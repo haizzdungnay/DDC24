@@ -7,7 +7,9 @@ Wants=mkddc-iobus.service
 
 [Service]
 Type=notify
-ExecStart=/usr/sbin/mkddc-core
+# Runtime coordinator/UDS khởi động trong GRAPH_ONLY; feature flag phía Web vẫn
+# OFF mặc định nên chưa mở mutation user-facing trước release gate.
+ExecStart=/usr/sbin/mkddc-core --programming-runtime
 ExecReload=/bin/kill -HUP $MAINPID
 User=mkddc
 Group=mkddc

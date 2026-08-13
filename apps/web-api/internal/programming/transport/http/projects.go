@@ -225,7 +225,11 @@ func writeJSON(w http.ResponseWriter, status int, correlationID string, value an
 func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 	status := http.StatusServiceUnavailable
 	public := domain.NewPublicError(domain.ErrUnavailable)
+	var operationError *programmingapplication.OperationPublicError
 	switch {
+	case errors.As(err, &operationError):
+		public = operationError.Public
+		status = domain.DefaultHTTPStatus(public.Code)
 	case errors.Is(err, programmingstore.ErrNotFound):
 		status, public = http.StatusNotFound, domain.NewPublicError(domain.ErrNotFound)
 	case errors.Is(err, programmingstore.ErrETagConflict):
@@ -241,7 +245,9 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 	case errors.Is(err, programmingapplication.ErrInvalidBundle):
 		status, public = http.StatusUnprocessableEntity, domain.NewPublicError(domain.ErrImport)
 	}
-	public.KeepsRunningRevision = true
+	if operationError == nil {
+		public.KeepsRunningRevision = true
+	}
 	WriteProgrammingError(w, status, public, correlationID)
 }
 

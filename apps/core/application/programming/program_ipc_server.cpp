@@ -211,6 +211,95 @@ std::vector<uint8_t> capabilities_payload()
     return json::to_cbor(payload);
 }
 
+std::string uuid_text(const std::vector<uint8_t>& raw)
+{
+    if (raw.size() != 16) return {};
+    static constexpr char HEX[] = "0123456789abcdef";
+    std::string output(36, '-');
+    std::size_t source = 0;
+    for (std::size_t target = 0; target < output.size(); ++target) {
+        if (target == 8 || target == 13 || target == 18 || target == 23) continue;
+        const uint8_t byte = raw[source / 2];
+        output[target] = HEX[(source % 2 == 0) ? (byte >> 4U) : (byte & 0x0fU)];
+        ++source;
+    }
+    return output;
+}
+
+bool parse_stage_payload(const ProgramRequest& request, StageCommand* output)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 6 || !value[0].is_string() ||
+            !value[1].is_string() || !value[2].is_string() ||
+            !value[3].is_number_unsigned() || !value[4].is_binary() ||
+            !value[5].is_string()) return false;
+        const auto& digest = value[4].get_binary();
+        if (digest.size() != crypto_hash_sha256_BYTES) return false;
+        output->operation_id = uuid_text(request.operation_id);
+        output->revision_id = value[0].get<std::string>();
+        output->instance_id = value[1].get<std::string>();
+        output->locator = value[2].get<std::string>();
+        output->byte_size = value[3].get<uint64_t>();
+        output->sha256.assign(digest.begin(), digest.end());
+        output->plan_hash = value[5].get<std::string>();
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+bool parse_activate_payload(const ProgramRequest& request, ActivateCommand* output)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 4 ||
+            (!value[0].is_null() && !value[0].is_string()) ||
+            !value[1].is_string() || !value[2].is_string() || !value[3].is_string())
+            return false;
+        output->operation_id = uuid_text(request.operation_id);
+        output->expected_active_revision_id = value[0].is_null()
+            ? std::string() : value[0].get<std::string>();
+        output->staged_token = value[1].get<std::string>();
+        const std::string cutover = value[2].get<std::string>();
+        if (cutover != "PROGRAM_ONLY") return false;
+        output->cutover = CutoverMode::PROGRAM_ONLY;
+        output->plan_hash = value[3].get<std::string>();
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+ProgramResult result_for_state(LifecycleState state)
+{
+    switch (state) {
+    case LifecycleState::IDLE: return ProgramResult::Ok;
+    case LifecycleState::STAGED: return ProgramResult::Staged;
+    case LifecycleState::COMMIT_INTENT:
+    case LifecycleState::ACTIVE_CANDIDATE:
+    case LifecycleState::FIRST_CYCLE_OK: return ProgramResult::Accepted;
+    case LifecycleState::COMMITTED: return ProgramResult::Ok;
+    case LifecycleState::ROLLING_BACK: return ProgramResult::Accepted;
+    case LifecycleState::ROLLED_BACK: return ProgramResult::Rejected;
+    case LifecycleState::FAILED: return ProgramResult::Rejected;
+    case LifecycleState::RECOVERY_REQUIRED: return ProgramResult::Unavailable;
+    }
+    return ProgramResult::Unavailable;
+}
+
+std::vector<uint8_t> status_payload(const RuntimeOperationSnapshot& snapshot)
+{
+    const json active = snapshot.active_revision_id.empty()
+        ? json(nullptr) : json(snapshot.active_revision_id);
+    const json lkg = snapshot.lkg_revision_id.empty()
+        ? json(nullptr) : json(snapshot.lkg_revision_id);
+    return json::to_cbor(json::array({
+        snapshot.producer_mode == CutoverMode::PROGRAM_ONLY ? "PROGRAM_ONLY" : "GRAPH_ONLY",
+        active, lkg, snapshot.active_override_ids,
+    }));
+}
+
 } // namespace
 
 std::vector<uint8_t> EncodeFrame(const std::vector<uint8_t>& cbor, ProgramCodecError* error)
@@ -502,9 +591,76 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
         if (request.action == ProgramAction::Capabilities) {
             response = make_response(request, ProgramResult::Ok, nullptr,
                                      capabilities_payload());
-        } else {
+        } else if (coordinator_ == nullptr) {
             response = make_response(request, ProgramResult::Unavailable,
-                                     "IPC-CONTRACT-ONLY");
+                                     "IPC-RUNTIME-NOT-CONFIGURED");
+        } else {
+            std::string flush_error;
+            if (!coordinator_->flush_progress(&flush_error)) {
+                response = make_response(request, ProgramResult::Unavailable,
+                                         "IPC-JOURNAL-FSYNC");
+            } else if (request.action == ProgramAction::Status) {
+                const RuntimeOperationSnapshot snapshot = coordinator_->snapshot();
+                response = snapshot.impact_snapshot_valid
+                    ? make_response(request, ProgramResult::Ok, nullptr, status_payload(snapshot))
+                    : make_response(request, ProgramResult::Unavailable,
+                                    "IPC-IMPACT-NOT-READY");
+                if (!snapshot.active_revision_id.empty()) {
+                    response.has_active_revision = true;
+                    response.active_revision_id = snapshot.active_revision_id;
+                }
+                if (!snapshot.lkg_revision_id.empty()) {
+                    response.has_lkg_revision = true;
+                    response.lkg_revision_id = snapshot.lkg_revision_id;
+                }
+            } else if (request.action == ProgramAction::OperationStatus) {
+                const RuntimeOperationSnapshot snapshot = coordinator_->snapshot();
+                if (snapshot.operation_id != uuid_text(request.operation_id)) {
+                    response = make_response(request, ProgramResult::Rejected,
+                                             "IPC-OPERATION-NOT-FOUND");
+                } else {
+                    response = make_response(request, result_for_state(snapshot.state),
+                                             snapshot.detail_code.empty()
+                                                 ? nullptr : snapshot.detail_code.c_str(),
+                                             status_payload(snapshot));
+                    response.keeps_running = snapshot.keeps_running;
+                    if (!snapshot.active_revision_id.empty()) {
+                        response.has_active_revision = true;
+                        response.active_revision_id = snapshot.active_revision_id;
+                    }
+                    if (!snapshot.lkg_revision_id.empty()) {
+                        response.has_lkg_revision = true;
+                        response.lkg_revision_id = snapshot.lkg_revision_id;
+                    }
+                }
+            } else if (request.action == ProgramAction::Stage ||
+                       request.action == ProgramAction::Restore) {
+                StageCommand command;
+                std::string detail;
+                std::string error;
+                const bool parsed = parse_stage_payload(request, &command);
+                const bool staged = parsed &&
+                    (request.action == ProgramAction::Restore
+                         ? coordinator_->restore(command, &detail, &error)
+                         : coordinator_->stage(command, &detail, &error));
+                response = make_response(request, staged ? ProgramResult::Staged
+                                                         : ProgramResult::Rejected,
+                                         staged ? nullptr : (detail.empty()
+                                             ? "IPC-PAYLOAD" : detail.c_str()));
+            } else if (request.action == ProgramAction::Activate) {
+                ActivateCommand command;
+                std::string detail;
+                std::string error;
+                const bool activated = parse_activate_payload(request, &command) &&
+                    coordinator_->activate(command, &detail, &error);
+                response = make_response(request, activated ? ProgramResult::Accepted
+                                                            : ProgramResult::Rejected,
+                                         activated ? nullptr : (detail.empty()
+                                             ? "IPC-PAYLOAD" : detail.c_str()));
+            } else {
+                response = make_response(request, ProgramResult::Unavailable,
+                                         "IPC-ACTION-NOT-IMPLEMENTED");
+            }
         }
         --queue_depth_;
     }

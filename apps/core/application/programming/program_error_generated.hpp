@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "92fb21f55b1400ba7bccfd1e2b0a75543c3a5f3125516108f647fd993c17fafc";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.3.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "60f050d184de1f37c668a7b85d6a52969dce03e11157389a58fc43c550a3e7d2";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.4.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -73,7 +73,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 82> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 99> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -131,10 +131,27 @@ inline constexpr std::array<ComponentErrorMapping, 82> kComponentErrorMappings =
     {"compiler", "ST-SYN-002", ProgramPublicError::Scope },
     {"compiler", "ST-WORKER-CRASH", ProgramPublicError::Unavailable },
     {"compiler", "ST-WORKER-TIMEOUT", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-ACTION-NOT-IMPLEMENTED", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-ACTIVATE-ARM", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-CONTRACT-ONLY", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-DEADLINE", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-EXPECTED-ACTIVE", ProgramPublicError::Conflict },
+    {"core-ipc", "IPC-IMPACT-NOT-READY", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-JOURNAL-FSYNC", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-OPERATION-BUSY", ProgramPublicError::Operation },
+    {"core-ipc", "IPC-OPERATION-NOT-FOUND", ProgramPublicError::Operation },
+    {"core-ipc", "IPC-PAYLOAD", ProgramPublicError::Request },
     {"core-ipc", "IPC-QUEUE-FULL", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-RECOVERY-REQUIRED", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-REQUEST-ID-CONFLICT", ProgramPublicError::Operation },
+    {"core-ipc", "IPC-RUNTIME-CONFIG", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-RUNTIME-NOT-CONFIGURED", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-STAGE-REJECTED", ProgramPublicError::Artifact },
+    {"core-ipc", "IPC-STAGED-TOKEN", ProgramPublicError::Operation },
+    {"core-ipc", "IPC-STAGING-HASH", ProgramPublicError::Artifact },
+    {"core-ipc", "IPC-STAGING-LOCATOR", ProgramPublicError::Artifact },
+    {"core-ipc", "IPC-STAGING-OPEN", ProgramPublicError::Artifact },
+    {"core-ipc", "IPC-STAGING-TYPE-SIZE", ProgramPublicError::Artifact },
     {"retain", "RT-RETAIN-001", ProgramPublicError::Retain },
     {"retain", "RT-RETAIN-002", ProgramPublicError::Retain },
     {"retain", "RT-RETAIN-003", ProgramPublicError::Retain },

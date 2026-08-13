@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FWSOM-PROG-001` |
-| Phiên bản | 0.7 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; P3 `300..307` và P4 `400..402` có source/host evidence; BE coordinator/cutover và target evidence còn mở** |
+| Phiên bản | 0.8 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; P3/P4 source/host DONE; target/HIL evidence còn mở** |
 | Ngày | 2026-08-13 |
 | Chủ quản | Core/Runtime Lead |
 | Người review | Controls Lead, Safety Lead, Backend Lead, Verification Lead |
@@ -22,10 +22,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **`mkddc-core` chạy Program như thế nào trên SOM**: phân lớp runtime, base step và scheduler, loader/activation, process image, arbitration, RETAIN, trace, và ngân sách luồng/thời gian. |
 | 2. Ai phải đọc file này? | Core/FW-SOM Lead (chủ quản); Controls đối chiếu với [Control Semantics](PROGRAMMING_CONTROL_SEMANTICS.md); BE đọc §5 để biết bàn giao artifact; QA đọc §11 và §17. |
-| 3. Hệ thống hiện tại đang có gì? | P3 `TASK-PROG-300..307` đã đóng source/host: prepare/activation, profile/base-step, process image atomic, PID tracking, overrun, trace, PROGRAM_ONLY bootstrap và soak 10.000 cycle. `TASK-PROG-400..402` có journal component, hold-last withdrawal và RETAIN v2 đã wire scheduler/bootstrap. Default vẫn GRAPH, feature flag OFF; UDS/BE coordinator/cutover chưa có. |
+| 3. Hệ thống hiện tại đang có gì? | P3/P4 đã đóng source/host: prepared runtime, process image/PID/overrun/trace, journal/RETAIN, BE coordinator, bounded UDS `SO_PEERCRED`, safe-boundary cutover/rollback, first-output LKG và checkpoint recovery. Default vẫn GRAPH_ONLY, feature flag OFF. |
 | 4. Thiết kế mới thay đổi điều gì? | Biến các component rời rạc đó thành một runtime thật sự được nối vào: base step tách khỏi chu kỳ Task, loader chạy ngoài RT rồi bàn giao tại biên an toàn, process image đóng băng trong lúc Program chạy, output đi qua arbitration mức 5, RETAIN khôi phục trước lần chạy đầu. |
-| 5. Team phải sửa module/contract nào? | `TASK-PROG-403` tiếp theo nối BE coordinator/UDS với journal/safe-boundary; `404` thực hiện cutover/rollback và `405` fault injection. RETAIN source hiện nằm ở `st_retain.*`, scheduler/process image/bootstrap và control schema. |
-| 6. Điều gì còn bị chặn? | Source còn lại là `TASK-PROG-403..405`; release còn cần 32/32 Test Result, power/restart/WCET/watchdog/IOP trên Forlinx/HIL và residual acceptance. Không mục nào chặn tiếp tục implementation. |
+| 5. Team phải sửa module/contract nào? | Source P4 nằm ở `application/programming`, `adapters/ipc/program_ipc_unix.*`, `st_scheduler.*`, `scan_loop.*` và bootstrap. P5/P6 dùng status/operation contract; không sửa đường IOP ownership. |
+| 6. Điều gì còn bị chặn? | Không còn source P4. Release còn cần 32/32 Test Result, power/restart/WCET/watchdog/IOP trên Forlinx/HIL và residual acceptance. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host targeted RETAIN/control/IR/manifest/integration `111/111 PASS`; full repository gate ghi trong Plan 53/CHANGELOG. `VS-PROG-029/030`, jitter/WCET/watchdog/IOP vẫn phải chạy **trên board**, chưa được suy từ host PASS. |
 
 Điểm dễ hiểu sai nhất: **PROGRAM_ONLY và RETAIN đã có source không đồng nghĩa
@@ -38,7 +38,7 @@ Source hiện có parser/semantic, typed IR/artifact/loader, scheduler, cyclic
 runtime, I/O mapping, arbitration, RETAIN, trace và host tests tại
 `apps/core/application/st/`. Bootstrap hỗ trợ explicit `--programming-mode` và
 chỉ dựng scheduler/retain service trong PROGRAM_ONLY; không có dual producer.
-Default GRAPH và thiếu UDS/coordinator nghĩa là chưa có luồng Commission user
+Default GRAPH và feature flag OFF nghĩa là chưa có luồng Commission user
 reachable, chưa phải feature Programming production hoàn tất.
 
 ## 2. Phân lớp runtime
@@ -254,7 +254,7 @@ last fault/source map, IOP gap/watchdog. Snapshot versioned/bounded và có obse
 | File/build target | Change |
 |---|---|
 | `apps/core/CMakeLists.txt` | link executor/loader/lifecycle only; CI assert no parser/compiler symbol in `mkddc-core` |
-| `apps/core/bootstrap/main.cpp` | explicit GRAPH/PROGRAM; PROGRAM_ONLY dựng scheduler + retain service; coordinator/UDS còn target |
+| `apps/core/bootstrap/main.cpp` | explicit GRAPH/PROGRAM; fixed scheduler topology, retain service, coordinator và Programming UDS tại `10d9ad6` |
 | `apps/core/application/runtime/scan_loop.*` | phase hook + timing metric; no ownership policy duplication |
 | `contracts/ipc/programming_v1` | generated/handwritten bounded schema and compatibility tests |
 | `contracts/config/` | replace/retire standalone base64 control schema by migration |
@@ -267,7 +267,8 @@ accepting unsupported artifact.
 As-Built Task 300/301: `apps/core/CMakeLists.txt` đã đăng ký hai CTest hậu liên kết
 cho `core_application` và `mkddc-core` bằng
 `scripts/verify_programming_runtime_symbols.py`; `st_program_control_v1` đã trả
-profile/capacity/period/base step và systemd trích ADR-028. Bootstrap cutover vẫn Target.
+profile/capacity/period/base step; Programming IPC trả operation/active/LKG/override
+authoritative. Cutover source đã wire; target evidence vẫn mở.
 
 ## 17. Verification, deployment và rollback
 
@@ -325,7 +326,7 @@ retain/trace. Exact policy/CPU affinity đo trên target rồi phê duyệt; kh�
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
 | Target semantics/ABI/RETAIN/cutover | Product + Architect + Controls | **Đã mở implementation** theo `AUTH-PROG-2026-08-11-03`; acceptance target vẫn độc lập |
-| Coordinator/IPC/cutover chưa implement | Core + BE Lead | `TASK-PROG-403..404` + integration |
+| Coordinator/IPC/cutover target chưa kiểm chứng | Core + BE Lead + QA | Forlinx/HIL integration, peer/service identity và power-fault Test Result |
 | Timing/HIL/power-loss chưa có evidence | Core + MCU + QA | target results approved |
 
 | Phiên bản | Ngày | Nội dung |
@@ -337,10 +338,11 @@ retain/trace. Exact policy/CPU affinity đo trên target rồi phê duyệt; kh�
 | 0.5 | 2026-08-11 | Đồng bộ `TASK-PROG-300` tại `4f7e0ac`: prepared runtime image ngoài RT, safe-boundary handle/LKG swap không cấp phát, retired cleanup ngoài scan và post-link no-parser/compiler gate; giữ production bootstrap/target NOT TESTED |
 | 0.6 | 2026-08-11 | Đồng bộ `TASK-PROG-301` tại `a831a0d`: scheduler profile Rev A 1/1/1, period 1/5/30 s, budget `<20%`, `on_base_step()`/sequence/missed release, capability/schema và watchdog ADR-028; targeted 74/74, CTest 936/936; giữ production/target NOT TESTED |
 | 0.7 | 2026-08-13 | Đồng bộ P3 `300..307`, P4 `400..402`; mô tả As-Built PROGRAM_ONLY bootstrap và RETAIN v2 stable identity/layout/CRC/atomic/cold-init/async checkpoint; giữ default GRAPH, flag OFF, coordinator/cutover và target/HIL NOT TESTED. |
+| 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: coordinator/SQLite v5, bounded UDS `SO_PEERCRED`, safe-boundary exclusive cutover, first-output/LKG, rollback và CRC checkpoint recovery. Host fault/restart gates PASS; giữ default GRAPH, flag OFF và target/HIL/power-cut NOT TESTED. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Core Lead | **P3 SOURCE/HOST DONE; TASK-PROG-400..402 SOURCE/HOST DONE** | commits Plan 53; `3ca5d22` |
+| Core Lead | **P3/P4 SOURCE/HOST DONE** | commits Plan 53; `3ca5d22`, `10d9ad6` |
 | Controls + Safety + BE + QA | **WAIVED FOR IMPLEMENTATION; review/test độc lập còn mở** | `AUTH-PROG-2026-08-11-03` |
 | Runtime Architect + System Architect | **APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; target/HIL không được suy thành PASS |
 
@@ -350,7 +352,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; lịch sử và bảng ký §19 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §2 phân lớp runtime; §3 runtime profile Rev A |
-| `DD-03` As-Built | PASS | §1 dẫn `apps/core/application/st/`, explicit GRAPH/PROGRAM bootstrap, RETAIN wiring và nêu đúng khoảng hở UDS/coordinator/target |
+| `DD-03` As-Built | PASS | §1 dẫn `apps/core/application/{st,programming}`, Programming UDS, explicit GRAPH/PROGRAM bootstrap, RETAIN/cutover/recovery wiring và nêu đúng khoảng hở target |
 | `DD-04` Target ownership | PASS | §2 phân lớp; §12 class/function/buffer target; §18 lớp giao diện và bàn giao giữa luồng |
 | `DD-05` Data từng field | PASS | §6 process image và Point binding; §8 RETAIN; §12 buffer |
 | `DD-06` Interface | PASS | §5 loader và activation; §18 hợp đồng interface class; hợp đồng liên tiến trình ở `IFSPEC-PROG-001` §8 |
@@ -360,7 +362,7 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §12 và §16 — file, build, package và config cần sửa |
 | `DD-11` Verification | PASS | §11 và §17 gắn `VS-PROG-009/012/014/027`, yêu cầu chạy **trên board** |
 | `DD-12` Compatibility/deploy/rollback | PASS | §17 deployment và rollback; §10 cutover/bootstrap/config |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; release BLOCKED | `AUTH-PROG-2026-08-11-03` đã mở source. Owner target: Runtime/Controls/Safety/Ops/QA; không giảm `RSK-PROG-002/003/009`; gate G4/G6 mở khi `403..405` và Test Result board/HIL độc lập hoàn tất |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; release BLOCKED | `AUTH-PROG-2026-08-11-03` đã mở source và P4 source/host đã đóng. Owner target: Runtime/Controls/Safety/Ops/QA; không giảm residual; G6 chỉ mở khi Test Result board/HIL độc lập hoàn tất |
 
 **Host test đã pass không chứng minh runtime đã hoạt động trên board.** Luồng
-Commission coordinator/cutover và bằng chứng target vẫn `NOT IMPLEMENTED/NOT TESTED`.
+Commission coordinator/cutover đã `IMPLEMENTED` ở source/host; bằng chứng target vẫn `NOT TESTED`.

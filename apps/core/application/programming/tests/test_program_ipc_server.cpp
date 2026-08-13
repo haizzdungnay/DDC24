@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -13,6 +14,11 @@
 
 #include <sys/socket.h>
 #include <unistd.h>
+
+#include "programming/programming_cutover.hpp"
+#include "st/st_compile.hpp"
+#include "st/st_ir.hpp"
+#include "st/st_test_key.hpp"
 
 namespace core::programming {
 namespace {
@@ -68,6 +74,32 @@ std::vector<uint8_t> load_hex(const std::string& name)
         output.push_back(static_cast<uint8_t>(std::stoul(hex.substr(index, 2), nullptr, 16)));
     }
     return output;
+}
+
+std::vector<uint8_t> uuid_bytes(const std::string& value)
+{
+    std::vector<uint8_t> output;
+    int high = -1;
+    for (const char ch : value) {
+        if (ch == '-') continue;
+        const int nibble = ch >= '0' && ch <= '9' ? ch - '0' : ch - 'a' + 10;
+        if (high < 0) high = nibble;
+        else { output.push_back(static_cast<uint8_t>((high << 4) | nibble)); high = -1; }
+    }
+    return output;
+}
+
+std::vector<uint8_t> signed_artifact()
+{
+    const char* source = "PROGRAM p\nVAR x : DINT; END_VAR\nx := 7;\nEND_PROGRAM\n";
+    StIrModule module;
+    StDiagnostic diagnostic;
+    EXPECT_TRUE(compile_st_source(source, &module, &diagnostic));
+    std::vector<uint8_t> artifact;
+    std::string error;
+    EXPECT_TRUE(serialize_st_ir(module, &artifact, &error)) << error;
+    EXPECT_TRUE(sign_st_artifact(&artifact, st_test_secret_key()));
+    return artifact;
 }
 
 TEST(ProgramIpcCodec, RequestRoundTrip)
@@ -214,6 +246,68 @@ TEST(ProgramIpcServer, ReadsLinuxPeerCredentials)
     EXPECT_EQ(peer.uid, static_cast<uint32_t>(::getuid()));
     ::close(sockets[0]);
     ::close(sockets[1]);
+}
+
+TEST(ProgramIpcServer, DispatchesCanonicalStageAndActivateToRuntimeCoordinator)
+{
+    char root_template[] = "/tmp/mkddc-ipc-dispatch-XXXXXX";
+    const char* created = ::mkdtemp(root_template);
+    ASSERT_NE(created, nullptr);
+    const std::filesystem::path root(created);
+    const std::string operation = "11111111-1111-4111-8111-111111111111";
+    const std::string revision = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
+    const std::string plan(64, 'a');
+    const std::filesystem::path staging = root / "staging" / operation;
+    std::filesystem::create_directories(staging);
+    const std::vector<uint8_t> artifact = signed_artifact();
+    const std::filesystem::path locator = staging / "candidate.mkddcir";
+    {
+        std::ofstream output(locator, std::ios::binary);
+        output.write(reinterpret_cast<const char*>(artifact.data()), artifact.size());
+    }
+    std::array<uint8_t, crypto_hash_sha256_BYTES> digest{};
+    crypto_hash_sha256(digest.data(), artifact.data(), artifact.size());
+
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    StTaskConfig task;
+    task.id = "main";
+    task.priority = 0;
+    task.period_ms = 1000;
+    task.budget_ms = 199;
+    std::string runtime_error;
+    ASSERT_TRUE(scheduler.add_task(task, &runtime_error));
+    ASSERT_TRUE(scheduler.add_program("main", "program-main", 0, &runtime_error));
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover,
+        (root / "journal.bin").string(), (root / "staging").string());
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()), &coordinator);
+    ProgramCodecError codec_error = ProgramCodecError::None;
+
+    ProgramRequest stage = request(ProgramAction::Stage);
+    stage.request_id.assign(16, 0x21);
+    stage.operation_id = uuid_bytes(operation);
+    stage.payload = nlohmann::json::to_cbor(nlohmann::json::array({revision,
+        "program-main", locator.string(), artifact.size(),
+        nlohmann::json::binary(std::vector<uint8_t>(digest.begin(), digest.end())), plan}));
+    crypto_hash_sha256(stage.payload_hash.data(), stage.payload.data(), stage.payload.size());
+    ProgramResponse response;
+    ASSERT_TRUE(DecodeResponseFrame(server.HandleFrame(EncodeRequestFrame(stage, &codec_error),
+        allowed_peer(), 1), &response, &codec_error));
+    EXPECT_EQ(response.result, ProgramResult::Staged);
+    EXPECT_EQ(coordinator.snapshot().state, LifecycleState::STAGED);
+
+    ProgramRequest activate = request(ProgramAction::Activate);
+    activate.request_id.assign(16, 0x22);
+    activate.operation_id = uuid_bytes(operation);
+    activate.actor_id = "admin-1";
+    activate.payload = nlohmann::json::to_cbor(nlohmann::json::array({nullptr,
+        operation, "PROGRAM_ONLY", plan}));
+    crypto_hash_sha256(activate.payload_hash.data(), activate.payload.data(), activate.payload.size());
+    ASSERT_TRUE(DecodeResponseFrame(server.HandleFrame(EncodeRequestFrame(activate, &codec_error),
+        allowed_peer(), 1), &response, &codec_error));
+    EXPECT_EQ(response.result, ProgramResult::Accepted);
+    EXPECT_EQ(coordinator.snapshot().state, LifecycleState::COMMIT_INTENT);
+    std::filesystem::remove_all(root);
 }
 
 TEST(ProgramIpcGolden, CrossLanguageCorpus)

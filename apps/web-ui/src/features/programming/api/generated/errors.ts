@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "92fb21f55b1400ba7bccfd1e2b0a75543c3a5f3125516108f647fd993c17fafc" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.3.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "60f050d184de1f37c668a7b85d6a52969dce03e11157389a58fc43c550a3e7d2" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.4.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
@@ -85,10 +85,27 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-SYN-002": "PRG-ERR-SCOPE-001",
   "compiler\u0000ST-WORKER-CRASH": "PRG-ERR-UNAVAILABLE-001",
   "compiler\u0000ST-WORKER-TIMEOUT": "PRG-ERR-UNAVAILABLE-001",
+  "core-ipc\u0000IPC-ACTION-NOT-IMPLEMENTED": "PRG-ERR-UNAVAILABLE-001",
+  "core-ipc\u0000IPC-ACTIVATE-ARM": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-CONTRACT-ONLY": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-DEADLINE": "PRG-ERR-UNAVAILABLE-001",
+  "core-ipc\u0000IPC-EXPECTED-ACTIVE": "PRG-ERR-CONFLICT-001",
+  "core-ipc\u0000IPC-IMPACT-NOT-READY": "PRG-ERR-UNAVAILABLE-001",
+  "core-ipc\u0000IPC-JOURNAL-FSYNC": "PRG-ERR-UNAVAILABLE-001",
+  "core-ipc\u0000IPC-OPERATION-BUSY": "PRG-ERR-OP-001",
+  "core-ipc\u0000IPC-OPERATION-NOT-FOUND": "PRG-ERR-OP-001",
+  "core-ipc\u0000IPC-PAYLOAD": "PRG-ERR-REQ-001",
   "core-ipc\u0000IPC-QUEUE-FULL": "PRG-ERR-UNAVAILABLE-001",
+  "core-ipc\u0000IPC-RECOVERY-REQUIRED": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-REQUEST-ID-CONFLICT": "PRG-ERR-OP-001",
+  "core-ipc\u0000IPC-RUNTIME-CONFIG": "PRG-ERR-UNAVAILABLE-001",
+  "core-ipc\u0000IPC-RUNTIME-NOT-CONFIGURED": "PRG-ERR-UNAVAILABLE-001",
+  "core-ipc\u0000IPC-STAGE-REJECTED": "PRG-ERR-ARTIFACT-001",
+  "core-ipc\u0000IPC-STAGED-TOKEN": "PRG-ERR-OP-001",
+  "core-ipc\u0000IPC-STAGING-HASH": "PRG-ERR-ARTIFACT-001",
+  "core-ipc\u0000IPC-STAGING-LOCATOR": "PRG-ERR-ARTIFACT-001",
+  "core-ipc\u0000IPC-STAGING-OPEN": "PRG-ERR-ARTIFACT-001",
+  "core-ipc\u0000IPC-STAGING-TYPE-SIZE": "PRG-ERR-ARTIFACT-001",
   "retain\u0000RT-RETAIN-001": "PRG-ERR-RETAIN-001",
   "retain\u0000RT-RETAIN-002": "PRG-ERR-RETAIN-001",
   "retain\u0000RT-RETAIN-003": "PRG-ERR-RETAIN-001",

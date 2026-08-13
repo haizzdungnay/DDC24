@@ -9,6 +9,7 @@ import (
 	programmingapplication "mkddc-web/internal/programming/application"
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	programmingcompiler "mkddc-web/internal/programming/compiler"
+	programmingcoreipc "mkddc-web/internal/programming/coreipc"
 	programmingstore "mkddc-web/internal/programming/store"
 	"net"
 	"net/http"
@@ -65,13 +66,14 @@ type App struct {
 	pointNamespaceWriter   func(string, []byte, os.FileMode) error
 	reloadDispatcher       func(string) (bool, []string)
 	// Modbus RTU v2 (MBR-B203/B208/B305)
-	modbusOnce          sync.Once
-	modbusCandidates    *webModbus.CandidateStore
-	modbusEvents        modbusEventLog
-	commissionLimit     commissionLimiter
-	programmingStore    *programmingstore.Store
-	programmingProjects *programmingapplication.ProjectService
-	programmingChecks   *programmingapplication.CheckService
+	modbusOnce            sync.Once
+	modbusCandidates      *webModbus.CandidateStore
+	modbusEvents          modbusEventLog
+	commissionLimit       commissionLimiter
+	programmingStore      *programmingstore.Store
+	programmingProjects   *programmingapplication.ProjectService
+	programmingChecks     *programmingapplication.CheckService
+	programmingOperations *programmingapplication.OperationService
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -114,10 +116,22 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming Check service: %w", checkErr)
 		}
+		operations, operationErr := programmingapplication.NewOperationService(programmingapplication.OperationServiceOptions{
+			Store: store, Projects: projects, Artifacts: artifacts,
+			Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
+			ControllerID: cfg.ProgrammingTargetID, StagingRoot: cfg.ProgrammingStagingDir,
+			Lease: 30 * time.Second,
+		})
+		if operationErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming Operation service: %w", operationErr)
+		}
 		app.programmingStore = store
 		app.programmingProjects = projects
 		app.programmingChecks = checks
+		app.programmingOperations = operations
 		checks.Start(context.Background())
+		operations.Start(context.Background())
 	}
 	app.pointNamespaceWriter = writeConfigFileAtomic
 	app.overrides = NewOverrideRegistry()
@@ -128,6 +142,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	audit.SetSink(app.activity)
 	if err := app.migrateLegacyPointConfig(); err != nil {
 		if app.programmingStore != nil {
+			app.programmingOperations.Close()
 			app.programmingChecks.Close()
 			_ = app.programmingStore.Close()
 		}
@@ -139,6 +154,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	historian, err := OpenHistorianPolicyService(filepath.Join(cfg.ConfigDir, "historian.conf"), time.Now, func() (uint64, error) { return filesystemFreeBytes(cfg.ConfigDir) })
 	if err != nil {
 		if app.programmingStore != nil {
+			app.programmingOperations.Close()
 			app.programmingChecks.Close()
 			_ = app.programmingStore.Close()
 		}
@@ -393,6 +409,9 @@ func (a *App) Close() error {
 		historianErr = a.historianV2.Close()
 	}
 	if a.programmingStore != nil {
+		if a.programmingOperations != nil {
+			a.programmingOperations.Close()
+		}
 		if a.programmingChecks != nil {
 			a.programmingChecks.Close()
 		}

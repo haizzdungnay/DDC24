@@ -110,7 +110,7 @@ func TestOpenProgrammingStoreFreshSchemaPolicyAndRestart(t *testing.T) {
 	if fmt.Sprint(tables) != fmt.Sprint(expectedTables) {
 		t.Fatalf("tables=%v", tables)
 	}
-	checksum, ok := MigrationChecksum(4)
+	checksum, ok := MigrationChecksum(CurrentSchemaVersion)
 	if !ok {
 		t.Fatal("missing embedded migration checksum")
 	}
@@ -119,7 +119,7 @@ func TestOpenProgrammingStoreFreshSchemaPolicyAndRestart(t *testing.T) {
 	if err := store.db.QueryRow(`SELECT version,checksum FROM schema_migrations ORDER BY version DESC LIMIT 1`).Scan(&version, &stored); err != nil {
 		t.Fatal(err)
 	}
-	if version != 4 || !bytes.Equal(stored, checksum[:]) {
+	if version != CurrentSchemaVersion || !bytes.Equal(stored, checksum[:]) {
 		t.Fatal("schema migration checksum mismatch")
 	}
 	info, err := os.Stat(path)
@@ -262,6 +262,74 @@ func TestBeginOperationIdempotencySingleFlightAndAudit(t *testing.T) {
 	}
 }
 
+func TestOperationLeaseRestartCASAndContextChecksum(t *testing.T) {
+	store := openTestStore(t)
+	createProjectFixture(t, store)
+	createRevisionFixture(t, store, 1)
+	key, request := mutationIdentity("operation-coordinator")
+	params := BeginOperationParams{
+		OperationID: "55555555-5555-4555-8555-555555555555", Kind: "COMMISSION",
+		ControllerID: "controller-local", RequestedRevisionID: revisionID,
+		IdempotencyKeySHA256: key, RequestSHA256: request,
+		ContextJSON:   []byte(`{"schemaVersion":"1.0","locator":"/state/staging/candidate"}`),
+		CorrelationID: correlationID, ActorID: actorID, Role: role,
+		AuditID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3", At: fixedNow.Add(2 * time.Second),
+	}
+	created, err := store.BeginOperation(context.Background(), params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lookup, found, err := store.LookupOperationByIdempotency(context.Background(), actorID,
+		"COMMISSION", "controller-local", key, request)
+	if err != nil || !found || !lookup.Replay || lookup.OperationID != created.OperationID {
+		t.Fatalf("lookup=%+v found=%v err=%v", lookup, found, err)
+	}
+	claimed, ok, err := store.ClaimOperation(context.Background(), ClaimOperationParams{
+		Owner: "worker-a", At: fixedNow.Add(3 * time.Second), Lease: time.Minute})
+	if err != nil || !ok || claimed.LeaseGeneration != 1 || claimed.AttemptCount != 1 {
+		t.Fatalf("claim=%+v ok=%v err=%v", claimed, ok, err)
+	}
+	if _, ok, err := store.ClaimOperation(context.Background(), ClaimOperationParams{
+		Owner: "worker-b", At: fixedNow.Add(4 * time.Second), Lease: time.Minute}); err != nil || ok {
+		t.Fatalf("lease kép ok=%v err=%v", ok, err)
+	}
+	_, err = store.UpdateOperation(context.Background(), UpdateOperationParams{
+		OperationID: claimed.OperationID, LeaseOwner: "worker-a", LeaseGeneration: 2,
+		State: "UNKNOWN", Step: "RECONCILE", At: fixedNow.Add(5 * time.Second), ReleaseLease: true})
+	if !errors.Is(err, ErrLeaseLost) {
+		t.Fatalf("stale generation không bị chặn: %v", err)
+	}
+	updated, err := store.UpdateOperation(context.Background(), UpdateOperationParams{
+		OperationID: claimed.OperationID, LeaseOwner: "worker-a", LeaseGeneration: 1,
+		State: "UNKNOWN", Step: "RECONCILE", At: fixedNow.Add(5 * time.Second), ReleaseLease: true})
+	if err != nil || updated.LeaseOwner != "" {
+		t.Fatalf("release=%+v err=%v", updated, err)
+	}
+	path := store.Path()
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := OpenProgrammingStore(context.Background(), Options{Path: path,
+		Now: func() time.Time { return fixedNow.Add(6 * time.Second) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restarted.Close()
+	reclaimed, ok, err := restarted.ClaimOperation(context.Background(), ClaimOperationParams{
+		Owner: "worker-after-restart", At: fixedNow.Add(6 * time.Second), Lease: time.Minute})
+	if err != nil || !ok || reclaimed.State != "UNKNOWN" || reclaimed.LeaseGeneration != 2 {
+		t.Fatalf("restart claim=%+v ok=%v err=%v", reclaimed, ok, err)
+	}
+	if _, err := restarted.db.Exec(`UPDATE operations SET operation_context_json=? WHERE operation_id=?`,
+		[]byte(`{}`), reclaimed.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.GetOperation(context.Background(), reclaimed.OperationID); err == nil ||
+		!strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("context bị sửa ngoài luồng không được phát hiện: %v", err)
+	}
+}
+
 func TestCheckLeaseIdempotencyAtomicArtifactAndDeterministicDedup(t *testing.T) {
 	store := openTestStore(t)
 	createProjectFixture(t, store)
@@ -338,7 +406,7 @@ func TestBackupVerifyRestoreIsPointInTimeAndNoOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if evidence.QuickCheck != "ok" || evidence.DatabaseVersion != 4 || len(evidence.SHA256) != 64 {
+	if evidence.QuickCheck != "ok" || evidence.DatabaseVersion != CurrentSchemaVersion || len(evidence.SHA256) != 64 {
 		t.Fatalf("backup evidence=%+v", evidence)
 	}
 	manifestRaw, err := os.ReadFile(evidence.ManifestPath)
@@ -451,7 +519,7 @@ func TestMigrationFaultChecksumPartialAndCorruptFailClosed(t *testing.T) {
 	})
 	t.Run("user-version", func(t *testing.T) {
 		store := openTestStore(t)
-		if _, err := store.db.Exec(`PRAGMA user_version=5`); err != nil {
+		if _, err := store.db.Exec(`PRAGMA user_version=6`); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := Migrate(context.Background(), store.db, MigrationOptions{}); !errors.Is(err, ErrSchemaFuture) {
@@ -484,7 +552,7 @@ func TestMigrationFaultChecksumPartialAndCorruptFailClosed(t *testing.T) {
 	})
 }
 
-func TestMigrationV1ToV4CreatesVerifiedBackup(t *testing.T) {
+func TestMigrationV1ToCurrentCreatesVerifiedBackup(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "programming-v1.sqlite")
 	db := openRawSQLite(t, path)
@@ -516,7 +584,7 @@ func TestMigrationV1ToV4CreatesVerifiedBackup(t *testing.T) {
 	}
 	defer store.Close()
 	var version int
-	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 4 {
+	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != CurrentSchemaVersion {
 		t.Fatalf("user_version=%d err=%v", version, err)
 	}
 	var receiptTable int
@@ -683,7 +751,7 @@ func TestProgrammingStoreContractManifest(t *testing.T) {
 	if !ok {
 		t.Fatalf("schema version không được hỗ trợ: %d", manifest.SchemaVersion)
 	}
-	if manifest.MigrationFile != "0004_bundle_receipts.sql" ||
+	if manifest.MigrationFile != "0005_operation_coordinator.sql" ||
 		manifest.MigrationSHA256 != hex.EncodeToString(checksum[:]) ||
 		!manifest.ForeignKeys || manifest.JournalMode != "WAL" ||
 		manifest.Synchronous != "FULL" || !manifest.SingleWriter || !manifest.FeatureDefaultOff {

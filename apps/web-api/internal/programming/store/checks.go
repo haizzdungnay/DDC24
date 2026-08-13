@@ -103,6 +103,23 @@ func (s *Store) GetCheck(ctx context.Context, checkID string) (Check, error) {
 	return getCheckTx(ctx, s.db, checkID)
 }
 
+func (s *Store) GetPassedCheckForRevision(ctx context.Context, revisionID string) (Check, error) {
+	if err := validateUUIDs(revisionID); err != nil {
+		return Check{}, err
+	}
+	var checkID string
+	err := s.db.QueryRowContext(ctx, `SELECT check_id FROM checks
+		WHERE revision_id=? AND state='PASSED'
+		ORDER BY completed_at_utc_ms DESC,check_id DESC LIMIT 1`, revisionID).Scan(&checkID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Check{}, ErrNotFound
+	}
+	if err != nil {
+		return Check{}, err
+	}
+	return getCheckTx(ctx, s.db, checkID)
+}
+
 type queryRower interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }

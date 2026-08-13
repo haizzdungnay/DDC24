@@ -108,6 +108,24 @@ func TestRevisionChangesDeterministicAndClassifiesSafetyImpact(t *testing.T) {
 	}
 }
 
+func TestRevisionChangesSupportsExplicitNoActiveBaselineForFirstCommission(t *testing.T) {
+	service, _ := openBundleService(t)
+	_, revisionOne, _ := createBundleRevisionPair(t, service)
+	initial, err := service.GetRevisionChanges(context.Background(), "none", revisionOne)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if initial.FromRevisionID != "none" || initial.ToRevisionID != revisionOne ||
+		initial.Impact.ImpactRef == "" || len(initial.Changes) == 0 {
+		t.Fatalf("initial impact=%+v", initial)
+	}
+	for _, change := range initial.Changes {
+		if change.ChangeType != "ADDED" || change.BeforeSHA256 != nil || change.AfterSHA256 == nil {
+			t.Fatalf("baseline none không biểu diễn full candidate: %+v", change)
+		}
+	}
+}
+
 func TestSourceBundleDeterministicRoundTripCreatesDraftOnly(t *testing.T) {
 	service, store := openBundleService(t)
 	sourceProjectID, revisionOne, revisionTwo := createBundleRevisionPair(t, service)

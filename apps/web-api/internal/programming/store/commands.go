@@ -349,9 +349,21 @@ func (s *Store) BeginOperation(ctx context.Context, params BeginOperationParams)
 	if err := validateActorAudit(params.ActorID, params.Role, params.CorrelationID, params.At.UnixMilli()); err != nil {
 		return Operation{}, err
 	}
-	requestJSON, _ := json.Marshal(map[string]any{"kind": params.Kind, "controllerId": params.ControllerID,
-		"requestedRevisionId": params.RequestedRevisionID, "expectedActiveRevisionId": params.ExpectedActiveRevisionID})
-	requestDigest := sha256.Sum256(requestJSON)
+	contextInput := params.ContextJSON
+	if len(contextInput) == 0 {
+		contextInput = []byte(`{}`)
+	}
+	contextJSON, err := canonicalJSONObject(contextInput, 1<<20)
+	if err != nil {
+		return Operation{}, fmt.Errorf("operation context: %w", err)
+	}
+	contextDigest := sha256.Sum256(contextJSON)
+	requestDigest := params.RequestSHA256
+	if requestDigest == ([32]byte{}) {
+		requestJSON, _ := json.Marshal(map[string]any{"kind": params.Kind, "controllerId": params.ControllerID,
+			"requestedRevisionId": params.RequestedRevisionID, "expectedActiveRevisionId": params.ExpectedActiveRevisionID})
+		requestDigest = sha256.Sum256(requestJSON)
+	}
 	at := params.At.UTC().UnixMilli()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -376,10 +388,10 @@ func (s *Store) BeginOperation(ctx context.Context, params BeginOperationParams)
 		}
 		return existing, nil
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO operations(operation_id,kind,state,step,controller_id,requested_revision_id,expected_active_revision_id,idempotency_key_sha256,request_sha256,correlation_id,actor_id,created_at_utc_ms,updated_at_utc_ms) VALUES(?,?,'PENDING','PENDING',?,?,?,?,?,?,?,?,?)`,
+	if _, err := tx.ExecContext(ctx, `INSERT INTO operations(operation_id,kind,state,step,controller_id,requested_revision_id,expected_active_revision_id,idempotency_key_sha256,request_sha256,correlation_id,actor_id,created_at_utc_ms,updated_at_utc_ms,operation_context_json,operation_context_sha256) VALUES(?,?,'PENDING','PENDING',?,?,?,?,?,?,?,?,?,?,?)`,
 		params.OperationID, params.Kind, params.ControllerID, params.RequestedRevisionID,
 		nullableString(params.ExpectedActiveRevisionID), params.IdempotencyKeySHA256[:], requestDigest[:],
-		params.CorrelationID, params.ActorID, at, at); err != nil {
+		params.CorrelationID, params.ActorID, at, at, contextJSON, contextDigest[:]); err != nil {
 		return Operation{}, fmt.Errorf("insert Operation: %w", err)
 	}
 	details, _ := json.Marshal(map[string]any{"kind": params.Kind, "controllerId": params.ControllerID})
@@ -395,7 +407,8 @@ func (s *Store) BeginOperation(ctx context.Context, params BeginOperationParams)
 	return Operation{OperationID: params.OperationID, Kind: params.Kind, State: "PENDING", Step: "PENDING",
 		ControllerID: params.ControllerID, RequestedRevisionID: params.RequestedRevisionID,
 		ExpectedActiveRevisionID: params.ExpectedActiveRevisionID, CorrelationID: params.CorrelationID,
-		ActorID: params.ActorID, CreatedAtUTCMS: at, UpdatedAtUTCMS: at}, nil
+		ActorID: params.ActorID, CreatedAtUTCMS: at, UpdatedAtUTCMS: at,
+		ContextJSON: contextJSON}, nil
 }
 
 func getOperationByIdempotencyTx(ctx context.Context, tx *sql.Tx, actorID, kind, controllerID string, key []byte) (Operation, bool, error) {

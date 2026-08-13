@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 1.4 |
-| Trạng thái | **APPROVED FOR IMPLEMENTATION** — 11 Project/Draft/Revision/Check/change/bundle operation, IPC v1 và catalog lỗi ba ngôn ngữ có source; operation/Core lifecycle còn mở |
+| Phiên bản | 1.5 |
+| Trạng thái | **APPROVED FOR IMPLEMENTATION** — Commission/Restore/status, IPC lifecycle và catalog lỗi ba ngôn ngữ có source; target evidence còn mở |
 | Ngày | 2026-08-13 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
 | Nguồn thẩm quyền | `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001` |
-| Phạm vi phiên bản | Target Rev A; 11 route REST, Check worker, change manifest và bundle source-only có source nhưng feature flag `OFF`, chưa có Commission/Core lifecycle production |
+| Phạm vi phiên bản | Target Rev A; 25 OpenAPI operation, gồm Commission/Restore/Get operation và Core lifecycle source; feature flag `OFF`, chưa Commission trên target |
 | Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001` |
 
 ## 0. Đọc nhanh
@@ -19,11 +19,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **hợp đồng** giữa các bên: REST và WebSocket giữa trình duyệt và BE, IPC giữa BE và Core. Định nghĩa đường dẫn, payload, mã lỗi, timeout, retry, idempotency và thứ tự sự kiện. Đây cũng là **nguồn chuẩn duy nhất của mã lỗi** `PRG-ERR-*`. |
 | 2. Ai phải đọc file này? | FE và BE bắt buộc đọc cùng nhau — hai bên phải review **một** hợp đồng, không phải hai bản mô tả. Core đọc §8 và §12 (hợp đồng BE↔Core). Security đọc §15. QA dựng contract test từ §14 và §18. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-207` tại `3e5281d` khóa assurance cho 11 operation Project/Draft/Revision/Check/change/bundle: raw archive/entry/count bounded, path UTF-8 NFC, entry regular không executable, ZIP không comment/encryption/link và timestamp cố định; hostile corpus 25 lớp zero-mutation. Catalog v1.3.0 giữ 20 public/82 detail (thêm `ST-RT-009/010` tại `TASK-PROG-400`); feature flag mặc định `OFF`. 14 operation runtime/operation/audit vẫn trả unavailable/no-side-effect. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-403..405` nối Commission/Restore/Get operation với durable worker và Core UDS lifecycle. IPC hỗ trợ STATUS/OPERATION_STATUS/STAGE/RESTORE/ACTIVATE, bounded frame/deadline/version/peer. Catalog v1.4.0 có 20 public/99 detail; feature flag mặc định `OFF`. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm nhóm `/api/v1/programming`, event WebSocket cho runtime/operation, và một giao thức nội bộ có phiên bản cho Commission. Nguyên tắc chi phối: `HTTP 2xx` chỉ nghĩa là **request đã được nhận**; chỉ read-back từ Core mới kết luận được Revision nào đang chạy. |
-| 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog, Project/Draft/Revision, Check worker, change manifest, bundle source-only và assurance Task 207 đã có source. Tiếp theo `TASK-PROG-300` nối bounded loader/runtime Core, rồi operation lifecycle. FE tiếp tục chỉ dùng type/catalog sinh ra, không tự viết mã lỗi hoặc messageKey. |
+| 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog, lifecycle operations và Core coordinator đã có source. FE P5 tiếp tục chỉ dùng type/catalog sinh ra; target P6 kiểm peer/service identity, timeout/restart và physical read-back. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Payload/limit/role đã được chốt bởi 17 decision `DECIDED`. TLS và giao thức BE↔Core là phần phải implement/test trong P1–P3, không phải điều kiện xin phép trước khi code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host evidence `EV-PROG-G2-207` chứng minh hostile corpus 25 lớp, request 6 MiB+1 trả 413, raw ZIP 4 MiB+1 reject, entry/count/metadata/NFC fail-closed, zero-mutation 8 bảng và audit không lộ source/secret. Các Test Result độc lập `VS-PROG-019/021/023/024/026` vẫn chưa PASS; host evidence không thay target/HIL. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host evidence bổ sung operation replay/timeout/restart/reconcile, UDS peer/frame/deadline, corrupt locator/hash và authoritative read-back; full Go/test + CTest 1002/1002 PASS. Các Test Result độc lập vẫn chưa PASS; host evidence không thay target/HIL. |
 
 Vì sao mã lỗi phải tập trung ở đây: nếu mỗi component tự đặt mã, FE sẽ retry sai
 chỗ và che mất lỗi thật — đó là `RSK-PROG-014`. Quy tắc: FE quyết định dựa trên
@@ -305,6 +305,10 @@ hữu; đây là khoảng hở phát hiện khi chạy `npm run build` gate cho
 `TASK-PROG-400` — hai task nguồn thêm mã `ST-RT-*` mới trong `st_diagnostic.hpp`
 nhưng chưa đồng bộ catalog, sửa cùng phiên theo nguyên tắc "làm hết việc".
 
+As-Built `TASK-PROG-404/405`: catalog v1.4.0 có **20 public code / 99 detail
+mapping**, bổ sung detail operation/journal/checkpoint/IPC mới từ cả server và
+coordinator; generator quét cả hai source để không tái diễn drift.
+
 ## 10. Compatibility và contract gate
 
 - Mọi schema có version; unknown major bị reject, unknown optional field theo
@@ -575,7 +579,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 |---|---|---|---|
 | `PROG-OD-001`: `17 DECIDED`, `0 OPEN`, `0 CLOSED` | Product + discipline authority | **APPROVED** | cập nhật OpenAPI/code theo baseline v2.8 |
 | TLS production chưa có | Security + Platform | **READY TO IMPLEMENT** | TLS/session/CSRF test theo Security DoD |
-| Production operation worker/lifecycle chưa nối IPC skeleton | BE + Core | **READY TO IMPLEMENT** | implementation + contract/fault test theo Plan 53 |
+| Operation worker/lifecycle target chưa kiểm chứng | BE + Core + QA | **SOURCE/HOST IMPLEMENTED** | target contract/fault/power/restart Test Result theo Plan 53 |
 
 | Phiên bản | Ngày | Nội dung | Tác giả |
 |---|---|---|---|
@@ -593,6 +597,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 1.2 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-206` tại `95b9388`: OpenAPI v1.19 và ba operation change/export/import nối SQLite v4; change/impactRef deterministic, ZIP Store source-only 4 MiB có manifest/hash/audit và import atomic chỉ tạo Project/Draft; giữ 14 operation còn 503, flag OFF và target evidence còn mở | BE + Core + Security Lead |
 | 1.3 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-207` tại `3e5281d`: khóa bundle path UTF-8 NFC, regular/non-exec, flags/comment/timestamp/extra metadata, raw 4 MiB và entry 256 KiB; hostile corpus 25 lớp zero-mutation và HTTP 6 MiB+1→413; giữ 14 operation còn 503, flag OFF và Test Result/target evidence còn mở | BE + Security + Verification Lead |
 | 1.4 | 2026-08-13 | Đồng bộ As-Built `TASK-PROG-400` tại `a523a04`: catalog lỗi v1.2.0→v1.3.0 (20 public/82 detail), bổ sung `ST-RT-009`/`ST-RT-010` map vào `PRG-ERR-COM-001` — khoảng hở phát hiện khi chạy `npm run build` gate, sửa cùng phiên; không đổi endpoint/state machine/decision | BE + Core Lead |
+| 1.5 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: Commission/Restore/Get operation handler, durable idempotent state machine, STATUS/OPERATION_STATUS/STAGE/RESTORE/ACTIVATE UDS và catalog v1.4.0 20 public/99 detail. Giữ flag OFF và target/HIL Test Result chưa chạy. | BE + Core + QA |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|
@@ -609,7 +614,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §19 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 quy tắc chung; §10 ranh giới contract gate |
-| `DD-03` As-Built | PASS | §0 câu 3 và §3/§11/§13.2/§16 dẫn 11 route + Check/change/bundle tại `95b9388`; flag `OFF`, 14 route operation/Core lifecycle chưa nối |
+| `DD-03` As-Built | PASS | §0 câu 3 và §3/§11/§13.2/§16 dẫn Commission/Restore/status + Core lifecycle tại `c2f3189`/`10d9ad6`; flag `OFF`, target chưa kiểm chứng |
 | `DD-04` Target ownership | PASS | §8 và §12: BE là producer REST/WS, Core là authority của runtime truth; §13 ai giữ trạng thái nào |
 | `DD-05` Data từng field | PASS | §4 payload mutation, §11.1 header/cursor/giới hạn, §11.2 response, §12 hợp đồng BE↔Core mức field |
 | `DD-06` Interface | PASS | §3 resource, §5 Check, §6 Commission, §7 event, §11 ma trận REST, §15 security/tương thích/triển khai, §17 envelope mẫu |
@@ -619,8 +624,7 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §16: handler BE, sinh type FE, và yêu cầu đưa spec vào `contracts/openapi/openapi.yaml` |
 | `DD-11` Verification | PASS | §16 gắn `VS-PROG-019/022/024/026`; §18 checklist đóng băng contract cho consumer |
 | `DD-12` Compatibility/deploy/rollback | PASS | §10 contract gate; §15 thứ tự triển khai và tương thích |
-| `DD-13` Trace/risk/decision/sign-off | **PASS FOR IMPLEMENTATION** | 17/17 decision `DECIDED`; Product + Architect `ACCEPT ALL`; chữ ký còn thiếu `WAIVED FOR IMPLEMENTATION`. TLS/BE-Core chưa tồn tại là deliverable thực thi và test, không phải blocker bắt đầu code |
+| `DD-13` Trace/risk/decision/sign-off | **PASS FOR IMPLEMENTATION** | 17/17 decision `DECIDED`; Product + Architect `ACCEPT ALL`; BE-Core source đã có. TLS/target/HIL evidence vẫn là blocker release, không phải blocker code |
 
-Không còn blocker approval. Check host đã có source/evidence, nhưng bằng chứng
-Commission/Core/target vẫn `NOT IMPLEMENTED/NOT TESTED` đúng thực tế và sẽ được
-tạo trong các task phụ thuộc.
+Không còn blocker approval. Commission/Core đã `IMPLEMENTED` ở source/host,
+nhưng target/HIL vẫn `NOT TESTED` và sẽ được tạo trong các task phụ thuộc.

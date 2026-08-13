@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Added — Hoàn tất Programming P4: Commission/Restore, cutover và recovery (2026-08-13)
+
+**TASK-PROG-403..405.** Web API nay có coordinator Commission/Restore bền
+vững: Operation được ghi SQLite trước IPC, có lease/generation CAS, request và
+context checksum, idempotency qua restart, staging content-addressed, timeout
+thành `UNKNOWN_RECONCILING` và chỉ query `OPERATION_STATUS` thay vì phát lại
+mutation. Terminal Commission ghi `commission_records` bất biến và audit trong
+cùng transaction; Commission đầu tiên hỗ trợ active trước đó bằng `null`/`none`.
+
+Core thêm UDS thật có frame/credential/deadline bound, dispatcher
+`STATUS/STAGE/ACTIVATE/RESTORE/OPERATION_STATUS`, coordinator nối `StJournal`
+vào đúng safe boundary và owner mailbox `GRAPH_ONLY↔PROGRAM_ONLY`. Candidate chỉ
+thành active/LKG sau first-cycle output batch commit; fault trước mốc này chuyển
+`ROLLING_BACK`, áp LKG + graph owner ở boundary kế rồi mới trả read-back
+`ROLLED_BACK`. Active checkpoint có CRC, exact Revision/artifact/plan identity,
+ghi temp→`fsync`→`rename`→`fsync(dir)`; restart chỉ nạp artifact staging khớp
+SHA-256 đã commit, còn journal/checkpoint mơ hồ giữ graph/LKG và phát
+`RECOVERY_REQUIRED`. Bootstrap dựng topology cố định trước ScanLoop để IPC không
+thay đổi container scheduler trong RT; feature flag Web vẫn mặc định `OFF`.
+
+**Kiểm chứng.** Release build bật Modbus+BACnet+HMI và CTest `1002/1002 PASS`;
+Go vet + test không cache `18 package PASS`; FE `58 file/494 test PASS`, lint và
+build PASS; error catalog `20 public/99 detail` đồng bộ. Ma trận gồm normal
+Commission, Restore, first-cycle rollback, restart ở mọi journal phase, restart
+`COMMITTED`, restart `ACTIVE_CANDIDATE`, journal/artifact/symlink/path traversal
+corrupt, UDS round-trip, durable replay/reconcile, CommissionRecord atomic và
+staging cleanup không follow symlink. Power-cut/WCET/IOP/HIL trên Forlinx vẫn
+`NOT RUN`; do đó 0/32 Test Result PASS, feature flag `OFF` và `RELEASE_READY
+BLOCKED` chưa đổi.
+
 ### Added — RETAIN lifecycle bền vững cho Programming P4 (2026-08-13)
 
 **TASK-PROG-402.** Nối RETAIN thật vào `StScheduler`/bootstrap PROGRAM_ONLY với

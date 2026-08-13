@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DM-PROG-001` |
-| Phiên bản | 0.9 |
+| Phiên bản | 1.0 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; chờ BE/Runtime/Security/QA review |
 | Ngày | 2026-08-11 |
 | Chủ quản | Backend Lead + Runtime Architect |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **dữ liệu Programming được lưu ra sao**: bảng, cột, kiểu, khóa, ràng buộc, giao dịch, thời gian giữ và cách nâng cấp schema. Ai viết migration hay viết struct Go/TypeScript đều lấy từ đây. |
 | 2. Ai phải đọc file này? | BE (viết store và migration) là bắt buộc; Core đọc phần định danh runtime và RETAIN; FE đọc để biết trường nào server là chủ; QA đọc §5 và §10 để dựng ca âm; Ops đọc §9 về backup/retention. |
-| 3. Hệ thống hiện tại đang có gì? | Source `3e5281d` giữ SQLite v4 gồm 12 bảng và thêm assurance cho store/bundle/audit: 25 lớp bundle độc hại đều reject với snapshot 8 bảng không đổi; 23 alias trường nhạy cảm bị từ chối trước khi append audit. 11 API Project/Draft/Revision/Check/change/bundle chạy thật; operation/Commission và RETAIN runtime chưa có. |
-| 4. Thiết kế mới thay đổi điều gì? | Chuỗi `Project → Draft → Revision → Check → Artifact` và đường `Revision set → source-only ZIP → Project/Draft mới` đã thành As-Built. Bundle không chứa/import Artifact/IR/native/cache; không auto-Check/Commission. Schema v4 mở rộng receipt action mà không đổi 12 aggregate table. |
-| 5. Team phải sửa module/contract nào? | §11 ánh xạ source đã có và phần còn lại. Assurance BE `TASK-PROG-207` đã xong; tiếp theo Core triển khai bounded loader/runtime ở `TASK-PROG-300`, rồi operation coordinator. Core dùng định danh biến ổn định cho RETAIN (§3.10); FE chỉ giữ phép chiếu, không coi cache trình duyệt là nguồn. |
-| 6. Điều gì còn bị chặn? | Không còn decision chặn implementation. Feature giữ `OFF` theo mặc định và chưa chạy migration target; release còn bị chặn bởi operation worker, Core lifecycle, target/HIL và Test Result, không phải bởi quyền viết code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-207` PASS hostile corpus 25 lớp, snapshot 8 bảng zero-mutation, 23 alias audit-secret, compiler resource faults và fuzz; full Go/race/regression cũng PASS. Đây là evidence host hỗ trợ, chưa phải `VS-PROG-*` Test Result; target power/RETAIN vẫn chưa chạy. |
+| 3. Hệ thống hiện tại đang có gì? | SQLite v5 giữ 12 aggregate nền và mở rộng operation context/core result, active/LKG projection, lease/generation/attempt; `commission_records.previous_revision_id` cho phép `null` ở lần Commission đầu. Store dùng CAS cho chuyển trạng thái, terminal CommissionRecord + audit atomic. RETAIN v2 và active checkpoint Core đã có source. |
+| 4. Thiết kế mới thay đổi điều gì? | Chuỗi Project→Artifact và bundle source-only giữ nguyên; P4 biến Commission/Restore thành operation bền vững xuyên restart, tách rõ intent DB, staged artifact, authoritative Core result và active/LKG projection. Migration v5 rebuild bảng CommissionRecord để giữ ràng buộc bất biến mà vẫn hỗ trợ cold start. |
+| 5. Team phải sửa module/contract nào? | §11 ánh xạ migration/store/operation P4 đã có. FE chỉ giữ phép chiếu; Core là authority active/LKG; DB không được tự suy “Active” từ HTTP ack. P5/P6 tiêu thụ contract hiện hành, không tạo state machine thứ hai. |
+| 6. Điều gì còn bị chặn? | Không còn blocker source P4. Feature vẫn `OFF`; target migration/backup/restart, power-cut RETAIN/checkpoint, HIL và Test Result còn chặn release. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Go tests PASS cho migration v5, idempotency/lease/restart/reconcile, terminal record và staging symlink/race; Core tests PASS cho checkpoint/recovery. Đây là evidence host hỗ trợ; target power/migration/HIL vẫn chưa chạy. |
 
 Ba quy tắc dễ làm sai nhất, nêu trước để khỏi phải đọc hết: (a) ID máy không đổi
 khi người dùng đổi tên — tên chỉ là metadata; (b) mọi timestamp lưu UTC có dấu
@@ -492,7 +492,7 @@ PATCH Draft:
 | Compiler sandbox | `apps/web-api/internal/programming/compiler/runner.go`; `apps/core/application/st/st_compile_main.cpp` | TASK-205: argv cố định, scratch 0700, rlimit/seccomp/no-new-privs, timeout giết process group, output/quota/manifest verify PASS |
 | Artifact registry/filesystem | `apps/web-api/internal/programming/{artifact/store.go,store/checks.go}` | TASK-205: temp+fsync+atomic link, content-address dedup, read-back, traversal/symlink/race reject PASS |
 | Bundle source-only | `apps/web-api/internal/programming/{application/bundles.go,store/bundles.go,transport/http/bundles.go}`, `store/migrations/0004_bundle_receipts.sql` | TASK-206 deterministic ZIP/hash/import; TASK-207 tại `3e5281d` khóa raw ZIP ≤4 MiB, entry ≤256 KiB, NFC, regular/non-exec, metadata/timestamp cố định, hostile corpus 25 lớp và snapshot 8 bảng zero-mutation |
-| Operation/commission | `apps/web-api/internal/programming/store/commands.go`; service/worker còn phải tạo | TASK-104: durable begin/idempotency/single-flight PASS; terminal reconcile/late response thuộc P4 |
+| Operation/commission | `apps/web-api/internal/programming/{application/operations.go,store/operations.go,store/migrations/0005_operation_coordinator.sql,transport/http/operations.go}` | TASK-403: durable intent, idempotency, lease/CAS, restart/reconcile và terminal CommissionRecord+audit atomic PASS trên host |
 | Audit | `apps/web-api/internal/programming/store/{audit.go,canonical.go,security_assurance_test.go}` | TASK-104 atomic append/sanitize/hash-chain; TASK-207 chuẩn hóa tên khóa nhạy cảm và reject 23 alias trước append, bundle audit chỉ giữ provenance, không source/secret |
 | Backup/migration | `apps/web-api/internal/programming/store/{backup,migrate}.go`, `migrations/` + operations runbook | TASK-104: online backup/quick_check/checksum/fault rollback PASS trên host; power-fault target chưa chạy |
 
@@ -533,9 +533,9 @@ không được dùng thay Core read-back cho Commission.
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| Bundle và operation/Commission worker chưa có | Backend Lead | P2/P4 triển khai source-only import/export, operation lease/reconcile và terminal Commission |
+| Target migration/operation chưa diễn tập | Backend Lead + Operations | deploy SQLite v5 trên bản sao target, backup/read-back/restart và Test Result được review |
 | Target migration chưa chạy | Operations + Verification | duyệt fixture, backup path và chạy rehearsal đúng target; tạo Test Result |
-| RETAIN compatibility chưa triển khai | Core/Runtime | P3/P4 hiện thực lifecycle matrix và chạy VS-PROG-029/030 |
+| RETAIN/checkpoint power-fault chưa có target evidence | Core/Runtime + QA | chạy VS-PROG-029/030 trên Forlinx/HIL |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
@@ -548,6 +548,7 @@ không được dùng thay Core read-back cho Commission.
 | 0.7 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-205` tại `e8c289e`: SQLite v3/12 bảng, Check receipt 24 giờ, lease/CAS tối đa hai attempt, terminal result, compiler sandbox và Artifact content-address/read-back; tám route thật, giữ operation/Core/target/RETAIN/Test Result chưa hoàn tất |
 | 0.8 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-206` tại `95b9388`: SQLite v4/12 bảng, bundle export/import receipt 24 giờ, change manifest/impactRef deterministic và ZIP source-only allowlist; import atomic chỉ tạo Project/Draft, 11 route thật; giữ operation/Core/target/RETAIN/Test Result chưa hoàn tất |
 | 0.9 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-207` tại `3e5281d`: hostile bundle corpus 25 lớp, snapshot 8 bảng zero-mutation, raw/entry/count/metadata/NFC bounds và 23 alias audit-secret bị reject trước append; giữ operation/Core/target/RETAIN/Test Result chưa hoàn tất |
+| 1.0 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: SQLite v5 operation context/core result/active-LKG projection/lease-generation-attempt, first Commission nullable previous revision, terminal CommissionRecord+audit atomic, RETAIN/checkpoint recovery source. Giữ feature OFF và target migration/power/HIL Test Result chưa chạy. |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|
@@ -562,7 +563,7 @@ không được dùng thay Core read-back cho Commission.
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file: ID, version, status, ngày, chủ quản, reviewer, approver, nguồn, phạm vi; revision history §14 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 nguyên tắc; §2 quan hệ entity xác định ranh giới trong/ngoài |
-| `DD-03` As-Built | PASS | §0 câu 3, §6 và §11 dẫn SQLite v4/Check/change/bundle tại `95b9388` và assurance store/bundle/audit tại `3e5281d`, phân biệt operation/RETAIN/target còn thiếu; Modbus Point authority chỉ được tham chiếu |
+| `DD-03` As-Built | PASS | §0 câu 3, §6 và §11 dẫn SQLite v5/operation/Commission tại `c2f3189` cùng RETAIN/checkpoint Core tại `10d9ad6`; phân biệt source host với target migration/power evidence; Modbus Point authority chỉ được tham chiếu |
 | `DD-04` Target ownership | PASS | §1 “BE/Core là authority, FE chỉ giữ phép chiếu”; §12 quyền ghi từng aggregate |
 | `DD-05` Data từng field | PASS | §3.1–§3.10 và §6.1–§6.4: type/unit/required/default/range/enum/null, khóa/index/FK, validation, lifecycle, retention; §13 serialization/migration |
 | `DD-06` Interface | N/A tại file này | Hợp đồng API thuộc [`IFSPEC-PROG-001`](../interfaces/PROGRAMMING_INTERFACE_SPEC.md); ở đây chỉ định nghĩa hình dạng dữ liệu bền vững. §13 mô tả handoff sinh mã cho hai bên |
@@ -575,4 +576,4 @@ không được dùng thay Core read-back cho Commission.
 | `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | 17 decision `DECIDED`, trace/risk cập nhật theo `95b9388`, chữ ký còn thiếu được `WAIVED FOR IMPLEMENTATION`. Target migration/release vẫn cần Ops/Verification evidence và residual acceptance |
 
 Không còn blocker quyền implementation. Tài liệu ghi đúng schema/store host đã
-có, nhưng **không** suy host test thành Test Result target, RETAIN hoặc runtime.
+có, nhưng **không** suy host test thành Test Result target/HIL/power-cut.

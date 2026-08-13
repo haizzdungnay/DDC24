@@ -1889,7 +1889,11 @@ paths:
       - name: from
         in: path
         required: true
-        schema: { type: string, format: uuid }
+        description: Revision active trước đó; dùng literal `none` cho Commission đầu tiên khi Core chưa có active Revision.
+        schema:
+          oneOf:
+            - { type: string, format: uuid }
+            - { type: string, const: none }
       - name: to
         in: path
         required: true
@@ -2069,7 +2073,7 @@ paths:
       operationId: commissionProgrammingRevision
       summary: Tạo transaction Commission có impact acknowledgement
       x-rbac: [admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-403
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
       requestBody:
@@ -2095,7 +2099,7 @@ paths:
       operationId: restoreProgrammingRevision
       summary: Restore Revision/LKG qua cùng verify path với Commission
       x-rbac: [admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-403
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
       requestBody:
@@ -2123,7 +2127,7 @@ paths:
       operationId: getProgrammingOperation
       summary: Đọc tiến trình và read-back authoritative của Operation
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-403
       responses:
         "200":
           description: Operation hiện hành
@@ -2536,7 +2540,10 @@ components:
       additionalProperties: false
       required: [fromRevisionId, toRevisionId, impact, changes]
       properties:
-        fromRevisionId: { type: string, format: uuid }
+        fromRevisionId:
+          oneOf:
+            - { type: string, format: uuid }
+            - { type: string, const: none }
         toRevisionId: { type: string, format: uuid }
         impact: { $ref: "#/components/schemas/ProgrammingImpact" }
         changes:

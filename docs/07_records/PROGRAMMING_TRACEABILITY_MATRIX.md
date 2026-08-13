@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.14 |
+| Phiên bản | 3.15 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
 | Cập nhật | 2026-08-13 |
 | Chủ quản | Verification Lead |
@@ -16,10 +16,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế/nơi sửa/kịch bản. `TASK-PROG-402` tại `3ca5d22` hoàn tất source `CORE-109`: RETAIN stable identity/version/layout/full CRC/atomic/cold-init, typed+FB codec, checkpoint sau output commit và wiring scheduler/bootstrap. Tổng **3/60** `I=Y`; hai record `BLOCKED`, 30 scenario `NOT_RUN`, **0/32 PASS**; mọi `T/P/R=N`. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế/nơi sửa/kịch bản. `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6` hoàn tất source Commission/Restore atomic, durable operation/reconcile, exclusive safe-boundary owner và first-output/LKG rollback. Tổng **7/60** `I=Y`; hai record `BLOCKED`, 30 scenario `NOT_RUN`, **0/32 PASS**; mọi `T/P/R=N`. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
-| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `BE-110`, `CORE-101` và `CORE-109 I=Y`; 57 dòng `I=N`. `CORE-109 T=N` vì `VS-PROG-029/030` Forlinx/HIL chưa có Test Result. Toàn bộ `T/P/R` còn `N` tới khi workflow E2E đủ acceptance và reviewer độc lập ký. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `SYS-103`, `SYS-105`, `BE-106`, `BE-110`, `CORE-101`, `CORE-106`, `CORE-109 I=Y`; 53 dòng `I=N`. Toàn bộ `T/P/R` còn `N` tới khi workflow E2E/target/HIL đủ acceptance và reviewer độc lập ký. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với bản thân ma trận: 60/60 dòng giải được về ID canonical, không trùng ID, không có dòng vi phạm `P=Y khi T=N` hay `R=Y khi P=N` — kiểm bằng harness ở [`PROG-REV-2026-08-09`](reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §2. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
@@ -110,7 +110,7 @@ scenario tương ứng có Test Result được review.
 ## 6. Trace chi tiết từng requirement
 
 Status dùng năm trục: `D` documented, `I` implemented, `T` tested, `P` passed,
-`R` released. Hiện mọi dòng `D=YES`; `BE-110`, `CORE-101`, `CORE-109 I=YES`, 57 dòng còn lại
+`R` released. Hiện mọi dòng `D=YES`; bảy dòng ghi ở §0 có `I=YES`, 53 dòng còn lại
 `I=NO`; toàn bộ `T/P/R=NO` cho tới khi có Test Result/release hợp lệ.
 Source target là vị trí phải tạo/sửa, không phải claim code đã có.
 
@@ -123,9 +123,9 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 |---|---|---|---|---|
 | `SYS-101` | ARCH; LANG; CTRL; RSK-006/010 | `95585e7`: profile; `52dfb57`: FBD canonical + FE reducer/component; `4819901`: FBD→typed IR/equivalence; `2c2bfb4`: artifact manifest/source map ST/FBD; `e8c289e`: Check route/worker/artifact registry; Point/Task/runtime E2E còn thiếu | 003/005/006/007/009/017 | Y/N/N/N/N |
 | `SYS-102` | DM; UX; FE; BE; RSK-007/008 | `66848a1`: Project/Draft/Revision; `e8c289e`: Check/Artifact; `95b9388`: SQLite v4 + source-only export/import Draft-only; `TR-PROG-019-20260811-001 BLOCKED`: UI và active-output integration còn thiếu | 002/019/026 | Y/N/N/N/N |
-| `SYS-103` | LIFE; ART; IFSPEC; RSK-003/007 | `4a1e9f5`: catalog/mapping lỗi lifecycle; Core coordinator + BE operation còn thiếu | 004/011 | Y/N/N/N/N |
+| `SYS-103` | LIFE; ART; IFSPEC; RSK-003/007 | `c2f3189` + `10d9ad6`: durable Commission/Restore, verified staging, journal/safe-boundary activation, authoritative read-back, first-output/LKG rollback và checkpoint recovery | 004/011 | Y/Y/N/N/N |
 | `SYS-104` | ARCH; LIFE; OPS; RSK-002/005 | `51fe515`: Core IPC no-mutation skeleton; `e9707b4`: reconnect/no-replay client; Core runtime + service package còn thiếu | 024/030 | Y/N/N/N/N |
-| `SYS-105` | CTRL; LIFE; RSK-001 | `4a1e9f5`: mã lỗi cross-layer; bootstrap/ScanLoop/resolver còn thiếu | 015 | Y/N/N/N/N |
+| `SYS-105` | CTRL; LIFE; RSK-001 | `10d9ad6`: `ProgrammingCutover` + ScanLoop safe-boundary khóa exclusive GRAPH_ONLY/PROGRAM_ONLY, rollback về graph/LKG; dual owner bị loại theo cấu trúc | 015 | Y/Y/N/N/N |
 | `SYS-106` | SEC; BE; IFSPEC; RSK-012/015 | `66848a1` + `e8c289e` + `95b9388`: 11 route enforce role; `3e5281d`: duplicate/unknown fail-closed, 23 alias audit-secret reject và bundle audit no-source; full route matrix/re-auth/TLS target còn thiếu | 022/023 | Y/N/N/N/N |
 | `SYS-107` | SEC; BE; OPS; RSK-011 | `95b9388`: source-only ZIP/import Draft-only; `3e5281d`: hostile corpus 25 lớp, path NFC/metadata/bounds và snapshot 8 bảng zero-mutation; UI replacement/target/independent evidence còn thiếu | 021/023 | Y/N/N/N/N |
 | `SYS-108` | UX; FE; HMI boundary | Web routes + HMI route inspection | 028 | Y/N/N/N/N |
@@ -149,7 +149,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `BE-103` | LANG; BE; IFSPEC | `e8c289e`: Check application/HTTP/worker, compiler thật, diagnostic và Artifact terminal; mapping/target acceptance/independent `VS-019` còn thiếu | 003/006/019 | Y/N/N/N/N |
 | `BE-104` | LANG; SEC; BE; RSK-005 | `e8c289e`: subprocess sandbox; `3e5281d`: timeout/SIGKILL-OOM/scratch cleanup/stdout/source one-over fail-closed và fuzz host; cgroup/priority/target load evidence còn thiếu | 006/012/013 | Y/N/N/N/N |
 | `BE-105` | DM; BE | `66848a1`: immutable Revision; `e8c289e`: immutable Check/Artifact; `95b9388`: structured diff + safety impact + impactRef deterministic; Core override/cutover impact còn `UNAVAILABLE` và independent evidence thiếu | 019 | Y/N/N/N/N |
-| `BE-106` | LIFE; IFSPEC; BE; RSK-007/008 | `e9707b4`: IPC Call/Reconcile; `312f357`: durable operation intent/idempotency/audit; worker, terminal state và stage/activate/read-back còn thiếu | 004/011/024 | Y/N/N/N/N |
+| `BE-106` | LIFE; IFSPEC; BE; RSK-007/008 | `c2f3189`: SQLite v5 operation/lease/generation, Commission/Restore worker, verified staging, timeout UNKNOWN, status-only reconcile và terminal CommissionRecord+audit atomic | 004/011/024 | Y/Y/N/N/N |
 | `BE-107` | SEC; BE; RSK-012 | `66848a1..95b9388`: authz handler+service/audit; `3e5281d`: 23 alias secret reject trước append và bundle audit no-source; full role/revocation/re-auth/CSRF/TLS matrix còn thiếu | 022 | Y/N/N/N/N |
 | `BE-108` | SEC; BE; RSK-011 | `95b9388`: ZIP source-only/import atomic; `3e5281d`: hostile corpus 25 lớp, raw/entry/count/path NFC/mode/flags/comment/timestamp/extra bounds, 8-table zero-mutation và fuzz; target/independent evidence còn thiếu | 021/023 | Y/N/N/N/N |
 | `BE-109` | CTRL; IFSPEC; BE; RSK-010 | runtime read model/events | 018/020/026 | Y/N/N/N/N |
@@ -159,7 +159,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `CORE-103` | ART; FWSOM; RSK-005/006 | `4f7e0ac`: prepare/preallocate ngoài scan, allocation counter activation/execute/LKG và post-link no-parser/compiler; full no-filesystem/DB/HTTP/DNS/blocking/dynamic-load + 10.000 cycle Forlinx còn thiếu | 012 | Y/N/N/N/N |
 | `CORE-104` | CTRL; FWSOM; RSK-001/004 | process image/PriorityResolver | 010/014/020 | Y/N/N/N/N |
 | `CORE-105` | CTRL; FWSOM; RSK-004 | PID library/runtime | 010/014 | Y/N/N/N/N |
-| `CORE-106` | CTRL; LIFE; RSK-003/004 | `4f7e0ac`: prepared handle safe-boundary swap + active/LKG preserve nền; output staging/first-cycle/coordinator/read-back còn thiếu | 011/014 | Y/N/N/N/N |
+| `CORE-106` | CTRL; LIFE; RSK-003/004 | `10d9ad6`: two-phase stage/commit/abort, safe-boundary swap, first output mới promote LKG/checkpoint; lỗi cycle đầu rollback prior LKG + graph trước khi báo ROLLED_BACK | 011/014 | Y/Y/N/N/N |
 | `CORE-107` | CTRL; FWSOM; RSK-005 | Task fault/metrics | 013 | Y/N/N/N/N |
 | `CORE-108` | CTRL; FWSOM; RSK-002 | `a831a0d`: base-step sequence + capability dải 500..2000 ms, systemd/comment runtime theo ADR-028; watchdog cadence/WCET `SCHED_FIFO` target và production wiring còn thiếu | 009/015 | Y/N/N/N/N |
 | `CORE-109` | LIFE §8; FWSOM §8; ART §4.6; RSK-009 | `3ca5d22`: `st_retain.{hpp,cpp}` record v2/store/mailbox/service; `st_scheduler.*` restore/checkpoint; `st_process_image.cpp` output-commit boundary; `bootstrap/main.cpp` service lifecycle; `st_control_api.cpp` + schema status health | 029/030 | Y/Y/N/N/N |
@@ -194,7 +194,7 @@ Tên rút gọn map: `LANG=DDD-LANG-PROG-001`, `ART=IFSPEC-ART-PROG-001`,
 | Requirement có design/control | 60/60 = 100% documented |
 | Requirement có source target | 60/60 = 100% planned |
 | Requirement có scenario | 60/60 = 100% specified |
-| Requirement implemented end-to-end | 3/60 confirmed (`BE-110`, `CORE-101`, `CORE-109`) |
+| Requirement implemented end-to-end | 7/60 confirmed (`SYS-103`, `SYS-105`, `BE-106`, `BE-110`, `CORE-101`, `CORE-106`, `CORE-109`) |
 | Scenario có Test Result record | 2/32 (`BLOCKED`); PASS 0/32 |
 | Requirement passed/released | 0/60 |
 
@@ -270,6 +270,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 3.12 | 2026-08-11 | `TASK-PROG-300` hoàn tất prepared runtime boundary tại `4f7e0ac`: bổ sung source partial cho CORE-103/106 và NFR-103/108, treatment RSK-003/006; targeted 84/84 và CTest 933/933 host PASS. Tổng `I=Y` giữ 2/60 vì CORE-103 còn full no-blocking/10.000 cycle Forlinx, operation/production/target E2E còn thiếu; hai record BLOCKED, 0/32 PASS, mọi `T/P/R=N` |
 | 3.13 | 2026-08-11 | `TASK-PROG-301` hoàn tất profile/base-step scheduler tại `a831a0d`: bổ sung source partial CORE-102/108, NFR-103 và treatment RSK-002; targeted 74/74, CTest 936/936 host PASS. Tổng `I=Y` giữ 2/60 vì process image/bootstrap/production và 10.000 cycle `SCHED_FIFO` Forlinx còn thiếu; hai record BLOCKED, 0/32 PASS, mọi `T/P/R=N` |
 | 3.14 | 2026-08-13 | `TASK-PROG-402` hoàn tất `CORE-109 I=Y` tại `3ca5d22`: RETAIN stable identity/layout/version/full CRC, typed+FB codec, async atomic write, output-commit checkpoint, cold-init/status và scheduler/bootstrap wiring. Tổng `I=Y` thành 3/60; không tạo Test Result, `VS-PROG-029/030` Forlinx/HIL vẫn NOT RUN, 0/32 PASS và mọi `T/P/R=N`. |
+| 3.15 | 2026-08-13 | `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6` hoàn tất source `SYS-103`, `SYS-105`, `BE-106`, `CORE-106`: durable Commission/Restore/reconcile, exclusive safe-boundary owner, first-output/LKG rollback và checkpoint recovery. Tổng `I=Y` thành 7/60; không tạo Test Result, target/HIL/power-cut vẫn NOT RUN, 0/32 PASS và mọi `T/P/R=N`. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

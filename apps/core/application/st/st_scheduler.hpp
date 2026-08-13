@@ -19,6 +19,7 @@
 #define CORE_ST_SCHEDULER_HPP
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -116,8 +117,11 @@ struct StProgramInstance {
      * request_activation() ngoài RT. */
     std::vector<uint8_t> retired_artifact;
     StPreparedProgramHandle pending_program;
-    bool        has_pending = false;
+    std::atomic<bool> has_pending{false};
+    std::atomic<bool> pending_commit_requested{false};
     bool        pending_is_rollback = false;
+    bool        pending_changed_state = false;
+    StProgramState state_before_stage = StProgramState::EMPTY;
 
     const char* last_fault_code = nullptr;
     uint32_t    last_fault_pc = 0;
@@ -257,6 +261,15 @@ public:
     bool request_activation(const std::string& instance_id, const std::vector<uint8_t>& artifact,
                             std::string* error);
 
+    /* Hai pha cho Commission: stage verify/preallocate ngoài RT nhưng CHƯA
+     * cho safe boundary swap; activate chỉ arming O(1). API cũ phía trên giữ
+     * hành vi một bước cho unit/supporting callers. */
+    bool stage_activation(const std::string& instance_id, const std::vector<uint8_t>& artifact,
+                          std::string* error);
+    bool commit_staged_activation(const std::string& instance_id, bool rollback,
+                                  std::string* error);
+    bool abort_staged_activation(const std::string& instance_id, std::string* error);
+
     /* Lệnh vòng đời (SPEC §7.3). Trả false nếu chuyển trạng thái không hợp lệ. */
     bool start(const std::string& instance_id, std::string* error);
     bool stop(const std::string& instance_id, std::string* error);
@@ -292,6 +305,11 @@ public:
     /* Gọi sau khi output batch của base-step hiện tại đã commit. Chỉ copy
      * snapshot bounded vào mailbox, không filesystem I/O/lock/allocation. */
     void publish_committed_retain_snapshots() noexcept;
+
+    /* Chỉ promote artifact vừa activate thành LKG sau khi CHÍNH cycle đó đã
+     * execute và publish output batch thành công. Một cycle chỉ execute sạch
+     * nhưng bị output preflight/commit từ chối chưa đủ tư cách rollback. */
+    void promote_output_committed_artifacts() noexcept;
 
 private:
     StSchedulerProfile profile_ = StSchedulerProfile::SUPPORTING_AS_BUILT;

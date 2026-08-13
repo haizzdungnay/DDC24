@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `IFSPEC-ART-PROG-001` |
-| Phiên bản | 0.8 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-300` đã tách prepare/preallocation khỏi safe boundary trên host; UDS/coordinator/bootstrap/target evidence còn mở** |
-| Ngày | 2026-08-11 |
+| Phiên bản | 0.9 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; verified staging/swap/LKG/recovery có source/host; target evidence còn mở** |
+| Ngày | 2026-08-13 |
 | Chủ quản | Compiler Lead + Core Lead |
 | Người review | Security Lead, Operations Lead, Verification Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **file artifact trông ra sao từng byte** và **loader kiểm nó thế nào trước khi cho chạy**. Gồm layout, hash/toàn vẹn, giới hạn, quy trình nạp có chặn trên, và cách tráo chương trình an toàn (stage → swap → rollback). |
 | 2. Ai phải đọc file này? | Compiler (bên sinh ra artifact) và Core (bên nạp) — hai bên phải khớp từng byte. Security đọc §4 và §8; Ops đọc §7 và §9. |
-| 3. Hệ thống hiện tại đang có gì? | Nền profile/serializer/loader/sáu type và manifest ST/FBD đã có. `TASK-PROG-300` tại `4f7e0ac` thêm `StPreparedProgram`, verify/preallocate ở command path, safe-boundary handle swap O(1), retired slot thu hồi ngoài RT và hậu kiểm symbol trên archive/binary. `st_control_api.*` vẫn nhúng artifact base64 và bootstrap production **chưa nối coordinator/UDS stage**. |
+| 3. Hệ thống hiện tại đang có gì? | Nền profile/serializer/loader/sáu type và manifest ST/FBD đã có. `TASK-PROG-403/404` nối verified content-address artifact thành hard-link staging, Core mở exact regular file không symlink, verify hash/size trước mutation, prepare ngoài RT và stage/commit/abort tại safe boundary. Checkpoint giữ exact artifact/hash để restart reload xác định. |
 | 4. Thiết kế mới thay đổi điều gì? | Giữ nguyên layout `MKDDCIR1` schema 1 nếu không cần đổi. Bỏ cách truyền base64 trong handler thời gian thực, chuyển sang **staging bằng file/FD qua UDS** — vì nhét 1 MiB base64 vào đường RT là không chấp nhận được. Thêm chế độ toàn vẹn `HASH_ONLY` cho compiler nội bộ tin cậy, giữ trường chữ ký để dành. |
-| 5. Team phải sửa module/contract nào? | Loader/runtime handoff nền ở §10 đã có source. Tiếp theo `TASK-PROG-301` tách base step/Task period; các task P3 sau nối process image, coordinator/UDS/bootstrap và bounded trace. BE vẫn phải chuyển staging sang file/FD. |
-| 6. Điều gì còn bị chặn? | Không còn decision blocker. Phần còn mở là production coordinator/UDS locator, journal/first-cycle/LKG, bootstrap và phép đo no-blocking/10.000 chu kỳ trên Forlinx; các mục này chặn Test Result/release, không phủ nhận source Task 300. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G3-300` ghim source `4f7e0ac`: targeted `84/84`, full CTest `933/933`, allocation counter tại activation/execute/LKG và hậu kiểm `nm -C` chặn parser/compiler đều PASS. Đây là evidence host hỗ trợ `VS-PROG-012`, chưa phải Test Result target/independent. |
+| 5. Team phải sửa module/contract nào? | Loader/runtime handoff và staging P4 đã có ở §10. P5/P6 chỉ tiêu thụ locator/hash/status; không truyền bytes tùy ý qua scan thread và không tạo loader thứ hai. |
+| 6. Điều gì còn bị chặn? | Không còn source staging/swap blocker. Phần còn mở là target file ownership/service identity, no-blocking/10.000 chu kỳ, power-cut filesystem và HIL Test Result. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host tests PASS cho corrupt hash, symlink, hard-link staging race/cleanup, active/LKG no-mutation, committed restart và active-candidate rollback; full CTest 1002/1002 PASS. Đây chưa phải Test Result target/independent. |
 
 Bất biến quan trọng nhất: **loader phải tự kiểm độc lập**, không tin compiler.
 Nếu artifact hỏng hoặc sai target thì bị từ chối **trước khi** tráo, và chương
@@ -51,7 +51,7 @@ lại đúng một active revision; IOP vẫn đáp ứng deadline trong stage/s
 | Build manifest | `st_artifact_manifest.*`, `artifact_build_manifest_v1.schema.json`, golden ST/FBD | consumer non-RT verify exact source/compiler/profile/library/ABI/hash/source map trước lưu/stage |
 | Verify | `StIntegrityMode`, mặc định `HASH_ONLY`; SHA-256 bắt buộc; `SIGNATURE_OPTIONAL` bị từ chối; signed artifact nếu có phải verify đúng | giữ `HASH_ONLY` trong trusted local boundary; field signature dành cho `SIGNATURE_REQUIRED` sau này |
 | Control API | `st_control_api.*`, schema `st_program_control_v1` có base64 artifact | file/FD staging qua UDS; cấm base64 1 MiB trong RT handler |
-| Loader wiring | `StProgramRuntime::prepare()` dựng `StPreparedProgram` và shadow buffers ngoài scan; `activate_prepared()` chỉ chuyển handle O(1); `StScheduler`/`StCyclicRuntime` stage trước tick; retired handle/bytes thu hồi ở command path; bootstrap production chưa route | coordinator/UDS worker + safe-boundary handoff vào ScanLoop production |
+| Loader wiring | `StProgramRuntime::prepare()` dựng `StPreparedProgram` ngoài scan; scheduler stage/commit/abort; coordinator/UDS + ScanLoop safe-boundary handoff đã route tại `10d9ad6` | target filesystem/power/timing evidence |
 | Spec cũ | `TYPED_IR_ARTIFACT_SPEC...` ghi signature normative | chỉ còn As-Built supporting spec; mục signature bị supersede cho target |
 
 ADR-031 đã loại bỏ `allow_unsigned`: policy là enum tường minh và khóa ở release
@@ -222,7 +222,7 @@ và correlation; không ghi artifact bytes/source/host path/public key material.
 | manifest/provenance | `st_artifact_manifest.*`, `artifact_build_manifest_v1.schema.json`, `golden/build_manifest_{st,fbd}_v1.json` | **đã có producer/verifier ST/FBD tại Task 203**; BE immutable linkage thuộc Task 204/205 |
 | loader | `st_loader.*`, `st_runtime.*`, `st_exec.*`, `st_retain.*` | **verify/preallocate/staged handle đã có tại `4f7e0ac`**; UDS worker/coordinator production còn phải nối |
 | control | `st_control_api.*`, `contracts/config/st_program_control_v1.schema.json` | thay base64 path bằng versioned UDS/locator |
-| lifecycle | `st_scheduler.*` có prepared-handle swap và LKG byte swap không cấp phát; `scan_loop.*`/bootstrap chưa route production | coordinator, journal/first-cycle/read-back và bootstrap |
+| lifecycle | `st_scheduler.*`, `programming_runtime_coordinator.*`, `scan_loop.*` và bootstrap có prepare/stage/first-output/LKG/read-back/checkpoint | target/HIL/power-fault |
 | packaging | `platform/packaging/` | directory owner/mode/tmpfiles/backup |
 | tests | `apps/core/application/st/tests`, `fuzz/fuzz_st_loader.cpp` | power-loss, symlink, mixed-version, target jitter |
 
@@ -269,7 +269,7 @@ Token không chứa path client-controlled. Expiry không được hủy handle 
 |---|---|---|---|
 | Integrity/profile contract | Product + Security + Architect | **ĐÃ ĐÓNG** | ADR-026/031 Accepted; profile/schema/golden + code/test tại TASK-PROG-102 |
 | Compiler type/provenance target | Compiler + Core | **ĐÃ ĐÓNG cho ST/FBD host** | `TASK-PROG-200..203`; schema/golden manifest + verifier tại `2c2bfb4` |
-| Production stage/swap chưa wired | Core Lead | chưa có runtime evidence | Plan 53 implementation + target/power-loss PASS |
+| Target stage/swap chưa kiểm chứng | Core + BE + Ops + QA | source/host đã wire | target filesystem/service identity/power-loss Test Result PASS |
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
 |---|---|---|---|
@@ -281,6 +281,7 @@ Token không chứa path client-controlled. Expiry không được hủy handle 
 | 0.6 | 2026-08-11 | Đồng bộ `TASK-PROG-200`: loader/serializer/executor/RETAIN đủ raw type 1..6, conversion/range/value canonical fail-closed, source map strict và loader fuzz 10 triệu input; production stage/swap/target vẫn mở | Core + Compiler Lead |
 | 0.7 | 2026-08-11 | Đồng bộ `TASK-PROG-203` tại `2c2bfb4`: manifest v1 ST/FBD khóa hai loại SHA-256, build key, compiler/profile/library/ABI và source map UUID/unit; verifier/CLI fail-closed, production stage/swap/target vẫn mở | Core + Compiler Lead |
 | 0.8 | 2026-08-11 | Đồng bộ `TASK-PROG-300` tại `4f7e0ac`: prepare/verify/preallocate ngoài scan, safe-boundary handle swap O(1), retired cleanup ngoài RT, LKG vector swap, `IR-E-015`, allocation test và post-link no-parser/compiler gate; coordinator/UDS/bootstrap/target vẫn mở | Core Lead |
+| 0.9 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: verified content-address hard-link staging, safe exact cleanup không follow symlink, bounded UDS locator/hash, two-phase stage/commit/abort và active checkpoint reload exact artifact. Host fault/restart PASS; target filesystem/power/HIL còn mở. | Core + BE + QA |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -294,7 +295,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §13 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §1 mục tiêu và bất biến; §2 quyết định Target |
-| `DD-03` As-Built | PASS | §2 dẫn profile/contracts, `st_ir.*`, `st_artifact.*`, `st_loader.*`, `StIntegrityMode`; ghi rõ bootstrap production **chưa route** |
+| `DD-03` As-Built | PASS | §2 dẫn profile/contracts, `st_ir.*`, `st_artifact.*`, `st_loader.*`, BE staging và Core coordinator/checkpoint; ghi rõ source đã route nhưng target chưa kiểm chứng |
 | `DD-04` Target ownership | PASS | §6 loader worker ngoài RT; §12 vòng đời handle và quyền sở hữu, chỉ một bên ghi |
 | `DD-05` Data từng field | PASS | §3 layout schema 1 tới mức byte/section; §5 giới hạn và mô hình dữ liệu runtime |
 | `DD-06` Interface | PASS | §3 layout là hợp đồng nhị phân giữa compiler và Core; §7 giao diện stage/swap; §9 tương thích |
@@ -304,7 +305,7 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §10 file cần sửa và ranh giới build |
 | `DD-11` Verification | PASS | §11 gắn `VS-PROG-006/011/023` với kỳ vọng “từ chối bằng mã ổn định, 0 thực thi tùy ý, active/LKG không đổi” |
 | `DD-12` Compatibility/deploy/rollback | PASS | §9 tương thích và triển khai; §7 rollback về LKG |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | ADR-026/031 Accepted; TASK-PROG-102 có commit/evidence; target/HIL và production stage/swap vẫn là release evidence, không phải decision blocker |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | ADR-026/031 Accepted; TASK-PROG-102/300/403..405 có source/host evidence; target/HIL/power-loss vẫn là release evidence |
 
-Tài liệu **không** chứng minh loader đã được nối vào production hoặc đã qua
-target/HIL; các phần đó tiếp tục bị chặn ở gate implementation/release tương ứng.
+Tài liệu chứng minh loader/staging đã được nối trong source/host, **không** chứng
+minh đã deploy hay qua target/HIL; các phần đó tiếp tục bị chặn ở release gate.

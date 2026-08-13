@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 1.2 |
+| Phiên bản | 1.3 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 32/32 kịch bản là baseline DoD; hiện có 2/32 record `BLOCKED`, 0/32 PASS |
 | Ngày | 2026-08-11 |
 | Chủ quản | Verification Lead |
@@ -18,11 +18,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **cách chứng minh hệ thống làm đúng**: 32 kịch bản `VS-PROG-001..032`, mỗi kịch bản có đồ gá, điều kiện trước, các bước, kết quả kỳ vọng định lượng, môi trường và ai được ký. Cũng chốt cái gì **không** được tính là bằng chứng. |
 | 2. Ai phải đọc file này? | Verification Lead (chủ quản) và mọi discipline lead — vì mỗi người sở hữu một phần trong cột “execute/review”. Release authority đọc §5 để biết gate nào đang mở. |
-| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001/019` có record G1 `BLOCKED`; 30 scenario còn lại `NOT_RUN`, tổng PASS `0/32` (§8). `EV-PROG-G3-300/301` ghim prepared runtime và profile/base-step host gates tại `4f7e0ac`/`a831a0d`, hỗ trợ VS-009/012/015; chưa có 10.000 chu kỳ Forlinx, timing/watchdog/IOP hoặc reviewer độc lập nên không phải Test Result. |
+| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001/019` có record G1 `BLOCKED`; 30 scenario còn lại `NOT_RUN`, tổng PASS `0/32` (§8). Evidence host P4 ghim operation/replay/restart, UDS/cutover/rollback/checkpoint recovery tại `c2f3189` + `10d9ad6`; chưa có Forlinx/HIL/power-cut/IOP timing hoặc reviewer độc lập nên không phải Test Result. |
 | 4. Thiết kế mới thay đổi điều gì? | Chuyển từ “có test” sang **bằng chứng có thẩm quyền**: mỗi lần chạy phải ghim commit, image, config và hash; Test Result là bất biến; chạy lại sinh ID mới. Trạng thái chỉ được là một trong `NOT_RUN/RUNNING/PASS/FAIL/BLOCKED/INVALIDATED`. |
 | 5. Team phải sửa module/contract nào? | Không sửa code. Cần dựng thư mục bằng chứng `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS`, cùng các đồ gá `H/B/T/L` ở §9. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Các giới hạn đã `DECIDED`. Đồ gá HIL (`L`) là deliverable/evidence của P6 và không chặn team bắt đầu P1–P5. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Chính file này định nghĩa. Với bản thân hồ sơ: 32/32 kịch bản có đặc tả đủ năm trục ở §9. `EV-PROG-G2-207` và `EV-PROG-G3-300/301` là evidence host hỗ trợ, không nâng verdict. Hiện có **2/32 record, 0/32 PASS, 2/32 BLOCKED**. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Chính file này định nghĩa. Với bản thân hồ sơ: 32/32 kịch bản có đặc tả đủ năm trục ở §9. Evidence host G2/G3/P4 chỉ hỗ trợ, không nâng verdict. Hiện có **2/32 record, 0/32 PASS, 2/32 BLOCKED**. |
 
 Ba loại bằng chứng **không** đủ để đóng một requirement: file tài liệu tồn tại;
 unit test trên máy host thay cho đo trên target/HIL; và ảnh chụp màn hình mock
@@ -298,17 +298,26 @@ Scheduler/Control API/ScanLoop/integration **74/74**, full CTest Release
 Modbus/BACnet/HMI **936/936**, Go, FE **494/494**, profile generator và G1
 **7/7** PASS. Evidence hỗ trợ phần host của `VS-PROG-009/015`.
 
+### 11.4 Evidence kỹ thuật host P4 `EV-PROG-P4-403-405`
+
+Source `c2f3189` + `10d9ad6` và gate cùng phiên chứng minh ở mức host: durable
+Commission/Restore và idempotency/lease/reconcile; bounded UDS peer credential;
+safe-boundary exclusive cutover; first-output/LKG; rollback; committed checkpoint
+restart; active-candidate recovery; corrupt journal/artifact/symlink fail-closed.
+Fresh Release build bật Modbus/BACnet/HMI, CTest 1002/1002, Go vet/test và FE
+494/494+lint/build PASS.
+
 Không tạo Test Result: chưa chạy 10.000 cycle mỗi period trên Forlinx, chưa đo
-jitter/WCET/watchdog/IOP poll gap với `SCHED_FIFO`, bootstrap production vẫn
-`st_sched=nullptr`, và chưa có executor/reviewer độc lập. Catalog giữ 2 record
-`BLOCKED`, 30 `NOT_RUN`, 0/32 PASS.
+jitter/WCET/watchdog/IOP poll gap với `SCHED_FIFO`, chưa cắt điện eMMC/HIL và
+chưa có executor/reviewer độc lập. Catalog giữ 2 record `BLOCKED`, 30 `NOT_RUN`,
+0/32 PASS.
 
 ## 12. Blocker, revision và sign-off
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
 | Requirement/design: `17 DECIDED/0 OPEN/0 CLOSED`, baseline approved | Product + Architect + discipline authority | **Đã mở implementation** theo `AUTH-PROG-2026-08-11-03` |
-| FE/BE/Core Programming chưa implement | Dev Leads | gates Plan 53 + build artifacts |
+| FE chưa implement; BE/Core P4 source đã có | Dev Leads | P5 + target/HIL gates Plan 53 và build artifacts |
 | BSP/HW fixture/limits/HIL chưa có | FW/HW/Safety | controlled setup + calibrated instruments |
 
 | Phiên bản | Ngày | Nội dung |
@@ -325,6 +334,7 @@ jitter/WCET/watchdog/IOP poll gap với `SCHED_FIFO`, bootstrap production vẫn
 | 1.0 | 2026-08-11 | Đăng ký `EV-PROG-G2-207` làm evidence kỹ thuật host hỗ trợ VS-006/012/013/021/023: hostile corpus 25 lớp, zero-mutation 8 bảng, 23 audit alias, compiler fault bounds, fuzz và full regression PASS; không tạo Test Result, giữ 2 record BLOCKED và 0/32 PASS |
 | 1.1 | 2026-08-11 | Đăng ký `EV-PROG-G3-300` cho phần host VS-012: prepared runtime/handle swap/LKG không cấp phát trong test, post-link không parser/compiler, targeted 84/84 và CTest 933/933; giữ scenario NOT_RUN vì chưa có 10.000 cycle/no-blocking trên Forlinx và reviewer độc lập |
 | 1.2 | 2026-08-11 | Đăng ký `EV-PROG-G3-301` cho phần host VS-009/015: profile Rev A 1/1/1, period 1/5/30 s, budget `<20%`, base-step sequence và no-catch-up; targeted 74/74, CTest 936/936; giữ scenario NOT_RUN vì chưa có 10.000 cycle/timing/watchdog/IOP trên Forlinx và reviewer độc lập |
+| 1.3 | 2026-08-13 | Đăng ký `EV-PROG-P4-403-405` cho phần host VS-004/011/015/024/029/030: operation/replay/restart, UDS/cutover/rollback/checkpoint recovery và negative fault PASS; fresh CTest 1002/1002 + Go/FE gates PASS. Giữ 2 record BLOCKED, 0/32 PASS vì target/HIL/power-cut/reviewer độc lập chưa có. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

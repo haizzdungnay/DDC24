@@ -60,8 +60,9 @@ var routeDefinitions = []routeDefinition{
 // fallback API hiện hữu trả 404, nên deploy binary trước không làm lộ capability
 // giả hoặc mutation chưa nối Core.
 type Services struct {
-	Projects *programmingapplication.ProjectService
-	Checks   *programmingapplication.CheckService
+	Projects   *programmingapplication.ProjectService
+	Checks     *programmingapplication.CheckService
+	Operations *programmingapplication.OperationService
 }
 
 func RegisterProgrammingRoutes(routes *[]webrouter.Route, enabled bool, provided ...Services) {
@@ -96,6 +97,9 @@ func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition
 		return
 	}
 	if services.Checks != nil && handleCheckRequest(w, r, correlationID, services.Checks) {
+		return
+	}
+	if services.Operations != nil && handleOperationRequest(w, r, correlationID, services.Operations) {
 		return
 	}
 	if services.Projects != nil && handleBundleRequest(w, r, correlationID, services.Projects) {

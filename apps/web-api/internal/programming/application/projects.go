@@ -99,10 +99,27 @@ type SealRevisionCommand struct {
 }
 
 type ProjectService struct {
-	store        *programmingstore.Store
-	now          func() time.Time
-	newID        func() string
-	cursorSecret []byte
+	store         *programmingstore.Store
+	now           func() time.Time
+	newID         func() string
+	cursorSecret  []byte
+	runtimeImpact RuntimeImpactProvider
+}
+
+type RuntimeImpactSnapshot struct {
+	ProducerMode      string
+	ActiveRevisionID  string
+	ActiveOverrideIDs []string
+}
+
+type RuntimeImpactProvider interface {
+	CurrentRuntimeImpact(context.Context) (RuntimeImpactSnapshot, error)
+}
+
+func (s *ProjectService) SetRuntimeImpactProvider(provider RuntimeImpactProvider) {
+	if s != nil {
+		s.runtimeImpact = provider
+	}
 }
 
 func NewProjectService(store *programmingstore.Store, cursorSecret []byte) (*ProjectService, error) {

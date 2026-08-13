@@ -274,7 +274,8 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("GET /api/v1/alarm-settings", RoleViewer, a.handleGetAlarmSettings),
 		webRouter.Protected("PUT /api/v1/alarm-settings", RoleAdmin, a.handlePutAlarmSettings),
 	}
-	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, programminghttp.Services{Projects: a.programmingProjects, Checks: a.programmingChecks})
+	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, programminghttp.Services{
+		Projects: a.programmingProjects, Checks: a.programmingChecks, Operations: a.programmingOperations})
 	mux, err := webRouter.New(a.auth, routes, http.HandlerFunc(a.handleStatic))
 	if err != nil {
 		panic(err)

@@ -301,7 +301,9 @@ std::string st_handle_control_request(StScheduler* sched, const std::string& req
             return error_response(request_id, code, err);
         }
         json p;
-        p["state"] = st_program_state_name(sched->find_program(inst)->state);
+        /* Trạng thái command là STAGED dù package cũ vẫn RUNNING/STOPPED tới
+         * boundary; không sửa state runtime sớm chỉ để tạo response. */
+        p["state"] = "STAGED";
         p["artifactBytes"] = bytes.size();
         /* Nói rõ activation áp ở tick kế, không phải ngay lập tức — BE không
          * được kết luận "đã chạy" khi mới stage xong. */
@@ -326,7 +328,8 @@ std::string st_handle_control_request(StScheduler* sched, const std::string& req
 
     const StProgramInstance* p = sched->find_program(inst);
     json payload;
-    payload["state"] = st_program_state_name(p->state);
+    payload["state"] = action == "program_rollback"
+        ? "STAGED" : st_program_state_name(p->state);
     if (action == "program_rollback") payload["appliedAt"] = "next_tick_boundary";
     return ok_response(request_id, payload);
 }

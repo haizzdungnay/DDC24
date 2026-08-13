@@ -248,6 +248,8 @@ type BeginOperationParams struct {
 	Role                     string
 	AuditID                  string
 	At                       time.Time
+	RequestSHA256            [32]byte
+	ContextJSON              []byte
 }
 
 type Operation struct {
@@ -263,4 +265,65 @@ type Operation struct {
 	CreatedAtUTCMS           int64
 	UpdatedAtUTCMS           int64
 	Replay                   bool
+	ResultCode               string
+	DetailCode               string
+	KeepsRunningRevision     *bool
+	PreviousActiveRevisionID string
+	ActualActiveRevisionID   string
+	ContextJSON              []byte
+	CoreResultJSON           []byte
+	AttemptCount             int
+	LeaseOwner               string
+	LeaseExpiresAtUTCMS      *int64
+	LeaseGeneration          int64
+}
+
+type ClaimOperationParams struct {
+	Owner string
+	At    time.Time
+	Lease time.Duration
+}
+
+type UpdateOperationParams struct {
+	OperationID          string
+	LeaseOwner           string
+	LeaseGeneration      int64
+	State                string
+	Step                 string
+	ResultCode           string
+	DetailCode           string
+	KeepsRunningRevision *bool
+	PreviousActive       string
+	ActualActive         string
+	CoreResultJSON       []byte
+	At                   time.Time
+	ReleaseLease         bool
+	AuditID              string
+	AuditAction          string
+	AuditRole            string
+	CommissionRecord     *CommissionRecordInput
+}
+
+// CommissionRecordInput được ghi cùng transaction terminal của Operation.
+// PreviousRevisionID rỗng chỉ hợp lệ cho lần Commission đầu tiên.
+type CommissionRecordInput struct {
+	PreviousRevisionID      string
+	NewRevisionID           string
+	ArtifactSHA256          [32]byte
+	RuntimeReadbackJSON     []byte
+	ImpactJSON              []byte
+	OverrideInventorySHA256 [32]byte
+	Result                  string
+}
+
+type CommissionRecord struct {
+	OperationID             string
+	PreviousRevisionID      string
+	NewRevisionID           string
+	ArtifactSHA256          [32]byte
+	RuntimeReadbackJSON     []byte
+	ImpactJSON              []byte
+	OverrideInventorySHA256 [32]byte
+	Result                  string
+	ClosedAtUTCMS           int64
 }

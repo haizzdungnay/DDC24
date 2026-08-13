@@ -55,7 +55,10 @@ type Config struct {
 	ProgrammingBackupDir       string
 	ProgrammingStateDir        string
 	ProgrammingArtifactDir     string
+	ProgrammingStagingDir      string
 	ProgrammingScratchDir      string
+	ProgrammingSocket          string
+	ProgrammingCoreUID         uint32
 	ProgrammingCompilerPath    string
 	ProgrammingTargetID        string
 	ProgrammingCompilerTimeout time.Duration
@@ -108,7 +111,10 @@ func LoadConfig() (Config, error) {
 		ProgrammingBackupDir:       os.Getenv("PROGRAMMING_BACKUP_DIR"),
 		ProgrammingStateDir:        getenv("PROGRAMMING_STATE_DIR", filepath.Join(getenv("STATE_DIR", "/data/mkddc"), "programming")),
 		ProgrammingArtifactDir:     os.Getenv("PROGRAMMING_ARTIFACT_DIR"),
+		ProgrammingStagingDir:      os.Getenv("PROGRAMMING_STAGING_DIR"),
 		ProgrammingScratchDir:      os.Getenv("PROGRAMMING_SCRATCH_DIR"),
+		ProgrammingSocket:          getenv("PROGRAMMING_SOCKET", "/run/mkddc/programming-v1.sock"),
+		ProgrammingCoreUID:         uint32(os.Getuid()),
 		ProgrammingCompilerPath:    getenv("PROGRAMMING_COMPILER", "/usr/sbin/mkddc-st-compile"),
 		ProgrammingTargetID:        getenv("PROGRAMMING_TARGET_ID", "controller-local"),
 		ProgrammingCompilerTimeout: 10 * time.Second,
@@ -138,6 +144,9 @@ func (c *Config) deriveProgrammingPaths() {
 	}
 	if c.ProgrammingArtifactDir == "" {
 		c.ProgrammingArtifactDir = filepath.Join(c.ProgrammingStateDir, "artifacts")
+	}
+	if c.ProgrammingStagingDir == "" {
+		c.ProgrammingStagingDir = filepath.Join(c.ProgrammingStateDir, "staging")
 	}
 	if c.ProgrammingScratchDir == "" {
 		c.ProgrammingScratchDir = filepath.Join(c.ProgrammingStateDir, "scratch")

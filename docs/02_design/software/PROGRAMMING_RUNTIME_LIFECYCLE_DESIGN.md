@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LIFE-PROG-001` |
-| Phiên bản | 0.5 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-400..402` có source/host evidence; BE coordinator (403), cutover live (404) và target/HIL còn mở** |
+| Phiên bản | 0.6 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-400..405` DONE về source/host; target/HIL/power-cut còn mở** |
 | Ngày | 2026-08-13 |
 | Chủ quản | Core Lead + Backend Lead + Operations Lead |
 | Người review | System Architect, Controls Lead, Verification Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **vòng đời của một thay đổi**: Check → Commission → Active, cộng Restore, RETAIN, LKG và phục hồi sau khi mất điện hoặc crash. Trả lời câu hỏi khó nhất: *mất điện đúng lúc đang tráo chương trình thì máy khởi động lên chạy cái gì?* |
 | 2. Ai phải đọc file này? | Core, BE và Ops (chủ quản chung); Architect và QA review. Ops đọc §10 và §14 vì runbook dựa trực tiếp vào đây. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-306` (`f35234c`) đã dựng `StScheduler` thật trong bootstrap qua `--programming-mode`; graph.execute() bị khoá khi PROGRAM_ONLY. `TASK-PROG-400` (`a523a04`) thêm `StJournal` 5 phase nhưng chưa wire coordinator. `TASK-PROG-402` (`3ca5d22`) đã nối RETAIN v2 vào scheduler/bootstrap: stable identity, exact layout/version, CRC toàn record, typed variable+FB codec, mailbox ngoài RT, atomic write và explicit cold-init. Control handler vẫn standalone, **chưa** nối BE↔Core. |
+| 3. Hệ thống hiện tại đang có gì? | P4 đã nối trọn source/host: BE durable Commission/Restore tại `c2f3189`; Core UDS/coordinator/journal/cutover/first-output/LKG/rollback/checkpoint recovery tại `10d9ad6`; RETAIN v2 tại `3ca5d22`. Mặc định vẫn GRAPH_ONLY và Web flag OFF. |
 | 4. Thiết kế mới thay đổi điều gì? | Biến Commission thành **giao dịch có nhật ký, sống sót qua restart**: một `operationId` bền vững, tráo chương trình tại biên an toàn, và chỉ nâng LKG **sau khi** chu kỳ đầu chạy xong không lỗi. Thất bại ở bất kỳ bước nào đều giữ nguyên Revision đang chạy. |
-| 5. Team phải sửa module/contract nào? | §12. Core: nhật ký + máy trạng thái tráo an toàn; BE: coordinator có operation bền vững và đối chiếu lại trạng thái; Ops: dùng procedure §14 thay cho thao tác SSH thủ công. |
-| 6. Điều gì còn bị chặn? | Chính sách RETAIN source của `OD-PROG-009` đã được hiện thực cho Rev A: chỉ restore exact-compatible, còn missing/corrupt/mismatch thì cold-init có diagnostic. Phần còn chặn release là journal/coordinator/UDS/cutover `TASK-PROG-403..405` và `VS-PROG-029/030` power-loss/restart trên Forlinx/HIL. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §13: `VS-PROG-011` (chèn lỗi/crash/cắt điện tại **mọi** trạng thái vòng đời — phải luôn đúng một active, không kích hoạt đôi, LKG vẫn nạp được), `VS-PROG-029` (RETAIN), `VS-PROG-030` (restart toàn hệ trên HIL). `NOT RUN`. |
+| 5. Team phải sửa module/contract nào? | §12 ánh xạ source P4 đã có. P5/P6 tiêu thụ operation/read-back; Ops dùng procedure §14. Không tạo shortcut copy file/DB hay retry activate mù. |
+| 6. Điều gì còn bị chặn? | Không còn blocker source P4. Release còn chờ `VS-PROG-011/029/030` phần Forlinx/HIL/power-cut, IOP timing, feature enable và residual acceptance. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host tests bao phủ normal/duplicate/timeout/restart/reconcile, symlink/corrupt artifact, first-cycle rollback, journal recovery matrix và exact committed checkpoint; full CTest 1002/1002 PASS. `VS-PROG-011/029/030` target/HIL vẫn `NOT RUN`. |
 
 Nguyên tắc chống “báo thành công giả” (`RSK-PROG-007`): `HTTP 202` chỉ nghĩa là
 lệnh đã nhận. Chỉ khi Core trả về đúng `activeRevision` và `operationId` khớp thì
@@ -51,7 +51,7 @@ Authority theo lớp:
 
 | Thành phần | As-Built 2026-08-09 | Gap Target |
 |---|---|---|
-| ST components | compiler/loader/scheduler/retain/trace/journal có unit/integration test; RETAIN đã wire scheduler/bootstrap ở `TASK-PROG-402` | journal/coordinator chưa wire vào lifecycle (403) và target power-fault chưa chạy |
+| ST components | compiler/loader/scheduler/retain/trace/journal/coordinator có unit/integration test; RETAIN + lifecycle đã wire scheduler/bootstrap tới `10d9ad6` | target power-fault/HIL chưa chạy |
 | ScanLoop | `TASK-PROG-306` (`f35234c`): `CutoverMode` chọn producer, `graph.execute()` khoá khi `PROGRAM_ONLY`, bootstrap dựng `StScheduler` thật | exclusive producer đã đạt; lifecycle safe swap DURABLE (journal wired) còn ở 403 |
 | Config API | `st_program_control_v1.schema.json` và handler standalone | BE↔Core protocol/durable operation chưa wired |
 | BE/FE | không có Programming package/route user reachable | project/check/commission/restore UI/API/storage |
@@ -316,15 +316,15 @@ Phần Core tự giữ (`StJournal`, xem As-Built §7) chỉ có
 CRC per-record — KHÔNG có `type/candidateRevision riêng/expectedActive kèm
 generation/activeBefore/lkgBefore/retainPlan/cutoverPlan/recordSeq` tường
 minh, vì Core không tự biết những giá trị đó (BE coordinator theo dõi trong
-DB, TASK-PROG-403). `recover()` pseudocode ở trên khớp
-`st_journal_decide_boot_action()` về Ý NGHĨA cho 5/7 nhánh; nhánh `STAGED`
-(BE chưa bàn giao candidate cho Core) không thuộc phạm vi `StJournal`.
+DB, TASK-PROG-403). `ProgrammingRuntimeCoordinator::recover()` kết hợp
+`st_journal_decide_boot_action()` với active checkpoint CRC: COMMITTED exact
+checkpoint được reload; ACTIVE_CANDIDATE chỉ về prior LKG; thiếu/hỏng/ambiguous
+thì giữ graph hoặc checkpoint LKG và báo `RECOVERY_REQUIRED`, không đoán theo thời gian.
 
 ## 16. Blocker, revision và phê duyệt
 
 | Blocker | Owner | Gate | Điều kiện mở |
 |---|---|---|---|
-| Journal/IPC/BE operation chưa tích hợp | Core + BE | Plan 53 | hoàn tất `TASK-PROG-403/404` + integration/fault tests |
 | Power-loss/first-cycle/IOP chưa có target evidence | QA + Ops | release | target/HIL test result approved |
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
@@ -334,6 +334,7 @@ DB, TASK-PROG-403). `recover()` pseudocode ở trên khớp
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; đóng finding `F-PROG-001/002` | System Engineering |
 | 0.4 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (bootstrap dựng StScheduler thật) và `TASK-PROG-400` (`StJournal` 5 phase Core-side, append/checksum, boot-recovery); ghi rõ phạm vi hẹp hơn bảng field §15 (thiếu type/candidateRevision/expectedActive-generation/activeBefore/lkgBefore/retainPlan/cutoverPlan/recordSeq — cần TASK-PROG-403 BE coordinator); giữ target/HIL NOT TESTED | Core + BE |
 | 0.5 | 2026-08-13 | Đồng bộ `TASK-PROG-402`: RETAIN record v2/layout v1, stable controller+instance identity, full-record CRC, exact typed/FB restore, async mailbox/worker, output-commit checkpoint, atomic write/cold-init diagnostics và status health; giữ `VS-PROG-029/030` Forlinx/HIL NOT RUN | Core |
+| 0.6 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: durable operation/lease/reconcile, bounded UDS peer credential, journal/cutover tại safe boundary, first-output mới nâng LKG, rollback và active checkpoint CRC atomic/restart recovery. Giữ flag OFF và target/HIL/power-cut/IOP Test Result NOT RUN. | Core + BE + QA |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -347,7 +348,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §16 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §1 mục tiêu và authority; §3 aggregate và bất biến |
-| `DD-03` As-Built | PASS | §2 bảng gap: bootstrap PROGRAM_ONLY đã tạo scheduler + RETAIN service; journal/coordinator/UDS vẫn chưa nối; control handler còn standalone |
+| `DD-03` As-Built | PASS | §2 bảng gap: bootstrap tạo scheduler + RETAIN + coordinator/UDS; journal/cutover/checkpoint đã nối; target/HIL còn chưa kiểm chứng |
 | `DD-04` Target ownership | PASS | §3 aggregate và chủ sở hữu; §9 cutover và replacement |
 | `DD-05` Data từng field | PASS | §15 schema bản ghi nhật ký từng trường; §8 vòng đời RETAIN |
 | `DD-06` Interface | N/A tại file này | Hợp đồng BE↔Core thuộc `IFSPEC-PROG-001` §8/§12; ở đây là máy trạng thái phía sau hợp đồng đó |
