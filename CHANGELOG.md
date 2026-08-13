@@ -7,6 +7,22 @@
 ---
 
 ## [Unreleased]
+### Fixed — catalog lỗi Programming thiếu map ST-RT-009/010 (2026-08-13)
+
+Chạy gate `npm run build` cho `TASK-PROG-400` phát hiện
+`scripts/generate_programming_errors.py --check` fail: `ST-RT-009` (PID `dt`
+không hợp lệ, thêm ở `TASK-PROG-303`) và `ST-RT-010` (Task overrun, thêm ở
+`TASK-PROG-304`) tồn tại trong `st_diagnostic.hpp` nhưng chưa có
+`componentDetails` map trong `contracts/programming/error_catalog_v1.json` —
+cả hai task đó chạy `npx vitest` + `npm run lint` khi merge nhưng bỏ sót
+`npm run build` (script kiểm catalog chỉ chạy trong bước build), nên khoảng hở
+lọt qua 2 vòng gate liên tiếp. Sửa bằng cách thêm hai dòng map vào
+`PRG-ERR-COM-001` hiện hữu (không tạo public code mới), bump catalog
+v1.2.0→v1.3.0 theo policy minor không phá vỡ consumer (20 public/82 detail),
+chạy lại generator để đồng bộ `errors_generated.go`/
+`program_error_generated.hpp`/`errors.ts`/manifest, và cập nhật
+`PROGRAMMING_INTERFACE_SPEC.md` (v1.3→v1.4). `npm run build` PASS trở lại.
+
 ### Added — StJournal: journal bền vững safe-boundary Programming P4 (2026-08-13)
 
 **TASK-PROG-400** (mở P4). `DDD-LIFE-PROG-001` §7 định nghĩa câu hỏi khó

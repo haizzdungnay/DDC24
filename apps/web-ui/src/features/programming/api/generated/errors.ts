@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "9b6337a0ed180c7a493774eaf1ad105c9a2b2a52e26abaf50120e1f8459e663e" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.2.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "92fb21f55b1400ba7bccfd1e2b0a75543c3a5f3125516108f647fd993c17fafc" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.3.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
@@ -101,6 +101,8 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "runtime\u0000ST-RT-006": "PRG-ERR-COM-001",
   "runtime\u0000ST-RT-007": "PRG-ERR-COM-001",
   "runtime\u0000ST-RT-008": "PRG-ERR-COM-001",
+  "runtime\u0000ST-RT-009": "PRG-ERR-COM-001",
+  "runtime\u0000ST-RT-010": "PRG-ERR-COM-001",
   "st-control-api\u0000API-E-001": "PRG-ERR-REQ-001",
   "st-control-api\u0000API-E-002": "PRG-ERR-REQ-001",
   "st-control-api\u0000API-E-003": "PRG-ERR-TARGET-001",

@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "9b6337a0ed180c7a493774eaf1ad105c9a2b2a52e26abaf50120e1f8459e663e";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.2.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "92fb21f55b1400ba7bccfd1e2b0a75543c3a5f3125516108f647fd993c17fafc";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.3.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -73,7 +73,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 80> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 82> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -147,6 +147,8 @@ inline constexpr std::array<ComponentErrorMapping, 80> kComponentErrorMappings =
     {"runtime", "ST-RT-006", ProgramPublicError::Commission },
     {"runtime", "ST-RT-007", ProgramPublicError::Commission },
     {"runtime", "ST-RT-008", ProgramPublicError::Commission },
+    {"runtime", "ST-RT-009", ProgramPublicError::Commission },
+    {"runtime", "ST-RT-010", ProgramPublicError::Commission },
     {"st-control-api", "API-E-001", ProgramPublicError::Request },
     {"st-control-api", "API-E-002", ProgramPublicError::Request },
     {"st-control-api", "API-E-003", ProgramPublicError::Target },

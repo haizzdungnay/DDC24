@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 1.3 |
+| Phiên bản | 1.4 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 11 Project/Draft/Revision/Check/change/bundle operation, IPC v1 và catalog lỗi ba ngôn ngữ có source; operation/Core lifecycle còn mở |
-| Ngày | 2026-08-11 |
+| Ngày | 2026-08-13 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -19,7 +19,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **hợp đồng** giữa các bên: REST và WebSocket giữa trình duyệt và BE, IPC giữa BE và Core. Định nghĩa đường dẫn, payload, mã lỗi, timeout, retry, idempotency và thứ tự sự kiện. Đây cũng là **nguồn chuẩn duy nhất của mã lỗi** `PRG-ERR-*`. |
 | 2. Ai phải đọc file này? | FE và BE bắt buộc đọc cùng nhau — hai bên phải review **một** hợp đồng, không phải hai bản mô tả. Core đọc §8 và §12 (hợp đồng BE↔Core). Security đọc §15. QA dựng contract test từ §14 và §18. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-207` tại `3e5281d` khóa assurance cho 11 operation Project/Draft/Revision/Check/change/bundle: raw archive/entry/count bounded, path UTF-8 NFC, entry regular không executable, ZIP không comment/encryption/link và timestamp cố định; hostile corpus 25 lớp zero-mutation. Catalog giữ 20 public/80 detail; feature flag mặc định `OFF`. 14 operation runtime/operation/audit vẫn trả unavailable/no-side-effect. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-207` tại `3e5281d` khóa assurance cho 11 operation Project/Draft/Revision/Check/change/bundle: raw archive/entry/count bounded, path UTF-8 NFC, entry regular không executable, ZIP không comment/encryption/link và timestamp cố định; hostile corpus 25 lớp zero-mutation. Catalog v1.3.0 giữ 20 public/82 detail (thêm `ST-RT-009/010` tại `TASK-PROG-400`); feature flag mặc định `OFF`. 14 operation runtime/operation/audit vẫn trả unavailable/no-side-effect. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm nhóm `/api/v1/programming`, event WebSocket cho runtime/operation, và một giao thức nội bộ có phiên bản cho Commission. Nguyên tắc chi phối: `HTTP 2xx` chỉ nghĩa là **request đã được nhận**; chỉ read-back từ Core mới kết luận được Revision nào đang chạy. |
 | 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog, Project/Draft/Revision, Check worker, change manifest, bundle source-only và assurance Task 207 đã có source. Tiếp theo `TASK-PROG-300` nối bounded loader/runtime Core, rồi operation lifecycle. FE tiếp tục chỉ dùng type/catalog sinh ra, không tự viết mã lỗi hoặc messageKey. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Payload/limit/role đã được chốt bởi 17 decision `DECIDED`. TLS và giao thức BE↔Core là phần phải implement/test trong P1–P3, không phải điều kiện xin phép trước khi code. |
@@ -297,6 +297,13 @@ ba detail Check worker/sandbox/artifact mới map vào public code hiện hữu,
 tạo nhánh xử lý công khai thứ hai. SHA-256 ghim trong
 `error_catalog_v1.manifest.json`; generator sinh Go/C++/TS và fail nếu §9, source
 detail, OpenAPI hoặc consumer bị drift.
+
+As-Built `TASK-PROG-400`: catalog v1.3.0 có **20 public code / 82 detail
+mapping** — bổ sung `ST-RT-009`/`ST-RT-010` (PID `dt` không hợp lệ ở
+`TASK-PROG-303`, Task overrun ở `TASK-PROG-304`) map vào `PRG-ERR-COM-001` hiện
+hữu; đây là khoảng hở phát hiện khi chạy `npm run build` gate cho
+`TASK-PROG-400` — hai task nguồn thêm mã `ST-RT-*` mới trong `st_diagnostic.hpp`
+nhưng chưa đồng bộ catalog, sửa cùng phiên theo nguyên tắc "làm hết việc".
 
 ## 10. Compatibility và contract gate
 
@@ -585,6 +592,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 1.1 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-205` tại `e8c289e`: OpenAPI v1.18 và hai operation Check nối SQLite v3/application worker; receipt 24 giờ, lease/retry, `QUEUED/RUNNING/PASSED/FAILED/TIMED_OUT`, sandbox/artifact verify và catalog v1.2.0 20 public/80 detail; giữ 17 operation còn 503, flag OFF và target evidence còn mở | BE + Core + FE Lead |
 | 1.2 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-206` tại `95b9388`: OpenAPI v1.19 và ba operation change/export/import nối SQLite v4; change/impactRef deterministic, ZIP Store source-only 4 MiB có manifest/hash/audit và import atomic chỉ tạo Project/Draft; giữ 14 operation còn 503, flag OFF và target evidence còn mở | BE + Core + Security Lead |
 | 1.3 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-207` tại `3e5281d`: khóa bundle path UTF-8 NFC, regular/non-exec, flags/comment/timestamp/extra metadata, raw 4 MiB và entry 256 KiB; hostile corpus 25 lớp zero-mutation và HTTP 6 MiB+1→413; giữ 14 operation còn 503, flag OFF và Test Result/target evidence còn mở | BE + Security + Verification Lead |
+| 1.4 | 2026-08-13 | Đồng bộ As-Built `TASK-PROG-400` tại `a523a04`: catalog lỗi v1.2.0→v1.3.0 (20 public/82 detail), bổ sung `ST-RT-009`/`ST-RT-010` map vào `PRG-ERR-COM-001` — khoảng hở phát hiện khi chạy `npm run build` gate, sửa cùng phiên; không đổi endpoint/state machine/decision | BE + Core Lead |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|

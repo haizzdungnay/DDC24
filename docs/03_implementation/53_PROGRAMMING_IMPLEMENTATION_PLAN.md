@@ -4,7 +4,7 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.40 |
+| Phiên bản | 0.41 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`.** Team được viết và merge code production ngay; `RELEASE_READY` được đánh giá riêng sau implementation |
 | Ngày phát hành | 2026-08-13 |
 | Chủ quản | Dev Lead + System Architect |
@@ -1143,6 +1143,7 @@ khiển thiết bị thật:
 | 0.38 | 2026-08-13 | Hoàn tất `TASK-PROG-306` tại `f35234c`: `CutoverMode` GRAPH_ONLY/PROGRAM_ONLY khoá dual-producer trong scan_loop.cpp, `bootstrap/main.cpp --programming-mode` dựng `StScheduler` REV_A thật lần đầu tiên (không còn `st_sched=nullptr` mọi ghi chú trước); phát hiện gap UDS transport control API, ghi trong Control Semantics §10; targeted 2/2, CTest 968/968 PASS; không đổi Go/FE. P3 7/8, tổng 28/49; next TASK-PROG-307 (đóng P3); giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 0.39 | 2026-08-13 | Hoàn tất `TASK-PROG-307` tại `29907a5`: soak 10.000 chu kỳ (`ScanLoop::step()` PROGRAM_ONLY thật) không tăng cấp phát/trace không vượt capacity; xác nhận lại symbol-scan `mkddc-core` không parser/compiler symbol. **P3 ĐÓNG 8/8 source/host DoD**; target 10k-cycle WCET Forlinx vẫn BLOCKED (cần phần cứng vật lý, không phải thiếu source — nhất quán với 300-306). CTest 969/969 PASS; không đổi Go/FE. Tổng 29/49; next TASK-PROG-400 (P4); giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 0.40 | 2026-08-13 | Hoàn tất `TASK-PROG-400` tại `a523a04`: `StJournal` append/checksum 5 phase Core-side + boot-recovery đúng DDD-LIFE-PROG-001 §7, phạm vi hẹp hơn field schema §15 (ghi rõ). Component độc lập, CHƯA wire vào scheduler/bootstrap (cần 403 + UDS transport). targeted 8/8, CTest 977/977 PASS; không đổi Go/FE. P4 1/6, tổng 30/49; next TASK-PROG-401; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 0.41 | 2026-08-13 | `npm run build` gate cho TASK-PROG-400 phát hiện khoảng hở catalog lỗi: `ST-RT-009/010` (thêm ở TASK-PROG-303/304, `st_diagnostic.hpp`) chưa map — sửa cùng phiên theo nguyên tắc "làm hết việc": catalog v1.2.0→v1.3.0 (20 public/82 detail) map vào `PRG-ERR-COM-001` hiện hữu, Go/C++/TS generated + manifest + IFSPEC v1.4 đồng bộ. Không đổi task/tiến độ P4; RELEASE_READY BLOCKED |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

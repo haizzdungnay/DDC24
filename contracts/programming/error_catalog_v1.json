@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.2.0",
+  "catalogVersion": "1.3.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     { "symbol": "ErrRequest", "code": "PRG-ERR-REQ-001", "ownerComponent": "api", "statusClass": "REQUEST", "httpStatuses": [400, 413, 422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.request", "allowedArgs": ["actual", "supportedMajor", "maxBytes"] },
@@ -105,6 +105,8 @@
     { "component": "runtime", "detailCode": "ST-RT-005", "publicCode": "PRG-ERR-COM-001" },
     { "component": "runtime", "detailCode": "ST-RT-006", "publicCode": "PRG-ERR-COM-001" },
     { "component": "runtime", "detailCode": "ST-RT-007", "publicCode": "PRG-ERR-COM-001" },
-    { "component": "runtime", "detailCode": "ST-RT-008", "publicCode": "PRG-ERR-COM-001" }
+    { "component": "runtime", "detailCode": "ST-RT-008", "publicCode": "PRG-ERR-COM-001" },
+    { "component": "runtime", "detailCode": "ST-RT-009", "publicCode": "PRG-ERR-COM-001" },
+    { "component": "runtime", "detailCode": "ST-RT-010", "publicCode": "PRG-ERR-COM-001" }
   ]
 }
