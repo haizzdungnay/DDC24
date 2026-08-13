@@ -63,6 +63,12 @@ struct ScanDeps {
      * output trong scan này. Mặc định GRAPH_ONLY — không đổi hành vi bootstrap
      * cũ nếu caller không set field này. */
     CutoverMode       mode = CutoverMode::GRAPH_ONLY;
+    /* TASK-PROG-401, DDD-CTRL-PROG-001 §6: số base step tối đa một proposal
+     * PRIO_LOCAL_LOGIC được hold-last khi Program FAULTED trước khi bị rút
+     * (release_ao/release_do). 0 = TTL CHƯA được Product+Controls ký field
+     * decision (§15) — giữ hold-last KHÔNG GIỚI HẠN như hành vi trước
+     * TASK-PROG-401, không đổi bootstrap hiện hành nếu caller không set. */
+    uint64_t          program_hold_ttl_base_steps = 0;
 };
 
 class ScanLoop {

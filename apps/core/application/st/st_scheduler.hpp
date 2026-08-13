@@ -131,6 +131,12 @@ struct StProgramInstance {
     bool        input_snapshot_valid = true;
     uint64_t    last_successful_base_step = 0;
     uint64_t    output_commit_generation = 0;
+    /* TASK-PROG-401, DDD-CTRL-PROG-001 §6: true sau khi proposal mức
+     * PRIO_LOCAL_LOGIC của instance đã được rút (release_ao/release_do) —
+     * tránh gọi release lặp mỗi tick và phân biệt "còn hold-last" với
+     * "đã nhả quyền". Reset về false khi instance publish thành công
+     * (st_apply_all_outputs) hoặc khi activate artifact mới. */
+    bool        outputs_withdrawn = false;
 };
 
 struct StTaskConfig {

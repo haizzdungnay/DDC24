@@ -179,6 +179,12 @@ void ScanLoop::step()
         st_tick_ = d_.st_sched->on_base_step(clock.monotonic_ns);
         PointWriter program_writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
         st_apply_all_outputs(d_.st_sched, d_.resolver, &program_writer, &st_io_stats_);
+        /* TASK-PROG-401: rút proposal mức 5 cho instance STOPPED/DISABLED
+         * (ngay) hoặc FAULTED quá holdTtl (nếu đã cấu hình) — SAU khi outputs
+         * vừa publish thành công đã reset outputs_withdrawn ở trên, nên
+         * instance vẫn đang chạy tốt không bị rút nhầm. */
+        st_withdraw_stale_outputs(d_.st_sched, d_.resolver, d_.program_hold_ttl_base_steps,
+                                  &st_io_stats_);
     }
 
     if (d_.alarms)

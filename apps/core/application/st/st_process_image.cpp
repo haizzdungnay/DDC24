@@ -373,8 +373,12 @@ bool st_apply_all_outputs(StScheduler* scheduler, PriorityResolver* resolver,
 
     for (auto& task : scheduler->tasks()) {
         for (auto& program : task->programs()) {
-            if (program->last_successful_base_step == generation)
+            if (program->last_successful_base_step == generation) {
                 program->output_commit_generation = generation;
+                /* Vừa tái xác nhận claim mức PRIO_LOCAL_LOGIC — mở lại cơ hội
+                 * rút khi instance này ngừng publish lần sau (TASK-PROG-401). */
+                program->outputs_withdrawn = false;
+            }
         }
     }
     if (stats) {
@@ -390,6 +394,57 @@ bool st_apply_all_outputs(StScheduler* scheduler, PriorityResolver* resolver, Po
     if (!table) return false;
     PointWriter writer(*table, nullptr);
     return st_apply_all_outputs(scheduler, resolver, &writer, stats);
+}
+
+bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityResolver* resolver)
+{
+    if (!resolver) return false;
+    const StLoadedProgram* program = instance.runtime.program();
+    if (!program) return true; /* chưa từng load: không có claim nào để rút */
+
+    for (const StIrIoBinding& binding : program->io_bindings) {
+        if (!binding.is_output) continue;
+        PointId id{};
+        if (!to_point_id(binding, &id)) continue; /* binding hỏng: không có claim */
+        switch (id.kind) {
+        case PointKind::AO: resolver->release_ao(PRIO_LOCAL_LOGIC, id.idx); break;
+        case PointKind::BO: resolver->release_do(PRIO_LOCAL_LOGIC, id.idx); break;
+        default: break; /* AV/BV/MSV/EXT không qua PriorityResolver (§6) */
+        }
+    }
+    return true;
+}
+
+uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
+                                   uint64_t hold_ttl_base_steps, StIoBridgeStats* stats)
+{
+    if (!scheduler || !resolver) return 0;
+    const uint64_t generation = scheduler->base_step_count();
+    uint32_t withdrawn = 0;
+
+    for (auto& task : scheduler->tasks()) {
+        for (auto& program : task->programs()) {
+            StProgramInstance& p = *program;
+            if (p.outputs_withdrawn) continue;
+
+            bool should_withdraw = false;
+            if (p.state == StProgramState::STOPPED || p.state == StProgramState::DISABLED) {
+                /* Lệnh operator: rút NGAY tại safe boundary, không chờ TTL. */
+                should_withdraw = true;
+            } else if (p.state == StProgramState::FAULTED && hold_ttl_base_steps > 0 &&
+                      generation >= p.output_commit_generation + hold_ttl_base_steps) {
+                should_withdraw = true;
+            }
+            if (!should_withdraw) continue;
+
+            if (st_withdraw_instance_outputs(p, resolver)) {
+                p.outputs_withdrawn = true;
+                withdrawn++;
+            }
+        }
+    }
+    if (stats) stats->outputs_withdrawn += withdrawn;
+    return withdrawn;
 }
 
 } // namespace core
