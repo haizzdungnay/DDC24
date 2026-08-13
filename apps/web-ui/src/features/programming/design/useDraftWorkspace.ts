@@ -5,7 +5,10 @@ import { programmingErrorCopy } from '../api/errorCopy'
 import { useI18n } from '../../../shared/i18n'
 import type { ProgrammingCheck, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingProject } from '../model/types'
 
-const REV_A_TARGET_PROFILE = 'MKDDC24_REVA'
+// Contract HTTP dùng tên profile công khai có dấu gạch ngang. Chuỗi
+// `MKDDC24_REVA` chỉ là định danh lưu trữ/bundle nội bộ; gửi nó vào API Check
+// làm backend từ chối fail-closed bằng PRG-ERR-REQ-001.
+const REV_A_TARGET_PROFILE = 'MK-DDC-24-REV-A'
 
 interface MutationResponse<T = Record<string, unknown>> {
   resource: T

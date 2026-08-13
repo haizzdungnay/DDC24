@@ -152,4 +152,30 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.queryByText(/mount ở TASK-PROG-502/)).not.toBeInTheDocument())
     await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Lệnh FBD' })).toBeInTheDocument())
   })
+
+  it('gửi targetProfile công khai đúng OpenAPI khi tạo Check', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'createProgrammingRevision') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', revisionId: 'b324bb9b-2bb5-4fce-8789-f6d0fe493f6a' },
+          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
+        })
+      }
+      if (operationId === 'createProgrammingCheck') return new Promise(() => {})
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Kiểm tra' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra' }))
+
+    await waitFor(() => {
+      const call = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingCheck')
+      expect(call).toBeTruthy()
+    })
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingCheck')!
+    expect(options.body).toEqual({ schemaVersion: '1.0', targetProfile: 'MK-DDC-24-REV-A' })
+  })
 })

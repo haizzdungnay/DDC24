@@ -29,6 +29,20 @@
 
 Refs: TASK-PROG-506/507, DDD-FE-PROG-001 §0.1, Plan 53 §5.9 S5-E.
 
+### Fixed — Programming P5: Check bị Foxlinx từ chối vì sai target profile (2026-08-13)
+
+- Browser thật trên Foxlinx tạo Revision `201` nhưng `POST /checks` trả `400`
+  `PRG-ERR-REQ-001`: FE gửi định danh lưu trữ `MKDDC24_REVA`, trong khi
+  OpenAPI/backend yêu cầu profile công khai `MK-DDC-24-REV-A`.
+- Đồng bộ `useCheckWorkflow` theo OpenAPI và thêm test khóa chính xác body của
+  `createProgrammingCheck`; không đổi schema lưu trữ/bundle nội bộ.
+- Preflight deploy đồng thời phát hiện `JWT_SECRET` legacy chỉ dài 1 byte trên
+  Foxlinx; đã xoay sang khóa ngẫu nhiên 32 byte (base64 dài 44), file
+  `root:root 0600`, không ghi bí mật vào log. Việc xoay khóa làm hết hạn các
+  phiên web cũ theo thiết kế.
+
+Refs: TASK-PROG-507, IFSPEC-PROG-001 OpenAPI `CreateCheckRequest`.
+
 ### Changed — Programming P5: đồng bộ governance docs sau TASK-PROG-500..506, candidate v2.36 (2026-08-13)
 
 Cập nhật năm hồ sơ trong mẫu số 22 để phản ánh đúng As-Built P5 (nguồn:
