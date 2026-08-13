@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-CTRL-PROG-001` |
-| Phiên bản | 0.9 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-301..306/401` có source/host evidence; target timing và Safety review còn mở** |
+| Phiên bản | 1.0 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; P3/P4 source/host DONE; target timing và Safety review còn mở** |
 | Ngày | 2026-08-13 |
 | Chủ quản | Controls Lead + Core Lead |
 | Người review | Safety Lead, FW MCU Lead, Verification Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **một vòng điều khiển chạy như thế nào**: đọc input lúc nào, chạy Task khi nào, ghi output ra sao, ai thắng khi nhiều nguồn cùng đòi một output, PID xử lý bão hòa thế nào, và chuyện gì xảy ra khi một vòng chạy quá giờ. Đây là hồ sơ **an toàn** quan trọng nhất của bộ. |
 | 2. Ai phải đọc file này? | Controls và Core (chủ quản); Safety reviewer **bắt buộc** ký; QA dựng ca HIL từ §13 và §14; FE đọc §6 để hiển thị đúng ai đang giữ output. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-301` (`a831a0d`) có profile scheduler Rev A 1/1/`1-5-30s`, budget `<20%`, `on_base_step()`. `TASK-PROG-302` (`f080056`) có process image preflight-toàn-batch. `TASK-PROG-303` (`85aa4d2`) có `StFbType::PID`. `TASK-PROG-304` (`4d744ac`) sửa `exec_ns` đo luôn-bằng-0 và fault ĐÚNG Task khi overrun. `TASK-PROG-305` (`c6ab2bd`) có bounded trace + monitor IPC. `TASK-PROG-306` (`f35234c`) dựng `StScheduler` thật trong `bootstrap/main.cpp` lần đầu tiên qua cờ `--programming-mode`, khoá `graph->execute()` khi `PROGRAM_ONLY` — không còn "bootstrap chưa cấp scheduler" như mọi ghi chú trước đây. `TASK-PROG-401` (`9227d27`) đóng khoảng hở hold-last không giới hạn: `st_withdraw_stale_outputs()` rút proposal mức 5 NGAY khi STOPPED/DISABLED, và theo `holdTtl` cấu hình được khi FAULTED — cơ chế đã có, con số TTL vẫn `TARGET-PENDING`. |
+| 3. Hệ thống hiện tại đang có gì? | P3 đã có profile/process image/PID/overrun/trace/bootstrap/soak; P4 giữ hold-last và thêm `ProgrammingCutover` + `ProgrammingRuntimeCoordinator` tại `10d9ad6`: chỉ một owner GRAPH/PROGRAM, cutover ở safe boundary, candidate chỉ thành LKG sau output commit đầu tiên, lỗi cycle đầu quay về prior LKG/graph. |
 | 4. Thiết kế mới thay đổi điều gì? | Thu về **đúng một Task**, chu kỳ chỉ `1000/5000/30000 ms`. Quan trọng nhất: Task 30 s là **nhịp điều độ**, không phải `sleep` của base step — base step vẫn phải chạy đủ nhanh để IOP không đứt. Và: lỗi một Task chỉ làm **Task đó** FAULT; chỉ SafetyManager mới được đưa cả trạm về safe-state. |
 | 5. Team phải sửa module/contract nào? | §12. Core sửa ScanLoop để dispatch Task đến hạn, staging output rồi commit một lần; `PriorityResolver` nhận `program_value` ở mức Local logic 5; RETAIN khôi phục **trước** lần chạy đầu và ghi ngoài đường tới hạn. |
-| 6. Điều gì còn bị chặn? | `OD-PROG-004/012/013` và ADR-026..029 đã `Accepted`, nên không còn blocker code. Còn thiếu source `TASK-PROG-307`, benchmark 10.000 cycle trên Forlinx, fault/HIL và Safety review hậu kiểm; chúng chặn release/cutover. UDS transport cho control API (phát hiện ở Task 306) và value-sampling trace historian còn mở, xem §10/§11. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host chứng minh profile/cadence (`74/74`), process image/binding bridge (`68/68`), PID/anti-windup/priority-5 read-back (`13/13`), overrun fault đúng Task/không plant-wide (`4/4`), monitor/bounded-trace IPC (`4/4`) và cutover mode khoá dual-producer (`2/2`) trên CTest `968/968`; đây chỉ hỗ trợ `VS-PROG-009/010/011/013/015/017/018`. §13 vẫn yêu cầu 10.000 chu kỳ mỗi period và poll gap `<200 ms` trên target/HIL; 0/32 Test Result PASS. |
+| 6. Điều gì còn bị chặn? | Không còn blocker code P3/P4. Benchmark/timing/watchdog/IOP/power-loss trên Forlinx/HIL và Safety review hậu kiểm vẫn chặn release/cutover thực. Value-sampling trace historian thuộc P5/P6. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Fresh CTest 1002/1002 PASS gồm exclusive owner, first-output commit, rollback/recovery và fault cases; đây chỉ hỗ trợ các scenario liên quan ở mức host. §13 vẫn yêu cầu target/HIL và poll gap `<200 ms`; 0/32 Test Result PASS. |
 
 Hai cái bẫy đã thành rủi ro có tên. `RSK-PROG-002` (điểm 20): nếu gắn `sleep`
 theo chu kỳ Task, Task 30 s sẽ kéo cả base step và watchdog 6 s sẽ restart vòng
@@ -53,7 +53,7 @@ watchdog độc lập vẫn có quyền cao hơn và có thể đưa thiết b�
 
 | Chủ đề | As-Built 2026-08-09 | Target |
 |---|---|---|
-| Runtime owner | `TASK-PROG-306` (`f35234c`): `bootstrap/main.cpp` dựng `StScheduler` thật, cờ `--programming-mode` chọn `GRAPH_ONLY`(mặc định)/`PROGRAM_ONLY`; `PROGRAM_ONLY` khoá hẳn `graph->execute()` | đã đạt cho lựa chọn TĨNH lúc khởi động; transaction LIVE có rollback vẫn là Task 404 |
+| Runtime owner | `TASK-PROG-404` (`10d9ad6`): `ProgrammingCutover` chọn `GRAPH_ONLY`/`PROGRAM_ONLY`, apply transaction tại safe boundary và rollback first-cycle fault | đã đạt source/host; target/HIL chưa kiểm chứng |
 | Scheduler | `StSchedulerProfile::SUPPORTING_AS_BUILT` giữ trần 8/16/32; `REV_A` tại `a831a0d`, dựng thật trong bootstrap khi `PROGRAM_ONLY` (Task 306) | đã đạt |
 | Base step | `ScanLoop` gọi `on_base_step()` và trả sequence/missed release; bootstrap dựng `st_sched` không nullptr khi `PROGRAM_ONLY` | đã đạt |
 | I/O | `st_process_image.*` load/apply với `PriorityResolver` | snapshot → execute → validate → atomic publish priority 5 |
@@ -267,23 +267,12 @@ freeze intended transition plan
 `PROGRAM_ONLY` là target cutover Rev A; graph backup immutable được giữ để Restore.
 Không cho graph và program cùng run “tạm” trên cùng Local output.
 
-**As-Built (`TASK-PROG-306`).** Phần TĨNH của bất biến trên đã có: `ScanDeps::mode`
-(`CutoverMode::GRAPH_ONLY` mặc định/`PROGRAM_ONLY`) khoá HẲN `graph->execute()`
-trong `scan_loop.cpp` khi `PROGRAM_ONLY` — không lọc theo Point, vì Rev A cutover
-là toàn bộ Local logic. `graph.load()`/`restore_persist_state()` vẫn chạy ở
-bootstrap nên config/RETAIN graph vẫn là backup immutable, không bị xoá khi đổi
-mode. `bootstrap/main.cpp` chọn mode qua cờ `--programming-mode`, dựng
-`StScheduler` profile `REV_A` khi `PROGRAM_ONLY`. Đây CHƯA PHẢI transaction LIVE
-với rollback ở pseudocode trên (freeze/snapshot/withdraw-install/first-cycle-
-no-publish) — đổi mode chỉ áp dụng lúc khởi động lại tiến trình. Transaction
-LIVE trong lúc hệ đang chạy, có rollback khi package mới lỗi, là phạm vi
-`TASK-PROG-404`.
-
-**Gap phát hiện khi wiring (`TASK-PROG-306`):** không có UDS transport nào gọi
-`st_handle_control_request()` — hợp đồng `program_capabilities/status/stage/
-start/.../trace` (TASK-PROG-100..305) đầy đủ nhưng chưa có socket server phục
-vụ nó (khác `web_ipc.cpp` đã có accept loop thật). Đây là gap tích hợp riêng,
-ghi lại để không lẫn với phạm vi cutover-config của task này.
+**As-Built (`TASK-PROG-404/405`).** `ProgrammingCutover` khóa HẲN một owner trong
+`ScanLoop`; coordinator chỉ apply staged handle tại safe boundary, chờ output
+commit đầu tiên mới promote LKG/checkpoint. First-cycle lỗi chuyển ROLLING_BACK,
+khôi phục prior LKG + graph ở boundary kế rồi mới báo ROLLED_BACK. Programming
+UDS bounded gọi coordinator với version/deadline/peer credential; không còn gap
+transport phát hiện ở Task 306. Target/HIL vẫn phải chứng minh output vật lý.
 
 ## 11. Concurrency, memory và RT constraints
 
@@ -308,7 +297,7 @@ quality/source/freshness, không capture gì mới ngoài đường RT.
 
 | Thiết kế | As-Built | Target sửa/tạo |
 |---|---|---|
-| base step/scan | `apps/core/application/runtime/scan_loop.*`; `CutoverMode`/`bootstrap/main.cpp --programming-mode` tại `f35234c` (TASK-PROG-306) | UDS transport cho control API còn mở |
+| base step/scan | `apps/core/application/runtime/scan_loop.*`; `ProgrammingCutover`, coordinator và bootstrap tại `10d9ad6` | target timing/HIL còn mở |
 | scheduler | `st_scheduler.*`: `StSchedulerProfile::REV_A`, `add_task()`, `add_program()`, `on_base_step()` tại `a831a0d`; overrun→Task FAULT (đồng hồ WCET riêng) tại `4d744ac` (TASK-PROG-304) | Task 306 chỉ bootstrap Rev A |
 | executor | `st_exec.*`, `st_cyclic_runtime.*` | instruction budget/non-finite/source fault |
 | process image | `st_process_image.*`, `st_io_map.*` tại `f080056` (TASK-PROG-302) | đã đạt quality/freshness/generation/all-or-nothing |
@@ -368,7 +357,7 @@ Budget tuyệt đối cho từng phase và `holdTtl` vẫn `TARGET-PENDING`; imp
 |---|---|---|---|
 | Hold TTL, PID set và capacity chưa ký | Product + Controls | DOC-G2 approval | decision package approved |
 | Safety interaction chưa có HIL evidence | Safety + QA | implementation/release | fault injection + 199/200/201 ms PASS |
-| Graph cutover implementation chưa có | Core Lead | Plan 53 | lifecycle/transition code + target test |
+| Graph cutover target chưa kiểm chứng | Core + Controls + QA | P6/G6 | Forlinx/HIL timing, power/restart và exclusive-output Test Result |
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
 |---|---|---|---|
@@ -381,6 +370,7 @@ Budget tuyệt đối cho từng phase và `holdTtl` vẫn `TARGET-PENDING`; imp
 | 0.7 | 2026-08-13 | Đồng bộ `TASK-PROG-305` (`c6ab2bd`): `StBoundedRuntimeTrace` ring buffer cấp phát tĩnh (khác `StTraceLog`/`std::deque` cũ) log fault/overrun/rollback/activation; `program_status.monitorInputs` trả quality/source/freshness; sửa chính xác row arbitration (`holdTtl` withdraw còn mở, không phải Task 304); giữ target/HIL NOT TESTED | Core + Controls |
 | 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (`f35234c`): `bootstrap/main.cpp` dựng `StScheduler` REV_A thật lần đầu qua `--programming-mode`, `CutoverMode` khoá hẳn `graph->execute()` khi `PROGRAM_ONLY`; cập nhật §2 As-Built (không còn "bootstrap chưa cấp scheduler"); ghi gap UDS transport control API phát hiện khi wiring; giữ target/HIL NOT TESTED, transaction LIVE/rollback vẫn Task 404 | Core + Controls |
 | 0.9 | 2026-08-13 | Đồng bộ `TASK-PROG-401` (`9227d27`): `st_withdraw_stale_outputs()` đóng khoảng hở "hold-last không giới hạn" ở §6/§12 — STOPPED/DISABLED rút proposal mức 5 NGAY tại safe boundary, FAULTED rút theo `hold_ttl_base_steps` cấu hình được (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn TARGET-PENDING); giữ target/HIL NOT TESTED | Core + Controls |
+| 1.0 | 2026-08-13 | Đồng bộ `TASK-PROG-404/405` tại `10d9ad6`: Programming UDS/coordinator, exclusive owner tại safe boundary, first-output commit mới nâng LKG, first-cycle fault rollback và restart checkpoint recovery. Host gates PASS; target/HIL/power/IOP vẫn NOT TESTED. | Core + Controls + QA |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -394,7 +384,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §15 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §1 mục tiêu và nguyên tắc an toàn; §3 giới hạn đúng một Task và ba chu kỳ |
-| `DD-03` As-Built | PASS | §2 phân biệt container supporting 8/16/32 với profile Rev A 1/1/1 tại `a831a0d`; ScanLoop gọi `on_base_step()` nhưng bootstrap chưa cấp scheduler; `st_process_image.*` và `any_force_safe()` còn ở trạng thái cũ |
+| `DD-03` As-Built | PASS | §2 phân biệt container supporting 8/16/32 với profile Rev A 1/1/1; ScanLoop/bootstrap/coordinator và process image/cutover source đã wire tới `10d9ad6`, target evidence còn mở |
 | `DD-04` Target ownership | PASS | §4 một cycle và quyền sở hữu dữ liệu; §10 cutover xác định owner Local logic duy nhất |
 | `DD-05` Data từng field | PASS | §5 Point mapping/quality/freshness; §14 bảng quyết định output với `program_value`/`actual_value`/winner/priority/TTL |
 | `DD-06` Interface | N/A tại file này | Hợp đồng liên tiến trình thuộc `IFSPEC-PROG-001`; ở đây là ngữ nghĩa nội bộ Core. §4 định nghĩa đủ giao diện process image cho Program |

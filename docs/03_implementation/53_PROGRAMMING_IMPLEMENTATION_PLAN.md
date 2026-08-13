@@ -4,14 +4,14 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.43 |
+| Phiên bản | 0.44 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`.** Team được viết và merge code production ngay; `RELEASE_READY` được đánh giá riêng sau implementation |
 | Ngày phát hành | 2026-08-13 |
 | Chủ quản | Dev Lead + System Architect |
 | Người review | Product, FE/BE/Core/FW/HW/Security/QA/Ops Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
 | Khung trình bày | ISO/IEC/IEEE 16326 — nội dung kế hoạch quản lý dự án phần mềm; ánh xạ điều khoản ở §11 |
-| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate v2.24 ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v3.33 — kiểm bằng `python3 scripts/candidate_pin_check.py`; authority phê duyệt nền tiếp tục hiệu lực |
+| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate v2.35 ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v3.45 — kiểm bằng `python3 scripts/candidate_pin_check.py`; authority phê duyệt nền tiếp tục hiệu lực |
 | Quy tắc tài liệu | [`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) |
 
 > ## ✅ APPROVED FOR IMPLEMENTATION — được viết và merge code production
@@ -55,10 +55,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **thứ tự làm và điều kiện qua cửa**: bảy pha `P0..P6`, phụ thuộc giữa chúng, ai chịu trách nhiệm gì, và bằng chứng nào mở được mỗi gate `G0..G6`. |
 | 2. Ai phải đọc file này? | Dev Lead và Architect (chủ quản); Product và QA duyệt; mọi team đọc pha của mình. Đọc **sau** khi đã đọc hồ sơ thiết kế upstream của slice mình. |
-| 3. Hệ thống hiện tại đang có gì? | P0/P1/P2 và P3 đã DONE về source/host DoD. P4 đạt 3/6: journal component (`400`), hold-last withdrawal (`401`) và RETAIN v2 đã wire scheduler/bootstrap (`402`). Hai record `VS-001/019` vẫn `BLOCKED`, 0/32 PASS; flag `OFF`, BE operation/Core Commission user-reachable chưa có. |
+| 3. Hệ thống hiện tại đang có gì? | P0/P1/P2, P3 và P4 đã DONE về source/host DoD. `TASK-PROG-403..405` bổ sung operation coordinator bền vững, UDS peer-checked, cutover/rollback ở safe boundary và restart recovery có checkpoint. Hai record `VS-001/019` vẫn `BLOCKED`, 0/32 PASS; flag `OFF`, chưa Commission trên board. |
 | 4. Thiết kế mới thay đổi điều gì? | Xác lập nguyên tắc: **không mở gate bằng lời văn**. Mỗi pha có điều kiện vào và ra cụ thể; §6.1 định nghĩa Definition of Ready và Definition of Done cho từng task; §6.2 định nghĩa bằng chứng gate và điều kiện quay lui. |
 | 5. Team phải sửa module/contract nào? | §5.7 ánh xạ quyền sở hữu source và sản phẩm bàn giao theo pha; §5.8 có mẫu thẻ task và cách bàn giao theo lát cắt dọc. |
-| 6. Điều gì còn bị chặn? | **P3 ĐÃ ĐÓNG (8/8), P4 3/6.** `TASK-PROG-400..402` DONE về source/host; next `TASK-PROG-403` Commission/Restore coordinator + durable reconcile. `RELEASE_READY` vẫn chờ 32/32 PASS, target/HIL và residual acceptance — Forlinx cần phần cứng vật lý. |
+| 6. Điều gì còn bị chặn? | **P3 ĐÃ ĐÓNG 8/8 và P4 ĐÃ ĐÓNG 6/6 ở mức source/host.** `RELEASE_READY` vẫn chờ 32/32 PASS, target/HIL/electrical/power-cut/IOP timing và residual acceptance — Forlinx cần phần cứng vật lý. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §5.2 chỉ rõ gate sở hữu từng scenario; §6.2 gắn bằng chứng bắt buộc. Hiện có 2/32 record `BLOCKED`, 0/32 PASS — đủ ghi nhận execution G1 nhưng không đủ release. |
 
 Quan hệ với Plan 54: file này quản **việc code**; [Plan 54](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md)
@@ -339,15 +339,15 @@ vẫn không production-enable nếu P4/P6 chưa đạt.
 
 | Task | Owner | Dependency | Deliverable/test |
 |---|---|---|---|
-| `PROG-400` | Core | P3 | **DONE (host) 2026-08-13 tại `a523a04`** — `StJournal` append/checksum 5 phase + boot-recovery đúng bảng §7; phạm vi hẹp hơn field schema đầy đủ §15 (ghi rõ, cần TASK-PROG-403 bổ sung field BE); **chưa wire vào scheduler/bootstrap — cần 403** |
+| `PROG-400` | Core | P3 | **DONE (host) 2026-08-13 tại `a523a04`, được wire bởi `10d9ad6`** — `StJournal` append/checksum 5 phase + boot-recovery; coordinator P4 đã bổ sung context operation/revision/artifact/plan và nối journal vào safe-boundary lifecycle |
 | `PROG-401` | Controls+Core | 303/400 | **DONE 2026-08-13 tại `9227d27`** — `st_withdraw_stale_outputs()` rút proposal mức 5 NGAY khi STOPPED/DISABLED, theo `hold_ttl_base_steps` khi FAULTED (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn `TARGET-PENDING`); wire vào `ScanLoop::step()` |
 | `PROG-402` | Core | P3 | **DONE (host) 2026-08-13 tại `3ca5d22`** — stable controller+instance SHA-256, record v2/layout v1/full CRC, exact typed/FB restore, async two-slot mailbox, checkpoint sau output commit, atomic write và explicit cold-init/status health; `VS-PROG-029/030` target/HIL còn mở |
-| `PROG-403` | BE | P1/P2/P3 | Commission/Restore coordinator + durable operation/reconcile |
-| `PROG-404` | BE+Core | 306/403 | first graph→Program cutover + rollback |
-| `PROG-405` | QA | 400–404 | fault at every step, BE/Core/power restart, corrupt artifact/retain |
+| `PROG-403` | BE | P1/P2/P3 | **DONE (host) 2026-08-13 tại `c2f3189`** — SQLite v5 operation/lease/generation, Commission/Restore idempotent, staging content-addressed, durable intent trước IPC, worker bounded, timeout `UNKNOWN` và reconcile chỉ đọc trạng thái Core; terminal CommissionRecord + audit atomic |
+| `PROG-404` | BE+Core | 306/403 | **DONE (host) 2026-08-13 tại `10d9ad6`** — UDS bounded + `SO_PEERCRED`, `ProgrammingRuntimeCoordinator`, journal/cutover tại safe boundary, first-output commit mới nâng LKG, rollback về LKG/graph và active checkpoint CRC atomic để restart phục hồi xác định |
+| `PROG-405` | QA | 400–404 | **DONE (host) 2026-08-13 tại `c2f3189` + `10d9ad6`** — negative/fault/restart tests cho duplicate, timeout/reconcile, symlink/corrupt artifact, first-cycle failure, mọi journal phase, corrupt journal và restart committed/active-candidate; **power-cut eMMC/Forlinx/HIL vẫn NOT RUN** |
 
-Exit: `VS-004/011/014/015/024/029/030` software/target portions PASS; Commission
-vẫn feature-gated tới HIL electrical.
+Exit source/host: các phần liên quan của `VS-004/011/014/015/024/029/030` có
+supporting evidence; target/HIL vẫn `NOT RUN`, Commission vẫn feature-gated.
 
 #### P5 — FE/UX (G2/G4)
 
@@ -457,10 +457,10 @@ tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ 
 | P1 | 6 | 6 | 100% | `DONE` | 2026-08-11 | 2026-08-11 | 2/2 record `BLOCKED`, 0 PASS | `TASK-PROG-100..105 DONE`; G1 GO cho downstream implementation |
 | P2 | 8 | 8 | 100% | `DONE` | 2026-08-11 | 2026-08-11 | 0/3 | `TASK-PROG-200..207 DONE` về source/DoD; Test Result độc lập vẫn 0 PASS |
 | P3 | 8 | 8 | 100% | `DONE` (source/host DoD) | 2026-08-11 | 2026-08-13 | 0/7 | `TASK-PROG-300..307 DONE` về source/host DoD; target evidence (10k-cycle WCET Forlinx) còn `BLOCKED` — cần phần cứng vật lý |
-| P4 | 6 | 3 | 50,0% | `IN_PROGRESS` | 2026-08-13 | — | 0/10 | `TASK-PROG-400..402 DONE` về source/host DoD (journal độc lập chưa wire; RETAIN đã wire scheduler/bootstrap); next `TASK-PROG-403` |
+| P4 | 6 | 6 | 100% | `DONE` (source/host DoD) | 2026-08-13 | 2026-08-13 | 0/10 | `TASK-PROG-400..405 DONE` về source/host DoD; target/HIL/electrical/power-cut/IOP timing vẫn `NOT RUN` và thuộc P6/release evidence |
 | P5 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G4`; shell chỉ đọc mở sớm từ `T+5` |
 | P6 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/1 | Chờ `HW-AUTH-*` và đồ gá HIL |
-| **Tổng** | **49** | **32** | **65,3%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P3 8/8 ĐÃ ĐÓNG; P4 3/6; tiếp theo `TASK-PROG-403`; release evidence chưa đạt |
+| **Tổng** | **49** | **35** | **71,4%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P3 và P4 đã đóng source/host; P5/P6 chưa bắt đầu; release evidence chưa đạt |
 
 Cột “Test Result đã có” cộng lại là `33`, không phải `32`: `VS-PROG-019` được
 tính hai lần vì phần contract của nó thuộc `G1` còn phần đầy đủ thuộc `G3`. Số
@@ -489,8 +489,8 @@ commit/Test Result Target đủ điều kiện.
 | P0 | 000–006 | 8–15 | DOC-G4 | DONE cho entry implementation theo `AUTH-PROG-2026-08-11-03` |
 | P1 | 100–105 | 15–25 | P0-A + P0-B theo từng task | DONE 6/6; G1 GO tại `PROG-G1-CONTRACT-REVIEW-2026-08-11` |
 | P2 | 200–207 | 35–55 | P1 | DONE 8/8 về source/DoD; G2 evidence độc lập vẫn BLOCKED |
-| P3 | 300–307 | 35–55 | P1–P2 + P0-B runtime | IN_PROGRESS 2/8; Task 300/301 host source/DoD DONE, process image/target timing/no-forbidden-call evidence còn mở |
-| P4 | 400–405 | 30–45 | P3 + BE P2 | NOT_STARTED; lifecycle/power/fault/read-back Test Results |
+| P3 | 300–307 | 35–55 | P1–P2 + P0-B runtime | SOURCE/HOST DONE 8/8; target timing/WCET Forlinx vẫn `NOT RUN` |
+| P4 | 400–405 | 30–45 | P3 + BE P2 | SOURCE/HOST DONE; lifecycle/power/fault/read-back target Test Results `NOT_RUN` |
 | P5 | 500–506 | 30–45 | P1/P2/P4 per task | NOT_STARTED; Vitest/build/E2E/browser/a11y evidence |
 | P6 | 600–606 | 25–45 + lab | all | NOT_STARTED; target/HIL/ops/security/release record |
 | **Tổng** | 49 task | **178–285 person-day + lab/review** | sequential gates, parallel lanes có kiểm soát | G0..G6 đều RED |
@@ -1037,8 +1037,8 @@ trỏ tới commit + test/evidence hiện tại.
 | G0/P0 | Product+Architect+QA | PASS | 2026-08-10 / 2026-08-11 | Candidate v2.8; consumer review kỹ thuật xong; 6 ADR `Accepted`; quyền implement mở bởi `AUTH-PROG-2026-08-11-03` |
 | G1/P1 | Architect+BE+Core | **GO — DONE 6/6** | 2026-08-11 | Join 6/6 contract, deploy/rollback dry-run PASS; 2 record BLOCKED, 0 PASS; không phải release GO |
 | G2/P2+P5 partial | BE+FE+Compiler | **SOURCE/DOD DONE — P2 8/8; EVIDENCE BLOCKED** | 2026-08-11 / 2026-08-11 | `TASK-PROG-200..207` DONE; Task 207 tại `3e5281d` có hostile corpus 25 lớp, audit-secret 23 alias, compiler timeout/OOM/output/source bounds và Go fuzz; `VS-001/019` vẫn BLOCKED, 0/32 PASS |
-| G3/P3 | Core+Controls+QA | **SOURCE/HOST DOD DONE — TASK-PROG-300..307 DONE (8/8); NEXT P4/TASK-PROG-400** | `4f7e0ac`, `a831a0d`, `f080056`, `85aa4d2`, `4d744ac`, `c6ab2bd`, `f35234c`, `29907a5`, `EV-PROG-G3-300/301` | Toàn bộ P3 host gates PASS (969/969 CTest); symbol-scan xác nhận không parser/compiler symbol trong `mkddc-core`; 10k-cycle WCET thật trên Forlinx vẫn `BLOCKED` — cần phần cứng, không phải thiếu source |
-| G4/P4+P5 | BE+Core+FE | **IN_PROGRESS — TASK-PROG-400..402 DONE (host); NEXT TASK-PROG-403** | `3ca5d22` | `StJournal` 5 phase chưa wire coordinator; hold-last đã wire ScanLoop; RETAIN v2 đã wire scheduler/bootstrap và host gate PASS; BE coordinator/live cutover/fault-injection còn theo 403–405 |
+| G3/P3 | Core+Controls+QA | **SOURCE/HOST DOD DONE — TASK-PROG-300..307 DONE (8/8)** | `4f7e0ac`, `a831a0d`, `f080056`, `85aa4d2`, `4d744ac`, `c6ab2bd`, `f35234c`, `29907a5`, `EV-PROG-G3-300/301` | Toàn bộ P3 host gates PASS; symbol-scan xác nhận không parser/compiler symbol trong `mkddc-core`; 10k-cycle WCET thật trên Forlinx vẫn `BLOCKED` — cần phần cứng, không phải thiếu source |
+| G4/P4+P5 | BE+Core+FE | **P4 SOURCE/HOST DOD DONE — TASK-PROG-400..405 DONE (6/6); P5 NOT_STARTED** | `a523a04`, `9227d27`, `3ca5d22`, `c2f3189`, `10d9ad6` | Journal/RETAIN/operation coordinator/UDS/cutover/rollback/restart recovery đã wire và host fault gates PASS; flag vẫn OFF, target/HIL/electrical/power-cut/IOP timing và 0/32 Test Result vẫn chặn G4 release authority |
 | G5/P6 HIL | FW+HW+QA | NOT_STARTED | — | BSP/fixture + G3/G4 |
 | G6/release | Product+Release+QA | NOT_STARTED | — | VS 32/32 + residual acceptance |
 
@@ -1146,6 +1146,7 @@ khiển thiết bị thật:
 | 0.41 | 2026-08-13 | `npm run build` gate cho TASK-PROG-400 phát hiện khoảng hở catalog lỗi: `ST-RT-009/010` (thêm ở TASK-PROG-303/304, `st_diagnostic.hpp`) chưa map — sửa cùng phiên theo nguyên tắc "làm hết việc": catalog v1.2.0→v1.3.0 (20 public/82 detail) map vào `PRG-ERR-COM-001` hiện hữu, Go/C++/TS generated + manifest + IFSPEC v1.4 đồng bộ. Không đổi task/tiến độ P4; RELEASE_READY BLOCKED |
 | 0.42 | 2026-08-13 | Hoàn tất `TASK-PROG-401` tại `9227d27`: `st_withdraw_stale_outputs()` đóng khoảng hở hold-last không giới hạn (DDD-CTRL-PROG-001 §6/§12) — STOPPED/DISABLED rút proposal mức 5 NGAY tại safe boundary, FAULTED rút theo `hold_ttl_base_steps` cấu hình được (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn TARGET-PENDING); wire vào `ScanLoop::step()`. targeted 6/6, CTest 983/983 PASS; không đổi Go/FE. P4 2/6, tổng 31/49; next TASK-PROG-402; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 0.43 | 2026-08-13 | Hoàn tất `TASK-PROG-402` tại `3ca5d22`: RETAIN stable controller/instance SHA-256, record v2/layout v1/CRC toàn record, exact typed+FB codec, checkpoint sau output commit, mailbox/worker ngoài RT, atomic write và explicit cold-init/status health. Targeted 111/111, CTest 991/991, Go vet/test, FE 494/494+lint/build và docs harness PASS. P4 3/6, tổng 32/49; next TASK-PROG-403; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED. |
+| 0.44 | 2026-08-13 | Hoàn tất `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: SQLite v5 operation/lease, Commission/Restore idempotent, staging an toàn, UDS `SO_PEERCRED`, coordinator/journal/cutover/first-output/LKG/checkpoint recovery và fault/restart host tests. Fresh Release build với Modbus/BACnet/HMI ON, CTest 1002/1002, Go vet/test, FE 494/494+lint/build PASS. P4 6/6 source/host, tổng 35/49; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED vì target/HIL/power-cut chưa chạy. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -1168,7 +1169,6 @@ khiển thiết bị thật:
 | Không mở gate bằng lời văn | PASS | §6.1 Definition of Ready/Done cụ thể cho task; §1.2 nguyên tắc triển khai |
 | Cổng quyền hạn implementation | **PASS** | §4.2, §5.5 và §9.2 đồng nhất: `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`; không còn approval blocker |
 
-Kế hoạch đã được **phê duyệt để triển khai có kiểm soát**, không phải quyền cutover production. P1 đã hoàn tất; P2 đạt
-`8/8` sau `TASK-PROG-200..207`; P3 đạt `2/8` sau `TASK-PROG-300/301`; team tiếp tục
-`TASK-PROG-302` và cập nhật tracker
-sau mỗi commit/PR.
+Kế hoạch đã được **phê duyệt để triển khai có kiểm soát**, không phải quyền cutover production. P1/P2,
+P3 và P4 đã hoàn tất source/host DoD; P5/P6 cùng mọi Test Result target/HIL vẫn
+theo tracker và phải được cập nhật sau mỗi commit/PR.

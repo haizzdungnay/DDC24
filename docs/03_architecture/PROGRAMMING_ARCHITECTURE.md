@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `ARCH-PROG-001` |
-| Phiên bản | 0.8 |
+| Phiên bản | 0.9 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION** — 6/6 ADR `Accepted` theo `AUTH-PROG-2026-08-11-03`; maturity M4/M5 không dùng làm blocker code |
-| Ngày | 2026-08-11 |
+| Ngày | 2026-08-13 |
 | Chủ quản | Software/Runtime Architect |
 | Reviewer | Controls/Safety, FE, BE, FW-SOM, FW MCU, HW, Security, Ops, Verification |
 | Approver | Product Owner + System/Runtime Architect |
@@ -19,11 +19,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **tiến trình nào sở hữu cái gì**: ai giữ dữ liệu có thể thay đổi, ai được ghi ra output vật lý, ai được phép chết mà hệ thống vẫn điều khiển. Mọi tranh cãi “module này gọi thẳng module kia có được không” giải quyết ở đây. |
 | 2. Ai phải đọc file này? | Bắt buộc với System Architect, Core/BE/FE/IO lead, Safety và Ops. Đọc trước khi đọc bất kỳ Detailed Design nào — vì các file đó giả định ranh giới trong file này là đúng. |
-| 3. Hệ thống hiện tại đang có gì? | Bốn tiến trình đã chạy thật; Local logic production vẫn do **graph** sở hữu. Core đã có prepared runtime Task 300 và profile/base-step scheduler Task 301 tại `a831a0d`, nhưng bootstrap vẫn `st_sched=nullptr`. Xem §13 để phân biệt source component với wiring production. |
+| 3. Hệ thống hiện tại đang có gì? | Bốn tiến trình đã chạy thật; mặc định Local logic vẫn do **graph** sở hữu. P3/P4 source/host đã dựng scheduler cố định, BE operation coordinator, UDS peer-checked và `ProgrammingRuntimeCoordinator`; cutover chỉ đổi owner tại safe boundary, first-output thành công mới nâng LKG, restart đọc checkpoint CRC. Flag vẫn `OFF`. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm Programming vào `mkddc-web` (authoring, compile, orchestration) và vào `mkddc-core` (nạp artifact, chạy Program). **Không** thêm đường ghi tắt: mọi output Program đi qua priority resolver mức Local logic 5. `mkddc-iobus` và MCU **không đổi ownership** — Commission không được restart iobus. |
 | 5. Team phải sửa module/contract nào? | §14 ánh xạ từng component target về repository. Tóm tắt: BE thêm package Programming trong `mkddc-web`; Core thêm loader + Program executor cạnh ScanLoop; FE thêm `apps/web-ui/src/features/programming/`; iobus/MCU chỉ nhận thêm yêu cầu **không được gián đoạn** (`max_iop_poll_gap <200 ms`). |
-| 6. Điều gì còn bị chặn? | Sáu xung đột §11 đã được đóng cho implementation bằng ADR-026..031 `Accepted`; Task 301 đã hiện thực profile/base-step phần host. Production `Active` vẫn bị chặn bởi process image/arbitration/overrun/bootstrap Task 302–306 và evidence target/HIL Task 307/P6. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §17. Quan trọng nhất: `VS-PROG-015` (không bao giờ có hai owner), `VS-PROG-012` (RT path không cấp phát bộ nhớ/không I/O chặn), `VS-PROG-014` (poll gap `<200 ms` đo bằng logic analyzer). Cả ba đều **chưa chạy**. |
+| 6. Điều gì còn bị chặn? | Không còn blocker source P3/P4. Production `Active` vẫn bị chặn bởi feature flag, P5/P6, 32/32 Test Result, target/HIL/electrical/power-cut/IOP timing và residual acceptance. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §17. Host fault/restart/cutover tests và full CTest 1002/1002 PASS hỗ trợ `VS-PROG-011/015/030`; `VS-PROG-012/014/015/030` phần target/HIL vẫn **chưa chạy**, nên không mở release. |
 
 Vì sao phải có “một owner duy nhất”: nếu graph và Program cùng đề xuất giá trị
 cho một output ở mức 5, thiết bị sẽ nhận lệnh không xác định — đây là
@@ -42,7 +42,7 @@ thay proposal `mkddc-program-service`/`mkddc-program-core` thành module trong
 ## 2. System context và trust boundary
 
 Sơ đồ dưới đây là **Target Design**. As-Built 2026-08-09 vẫn dùng HTTP cổng
-8081, graph runtime production và `st_sched=nullptr`; không được đọc sơ đồ target
+8081, graph runtime mặc định và Programming flag OFF; không được đọc sơ đồ target
 như bằng chứng đã triển khai.
 
 ```text
@@ -219,14 +219,14 @@ hậu kiểm và evidence vẫn được thực hiện trong task/verification, 
 
 | Ranh giới | Source/contract hiện tại | Hành vi đã xác nhận | Gap so với Target |
 |---|---|---|---|
-| Core bootstrap | `apps/core/bootstrap/main.cpp:70..348` | nạp `/data/config/graph.json`, chọn scan period từ graph/CLI, tạo `ScanLoop` không truyền `StScheduler` | ST scheduler vẫn `nullptr`; graph luôn execute; chưa có mode/cutover/active package |
-| Base step | `scan_loop.*`, `st_scheduler.*` tại `a831a0d` | ScanLoop gọi `on_base_step(monotonic)`; sequence độc lập Task, due phase-locked và missed release không catch-up | bootstrap vẫn ánh xạ graph scan trong `GRAPH_ONLY`; chưa có mode/cutover/config nền tảng production |
-| ST/IR runtime | `apps/core/application/st/st_*.{hpp,cpp}` | profile `REV_A` chặn ngoài 1 Task/1 Program/1-5-30 s và budget `>=20%`; supporting 8/16/32 giữ làm backstop | control API chưa route qua `web_ipc`; process image/overrun/RETAIN chưa nối lifecycle production |
+| Core bootstrap | `apps/core/bootstrap/main.cpp`, `programming_cutover.hpp` tại `10d9ad6` | dựng topology scheduler `main/program-main` trước scan; mode mặc định GRAPH_ONLY; tạo coordinator + endpoint Programming UDS khi runtime được bật | feature flag Web vẫn OFF; chưa deploy/cutover trên target |
+| Base step | `scan_loop.*`, `st_scheduler.*` tại `a831a0d..10d9ad6` | phase-locked dispatch, process-image atomic, exclusive GRAPH/PROGRAM owner và lifecycle hook tại cùng safe boundary | timing/WCET/IOP gap target chưa đo |
+| ST/IR runtime | `apps/core/application/{st,programming}` | profile REV_A, prepare/stage/commit/abort, first-output LKG promotion, journal/checkpoint/rollback/recovery | power-cut eMMC và HIL chưa chạy |
 | Build boundary | `apps/core/CMakeLists.txt` | `st_compiler_lib` tách khỏi `mkddc-core`; CLI compile/validate được build | CLI chưa được packaging/called bởi BE; compiler isolation/timeout chưa có |
-| Internal contract | `contracts/config/st_program_control_v1.schema.json`, `st_control_api.cpp` | capability trả runtime profile/capacity/allowed period/base-step/budget đúng scheduler; source path đã sửa | schema/handler standalone chưa route UDS; error authority chưa reconcile |
-| Core Web IPC | `apps/core/adapters/ipc/web_ipc.{hpp,cpp}` | UDS `/run/mkddc/core.sock` phục vụ point/alarm/schedule | không dispatch `program_*`; peer credential/versioning cho Programming chưa có |
-| BE | `apps/web-api/internal/app/http.go`, `core_client.go`, `configapi.go` | auth/RBAC/audit/config patterns và core client có thật | không Project/Draft/Revision/compiler/operation route/store Programming |
-| API contract | `contracts/openapi/openapi.yaml` | có `/graph/*` ở trạng thái not-implemented | chưa có `/api/v1/programming/*`; OpenAPI không phải evidence handler |
+| Internal contract | `contracts/ipc/programming_v1`, `program_ipc_server.*`, `program_ipc_unix.*` | STATUS/OPERATION_STATUS/STAGE/RESTORE/ACTIVATE qua bounded frame, deadline, version và peer credential | target socket ownership/group cần deploy read-back |
+| Core Web IPC | `/run/mkddc/programming-v1.sock` | endpoint riêng Programming mode `0660`, `SO_PEERCRED`, reject peer/frame/version/path sai | target service identity và fault injection liên tiến trình chưa có Test Result |
+| BE | `apps/web-api/internal/programming/{application,store,artifact,coreipc,transport}` | SQLite v5, durable Commission/Restore, lease/reconcile, staging an toàn và terminal record/audit | feature OFF; target migration/restart chưa diễn tập |
+| API contract | `contracts/openapi/openapi.yaml` | 25 operation; Project/Check/bundle và Commission/Restore/status handler có source | FE P5 và target E2E chưa có Test Result |
 | FE | `apps/web-ui/src/features/dashboard/ProgrammingPage.tsx`, `App.tsx`, `NavRail.tsx` | legacy graph demo, route bị gate `LEGACY_GRAPH_DEMO_ENABLED` | không có PGM-01..06, ST/FBD workflow hoặc runtime authority live |
 | FW MCU/IOP | `contracts/iop/iop_protocol.h`, `firmware/stm32/*`, `apps/iobus/*` | sampling/actuation/IOP/safe-timeout substrate | Programming-specific HIL, poll-gap/hold-last/power-loss evidence còn RED |
 | Transport security | `apps/web-api/internal/app/main.go`, `platform/systemd/mkddc-web-pi.service` | As-Built HTTP `:8081`, chưa có TLS termination | Target HTTPS/secure headers/certificate lifecycle bị chặn bởi Security Design |
@@ -385,6 +385,7 @@ trong implementation. Không copy số host vào target configuration.
 | 0.6 | 2026-08-10 | Ghi System Architect Phạm Đình Chương `ACCEPT` theo ủy quyền điện tử `AUTH-PROG-2026-08-10-01`; đồng bộ §11 và sign-off. Giữ M3 và 6 ADR `Proposed` vì còn đồng phê duyệt Safety/Security/Verification/Runtime cùng target evidence |
 | 0.7 | 2026-08-11 | `AUTH-PROG-2026-08-11-03` phê duyệt toàn bộ kiến trúc để implement; chuyển ADR-026..031 sang `Accepted`; review discipline còn thiếu thành hậu kiểm và không chặn `IMPLEMENT_READY[*]` |
 | 0.8 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-301` tại `a831a0d`: profile Rev A, `on_base_step()`/missed release, capability/schema và watchdog ADR-028; giữ bootstrap/cutover/target evidence còn mở |
+| 0.9 | 2026-08-13 | Đồng bộ P3/P4 As-Built tới `c2f3189` + `10d9ad6`: fixed scheduler topology, SQLite v5 operation coordinator, Programming UDS `SO_PEERCRED`, exclusive safe-boundary cutover, first-output/LKG, rollback và CRC checkpoint recovery. Giữ flag OFF, 0/32 PASS và target/HIL/power-cut/IOP timing chưa chạy. |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|

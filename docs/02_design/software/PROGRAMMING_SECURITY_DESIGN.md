@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-SEC-PROG-001` |
-| Phiên bản | 0.5 |
+| Phiên bản | 0.6 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; TLS production còn chặn mutation |
 | Ngày | 2026-08-11 |
 | Chủ quản | Security Lead + Backend Lead |
@@ -22,7 +22,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **ai được làm gì, chặn đầu vào độc hại ở đâu, và ghi lại dấu vết ra sao**. Gồm biên tin cậy, RBAC phía server, cách ly compiler, toàn vẹn artifact, kiểm gói import và nhật ký audit. |
 | 2. Ai phải đọc file này? | Security và BE (chủ quản); Core đọc §7 (artifact/IPC/filesystem); Ops đọc §12 (xoay chứng chỉ/khóa); QA dựng ca tấn công từ §10 và §15. |
-| 3. Hệ thống hiện tại đang có gì? | **Web vẫn chạy HTTP cổng 8081, chưa có TLS** nên feature Programming mặc định `OFF`. Khi bật ở lab, 11/25 route Project/Draft/Revision/Check/change/bundle chạy qua RBAC handler+service, SQLite v4 và audit hash-chain; 14 route còn `503`. Compiler chạy child process có rlimit/seccomp/no-new-privileges/timeout/process-group kill; Artifact content-address/read-back và IPC Programming v1 đã có. `TASK-PROG-207` tại `3e5281d` thêm hostile corpus 25 lớp zero-mutation, 23 alias audit-secret và compiler resource/fuzz assurance trên host. |
+| 3. Hệ thống hiện tại đang có gì? | **Web vẫn chạy HTTP cổng 8081, chưa có TLS** nên feature Programming mặc định `OFF`. P4 có SQLite v5 operation audit, verified hard-link staging + exact no-follow cleanup, Core Programming UDS mode `0660`/`SO_PEERCRED`, bounded frame/deadline/version và loader reject symlink/hash/path trước mutation. Host negative tests đã có; target service identity/TLS chưa kiểm chứng. |
 | 4. Thiết kế mới thay đổi điều gì? | Đặt RBAC ở **server**, ở cả tầng handler lẫn tầng service — vì chặn ở UI không phải là chặn. Chạy compiler trong tiến trình cách ly, có hạn ngạch, không mạng, không include theo đường dẫn tùy ý. IPC dùng UDS có kiểm credential của tiến trình đối tác, quyền `0660`, khung có phiên bản và giới hạn kích thước. Audit ghi có cấu trúc và bất biến. |
 | 5. Team phải sửa module/contract nào? | §13. BE: middleware authz + audit store; Core: kiểm quyền socket và verify artifact độc lập; Ops/Platform: dựng TLS. **Hệ quả bắt buộc ngay**: vì chưa có TLS, mọi mutation Programming phải **mặc định tắt** trong gói production. |
 | 6. Điều gì còn bị chặn? | TLS production (Security + Platform) vẫn chặn bật mutation ngoài lab. Ma trận quyền và provenance đã được quyết định để implementation tiếp tục; operation/Core target, full RBAC matrix và Test Result độc lập vẫn còn mở. |
@@ -61,7 +61,7 @@ file name, MIME, bundle manifest hay artifact metadata nếu chưa verify.
 | Programming API | 11/25 route chạy thật khi flag ON; RBAC handler+service, request limits và audit atomic; 14 route fail-closed `503` | TLS/CSRF/rate-limit target và full authorization matrix |
 | Compiler | child process non-RT có scratch `0700`, argv cố định, rlimit/seccomp/no-new-privileges, timeout/process-group kill; timeout/OOM/output/source bounds và fuzz host PASS | cgroup/no-network/service UID + availability trên target |
 | Artifact | content-address store, canonical hash/profile/manifest/source map và read-back đã nối Check | Core bounded loader verify độc lập và target stage/load/swap |
-| IPC | Programming protocol v1 có bounded frame/deadline/peer schema, chưa production lifecycle | UDS peer credential, `0660` và target operation integration |
+| IPC | Programming protocol v1 có bounded frame/deadline/version, UDS `0660` + `SO_PEERCRED` và operation lifecycle source | target UID/group/socket ownership, mixed-version và fault evidence |
 | Audit | SQLite v4 atomic append + hash-chain/gap/tamper/sanitize; 23 alias secret reject, bundle audit không chứa source | export/retention/full route matrix và target evidence |
 | Bundle | source-only ZIP deterministic; raw/entry/count/path NFC/mode/flags/comment/timestamp/extra metadata bounded; hostile corpus 25 lớp zero-mutation | independent `VS-PROG-021/023` và target availability |
 
@@ -295,7 +295,7 @@ error không rò chi tiết và evidence trong V&V.
 |---|---|---|---|
 | TLS chưa production-ready | Security + Platform | cấm mutation | certificate/session/CSRF target evidence PASS |
 | Full RBAC/re-auth/CSRF/TLS matrix chưa có target evidence | BE + Security + Platform | `VS-PROG-022`/release | route+service matrix và browser/network target PASS |
-| Operation/Core security integration chưa có | BE + Core | Plan 53 P3/P4 | peer credential + bounded loader + negative/fault/target test |
+| Operation/Core target security chưa kiểm chứng | BE + Core + Security + QA | P6/G6 | target peer identity/socket owner, malicious locator/frame, restart/power fault Test Result |
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
 |---|---|---|---|
@@ -304,6 +304,7 @@ error không rò chi tiết và evidence trong V&V.
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; nêu rõ hệ quả “chưa có TLS ⇒ tắt mutation” | System Engineering |
 | 0.4 | 2026-08-10 | Đóng finding consumer review `F-CR-02`: đặt tên gốc cố định `${STATE_DIR}/programming/staging/` cho locator artifact thay vì “root fixed” không nêu tên, và ghi rõ root là hằng số package chứ không nhận từ request | System Engineering |
 | 0.5 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-100..207`, trọng tâm source `3e5281d`: 11 route/RBAC/store v4/compiler sandbox/Artifact/IPC v1 đã có; hostile bundle corpus 25 lớp zero-mutation, 23 alias audit-secret và compiler resource/fuzz assurance PASS trên host. Giữ feature OFF, TLS/operation/Core/target/Test Result/release còn mở | Security + Backend Lead |
+| 0.6 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: operation audit/lease, verified hard-link staging, safe exact cleanup, UDS `0660`/`SO_PEERCRED`, bounded frame/deadline/version và loader fail-closed symlink/hash/path. Giữ feature OFF, TLS/target peer/HIL Test Result còn mở. | Security + BE + Core |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -317,7 +318,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §16 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §1 mục tiêu, tài sản cần bảo vệ và giả định |
-| `DD-03` As-Built | PASS | §0/§2/§14.1 dẫn source `3e5281d`: HTTP 8081/TLS chưa có nhưng 11 route, RBAC/store v4/audit chain/compiler sandbox/Artifact/IPC v1 và assurance host đã có; operation/Core target còn thiếu |
+| `DD-03` As-Built | PASS | §0/§2/§14.1 dẫn source `c2f3189` + `10d9ad6`: HTTP 8081/TLS chưa có nhưng operation audit/staging và Core UDS peer/path/frame controls đã có; target evidence còn thiếu |
 | `DD-04` Target ownership | PASS | §3 biên tin cậy và luồng dữ liệu; §7 quyền sở hữu artifact/IPC/filesystem |
 | `DD-05` Data từng field | PASS | §9 trường bắt buộc của bản ghi audit, quy tắc secret và quyền riêng tư |
 | `DD-06` Interface | PASS | §4 RBAC theo action; §5 web/session/transport; §11 phản hồi lỗi không rò thông tin |
@@ -327,7 +328,7 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §13 middleware, audit store, kiểm quyền socket và verify artifact |
 | `DD-11` Verification | PASS | §14/§14.1 gắn `VS-PROG-021/022/023`, record `EV-PROG-G2-207`; yêu cầu deny phải **không** sinh IPC hay ghi DB; không suy evidence host thành Test Result |
 | `DD-12` Compatibility/deploy/rollback | PASS | §12 tương thích, xoay chứng chỉ/khóa và rollback |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; release BLOCKED | §16: decision/authority đã mở implementation; owner Security + Platform + BE/Core vẫn phải đóng TLS/full RBAC/Core target evidence. Ảnh hưởng: mutation production giữ `OFF`. Gate: `VS-PROG-022`/`RELEASE_READY`. Điều kiện mở: TLS/session/CSRF, peer/loader và Test Result target PASS |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; release BLOCKED | §16: source peer/loader đã có; owner Security + Platform + BE/Core vẫn phải đóng TLS/full RBAC/target evidence. Mutation production giữ `OFF`; mở khi TLS/session/CSRF và Test Result target PASS |
 
 Mạng lab kín **không** được tính là biện pháp thay TLS. Residual security
 **không được giảm** trước khi có bằng chứng trên target và phê duyệt độc lập.

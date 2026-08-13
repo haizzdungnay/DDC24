@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `OPS-PROG-001` |
-| Phiên bản | 0.5 |
+| Phiên bản | 0.6 |
 | Trạng thái | **M3 — Review Ready** — thủ tục đủ; chưa diễn tập lần nào |
-| Ngày | 2026-08-09 |
+| Ngày | 2026-08-13 |
 | Chủ quản | Operations Lead |
 | Người review | Core/BE/FW/HW/Security/Verification Leads |
 | Người phê duyệt | Operations Lead + Release Authority |
@@ -21,10 +21,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **cẩm nang thao tác tại hiện trường**: sao lưu, đưa vào vận hành, khôi phục, thay controller, nâng cấp gói và xử lý sự cố. Viết để người trực ca làm theo từng bước, kể cả khi đang căng thẳng. |
 | 2. Ai phải đọc file này? | Ops và Release (chủ quản); kỹ thuật viên hiện trường làm theo; Core/BE đối chiếu để bảo đảm thủ tục khớp hành vi thật; QA kiểm bằng diễn tập. |
-| 3. Hệ thống hiện tại đang có gì? | Chưa có thao tác Programming nào chạy trên thiết bị thật. Theo báo cáo nguồn, việc triển khai hiện chủ yếu **thủ công qua SSH**, chưa có staged operation do gói quản lý. Nghĩa là các thủ tục dưới đây **chưa từng được diễn tập**. |
+| 3. Hệ thống hiện tại đang có gì? | Source/host đã có Commission/Restore operation bền vững, verified staging, Core UDS/cutover/rollback và restart recovery (`c2f3189` + `10d9ad6`). Feature vẫn OFF và chưa có thao tác Programming nào chạy trên thiết bị thật; các thủ tục dưới đây **chưa từng được diễn tập trên target**. |
 | 4. Thiết kế mới thay đổi điều gì? | Thay thao tác tùy ứng bằng thủ tục có kiểm tra trước, có đọc ngược sau mỗi bước, có sao lưu trước khi đổi, và có điều kiện dừng rõ ràng. Bổ sung cây quyết định cho tình huống khó nhất: **timeout và kết quả không xác định** (§14). |
 | 5. Team phải sửa module/contract nào? | Không sửa code. Cần chuẩn bị lệnh thu thập baseline (§10), quy trình sao lưu có kiểm chứng (§11) và mẫu bản ghi thao tác (§17.1). |
-| 6. Điều gì còn bị chặn? | Chưa có API và runtime Programming nên chưa diễn tập được; đồ gá và thiết bị đo cho phần kiểm chứng vật lý chưa sẵn sàng. |
+| 6. Điều gì còn bị chặn? | API/runtime source đã có nhưng feature OFF, chưa deploy candidate lên Forlinx và đồ gá/thiết bị đo chưa sẵn sàng; vì vậy chưa được diễn tập hoặc dùng production. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §16: diễn tập nâng cấp và thay thiết bị, lưu bằng chứng; `VS-PROG-030` (restart toàn hệ) và `VS-PROG-011` (chèn lỗi vòng đời). Chưa diễn tập lần nào. |
 
 Nguyên tắc số một khi gặp `UNKNOWN`: **tra lại trạng thái, không gửi lại lệnh.**
@@ -280,7 +280,7 @@ Rollback performed/result or reason not required:
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| Programming API/backup/lifecycle chưa implement | BE + Core | Plan 53 implementation/integration PASS |
+| Programming API/lifecycle chưa diễn tập trên target | BE + Core + Ops | deploy lab có kiểm soát, backup/read-back/restart/rollback rehearsal PASS |
 | TLS/role/release policy chưa Approved | Security + Product + Release | decision + target security evidence |
 | HW/HIL limits/fixture chưa available | HW + Safety + QA | controlled setup và VS-014/030 PASS |
 
@@ -291,6 +291,7 @@ Rollback performed/result or reason not required:
 | 0.3 | 2026-08-09 | Bổ sung GO/STOP/ABORT/HOLD/ROLLBACK/CLOSE gates, shift handover và operation record schema; chuyển Detailed Draft chờ rehearsal review |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Operations; ghi rõ chưa diễn tập lần nào |
 | 0.5 | 2026-08-09 | Amendment A1: thêm §18.1 — số ô xác nhận thay đổi theo ảnh hưởng thật, `Chưa tính được` là điều kiện dừng, và vùng thao tác nguy hiểm tách riêng trên `PGM-04`; ba bước an toàn giữ nguyên |
+| 0.6 | 2026-08-13 | Đồng bộ P4 source/host `c2f3189` + `10d9ad6`: durable Commission/Restore, verified staging, UDS/cutover/rollback/checkpoint recovery đã có; giữ feature OFF và toàn bộ rehearsal/Forlinx/HIL/power-cut ở trạng thái chưa chạy. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -329,7 +330,7 @@ chặn phát hành, không phải cải tiến trải nghiệm.
 | Leo thang | PASS | §9 điều kiện dừng và §17 Go/Stop/Abort/Hold/Close |
 | Audit và bằng chứng | PASS | §8 bằng chứng và bàn giao; §17.1 bản ghi thao tác tối thiểu |
 | Bảo vệ dữ liệu | PASS | §11 và §13 nêu rõ dữ liệu nào phải giữ khi quay lui |
-| `BLOCKED` có owner/gate | **BLOCKED** | Chưa diễn tập lần nào. Owner: Ops/Release Lead + Core + BE. Ảnh hưởng: thủ tục chưa được kiểm chứng trên thiết bị thật, nên rủi ro sai thao tác khi Commission lần đầu vẫn cao. Gate: `DOC-G4` cho tài liệu, `G6` cho vận hành. Điều kiện mở: có API và runtime Programming trên target, rồi chạy diễn tập §16 và lưu bằng chứng |
+| `BLOCKED` có owner/gate | **BLOCKED** | Chưa diễn tập lần nào trên target. Owner: Ops/Release Lead + Core + BE. Ảnh hưởng: thủ tục chưa được kiểm chứng trên thiết bị thật, nên rủi ro sai thao tác khi Commission lần đầu vẫn cao. Gate: `DOC-G4` cho tài liệu, `G6` cho vận hành. Điều kiện mở: deploy API/runtime Programming trên target lab, rồi chạy diễn tập §16 và lưu bằng chứng |
 
-Thủ tục trong file này **chưa từng được thực thi**. Runbook đã viết không đồng
-nghĩa runbook đã hoạt động.
+Thủ tục trong file này **chưa từng được thực thi trên target**. Host test và
+runbook đã viết không đồng nghĩa runbook đã hoạt động ngoài hiện trường.
