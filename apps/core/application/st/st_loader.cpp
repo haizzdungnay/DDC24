@@ -394,7 +394,8 @@ private:
             b.slot = rd_u16(p);
             if (p[2] > 1) return fail(st_ir_error::kBadIoBinding, "invalid direction");
             b.is_output = p[2] != 0;
-            if (p[3] > 6) return fail(st_ir_error::kBadIoBinding, "invalid point kind");
+            if (p[3] > static_cast<uint8_t>(StPointKind::EXT))
+                return fail(st_ir_error::kBadIoBinding, "invalid point kind");
             b.point_kind = static_cast<StPointKind>(p[3]);
             b.point_index = rd_u16(p + 4);
             if (!valid_type_raw(p[6])) return fail(st_ir_error::kBadIoBinding, "invalid binding type");
@@ -405,10 +406,36 @@ private:
 
             if (b.slot >= var_slot_count_)
                 return fail(st_ir_error::kBadIoBinding, "binding slot out of writable range");
-            bool type_ok = false;
-            for (const StIrVariable& v : out_->variables)
-                if (v.slot == b.slot) { type_ok = (v.type == b.type); break; }
-            if (!type_ok) return fail(st_ir_error::kBadIoBinding, "binding type does not match variable");
+            if (b.point_index == 0 || b.point_index > st_point_kind_limit(b.point_kind))
+                return fail(st_ir_error::kBadIoBinding,
+                            "binding point index out of target point range");
+            if (b.is_output && !st_point_kind_allows_output(b.point_kind))
+                return fail(st_ir_error::kBadIoBinding,
+                            "binding output direction not allowed for point kind");
+            if (!st_point_kind_allows_type(b.point_kind, b.type))
+                return fail(st_ir_error::kBadIoBinding,
+                            "binding type not allowed for point kind");
+            if (!std::isfinite(b.scale_min) || !std::isfinite(b.scale_max))
+                return fail(st_ir_error::kBadIoBinding, "binding range must be finite");
+            const bool has_range = b.scale_min != 0.0f || b.scale_max != 0.0f;
+            if (has_range && !(b.scale_min < b.scale_max))
+                return fail(st_ir_error::kBadIoBinding,
+                            "binding range_min must be lower than range_max");
+            const StIrVariable* bound_variable = nullptr;
+            for (const StIrVariable& v : out_->variables) {
+                if (v.slot == b.slot) {
+                    bound_variable = &v;
+                    break;
+                }
+            }
+            if (!bound_variable || bound_variable->type != b.type)
+                return fail(st_ir_error::kBadIoBinding,
+                            "binding type does not match variable");
+            const StStorage expected_storage = b.is_output ? StStorage::VAR_OUTPUT
+                                                           : StStorage::VAR_INPUT;
+            if (bound_variable->storage != expected_storage)
+                return fail(st_ir_error::kBadIoBinding,
+                            "binding direction does not match variable storage");
             for (const StIrIoBinding& o : out_->io_bindings) {
                 if (o.slot == b.slot)
                     return fail(st_ir_error::kBadIoBinding, "duplicate binding for slot");

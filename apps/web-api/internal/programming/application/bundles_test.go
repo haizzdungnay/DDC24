@@ -15,8 +15,13 @@ import (
 
 func openBundleService(t *testing.T) (*ProjectService, *programmingstore.Store) {
 	t.Helper()
+	/* Ghim Store.now khớp service.now mock: nếu không, TTL 24h của mutation
+	 * receipt tính từ mốc cố định bên dưới sẽ bị Store coi là hết hạn theo
+	 * đồng hồ thật một khi ngày thật trôi qua mốc đó — xem projects_test.go. */
+	fixedNow := time.Date(2026, 8, 11, 11, 0, 0, 0, time.UTC)
 	store, err := programmingstore.OpenProgrammingStore(context.Background(), programmingstore.Options{
 		Path: filepath.Join(t.TempDir(), "programming-bundle.sqlite"),
+		Now:  func() time.Time { return fixedNow },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -26,7 +31,7 @@ func openBundleService(t *testing.T) (*ProjectService, *programmingstore.Store) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.now = func() time.Time { return time.Date(2026, 8, 11, 11, 0, 0, 0, time.UTC) }
+	service.now = func() time.Time { return fixedNow }
 	return service, store
 }
 

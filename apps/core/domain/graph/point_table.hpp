@@ -15,7 +15,16 @@ namespace core {
 
 enum class PointKind : uint8_t { AI, BI, AO, BO, AV, BV, MSV, EXT };
 
-enum class PointSource : uint8_t { IO, GRAPH, WEB, BACNET, SCHEDULE, MODBUS_RTU, DEFAULT };
+enum class PointSource : uint8_t {
+    IO,
+    GRAPH,
+    PROGRAM,
+    WEB,
+    BACNET,
+    SCHEDULE,
+    MODBUS_RTU,
+    DEFAULT,
+};
 
 struct PointId {
     PointKind kind;

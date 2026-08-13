@@ -1,6 +1,7 @@
 #include "st/st_io_map.hpp"
 
 #include <cctype>
+#include <cmath>
 #include <unordered_map>
 #include <utility>
 
@@ -37,14 +38,10 @@ void push_diag(std::vector<StDiagnostic>* out, const char* code, const std::stri
     out->push_back(std::move(d));
 }
 
-} // namespace
-
-bool valid_st_point_id(const std::string& point_id)
+bool split_numbered_id(const std::string& point_id, std::string* prefix)
 {
     const std::size_t dash = point_id.find('-');
     if (dash == std::string::npos || dash == 0) return false;
-    const std::string prefix = point_id.substr(0, dash);
-    if (prefix != "UI" && prefix != "DI" && prefix != "AO" && prefix != "DO") return false;
     const std::string digits = point_id.substr(dash + 1);
     if (digits.empty()) return false;
     bool all_zero = true;
@@ -52,7 +49,98 @@ bool valid_st_point_id(const std::string& point_id)
         if (!std::isdigit(static_cast<unsigned char>(c))) return false;
         if (c != '0') all_zero = false;
     }
-    return !all_zero;
+    if (all_zero) return false;
+    if (prefix) *prefix = point_id.substr(0, dash);
+    return true;
+}
+
+bool valid_ascii_identity(const std::string& identity)
+{
+    if (identity.empty() || identity.size() > 23) return false;
+    for (unsigned char c : identity) {
+        if (c < 0x21 || c > 0x7e) return false;
+    }
+    return true;
+}
+
+bool valid_device_id(const std::string& device_id)
+{
+    if (device_id.empty() || device_id.size() > 23 ||
+        !std::isalpha(static_cast<unsigned char>(device_id.front())))
+        return false;
+    for (char c : device_id) {
+        const unsigned char uc = static_cast<unsigned char>(c);
+        if (!std::isalnum(uc) && c != '_' && c != '-') return false;
+    }
+    return true;
+}
+
+bool validate_point_contract(const StIoMapEntry& entry, bool expect_output,
+                             std::vector<StDiagnostic>* diagnostics)
+{
+    std::string prefix;
+    bool identity_valid = false;
+    bool direction_valid = true;
+    bool type_valid = true;
+
+    if (entry.category == "LOCAL") {
+        identity_valid = split_numbered_id(entry.point_id, &prefix) &&
+                         (prefix == "UI" || prefix == "DI" ||
+                          prefix == "AO" || prefix == "DO") &&
+                         entry.device_id.empty();
+        if (identity_valid) {
+            direction_valid = !expect_output || prefix == "AO" || prefix == "DO";
+            type_valid = ((prefix == "UI" || prefix == "AO") &&
+                          entry.type == StType::REAL) ||
+                         ((prefix == "DI" || prefix == "DO") &&
+                          entry.type == StType::BOOL);
+        }
+    } else if (entry.category == "VP") {
+        identity_valid = split_numbered_id(entry.point_id, &prefix) &&
+                         (prefix == "AV" || prefix == "BV" || prefix == "MSV") &&
+                         entry.device_id.empty();
+        if (identity_valid) {
+            type_valid = (prefix == "AV" && entry.type == StType::REAL) ||
+                         (prefix == "BV" && entry.type == StType::BOOL) ||
+                         (prefix == "MSV" && entry.type == StType::UINT);
+        }
+    } else if (entry.category == "MB_RTU") {
+        identity_valid = valid_device_id(entry.device_id) &&
+                         valid_ascii_identity(entry.point_id);
+        type_valid = entry.type != StType::TIME;
+    } else {
+        push_diag(diagnostics, st_diag_code::kIoMapBadPointId,
+                  "io_map entry for '" + entry.variable + "' has unsupported category '" +
+                      entry.category + "' (allowlist: LOCAL, VP, MB_RTU)");
+        return false;
+    }
+
+    if (!identity_valid) {
+        push_diag(diagnostics, st_diag_code::kIoMapBadPointId,
+                  "io_map entry for '" + entry.variable +
+                      "' has invalid discriminated point identity for category '" +
+                      entry.category + "'");
+    }
+    if (!direction_valid || (expect_output && !entry.writable)) {
+        push_diag(diagnostics, st_diag_code::kIoMapBadDirection,
+                  "io_map output for '" + entry.variable +
+                      "' targets a read-only or non-writable point");
+    }
+    if (!type_valid) {
+        push_diag(diagnostics, st_diag_code::kIoMapTypeMismatch,
+                  "io_map entry for '" + entry.variable +
+                      "' type is incompatible with point category/kind");
+    }
+    return identity_valid && direction_valid && (!expect_output || entry.writable) && type_valid;
+}
+
+} // namespace
+
+bool valid_st_point_id(const std::string& point_id)
+{
+    std::string prefix;
+    return split_numbered_id(point_id, &prefix) &&
+           (prefix == "UI" || prefix == "DI" || prefix == "AO" || prefix == "DO");
 }
 
 bool validate_io_map(const StProgram& prog, const std::vector<StIoMapEntry>& entries,
@@ -97,17 +185,14 @@ bool validate_io_map(const StProgram& prog, const std::vector<StIoMapEntry>& ent
                      "io_map entry for '" + e.variable + "' type does not match declared ST type");
         }
 
-        if (!valid_st_point_id(e.point_id)) {
-            push_diag(diagnostics, st_diag_code::kIoMapBadPointId,
-                     "io_map entry for '" + e.variable + "' has invalid point_id '" + e.point_id +
-                         "' (expected PREFIX-NN, PREFIX in {UI,DI,AO,DO})");
-        }
+        validate_point_contract(e, expect_output, diagnostics);
 
         if (e.has_range) {
             if (e.type == StType::BOOL) {
                 push_diag(diagnostics, st_diag_code::kIoMapBadRange,
                          "io_map entry for '" + e.variable + "' declares a range but type is BOOL");
-            } else if (!(e.range_min < e.range_max)) {
+            } else if (!std::isfinite(e.range_min) || !std::isfinite(e.range_max) ||
+                       !(e.range_min < e.range_max)) {
                 push_diag(diagnostics, st_diag_code::kIoMapBadRange,
                          "io_map entry for '" + e.variable + "' has range_min >= range_max");
             }

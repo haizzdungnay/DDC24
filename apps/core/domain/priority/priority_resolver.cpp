@@ -20,14 +20,16 @@ PriorityResolver::PriorityResolver()
 
 bool PriorityResolver::set_ao(int level, int ch, float v)
 {
-    if (!valid_level(level) || ch < 0 || ch >= KX_N_AO) return false;
-    const float lo = ao_modes_[ch] == 1 ? 4.0f : 0.0f;
-    const float hi = ao_modes_[ch] == 1 ? 20.0f : 10.0f;
-    if (!std::isfinite(v) || v < lo || v > hi) {
-        std::fprintf(stderr,
-                     "WARN  priority.reject_ao ch=%d mode=%s value=%.3f range=[%.1f,%.1f]\n",
-                     ch, ao_modes_[ch] == 1 ? "4-20mA" : "0-10V",
-                     static_cast<double>(v), static_cast<double>(lo), static_cast<double>(hi));
+    if (!can_set_ao(level, ch, v)) {
+        if (valid_level(level) && ch >= 0 && ch < KX_N_AO) {
+            const float lo = ao_modes_[ch] == 1 ? 4.0f : 0.0f;
+            const float hi = ao_modes_[ch] == 1 ? 20.0f : 10.0f;
+            std::fprintf(stderr,
+                         "WARN  priority.reject_ao ch=%d mode=%s value=%.3f range=[%.1f,%.1f]\n",
+                         ch, ao_modes_[ch] == 1 ? "4-20mA" : "0-10V",
+                         static_cast<double>(v), static_cast<double>(lo),
+                         static_cast<double>(hi));
+        }
         return false;
     }
     Slot& s = ao_[level - 1][ch];
@@ -37,6 +39,14 @@ bool PriorityResolver::set_ao(int level, int ch, float v)
     s.active = true;
     s.value = v;
     return true;
+}
+
+bool PriorityResolver::can_set_ao(int level, int ch, float v) const
+{
+    if (!valid_level(level) || ch < 0 || ch >= KX_N_AO) return false;
+    const float lo = ao_modes_[ch] == 1 ? 4.0f : 0.0f;
+    const float hi = ao_modes_[ch] == 1 ? 20.0f : 10.0f;
+    return std::isfinite(v) && v >= lo && v <= hi;
 }
 
 void PriorityResolver::set_ao_modes(const uint8_t modes[KX_N_AO])
@@ -60,7 +70,7 @@ bool PriorityResolver::release_ao(int level, int ch)
 
 bool PriorityResolver::set_do(int level, int ch, bool on)
 {
-    if (!valid_level(level) || ch < 0 || ch >= KX_N_DO) return false;
+    if (!can_set_do(level, ch)) return false;
     Slot& s = do_[level - 1][ch];
     if (s.active && (s.value != 0.0f) != on)
         std::fprintf(stderr, "WARN  priority.conflict do ch=%d level=%d old=%d new=%d (nguồn sau thắng)\n",
@@ -68,6 +78,11 @@ bool PriorityResolver::set_do(int level, int ch, bool on)
     s.active = true;
     s.value = on ? 1.0f : 0.0f;
     return true;
+}
+
+bool PriorityResolver::can_set_do(int level, int ch) const
+{
+    return valid_level(level) && ch >= 0 && ch < KX_N_DO;
 }
 
 bool PriorityResolver::release_do(int level, int ch)

@@ -133,6 +133,45 @@ bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::stri
         if (!valid_value(variable.init))
             return fail("variable initial value is outside its type range");
     }
+    for (std::size_t i = 0; i < mod.io_bindings.size(); ++i) {
+        const StIrIoBinding& binding = mod.io_bindings[i];
+        if (binding.slot >= mod.var_slot_count)
+            return fail("IO binding slot is outside writable variable range");
+        if (binding.point_index == 0 ||
+            binding.point_index > st_point_kind_limit(binding.point_kind))
+            return fail("IO binding point index is outside target point range");
+        if (binding.is_output && !st_point_kind_allows_output(binding.point_kind))
+            return fail("IO binding output direction is not allowed for point kind");
+        if (!st_point_kind_allows_type(binding.point_kind, binding.type))
+            return fail("IO binding type is not allowed for point kind");
+        const StIrVariable* bound_variable = nullptr;
+        for (const StIrVariable& variable : mod.variables) {
+            if (variable.slot == binding.slot) {
+                bound_variable = &variable;
+                break;
+            }
+        }
+        if (!bound_variable || bound_variable->type != binding.type)
+            return fail("IO binding type does not match variable");
+        const StStorage expected_storage = binding.is_output ? StStorage::VAR_OUTPUT
+                                                             : StStorage::VAR_INPUT;
+        if (bound_variable->storage != expected_storage)
+            return fail("IO binding direction does not match variable storage");
+        if (!std::isfinite(binding.scale_min) || !std::isfinite(binding.scale_max))
+            return fail("IO binding range must be finite");
+        const bool has_range = binding.scale_min != 0.0f || binding.scale_max != 0.0f;
+        if (has_range && !(binding.scale_min < binding.scale_max))
+            return fail("IO binding range_min must be lower than range_max");
+        for (std::size_t j = 0; j < i; ++j) {
+            const StIrIoBinding& previous = mod.io_bindings[j];
+            if (previous.slot == binding.slot)
+                return fail("duplicate IO binding for variable slot");
+            if (previous.is_output && binding.is_output &&
+                previous.point_kind == binding.point_kind &&
+                previous.point_index == binding.point_index)
+                return fail("two variables bound to the same output point");
+        }
+    }
     uint32_t previous_source_pc = 0;
     for (std::size_t i = 0; i < mod.source_map.size(); ++i) {
         const StIrSourceMap& entry = mod.source_map[i];

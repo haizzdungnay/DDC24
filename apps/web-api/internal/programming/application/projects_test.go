@@ -18,8 +18,14 @@ const (
 
 func openProjectService(t *testing.T) (*ProjectService, *programmingstore.Store) {
 	t.Helper()
+	/* Store.now mặc định time.Now() thật; nếu không ghim khớp với service.now
+	 * mock bên dưới thì receipt idempotency (TTL 24h tính từ service.now) sẽ
+	 * bị Store coi là hết hạn ngay khi ngày thật trôi qua mốc cố định — làm
+	 * LookupMutation báo not-found một cách giả, tốn newID() ngoài dự kiến. */
+	fixedNow := time.Date(2026, 8, 11, 9, 0, 0, 0, time.UTC)
 	store, err := programmingstore.OpenProgrammingStore(context.Background(), programmingstore.Options{
 		Path: filepath.Join(t.TempDir(), "programming-v1.sqlite"),
+		Now:  func() time.Time { return fixedNow },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +124,15 @@ func TestProjectDraftRevisionLifecycleAndDurableIdempotency(t *testing.T) {
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := programmingstore.OpenProgrammingStore(context.Background(), programmingstore.Options{Path: store.Path()})
+	/* Ghim Now khớp fixedNow ở trên: restart mô phỏng process thật khởi động
+	 * lại nên KHÔNG mock lại service.now, nhưng nếu Store dùng đồng hồ thật
+	 * thì TTL 24h của receipt seal tính từ fixedNow sẽ bị coi là hết hạn một
+	 * khi ngày thật trôi qua fixedNow — làm replay giả thành SealRevision
+	 * mới và va ETag conflict, y hệt lỗi đã sửa ở openProjectService(). */
+	reopened, err := programmingstore.OpenProgrammingStore(context.Background(), programmingstore.Options{
+		Path: store.Path(),
+		Now:  func() time.Time { return time.Date(2026, 8, 11, 9, 0, 0, 0, time.UTC) },
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

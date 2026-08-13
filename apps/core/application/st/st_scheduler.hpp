@@ -18,11 +18,13 @@
 #ifndef CORE_ST_SCHEDULER_HPP
 #define CORE_ST_SCHEDULER_HPP
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "graph/point_table.hpp"
 #include "safety/overrun_monitor.hpp"
 #include "st/st_limits.hpp"
 #include "st/st_runtime.hpp"
@@ -75,6 +77,20 @@ enum class StSchedulerProfile : uint8_t {
 
 const char* st_scheduler_profile_name(StSchedulerProfile profile);
 
+/* Ảnh input cố định của một Program cho đúng một base-step. `cell` là value
+ * typed đã convert nhưng chưa ghi vào runtime slot; metadata giữ identity,
+ * quality, producer timestamp và source để Task 305 có thể publish health mà
+ * không đọc ngược PointTable giữa cycle. */
+struct StProcessInputSlot {
+    StCell      cell{};
+    uint16_t    slot = 0;
+    StPointKind point_kind = StPointKind::UI;
+    uint16_t    point_index = 0;
+    uint8_t     quality = KX_Q_BAD;
+    uint8_t     source = static_cast<uint8_t>(PointSource::DEFAULT);
+    uint64_t    observed_at_ns = 0;
+};
+
 struct StProgramInstance {
     std::string instance_id;
     uint16_t    order = 0;
@@ -101,6 +117,14 @@ struct StProgramInstance {
     int         last_fault_line = 0;
     uint32_t    fault_count = 0;
     uint32_t    run_count = 0;
+
+    /* ProgramProcessImage: cấp phát tĩnh theo profile, không heap trong scan. */
+    std::array<StProcessInputSlot, st_ir::kMaxIoBindings> process_inputs{};
+    uint16_t    process_input_count = 0;
+    uint64_t    input_snapshot_generation = 0;
+    bool        input_snapshot_valid = true;
+    uint64_t    last_successful_base_step = 0;
+    uint64_t    output_commit_generation = 0;
 };
 
 struct StTaskConfig {
@@ -129,6 +153,8 @@ public:
     const StTaskStats&  stats() const { return stats_; }
     const OverrunMonitor& monitor() const { return monitor_; }
     OverrunMonitor& monitor() { return monitor_; }
+    uint64_t last_dispatch_base_step() const { return last_dispatch_base_step_; }
+    bool last_dispatch_succeeded() const { return last_dispatch_succeeded_; }
 
     void set_enabled(bool e);
     bool enabled() const { return cfg_.enabled; }
@@ -148,6 +174,8 @@ private:
     std::vector<std::unique_ptr<StProgramInstance>> programs_;
     uint64_t last_run_ns_ = 0;
     bool     started_ = false;
+    uint64_t last_dispatch_base_step_ = 0;
+    bool     last_dispatch_succeeded_ = false;
 
     friend class StScheduler;
 };
@@ -194,6 +222,11 @@ public:
     bool disable(const std::string& instance_id, std::string* error);
     bool reset_fault(const std::string& instance_id, std::string* error);
     bool rollback(const std::string& instance_id, std::string* error);
+
+    /* Safe-boundary phase tách riêng để process image chụp input của candidate
+     * vừa activate, không chụp artifact cũ rồi execute artifact mới. Gọi lặp
+     * lại trong cùng boundary là no-op. */
+    void apply_pending_activations_at_boundary();
 
     /* Một base step. `now_ns` chụp MỘT LẦN bởi caller và dùng chung cho mọi
      * Task. Task period chỉ quyết định có dispatch hay không; tuyệt đối không

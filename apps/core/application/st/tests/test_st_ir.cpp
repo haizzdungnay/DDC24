@@ -232,6 +232,70 @@ END_PROGRAM
     EXPECT_EQ(loaded.variables[2].type, StType::UINT);
 }
 
+TEST(StIr, ModbusRtuExtBindingRoundTripsWithoutChangingLegacyPointKinds)
+{
+    StIrModule module;
+    StDiagnostic diagnostic;
+    ASSERT_TRUE(compile_st_source(kSimple, &module, &diagnostic));
+    StIrIoBinding input{};
+    input.slot = module.variables[0].slot;
+    input.point_kind = StPointKind::EXT;
+    input.point_index = 256;
+    input.type = StType::REAL;
+    module.io_bindings.push_back(input);
+
+    std::vector<uint8_t> artifact;
+    std::string encode_error;
+    ASSERT_TRUE(serialize_st_ir(module, &artifact, &encode_error)) << encode_error;
+    StLoadedProgram loaded;
+    StLoaderOptions options;
+    StLoadError load_error;
+    ASSERT_TRUE(load_st_artifact(artifact.data(), artifact.size(), options, &loaded,
+                                 &load_error))
+        << load_error.code << ": " << load_error.message;
+    ASSERT_EQ(loaded.io_bindings.size(), 1u);
+    EXPECT_EQ(loaded.io_bindings[0].point_kind, StPointKind::EXT);
+    EXPECT_EQ(loaded.io_bindings[0].point_index, 256u);
+    EXPECT_EQ(static_cast<uint8_t>(StPointKind::MSV), 6u);
+    EXPECT_EQ(static_cast<uint8_t>(StPointKind::EXT), 7u);
+}
+
+TEST(StIr, SerializerRejectsInvalidBindingMatrixBeforeArtifactCreation)
+{
+    StIrModule module;
+    StDiagnostic diagnostic;
+    ASSERT_TRUE(compile_st_source(kSimple, &module, &diagnostic));
+    StIrIoBinding invalid{};
+    invalid.slot = module.variables[1].slot;
+    invalid.is_output = true;
+    invalid.point_kind = StPointKind::UI; /* UI chỉ read */
+    invalid.point_index = 1;
+    invalid.type = StType::REAL;
+    module.io_bindings.push_back(invalid);
+    std::vector<uint8_t> artifact;
+    std::string error;
+    EXPECT_FALSE(serialize_st_ir(module, &artifact, &error));
+    EXPECT_NE(error.find("output direction"), std::string::npos);
+}
+
+TEST(StIr, SerializerRejectsBindingDirectionThatDisagreesWithVariableStorage)
+{
+    StIrModule module;
+    StDiagnostic diagnostic;
+    ASSERT_TRUE(compile_st_source(kSimple, &module, &diagnostic));
+    StIrIoBinding invalid{};
+    invalid.slot = module.variables[0].slot; /* a là VAR_INPUT */
+    invalid.is_output = true;
+    invalid.point_kind = StPointKind::AO;
+    invalid.point_index = 1;
+    invalid.type = StType::REAL;
+    module.io_bindings.push_back(invalid);
+    std::vector<uint8_t> artifact;
+    std::string error;
+    EXPECT_FALSE(serialize_st_ir(module, &artifact, &error));
+    EXPECT_NE(error.find("variable storage"), std::string::npos);
+}
+
 TEST(StIr, SerializerRejectsInvalidSourceMapBeforeArtifactCreation)
 {
     StIrModule module;

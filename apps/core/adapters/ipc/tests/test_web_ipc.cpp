@@ -1099,6 +1099,11 @@ TEST(WebIpc, ExtPointWriteCommandAccepted)
 {
     Fixture f;
     f.bacnet.attach();
+    /* PointWriter chỉ chấp nhận EXT nằm trong ext_count và writable=1 — mô
+     * phỏng Point Catalog đã đăng ký point này qua iobus trước khi test ghi. */
+    ASSERT_NE(f.bacnet.shm(), nullptr);
+    f.bacnet.shm()->ext_count = 1;
+    f.bacnet.shm()->ext[0].writable = 1;
     ASSERT_TRUE(f.web.open(f.sock_path));
     Client c;
     ASSERT_TRUE(c.connect(f.sock_path));

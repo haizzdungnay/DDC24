@@ -121,6 +121,29 @@ void set_ai(PointTable* table, int ch, float v, uint8_t quality = KX_Q_GOOD)
     table->update_inputs(io);
 }
 
+void set_two_ai(PointTable* table, float first, uint8_t first_quality,
+                float second, uint8_t second_quality, uint64_t timestamp)
+{
+    IoSnapshot io{};
+    io.ts_ns = timestamp;
+    io.ui_value[0] = first;
+    io.ui_quality[0] = first_quality;
+    io.ui_value[1] = second;
+    io.ui_quality[1] = second_quality;
+    table->update_inputs(io);
+}
+
+void attach_valid_iobus(IobusReader* reader, kx_io_shm_t* shm, float ui0 = 2.0f)
+{
+    std::memset(shm, 0, sizeof(*shm));
+    shm->magic = KX_SHM_MAGIC;
+    shm->iop_status = KX_IOP_NORMAL;
+    shm->ts_ns = 1;
+    shm->ui_value[0] = ui0;
+    shm->ui_quality[0] = KX_Q_GOOD;
+    reader->attach_external(shm);
+}
+
 constexpr uint64_t kMs = 1000000ull;
 
 } // namespace
@@ -293,6 +316,249 @@ TEST(StIntegration, NonFiniteInputIsBlockedAtBoundary)
     }
 }
 
+TEST(StIntegration, InputSnapshotRejectsWholeBatchAndDoesNotReusePartialValues)
+{
+    const char* source = R"ST(
+PROGRAM pair
+VAR_INPUT a : REAL; b : REAL; END_VAR
+VAR_OUTPUT total : REAL; END_VAR
+total := a + b;
+END_PROGRAM
+)ST";
+    const StIrModule module = compile_only(source);
+    StIrIoBinding a{};
+    a.slot = slot_of(module, "a");
+    a.point_kind = StPointKind::UI;
+    a.point_index = 1;
+    StIrIoBinding b{};
+    b.slot = slot_of(module, "b");
+    b.point_kind = StPointKind::UI;
+    b.point_index = 2;
+    StIrIoBinding total{};
+    total.slot = slot_of(module, "total");
+    total.is_output = true;
+    total.point_kind = StPointKind::AO;
+    total.point_index = 1;
+
+    StScheduler scheduler;
+    make_running(&scheduler, build_with_bindings(source, {a, b, total}));
+    PointTable table;
+    PriorityResolver resolver;
+    StIoBridgeStats stats;
+
+    set_two_ai(&table, 2.0f, KX_Q_GOOD, 3.0f, KX_Q_GOOD, 11);
+    ASSERT_TRUE(st_load_all_inputs(&scheduler, table, &stats));
+    ASSERT_EQ(scheduler.tick(100 * kMs).programs_run, 1u);
+
+    StProgramInstance* instance = scheduler.find_program("p");
+    ASSERT_NE(instance, nullptr);
+    const StLoadedProgram* loaded = instance->runtime.program();
+    ASSERT_NE(loaded, nullptr);
+    EXPECT_FLOAT_EQ(loaded->slots[a.slot].r, 2.0f);
+    EXPECT_FLOAT_EQ(loaded->slots[b.slot].r, 3.0f);
+
+    set_two_ai(&table, 8.0f, KX_Q_GOOD, 9.0f, KX_Q_BAD, 12);
+    EXPECT_FALSE(st_load_all_inputs(&scheduler, table, &stats));
+    EXPECT_FLOAT_EQ(loaded->slots[a.slot].r, 2.0f)
+        << "binding đầu không được commit khi binding sau BAD";
+    EXPECT_FLOAT_EQ(loaded->slots[b.slot].r, 3.0f);
+    const StSchedulerTickResult failed = scheduler.tick(200 * kMs);
+    EXPECT_EQ(failed.faults, 1u);
+    EXPECT_STREQ(instance->last_fault_code, st_diag_code::kRtNonFiniteInput);
+    EXPECT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &stats));
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT);
+}
+
+TEST(StIntegration, TypedInputRejectsImplicitFractionalToIntegerConversion)
+{
+    const char* source = R"ST(
+PROGRAM integer_input
+VAR_INPUT state : UINT; END_VAR
+END_PROGRAM
+)ST";
+    const StIrModule module = compile_only(source);
+    StIrIoBinding input{};
+    input.slot = slot_of(module, "state");
+    input.point_kind = StPointKind::MSV;
+    input.point_index = 1;
+    StScheduler scheduler;
+    make_running(&scheduler, build_with_bindings(source, {input}));
+    PointTable table;
+    ASSERT_TRUE(table.set_virtual({PointKind::MSV, 0}, 1.5f, PointSource::WEB));
+    StIoBridgeStats stats;
+    EXPECT_FALSE(st_load_all_inputs(&scheduler, table, &stats));
+    EXPECT_EQ(stats.inputs_rejected, 1u);
+    EXPECT_FALSE(scheduler.find_program("p")->input_snapshot_valid);
+}
+
+TEST(StIntegration, OutputPublishRejectsWholeBatchBeforePriorityMutation)
+{
+    const char* source = R"ST(
+PROGRAM outputs
+VAR_OUTPUT first : REAL; invalid : REAL; END_VAR
+first := 5.0;
+invalid := 99.0;
+END_PROGRAM
+)ST";
+    const StIrModule module = compile_only(source);
+    StIrIoBinding first{};
+    first.slot = slot_of(module, "first");
+    first.is_output = true;
+    first.point_kind = StPointKind::AO;
+    first.point_index = 1;
+    StIrIoBinding invalid = first;
+    invalid.slot = slot_of(module, "invalid");
+    invalid.point_index = 2;
+
+    StScheduler scheduler;
+    make_running(&scheduler, build_with_bindings(source, {first, invalid}));
+    ASSERT_EQ(scheduler.tick(100 * kMs).programs_run, 1u);
+    PointTable table;
+    PriorityResolver resolver;
+    PointWriter writer(table, nullptr);
+    StIoBridgeStats stats;
+    EXPECT_FALSE(st_apply_all_outputs(&scheduler, &resolver, &writer, &stats));
+    EXPECT_EQ(stats.outputs_applied, 0u);
+    EXPECT_EQ(stats.output_batches_rejected, 1u);
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT);
+    EXPECT_EQ(resolver.winning_ao_level(1), PRIO_DEFAULT);
+}
+
+TEST(StIntegration, DoesNotRepublishOutputWhenLongPeriodTaskIsNotDue)
+{
+    const char* source = R"ST(
+PROGRAM slow
+VAR_OUTPUT out1 : REAL; END_VAR
+out1 := 4.0;
+END_PROGRAM
+)ST";
+    const StIrModule module = compile_only(source);
+    StIrIoBinding output{};
+    output.slot = slot_of(module, "out1");
+    output.is_output = true;
+    output.point_kind = StPointKind::AO;
+    output.point_index = 1;
+
+    StScheduler scheduler;
+    std::string error;
+    ASSERT_TRUE(scheduler.add_task(task_cfg("slow", 5000), &error)) << error;
+    ASSERT_TRUE(scheduler.add_program("slow", "p", 0, &error)) << error;
+    const std::vector<uint8_t> artifact = build_with_bindings(source, {output});
+    ASSERT_TRUE(scheduler.request_activation("p", artifact, &error)) << error;
+    scheduler.tick(0);
+    ASSERT_TRUE(scheduler.start("p", &error)) << error;
+
+    ASSERT_EQ(scheduler.tick(5000 * kMs).programs_run, 1u);
+    PointTable table;
+    PriorityResolver resolver;
+    StIoBridgeStats first_stats;
+    ASSERT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &first_stats));
+    ASSERT_EQ(first_stats.output_commit_generation, scheduler.base_step_count());
+    ASSERT_TRUE(resolver.release_ao(PRIO_LOCAL_LOGIC, 0));
+
+    const uint64_t prior_generation = scheduler.find_program("p")->output_commit_generation;
+    ASSERT_EQ(scheduler.tick(6000 * kMs).programs_run, 0u);
+    StIoBridgeStats skipped_stats;
+    EXPECT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &skipped_stats));
+    EXPECT_EQ(skipped_stats.outputs_applied, 0u);
+    EXPECT_EQ(skipped_stats.output_batches_committed, 0u);
+    EXPECT_EQ(scheduler.find_program("p")->output_commit_generation, prior_generation);
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT);
+}
+
+TEST(StIntegration, VirtualPointBridgePreservesSnapshotMetadataAndProgramSource)
+{
+    const char* source = R"ST(
+PROGRAM virtual_bridge
+VAR_INPUT value : REAL; END_VAR
+VAR_OUTPUT enabled : BOOL; END_VAR
+enabled := value > 1.0;
+END_PROGRAM
+)ST";
+    const StIrModule module = compile_only(source);
+    StIrIoBinding input{};
+    input.slot = slot_of(module, "value");
+    input.point_kind = StPointKind::AV;
+    input.point_index = 1;
+    StIrIoBinding output{};
+    output.slot = slot_of(module, "enabled");
+    output.is_output = true;
+    output.point_kind = StPointKind::BV;
+    output.point_index = 1;
+
+    StScheduler scheduler;
+    make_running(&scheduler, build_with_bindings(source, {input, output}));
+    PointTable table;
+    ASSERT_TRUE(table.set_virtual({PointKind::AV, 0}, 2.5f, PointSource::WEB));
+    const Point source_point = table.get({PointKind::AV, 0});
+    StIoBridgeStats stats;
+    ASSERT_TRUE(st_load_all_inputs(&scheduler, table, &stats));
+    StProgramInstance* instance = scheduler.find_program("p");
+    ASSERT_EQ(instance->process_input_count, 1u);
+    EXPECT_EQ(instance->process_inputs[0].quality, KX_Q_GOOD);
+    EXPECT_EQ(instance->process_inputs[0].source,
+              static_cast<uint8_t>(PointSource::WEB));
+    EXPECT_EQ(instance->process_inputs[0].observed_at_ns, source_point.ts_ns);
+    ASSERT_EQ(scheduler.tick(100 * kMs).programs_run, 1u);
+    PriorityResolver resolver;
+    PointWriter writer(table, nullptr);
+    ASSERT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &writer, &stats));
+    const Point result = table.get({PointKind::BV, 0});
+    EXPECT_FLOAT_EQ(result.value, 1.0f);
+    EXPECT_EQ(result.source, PointSource::PROGRAM);
+}
+
+TEST(StIntegration, ModbusRtuBridgeReadsExtAndPublishesSetpointDirty)
+{
+    const char* source = R"ST(
+PROGRAM rtu_bridge
+VAR_INPUT actual : REAL; END_VAR
+VAR_OUTPUT request : REAL; END_VAR
+request := actual + 1.0;
+END_PROGRAM
+)ST";
+    const StIrModule module = compile_only(source);
+    StIrIoBinding input{};
+    input.slot = slot_of(module, "actual");
+    input.point_kind = StPointKind::EXT;
+    input.point_index = 1;
+    StIrIoBinding output{};
+    output.slot = slot_of(module, "request");
+    output.is_output = true;
+    output.point_kind = StPointKind::EXT;
+    output.point_index = 2;
+
+    StScheduler scheduler;
+    make_running(&scheduler, build_with_bindings(source, {input, output}));
+    PointTable table;
+    kx_ext_point_t ext[2]{};
+    ext[0].value = 3.5f;
+    ext[0].quality = KX_Q_GOOD;
+    ext[0].sample_mono_ns = 123456;
+    ext[1].quality = KX_Q_GOOD;
+    table.update_ext(ext, 2);
+    StIoBridgeStats stats;
+    ASSERT_TRUE(st_load_all_inputs(&scheduler, table, &stats));
+    StProgramInstance* instance = scheduler.find_program("p");
+    ASSERT_EQ(instance->process_input_count, 1u);
+    EXPECT_EQ(instance->process_inputs[0].observed_at_ns, 123456u);
+    EXPECT_EQ(instance->process_inputs[0].source,
+              static_cast<uint8_t>(PointSource::MODBUS_RTU));
+    ASSERT_EQ(scheduler.tick(100 * kMs).programs_run, 1u);
+
+    kx_plc_shm_t shm{};
+    shm.ext_count = 2;
+    shm.ext[1].writable = 1;
+    PriorityResolver resolver;
+    PointWriter writer(table, &shm);
+    ASSERT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &writer, &stats));
+    EXPECT_FLOAT_EQ(shm.ext[1].setpoint, 4.5f);
+    EXPECT_EQ(shm.ext[1].dirty, 1);
+    const Point result = table.get({PointKind::EXT, 1});
+    EXPECT_FLOAT_EQ(result.value, 4.5f);
+    EXPECT_EQ(result.source, PointSource::PROGRAM);
+}
+
 /* ---- ScanLoop thật ---- */
 
 TEST(StIntegration, ScanLoopWithoutStSchedulerBehavesAsBefore)
@@ -319,7 +585,9 @@ TEST(StIntegration, ScanLoopWithoutStSchedulerBehavesAsBefore)
 
 TEST(StIntegration, ScanLoopRunsStProgramAndRoutesThroughArbitration)
 {
+    kx_io_shm_t shm{};
     IobusReader reader;
+    attach_valid_iobus(&reader, &shm);
     PointTable table;
     PointQuality quality;
     WebIpc web;
@@ -350,7 +618,9 @@ TEST(StIntegration, ScanLoopStepDoesNotAllocateWithStProgram)
 {
     /* Bất biến zero-allocation phải giữ nguyên SAU KHI tích hợp — nếu không,
      * mọi công của ACTION 6 mất tác dụng ngay khi ST vào scan path. */
+    kx_io_shm_t shm{};
     IobusReader reader;
+    attach_valid_iobus(&reader, &shm);
     PointTable table;
     PointQuality quality;
     WebIpc web;

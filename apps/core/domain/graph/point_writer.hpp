@@ -33,15 +33,20 @@ namespace core {
 
 class PointWriter {
 public:
-    /* `shm` có thể là nullptr (test, hoặc chưa attach SHM). Khi đó ghi EXT vẫn
-     * cập nhật point table nhưng KHÔNG tới được thiết bị, và write() trả false
-     * để nguồn gọi biết mà báo lỗi thay vì tưởng đã xong. */
+    /* `shm` có thể là nullptr (test, hoặc chưa attach SHM). Khi đó ghi EXT
+     * fail trước mutation để nguồn gọi không nhầm PointTable đã đổi là
+     * thiết bị đã nhận lệnh. */
     PointWriter(PointTable& table, kx_plc_shm_t* shm) : table_(table), shm_(shm) {}
 
     /* Ghi một point ảo hoặc điểm mở rộng.
      * EXT: ngoài point table còn đặt setpoint + dirty để iobus đẩy xuống bus.
-     * Trả false nếu point không hợp lệ, hoặc EXT mà không có SHM để ghi. */
+     * Trả false nếu point không hợp lệ, hoặc EXT không có SHM,
+     * ngoài ext_count hay read-only. */
     bool write(PointId id, float value, PointSource source);
+
+    /* Preflight không mutation. Batch process-image gọi cho TOÀN BỘ proposal
+     * trước khi publish để một binding lỗi không tạo commit nửa chừng. */
+    bool can_write(PointId id, float value) const;
 
     /* Nhả quyền ghi: GIỮ value, chỉ trả source về DEFAULT (point ảo không có
      * priority array nên release ≠ ghi giá trị). Với EXT thì KHÔNG đặt dirty —

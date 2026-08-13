@@ -4,6 +4,8 @@
 #include <new>
 #include <utility>
 
+#include "st/st_diagnostic.hpp"
+
 namespace core {
 
 const char* st_program_state_name(StProgramState s)
@@ -324,6 +326,11 @@ void StScheduler::apply_pending_activations(StTask& task)
         if (ok) {
             p->state = p->pending_is_rollback ? StProgramState::ROLLED_BACK
                                               : StProgramState::ACTIVE;
+            p->process_input_count = 0;
+            p->input_snapshot_generation = 0;
+            p->input_snapshot_valid = true;
+            p->last_successful_base_step = 0;
+            p->output_commit_generation = 0;
             /* Giữ lại bytes để promote thành last-known-good SAU KHI chạy được
              * >= 1 tick không fault — package chưa chạy lần nào không đủ tư
              * cách làm mốc rollback. */
@@ -342,10 +349,17 @@ void StScheduler::apply_pending_activations(StTask& task)
     }
 }
 
+void StScheduler::apply_pending_activations_at_boundary()
+{
+    for (auto& task : tasks_) apply_pending_activations(*task);
+}
+
 void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out)
 {
     const uint64_t start = now_ns;
     uint32_t ran = 0;
+    task.last_dispatch_base_step_ = base_step_count_;
+    task.last_dispatch_succeeded_ = true;
 
     for (auto& p : task.programs()) {
         if (!p->enabled) continue;
@@ -357,6 +371,30 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
         if (p->state != StProgramState::RUNNING) continue;
         if (!p->runtime.loaded()) continue;
 
+        bool has_input_binding = false;
+        for (const StIrIoBinding& binding : p->runtime.program()->io_bindings) {
+            if (!binding.is_output) {
+                has_input_binding = true;
+                break;
+            }
+        }
+        if (has_input_binding &&
+            (p->input_snapshot_generation != base_step_count_ ||
+             !p->input_snapshot_valid)) {
+            p->fault_count++;
+            p->last_fault_code = st_diag_code::kRtNonFiniteInput;
+            p->last_fault_pc = 0;
+            p->last_fault_line = 0;
+            p->state = StProgramState::FAULTED;
+            p->last_successful_base_step = 0;
+            task.last_dispatch_succeeded_ = false;
+            out->faults++;
+            /* Required input không GOOD/mapped/coercible làm hủy cả cycle.
+             * Không execute bằng slot cũ vì như vậy stale/bad sẽ bị trình bày
+             * như dữ liệu live và output mới vẫn có thể được publish. */
+            break;
+        }
+
         const StExecResult r = p->runtime.execute(static_cast<int64_t>(now_ns));
         p->run_count++;
         if (!r.ok) {
@@ -365,6 +403,8 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
             p->last_fault_pc = r.fault_pc;
             p->last_fault_line = r.fault_line;
             p->state = StProgramState::FAULTED;
+            p->last_successful_base_step = 0;
+            task.last_dispatch_succeeded_ = false;
             out->faults++;
             /* Fault của MỘT Program dừng cả Task: các Program trong một Task
              * thường phối hợp (Program 0 tính setpoint, Program 1 dùng nó), nên
@@ -372,6 +412,7 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
              * (SPEC §5). Staging của từng Program đã được StProgramRuntime huỷ. */
             break;
         }
+        p->last_successful_base_step = base_step_count_;
         /* Chạy được >= 1 tick không fault -> đủ điều kiện last-known-good. */
         if (!p->activated_artifact.empty()) {
             p->retired_artifact.swap(p->last_known_good);
@@ -402,7 +443,7 @@ StSchedulerTickResult StScheduler::on_base_step(uint64_t now_ns)
      * một task chu kỳ dài phải đợi trọn một chu kỳ mới có hiệu lực, trong khi
      * BE đã báo "đã activate". Áp ở đây cũng bảo đảm không bao giờ swap package
      * giữa lúc execute() đang chạy. */
-    for (auto& t : tasks_) apply_pending_activations(*t);
+    apply_pending_activations_at_boundary();
 
     for (auto& t : tasks_) {
         if (!t->enabled()) { t->stats_.skip_count++; continue; }

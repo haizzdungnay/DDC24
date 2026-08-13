@@ -4,18 +4,18 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.34 |
-| Ngày | 2026-08-11 |
+| Phiên bản | 3.35 |
+| Ngày | 2026-08-13 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
-| Trạng thái | **ACTIVE — candidate v2.24 `IMPLEMENTATION IN PROGRESS`; P1 6/6, P2 8/8, P3 2/8 SOURCE/DOD DONE; G3 IN PROGRESS; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
+| Trạng thái | **ACTIVE — candidate v2.25 `IMPLEMENTATION IN PROGRESS`; P1 6/6, P2 8/8, P3 3/8 SOURCE/DOD DONE; G3 IN PROGRESS; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | `d4fd15da4b369b027296bcf9460ecdc9fbe0997c`; source authority `a831a0d`, source tree `9ff19be3`; **22 hash ở §2 là định danh hiện hành** |
-| PR nguồn | [PR #157](https://github.com/Mekong-HCM/MK-DDC-24/pull/157) — merged; remote feature branch đã xóa |
-| Candidate trước | v2.23 tại commit `424367a` — **SUPERSEDED bởi TASK-PROG-301**, xem §4 |
+| Candidate commit | source authority `f080056` (`TASK-PROG-302`); PR/merge commit ghi bổ sung sau khi merge — xem §4.2 |
+| PR nguồn | Chờ tạo/merge PR cho nhánh `feat/programming-process-image-20260811`; ghi bổ sung sau khi merge |
+| Candidate trước | v2.24 tại commit `d4fd15d` — **SUPERSEDED bởi TASK-PROG-302**, xem §4.2 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
-| Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.24 không đổi requirement/design decision |
+| Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.25 không đổi requirement/design decision |
 
 ## 1. Phạm vi và phán quyết
 
@@ -62,8 +62,8 @@ Việc ghim candidate xác định đúng baseline được duyệt. Nó **khôn
 - tự mở `RELEASE_READY`.
 
 `AUTH-PROG-2026-08-11-03` đã mở `PLAN_READY` và mọi `IMPLEMENT_READY[*]`; việc
-ghim hash bảo đảm team đọc đúng candidate v2.24: baseline đã phê duyệt cộng
-trạng thái triển khai thật của `TASK-PROG-100..301`.
+ghim hash bảo đảm team đọc đúng candidate v2.25: baseline đã phê duyệt cộng
+trạng thái triển khai thật của `TASK-PROG-100..302`.
 
 Baseline gốc `05c1c480418a2256f1010527f9d90fb6ff549b86` vẫn được giữ để so
 sánh/rollback. Chuỗi candidate của vòng P0 là
@@ -97,11 +97,11 @@ candidate v2.7; delta trực tiếp so với v2.23 được liệt kê ở §4.
 | 19 | `docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md` | `ac7fed9c3134f32f16f28dee7d9b3f60585ef62df749d0148fc15770ba8fc6ba` | `6a09f28979d99ebfc07e8183a1ad01085a7e4488` | 335 | ✱ |
 | 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `566d6bf39078c949894f7c1c07e519b05ba09f8fcedb615abd95a37f0958d65e` | `446f0c8e25bc27d6aa5517b918310ad10d31be3a` | 327 | ✱ |
 | 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `082bf4c19d715dcf167b7bcc7f59c7d6d43cc934ebbece2d9d9d4e5f2a05123f` | `11be789c2362edd99e77021443461362853c1ac6` | 347 | ✱ |
-| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `0756aaf2c067e3986272c82b2188e592c92be71d892b9ec595302b20932b37c2` | `32ed8c22a48f10fabf2c3765f798893bd85bc3eb` | 1164 | ✱ |
+| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `2afaff165ce149723308dc922a8286045ab8d9535aea4a94465def445d7c4761` | `2dcb8b8b57905c0973e01d08b774f8df5e341fa3` | 1165 | ✱ |
 
 So với candidate v2.7, **22/22 hồ sơ đã đổi** để tạo nền v2.8 được phê duyệt.
-Candidate v2.24 hiện tại đổi dòng 1, 4, 9, 15, 18, 20–22 so với v2.23 để ghi
-`TASK-PROG-301`, profile Rev A/base-step/watchdog và trace/risk/progress P3; dấu `✱` tiếp tục biểu thị delta
+Candidate v2.25 hiện tại đổi dòng 22 so với v2.24 để ghi `TASK-PROG-302`
+DONE và progress P3 3/8; dấu `✱` tiếp tục biểu thị delta
 tích lũy so với v2.7.
 
 ## 3. Hồ sơ hỗ trợ ngoài mẫu số 22
@@ -124,7 +124,9 @@ không cần phát hành manifest mới.
 Sáu ADR `ADR-026..031` cũng nằm ngoài mẫu số 22 vì chúng là **quyết định**, không
 phải hồ sơ baseline. Cả sáu đã `Accepted` theo `AUTH-PROG-2026-08-11-03`.
 
-## 4. Delta so với candidate v2.23
+## 4. Lịch sử delta
+
+### 4.1 v2.24 so với v2.23
 
 Candidate v2.24 thay đổi **8/22** hồ sơ để phản ánh `TASK-PROG-301`, không đổi
 requirement hoặc decision đã phê duyệt:
@@ -149,6 +151,34 @@ requirement hoặc decision đã phê duyệt:
 
 Các hồ sơ hỗ trợ, Decision Log, sáu ADR và asset SVG nằm ngoài mẫu số 22 nhưng
 được đồng bộ trong cùng thay đổi để không còn chỉ báo gate mâu thuẫn.
+
+### 4.2 v2.25 so với v2.24
+
+Candidate v2.25 thay đổi **1/22** hồ sơ — phạm vi hẹp hơn v2.24 có chủ đích:
+
+- `PLAN-PROG-053` v0.34 (hồ sơ #22): P3 `3/8`, tổng `24/49`, ghi
+  `TASK-PROG-302 DONE` tại `f080056` và next `TASK-PROG-303`.
+- Source Task 302 khóa tại `f080056`: process image preflight-toàn-batch
+  input/output, `StPointKind::EXT` + ba category LOCAL/VP/MB_RTU theo
+  `OD-PROG-007`, `PointWriter::can_write` bắt buộc EXT trong
+  `ext_count`/`writable`; targeted 68/68, CTest 949/949, Go vet/test, FE
+  494/494 PASS. Kèm sửa một bug không liên quan runtime (`84b3776`): test Go
+  idempotency time-bomb TTL do đồng hồ Store/service lệch nhau — xem
+  CHANGELOG mục Fixed 2026-08-13.
+- **21/22 hồ sơ còn lại (#1–21) byte-identical với v2.24** — chưa cập nhật
+  As-Built narrative của `PROG-DOCSET-001`, `ARCH-PROG-001`,
+  `DDD-CTRL-PROG-001`, `DDD-FWSOM-PROG-001`, `VVP-PROG-001`, `RSK-PROG-001`
+  và `TRACE-PROG-001` cho riêng nội dung `TASK-PROG-302` (process
+  image/binding bridge). Nội dung As-Built hiện tại của 7 hồ sơ đó vẫn ĐÚNG
+  về mặt sự kiện (mô tả state tại `TASK-PROG-301`), chỉ chưa PHẢN ÁNH đủ
+  chi tiết Task 302 — không phải hồ sơ sai, mà là hồ sơ chưa đuổi kịp
+  source mới nhất. Cần một lượt cập nhật As-Built riêng trước khi các hồ sơ
+  đó được dùng làm căn cứ ký cho `TASK-PROG-302`.
+- `AUTH-PROG-2026-08-11-03` tiếp tục hiệu lực; v2.25 không đổi
+  requirement/design decision.
+- Source/evidence Task 302 nằm ngoài mẫu số 22, chưa có file evidence
+  `EV-PROG-G3-302` riêng (khác với 300/301) — ghi trong CHANGELOG và Plan 53
+  §12 thay vì hồ sơ G3 review độc lập cho tới khi lượt As-Built đầy đủ chạy.
 
 ## 5. Cách tái kiểm
 
@@ -225,3 +255,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.32 | 2026-08-11 | Ghi bổ sung PR #155, merge commit `424367a` và tree `7b81f79` chứa candidate v2.23; remote feature branch đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi, candidate pin tiếp tục 22/22 PASS. GitHub Actions không chạy step nào do billing/spending-limit; gate local đầy đủ được ghi trong PR |
 | 3.33 | 2026-08-11 | Phát hành candidate v2.24 sau `TASK-PROG-301`: cập nhật hash/blob Index v3.2, Architecture v0.8, Control v0.4, FW-SOM v0.6, VVP v1.2, Risk v1.7, Trace v3.13 và Plan v0.33; 14/22 hồ sơ còn lại giữ nguyên. P3 2/8, next TASK-PROG-302; 0/32 PASS; commit/tree/PR chờ ghi sau merge |
 | 3.34 | 2026-08-11 | Ghi bổ sung PR #157, merge commit `d4fd15d` và tree `fe321c3` chứa candidate v2.24; remote feature branch đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi, candidate pin tiếp tục 22/22 PASS. GitHub Actions không chạy step nào do billing/spending-limit; gate local đầy đủ được ghi trong PR |
+| 3.35 | 2026-08-13 | Phát hành candidate v2.25 sau `TASK-PROG-302`: cập nhật hash/blob Plan v0.34 (hồ sơ #22 duy nhất); 21/22 hồ sơ còn lại giữ nguyên — phạm vi hẹp hơn thường lệ, CHƯA cập nhật As-Built narrative của Index/Architecture/Control/FW-SOM/VVP/Risk/Trace cho riêng Task 302 (xem §4.2). P3 3/8, next TASK-PROG-303; 0/32 PASS; commit/PR chờ ghi sau merge |
