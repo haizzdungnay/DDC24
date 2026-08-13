@@ -4,15 +4,15 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.40 |
+| Phiên bản | 3.41 |
 | Ngày | 2026-08-13 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
-| Trạng thái | **ACTIVE — candidate v2.30 `IMPLEMENTATION IN PROGRESS`; P1 6/6, P2 8/8, P3 8/8 SOURCE/HOST DOD DONE (ĐÃ ĐÓNG); G3 IN PROGRESS; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
+| Trạng thái | **ACTIVE — candidate v2.31 `IMPLEMENTATION IN PROGRESS`; P1 6/6, P2 8/8, P3 8/8 SOURCE/HOST DOD DONE (ĐÃ ĐÓNG); P4 1/6 IN PROGRESS; G3 IN PROGRESS; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | source authority `29907a5` (`TASK-PROG-307`); PR/merge commit ghi bổ sung sau khi merge — xem §4.7 |
-| PR nguồn | Chờ tạo/merge PR cho nhánh `test/programming-p3-soak-load-20260813`; ghi bổ sung sau khi merge |
-| Candidate trước | v2.29 tại source `f35234c`, merge `44d3fb9` (PR #163) — **SUPERSEDED bởi TASK-PROG-307**, xem §4.7 |
+| Candidate commit | source authority `a523a04` (`TASK-PROG-400`); PR/merge commit ghi bổ sung sau khi merge — xem §4.8 |
+| PR nguồn | Chờ tạo/merge PR cho nhánh `feat/programming-safe-boundary-journal-20260813`; ghi bổ sung sau khi merge |
+| Candidate trước | v2.30 tại source `29907a5`, merge `e8fc772` (PR #164) — **SUPERSEDED bởi TASK-PROG-400**, xem §4.8 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
 | Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.30 không đổi requirement/design decision |
@@ -85,7 +85,7 @@ candidate v2.7; delta trực tiếp so với v2.23 được liệt kê ở §4.
 | 7 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `0ad0619410e162bd066963ecfc2eae6ce745e46547eba112e67f116fa52aea16` | `eb38fcee8104029cb8a0302ce4fd03fc858a01c7` | 361 | ✱ |
 | 8 | `docs/02_design/interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md` | `c43f8757df50e0b121df19df18ccea3b3c26cd25c78a30d2576ad939605409d7` | `5dcfbda5aea849642f86dac33cb3f4e76c6846de` | 310 | ✱ |
 | 9 | `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` | `eabddcbf43ada65dd555ad127df50e2feb0258046a8dac8230718ad22b8caac3` | `735bc54fe4b04bb7fd3c1c8dcc5f18d9482f2d6d` | 394 | ✱ |
-| 10 | `docs/02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md` | `58a3613fb111f9592c210b379d1ba0718ccde42324ed3cabbc931df5319816b1` | `620f100b89ae5c08f26dca6654b343686a5c72b9` | 322 | ✱ |
+| 10 | `docs/02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md` | `f60ffb8d87bef34349758435315c11cd3402a42d4fbb76063b64be44acdcc96d` | `749ae71965d5375f49b2081dc65a42f3461980b6` | 354 | ✱ |
 | 11 | `docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md` | `9d2cc63843439bab6e30378e0b2579c5fb15f17547b2134849217e0c2f2cb02c` | `cc9013e80dbc4fcb60decd10566988d0f4d8ca80` | 333 | ✱ |
 | 12 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `b31bdeadaf3008bc8f5ab34b8a310f10326e972a0926ff9883489de8dedde568` | `8930ca4580ecff586495cacea0134943c0367021` | 1361 | ✱ |
 | 13 | `docs/02_design/software/PROGRAMMING_FE_DESIGN.md` | `2eafc4ed3b14b5da9acbfbe6ef590418f30b9054c791c6571972afb83f5255b7` | `a6e1f01bf0a42564b78ea08b8162e504708b7708` | 445 | ✱ |
@@ -97,12 +97,12 @@ candidate v2.7; delta trực tiếp so với v2.23 được liệt kê ở §4.
 | 19 | `docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md` | `ac7fed9c3134f32f16f28dee7d9b3f60585ef62df749d0148fc15770ba8fc6ba` | `6a09f28979d99ebfc07e8183a1ad01085a7e4488` | 335 | ✱ |
 | 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `566d6bf39078c949894f7c1c07e519b05ba09f8fcedb615abd95a37f0958d65e` | `446f0c8e25bc27d6aa5517b918310ad10d31be3a` | 327 | ✱ |
 | 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `082bf4c19d715dcf167b7bcc7f59c7d6d43cc934ebbece2d9d9d4e5f2a05123f` | `11be789c2362edd99e77021443461362853c1ac6` | 347 | ✱ |
-| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `a6f51e52520be0c92a629c80919bf5a6154180b5348030cf0efc808bdbc0c53a` | `b3358138e45ac0993594f0c3f85e8116a5e2bcef` | 1170 | ✱ |
+| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `f3abb027fa6d5083b53409848cbf1dd2f6822be629888814b455bb6551487b33` | `1e95b375ab60b51f5f37dea85bdbe2a5cabc1d7c` | 1171 | ✱ |
 
 So với candidate v2.7, **22/22 hồ sơ đã đổi** để tạo nền v2.8 được phê duyệt.
-Candidate v2.30 hiện tại đổi dòng 22 so với v2.29 để ghi `TASK-PROG-307`
-DONE và P3 đóng 8/8; dấu `✱` tiếp tục biểu thị delta
-tích lũy so với v2.7.
+Candidate v2.31 hiện tại đổi dòng 10 và 22 so với v2.30 để ghi
+`TASK-PROG-400` DONE (mở P4, StJournal) và As-Built Runtime Lifecycle Design
+đuổi kịp; dấu `✱` tiếp tục biểu thị delta tích lũy so với v2.7.
 
 ## 3. Hồ sơ hỗ trợ ngoài mẫu số 22
 
@@ -294,6 +294,35 @@ Candidate v2.30 thay đổi **1/22** hồ sơ:
   feature branch đã xóa — ghi bổ sung, không đổi hồ sơ nào trong mẫu số 22
   nên không cần candidate mới riêng cho việc này.
 
+### 4.8 v2.31 so với v2.30
+
+Candidate v2.31 thay đổi **2/22** hồ sơ:
+
+- `DDD-LIFE-PROG-001` v0.4 (hồ sơ #10): As-Built §0/§2/§7/§12/§15 đuổi kịp
+  `TASK-PROG-400` — `StJournal` append/checksum 5-phase
+  (`PREPARED→COMMIT_INTENT→ACTIVE_CANDIDATE→FIRST_CYCLE_OK→COMMITTED`) và
+  `st_journal_decide_boot_action()` hiện thực đúng bảng boot-recovery 5
+  dòng; ghi rõ phạm vi Core-only 4 field hẹp hơn schema đầy đủ ở §15 (field
+  BE coordinator theo dõi thuộc `TASK-PROG-403`) và **chưa wire** vào
+  `StScheduler`/bootstrap.
+- `PLAN-PROG-053` v0.40 (hồ sơ #22): mở P4, `1/6` `16.7%` IN_PROGRESS, tổng
+  `30/49` `61.2%`, ghi `TASK-PROG-400 DONE` tại `a523a04` và next
+  `TASK-PROG-401`.
+- Source Task 400 khóa tại `a523a04`: targeted 8/8 (round-trip append/read,
+  nhiều record chỉ giữ cái cuối, đuôi cắt cụt không hỏng record trước, record
+  đầu hỏng → CORRUPT, field quá giới hạn bị từ chối, erase idempotent, đủ 5
+  nhánh bảng boot-recovery, EMPTY→giữ active cũ), CTest 977/977 PASS; không
+  đổi Go/FE.
+- **20/22 hồ sơ còn lại (#1–9, #11–21) byte-identical với v2.30** — khoảng
+  hở As-Built cho 302..306 ở Index/Architecture/FW-SOM/VVP/Risk/Trace (kế
+  thừa từ §4.2–§4.7) vẫn CHƯA đóng; `DDD-CTRL-PROG-001` không đổi ở candidate
+  này vì `TASK-PROG-400` là lifecycle/journal, không phải control semantics.
+- `AUTH-PROG-2026-08-11-03` tiếp tục hiệu lực; v2.31 không đổi
+  requirement/design decision.
+- Candidate v2.30 (Task 307) đã merge qua PR #164 tại `e8fc772`; remote
+  feature branch đã xóa — ghi bổ sung, không đổi hồ sơ nào trong mẫu số 22
+  nên không cần candidate mới riêng cho việc này.
+
 ## 5. Cách tái kiểm
 
 **Bước bắt buộc trước khi đọc để review:**
@@ -375,3 +404,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.38 | 2026-08-13 | Ghi bổ sung PR #161, merge commit `bc468cb` chứa candidate v2.27; remote feature branch đã xóa. Phát hành candidate v2.28 sau `TASK-PROG-305`: cập nhật hash/blob Control v0.7 và Plan v0.37; 20/22 hồ sơ còn lại giữ nguyên — khoảng hở As-Built 302/303/304/305 vẫn còn (xem §4.5). P3 6/8, next TASK-PROG-306; 0/32 PASS; commit/PR Task 305 chờ ghi sau merge |
 | 3.39 | 2026-08-13 | Ghi bổ sung PR #162, merge commit `35519ce` chứa candidate v2.28; remote feature branch đã xóa. Phát hành candidate v2.29 sau `TASK-PROG-306`: cập nhật hash/blob Control v0.8 và Plan v0.38; 20/22 hồ sơ còn lại giữ nguyên — khoảng hở As-Built 302..306 vẫn còn (xem §4.6). P3 7/8, next TASK-PROG-307; 0/32 PASS; commit/PR Task 306 chờ ghi sau merge |
 | 3.40 | 2026-08-13 | Ghi bổ sung PR #163, merge commit `44d3fb9` chứa candidate v2.29; remote feature branch đã xóa. Phát hành candidate v2.30 sau `TASK-PROG-307`: cập nhật hash/blob Plan v0.39 (hồ sơ #22 duy nhất). **P3 đóng 8/8 source/host DoD**; 21/22 hồ sơ còn lại giữ nguyên. Tổng 29/49, next TASK-PROG-400 (P4); 0/32 PASS; commit/PR Task 307 chờ ghi sau merge |
+| 3.41 | 2026-08-13 | Ghi bổ sung PR #164, merge commit `e8fc772` chứa candidate v2.30; remote feature branch đã xóa. Phát hành candidate v2.31 sau `TASK-PROG-400`: cập nhật hash/blob Runtime Lifecycle Design v0.4 và Plan v0.40; 20/22 hồ sơ còn lại giữ nguyên (xem §4.8). P4 mở 1/6 16.7%, next TASK-PROG-401; tổng 30/49 61.2%; commit/PR Task 400 chờ ghi sau merge |
