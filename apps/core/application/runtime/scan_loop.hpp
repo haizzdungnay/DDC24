@@ -28,6 +28,8 @@
 #include "schedule/schedule_runtime.hpp"
 #include "st/st_process_image.hpp"
 #include "st/st_scheduler.hpp"
+#include "programming/programming_cutover.hpp"
+#include "programming/programming_runtime_coordinator.hpp"
 #include "ipc/web_ipc.hpp"
 
 namespace core {
@@ -39,8 +41,6 @@ namespace core {
  * bật nhầm cả hai. Cutover LIVE có rollback (đổi mode khi hệ đang chạy,
  * an toàn nếu package mới lỗi) là phạm vi TASK-PROG-404; đây chỉ là lựa
  * chọn mode tại thời điểm khởi động (bootstrap). */
-enum class CutoverMode : uint8_t { GRAPH_ONLY = 0, PROGRAM_ONLY = 1 };
-
 struct ScanDeps {
     IoSnapshotReaderPort* reader;
     PointTable*       table;
@@ -63,6 +63,8 @@ struct ScanDeps {
      * output trong scan này. Mặc định GRAPH_ONLY — không đổi hành vi bootstrap
      * cũ nếu caller không set field này. */
     CutoverMode       mode = CutoverMode::GRAPH_ONLY;
+    ProgrammingCutover* cutover = nullptr;
+    programming::ProgrammingRuntimeCoordinator* programming_coordinator = nullptr;
     /* TASK-PROG-401, DDD-CTRL-PROG-001 §6: số base step tối đa một proposal
      * PRIO_LOCAL_LOGIC được hold-last khi Program FAULTED trước khi bị rút
      * (release_ao/release_do). 0 = TTL CHƯA được Product+Controls ký field

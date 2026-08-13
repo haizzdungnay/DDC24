@@ -11,6 +11,8 @@
 #include <ctime>
 #include <memory>
 #include <string>
+#include <filesystem>
+#include <thread>
 
 #include <pthread.h>
 #include <sys/mman.h>
@@ -27,6 +29,9 @@
 #include "schedule/schedule_runtime.hpp"
 #include "runtime/scan_loop.hpp"
 #include "persistence/state_snapshot.hpp"
+#include "ipc/program_ipc_unix.hpp"
+#include "programming/programming_cutover.hpp"
+#include "programming/programming_runtime_coordinator.hpp"
 #include "build_info.h"
 
 namespace {
@@ -80,10 +85,11 @@ int main(int argc, char** argv)
     bool scan_ms_from_cli = false;
     uint64_t base_step_ns = 1000000000ull; /* base step 1s Rev A */
     int rt_prio = 80;
-    /* TASK-PROG-306: mặc định GRAPH_ONLY — không đổi hành vi cũ nếu không
-     * truyền cờ. PROGRAM_ONLY là lựa chọn TĨNH tại khởi động; cutover LIVE có
-     * rollback trong lúc hệ đang chạy là TASK-PROG-404, không phải ở đây. */
+    /* Mặc định GRAPH_ONLY — runtime IPC có thể bật độc lập để Commission đổi
+     * owner tại safe boundary; không có operation thì graph giữ nguyên. */
     CutoverMode programming_mode = CutoverMode::GRAPH_ONLY;
+    bool programming_runtime_enabled = false;
+    std::string programming_sock_path = "/run/mkddc/programming-v1.sock";
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
@@ -116,15 +122,21 @@ int main(int argc, char** argv)
                 return 1;
             }
         }
+        else if (a == "--programming-runtime") programming_runtime_enabled = true;
+        else if (a == "--programming-sock" && i + 1 < argc)
+            programming_sock_path = argv[++i];
         else if (a == "--help") {
             std::printf("usage: mkddc-core [--sock PATH] [--fieldbus-sock PATH] [--graph FILE]"
                         " [--safe-state-conf FILE] [--io-conf FILE] [--alarm-conf FILE]"
                         " [--schedule-conf FILE] [--scan-ms N]"
-                        " [--programming-mode graph_only|program_only]"
+                        " [--programming-mode graph_only|program_only] [--programming-runtime]"
+                        " [--programming-sock PATH]"
                         " [--log-level LVL]\n");
             return 0;
         }
     }
+    programming_runtime_enabled = programming_runtime_enabled ||
+                                  programming_mode == CutoverMode::PROGRAM_ONLY;
 
     /* scan_ms log SAU khi chốt với graph.json (tránh log giá trị không dùng) */
     std::fprintf(stderr, "INFO  core.start version=%s git_commit=%s build_time=%s toolchain=%s pid=%d\n",
@@ -232,18 +244,32 @@ int main(int argc, char** argv)
 
     PriorityResolver resolver;
 
-    /* TASK-PROG-306: PROGRAM_ONLY dựng StScheduler Rev A làm producer Local
-     * logic DUY NHẤT (ScanLoop khoá graph.execute() tương ứng — xem
-     * scan_loop.cpp). graph.json vẫn load/restore phía trên nên vẫn là
-     * backup immutable cho Restore, không bị xoá khi đổi mode. Task/Program
-     * thật được BE nạp qua control API sau khi UDS transport nối (còn mở,
-     * xem ghi chú provenance) — bootstrap chỉ dựng scheduler rỗng, không tự
-     * activate gì. */
-    StScheduler programming_scheduler(programming_mode == CutoverMode::PROGRAM_ONLY
+    /* TASK-PROG-403/404: runtime có thể khởi động cùng GRAPH_ONLY; UDS worker
+     * stage artifact ngoài RT, coordinator mới arm pointer/owner swap tại
+     * safe boundary. graph.json luôn còn nguyên làm rollback owner. */
+    StScheduler programming_scheduler(programming_runtime_enabled
                                           ? StSchedulerProfile::REV_A
                                           : StSchedulerProfile::SUPPORTING_AS_BUILT);
+    ProgrammingCutover programming_cutover(programming_mode);
     std::unique_ptr<StRetainService> retain_service;
-    if (programming_mode == CutoverMode::PROGRAM_ONLY) {
+    std::unique_ptr<programming::ProgrammingRuntimeCoordinator> programming_coordinator;
+    std::unique_ptr<programming::ProgramIpcServer> programming_ipc_server;
+    std::unique_ptr<programming::ProgramIpcUnixEndpoint> programming_ipc_endpoint;
+    std::thread programming_ipc_thread;
+    if (programming_runtime_enabled) {
+        StTaskConfig runtime_task;
+        runtime_task.id = "main";
+        runtime_task.priority = 0;
+        runtime_task.period_ms = 1000;
+        runtime_task.budget_ms = 199;
+        runtime_task.overrun_threshold = 3;
+        std::string topology_error;
+        if (!programming_scheduler.add_task(runtime_task, &topology_error) ||
+            !programming_scheduler.add_program("main", "program-main", 0, &topology_error)) {
+            std::fprintf(stderr, "ERROR programming.topology_fail error=%s\n",
+                         topology_error.c_str());
+            return 1;
+        }
         const char* configured_state = std::getenv("PROGRAMMING_STATE_DIR");
         const char* shared_state = std::getenv("STATE_DIR");
         const char* configured_target = std::getenv("PROGRAMMING_TARGET_ID");
@@ -265,6 +291,45 @@ int main(int argc, char** argv)
         programming_scheduler.set_retain_service(retain_service.get());
         std::fprintf(stderr, "INFO  programming.retain_ready path=%s target=%s\n",
                      (programming_state + "/retain").c_str(), target_identity.c_str());
+        const auto ensure_state_directory = [](const std::string& path,
+                                               std::string* error) {
+            std::error_code directory_error;
+            std::filesystem::create_directories(path, directory_error);
+            if (directory_error || ::chmod(path.c_str(), 0750) != 0) {
+                if (error) *error = directory_error
+                    ? directory_error.message() : std::strerror(errno);
+                return false;
+            }
+            return true;
+        };
+        std::string state_error;
+        if (!ensure_state_directory(programming_state + "/journal", &state_error) ||
+            !ensure_state_directory(programming_state + "/staging", &state_error)) {
+            std::fprintf(stderr, "ERROR programming.state_dir_fail error=%s\n",
+                         state_error.c_str());
+            return 1;
+        }
+        programming_coordinator = std::make_unique<programming::ProgrammingRuntimeCoordinator>(
+            &programming_scheduler, &programming_cutover,
+            programming_state + "/journal/lifecycle.bin", programming_state + "/staging");
+        std::string recovery_error;
+        if (!programming_coordinator->recover(&recovery_error))
+            std::fprintf(stderr, "ERROR programming.recovery_required error=%s\n",
+                         recovery_error.c_str());
+        programming_ipc_server = std::make_unique<programming::ProgramIpcServer>(
+            static_cast<uint32_t>(::getuid()), programming_coordinator.get());
+        programming_ipc_endpoint = std::make_unique<programming::ProgramIpcUnixEndpoint>();
+        std::string ipc_error;
+        if (!programming_ipc_endpoint->open(programming_sock_path, &ipc_error)) {
+            std::fprintf(stderr, "ERROR programming.ipc_open_fail path=%s error=%s\n",
+                         programming_sock_path.c_str(), ipc_error.c_str());
+            return 1;
+        }
+        programming_ipc_thread = std::thread([&] {
+            programming_ipc_endpoint->run(programming_ipc_server.get(), &g_shutdown);
+        });
+        std::fprintf(stderr, "INFO  programming.ipc_ready path=%s\n",
+                     programming_sock_path.c_str());
     }
 
     /* io_safe_state.conf → relinquish default MỨC 6 (quan hệ chốt: safe_state
@@ -323,10 +388,13 @@ int main(int argc, char** argv)
         }
     }
 
-    ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver,
-                   &safe, &writer, &bacnet, &metrics, fieldbus_sockfd, &alarms, &schedules,
-                   programming_mode == CutoverMode::PROGRAM_ONLY ? &programming_scheduler : nullptr,
-                   programming_mode});
+    ScanDeps scan_deps{&reader, &table, &quality, &web, &graph, &resolver,
+                       &safe, &writer, &bacnet, &metrics, fieldbus_sockfd, &alarms, &schedules};
+    scan_deps.st_sched = programming_runtime_enabled ? &programming_scheduler : nullptr;
+    scan_deps.mode = programming_mode;
+    scan_deps.cutover = programming_runtime_enabled ? &programming_cutover : nullptr;
+    scan_deps.programming_coordinator = programming_coordinator.get();
+    ScanLoop loop(scan_deps);
 
     /* SIGHUP → reload io_config + io_safe_state + graph ở ranh giới scan;
      * fail → giữ config cũ (khác boot fail-fast); manual đang giữ không mất */
@@ -405,6 +473,9 @@ int main(int argc, char** argv)
     };
 
     loop.run(g_shutdown, base_step_ns, after_scan, &nctx);
+
+    if (programming_ipc_thread.joinable()) programming_ipc_thread.join();
+    if (programming_ipc_endpoint) programming_ipc_endpoint->close();
 
     /* Flush latest committed generation trước khi process rời đi. Filesystem
      * vẫn thuộc worker/non-RT; scan đã dừng nên không có snapshot mới. */

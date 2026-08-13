@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "programming/programming_runtime_coordinator.hpp"
+
 namespace core::programming {
 
 constexpr uint16_t PROGRAM_IPC_PROTOCOL_MAJOR = 1;
@@ -105,7 +107,9 @@ PeerCredentials ReadPeerCredentials(int socket_fd);
 
 class ProgramIpcServer {
 public:
-    explicit ProgramIpcServer(uint32_t allowed_peer_uid) : allowed_peer_uid_(allowed_peer_uid) {}
+    explicit ProgramIpcServer(uint32_t allowed_peer_uid,
+                              ProgrammingRuntimeCoordinator* coordinator = nullptr)
+        : allowed_peer_uid_(allowed_peer_uid), coordinator_(coordinator) {}
 
     // Pure non-RT boundary: decode/validate/cache/dispatch skeleton. Empty
     // response means peer/frame rejected and caller must close the connection.
@@ -134,6 +138,7 @@ private:
     std::size_t queue_depth_ = 0;
     std::unordered_map<std::string, CachedResponse> cache_;
     std::deque<std::string> cache_order_;
+    ProgrammingRuntimeCoordinator* coordinator_ = nullptr;
 };
 
 } // namespace core::programming

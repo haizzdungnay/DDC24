@@ -11,8 +11,10 @@
 #include "st/st_compile.hpp"
 #include "st/st_diagnostic.hpp"
 #include "st/st_ir.hpp"
+#include "st/st_process_image.hpp"
 #include "st/st_scheduler.hpp"
 #include "st/st_test_key.hpp"
+#include "priority/priority_resolver.hpp"
 #include "tests/allocation_probe.hpp"
 
 namespace core {
@@ -534,7 +536,7 @@ TEST(StScheduler, ActivationAppliedAtTickBoundaryNotImmediately)
     EXPECT_EQ(s.find_program("p")->state, StProgramState::ACTIVE);
 }
 
-TEST(StScheduler, PreparedActivationAndLkgPromotionAllocateNothingInTick)
+TEST(StScheduler, PreparedActivationAndLkgPromotionAllocateNothingAtCommitBoundary)
 {
     StScheduler s;
     std::string err;
@@ -553,7 +555,18 @@ TEST(StScheduler, PreparedActivationAndLkgPromotionAllocateNothingInTick)
     ASSERT_TRUE(s.start("p", &err));
     {
         allocation_probe::ScopedCounter counter;
-        s.tick(100 * kMs);  // execute + promote LKG bằng swap vector
+        s.tick(100 * kMs);  // chỉ execute; chưa được nâng LKG trước output commit
+        allocations = counter.allocations();
+    }
+    EXPECT_EQ(allocations, 0u);
+    EXPECT_TRUE(s.find_program("p")->last_known_good.empty());
+
+    PointTable table;
+    PriorityResolver resolver;
+    StIoBridgeStats stats;
+    {
+        allocation_probe::ScopedCounter counter;
+        EXPECT_TRUE(st_apply_all_outputs(&s, &resolver, &table, &stats));
         allocations = counter.allocations();
     }
     EXPECT_EQ(allocations, 0u);

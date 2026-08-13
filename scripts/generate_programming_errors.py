@@ -114,7 +114,11 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
         "st-control-api": set(re.findall(r"API-E-[0-9]{3}", (ROOT / "apps/core/application/st/st_control_api.hpp").read_text())),
         "artifact-loader": set(re.findall(r"IR-E-[0-9]{3}", (ROOT / "apps/core/application/st/st_loader.hpp").read_text())),
         "retain": set(re.findall(r"RT-RETAIN-[0-9]{3}", (ROOT / "apps/core/application/st/st_retain.hpp").read_text())),
-        "core-ipc": set(re.findall(r"IPC-[A-Z0-9-]+", (ROOT / "apps/core/application/programming/program_ipc_server.cpp").read_text())),
+        "core-ipc": set(re.findall(
+            r"IPC-[A-Z0-9-]+",
+            (ROOT / "apps/core/application/programming/program_ipc_server.cpp").read_text()
+            + (ROOT / "apps/core/application/programming/programming_runtime_coordinator.cpp").read_text(),
+        )),
     }
     diagnostic_source = (ROOT / "apps/core/application/st/st_diagnostic.hpp").read_text()
     expected_details["compiler"] = set(re.findall(r"ST-(?:LEX|SYN|SEM|LIM|IOMAP)-[0-9]{3}", diagnostic_source))

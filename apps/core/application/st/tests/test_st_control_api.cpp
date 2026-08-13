@@ -13,6 +13,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "graph/point_table.hpp"
+#include "priority/priority_resolver.hpp"
 #include "st/st_compile.hpp"
 #include "st/st_control_api.hpp"
 #include "st/st_ir.hpp"
@@ -68,6 +70,14 @@ json call(StScheduler* s, const json& req)
     const std::string out = st_handle_control_request(s, req.dump());
     EXPECT_FALSE(out.empty());
     return json::parse(out);
+}
+
+void commit_outputs(StScheduler* scheduler)
+{
+    PointTable table;
+    PriorityResolver resolver;
+    StIoBridgeStats stats;
+    ASSERT_TRUE(st_apply_all_outputs(scheduler, &resolver, &table, &stats));
 }
 
 /* Bất biến chung cho mọi response — gọi ở mọi test. */
@@ -357,7 +367,9 @@ TEST(StControlApi, FullLifecycleStageStartStopRollback)
     EXPECT_EQ(r["state"], "RUNNING");
 
     s.tick(100000000ull);
+    commit_outputs(&s);
     s.tick(200000000ull);
+    commit_outputs(&s);
 
     r = call(&s, {{"action", "program_stop"}, {"instanceId", "p"}});
     ASSERT_EQ(r["result"], "ok");
@@ -434,7 +446,8 @@ TEST(StControlApi, StagingCorruptArtifactKeepsRunningPackage)
     ASSERT_TRUE(s.request_activation("p", build(kCounter), &err));
     s.tick(0);
     ASSERT_TRUE(s.start("p", &err));
-    s.tick(100000000ull); /* promote package hiện hành thành last-known-good */
+    s.tick(100000000ull);
+    commit_outputs(&s); /* chỉ output commit mới promote package thành LKG */
 
     std::vector<uint8_t> broken = build(kCounter);
     broken[broken.size() - 1] ^= 0xFF;

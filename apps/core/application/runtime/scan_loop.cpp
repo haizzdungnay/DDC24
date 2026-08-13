@@ -150,13 +150,22 @@ void ScanLoop::step()
         d_.schedules->evaluate(clock, last_io_, schedule_writer, *d_.resolver);
     }
 
+    if (d_.programming_coordinator)
+        d_.programming_coordinator->capture_priority_overrides(*d_.resolver);
+
+    /* TASK-PROG-404: áp owner swap tại đúng một safe boundary. Sau dòng này
+     * toàn scan dùng cùng một mode; graph/program không thể cùng publish. */
+    if (d_.programming_coordinator) d_.programming_coordinator->on_safe_boundary();
+    else if (d_.cutover) (void)d_.cutover->apply_pending_at_boundary();
+    const CutoverMode active_mode = d_.cutover ? d_.cutover->current() : d_.mode;
+
     /* 5. Execute graph — CHỈ khi GRAPH là producer Local logic (TASK-PROG-306,
      * DDD-CTRL-PROG-001 §10: "một Point Local logic không có hai producer").
      * PROGRAM_ONLY tắt hẳn graph.execute() thay vì lọc theo point: Rev A cutover
      * là toàn bộ Local logic, không migrate từng điểm. graph.load()/restore
      * vẫn chạy ở bootstrap nên config/RETAIN graph vẫn là backup immutable cho
      * Restore — chỉ đường XUẤT ra resolver bị khoá, không xoá gì. */
-    if (d_.mode != CutoverMode::PROGRAM_ONLY) d_.graph->execute(*d_.table, *d_.resolver);
+    if (active_mode != CutoverMode::PROGRAM_ONLY) d_.graph->execute(*d_.table, *d_.resolver);
 
     /* 5b. ACTION 10 — Program Runtime (ST).
      *
@@ -169,16 +178,25 @@ void ScanLoop::step()
      * `clock.monotonic_ns` chụp MỘT LẦN ở đầu scan và dùng chung cho mọi Task
      * và mọi FB — hai timer khởi động cùng scan sẽ hết hạn cùng scan
      * (PROGRAM_TASK_SCHEDULER_SPEC §4). */
-    if (d_.st_sched) {
+    /* Caller legacy chỉ truyền StScheduler (không có live-cutover object) vẫn
+     * giữ hành vi TASK-PROG-302/306 để các embedding hiện hữu không bị tắt ST.
+     * Khi coordinator/cutover tồn tại, mode là authority duy nhất. */
+    const bool program_owner = active_mode == CutoverMode::PROGRAM_ONLY ||
+        (!d_.cutover && !d_.programming_coordinator);
+    if (d_.st_sched && program_owner) {
         st_io_stats_ = StIoBridgeStats{};
         /* Activation phải được áp dụng trước capture: candidate mới không
          * được chạy chu kỳ đầu bằng slot init hoặc process image của bản cũ. */
-        d_.st_sched->apply_pending_activations_at_boundary();
+        if (!d_.programming_coordinator)
+            d_.st_sched->apply_pending_activations_at_boundary();
         st_capture_due_inputs(d_.st_sched, *d_.table, clock.monotonic_ns,
                               &st_io_stats_);
         st_tick_ = d_.st_sched->on_base_step(clock.monotonic_ns);
         PointWriter program_writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
-        st_apply_all_outputs(d_.st_sched, d_.resolver, &program_writer, &st_io_stats_);
+        const bool outputs_committed =
+            st_apply_all_outputs(d_.st_sched, d_.resolver, &program_writer, &st_io_stats_);
+        if (d_.programming_coordinator)
+            d_.programming_coordinator->on_output_commit(outputs_committed);
         /* TASK-PROG-401: rút proposal mức 5 cho instance STOPPED/DISABLED
          * (ngay) hoặc FAULTED quá holdTtl (nếu đã cấu hình) — SAU khi outputs
          * vừa publish thành công đã reset outputs_withdrawn ở trên, nên

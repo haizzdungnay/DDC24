@@ -222,6 +222,13 @@ StProgramInstance* StScheduler::find_program(const std::string& instance_id)
 bool StScheduler::request_activation(const std::string& instance_id,
                                      const std::vector<uint8_t>& artifact, std::string* error)
 {
+    if (!stage_activation(instance_id, artifact, error)) return false;
+    return commit_staged_activation(instance_id, false, error);
+}
+
+bool StScheduler::stage_activation(const std::string& instance_id,
+                                   const std::vector<uint8_t>& artifact, std::string* error)
+{
     StProgramInstance* p = find_program(instance_id);
     if (!p) { if (error) *error = "unknown instance '" + instance_id + "'"; return false; }
     if (p->has_pending) {
@@ -270,9 +277,47 @@ bool StScheduler::request_activation(const std::string& instance_id,
     p->pending_retain_restore_state = retain_result.state;
     p->pending_retain_reject_code = retain_result.reject_code;
     p->pending_retain_generation = retain_result.generation;
-    p->has_pending = true;
+    p->pending_changed_state = !p->runtime.loaded();
+    if (p->pending_changed_state) p->state_before_stage = p->state;
+    p->pending_commit_requested.store(false, std::memory_order_relaxed);
     p->pending_is_rollback = false;
-    p->state = StProgramState::STAGED;
+    if (p->pending_changed_state) p->state = StProgramState::STAGED;
+    p->has_pending.store(true, std::memory_order_release);
+    return true;
+}
+
+bool StScheduler::commit_staged_activation(const std::string& instance_id, bool rollback,
+                                           std::string* error)
+{
+    StProgramInstance* p = find_program(instance_id);
+    if (!p) { if (error) *error = "unknown instance '" + instance_id + "'"; return false; }
+    if (!p->has_pending || p->pending_commit_requested) {
+        if (error) *error = "no staged activation available for '" + instance_id + "'";
+        return false;
+    }
+    p->pending_is_rollback = rollback;
+    p->pending_commit_requested.store(true, std::memory_order_release);
+    return true;
+}
+
+bool StScheduler::abort_staged_activation(const std::string& instance_id, std::string* error)
+{
+    StProgramInstance* p = find_program(instance_id);
+    if (!p) { if (error) *error = "unknown instance '" + instance_id + "'"; return false; }
+    if (!p->has_pending || p->pending_commit_requested) {
+        if (error) *error = "staged activation cannot be aborted";
+        return false;
+    }
+    p->pending_program.reset();
+    p->pending_artifact.clear();
+    p->pending_is_rollback = false;
+    p->pending_retain_restore_state = StRetainRestoreState::NOT_APPLICABLE;
+    p->pending_retain_reject_code = nullptr;
+    p->pending_retain_generation = 0;
+    if (p->pending_changed_state) p->state = p->state_before_stage;
+    p->pending_changed_state = false;
+    p->pending_commit_requested.store(false, std::memory_order_relaxed);
+    p->has_pending.store(false, std::memory_order_release);
     return true;
 }
 
@@ -351,9 +396,16 @@ bool StScheduler::rollback(const std::string& instance_id, std::string* error)
         if (error) *error = "no last-known-good package to roll back to";
         return false;
     }
-    /* Rollback vẫn đi lại loader, nhưng prepare ở command path và chỉ swap tại
-     * tick boundary như activation thường. */
-    if (!request_activation(instance_id, p->last_known_good, error)) return false;
+    /* Candidate chưa qua output commit còn nằm ở activated_artifact. Tạm lấy
+     * nó ra để đường loader có thể prepare LKG; nếu prepare lỗi thì trả lại
+     * nguyên trạng candidate. Candidate hỏng được huỷ ở command/non-RT path,
+     * không mang qua safe boundary và không thể chiếm nhầm mốc LKG. */
+    std::vector<uint8_t> failed_candidate;
+    failed_candidate.swap(p->activated_artifact);
+    if (!request_activation(instance_id, p->last_known_good, error)) {
+        p->activated_artifact.swap(failed_candidate);
+        return false;
+    }
     p->pending_is_rollback = true;
     p->last_fault_code = nullptr;
     return true;
@@ -364,7 +416,8 @@ bool StScheduler::rollback(const std::string& instance_id, std::string* error)
 void StScheduler::apply_pending_activations(StTask& task)
 {
     for (auto& p : task.programs()) {
-        if (!p->has_pending) continue;
+        if (!p->has_pending.load(std::memory_order_acquire) ||
+            !p->pending_commit_requested.load(std::memory_order_acquire)) continue;
         const bool had_previous = p->runtime.loaded();
         const bool ok = p->runtime.activate_prepared(std::move(p->pending_program));
         if (ok) {
@@ -401,11 +454,15 @@ void StScheduler::apply_pending_activations(StTask& task)
         }
         /* Tiêu thụ request dù thành hay bại: không retry ngầm ở tick sau với
          * cùng artifact lỗi. */
-        p->has_pending = false;
         p->pending_is_rollback = false;
+        p->pending_changed_state = false;
         p->pending_retain_restore_state = StRetainRestoreState::NOT_APPLICABLE;
         p->pending_retain_reject_code = nullptr;
         p->pending_retain_generation = 0;
+        p->pending_commit_requested.store(false, std::memory_order_relaxed);
+        /* Publish slot rỗng SAU mọi cleanup; worker thấy false bằng acquire
+         * thì scan không còn được phép chạm pending fields của request cũ. */
+        p->has_pending.store(false, std::memory_order_release);
     }
 }
 
@@ -483,11 +540,6 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
         }
         p->last_successful_base_step = base_step_count_;
         p->last_successful_now_ns = now_ns;
-        /* Chạy được >= 1 tick không fault -> đủ điều kiện last-known-good. */
-        if (!p->activated_artifact.empty()) {
-            p->retired_artifact.swap(p->last_known_good);
-            p->last_known_good.swap(p->activated_artifact);
-        }
         ran++;
     }
 
@@ -578,6 +630,20 @@ void StScheduler::publish_committed_retain_snapshots() noexcept
             if (loaded && loaded->has_retain())
                 (void)st_publish_retain_snapshot(program->retain_mailbox, *loaded,
                                                  program->last_successful_now_ns);
+        }
+    }
+}
+
+void StScheduler::promote_output_committed_artifacts() noexcept
+{
+    for (auto& task : tasks_) {
+        for (auto& program : task->programs()) {
+            if (program->activated_artifact.empty() ||
+                program->last_successful_base_step != base_step_count_ ||
+                program->output_commit_generation != base_step_count_)
+                continue;
+            program->retired_artifact.swap(program->last_known_good);
+            program->last_known_good.swap(program->activated_artifact);
         }
     }
 }
