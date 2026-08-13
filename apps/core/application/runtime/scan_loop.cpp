@@ -150,8 +150,13 @@ void ScanLoop::step()
         d_.schedules->evaluate(clock, last_io_, schedule_writer, *d_.resolver);
     }
 
-    /* 5. Execute graph */
-    d_.graph->execute(*d_.table, *d_.resolver);
+    /* 5. Execute graph — CHỈ khi GRAPH là producer Local logic (TASK-PROG-306,
+     * DDD-CTRL-PROG-001 §10: "một Point Local logic không có hai producer").
+     * PROGRAM_ONLY tắt hẳn graph.execute() thay vì lọc theo point: Rev A cutover
+     * là toàn bộ Local logic, không migrate từng điểm. graph.load()/restore
+     * vẫn chạy ở bootstrap nên config/RETAIN graph vẫn là backup immutable cho
+     * Restore — chỉ đường XUẤT ra resolver bị khoá, không xoá gì. */
+    if (d_.mode != CutoverMode::PROGRAM_ONLY) d_.graph->execute(*d_.table, *d_.resolver);
 
     /* 5b. ACTION 10 — Program Runtime (ST).
      *

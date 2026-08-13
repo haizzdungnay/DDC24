@@ -61,6 +61,82 @@ TEST(ScanLoop, StepWritesResolvedOutputToShm)
     EXPECT_EQ(f.metrics.scan_count(), 1u);
 }
 
+namespace {
+
+const char* kAoGraph = R"({
+  "schema_version": "1.0",
+  "device": { "bacnet_device_id": 1, "name": "t", "scan_ms": 1000 },
+  "io_map": {},
+  "nodes": [
+    { "id": "ao1", "type": "AO_Output", "params": { "channel": 0, "limit_lo": 0, "limit_hi": 100 }, "power_on": { "in": 42 } }
+  ],
+  "links": []
+})";
+
+} // namespace
+
+TEST(ScanLoop, GraphOnlyModePublishesGraphAoOutput)
+{
+    /* Cơ sở so sánh: hành vi TRƯỚC TASK-PROG-306, mode mặc định không đổi. */
+    kx_io_shm_t shm{};
+    shm.magic = KX_SHM_MAGIC;
+    shm.iop_status = KX_IOP_NORMAL;
+    shm.ts_ns = 1;
+    IobusReader reader;
+    reader.attach_external(&shm);
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;
+    ASSERT_TRUE(graph.load_string(kAoGraph));
+    PriorityResolver resolver;
+    SafeState safe(quality);
+    OutputWriter writer(reader);
+    BacnetObjTable bacnet;
+    CoreMetrics metrics;
+
+    ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer, &bacnet,
+                   &metrics, -1, nullptr, nullptr, nullptr, CutoverMode::GRAPH_ONLY});
+    shm.ts_ns += 1000000;
+    loop.step();
+
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC)
+        << "GRAPH_ONLY: graph phải là producer, đúng hành vi trước Task 306";
+}
+
+TEST(ScanLoop, ProgramOnlyModeSkipsGraphExecuteEntirely)
+{
+    /* TASK-PROG-306, DDD-CTRL-PROG-001 §10: "một Point Local logic không có
+     * hai producer". Cùng graph.json ghi AO-01 như test trên, nhưng
+     * PROGRAM_ONLY phải khoá hẳn graph.execute() — không chỉ "chương trình
+     * ghi đè sau" (điều đó không chứng minh được graph đã ngừng chạy, vì hai
+     * nguồn cùng mức ưu tiên 5 thì "nguồn sau thắng" dù có gate hay không). */
+    kx_io_shm_t shm{};
+    shm.magic = KX_SHM_MAGIC;
+    shm.iop_status = KX_IOP_NORMAL;
+    shm.ts_ns = 1;
+    IobusReader reader;
+    reader.attach_external(&shm);
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;
+    ASSERT_TRUE(graph.load_string(kAoGraph));
+    PriorityResolver resolver;
+    SafeState safe(quality);
+    OutputWriter writer(reader);
+    BacnetObjTable bacnet;
+    CoreMetrics metrics;
+
+    ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer, &bacnet,
+                   &metrics, -1, nullptr, nullptr, nullptr, CutoverMode::PROGRAM_ONLY});
+    shm.ts_ns += 1000000;
+    loop.step();
+
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT)
+        << "PROGRAM_ONLY: graph.execute() không được chạy — không ai claim AO-01";
+}
+
 TEST(ScanLoop, FaultTriggersSafeOutputs)
 {
     Fixture f;

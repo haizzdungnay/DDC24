@@ -7,6 +7,42 @@
 ---
 
 ## [Unreleased]
+### Added — Bootstrap cutover mode GRAPH_ONLY/PROGRAM_ONLY Programming P3 (2026-08-13)
+
+**TASK-PROG-306.** Dựng `StScheduler` thật trong `bootstrap/main.cpp` LẦN ĐẦU
+TIÊN — mọi ghi chú As-Built từ TASK-PROG-300 tới 305 đều nói "bootstrap chưa
+cấp scheduler" (`ScanDeps::st_sched` luôn `nullptr` trong production, toàn bộ
+runtime đã build không có đường nào chạy trên board).
+
+Thêm `CutoverMode` (`GRAPH_ONLY` mặc định/`PROGRAM_ONLY`) và `ScanDeps::mode`.
+Không set field này giữ nguyên hành vi `GRAPH_ONLY` cũ 100%. `scan_loop.cpp`
+chỉ gọi `graph->execute()` khi `mode != PROGRAM_ONLY` — khoá TOÀN BỘ thay vì
+lọc theo Point, vì Rev A cutover là cả Local logic, không migrate từng điểm.
+Nếu chỉ thêm `deps.st_sched` mà không khoá graph, hai hệ sẽ cùng ghi
+`PRIO_LOCAL_LOGIC` cho cùng Point — đúng tình huống dual-producer mà
+`DDD-CTRL-PROG-001` §10 cấm ("một Point Local logic không có hai producer").
+`graph.load()`/`restore_persist_state()` vẫn chạy ở bootstrap nên config/
+RETAIN graph vẫn là backup immutable cho Restore, không bị xoá khi đổi mode.
+
+Cờ mới `--programming-mode graph_only|program_only` (mặc định `graph_only`);
+`program_only` dựng `StScheduler` profile `REV_A` và wire vào `ScanDeps`.
+Bootstrap chỉ dựng scheduler RỖNG — Task/Program thật do BE nạp qua control
+API.
+
+**Gap phát hiện khi wiring, ghi rõ thay vì lặng lẽ bỏ qua:** không có UDS
+transport nào gọi `st_handle_control_request()` — hợp đồng
+`program_capabilities/status/stage/start/.../trace` (TASK-PROG-100 tới 305)
+đầy đủ nhưng chưa có socket server phục vụ nó, khác `web_ipc.cpp` đã có
+accept loop thật. Đây là gap tích hợp riêng, ngoài phạm vi "bootstrap cutover
+config" của task này.
+
+**Kiểm chứng.** Release build sạch bật Modbus/BACnet/HMI và CTest `968/968`
+PASS; 2 test ScanLoop mới chứng minh `PROGRAM_ONLY` khoá HẲN `graph->execute()`
+(không phải "program ghi đè sau" — cùng mức ưu tiên 5 thì nguồn sau luôn
+thắng dù gate có chạy hay không, nên test khẳng định KHÔNG AI claim AO khi
+graph bị khoá và chưa có program nào chạy). Không đổi Go/FE. Source
+`f35234c`.
+
 ### Added — Monitor input quality + bounded runtime trace + capability IPC Programming P3 (2026-08-13)
 
 **TASK-PROG-305.** BE giờ đọc lại được quality/source/freshness của từng
