@@ -88,6 +88,16 @@ func TestProgrammingProjectDraftRevisionHTTPAndRestart(t *testing.T) {
 	if err := json.Unmarshal(sealed.Body.Bytes(), &sealResponse); err != nil || sealResponse.Resource.RevisionID == "" {
 		t.Fatalf("seal response=%+v err=%v", sealResponse, err)
 	}
+	projectAfterSeal := serveAuth(t, handler, http.MethodGet, projectPath, "", token)
+	var projectAfterSealResponse struct {
+		DraftRevisionID string `json:"draftRevisionId"`
+		BaseRevisionID  string `json:"baseRevisionId"`
+	}
+	if err := json.Unmarshal(projectAfterSeal.Body.Bytes(), &projectAfterSealResponse); err != nil ||
+		projectAfterSeal.Code != http.StatusOK || projectAfterSealResponse.DraftRevisionID != createResponse.Resource.DraftRevisionID ||
+		projectAfterSealResponse.BaseRevisionID != sealResponse.Resource.RevisionID {
+		t.Fatalf("get project sau seal status=%d response=%+v err=%v", projectAfterSeal.Code, projectAfterSealResponse, err)
+	}
 	revision := serveAuth(t, handler, http.MethodGet, "/api/v1/programming/revisions/"+sealResponse.Resource.RevisionID, "", token)
 	if revision.Code != http.StatusOK {
 		t.Fatalf("get revision status=%d body=%s", revision.Code, revision.Body.String())

@@ -112,6 +112,8 @@ export interface ProgrammingProject {
   etag: string
   activeRevisionId: string | null
   draftRevisionId: string
+  /** Revision nền hiện hành; dùng cho save/seal kế tiếp, không đồng nhất với Draft ID sau lần seal đầu. */
+  baseRevisionId: string
   updatedAt: string
   /** Chỉ có ở `GET /projects/{projectId}`, không có ở item của `GET /projects`. */
   draft?: ProgrammingDraftDocument

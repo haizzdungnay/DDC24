@@ -78,7 +78,7 @@ export function useDraftWorkspace(projectId: string | undefined) {
           'updateProgrammingDraft',
           {
             path: { projectId },
-            body: { schemaVersion: '1.0', baseRevisionId: project.draftRevisionId, operations },
+            body: { schemaVersion: '1.0', baseRevisionId: project.baseRevisionId, operations },
             ifMatch: project.etag,
             idempotencyKey: crypto.randomUUID(),
             correlationId: crypto.randomUUID()
@@ -162,7 +162,7 @@ export function useCheckWorkflow(projectId: string | undefined) {
       try {
         const sealed = await client.request<MutationResponse<{ projectId: string; revisionId: string }>>('createProgrammingRevision', {
           path: { projectId },
-          body: { schemaVersion: '1.0', baseRevisionId: project.draftRevisionId, label: new Date().toISOString(), comment: '' },
+          body: { schemaVersion: '1.0', baseRevisionId: project.baseRevisionId, label: new Date().toISOString(), comment: '' },
           ifMatch: project.etag,
           idempotencyKey: crypto.randomUUID(),
           correlationId: crypto.randomUUID()

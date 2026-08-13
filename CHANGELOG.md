@@ -8,6 +8,19 @@
 
 ## [Unreleased]
 
+### Fixed — Programming P5: Check lần hai xung đột do thiếu Revision nền (2026-08-13)
+
+- Foxlinx chứng minh lần `Check` đầu đã đóng Revision, nhưng sau khi tải lại,
+  FE tiếp tục gửi `draftRevisionId` làm `baseRevisionId`; backend đúng ra yêu
+  cầu Revision nền vừa đóng nên trả `409 PRG-ERR-CONFLICT-001` dù ETag mới.
+- Bổ sung `ProgrammingProject.baseRevisionId` vào OpenAPI/Go response, trả về
+  Draft ID trước lần đóng đầu và Revision nền hiện hành sau đó; FE dùng field
+  này cho cả lưu Draft và đóng Revision kế tiếp.
+- Thêm kiểm thử HTTP đọc ngược sau seal và kiểm thử FE khóa request seal từ
+  Revision nền, ngăn hồi quy xung đột sau reload.
+
+Refs: TASK-PROG-507, IFSPEC-PROG-001 `ProgrammingProject`.
+
 ### Fixed — Programming P5: WebSocket monitor qua Vite dev proxy bị 403 (2026-08-13)
 
 - Chrome DevTools với FE `:4174` và backend Go thật `:8081` phát hiện

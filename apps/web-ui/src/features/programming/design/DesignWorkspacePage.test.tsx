@@ -41,7 +41,7 @@ function baseDocument(): ProgrammingDraftDocument {
 function baseProject(): ProgrammingProject {
   return {
     projectId: 'project-1', name: 'AHU-01', etag: '"draft-1:1"',
-    activeRevisionId: null, draftRevisionId: 'draft-1', updatedAt: '2026-08-13T00:00:00Z',
+    activeRevisionId: null, draftRevisionId: 'draft-1', baseRevisionId: 'draft-1', updatedAt: '2026-08-13T00:00:00Z',
     draft: baseDocument()
   }
 }
@@ -154,8 +154,10 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   })
 
   it('gửi targetProfile công khai đúng OpenAPI khi tạo Check', async () => {
+    const project = baseProject()
+    project.baseRevisionId = 'b1111111-1111-4111-8111-111111111111'
     client.request.mockImplementation((operationId: string) => {
-      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'createProgrammingRevision') {
         return Promise.resolve({
@@ -177,5 +179,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
     const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingCheck')!
     expect(options.body).toEqual({ schemaVersion: '1.0', targetProfile: 'MK-DDC-24-REV-A' })
+    const [, sealOptions] = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingRevision')!
+    expect(sealOptions.body.baseRevisionId).toBe('b1111111-1111-4111-8111-111111111111')
   })
 })
