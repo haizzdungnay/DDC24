@@ -2143,7 +2143,7 @@ paths:
       operationId: listProgrammingOperations
       summary: Liệt kê lịch sử Operation
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-505
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
         - { $ref: "#/components/parameters/ProgrammingLimit" }

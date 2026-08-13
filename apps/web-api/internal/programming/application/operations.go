@@ -81,6 +81,7 @@ type OperationAccepted struct {
 
 type OperationView struct {
 	OperationID              string  `json:"operationId"`
+	Kind                     string  `json:"kind,omitempty"`
 	State                    string  `json:"state"`
 	Step                     string  `json:"step"`
 	RequestedRevisionID      *string `json:"requestedRevisionId"`
@@ -594,7 +595,7 @@ func (s *OperationService) PendingAtStartup(ctx context.Context) ([]OperationVie
 
 func operationView(operation programmingstore.Operation) OperationView {
 	requested := operation.RequestedRevisionID
-	view := OperationView{OperationID: operation.OperationID, State: publicOperationState(operation.State),
+	view := OperationView{OperationID: operation.OperationID, Kind: operation.Kind, State: publicOperationState(operation.State),
 		Step: operation.Step, RequestedRevisionID: &requested, KeepsRunningRevision: true,
 		StartedAt: formatTime(operation.CreatedAtUTCMS), UpdatedAt: formatTime(operation.UpdatedAtUTCMS)}
 	if operation.PreviousActiveRevisionID != "" {

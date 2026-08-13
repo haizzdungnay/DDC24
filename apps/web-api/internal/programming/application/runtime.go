@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -249,6 +250,86 @@ func (s *RuntimeService) decodeAuditCursor(encoded string) (int64, error) {
 		return 0, ErrInvalidCursor
 	}
 	return int64(binary.BigEndian.Uint64(raw[:8])), nil
+}
+
+type OperationPage struct {
+	Items      []OperationView `json:"items"`
+	NextCursor *string         `json:"nextCursor,omitempty"`
+}
+
+// ListOperations — TASK-PROG-505, tab "Phiên bản & Bảo trì" của PGM-04. Mọi
+// state (kể cả terminal), mới nhất trước; cursor HMAC cùng mẫu `ListAudit`.
+// Dùng lại `operationView()`/`programmingstore.Operation` (cùng package) —
+// không tạo state machine hiển thị thứ hai cho operation.
+func (s *RuntimeService) ListOperations(ctx context.Context, encodedCursor string, limit int) (OperationPage, error) {
+	if s.store == nil {
+		return OperationPage{Items: []OperationView{}}, nil
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	var beforeAt int64
+	var beforeID string
+	if encodedCursor != "" {
+		decoded, id, err := s.decodeOperationCursor(encodedCursor)
+		if err != nil {
+			return OperationPage{}, err
+		}
+		beforeAt, beforeID = decoded, id
+	}
+	operations, err := s.store.ListOperations(ctx, beforeAt, beforeID, limit)
+	if err != nil {
+		return OperationPage{}, err
+	}
+	page := OperationPage{Items: make([]OperationView, 0, len(operations))}
+	for _, operation := range operations {
+		page.Items = append(page.Items, operationView(operation))
+	}
+	if len(operations) == limit {
+		last := operations[len(operations)-1]
+		encoded := s.encodeOperationCursor(last.UpdatedAtUTCMS, last.OperationID)
+		page.NextCursor = &encoded
+	}
+	return page, nil
+}
+
+func (s *RuntimeService) encodeOperationCursor(beforeUpdatedAtUTCMS int64, beforeOperationID string) string {
+	payload := fmt.Sprintf("%d\x00%s", beforeUpdatedAtUTCMS, beforeOperationID)
+	mac := hmac.New(sha256.New, s.cursorSecret)
+	mac.Write([]byte(payload))
+	signed := append([]byte(payload), mac.Sum(nil)...)
+	return base64.RawURLEncoding.EncodeToString(signed)
+}
+
+func (s *RuntimeService) decodeOperationCursor(encoded string) (int64, string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || len(raw) <= sha256.Size {
+		return 0, "", ErrInvalidCursor
+	}
+	payload, signature := raw[:len(raw)-sha256.Size], raw[len(raw)-sha256.Size:]
+	mac := hmac.New(sha256.New, s.cursorSecret)
+	mac.Write(payload)
+	if !hmac.Equal(signature, mac.Sum(nil)) {
+		return 0, "", ErrInvalidCursor
+	}
+	parts := bytesSplitOnce(payload, 0x00)
+	if parts == nil {
+		return 0, "", ErrInvalidCursor
+	}
+	updatedAt, convErr := strconv.ParseInt(string(parts[0]), 10, 64)
+	if convErr != nil {
+		return 0, "", ErrInvalidCursor
+	}
+	return updatedAt, string(parts[1]), nil
+}
+
+func bytesSplitOnce(input []byte, separator byte) [][]byte {
+	for index, value := range input {
+		if value == separator {
+			return [][]byte{input[:index], input[index+1:]}
+		}
+	}
+	return nil
 }
 
 func (s *RuntimeService) callStatus(ctx context.Context) (coreipc.Response, error) {

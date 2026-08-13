@@ -202,3 +202,46 @@ func uuidBytesToString(t *testing.T, seed int) string {
 	t.Helper()
 	return "00000000-0000-4000-8000-00000000000" + string(rune('1'+seed))
 }
+
+// TASK-PROG-505: tab "Phiên bản & Bảo trì" cần lịch sử Operation thật, mới
+// nhất trước, kể cả operation đã terminal — không chỉ operation đang chạy
+// như `ListRecoverableOperations` (dùng cho restart recovery, mục đích khác).
+func TestRuntimeServiceListOperationsNewestFirstIncludesTerminal(t *testing.T) {
+	fixture := newOperationFixture(t)
+	runtime := &fakeOperationRuntime{}
+	operations := fixture.service(t, runtime)
+	command := fixture.commissionCommand(t, runtime)
+	accepted, err := operations.Commission(context.Background(), Actor{ID: testActorID, Role: "admin"}, command)
+	if err != nil {
+		t.Fatalf("Commission: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if processed, err := operations.ProcessNext(context.Background()); err != nil || !processed {
+			t.Fatalf("ProcessNext[%d]: processed=%v err=%v", i, processed, err)
+		}
+	}
+	final, err := fixture.store.GetOperation(context.Background(), accepted.OperationID)
+	if err != nil || final.State != "SUCCEEDED" {
+		t.Fatalf("operation cuối = %+v err=%v", final, err)
+	}
+
+	service, err := NewRuntimeService(RuntimeServiceOptions{
+		Runtime: runtime, Store: fixture.store, ControllerID: "controller-local", CursorSecret: []byte("test-secret-operations"),
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeService: %v", err)
+	}
+	page, err := service.ListOperations(context.Background(), "", 10)
+	if err != nil {
+		t.Fatalf("ListOperations: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].OperationID != accepted.OperationID {
+		t.Fatalf("page = %+v", page.Items)
+	}
+	if page.Items[0].Kind != "COMMISSION" || page.Items[0].State != "SUCCEEDED" {
+		t.Fatalf("item view = %+v", page.Items[0])
+	}
+	if page.NextCursor != nil {
+		t.Fatalf("chỉ 1 operation, không được còn nextCursor: %+v", page.NextCursor)
+	}
+}
