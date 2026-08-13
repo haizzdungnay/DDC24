@@ -40,6 +40,9 @@ struct StIoBridgeStats {
     uint32_t output_batches_rejected = 0;
     uint64_t input_snapshot_generation = 0;
     uint64_t output_commit_generation = 0;
+    /* TASK-PROG-401: số instance vừa bị rút proposal mức PRIO_LOCAL_LOGIC
+     * (release_ao/release_do) ở lần gọi st_withdraw_stale_outputs() gần nhất. */
+    uint32_t outputs_withdrawn = 0;
 };
 
 /* Chụp rồi commit đầu vào cho MỘT instance. Không slot nào đổi nếu bất kỳ
@@ -69,6 +72,25 @@ bool st_apply_all_outputs(StScheduler* sched, PriorityResolver* resolver, PointW
                           StIoBridgeStats* stats);
 bool st_apply_all_outputs(StScheduler* sched, PriorityResolver* resolver, PointTable* table,
                           StIoBridgeStats* stats);
+
+/* TASK-PROG-401, DDD-CTRL-PROG-001 §6: rút proposal mức PRIO_LOCAL_LOGIC
+ * (release_ao/release_do) của MỌI output binding AO/DO thuộc instance —
+ * AV/BV/MSV/EXT không qua PriorityResolver nên không có gì để rút. Idempotent:
+ * gọi lại trên instance đã rút hoặc chưa từng load không lỗi. */
+bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityResolver* resolver);
+
+/* Chính sách hold-last + rút an toàn cho MỌI instance (DDD-CTRL-PROG-001 §6):
+ *  - STOPPED/DISABLED: rút NGAY tại safe boundary, không chờ TTL — lệnh dừng
+ *    có chủ ý của operator phải nhả quyền ngay, không giữ mãi.
+ *  - FAULTED giữ quá `hold_ttl_base_steps` kể từ lần publish thành công cuối
+ *    (`output_commit_generation`): rút. `hold_ttl_base_steps == 0` nghĩa là
+ *    TTL CHƯA được Product+Controls ký (DDD-CTRL-PROG-001 §15/§6: "Giá
+ *    trị/TTL mặc định vẫn TARGET-PENDING") — giữ hold-last KHÔNG GIỚI HẠN
+ *    như hành vi trước TASK-PROG-401, không tự đoán một con số chưa duyệt.
+ * Trả về số instance vừa bị rút ở lần gọi này; gọi lại trên instance đã rút
+ * là no-op (outputs_withdrawn chặn double-release). */
+uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
+                                   uint64_t hold_ttl_base_steps, StIoBridgeStats* stats);
 
 } // namespace core
 

@@ -7,6 +7,36 @@
 ---
 
 ## [Unreleased]
+### Added — hold-last TTL-bounded + rút proposal an toàn Programming P4 (2026-08-13)
+
+**TASK-PROG-401.** `DDD-CTRL-PROG-001` §6/§12 ghi rõ một khoảng hở: hold-last
+(giữ proposal Local Program mức ưu tiên 5 khi ngừng publish) không có giới
+hạn thời gian — `st_apply_all_outputs()` chỉ đơn thuần không publish giá trị
+mới khi một Program dừng/lỗi, chưa từng gọi `PriorityResolver::release_ao/
+release_do`. Kết quả: một Program bị operator STOP hay DISABLE, hoặc FAULTED
+kéo dài, vẫn thắng arbitration ở mức 5 **mãi mãi** — downstream (BACnet mức
+3, schedule mức 4) không bao giờ giành lại được quyền dù chương trình đã
+ngừng chạy từ lâu.
+
+`st_withdraw_stale_outputs()` (`st_process_image.*`) đóng khoảng hở này theo
+đúng hai nhánh chính sách của §6: STOPPED/DISABLED rút NGAY tại safe
+boundary (lệnh dừng có chủ ý của operator phải nhả quyền ngay, không giữ
+mãi); FAULTED rút khi giữ quá `hold_ttl_base_steps` kể từ lần publish thành
+công cuối. `hold_ttl_base_steps` là field mới ở `ScanDeps`, **mặc định `0`**
+— TTL CHƯA được Product+Controls ký field decision theo Point class
+(`DDD-CTRL-PROG-001` §15), nên mặc định giữ hold-last KHÔNG GIỚI HẠN đúng
+như hành vi trước task này; cơ chế đã sẵn sàng, chỉ cần đổi một tham số khi
+có quyết định field, không cần sửa lại code. `StProgramInstance` thêm cờ
+`outputs_withdrawn` để idempotent (không release lặp mỗi tick) và tự mở lại
+khi instance publish thành công trở lại. `ScanLoop::step()` gọi hàm này ngay
+sau `st_apply_all_outputs()`.
+
+**Kiểm chứng.** 6 test mới (hold-last vô hạn khi TTL=0, rút đúng ngưỡng TTL
+sau FAULT, STOPPED/DISABLED rút ngay bất kể TTL, restart tái xác nhận claim
+và mở lại cơ hội rút, wiring thật qua `ScanLoop::step()`). Release build sạch
+bật Modbus/BACnet/HMI và CTest `983/983` PASS; symbol-scan `mkddc-core` xác
+nhận lại. Không đổi Go/FE. Source `9227d27`.
+
 ### Fixed — catalog lỗi Programming thiếu map ST-RT-009/010 (2026-08-13)
 
 Chạy gate `npm run build` cho `TASK-PROG-400` phát hiện

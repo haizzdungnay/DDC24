@@ -291,6 +291,150 @@ END_PROGRAM
     EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT);
 }
 
+/* ---- Hold-last + rút proposal an toàn (TASK-PROG-401, DDD-CTRL-PROG-001 §6) ---- */
+
+TEST(StIntegration, HoldLastKeepsPreviousProposalIndefinitelyWhenTtlUnconfigured)
+{
+    StScheduler sched;
+    make_running(&sched, doubler_artifact());
+
+    PointTable table;
+    PriorityResolver resolver;
+    set_ai(&table, 0, 5.0f);
+
+    StIoBridgeStats stats;
+    st_load_all_inputs(&sched, table, &stats);
+    sched.tick(100 * kMs);
+    ASSERT_TRUE(st_apply_all_outputs(&sched, &resolver, &table, &stats));
+    ASSERT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC);
+    ASSERT_FLOAT_EQ(resolver.resolve().ao[0], 10.0f);
+
+    /* Không load input lại trước tick kế -> input_snapshot_generation lệch
+     * base_step_count_ -> FAULTED (không phải chạy thành công rồi mới lỗi). */
+    sched.tick(200 * kMs);
+    ASSERT_EQ(sched.find_program("p")->state, StProgramState::FAULTED);
+    st_apply_all_outputs(&sched, &resolver, &table, &stats);
+
+    /* hold_ttl_base_steps=0: TTL CHƯA được Product+Controls ký (§15) -> hold
+     * KHÔNG GIỚI HẠN, không tự rút proposal cũ. */
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 0, &stats), 0u);
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC)
+        << "hold-last phải giữ proposal cũ khi TTL chưa cấu hình";
+    EXPECT_FLOAT_EQ(resolver.resolve().ao[0], 10.0f);
+}
+
+TEST(StIntegration, HoldLastWithdrawsExactlyWhenTtlBaseStepsElapseAfterFault)
+{
+    StScheduler sched;
+    make_running(&sched, doubler_artifact());
+
+    PointTable table;
+    PriorityResolver resolver;
+    set_ai(&table, 0, 5.0f);
+
+    StIoBridgeStats stats;
+    st_load_all_inputs(&sched, table, &stats);
+    sched.tick(100 * kMs);   /* base_step=2, publish thành công */
+    ASSERT_TRUE(st_apply_all_outputs(&sched, &resolver, &table, &stats));
+    ASSERT_EQ(sched.find_program("p")->output_commit_generation, 2u);
+
+    sched.tick(200 * kMs);   /* base_step=3, FAULTED (input snapshot cũ) */
+    ASSERT_EQ(sched.find_program("p")->state, StProgramState::FAULTED);
+    st_apply_all_outputs(&sched, &resolver, &table, &stats);
+
+    /* holdTtl=2 base step kể từ output_commit_generation=2 -> ngưỡng rút là
+     * base_step=4. Tại base_step=3 (còn trong TTL) CHƯA được rút. */
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 2, &stats), 0u);
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC)
+        << "còn trong holdTtl, chưa tới lúc rút";
+
+    sched.tick(300 * kMs);   /* base_step=4: đủ ngưỡng holdTtl */
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 2, &stats), 1u);
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT)
+        << "hết holdTtl phải rút proposal, nhả quyền cho downstream";
+
+    /* Idempotent: gọi lại không rút thêm lần hai (đã outputs_withdrawn). */
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 2, &stats), 0u);
+}
+
+TEST(StIntegration, StoppedProgramWithdrawsImmediatelyRegardlessOfTtl)
+{
+    StScheduler sched;
+    make_running(&sched, doubler_artifact());
+
+    PointTable table;
+    PriorityResolver resolver;
+    set_ai(&table, 0, 5.0f);
+
+    StIoBridgeStats stats;
+    st_load_all_inputs(&sched, table, &stats);
+    sched.tick(100 * kMs);
+    ASSERT_TRUE(st_apply_all_outputs(&sched, &resolver, &table, &stats));
+    ASSERT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC);
+
+    std::string err;
+    ASSERT_TRUE(sched.stop("p", &err)) << err;
+
+    /* Lệnh operator (stop) phải rút NGAY tại safe boundary, không chờ TTL dù
+     * TTL rất lớn hoặc chưa cấu hình — khác hẳn chính sách hold-last cho FAULT. */
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 1000000, &stats), 1u);
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT);
+}
+
+TEST(StIntegration, DisabledProgramWithdrawsImmediately)
+{
+    StScheduler sched;
+    make_running(&sched, doubler_artifact());
+
+    PointTable table;
+    PriorityResolver resolver;
+    set_ai(&table, 0, 5.0f);
+
+    StIoBridgeStats stats;
+    st_load_all_inputs(&sched, table, &stats);
+    sched.tick(100 * kMs);
+    ASSERT_TRUE(st_apply_all_outputs(&sched, &resolver, &table, &stats));
+
+    std::string err;
+    ASSERT_TRUE(sched.disable("p", &err)) << err;
+
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 0, &stats), 1u);
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT);
+}
+
+TEST(StIntegration, RestartAfterWithdrawReclaimsPriorityAndResetsHoldLastTracking)
+{
+    StScheduler sched;
+    make_running(&sched, doubler_artifact());
+
+    PointTable table;
+    PriorityResolver resolver;
+    set_ai(&table, 0, 5.0f);
+
+    StIoBridgeStats stats;
+    st_load_all_inputs(&sched, table, &stats);
+    sched.tick(100 * kMs);
+    ASSERT_TRUE(st_apply_all_outputs(&sched, &resolver, &table, &stats));
+
+    std::string err;
+    ASSERT_TRUE(sched.stop("p", &err)) << err;
+    ASSERT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 0, &stats), 1u);
+    ASSERT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT);
+
+    /* Restart + publish lại thành công -> tái xác nhận claim mức 5 và mở lại
+     * cơ hội rút cho lần dừng kế tiếp (outputs_withdrawn reset). */
+    ASSERT_TRUE(sched.start("p", &err)) << err;
+    st_load_all_inputs(&sched, table, &stats);
+    sched.tick(300 * kMs);
+    ASSERT_TRUE(st_apply_all_outputs(&sched, &resolver, &table, &stats));
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC);
+    EXPECT_FALSE(sched.find_program("p")->outputs_withdrawn);
+
+    ASSERT_TRUE(sched.stop("p", &err)) << err;
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 0, &stats), 1u)
+        << "sau khi publish lại, dừng lần hai phải rút được lần nữa";
+}
+
 TEST(StIntegration, NonFiniteInputIsBlockedAtBoundary)
 {
     StScheduler sched;
@@ -697,6 +841,44 @@ TEST(StIntegration, ScanLoopRunsStProgramAndRoutesThroughArbitration)
     EXPECT_EQ(loop.st_tick_for_test().base_step_sequence, base_steps_before + 1);
     EXPECT_EQ(loop.st_tick_for_test().tasks_run, 1u);
     EXPECT_EQ(loop.st_tick_for_test().programs_run, 1u);
+}
+
+TEST(StIntegration, ScanLoopWithdrawsStoppedProgramOutputAtSafeBoundary)
+{
+    /* TASK-PROG-401: xác nhận wiring thật trong ScanLoop::step() — không chỉ
+     * hàm st_withdraw_stale_outputs() đơn lẻ — rút proposal đúng lúc operator
+     * dừng chương trình, không phải chỉ trong unit test cô lập. */
+    kx_io_shm_t shm{};
+    IobusReader reader;
+    attach_valid_iobus(&reader, &shm);
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;
+    PriorityResolver resolver;
+    SafeState safe(quality, &graph, &resolver);
+    OutputWriter writer(reader);
+    BacnetObjTable bacnet;
+    ASSERT_TRUE(bacnet.attach());
+    CoreMetrics metrics;
+
+    StScheduler sched;
+    make_running(&sched, doubler_artifact());
+
+    ScanDeps deps{&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer, &bacnet,
+                  &metrics, -1, nullptr, nullptr};
+    deps.st_sched = &sched;
+    ScanLoop loop(deps);
+
+    loop.step();
+    ASSERT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC);
+
+    std::string err;
+    ASSERT_TRUE(sched.stop("p", &err)) << err;
+
+    loop.step();
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT)
+        << "ScanLoop phải rút proposal mức 5 ngay tick sau khi operator stop";
 }
 
 TEST(StIntegration, ScanLoopStepDoesNotAllocateWithStProgram)

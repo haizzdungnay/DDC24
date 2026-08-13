@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-CTRL-PROG-001` |
-| Phiên bản | 0.8 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-301..306` có source/host evidence; target timing và Safety review còn mở** |
+| Phiên bản | 0.9 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-301..306/401` có source/host evidence; target timing và Safety review còn mở** |
 | Ngày | 2026-08-13 |
 | Chủ quản | Controls Lead + Core Lead |
 | Người review | Safety Lead, FW MCU Lead, Verification Lead |
@@ -22,7 +22,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **một vòng điều khiển chạy như thế nào**: đọc input lúc nào, chạy Task khi nào, ghi output ra sao, ai thắng khi nhiều nguồn cùng đòi một output, PID xử lý bão hòa thế nào, và chuyện gì xảy ra khi một vòng chạy quá giờ. Đây là hồ sơ **an toàn** quan trọng nhất của bộ. |
 | 2. Ai phải đọc file này? | Controls và Core (chủ quản); Safety reviewer **bắt buộc** ký; QA dựng ca HIL từ §13 và §14; FE đọc §6 để hiển thị đúng ai đang giữ output. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-301` (`a831a0d`) có profile scheduler Rev A 1/1/`1-5-30s`, budget `<20%`, `on_base_step()`. `TASK-PROG-302` (`f080056`) có process image preflight-toàn-batch. `TASK-PROG-303` (`85aa4d2`) có `StFbType::PID`. `TASK-PROG-304` (`4d744ac`) sửa `exec_ns` đo luôn-bằng-0 và fault ĐÚNG Task khi overrun. `TASK-PROG-305` (`c6ab2bd`) có bounded trace + monitor IPC. `TASK-PROG-306` (`f35234c`) dựng `StScheduler` thật trong `bootstrap/main.cpp` lần đầu tiên qua cờ `--programming-mode`, khoá `graph->execute()` khi `PROGRAM_ONLY` — không còn "bootstrap chưa cấp scheduler" như mọi ghi chú trước đây. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-301` (`a831a0d`) có profile scheduler Rev A 1/1/`1-5-30s`, budget `<20%`, `on_base_step()`. `TASK-PROG-302` (`f080056`) có process image preflight-toàn-batch. `TASK-PROG-303` (`85aa4d2`) có `StFbType::PID`. `TASK-PROG-304` (`4d744ac`) sửa `exec_ns` đo luôn-bằng-0 và fault ĐÚNG Task khi overrun. `TASK-PROG-305` (`c6ab2bd`) có bounded trace + monitor IPC. `TASK-PROG-306` (`f35234c`) dựng `StScheduler` thật trong `bootstrap/main.cpp` lần đầu tiên qua cờ `--programming-mode`, khoá `graph->execute()` khi `PROGRAM_ONLY` — không còn "bootstrap chưa cấp scheduler" như mọi ghi chú trước đây. `TASK-PROG-401` (`9227d27`) đóng khoảng hở hold-last không giới hạn: `st_withdraw_stale_outputs()` rút proposal mức 5 NGAY khi STOPPED/DISABLED, và theo `holdTtl` cấu hình được khi FAULTED — cơ chế đã có, con số TTL vẫn `TARGET-PENDING`. |
 | 4. Thiết kế mới thay đổi điều gì? | Thu về **đúng một Task**, chu kỳ chỉ `1000/5000/30000 ms`. Quan trọng nhất: Task 30 s là **nhịp điều độ**, không phải `sleep` của base step — base step vẫn phải chạy đủ nhanh để IOP không đứt. Và: lỗi một Task chỉ làm **Task đó** FAULT; chỉ SafetyManager mới được đưa cả trạm về safe-state. |
 | 5. Team phải sửa module/contract nào? | §12. Core sửa ScanLoop để dispatch Task đến hạn, staging output rồi commit một lần; `PriorityResolver` nhận `program_value` ở mức Local logic 5; RETAIN khôi phục **trước** lần chạy đầu và ghi ngoài đường tới hạn. |
 | 6. Điều gì còn bị chặn? | `OD-PROG-004/012/013` và ADR-026..029 đã `Accepted`, nên không còn blocker code. Còn thiếu source `TASK-PROG-307`, benchmark 10.000 cycle trên Forlinx, fault/HIL và Safety review hậu kiểm; chúng chặn release/cutover. UDS transport cho control API (phát hiện ở Task 306) và value-sampling trace historian còn mở, xem §10/§11. |
@@ -141,6 +141,21 @@ ghi lại physical output và không chiếm quyền của source ưu tiên cao 
   che; anti-windup nhận actual selected output, không assumed proposal.
 
 Giá trị/TTL mặc định vẫn `TARGET-PENDING`; decision phải khóa theo Point class.
+
+**As-Built (`TASK-PROG-401`).** `st_withdraw_stale_outputs()`
+(`st_process_image.*`) hiện thực đúng hai nhánh chính sách trên: STOPPED/
+DISABLED rút NGAY tại safe boundary (không chờ TTL, gọi mỗi tick từ
+`ScanLoop::step()` sau `st_apply_all_outputs()`); FAULTED rút khi
+`base_step_count() >= output_commit_generation + hold_ttl_base_steps`.
+`hold_ttl_base_steps` là field mới ở `ScanDeps`, mặc định `0` — nghĩa là TTL
+CHƯA được Product+Controls ký (đúng như đoạn trên nói), giữ hold-last KHÔNG
+GIỚI HẠN như hành vi trước task này; đổi được bằng một tham số khi có quyết
+định field, không cần sửa lại cơ chế. `outputs_withdrawn` trên
+`StProgramInstance` chặn double-release và tự mở lại khi instance publish
+thành công trở lại (restart sau `reset_fault`/`start`). "Khóa theo Point
+class" (TTL khác nhau theo loại điểm) CHƯA làm — một `hold_ttl_base_steps`
+áp dụng đồng nhất mọi instance; phân biệt theo Point class vẫn là quyết định
+field chưa có, xem §15.
 
 ## 7. PID và anti-windup
 
@@ -297,7 +312,7 @@ quality/source/freshness, không capture gì mới ngoài đường RT.
 | scheduler | `st_scheduler.*`: `StSchedulerProfile::REV_A`, `add_task()`, `add_program()`, `on_base_step()` tại `a831a0d`; overrun→Task FAULT (đồng hồ WCET riêng) tại `4d744ac` (TASK-PROG-304) | Task 306 chỉ bootstrap Rev A |
 | executor | `st_exec.*`, `st_cyclic_runtime.*` | instruction budget/non-finite/source fault |
 | process image | `st_process_image.*`, `st_io_map.*` tại `f080056` (TASK-PROG-302) | đã đạt quality/freshness/generation/all-or-nothing |
-| arbitration | `PriorityResolver::can_set_ao/can_set_do` tại `f080056`; read-back qua Point Table AO/DO (không kênh riêng) | `holdTtl`-based withdraw khi Task FAULT kéo dài vẫn CHƯA làm — hiện tại hold-last không giới hạn thời gian (chỉ dừng publish MỚI, không tự nhả quyền); còn mở, chưa gán task |
+| arbitration | `PriorityResolver::can_set_ao/can_set_do` tại `f080056`; `st_withdraw_stale_outputs()` (STOPPED/DISABLED ngay, FAULTED theo `holdTtl`) tại `9227d27` (TASK-PROG-401) | `hold_ttl_base_steps` mặc định `0` (vô hạn) — con số field decision theo Point class vẫn `TARGET-PENDING`, chưa gán task |
 | PID/library | `StFbType::PID` trong `st_program.*`/`st_exec.cpp`/`st_loader.cpp` tại `TASK-PROG-303` | back-calculation anti-windup + freeze-on-override đã có; tuning gain/tolerance field là Revision/Target decision |
 | monitor/trace | `StBoundedRuntimeTrace`, `program_status.monitorInputs`, `program_trace` tại `c6ab2bd` (TASK-PROG-305) | value-sampling historian session (`POST/GET/DELETE /runtime/traces`) còn mở |
 | integration | `apps/core/bootstrap/main.cpp` | instantiate scheduler/lifecycle; exclusive graph cutover |
@@ -365,6 +380,7 @@ Budget tuyệt đối cho từng phase và `holdTtl` vẫn `TARGET-PENDING`; imp
 | 0.6 | 2026-08-13 | Đồng bộ `TASK-PROG-304` (`4d744ac`): sửa `exec_ns` đo luôn-bằng-0 (đồng hồ WCET riêng, không dùng `now_ns` chung tick), fault ĐÚNG Task khi 3 overrun liên tiếp không plant-wide safe — supersede rõ `PROGRAM_TASK_SCHEDULER_SPEC` §6.1 cũ; giữ target/HIL NOT TESTED | Core + Controls |
 | 0.7 | 2026-08-13 | Đồng bộ `TASK-PROG-305` (`c6ab2bd`): `StBoundedRuntimeTrace` ring buffer cấp phát tĩnh (khác `StTraceLog`/`std::deque` cũ) log fault/overrun/rollback/activation; `program_status.monitorInputs` trả quality/source/freshness; sửa chính xác row arbitration (`holdTtl` withdraw còn mở, không phải Task 304); giữ target/HIL NOT TESTED | Core + Controls |
 | 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (`f35234c`): `bootstrap/main.cpp` dựng `StScheduler` REV_A thật lần đầu qua `--programming-mode`, `CutoverMode` khoá hẳn `graph->execute()` khi `PROGRAM_ONLY`; cập nhật §2 As-Built (không còn "bootstrap chưa cấp scheduler"); ghi gap UDS transport control API phát hiện khi wiring; giữ target/HIL NOT TESTED, transaction LIVE/rollback vẫn Task 404 | Core + Controls |
+| 0.9 | 2026-08-13 | Đồng bộ `TASK-PROG-401` (`9227d27`): `st_withdraw_stale_outputs()` đóng khoảng hở "hold-last không giới hạn" ở §6/§12 — STOPPED/DISABLED rút proposal mức 5 NGAY tại safe boundary, FAULTED rút theo `hold_ttl_base_steps` cấu hình được (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn TARGET-PENDING); giữ target/HIL NOT TESTED | Core + Controls |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

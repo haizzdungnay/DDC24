@@ -354,6 +354,7 @@ void StScheduler::apply_pending_activations(StTask& task)
             p->input_snapshot_valid = true;
             p->last_successful_base_step = 0;
             p->output_commit_generation = 0;
+            p->outputs_withdrawn = false;
             /* Giữ lại bytes để promote thành last-known-good SAU KHI chạy được
              * >= 1 tick không fault — package chưa chạy lần nào không đủ tư
              * cách làm mốc rollback. */
