@@ -7,6 +7,45 @@
 ---
 
 ## [Unreleased]
+### Added — Monitor input quality + bounded runtime trace + capability IPC Programming P3 (2026-08-13)
+
+**TASK-PROG-305.** BE giờ đọc lại được quality/source/freshness của từng
+input đang nuôi một Program (`program_status.monitorInputs[]`, đúng
+`GET /runtime/monitor` của Interface Spec §7/§8) — dữ liệu này process
+image (TASK-PROG-302) đã chụp sẵn vào `StProcessInputSlot`, chỉ chưa ai đọc
+ra IPC. Thêm action `program_trace` đọc bounded event fault/overrun/
+rollback/activation, và capability `monitorPollHz`(1)/`monitorStaleAfter
+Polls`(3)/`maxTraceEvents` theo `OD-PROG-011` đã DECIDED.
+
+`StTraceLog` (event trace) đã có sẵn trong repo nhưng chỉ nối với
+`StCyclicRuntime` — component supporting cũ, không phải `StScheduler` sản
+xuất đang dùng cho TASK-PROG-300..304. Hơn nữa `StTraceLog` dùng
+`std::deque`, cấp/giải phóng chunk nội bộ mỗi lần `push_back`/`pop_front`
+dù kích thước logic không đổi — KHÔNG an toàn gọi trong `run_task()` (đường
+RT). Thêm `StBoundedRuntimeTrace<Capacity>` mới: ring buffer cấp phát TĨNH
+bằng `std::array`, event chỉ giữ con trỏ `const char*` tới string TĨNH
+(không sở hữu, không cấp phát động), đầy thì ghi đè phần tử cũ nhất và tăng
+`dropped_count()` (Control Semantics §11: "overflow trace drop sample +
+counter"). Không đổi `StTraceLog`/`StCyclicRuntime` hiện có.
+
+Sửa một bug trong lúc viết test: `json j["code"] = cond ? cptr : nullptr;`
+— hai nhánh toán tử ba ngôi hợp kiểu về `const char*`, làm `nullptr` bị ép
+về con trỏ NULL thay vì giữ JSON null; `nlohmann::json` cố dựng
+`std::string` từ con trỏ NULL và ném exception. Sửa bằng rẽ nhánh if/else
+tường minh.
+
+**Phạm vi cố ý thu hẹp:** đây là bounded EVENT trace, KHÔNG PHẢI
+value-sampling historian "10.000 sample/10 phút" cùng `OD-PROG-011` — phần
+đó cần selector/session theo biến/thời lượng qua `POST/GET/DELETE
+/runtime/traces` (Interface Spec §8), một tính năng lớn hơn cần BE phối
+hợp, ghi rõ làm follow-up còn mở thay vì âm thầm bỏ qua.
+
+**Kiểm chứng.** Release build sạch bật Modbus/BACnet/HMI và CTest `966/966`
+PASS; 4 test trace/monitor mới (ring buffer drop-oldest+counter,
+`program_trace` graceful không có log, RUNTIME_FAULT event đúng
+task/instance/code khi có log, `monitorInputs` đúng quality/source/
+category) cộng test capability mở rộng. Không đổi Go/FE. Source `c6ab2bd`.
+
 ### Fixed — Overrun Task fault đúng phạm vi, không plant-wide safe Programming P3 (2026-08-13)
 
 **TASK-PROG-304.** Phát hiện và sửa một bug an toàn: `StScheduler::run_task()`
