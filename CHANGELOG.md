@@ -42,6 +42,72 @@ không cần sửa lại).
 
 Refs: Plan 53 §5.9 S5-E, UX-WEB-PROG-001 §6.2, UC-PROG-13.
 
+### Added — Programming P5 TASK-PROG-506: Playwright E2E bốn workspace + tám journey (2026-08-13)
+
+`apps/web-ui/e2e/programming.spec.ts` (mới) — nghiệm thu Chrome thật (không
+jsdom) cho toàn bộ chuỗi UJ-PROG-01..08 (Tổng quan → Thiết kế ST+FBD+ánh
+xạ+thực thi → Kiểm tra → Đưa vào vận hành → Runtime → Khôi phục) và route cũ
+`programs/mapping/task` redirect (VS-PROG-032), chạy trên cả `desktop-chrome`
+và `mobile-chrome` (Pixel 7, `playwright.config.ts` thêm project mới +
+`VITE_PROGRAMMING_REV_A=1` cho dev server e2e). `installProgrammingMocks()`
+mock `/api/v1/programming/**` bằng `page.route()` đối chiếu đúng shape response
+Go thật (không bịa dữ liệu); các route contract-only còn lại (traces,
+retain/reset...) trả 503 đúng hành vi backend hiện tại. Test kiểm cả
+Console error và failed request ngoài dự kiến trong suốt hành trình.
+
+Hai lỗi ứng dụng thật phát hiện qua chính E2E này, sửa trong cùng phiên
+(không chỉ ghi finding):
+
+- **Mất nội dung đang gõ khi đổi tab** (`design/DesignWorkspacePage.tsx`):
+  ba tab Thiết kế dùng `{tab === 'X' && <Tab/>}`, unmount/remount
+  `SourceEditor`/`MappingTab`/`ExecutionTab` mỗi lần đổi tab — xoá buffer
+  chưa lưu của ST editor, vi phạm thẳng ràng buộc "đổi tab không mất nội
+  dung đang gõ" (DDD-FE-PROG-001 §0.1 ràng buộc 1). Sửa sang mount cố định,
+  chỉ ẩn bằng CSS: `<div hidden={tab !== 'X'}><Tab/></div>` cho cả ba tab.
+  `DesignWorkspacePage.test.tsx` cập nhật thêm mock `getProgrammingPointCatalog`
+  ở cả ba `mockImplementation` (vì `MappingTab` giờ luôn mount).
+- **Mất focus bàn phím sau khi xóa phần tử FBD** (`fbd/StructuredFbdEditor.tsx`):
+  `DELETE_SELECTION` gỡ port/node/wire đang được chọn khỏi DOM; nếu đúng
+  phần tử đó đang giữ focus bàn phím thì trình duyệt tự đưa focus về
+  `document.body` (hành vi chuẩn khi phần tử focus bị gỡ khỏi cây), cắt đứt
+  chuỗi lệnh bàn phím tiếp theo (vd. Ctrl+Z sau Delete không còn tới được
+  `onKeyDown` của editor) — vi phạm yêu cầu "hoàn tất bằng bàn phím"
+  (DDD-FE-PROG-001 §0.1). Sửa bằng cách thêm `sectionRef`+`tabIndex={-1}`
+  trên `<section>` gốc; `useEffect` theo dõi `state.selection` giờ thu hồi
+  focus về section khi `document.activeElement` rơi về `body` (chỉ khi thật
+  sự mất focus — không cướp focus lúc mount). Kịch bản E2E xác nhận bằng
+  chuỗi bàn phím thật (không click chuột): `Insert` thêm 2 block AND,
+  `ArrowDown`×3 chọn port nguồn, `Enter` bắt đầu nối, `ArrowDown` chọn port
+  đích, `Enter` hoàn tất nối, `Delete` xóa (kéo theo wire), `Ctrl+Z` hoàn
+  tác — khôi phục đúng wire vừa xóa.
+
+Ngoài hai lỗi ứng dụng trên, còn ba lỗi nằm trong chính test spec (không
+phải ứng dụng), sửa cùng lúc: mất phiên mock khi `page.goto()` (AUTH_MODE=mock
+giữ phiên trong React state, không cookie — chuyển sang điều hướng
+client-side `pushState`+`popstate` theo đúng tiền lệ `pa3-dashboard.spec.ts`);
+ngôn ngữ mặc định trình duyệt mới là `en` (khoá `mkddc-lang=vi` qua
+`page.addInitScript`); locator `getByText('PASSED')` sai vì
+`DesignWorkspacePage.tsx` không render chữ "PASSED" thô (chỉ có ở
+`CheckCommissionPage.tsx` qua `StatusBadge`) — sửa lại đúng banner
+"Kiểm tra đạt. Bản đang chạy không đổi.".
+
+`RealtimeProvider` (App.tsx) mount vô điều kiện ở gốc app kể cả `/login` và
+mở `ws://.../api/v1/ws/monitor` thật — không có backend Go trong e2e này nên
+bắt tay WS thất bại, log console error lặp theo backoff, không liên quan gì
+P5. Mock bằng `page.routeWebSocket()` (chấp nhận kết nối, không forward server
+thật) thay vì lọc lỗi console, giữ assertion "không console error lạ" có ý
+nghĩa cho lỗi P5 thật.
+
+Test/evidence: `npx playwright test e2e/programming.spec.ts` → 2/2 PASS trên
+cả `desktop-chrome` và `mobile-chrome` (4/4); `npx playwright test
+e2e/network-qa.spec.ts` → 1/1 PASS (bắt buộc vì P5 đổi trang có kết nối
+mạng); full `npx playwright test` (60 spec khác + 2 Programming) → 60/60 PASS,
+không hồi quy từ đổi `playwright.config.ts`; `npx vitest --run --environment
+jsdom src/features/programming/fbd` → 15/15 PASS sau fix focus.
+
+Refs: TASK-PROG-506, Plan 53 §5.9 S5-F chuẩn bị, DDD-FE-PROG-001 §0.1,
+UX-WEB-PROG-001 §14 UX-T-002.
+
 ### Added — Programming P5 TASK-PROG-505: workspace Runtime & Bảo trì (S5-D) (2026-08-13)
 
 **BE gap-fill: `GET /operations` (list).** Commit riêng trước đó

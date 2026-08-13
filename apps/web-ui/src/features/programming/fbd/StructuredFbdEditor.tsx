@@ -46,6 +46,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
   const publishedDocument = useRef(canonicalFbdJson(state.document))
   const portButtons = useRef(new Map<string, HTMLButtonElement>())
+  const sectionRef = useRef<HTMLElement>(null)
   const keyboardHelpId = useId()
 
   useEffect(() => {
@@ -66,7 +67,18 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
   }, [onChange, state.document])
 
   useEffect(() => {
-    if (state.selection?.kind === 'port') portButtons.current.get(state.selection.portId)?.focus()
+    if (state.selection?.kind === 'port') {
+      portButtons.current.get(state.selection.portId)?.focus()
+      return
+    }
+    // Xóa phần tử đang focus (vd. port bị DELETE_SELECTION gỡ khỏi DOM)
+    // khiến trình duyệt tự đưa focus về `document.body`, cắt luôn chuỗi
+    // bàn phím (DDD-FE-PROG-001 §0.1 đòi "hoàn tất bằng bàn phím"). Phát
+    // hiện qua Playwright E2E (TASK-PROG-506): Ctrl+Z sau Delete không còn
+    // tới được `onKeyDown` của editor. Chỉ thu hồi focus khi thật sự bị mất
+    // (activeElement rơi về body) — không cướp focus lúc mount.
+    const active = window.document.activeElement
+    if (sectionRef.current && (!active || active === window.document.body)) sectionRef.current.focus()
   }, [state.selection])
 
   const selectedNetworkId = state.selection?.networkId ?? state.document.networks[0]?.id
@@ -112,6 +124,8 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
   const issues = validateFbdDocument(state.document)
   return (
     <section
+      ref={sectionRef}
+      tabIndex={-1}
       aria-label={pick('Bộ dựng FBD có cấu trúc', 'Structured FBD editor')}
       aria-describedby={keyboardHelpId}
       className="space-y-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4"

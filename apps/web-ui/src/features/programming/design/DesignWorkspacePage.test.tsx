@@ -69,6 +69,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   it('nạp Draft thật và cho phép thêm chương trình ST qua PATCH batch upsertProgram+setTask', async () => {
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
         const document = baseDocument()
         document.programs.push({ programId: 'program-1', name: 'New program', kind: 'PROGRAM', language: 'ST', document: '' })
@@ -105,6 +106,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
         return Promise.reject(
           new ProgrammingApiError(409, {
@@ -131,6 +133,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   it('thêm chương trình FBD mount StructuredFbdEditor thật, không placeholder (TASK-PROG-502)', async () => {
     client.request.mockImplementation((operationId: string, options?: { body?: { operations: Array<{ op: string; program?: { programId: string; document: unknown } }> } }) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
         const upsertOp = options?.body?.operations.find((op) => op.op === 'upsertProgram')
         const document = baseDocument()

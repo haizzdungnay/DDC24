@@ -168,11 +168,21 @@ export function DesignWorkspacePage() {
         </div>
       )}
 
-      {tab === 'programs' && (
+      {/* Cả ba tab luôn MOUNTED, chỉ ẩn bằng CSS (không unmount/remount theo
+          `tab`). Bắt buộc: unmount xoá state cục bộ của `SourceEditor`/
+          `FbdEditorPane` (buffer đang gõ, chưa lưu), nên đổi tab rồi quay lại
+          sẽ "mất nội dung đang gõ" — đúng hành vi bị cấm ở
+          DDD-FE-PROG-001 §0.1 ràng buộc 1. Phát hiện qua Playwright E2E
+          (TASK-PROG-506), sửa ngay trong cùng phiên. */}
+      <div hidden={tab !== 'programs'}>
         <ProgramsTab document={document} saving={workspace.saving} selectedProgramId={selectedProgramId} onSelectProgram={setSelectedProgramId} onSave={workspace.save} />
-      )}
-      {tab === 'mapping' && <MappingTab document={document} saving={workspace.saving} onSave={workspace.save} />}
-      {tab === 'execution' && <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} />}
+      </div>
+      <div hidden={tab !== 'mapping'}>
+        <MappingTab document={document} saving={workspace.saving} onSave={workspace.save} />
+      </div>
+      <div hidden={tab !== 'execution'}>
+        <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} />
+      </div>
 
       {diagnostics.length > 0 && (
         <div>
