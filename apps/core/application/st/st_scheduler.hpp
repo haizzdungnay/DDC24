@@ -29,6 +29,7 @@
 #include "safety/overrun_monitor.hpp"
 #include "st/st_limits.hpp"
 #include "st/st_runtime.hpp"
+#include "st/st_trace.hpp"
 
 namespace core {
 
@@ -212,6 +213,15 @@ public:
      * cần sleep thật. */
     void set_wall_clock_for_test(std::function<uint64_t()> clock) { wall_clock_ = std::move(clock); }
 
+    /* TASK-PROG-305: log bounded read-only cho RUNTIME_FAULT/OVERRUN/
+     * ROLLBACK/ACTIVATION_RESULT — bounded event trace của OD-PROG-011,
+     * KHÔNG PHẢI value-sampling historian 10.000 sample/10 phút của cùng
+     * quyết định đó (phần đó cần selector/session riêng, còn mở — xem
+     * DDD-CTRL-PROG-001 As-Built). nullptr = không log (mặc định), scheduler
+     * không tự cấp phát trace log để giữ chủ quyền bounded-capacity ở caller. */
+    void set_trace_log(StSchedulerTrace* trace) { trace_ = trace; }
+    const StSchedulerTrace* trace_log() const { return trace_; }
+
     /* Trả false + *error nếu cấu hình vi phạm ràng buộc SPEC §3. Fail-fast:
      * cấu hình sai không được chạy với "phần hợp lệ", vì như vậy hệ chạy khác
      * điều engineer nghĩ mà không ai biết. */
@@ -262,9 +272,12 @@ private:
     std::vector<std::unique_ptr<StTask>> tasks_;
     StLoaderOptions loader_opts_;
     std::function<uint64_t()> wall_clock_ = default_monotonic_wall_clock_ns;
+    StSchedulerTrace* trace_ = nullptr;
 
     void run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out);
     void apply_pending_activations(StTask& task);
+    void log_trace(StTraceEventKind kind, uint64_t now_ns, bool ok, const char* task_id,
+                   const char* instance_id, const char* code);
 };
 
 } // namespace core

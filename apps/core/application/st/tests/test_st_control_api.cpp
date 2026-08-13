@@ -16,6 +16,7 @@
 #include "st/st_compile.hpp"
 #include "st/st_control_api.hpp"
 #include "st/st_ir.hpp"
+#include "st/st_process_image.hpp"
 #include "st/st_scheduler.hpp"
 #include "st/st_test_key.hpp"
 
@@ -155,6 +156,11 @@ TEST(StControlApi, CapabilitiesPublishesEverythingBeNeedsToCompile)
     EXPECT_EQ(r["baseStepMinMs"], 500);
     EXPECT_EQ(r["baseStepMaxMs"], 2000);
     EXPECT_EQ(r["maxTaskBudgetPercentExclusive"], 20);
+    /* TASK-PROG-305: capability monitor/trace theo OD-PROG-011 — 1 Hz, stale
+     * sau 3 kỳ, trace event bounded. */
+    EXPECT_EQ(r["monitorPollHz"], 1);
+    EXPECT_EQ(r["monitorStaleAfterPolls"], 3);
+    EXPECT_EQ(r["maxTraceEvents"], kSchedulerTraceCapacity);
 }
 
 TEST(StControlApi, StatusReportsTasksAndPrograms)
@@ -196,6 +202,127 @@ END_PROGRAM
     ASSERT_FALSE(p["lastFault"].is_null());
     EXPECT_EQ(p["lastFault"]["code"], "ST-RT-002") << "chia cho 0";
     EXPECT_GT(p["lastFault"]["line"].get<int>(), 0) << "phải chỉ được về dòng ST gốc";
+}
+
+TEST(StControlApi, StatusExposesMonitorInputsWithQualityAndSource)
+{
+    /* TASK-PROG-305 "monitor": source/quality/freshness per input binding —
+     * đọc lại process_inputs đã chụp ở TASK-PROG-302, không suy diễn. */
+    StScheduler s;
+    std::string err;
+    setup(&s);
+    const char* echo = R"ST(
+PROGRAM e
+VAR_INPUT  a : REAL; END_VAR
+VAR_OUTPUT b : REAL; END_VAR
+    b := a;
+END_PROGRAM
+)ST";
+    const StIrModule mod = [&] {
+        StIrModule m;
+        StDiagnostic d;
+        EXPECT_TRUE(compile_st_source(echo, &m, &d));
+        return m;
+    }();
+    StIrIoBinding in{};
+    for (const StIrVariable& v : mod.variables) if (v.name == "a") in.slot = v.slot;
+    in.point_kind = StPointKind::AV;
+    in.point_index = 1;
+    StIrModule m2 = mod;
+    m2.io_bindings.push_back(in);
+    std::vector<uint8_t> bytes;
+    ASSERT_TRUE(serialize_st_ir(m2, &bytes, &err)) << err;
+    ASSERT_TRUE(sign_st_artifact(&bytes, st_test_secret_key()));
+
+    ASSERT_TRUE(s.request_activation("p", bytes, &err)) << err;
+    s.tick(0);
+    ASSERT_TRUE(s.start("p", &err));
+
+    PointTable table;
+    ASSERT_TRUE(table.set_virtual({PointKind::AV, 0}, 3.5f, PointSource::WEB));
+    StIoBridgeStats stats;
+    ASSERT_TRUE(st_load_all_inputs(&s, table, &stats));
+    ASSERT_EQ(s.tick(100 * 1000000ull).programs_run, 1u);
+
+    const json r = call(&s, {{"action", "program_status"}});
+    const json& p = r["tasks"][0]["programs"][0];
+    ASSERT_EQ(p["monitorInputs"].size(), 1u);
+    EXPECT_EQ(p["monitorInputs"][0]["variable"], "a");
+    EXPECT_EQ(p["monitorInputs"][0]["pointCategory"], "VP");
+    EXPECT_EQ(p["monitorInputs"][0]["quality"], static_cast<int>(KX_Q_GOOD));
+    EXPECT_EQ(p["monitorInputs"][0]["source"], static_cast<int>(PointSource::WEB));
+    EXPECT_TRUE(p["inputSnapshotValid"].get<bool>());
+}
+
+TEST(StControlApi, TraceActionIsGracefulWithoutAttachedLog)
+{
+    StScheduler s;
+    setup(&s);
+    const json r = call(&s, {{"action", "program_trace"}});
+    ASSERT_EQ(r["result"], "ok");
+    EXPECT_EQ(r["events"].size(), 0u);
+    EXPECT_EQ(r["capacity"], 0);
+    EXPECT_EQ(r["droppedCount"], 0);
+}
+
+TEST(StControlApi, TraceActionReportsRuntimeFaultEventWhenLogAttached)
+{
+    StScheduler s;
+    std::string err;
+    setup(&s);
+    StSchedulerTrace trace;
+    s.set_trace_log(&trace);
+
+    const char* boom = R"ST(
+PROGRAM b
+VAR_INPUT  d : INT; END_VAR
+VAR_OUTPUT o : INT; END_VAR
+    o := 1 / d;
+END_PROGRAM
+)ST";
+    ASSERT_TRUE(s.request_activation("p", build(boom), &err));
+    s.tick(0);
+    ASSERT_TRUE(s.start("p", &err));
+    s.tick(100000000ull);
+
+    const json r = call(&s, {{"action", "program_trace"}});
+    ASSERT_EQ(r["result"], "ok");
+    EXPECT_EQ(r["capacity"], kSchedulerTraceCapacity);
+    bool found_fault = false;
+    for (const json& e : r["events"]) {
+        if (e["kind"] == static_cast<int>(StTraceEventKind::RUNTIME_FAULT) &&
+            e["code"] == "ST-RT-002") {
+            found_fault = true;
+            EXPECT_EQ(e["taskId"], "T");
+            EXPECT_EQ(e["instanceId"], "p");
+            EXPECT_FALSE(e["ok"].get<bool>());
+        }
+    }
+    EXPECT_TRUE(found_fault) << "chia cho 0 phải sinh RUNTIME_FAULT event";
+
+    /* Còn hai event ACTIVATION_RESULT (stage) — cũng phải có mặt, chứng
+     * minh log không chỉ ghi fault. */
+    bool found_activation = false;
+    for (const json& e : r["events"])
+        if (e["kind"] == static_cast<int>(StTraceEventKind::ACTIVATION_RESULT)) found_activation = true;
+    EXPECT_TRUE(found_activation);
+}
+
+TEST(StControlApi, TraceLogDropsOldestAndCountsWhenFull)
+{
+    StBoundedRuntimeTrace<2> tiny;
+    StRuntimeTraceEvent e1; e1.code = "A";
+    StRuntimeTraceEvent e2; e2.code = "B";
+    StRuntimeTraceEvent e3; e3.code = "C";
+    tiny.push(e1);
+    tiny.push(e2);
+    EXPECT_EQ(tiny.size(), 2u);
+    EXPECT_EQ(tiny.dropped_count(), 0u);
+    tiny.push(e3);
+    EXPECT_EQ(tiny.size(), 2u) << "capacity cố định, không phình ra";
+    EXPECT_EQ(tiny.dropped_count(), 1u);
+    EXPECT_STREQ(tiny.at(0).code, "B") << "event cũ nhất (A) đã bị drop";
+    EXPECT_STREQ(tiny.at(1).code, "C");
 }
 
 /* ---- Vòng đời qua API ---- */
