@@ -123,6 +123,12 @@ struct Fixture {
     kx_plc_shm_t shm{};
     PointWriter writer{table, &shm};
 
+    Fixture()
+    {
+        shm.ext_count = KX_N_EXT;
+        for (int i = 0; i < KX_N_EXT; ++i) shm.ext[i].writable = 1;
+    }
+
     bool load(const std::string& json)
     {
         TempFile f(json);
@@ -960,10 +966,29 @@ TEST(ScheduleV31ExtWritePath, ReportsFailureWhenShmUnavailable)
     PointTable table;
     PointWriter writer_without_shm(table, nullptr);
     EXPECT_FALSE(writer_without_shm.can_write_ext());
+    const Point before = table.get({PointKind::EXT, 0});
     EXPECT_FALSE(writer_without_shm.write({PointKind::EXT, 0}, 1.0f, PointSource::SCHEDULE))
         << "không có SHM thì phải trả false, không được báo đã ghi";
+    const Point after = table.get({PointKind::EXT, 0});
+    EXPECT_FLOAT_EQ(after.value, before.value);
+    EXPECT_EQ(after.quality, before.quality);
+    EXPECT_EQ(after.source, before.source)
+        << "preflight thất bại không được mutate PointTable";
     /* Point ảo thường vẫn ghi được vì chúng không cần SHM. */
     EXPECT_TRUE(writer_without_shm.write({PointKind::AV, 0}, 1.0f, PointSource::SCHEDULE));
+}
+
+TEST(ScheduleV31ExtWritePath, RejectsReadOnlyOrInactiveExtBeforeMutation)
+{
+    PointTable table;
+    kx_plc_shm_t shm{};
+    shm.ext_count = 1;
+    PointWriter writer(table, &shm);
+    EXPECT_FALSE(writer.write({PointKind::EXT, 0}, 7.0f, PointSource::SCHEDULE));
+    EXPECT_FALSE(writer.write({PointKind::EXT, 1}, 8.0f, PointSource::SCHEDULE));
+    EXPECT_EQ(shm.ext[0].dirty, 0);
+    EXPECT_EQ(table.get({PointKind::EXT, 0}).source, PointSource::DEFAULT);
+    EXPECT_EQ(table.get({PointKind::EXT, 1}).source, PointSource::DEFAULT);
 }
 
 /* Nhả quyền KHÔNG được đặt dirty: nhả quyền không phải là ra thêm một lệnh
@@ -972,6 +997,8 @@ TEST(ScheduleV31ExtWritePath, ReleaseDoesNotCommandTheDevice)
 {
     PointTable table;
     kx_plc_shm_t shm{};
+    shm.ext_count = KX_N_EXT;
+    shm.ext[3].writable = 1;
     PointWriter writer(table, &shm);
     ASSERT_TRUE(writer.write({PointKind::EXT, 3}, 10.0f, PointSource::SCHEDULE));
     shm.ext[3].dirty = 0;   /* giả lập iobus đã tiêu thụ lệnh */

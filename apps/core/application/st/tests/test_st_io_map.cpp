@@ -74,6 +74,55 @@ TEST(StIoMap, ValidCompleteMapPasses)
     EXPECT_TRUE(diags.empty());
 }
 
+TEST(StIoMap, AcceptsExactlyThreePointCategoriesWithDiscriminatedIdentity)
+{
+    const StProgram prog = parse_ok(kHvac);
+    std::vector<StIoMapEntry> entries = valid_entries();
+    entries[0].category = "VP";
+    entries[0].point_id = "AV-01";
+    entries[1].category = "MB_RTU";
+    entries[1].device_id = "PUMP_VFD-01";
+    entries[1].point_id = "speed_ref";
+    std::vector<StDiagnostic> diags;
+    EXPECT_TRUE(validate_io_map(prog, entries, &diags));
+    EXPECT_TRUE(diags.empty());
+}
+
+TEST(StIoMap, RejectsModbusRtuFlatIdentityAndOutOfScopeCategory)
+{
+    const StProgram prog = parse_ok(kHvac);
+    std::vector<StIoMapEntry> entries = valid_entries();
+    entries[0].category = "MB_RTU";
+    entries[0].point_id = "MB-042";
+    entries[0].device_id.clear();
+    entries[1].category = "BACNET";
+    entries[1].point_id = "AV-01";
+    std::vector<StDiagnostic> diags;
+    EXPECT_FALSE(validate_io_map(prog, entries, &diags));
+    EXPECT_GE(diags.size(), 2u);
+    for (const StDiagnostic& d : diags)
+        EXPECT_EQ(d.code, st_diag_code::kIoMapBadPointId);
+}
+
+TEST(StIoMap, RejectsPointKindTypeAndWritableMismatch)
+{
+    const StProgram prog = parse_ok(kHvac);
+    std::vector<StIoMapEntry> entries = valid_entries();
+    entries[0].category = "VP";
+    entries[0].point_id = "BV-01"; /* SupplyTemp REAL không bind BV */
+    entries[2].writable = false;    /* output không bind Point read-only */
+    std::vector<StDiagnostic> diags;
+    EXPECT_FALSE(validate_io_map(prog, entries, &diags));
+    bool type_mismatch = false;
+    bool bad_direction = false;
+    for (const StDiagnostic& d : diags) {
+        if (d.code == st_diag_code::kIoMapTypeMismatch) type_mismatch = true;
+        if (d.code == st_diag_code::kIoMapBadDirection) bad_direction = true;
+    }
+    EXPECT_TRUE(type_mismatch);
+    EXPECT_TRUE(bad_direction);
+}
+
 TEST(StIoMap, RejectsUnknownVariable)
 {
     const StProgram prog = parse_ok(kHvac);

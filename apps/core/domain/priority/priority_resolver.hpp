@@ -37,6 +37,10 @@ public:
     bool set_do(int level, int ch, bool on);
     bool release_do(int level, int ch);
 
+    /* Validate không mutation cho publish batch all-or-nothing. */
+    bool can_set_ao(int level, int ch, float v) const;
+    bool can_set_do(int level, int ch) const;
+
     /* Mode điện thực tế MCU đã ACK: 0=0-10V, 1=4-20mA. Dùng để chặn
      * lệnh AO sai đơn vị/range trước khi ghi ra SHM. */
     void set_ao_modes(const uint8_t modes[KX_N_AO]);

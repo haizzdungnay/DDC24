@@ -19,6 +19,7 @@ static const char* point_source_name(PointSource source)
     switch (source) {
     case PointSource::IO: return "input";
     case PointSource::GRAPH: return "logic";
+    case PointSource::PROGRAM: return "program";
     case PointSource::WEB: return "manual";
     case PointSource::BACNET: return "bacnet";
     case PointSource::SCHEDULE: return "schedule";
@@ -165,9 +166,14 @@ void ScanLoop::step()
      * (PROGRAM_TASK_SCHEDULER_SPEC §4). */
     if (d_.st_sched) {
         st_io_stats_ = StIoBridgeStats{};
-        st_load_all_inputs(d_.st_sched, *d_.table, &st_io_stats_);
+        /* Activation phải được áp dụng trước capture: candidate mới không
+         * được chạy chu kỳ đầu bằng slot init hoặc process image của bản cũ. */
+        d_.st_sched->apply_pending_activations_at_boundary();
+        st_capture_due_inputs(d_.st_sched, *d_.table, clock.monotonic_ns,
+                              &st_io_stats_);
         st_tick_ = d_.st_sched->on_base_step(clock.monotonic_ns);
-        st_apply_all_outputs(d_.st_sched, d_.resolver, d_.table, &st_io_stats_);
+        PointWriter program_writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
+        st_apply_all_outputs(d_.st_sched, d_.resolver, &program_writer, &st_io_stats_);
     }
 
     if (d_.alarms)

@@ -21,6 +21,7 @@
 
 #include <cstdint>
 
+#include "graph/point_writer.hpp"
 #include "graph/point_table.hpp"
 #include "priority/priority_resolver.hpp"
 #include "st/st_scheduler.hpp"
@@ -29,25 +30,44 @@ namespace core {
 
 struct StIoBridgeStats {
     uint32_t inputs_loaded = 0;
+    uint32_t inputs_rejected = 0;
     uint32_t outputs_applied = 0;
     uint32_t outputs_rejected = 0;   /* non-finite hoặc ngoài dải */
     uint32_t bindings_unmapped = 0;  /* binding trỏ tới point không tồn tại */
+    uint32_t input_batches_committed = 0;
+    uint32_t input_batches_rejected = 0;
+    uint32_t output_batches_committed = 0;
+    uint32_t output_batches_rejected = 0;
+    uint64_t input_snapshot_generation = 0;
+    uint64_t output_commit_generation = 0;
 };
 
-/* Nạp đầu vào cho MỘT instance từ point table đã cập nhật trong tick này. */
-void st_load_inputs(StProgramInstance* inst, const PointTable& table, StIoBridgeStats* stats);
+/* Chụp rồi commit đầu vào cho MỘT instance. Không slot nào đổi nếu bất kỳ
+ * binding required nào unmapped, quality != GOOD, non-finite hoặc convert lỗi. */
+bool st_load_inputs(StProgramInstance* inst, const PointTable& table, uint64_t generation,
+                    StIoBridgeStats* stats);
+bool st_load_inputs(StProgramInstance* inst, const PointTable& table,
+                    StIoBridgeStats* stats);
 
-/* Đẩy đầu ra của MỘT instance vào PriorityResolver ở mức PRIO_LOCAL_LOGIC.
- * Chỉ gọi khi chu kỳ của instance đó chạy THÀNH CÔNG — chương trình fault
- * không được đẩy giá trị nửa vời ra trọng tài. */
-void st_apply_outputs(const StProgramInstance& inst, PriorityResolver* resolver,
+/* Preflight toàn bộ output của MỘT instance rồi publish. PointWriter là adapter
+ * chung cho VP và MB_RTU/EXT; AO/DO luôn qua PriorityResolver mức 5. */
+bool st_apply_outputs(const StProgramInstance& inst, PriorityResolver* resolver,
+                      PointWriter* writer, uint64_t generation, StIoBridgeStats* stats);
+bool st_apply_outputs(const StProgramInstance& inst, PriorityResolver* resolver,
                       PointTable* table, StIoBridgeStats* stats);
 
-/* Nạp đầu vào cho mọi instance đang RUNNING của mọi task. */
-void st_load_all_inputs(StScheduler* sched, const PointTable& table, StIoBridgeStats* stats);
+/* Đường ScanLoop: chỉ chụp Task đến hạn, sau safe-boundary activation. */
+bool st_capture_due_inputs(StScheduler* sched, const PointTable& table, uint64_t now_ns,
+                           StIoBridgeStats* stats);
 
-/* Đẩy đầu ra của mọi instance chạy thành công trong tick vừa rồi. */
-void st_apply_all_outputs(StScheduler* sched, PriorityResolver* resolver, PointTable* table,
+/* API tương thích test/supporting: nạp mọi instance RUNNING cho generation kế. */
+bool st_load_all_inputs(StScheduler* sched, const PointTable& table, StIoBridgeStats* stats);
+
+/* Batch của toàn Task: chỉ instance chạy thành công ở base-step hiện tại được
+ * publish; một proposal lỗi hủy toàn bộ batch và giữ contribution trước. */
+bool st_apply_all_outputs(StScheduler* sched, PriorityResolver* resolver, PointWriter* writer,
+                          StIoBridgeStats* stats);
+bool st_apply_all_outputs(StScheduler* sched, PriorityResolver* resolver, PointTable* table,
                           StIoBridgeStats* stats);
 
 } // namespace core

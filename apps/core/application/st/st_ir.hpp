@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "mkddc_shm.h"
 #include "st/st_program.hpp"
 #include "st/st_profile_generated.hpp"
 
@@ -148,7 +149,84 @@ struct StIrFbInstance {
     bool        retained = false;
 };
 
-enum class StPointKind : uint8_t { UI = 0, DI = 1, AO = 2, DO = 3, AV = 4, BV = 5, MSV = 6 };
+/* Runtime kind chi tiết nằm dưới ba category Product đã duyệt:
+ * LOCAL={UI,DI,AO,DO}, VP={AV,BV,MSV}, MB_RTU={EXT}. Giá trị wire 0..6 giữ
+ * nguyên; EXT dùng giá trị mới 7 nên artifact cũ vẫn byte-compatible. */
+enum class StPointKind : uint8_t {
+    UI = 0,
+    DI = 1,
+    AO = 2,
+    DO = 3,
+    AV = 4,
+    BV = 5,
+    MSV = 6,
+    EXT = 7,
+};
+
+enum class StPointCategory : uint8_t { LOCAL = 0, VP = 1, MB_RTU = 2 };
+
+inline StPointCategory st_point_category(StPointKind kind)
+{
+    switch (kind) {
+    case StPointKind::UI:
+    case StPointKind::DI:
+    case StPointKind::AO:
+    case StPointKind::DO: return StPointCategory::LOCAL;
+    case StPointKind::AV:
+    case StPointKind::BV:
+    case StPointKind::MSV: return StPointCategory::VP;
+    case StPointKind::EXT: return StPointCategory::MB_RTU;
+    }
+    return StPointCategory::LOCAL;
+}
+
+inline const char* st_point_category_name(StPointCategory category)
+{
+    switch (category) {
+    case StPointCategory::LOCAL: return "LOCAL";
+    case StPointCategory::VP: return "VP";
+    case StPointCategory::MB_RTU: return "MB_RTU";
+    }
+    return "LOCAL";
+}
+
+/* Ma trận type/direction Rev A. Point Catalog còn phải xác minh identity,
+ * unit, writable và generation tại Check/Commission; loader vẫn khóa những
+ * tổ hợp chắc chắn sai để artifact không tới được scan path. */
+inline bool st_point_kind_allows_output(StPointKind kind)
+{
+    return kind != StPointKind::UI && kind != StPointKind::DI;
+}
+
+inline bool st_point_kind_allows_type(StPointKind kind, StType type)
+{
+    switch (kind) {
+    case StPointKind::UI:
+    case StPointKind::AO:
+    case StPointKind::AV: return type == StType::REAL;
+    case StPointKind::DI:
+    case StPointKind::DO:
+    case StPointKind::BV: return type == StType::BOOL;
+    case StPointKind::MSV: return type == StType::UINT;
+    case StPointKind::EXT: return type != StType::TIME;
+    }
+    return false;
+}
+
+inline uint16_t st_point_kind_limit(StPointKind kind)
+{
+    switch (kind) {
+    case StPointKind::UI: return KX_N_UI;
+    case StPointKind::DI: return KX_N_DI;
+    case StPointKind::AO: return KX_N_AO;
+    case StPointKind::DO: return KX_N_DO;
+    case StPointKind::AV: return KX_N_AV;
+    case StPointKind::BV: return KX_N_BV;
+    case StPointKind::MSV: return KX_N_MSV;
+    case StPointKind::EXT: return KX_N_EXT;
+    }
+    return 0;
+}
 
 struct StIrIoBinding {
     uint16_t    slot = 0;

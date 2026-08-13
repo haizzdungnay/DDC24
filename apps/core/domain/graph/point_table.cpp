@@ -44,12 +44,16 @@ Point* PointTable::slot(PointId id)
 
 void PointTable::update_ext(const kx_ext_point_t* points, uint16_t count)
 {
-    const uint64_t t = now_ns();
+    const uint64_t fallback_ts = now_ns();
     const uint16_t valid_count = count < KX_N_EXT ? count : KX_N_EXT;
     for (uint16_t i = 0; i < valid_count; i++) {
         ext_[i].value = points[i].value;
         ext_[i].quality = static_cast<kx_quality_t>(points[i].quality);
-        ext_[i].ts_ns = t;
+        /* Giữ timestamp của producer để process image phân biệt sample mới,
+         * stale và offline; chỉ dùng clock local cho producer Rev cũ. */
+        ext_[i].ts_ns = points[i].sample_mono_ns > 0
+                            ? points[i].sample_mono_ns
+                            : fallback_ts;
         ext_[i].source = PointSource::MODBUS_RTU;
     }
     for (uint16_t i = valid_count; i < KX_N_EXT; i++) {
@@ -65,7 +69,9 @@ const Point* PointTable::slot(PointId id) const
 
 void PointTable::update_inputs(const IoSnapshot& io)
 {
-    const uint64_t t = now_ns();
+    /* ts_ns thuộc snapshot atomically read từ I/O process. Không thay bằng
+     * thời điểm consumer đọc vì như vậy sample đứng yên vẫn trông như mới. */
+    const uint64_t t = io.ts_ns > 0 ? io.ts_ns : now_ns();
     for (int i = 0; i < KX_N_UI; i++) {
         ai_[i].value   = io.ui_value[i];
         ai_[i].quality = static_cast<kx_quality_t>(io.ui_quality[i]);
