@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 1.3 |
+| Phiên bản | 1.4 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 32/32 kịch bản là baseline DoD; hiện có 2/32 record `BLOCKED`, 0/32 PASS |
-| Ngày | 2026-08-11 |
+| Ngày | 2026-08-13 |
 | Chủ quản | Verification Lead |
 | Người review | Product, System Architect, FE/BE/Core/FW/HW/Ops Leads |
 | Người phê duyệt | Verification Lead + Product Owner |
@@ -312,6 +312,56 @@ jitter/WCET/watchdog/IOP poll gap với `SCHED_FIFO`, chưa cắt điện eMMC/H
 chưa có executor/reviewer độc lập. Catalog giữ 2 record `BLOCKED`, 30 `NOT_RUN`,
 0/32 PASS.
 
+### 11.5 Evidence kỹ thuật host + trình duyệt thật P5 `EV-PROG-P5-500-506`
+
+Source `e58c745..14a9299` (chín commit `S5-A..E` + `TASK-PROG-506`) dựng bốn
+workspace FE thật (`PGM-01..04`) nối BE thật (không mock production): route
+`/eng/programming/*` sau cờ `PROGRAMMING_REV_A`; `GET /capabilities|/runtime`,
+Draft `PATCH` với `If-Match`/409-giữ-buffer, `StructuredFbdEditor` thật (không
+placeholder), `GET /point-catalog|/overrides|/audit|/operations`; Check→
+Commission với ack khớp đúng ba nhóm impact `PRESENT` (bao gồm câu RETAIN đúng
+UC-PROG-13) và re-auth; Restore/RetainReset qua `DangerZone`; timeout
+Commission/Restore đi `UNKNOWN_RECONCILING` rồi tự GET lại (không auto-replay
+POST). Go `internal/programming/{application,transport/http}` **17 test file
+mới/sửa** PASS; fresh CTest Release Modbus/BACnet/HMI **1002/1002** PASS; FE
+`vitest` **502/502**, `tsc --noEmit`/`eslint --max-warnings=0`/`vite build`
+(kèm gate drift error-catalog/API-client/FBD-contract) PASS.
+
+Riêng `TASK-PROG-506` (`14a9299`) thêm bằng chứng **trình duyệt Chrome thật**
+(Playwright, không jsdom) trên cả `desktop-chrome` và `mobile-chrome` (Pixel
+7): toàn bộ `UJ-PROG-01..08` và route cũ redirect (`VS-PROG-032`) chạy
+**2/2 PASS** mỗi project; `network-qa.spec.ts` **1/1 PASS**; full e2e suite
+**60/60 PASS** (không hồi quy từ đổi `playwright.config.ts`). Chuỗi FBD dùng
+đúng phím thật (`Insert`/`ArrowDown`/`Enter`/`Delete`/`Control+z`, không click
+chuột) để thêm 2 block, nối wire, xóa, hoàn tác — hỗ trợ trực tiếp nhánh
+"hoàn tất bằng bàn phím" của `VS-PROG-028` trên cả desktop và mobile viewport
+(chưa có contrast/axe scan và chưa xác nhận route HMI vắng mặt nên vẫn là hỗ
+trợ một phần, không phải toàn bộ scenario). `VS-PROG-032` khớp gần như trọn
+vẹn kịch bản đặc tả (redirect giữ `projectId`/tab + đổi tab không mất nội
+dung đang gõ) nhưng vẫn thiếu executor/reviewer độc lập theo §11 nên không đủ
+điều kiện tạo `TR-PROG-*`.
+
+Qua đúng phiên dựng `TASK-PROG-506` này, E2E tự phát hiện và buộc sửa hai lỗi
+ứng dụng thật (không phải lỗi test) — chi tiết ở `CHANGELOG.md` mục
+`TASK-PROG-506`: (1) đổi tab Thiết kế unmount mất nội dung ST chưa lưu, vi
+phạm thẳng đặc tả `DDD-FE-PROG-001` §0.1; (2) `DELETE_SELECTION` trong FBD gỡ
+phần tử đang focus khỏi DOM khiến trình duyệt rơi focus về `document.body`,
+cắt chuỗi bàn phím ngay sau đó (`Ctrl+Z` không tới được `onKeyDown`). Cả hai
+đã sửa và tái xác nhận PASS trong cùng commit.
+
+Evidence trên hỗ trợ một phần `VS-PROG-020` (bảng override — BE thật đã join
+`OverrideRegistry`/`App.ReadPoints`, nhưng E2E chạy với danh sách override
+rỗng nên chưa có bằng chứng trình duyệt cho actor/priority/TTL hiển thị),
+`VS-PROG-022` (RBAC — chỉ luồng `admin` được chạy qua E2E, chưa có ma trận
+viewer/operator), `VS-PROG-025` (copy VI/DDC-first — đúng trên mọi màn hình
+đã chụp, chưa quét i18n toàn bộ), `VS-PROG-026` (`SC-CORE-DEGRADED` — soát ở
+mức đọc code S5-E, chưa có E2E fault-injection thật). Không tạo Test Result
+nào vì thiếu executor/reviewer độc lập, chưa có target/HIL, và `VS-PROG-027`
+(soak 10 phút)/`VS-PROG-029` (power-loss RETAIN)/`VS-PROG-030` (HIL)/
+`VS-PROG-031` (usability `≥5` kỹ thuật viên BMS thật) vẫn hoàn toàn `NOT_RUN`
+— không có đường tắt nào cho các mục này. Catalog giữ nguyên **2/32 record
+BLOCKED, 0/32 PASS**; residual risk và release gate không đổi.
+
 ## 12. Blocker, revision và sign-off
 
 | Blocker | Owner | Điều kiện mở |
@@ -335,6 +385,7 @@ chưa có executor/reviewer độc lập. Catalog giữ 2 record `BLOCKED`, 30 `
 | 1.1 | 2026-08-11 | Đăng ký `EV-PROG-G3-300` cho phần host VS-012: prepared runtime/handle swap/LKG không cấp phát trong test, post-link không parser/compiler, targeted 84/84 và CTest 933/933; giữ scenario NOT_RUN vì chưa có 10.000 cycle/no-blocking trên Forlinx và reviewer độc lập |
 | 1.2 | 2026-08-11 | Đăng ký `EV-PROG-G3-301` cho phần host VS-009/015: profile Rev A 1/1/1, period 1/5/30 s, budget `<20%`, base-step sequence và no-catch-up; targeted 74/74, CTest 936/936; giữ scenario NOT_RUN vì chưa có 10.000 cycle/timing/watchdog/IOP trên Forlinx và reviewer độc lập |
 | 1.3 | 2026-08-13 | Đăng ký `EV-PROG-P4-403-405` cho phần host VS-004/011/015/024/029/030: operation/replay/restart, UDS/cutover/rollback/checkpoint recovery và negative fault PASS; fresh CTest 1002/1002 + Go/FE gates PASS. Giữ 2 record BLOCKED, 0/32 PASS vì target/HIL/power-cut/reviewer độc lập chưa có. |
+| 1.4 | 2026-08-13 | Đăng ký `EV-PROG-P5-500-506` cho P5 FE bốn workspace: source/host đầy đủ (Go 17 file test, CTest 1002/1002, FE vitest 502/502) + bằng chứng trình duyệt Chrome thật `TASK-PROG-506` (Playwright desktop+mobile, `UJ-PROG-01..08` 2/2 PASS mỗi project, FBD hoàn tất bằng phím thật, hai lỗi ứng dụng tự phát hiện+sửa ngay). Hỗ trợ một phần `VS-PROG-020/022/025/026/028/032`. Giữ nguyên 2 record BLOCKED, 0/32 PASS — chưa có executor/reviewer độc lập, target/HIL; `VS-PROG-027/029/030/031` vẫn NOT_RUN. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

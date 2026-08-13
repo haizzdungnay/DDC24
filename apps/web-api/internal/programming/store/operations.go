@@ -104,6 +104,40 @@ func (s *Store) ListRecoverableOperations(ctx context.Context, limit int) ([]Ope
 	return result, rows.Err()
 }
 
+// ListOperations — TASK-PROG-505, dùng cho tab "Phiên bản & Bảo trì" của
+// PGM-04. Mọi state (kể cả terminal), mới nhất trước, keyset pagination trên
+// `(updated_at_utc_ms, operation_id)` để không trôi trang khi có operation
+// mới xen giữa hai lần gọi — cùng bất biến với `ListAuditRecords`.
+func (s *Store) ListOperations(ctx context.Context, beforeUpdatedAtUTCMS int64, beforeOperationID string, limit int) ([]Operation, error) {
+	if limit < 1 || limit > 100 {
+		return nil, fmt.Errorf("operation limit không hợp lệ")
+	}
+	var rows *sql.Rows
+	var err error
+	if beforeUpdatedAtUTCMS > 0 {
+		rows, err = s.db.QueryContext(ctx, operationSelect+`
+			WHERE updated_at_utc_ms < ? OR (updated_at_utc_ms = ? AND operation_id < ?)
+			ORDER BY updated_at_utc_ms DESC, operation_id DESC LIMIT ?`,
+			beforeUpdatedAtUTCMS, beforeUpdatedAtUTCMS, beforeOperationID, limit)
+	} else {
+		rows, err = s.db.QueryContext(ctx, operationSelect+`
+			ORDER BY updated_at_utc_ms DESC, operation_id DESC LIMIT ?`, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]Operation, 0)
+	for rows.Next() {
+		operation, err := scanOperation(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, operation)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) ClaimOperation(ctx context.Context, params ClaimOperationParams) (Operation, bool, error) {
 	if err := validateText("leaseOwner", params.Owner, 1, 128); err != nil ||
 		params.Lease < time.Second || params.Lease > operationLeaseMaximum {

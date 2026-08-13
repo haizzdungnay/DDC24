@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.15 |
+| Phiên bản | 3.16 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
 | Cập nhật | 2026-08-13 |
 | Chủ quản | Verification Lead |
@@ -110,8 +110,9 @@ scenario tương ứng có Test Result được review.
 ## 6. Trace chi tiết từng requirement
 
 Status dùng năm trục: `D` documented, `I` implemented, `T` tested, `P` passed,
-`R` released. Hiện mọi dòng `D=YES`; bảy dòng ghi ở §0 có `I=YES`, 53 dòng còn lại
-`I=NO`; toàn bộ `T/P/R=NO` cho tới khi có Test Result/release hợp lệ.
+`R` released. Hiện mọi dòng `D=YES`; 22 dòng có `I=YES` (7 dòng BE/Core ghi ở
+§0 + `FE-101..115` sau `TASK-PROG-500..506`), 38 dòng còn lại `I=NO`; toàn bộ
+`T/P/R=NO` cho tới khi có Test Result/release hợp lệ.
 Source target là vị trí phải tạo/sửa, không phải claim code đã có.
 
 Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
@@ -129,21 +130,21 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `SYS-106` | SEC; BE; IFSPEC; RSK-012/015 | `66848a1` + `e8c289e` + `95b9388`: 11 route enforce role; `3e5281d`: duplicate/unknown fail-closed, 23 alias audit-secret reject và bundle audit no-source; full route matrix/re-auth/TLS target còn thiếu | 022/023 | Y/N/N/N/N |
 | `SYS-107` | SEC; BE; OPS; RSK-011 | `95b9388`: source-only ZIP/import Draft-only; `3e5281d`: hostile corpus 25 lớp, path NFC/metadata/bounds và snapshot 8 bảng zero-mutation; UI replacement/target/independent evidence còn thiếu | 021/023 | Y/N/N/N/N |
 | `SYS-108` | UX; FE; HMI boundary | Web routes + HMI route inspection | 028 | Y/N/N/N/N |
-| `FE-101` | UX; FE | `features/programming/routes/layout` | 002/028/032 | Y/N/N/N/N |
-| `FE-102` | UX; FE; LIFE; RSK-007 | ProgrammingContext/overview | 002/004/008/026 | Y/N/N/N/N |
-| `FE-103` | LANG; UX; FE | editor/problems | 003/006 | Y/N/N/N/N |
-| `FE-104` | LANG; UX; FE | `52dfb57`: `features/programming/fbd` có model/validator, registry 11 command, reducer history 50/read-only và component keyboard; chưa mount `PGM-02`, chưa Draft API/browser E2E | 005/006/028 | Y/N/N/N/N |
-| `FE-105` | CTRL; FE; IFSPEC; RSK-010 | mapping/point catalog client | 017/018 | Y/N/N/N/N |
-| `FE-106` | CTRL; FE | task UI/API model | 009 | Y/N/N/N/N |
-| `FE-107` | LIFE; UX; FE; RSK-007 | `TR-PROG-019-20260811-001 BLOCKED`: check/commission reducer chưa implement | 011/019/024/026 | Y/N/N/N/N |
-| `FE-108` | CTRL; UX; FE; RSK-004 | runtime/override view | 010/020 | Y/N/N/N/N |
-| `FE-109` | IFSPEC; FE; BE; RSK-010 | runtime/events/freshness | 018/026/027 | Y/N/N/N/N |
-| `FE-110` | IFSPEC; FE; BE; RSK-008/014 | `4a1e9f5`: generated error catalog/client sanitize fail-safe; Draft reducer/conflict flow còn thiếu | 024 | Y/N/N/N/N |
-| `FE-111` | UX; FE | i18n/a11y/styles | 025/028 | Y/N/N/N/N |
-| `FE-112` | UX; FE | Problems vs alarm adapter | 019/028 | Y/N/N/N/N |
-| `FE-113` | UX §5 PGM-03; FE; LIFE; RSK-007 | `TR-PROG-019-20260811-001 BLOCKED`: acknowledgement + impact reducer chưa implement | 011/019/031 | Y/N/N/N/N |
-| `FE-114` | UX §5 PGM-04, §22 DangerZone; SEC; RSK-012 | `runtime/service` danger zone + RequireRole | 022/031 | Y/N/N/N/N |
-| `FE-115` | UX §5 PGM-02, §16.2; DM; IFSPEC | `design/mapping` filter + point catalog client | 017/031 | Y/N/N/N/N |
+| `FE-101` | UX; FE | `ccdc408`+`14a9299`: `ProgrammingRoutes.tsx` 4 route thật + 3 redirect (`LegacyTabRedirect`); `layout/{ProgrammingLayout,ProgrammingHeader,ProgrammingContextBar}.tsx`; Chrome/Playwright `VS-PROG-032` desktop+mobile PASS | 002/028/032 | Y/Y/N/N/N |
+| `FE-102` | UX; FE; LIFE; RSK-007 | `e58c745`+`ccdc408`: `RuntimeService.GetRuntime` (Go, không fabricate `producerState`/`safeState`) + `overview/OverviewPage.tsx` đọc Active/Draft/Core thật | 002/004/008/026 | Y/Y/N/N/N |
+| `FE-103` | LANG; UX; FE | `5f96d43`: `design/editor/ProgramsTab.tsx` (SourceEditor ST) + `shared/ProblemsDrawer.tsx` | 003/006 | Y/Y/N/N/N |
+| `FE-104` | LANG; UX; FE | `52dfb57`: FBD model/validator/reducer (Task 201); `5f96d43`: mount thật vào `ProgramsTab` (không còn placeholder); `14a9299`: sửa mất focus bàn phím sau `DELETE_SELECTION`, Chrome/Playwright keyboard-only (Insert/Arrow/Enter/Delete/Ctrl+Z) PASS desktop+mobile | 005/006/028 | Y/Y/N/N/N |
+| `FE-105` | CTRL; FE; IFSPEC; RSK-010 | `628cebe`: BE `GET /point-catalog` join `App.ReadPoints`; `5f96d43`: `design/mapping/MappingTab.tsx` + `PointPickerDialog` | 017/018 | Y/Y/N/N/N |
+| `FE-106` | CTRL; FE | `5f96d43`: `design/task/ExecutionTab.tsx` (period 1000/5000/30000 ms, program order) | 009 | Y/Y/N/N/N |
+| `FE-107` | LIFE; UX; FE; RSK-007 | `0347efd`+`ca3e198`: `useCheckWorkflow`/`useCommissionWorkflow`, `commission/CheckCommissionPage.tsx` — timeout đi `UNKNOWN_RECONCILING`, không auto-replay POST | 011/019/024/026 | Y/Y/N/N/N |
+| `FE-108` | CTRL; UX; FE; RSK-004 | `0347efd`+`771efd9`: BE `GET /overrides` join `OverrideRegistry.Snapshot` + `runtime/RuntimeTab.tsx` | 010/020 | Y/Y/N/N/N |
+| `FE-109` | IFSPEC; FE; BE; RSK-010 | `771efd9`: `runtime/WatchTab.tsx` đọc `runtime/monitor` qua REST polling (P5 không dùng kênh event/WS riêng — As-Built khác giả định ban đầu); 503 thật fail-closed khi backend chưa implement, không fabricate freshness | 018/026/027 | Y/Y/N/N/N |
+| `FE-110` | IFSPEC; FE; BE; RSK-008/014 | `4a1e9f5`: generated error catalog/client; `5f96d43`: `useDraftWorkspace` với `If-Match`, 409 giữ nguyên buffer đang gõ (Draft reducer/conflict flow nay đã có) | 024 | Y/Y/N/N/N |
+| `FE-111` | UX; FE | Toàn bộ P5 dùng `pick()` VI/EN tại chỗ (không namespace file riêng); Chrome/Playwright desktop+mobile xác nhận copy tiếng Việt hiển thị đúng — chưa có contrast/axe scan độc lập | 025/028 | Y/Y/N/N/N |
+| `FE-112` | UX; FE | `5f96d43`: `ProblemsDrawer` dùng `programmingErrorCopy(pick, code)`, không hiển thị `messageKey` thô | 019/028 | Y/Y/N/N/N |
+| `FE-113` | UX §5 PGM-03; FE; LIFE; RSK-007 | `ca3e198`+`1961006`: `AcknowledgementChecklist` khớp đúng ba nhóm impact `PRESENT`; nhóm `retain` PRESENT dùng đúng câu UC-PROG-13 (sửa finding thật khi soát S5-E) | 011/019/031 | Y/Y/N/N/N |
+| `FE-114` | UX §5 PGM-04, §22 DangerZone; SEC; RSK-012 | `771efd9`: `runtime/DangerZone.tsx` (Restore/BundleImport/RetainReset) trong `RuntimeServicePage.tsx`, tách riêng khỏi Runtime/Watch; `RequireRole` chặn viewer | 022/031 | Y/Y/N/N/N |
+| `FE-115` | UX §5 PGM-02, §16.2; DM; IFSPEC | `628cebe`+`5f96d43`: `PointPickerDialog` lọc category/direction/writable + BE `GET /point-catalog` | 017/031 | Y/Y/N/N/N |
 | `BE-101` | DM; BE | `66848a1` + `e8c289e` + `95b9388`: lifecycle SQLite v4, Project/Draft/Revision/Check/Artifact/change/bundle và restart host; `TR-PROG-001-20260811-001 BLOCKED`: target/E2E độc lập còn thiếu | 001/019 | Y/N/N/N/N |
 | `BE-102` | DM; IFSPEC; BE; RSK-008 | `66848a1`: Draft ETag/CAS; `e8c289e`: Check receipt/lease; `95b9388`: bundle export/import receipt 24 giờ/replay/conflict; Core operation reconcile còn thiếu | 024 | Y/N/N/N/N |
 | `BE-103` | LANG; BE; IFSPEC | `e8c289e`: Check application/HTTP/worker, compiler thật, diagnostic và Artifact terminal; mapping/target acceptance/independent `VS-019` còn thiếu | 003/006/019 | Y/N/N/N/N |
@@ -194,7 +195,7 @@ Tên rút gọn map: `LANG=DDD-LANG-PROG-001`, `ART=IFSPEC-ART-PROG-001`,
 | Requirement có design/control | 60/60 = 100% documented |
 | Requirement có source target | 60/60 = 100% planned |
 | Requirement có scenario | 60/60 = 100% specified |
-| Requirement implemented end-to-end | 7/60 confirmed (`SYS-103`, `SYS-105`, `BE-106`, `BE-110`, `CORE-101`, `CORE-106`, `CORE-109`) |
+| Requirement implemented end-to-end | 22/60 confirmed (`SYS-103`, `SYS-105`, `BE-106`, `BE-110`, `CORE-101`, `CORE-106`, `CORE-109`, `FE-101..115`) |
 | Scenario có Test Result record | 2/32 (`BLOCKED`); PASS 0/32 |
 | Requirement passed/released | 0/60 |
 
@@ -271,6 +272,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 3.13 | 2026-08-11 | `TASK-PROG-301` hoàn tất profile/base-step scheduler tại `a831a0d`: bổ sung source partial CORE-102/108, NFR-103 và treatment RSK-002; targeted 74/74, CTest 936/936 host PASS. Tổng `I=Y` giữ 2/60 vì process image/bootstrap/production và 10.000 cycle `SCHED_FIFO` Forlinx còn thiếu; hai record BLOCKED, 0/32 PASS, mọi `T/P/R=N` |
 | 3.14 | 2026-08-13 | `TASK-PROG-402` hoàn tất `CORE-109 I=Y` tại `3ca5d22`: RETAIN stable identity/layout/version/full CRC, typed+FB codec, async atomic write, output-commit checkpoint, cold-init/status và scheduler/bootstrap wiring. Tổng `I=Y` thành 3/60; không tạo Test Result, `VS-PROG-029/030` Forlinx/HIL vẫn NOT RUN, 0/32 PASS và mọi `T/P/R=N`. |
 | 3.15 | 2026-08-13 | `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6` hoàn tất source `SYS-103`, `SYS-105`, `BE-106`, `CORE-106`: durable Commission/Restore/reconcile, exclusive safe-boundary owner, first-output/LKG rollback và checkpoint recovery. Tổng `I=Y` thành 7/60; không tạo Test Result, target/HIL/power-cut vẫn NOT RUN, 0/32 PASS và mọi `T/P/R=N`. |
+| 3.16 | 2026-08-13 | `TASK-PROG-500..506` tại `e58c745`..`14a9299` hoàn tất source **toàn bộ `FE-101..115`** (15/15): bốn workspace nối BE thật, Draft ETag/conflict, Check/Commission/Restore reconcile, error catalog, acknowledgement/impact, DangerZone, point-catalog filter; Chrome/Playwright thật desktop+mobile PASS `UJ-PROG-01..08` (`EV-PROG-P5-500-506`, VVP §11.5). §10.1 Evidence đổi từ `MISSING` sang trích dẫn evidence host+browser cho cả 8 journey, giữ rõ phần vẫn `MISSING` (`VS-PROG-031` usability người thật và các trục cần target/HIL). Tổng `I=Y` thành **22/60**; không tạo Test Result nào, 0/32 PASS và mọi `T/P/R=N` — bằng chứng browser không tự nâng `T`. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -290,14 +292,14 @@ Product Requirement → UJ-PROG-* → Requirement (SRS) → Design/UI → Source
 
 | Journey | Workspace | Requirement chính | Design | Scenario | Evidence |
 |---|---|---|---|---|---|
-| `UJ-PROG-01` | `PGM-01` | SYS-108; FE-101/102/109 | UX §3, §5, §16.1; FE §2 | VS-001/002/026/031 | MISSING |
-| `UJ-PROG-02` | `PGM-02` tab Chương trình | FE-101/103/104; CORE-101 | UX §5, §16.2; LANG §4–§5 | VS-003/005/006/007/031 | MISSING |
-| `UJ-PROG-03` | `PGM-02` tab Điểm & Ánh xạ | FE-105/115; BE-109 | UX §16.2; DM §3.5 | VS-017/018/031 | MISSING |
-| `UJ-PROG-04` | `PGM-02` tab Thực thi | FE-106; CORE-102/108 | UX §5; CTRL §3 | VS-009/016/031 | MISSING |
-| `UJ-PROG-05` | `PGM-03` giai đoạn Kiểm tra | FE-107/112; BE-103/104/105 | UX §5, §16.3; BE §3 | VS-006/019/031 | MISSING |
-| `UJ-PROG-06` | `PGM-03` giai đoạn Vận hành | SYS-103; FE-107/113; BE-106; CORE-106 | UX §16.3; LIFE §5–§7 | VS-004/011/014/015/020/029/031 | MISSING |
-| `UJ-PROG-07` | `PGM-04` Runtime, Theo dõi | FE-108/109; BE-109; CORE-110 | UX §16.4; FWSOM §9 | VS-010/013/018/027/031 | MISSING |
-| `UJ-PROG-08` | `PGM-04` Phiên bản & Bảo trì | SYS-107; FE-114; BE-108; CORE-109 | UX §16.4; LIFE §8–§9; SEC §8 | VS-011/021/023/029/031 | MISSING |
+| `UJ-PROG-01` | `PGM-01` | SYS-108; FE-101/102/109 | UX §3, §5, §16.1; FE §2 | VS-001/002/026/031 | `EV-PROG-P5-500-506` (host+Chrome, chưa review độc lập); `VS-PROG-031` usability người thật vẫn MISSING |
+| `UJ-PROG-02` | `PGM-02` tab Chương trình | FE-101/103/104; CORE-101 | UX §5, §16.2; LANG §4–§5 | VS-003/005/006/007/031 | `EV-PROG-P5-500-506`; `VS-PROG-031` MISSING |
+| `UJ-PROG-03` | `PGM-02` tab Điểm & Ánh xạ | FE-105/115; BE-109 | UX §16.2; DM §3.5 | VS-017/018/031 | `EV-PROG-P5-500-506`; `VS-PROG-031` MISSING |
+| `UJ-PROG-04` | `PGM-02` tab Thực thi | FE-106; CORE-102/108 | UX §5; CTRL §3 | VS-009/016/031 | `EV-PROG-P5-500-506`; `VS-PROG-031` MISSING |
+| `UJ-PROG-05` | `PGM-03` giai đoạn Kiểm tra | FE-107/112; BE-103/104/105 | UX §5, §16.3; BE §3 | VS-006/019/031 | `EV-PROG-P5-500-506`; `VS-PROG-031` MISSING |
+| `UJ-PROG-06` | `PGM-03` giai đoạn Vận hành | SYS-103; FE-107/113; BE-106; CORE-106 | UX §16.3; LIFE §5–§7 | VS-004/011/014/015/020/029/031 | `EV-PROG-P5-500-506` cho phần Commission E2E; `VS-PROG-014/015/020/029/031` cần target/HIL/người thật, vẫn MISSING |
+| `UJ-PROG-07` | `PGM-04` Runtime, Theo dõi | FE-108/109; BE-109; CORE-110 | UX §16.4; FWSOM §9 | VS-010/013/018/027/031 | `EV-PROG-P5-500-506` cho phần Runtime tab E2E; `VS-PROG-013/027/031` cần soak/target/người thật, vẫn MISSING |
+| `UJ-PROG-08` | `PGM-04` Phiên bản & Bảo trì | SYS-107; FE-114; BE-108; CORE-109 | UX §16.4; LIFE §8–§9; SEC §8 | VS-011/021/023/029/031 | `EV-PROG-P5-500-506` cho phần Restore E2E; `VS-PROG-021/023/029/031` cần target/security corpus review/người thật, vẫn MISSING |
 
 Bốn requirement mới của Amendment A1 gắn journey như sau: `FE-113` → `UJ-PROG-06`;
 `FE-114` → `UJ-PROG-08`; `FE-115` → `UJ-PROG-03`; `NFR-109` và `NFR-110` phủ cả

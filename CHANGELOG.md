@@ -8,6 +8,362 @@
 
 ## [Unreleased]
 
+### Changed — Programming P5: đồng bộ governance docs sau TASK-PROG-500..506, candidate v2.36 (2026-08-13)
+
+Cập nhật năm hồ sơ trong mẫu số 22 để phản ánh đúng As-Built P5 (nguồn:
+commit `e58c745`..`14a9299`) và re-pin candidate — không đổi requirement,
+design quyết định hay Test Result:
+
+- `PLAN-PROG-053` v0.50: §5.5 P5 7/7 100% DONE (source/host/browser DoD),
+  tổng 42/49 85,7%; §5.9 thêm trạng thái S5-A..E DONE + S5-F BLOCKED (đúng
+  thiết kế, không tắt); §9.2 tách dòng G4/P4 khỏi P5; §12 thêm sáu mục lịch
+  sử `0.45..0.50` theo từng slice.
+- `DDD-FE-PROG-001` v0.9: viết lại §0/§11/§15/§17/tự kiểm theo source thật
+  (bốn workspace, FBD mount thật, hai lỗi ứng dụng phát hiện+sửa qua
+  `TASK-PROG-506`) — không còn mô tả P5 như kế hoạch chưa làm.
+- `VVP-PROG-001` v1.4: thêm §11.5 `EV-PROG-P5-500-506` — host+browser Chrome
+  thật hỗ trợ một phần `VS-PROG-020/022/025/026/028/032`; giữ nguyên 2/32
+  record BLOCKED, 0/32 PASS (không tạo Test Result vì thiếu executor/
+  reviewer độc lập và target/HIL).
+- `RSK-PROG-001` v2.0: thêm §5.14 treatment `TASK-PROG-500..506` cho
+  RSK-007/008/014/016; giữ 16/16 Open, mọi residual không đổi.
+- `TRACE-PROG-001` v3.16: nâng **`FE-101..115` I=Y** (15/15) với commit/file
+  cụ thể; tổng `I=Y` 7/60→22/60; §10.1 Evidence đổi từ `MISSING` sang
+  `EV-PROG-P5-500-506` cho cả tám journey, giữ rõ phần còn thiếu
+  (`VS-PROG-031` usability người thật, target/HIL). `T/P/R` vẫn `N` toàn bộ.
+- `PROG-P0-CANDIDATE-MANIFEST` v3.47: ghi bổ sung PR #168/merge `4692d5a`
+  (candidate v2.35, trước đó bỏ sót) rồi phát hành candidate **v2.36** ghim
+  lại 5/22 hồ sơ đổi ở trên; 17/22 còn lại byte-identical.
+
+Verification: `python3 scripts/docs_iso_harness.py --expect` PASS;
+`python3 scripts/trace_bidirectional_check.py` PASS (60/60 alias, 32/32
+scenario); `python3 scripts/candidate_pin_check.py` PASS 22/22; `git diff
+--check` sạch.
+
+Refs: TASK-PROG-500..506, Plan 53 §5.5/§5.9, VVP §11.5, candidate v2.36.
+
+### Fixed — Programming P5 S5-E: soát ba kịch bản fault xuyên suốt (2026-08-13)
+
+Soát lại `SC-CORE-DEGRADED`/`SC-OP-FAILED`/`SC-RETAIN-RESET` trên cả bốn
+workspace đã dựng ở S5-A..D (Plan 53 §5.9 S5-E). Phần lớn đã đúng hành vi từ
+khi dựng từng workspace vì bám sát contract fail-closed của BE (không phải
+việc tách riêng cần code mới):
+
+- `SC-CORE-DEGRADED`: `ProgrammingContextBar` (mọi trang) + `CoreSafeStatePanel`
+  (PGM-01) + `RuntimeTab`/`DangerZone` (PGM-04) đều đọc `runtime.producerState`
+  thật. PGM-03 tự khoá Commission khi Core suy giảm/mất kết nối vì
+  `activeOverrides`/`cutover` impact rơi về `UNAVAILABLE` mặc định trong
+  `GetRevisionChanges` (Go) bất cứ khi nào `RuntimeImpactProvider` lỗi —
+  không cần thêm cờ nào ở FE để chặn.
+- `SC-OP-FAILED`: banner Check/Commission/Restore chỉ ghi "bản đang chạy
+  không đổi" khi `keepsRunningRevision=true` từ server — đã đúng từ
+  TASK-PROG-501/504/505, xác nhận lại không có nhánh nào tự suy `true`.
+- `SC-RETAIN-RESET`: sửa một finding thật khi soát — `AcknowledgementChecklist`
+  của PGM-03 dùng nhãn chung "Trạng thái lưu (RETAIN) sẽ khởi tạo lại" cho
+  MỌI nhóm impact `retain` PRESENT, thay vì ngôn ngữ điều khiển bắt buộc của
+  UC-PROG-13 ("Trạng thái điều khiển đã lưu không còn tương thích...") và
+  không liệt kê biến RETAIN bị ảnh hưởng. Sửa `CheckCommissionPage.tsx`:
+  nhóm `retain` PRESENT giờ dùng đúng câu UC-PROG-13 và liệt kê
+  `impact.retain.items` ngay dưới ô xác nhận. `RetainResetDialog` (PGM-04,
+  dựng ở TASK-PROG-505) đã đúng ba quy tắc §16.4.1 từ đầu (không mở khi chưa
+  có danh sách biến — hiện hiện thông báo rõ ràng thay vì mở form; fail-closed
+  khi 503; không kết quả lạc quan).
+
+Test/evidence: `npx tsc --noEmit` sạch; `npm run lint` sạch; `npx vitest
+--run --environment jsdom src` → 61 file/502 test PASS (không đổi số — bản
+sửa chỉ đổi copy/hiển thị, các test hiện có chọn theo `role=checkbox` nên
+không cần sửa lại).
+
+Refs: Plan 53 §5.9 S5-E, UX-WEB-PROG-001 §6.2, UC-PROG-13.
+
+### Added — Programming P5 TASK-PROG-506: Playwright E2E bốn workspace + tám journey (2026-08-13)
+
+`apps/web-ui/e2e/programming.spec.ts` (mới) — nghiệm thu Chrome thật (không
+jsdom) cho toàn bộ chuỗi UJ-PROG-01..08 (Tổng quan → Thiết kế ST+FBD+ánh
+xạ+thực thi → Kiểm tra → Đưa vào vận hành → Runtime → Khôi phục) và route cũ
+`programs/mapping/task` redirect (VS-PROG-032), chạy trên cả `desktop-chrome`
+và `mobile-chrome` (Pixel 7, `playwright.config.ts` thêm project mới +
+`VITE_PROGRAMMING_REV_A=1` cho dev server e2e). `installProgrammingMocks()`
+mock `/api/v1/programming/**` bằng `page.route()` đối chiếu đúng shape response
+Go thật (không bịa dữ liệu); các route contract-only còn lại (traces,
+retain/reset...) trả 503 đúng hành vi backend hiện tại. Test kiểm cả
+Console error và failed request ngoài dự kiến trong suốt hành trình.
+
+Hai lỗi ứng dụng thật phát hiện qua chính E2E này, sửa trong cùng phiên
+(không chỉ ghi finding):
+
+- **Mất nội dung đang gõ khi đổi tab** (`design/DesignWorkspacePage.tsx`):
+  ba tab Thiết kế dùng `{tab === 'X' && <Tab/>}`, unmount/remount
+  `SourceEditor`/`MappingTab`/`ExecutionTab` mỗi lần đổi tab — xoá buffer
+  chưa lưu của ST editor, vi phạm thẳng ràng buộc "đổi tab không mất nội
+  dung đang gõ" (DDD-FE-PROG-001 §0.1 ràng buộc 1). Sửa sang mount cố định,
+  chỉ ẩn bằng CSS: `<div hidden={tab !== 'X'}><Tab/></div>` cho cả ba tab.
+  `DesignWorkspacePage.test.tsx` cập nhật thêm mock `getProgrammingPointCatalog`
+  ở cả ba `mockImplementation` (vì `MappingTab` giờ luôn mount).
+- **Mất focus bàn phím sau khi xóa phần tử FBD** (`fbd/StructuredFbdEditor.tsx`):
+  `DELETE_SELECTION` gỡ port/node/wire đang được chọn khỏi DOM; nếu đúng
+  phần tử đó đang giữ focus bàn phím thì trình duyệt tự đưa focus về
+  `document.body` (hành vi chuẩn khi phần tử focus bị gỡ khỏi cây), cắt đứt
+  chuỗi lệnh bàn phím tiếp theo (vd. Ctrl+Z sau Delete không còn tới được
+  `onKeyDown` của editor) — vi phạm yêu cầu "hoàn tất bằng bàn phím"
+  (DDD-FE-PROG-001 §0.1). Sửa bằng cách thêm `sectionRef`+`tabIndex={-1}`
+  trên `<section>` gốc; `useEffect` theo dõi `state.selection` giờ thu hồi
+  focus về section khi `document.activeElement` rơi về `body` (chỉ khi thật
+  sự mất focus — không cướp focus lúc mount). Kịch bản E2E xác nhận bằng
+  chuỗi bàn phím thật (không click chuột): `Insert` thêm 2 block AND,
+  `ArrowDown`×3 chọn port nguồn, `Enter` bắt đầu nối, `ArrowDown` chọn port
+  đích, `Enter` hoàn tất nối, `Delete` xóa (kéo theo wire), `Ctrl+Z` hoàn
+  tác — khôi phục đúng wire vừa xóa.
+
+Ngoài hai lỗi ứng dụng trên, còn ba lỗi nằm trong chính test spec (không
+phải ứng dụng), sửa cùng lúc: mất phiên mock khi `page.goto()` (AUTH_MODE=mock
+giữ phiên trong React state, không cookie — chuyển sang điều hướng
+client-side `pushState`+`popstate` theo đúng tiền lệ `pa3-dashboard.spec.ts`);
+ngôn ngữ mặc định trình duyệt mới là `en` (khoá `mkddc-lang=vi` qua
+`page.addInitScript`); locator `getByText('PASSED')` sai vì
+`DesignWorkspacePage.tsx` không render chữ "PASSED" thô (chỉ có ở
+`CheckCommissionPage.tsx` qua `StatusBadge`) — sửa lại đúng banner
+"Kiểm tra đạt. Bản đang chạy không đổi.".
+
+`RealtimeProvider` (App.tsx) mount vô điều kiện ở gốc app kể cả `/login` và
+mở `ws://.../api/v1/ws/monitor` thật — không có backend Go trong e2e này nên
+bắt tay WS thất bại, log console error lặp theo backoff, không liên quan gì
+P5. Mock bằng `page.routeWebSocket()` (chấp nhận kết nối, không forward server
+thật) thay vì lọc lỗi console, giữ assertion "không console error lạ" có ý
+nghĩa cho lỗi P5 thật.
+
+Test/evidence: `npx playwright test e2e/programming.spec.ts` → 2/2 PASS trên
+cả `desktop-chrome` và `mobile-chrome` (4/4); `npx playwright test
+e2e/network-qa.spec.ts` → 1/1 PASS (bắt buộc vì P5 đổi trang có kết nối
+mạng); full `npx playwright test` (60 spec khác + 2 Programming) → 60/60 PASS,
+không hồi quy từ đổi `playwright.config.ts`; `npx vitest --run --environment
+jsdom src/features/programming/fbd` → 15/15 PASS sau fix focus.
+
+Refs: TASK-PROG-506, Plan 53 §5.9 S5-F chuẩn bị, DDD-FE-PROG-001 §0.1,
+UX-WEB-PROG-001 §14 UX-T-002.
+
+### Added — Programming P5 TASK-PROG-505: workspace Runtime & Bảo trì (S5-D) (2026-08-13)
+
+**BE gap-fill: `GET /operations` (list).** Commit riêng trước đó
+(`store.ListOperations` + `RuntimeService.ListOperations`, mọi state kể cả
+terminal, cursor HMAC newest-first) — dùng cho tab "Phiên bản & Bảo trì".
+
+**FE — `RuntimeServicePage.tsx` (PGM-04, `UJ-PROG-07/08`).** Ba tab
+`?tab=runtime|watch|service` (mặc định `runtime`, cũng là đích redirect
+`/runtime` không tab theo UX §11.1) cộng `DangerZone` cố định dưới cùng:
+
+- **Runtime**: `RuntimeSummary` + `CoreConnectionPanel` dùng lại
+  `useProgrammingRuntimeContext()` đã có từ TASK-PROG-500 (không poll trùng).
+  `TaskRuntimeTable` hiện `—` trung thực cho chu kỳ gần nhất/lớn nhất/số lần
+  quá giờ — **ba trường này không có trong STATUS payload UDS v1**
+  (`RuntimeOperationSnapshot` chỉ mang producer/active/lkg/overrideIds, không
+  có metric Task); đây là khoảng hở Core cần một action UDS mới, ghi rõ trong
+  UI thay vì bịa số.
+- **Theo dõi**: `OnlineWatch`/`TracePanel` gọi THẬT `GET /runtime/monitor`
+  (`useProgrammingRuntimeMonitor`, không mock) — nhận đúng `503
+  PRG-ERR-UNAVAILABLE-001` từ backend hiện tại vì UDS chưa có action mang
+  sample runtime theo Point, và hiện trạng thái "chưa sẵn sàng" phản ánh
+  đúng lỗi đó (Network tab thấy request thật, không phải giả lập).
+  `POST/GET/DELETE /runtime/traces` cùng lý do, chưa nối query riêng.
+- **Phiên bản & Bảo trì**: `PreviousVersionsDrawer` giới hạn đúng dữ liệu có
+  AUTHORITY thật — Active + LKG từ `GET /runtime`, lịch sử operation từ
+  `GET /operations` mới nối; **không có route "liệt kê mọi Revision của
+  Project"** trong hợp đồng 25-route hiện hành (chỉ `GET /revisions/{id}` đơn
+  lẻ), nên chọn khôi phục một Revision bất kỳ ngoài LKG là khoảng hở BE cần
+  route mới — ghi rõ trong code, không suy đoán danh sách giả.
+  `AuditTimeline` dùng `GET /audit` (đã có từ TASK-PROG-500).
+- **DangerZone**: `RestoreDialog` khôi phục về LKG dùng ĐÚNG đường ống
+  operation/reconcile như Commission (`useRestoreWorkflow.ts` — re-auth qua
+  `AuthProvider.login` thật, idempotency key một lần qua `sessionStorage`,
+  poll `GET /operations/{id}`, `UNKNOWN_RECONCILING` có nút "Kiểm tra lại
+  trạng thái", không tự POST lại). `BundleImportPanel` đọc file `.zip` thật,
+  tính SHA-256 bằng `crypto.subtle.digest` client-side, gọi
+  `POST /bundles/import` thật (route đã có từ TASK-PROG-206) — nhập KHÔNG tự
+  Active. `RetainResetDialog` gọi thật `POST /retain/reset` (vẫn 503 —
+  BE-Core chưa có cơ chế phát `confirmationToken` một-lần theo
+  DDD-SEC-PROG-001 §4) và hiện đúng artboard "bị khóa" của UX §16.4.1 khi
+  nhận `503`: không có kết quả lạc quan, không ô xác nhận giả trước khi có
+  danh sách biến RETAIN thật. Viewer thấy cả ba mục ở chế độ đọc kèm lý do
+  thiếu quyền — không thấy một dãy nút bị vô hiệu hóa (UX §16.4).
+
+**Test/evidence.** Go: `go build`/`go vet` sạch; `go test ./... -count=1` 18
+package PASS, gồm test mới `TestRuntimeServiceListOperationsNewestFirstIncludesTerminal`
+(chạy Commission thật tới SUCCEEDED, xác nhận list trả đúng Kind/State). FE:
+`npx tsc --noEmit` sạch; `npm run lint` sạch; `npx vitest --run --environment
+jsdom src` → 61 file/**502** test PASS (499 cũ + 3 mới: viewer không thấy nút
+DangerZone thật, admin khôi phục LKG re-auth thật + POST một lần + đọc ngược
+`actualActiveRevisionId`, tab Theo dõi gọi `GET /runtime/monitor` thật và
+hiện đúng "chưa sẵn sàng" khi 503). `npm run build` PASS (contract drift
+25/25, error catalog 20/99).
+
+**Khoảng hở còn mở, ghi rõ để không nhận nhầm là đã xong:** `GET
+/runtime/monitor`, `POST/GET/DELETE /runtime/traces`, `POST /retain/reset`
+cần Core bổ sung action UDS mới (metric Task, sample theo Point,
+`confirmationToken` một-lần) — ngoài phạm vi sửa tối thiểu của P5, thuộc P3/
+P4/Core. Danh sách Revision lịch sử đầy đủ (ngoài Active/LKG) cần một route
+BE mới. Flag Web `PROGRAMMING_REV_A` và FE `VITE_PROGRAMMING_REV_A` giữ mặc
+định TẮT; `RELEASE_READY` không đổi.
+
+Refs: TASK-PROG-505, Plan 53 §5.9 S5-D, UX-WEB-PROG-001 §5 PGM-04/§16.4/§22.
+
+### Added — Programming P5 TASK-PROG-504: workspace Kiểm tra & Đưa vào vận hành (S5-C) (2026-08-13)
+
+**BE gap-fill: `GET /overrides`.** Route thứ ba (sau capabilities/runtime và
+point-catalog) vẫn rơi 503 stub dù `ImpactPanel`/`ActiveOverrideTable` của
+PGM-03 cần bảng override chi tiết (Point/actor/giá trị/TTL) — impact bốn nhóm
+ở `GET /revisions/{from}/changes/{to}` chỉ liệt kê **ID**, không đủ cho bảng
+review. `application/overrides.go` (interface `OverrideProvider`) +
+`internal/app/programming_pointcatalog.go#ListActiveOverrides` (cùng adapter
+với point-catalog, tái dùng `App.ReadPoints`): chỉ chiếu Point đang thật sự
+`Forced=true`; TTL/actor ưu tiên lấy từ `OverrideRegistry.Snapshot()` (nhớ
+actor đã force qua chính web-api này), rơi về `OverrideExpiresInS` tự thân của
+Point khi registry không có, và **cố ý bỏ trống `effectivePriority`** vì
+`PointDTO.Priority` là chuỗi mô tả nguồn (vd. "Virtual Point"), không phải mức
+1..5 — gán nhầm sẽ là bịa dữ liệu ưu tiên arbitration.
+
+**Phát hiện quan trọng khi khảo sát: `GET /revisions/{from}/changes/{to}`
+(TASK-PROG-206) đã tính đủ bốn nhóm impact bằng dữ liệu THẬT**, gồm
+`activeOverrides`/`cutover` đọc trực tiếp Core qua `RuntimeImpactProvider` —
+`NewOperationService` đã tự gọi `Projects.SetRuntimeImpactProvider(service)`
+từ P4. Nghĩa là S5-C không cần gap-fill BE cho impact/readiness — chỉ thiếu
+`GET /overrides` cho bảng chi tiết.
+
+**FE — `CheckCommissionPage.tsx` (PGM-03, `UJ-PROG-05/06`).** Nhận
+`revisionId/checkId` qua `navigate(..., {state})` từ nút "Mở Kiểm tra & Đưa
+vào vận hành" của PGM-02 (S5-B) — vào thẳng bằng URL/reload không có gì để
+tin, trang yêu cầu quay lại Thiết kế chạy Kiểm tra lại (không có route nào
+trả "Check mới nhất của Project" để suy đoán thay, và suy đoán là đúng thứ bị
+cấm). Bốn panel: kết quả Check (ProblemsDrawer dùng lại), thay đổi so với bản
+đang chạy, ảnh hưởng bốn nhóm (đúng `NONE/PRESENT/UNAVAILABLE`, `UNAVAILABLE`
+khoá nút Đưa vào vận hành ngay cả khi Check `PASSED`), bảng override còn hiệu
+lực. `useCommissionWorkflow.ts`: re-auth bắt buộc dùng lại
+`AuthProvider.login` thật (không tạo endpoint riêng); idempotency key tạo
+đúng một lần khi bấm xác nhận, giữ qua `sessionStorage` theo revisionId; POST
+Commission đúng một lần rồi chỉ poll `GET /operations/{id}` — timeout/lỗi
+mạng chuyển `UNKNOWN_RECONCILING` với nút "Kiểm tra lại trạng thái", không
+bao giờ tự POST lại. Modal xác nhận (`shared/components/Modal` có sẵn) chặn
+đóng bằng `Esc`/backdrop khi đang gửi. Số ô xác nhận khớp **đúng** số nhóm
+`PRESENT` — không phải bốn ô cố định (IFSPEC-PROG-001 §6.1.1).
+
+**Test/evidence.** Go: `go build`/`go vet` sạch; `go test ./... -count=1` 18
+package PASS, gồm test mới `TestListActiveOverridesOnlyReturnsForcedPointsAndNeverFabricatesActor`
+(chỉ Point bị force, actor rỗng khi registry không biết — không bịa). FE:
+`npx tsc --noEmit` sạch; `npm run lint` sạch; `npx vitest --run --environment
+jsdom src` → 60 file/**499** test PASS (497 cũ + 2 mới: ô xác nhận khớp đúng
+2 nhóm PRESENT + Commission POST đúng một lần sau re-auth + đọc ngược
+`actualActiveRevisionId`, và `UNAVAILABLE` khoá nút dù Check PASSED). `npm run
+build` PASS (contract drift 25/25, error catalog 20/99).
+
+Refs: TASK-PROG-504, Plan 53 §5.9 S5-C, IFSPEC-PROG-001 §6.1/§6.1.1,
+UX-WEB-PROG-001 §5 PGM-03/§16.3/§22.
+
+### Added — Programming P5 TASK-PROG-501/502/503: workspace Thiết kế (S5-B) (2026-08-13)
+
+**FE.** Hoàn thiện PGM-02 (`DesignWorkspacePage`) — một workspace, ba tab dùng
+chung một Draft/ETag đúng ràng buộc DDD-FE-PROG-001 §0.1:
+
+- `design/useDraftWorkspace.ts`: `useDraftWorkspace(projectId)` nạp
+  `GET /projects/{projectId}` (có `draft` content nhờ gap-fill BE ở commit
+  trước), `save(operations)` gửi đúng một batch `PATCH .../draft` với
+  `If-Match`, cập nhật `document`/`etag` từ CHÍNH đọc-ngược của server
+  (`response.resource.content`) — không optimistic tự suy. `409` giữ
+  `conflict{expected,actual}` mà KHÔNG xoá buffer đang gõ ở component gọi.
+  `useCheckWorkflow(projectId)`: seal Revision → tạo Check → poll
+  `GET /checks/{id}` mỗi 1,5 s tới trạng thái cuối; không tự retry khi lỗi —
+  người dùng phải chủ động bấm lại (UX §7/§18).
+- `design/editor/ProgramsTab.tsx` (TASK-PROG-501+502): `ApplicationTree` +
+  `SourceEditor` ST (textarea keyboard-first, buffer cục bộ tách khỏi
+  `document` đã lưu) + **`StructuredFbdEditor` mount thẳng cho Program FBD**
+  — dùng nguyên model/reducer/component đã có ở `features/programming/fbd/`
+  (`TASK-PROG-201`), không viết model/reducer/shortcut thứ hai. FBD lưu qua
+  cùng `replaceProgramSource` với `source` là `canonicalFbdJson(document)`
+  (chuỗi JSON) — khớp đúng kiểu `Source string` mà
+  `application/draft.go#replaceProgramSource` yêu cầu bất kể ngôn ngữ. Thêm
+  chương trình mới gửi MỘT batch `[upsertProgram, setTask]` vì
+  `validateDraftDocument` (Go) buộc `task.programOrder` chứa đúng tập
+  `programId` hiện có — tách hai lời gọi sẽ luôn fail ở nửa đường.
+- `design/mapping/MappingTab.tsx` (TASK-PROG-503): bảng Variable↔Point +
+  `PointPickerDialog` lọc theo category/hướng/khả năng ghi, gọi
+  `GET /point-catalog` thật (xem gap-fill BE). Quality sáu mức hiển thị
+  nguyên văn từ catalog, không chuẩn hoá `OFFLINE/STALE/UNKNOWN` về giá trị
+  giả. Ánh xạ mới gửi batch `[upsertVariable, upsertBinding]` vì binding luôn
+  cần một Variable đã tồn tại (`DM-PROG-001` §3.5).
+- `design/task/ExecutionTab.tsx` (TASK-PROG-503): đúng một Task
+  `Control_Main`, chu kỳ chỉ `1/5/30 s` (select, không cho gõ tự do), sắp thứ
+  tự Program bằng nút lên/xuống (bàn phím-hoàn-toàn, không kéo-thả chuột).
+- `shared/ProblemsDrawer.tsx`: dùng chung cho ba tab của PGM-02 (và PGM-03 ở
+  TASK-PROG-504); diagnostic hiển thị qua `programmingErrorCopy(code)` — không
+  in thẳng `messageKey` nội bộ ra người dùng.
+- `DesignWorkspacePage.tsx`: gắn tab-error-badge (đếm diagnostic theo
+  program/binding/khác), banner 409 (Tải lại / Giữ bản đang gõ), banner kết
+  quả Check (giữ đúng "bản đang chạy không đổi" bất kể PASS/FAIL), nút "Mở
+  Kiểm tra & Đưa vào vận hành" chỉ bật khi Check `PASSED`.
+
+**Test/evidence.** `npx tsc --noEmit` sạch; `npm run lint` sạch; `npx vitest
+--run --environment jsdom src` → 59 file/**497** test PASS (494 cũ + 3 mới:
+save batch upsertProgram+setTask đúng thứ tự, 409 giữ buffer + banner, FBD
+program mount `StructuredFbdEditor` thật — không placeholder). `npm run
+build` PASS (contract drift 25/25, error catalog 20/99, FBD self-test 10/10).
+Chrome DevTools/Playwright cho luồng FBD keyboard-only dời sang TASK-PROG-506
+(MCP không có trong phiên).
+
+Refs: TASK-PROG-501, TASK-PROG-502, TASK-PROG-503, Plan 53 §5.9 S5-B,
+DDD-FE-PROG-001 §0.1/§5, UX-WEB-PROG-001 §5/§16.2/§22.
+
+### Added — Programming P5 TASK-PROG-500: nền tảng FE bốn workspace (2026-08-13)
+
+**Khoảng hở BE phát hiện khi bắt đầu S5-A.** `GET /capabilities`, `GET
+/runtime` và `GET /audit` đã có trong OpenAPI (`x-implementation-status:
+contract-only`) nhưng router Go luôn rơi vào stub `503
+PRG-ERR-UNAVAILABLE-001` — PGM-01 không thể hiển thị Core/Active/Draft/hoạt
+động gần đây bằng dữ liệu thật. Sửa tối thiểu tại đúng owner (BE, theo quy tắc
+gap ở task): thêm `RuntimeService` (`apps/web-api/internal/programming/
+application/runtime.go`) gọi Core qua `coreipc` (action `CAPABILITIES`/
+`STATUS`) và `Store.ListAuditRecords` mới (cursor HMAC keyset, không OFFSET);
+nối handler `transport/http/runtime.go` và wiring ở `internal/app/main.go`.
+`GET /runtime` luôn trả `200` với authority thật kể cả khi Core mất kết nối
+(`producerState=UNAVAILABLE`, `taskState=UNKNOWN`) — không suy trạng thái từ
+DB Web, không bịa `RUNNING`/`safeState=true` khi chưa xác nhận
+(`RSK-PROG-010`). Cập nhật `x-implementation-status` ba operation này sang
+`task-prog-500` trong `contracts/openapi/openapi.yaml`.
+
+**Frontend.** Dựng `apps/web-ui/src/features/programming/`:
+`ProgrammingRoutes.tsx` (4 route chuẩn + 3 redirect route cũ còn dựng được
+bằng `<Route>`, dòng thứ tư/`​.../commission` giữ nguyên và dòng thứ năm
+`/runtime` không tab do `RuntimeServicePage` tự mặc định — UX-WEB-PROG-001
+§11.1), `layout/{ProgrammingLayout,ProgrammingHeader,ProgrammingContextBar}`
+(persistent "Đang vận hành"/Core, một `<h1>` duy nhất), `api/{authClient,
+queries,mutations,errorCopy}` (bọc `ProgrammingApiClient` sinh sẵn với
+`Authorization` từ `AuthProvider`, hook đọc theo mẫu `useModbusRuntime` sẵn có
+— dự án chưa dùng react-query nên không thêm dependency mới), `model/types.ts`
+(DTO tay khớp schema OpenAPI vì generator chỉ sinh type nhóm Commission), và
+`overview/OverviewPage.tsx` (`RunningApplicationPanel`, `CoreSafeStatePanel`,
+`DraftAttentionPanel` có "Tạo bản nháp" thật cho admin qua `POST /projects`,
+`ProgrammingAttentionList`, `RecentEngineeringTimeline`). Route mới nằm sau cờ
+FE `PROGRAMMING_REV_A_ENABLED` (`VITE_PROGRAMMING_REV_A`, mặc định TẮT) —
+tách hẳn khỏi `LEGACY_GRAPH_DEMO_ENABLED` của trang demo graph cũ; `NavRail`
+và `ROUTE_MIN_ROLE['/eng/programming'] = 'viewer'` cập nhật theo. Trang
+Thiết kế/Kiểm tra & Vận hành/Runtime & Bảo trì hiện là placeholder thật (không
+mock) chờ TASK-PROG-501..505 nối tiếp theo đúng thứ tự lát cắt S5-B/C/D.
+
+**Kiểm chứng.** Go: `go build ./...`, `go vet ./...` sạch;
+`go test ./... -count=1` toàn bộ 18 package PASS, gồm 8 test mới cho
+`RuntimeService` (capabilities/runtime ready & unavailable, audit phân trang
+cursor HMAC, cursor giả bị từ chối) và 2 test router mới. FE:
+`npx vitest --run --environment jsdom src` 58 file/494 test PASS (không giảm);
+`npx tsc --noEmit` sạch; `npm run lint` (`--max-warnings=0`) sạch trên toàn
+`src`; `npm run build` PASS (contract drift gate `check:programming-contracts`
+25/25 operation đồng bộ, error catalog 20/99 khớp SHA-256). Chưa có bằng chứng
+Chrome DevTools/Playwright cho slice này — dời sang TASK-PROG-506 theo đúng
+cấu trúc gate cuối cùng trước PR; `chrome-devtools` MCP không có trong phiên
+này (không có `codex mcp`/tool tương đương được cấp), ghi rõ để không nhận
+nhầm là đã kiểm chứng trình duyệt. Flag Web `PROGRAMMING_REV_A` và FE
+`VITE_PROGRAMMING_REV_A` giữ mặc định TẮT; `RELEASE_READY` không đổi.
+
+Refs: `TASK-PROG-500`, Plan 53 §5.9 S5-A, `docs/02_design/software/
+PROGRAMMING_FE_DESIGN.md` §0.1, `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md`
+§11/§16.1/§22.
+
 ### Added — Hoàn tất Programming P4: Commission/Restore, cutover và recovery (2026-08-13)
 
 **TASK-PROG-403..405.** Web API nay có coordinator Commission/Restore bền

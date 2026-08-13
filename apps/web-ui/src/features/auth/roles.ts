@@ -73,6 +73,13 @@ export const ROUTE_MIN_ROLE: Record<string, UserRole> = {
    * Mutation cấu hình (tạo/sửa/publish/rollback) vẫn khoá theo role BÊN TRONG
    * trang, và backend vẫn là nơi chặn cuối cùng. */
   '/eng/scheduler': 'viewer',
+  /* TASK-PROG-500: mọi role đọc được bốn workspace Programming (Data Model
+   * §"Persona và quyền" — viewer/operator/admin đều xem status/monitor/audit).
+   * Mutation (Lưu Draft, Kiểm tra, Đưa vào vận hành, Khôi phục, Đặt lại RETAIN)
+   * đòi `programming.permission.admin` và bị khoá riêng bên trong từng
+   * component qua `roleAtLeast(session?.role, 'admin')` — server vẫn là
+   * authority cuối theo `routeDefinitions` ở `transport/http/router.go`. */
+  '/eng/programming': 'viewer',
   '/eng/user-parameters': 'admin',
   '/settings/time': 'admin',
   '/settings/device': 'admin',

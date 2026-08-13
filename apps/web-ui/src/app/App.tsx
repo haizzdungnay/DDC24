@@ -28,7 +28,8 @@ import { RequireRole } from '../shared/components/RequireRole'
 import { useI18n } from '../shared/i18n'
 import { OverviewProvider } from '../shared/overview/OverviewProvider'
 import { RealtimeProvider } from '../shared/realtime'
-import { LEGACY_GRAPH_DEMO_ENABLED } from '../shared/config'
+import { LEGACY_GRAPH_DEMO_ENABLED, PROGRAMMING_REV_A_ENABLED } from '../shared/config'
+import { ProgrammingRoutes } from '../features/programming/ProgrammingRoutes'
 
 function ProtectedShell() {
   const { isAuthenticated } = useAuth()
@@ -133,17 +134,23 @@ export function App() {
         {/* WEB-UX-007: thay `<Navigate to="/" replace />` im lặng bằng lời giải
             thích. Bấm vào menu rồi bị đá về Dashboard không kèm lý do là cách
             nhanh nhất để người dùng kết luận sản phẩm hỏng. */}
+        {/* TASK-PROG-500: `PROGRAMMING_REV_A_ENABLED` (mặc định TẮT) thay hẳn
+            route demo graph cũ bằng bốn workspace thật khi bật. Đây là cờ
+            RIÊNG với `LEGACY_GRAPH_DEMO_ENABLED` — hai tính năng không còn
+            liên quan tới nhau (UX-WEB-PROG-001 §15/§28). */}
         <Route
-          path="eng/programming"
-          element={LEGACY_GRAPH_DEMO_ENABLED
-            ? <ProgrammingPage />
-            : <UnavailableFeaturePage
-                title={pick('Lập trình đồ hoạ chưa khả dụng', 'Graphical programming is not available')}
-                reason={pick(
-                  'Canvas lập trình dạng sơ đồ khối thuộc phạm vi Rev B theo REVA_SCOPE_ROADMAP §3. Bản Rev A hiện tại cấu hình logic qua các trang Điểm ảo, Lịch vận hành và Cảnh báo.',
-                  'The block-diagram programming canvas is Rev B scope per REVA_SCOPE_ROADMAP §3. This Rev A build configures logic through the Virtual points, Scheduler and Alarm settings pages.'
-                )}
-              />}
+          path="eng/programming/*"
+          element={PROGRAMMING_REV_A_ENABLED
+            ? <RequireRole role={ROUTE_MIN_ROLE['/eng/programming']}><ProgrammingRoutes /></RequireRole>
+            : LEGACY_GRAPH_DEMO_ENABLED
+              ? <ProgrammingPage />
+              : <UnavailableFeaturePage
+                  title={pick('Lập trình đồ hoạ chưa khả dụng', 'Graphical programming is not available')}
+                  reason={pick(
+                    'Canvas lập trình dạng sơ đồ khối thuộc phạm vi Rev B theo REVA_SCOPE_ROADMAP §3. Bản Rev A hiện tại cấu hình logic qua các trang Điểm ảo, Lịch vận hành và Cảnh báo.',
+                    'The block-diagram programming canvas is Rev B scope per REVA_SCOPE_ROADMAP §3. This Rev A build configures logic through the Virtual points, Scheduler and Alarm settings pages.'
+                  )}
+                />}
         />
         <Route path="eng/inputs" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/inputs']}><InputsPage /></RequireRole>} />
         <Route path="eng/outputs" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/outputs']}><OutputsPage /></RequireRole>} />

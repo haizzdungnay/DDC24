@@ -168,3 +168,65 @@ func TestDraftMutationRejectsUnknownWithoutChangingETag(t *testing.T) {
 		t.Fatalf("Draft đổi sau reject: %+v err=%v", draft, err)
 	}
 }
+
+// TASK-PROG-501: `GET /projects/{projectId}` phải trả đủ nội dung Draft canonical
+// (DM-PROG-001 §7) để FE nạp lại ST/FBD/mapping/task đang dở — trước bản này
+// không có route nào đọc được nội dung Draft, chỉ có metadata. `GET /projects`
+// (danh sách) KHÔNG được nhân bản nội dung đó vào từng item.
+func TestGetProjectIncludesDraftContentButListDoesNot(t *testing.T) {
+	service, _ := openProjectService(t)
+	actor := Actor{ID: testActorID, Role: "admin"}
+	created, err := service.CreateProject(context.Background(), actor, CreateProjectCommand{
+		SchemaVersion: "1.0", Name: "AHU tầng 3", IdempotencyKey: "20000000-0000-4000-8000-000000000001",
+		CorrelationID: testCorrelationID,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	projectID := created.Resource["projectId"].(string)
+	draftID := created.Resource["draftRevisionId"].(string)
+	saved, err := service.SaveDraft(context.Background(), actor, SaveDraftCommand{
+		ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID,
+		Operations:     []json.RawMessage{json.RawMessage(`{"op":"setFunctionalTags","tags":["ahu"]}`)},
+		IfMatch:        created.ETag,
+		IdempotencyKey: "20000000-0000-4000-8000-000000000002", CorrelationID: testCorrelationID,
+	})
+	if err != nil {
+		t.Fatalf("SaveDraft: %v", err)
+	}
+	savedContent, ok := saved.Resource["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("SaveDraft.Resource thiếu content đọc-ngược: %+v", saved.Resource)
+	}
+	if project, ok := savedContent["project"].(map[string]any); !ok || project["functionalTags"] == nil {
+		t.Fatalf("content trả về từ SaveDraft thiếu functionalTags: %+v", savedContent)
+	}
+
+	view, err := service.GetProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if len(view.DraftContentJSON) == 0 {
+		t.Fatal("GetProject phải trả DraftContentJSON không rỗng")
+	}
+	var document map[string]any
+	if err := json.Unmarshal(view.DraftContentJSON, &document); err != nil {
+		t.Fatalf("DraftContentJSON không phải JSON hợp lệ: %v", err)
+	}
+	for _, key := range []string{"schemaVersion", "project", "programs", "variables", "bindings", "task", "library"} {
+		if _, ok := document[key]; !ok {
+			t.Fatalf("DraftContentJSON thiếu khoá %q: %+v", key, document)
+		}
+	}
+
+	page, err := service.ListProjects(context.Background(), "", 10)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("ListProjects items = %d; want 1", len(page.Items))
+	}
+	if len(page.Items[0].DraftContentJSON) != 0 {
+		t.Fatal("ListProjects KHÔNG được nhân bản DraftContentJSON vào từng item")
+	}
+}

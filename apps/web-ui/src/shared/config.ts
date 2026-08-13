@@ -7,6 +7,11 @@ export function isLegacyGraphDemoEnabled(mode: DdcMode, flag: string | undefined
   return mode === 'demo' && flag === '1'
 }
 export const LEGACY_GRAPH_DEMO_ENABLED = isLegacyGraphDemoEnabled(DDC_MODE, import.meta.env.VITE_ENABLE_LEGACY_GRAPH_DEMO)
+// TASK-PROG-500 (UX-WEB-PROG-001 §28): cờ Programming Rev A, mặc định TẮT.
+// Bật cờ chỉ mở route/shell bốn workspace; nó KHÔNG tự mở quyền mutation —
+// quyền đó vẫn do server (`PROGRAMMING_REV_A` env của web-api) và RBAC quyết
+// định. Không bật ở production tới khi TLS + UX-T-001..006 PASS.
+export const PROGRAMMING_REV_A_ENABLED = import.meta.env.VITE_PROGRAMMING_REV_A === '1'
 export const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || ''
 export const WS_ORIGIN = import.meta.env.VITE_WS_ORIGIN || ''
 export const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || (IS_DEMO ? 'mock' : 'jwt')
