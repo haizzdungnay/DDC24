@@ -72,10 +72,34 @@ json instance_state_json(const StProgramInstance& p, const std::string& task_id)
         j["programName"] = prog->program_name;
         j["artifactSha256"] = st_base64_encode(prog->sha256, 32);
         j["hasRetain"] = !prog->retain_entries.empty();
+
+        /* TASK-PROG-305 "monitor": source/quality/freshness per input binding,
+         * theo GET /runtime/monitor (Interface Spec §7/§8). Đọc lại từ
+         * process_inputs đã chụp ở TASK-PROG-302, không đọc lại Point Table —
+         * tránh trình bày dữ liệu khác cycle vừa chạy. */
+        json inputs = json::array();
+        for (uint16_t i = 0; i < p.process_input_count; ++i) {
+            const StProcessInputSlot& in = p.process_inputs[i];
+            std::string var_name;
+            for (const StIrVariable& v : prog->variables)
+                if (v.slot == in.slot) { var_name = v.name; break; }
+            json e;
+            e["variable"] = var_name;
+            e["pointCategory"] = st_point_category_name(st_point_category(in.point_kind));
+            e["pointIndex"] = in.point_index;
+            e["quality"] = static_cast<int>(in.quality);
+            e["source"] = static_cast<int>(in.source);
+            e["observedAtNs"] = in.observed_at_ns;
+            inputs.push_back(std::move(e));
+        }
+        j["monitorInputs"] = inputs;
+        j["inputSnapshotValid"] = p.input_snapshot_valid;
     } else {
         j["programName"] = nullptr;
         j["artifactSha256"] = nullptr;
         j["hasRetain"] = false;
+        j["monitorInputs"] = json::array();
+        j["inputSnapshotValid"] = false;
     }
     return j;
 }
@@ -193,6 +217,14 @@ std::string st_handle_control_request(StScheduler* sched, const std::string& req
         p["baseStepMinMs"] = st_base_step::kMinMs;
         p["baseStepMaxMs"] = st_base_step::kMaxMs;
         p["maxTaskBudgetPercentExclusive"] = st_base_step::kMaxTaskBudgetPercent;
+        /* TASK-PROG-305, OD-PROG-011: monitor 1 Hz/stale sau 3 kỳ đã DECIDED;
+         * đây là bounded EVENT trace (fault/overrun/rollback/activation), không
+         * phải value-sampling historian 10.000 sample/10 phút cùng quyết định —
+         * phần đó cần selector/session riêng qua POST/GET /runtime/traces,
+         * chưa làm ở task này (ghi rõ để không lẫn với capability dưới đây). */
+        p["monitorPollHz"] = 1;
+        p["monitorStaleAfterPolls"] = 3;
+        p["maxTraceEvents"] = static_cast<uint32_t>(kSchedulerTraceCapacity);
         return ok_response(request_id, p);
     }
 
@@ -202,6 +234,35 @@ std::string st_handle_control_request(StScheduler* sched, const std::string& req
         json p;
         p["tasks"] = tasks;
         p["anyForcingSafeState"] = sched->any_force_safe();
+        return ok_response(request_id, p);
+    }
+
+    if (action == "program_trace") {
+        json events = json::array();
+        json p;
+        if (const StSchedulerTrace* trace = sched->trace_log()) {
+            for (std::size_t i = 0; i < trace->size(); ++i) {
+                const StRuntimeTraceEvent& e = trace->at(i);
+                json j;
+                j["kind"] = static_cast<int>(e.kind);
+                j["timestampNs"] = e.timestamp_ns;
+                j["ok"] = e.ok;
+                /* Không dùng toán tử ba ngôi `cond ? cptr : nullptr`: hai
+                 * nhánh hợp kiểu về const char*, nullptr_t bị ép về con trỏ
+                 * NULL thay vì giữ JSON null — nlohmann sẽ cố dựng std::string
+                 * từ con trỏ NULL và ném exception. Phải rẽ nhánh tường minh. */
+                if (e.task_id) j["taskId"] = e.task_id; else j["taskId"] = nullptr;
+                if (e.instance_id) j["instanceId"] = e.instance_id; else j["instanceId"] = nullptr;
+                if (e.code) j["code"] = e.code; else j["code"] = nullptr;
+                events.push_back(std::move(j));
+            }
+            p["droppedCount"] = trace->dropped_count();
+            p["capacity"] = static_cast<uint32_t>(trace->capacity());
+        } else {
+            p["droppedCount"] = 0;
+            p["capacity"] = 0;
+        }
+        p["events"] = events;
         return ok_response(request_id, p);
     }
 

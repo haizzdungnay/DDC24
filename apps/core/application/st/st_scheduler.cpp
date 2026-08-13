@@ -17,6 +17,20 @@ uint64_t default_monotonic_wall_clock_ns()
     return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
 }
 
+void StScheduler::log_trace(StTraceEventKind kind, uint64_t now_ns, bool ok, const char* task_id,
+                            const char* instance_id, const char* code)
+{
+    if (!trace_) return;
+    StRuntimeTraceEvent event;
+    event.kind = kind;
+    event.timestamp_ns = now_ns;
+    event.ok = ok;
+    event.task_id = task_id;
+    event.instance_id = instance_id;
+    event.code = code;
+    trace_->push(event);
+}
+
 const char* st_program_state_name(StProgramState s)
 {
     switch (s) {
@@ -351,6 +365,14 @@ void StScheduler::apply_pending_activations(StTask& task)
              * có (TYPED_IR_ARTIFACT_SPEC §8). */
             p->state = had_previous ? StProgramState::RUNNING : StProgramState::REJECTED;
         }
+        {
+            const uint64_t event_ns = wall_clock_();
+            log_trace(StTraceEventKind::ACTIVATION_RESULT, event_ns, ok,
+                     task.config().id.c_str(), p->instance_id.c_str(), ok ? nullptr : "rejected");
+            if (!ok && had_previous)
+                log_trace(StTraceEventKind::ROLLBACK, event_ns, true, task.config().id.c_str(),
+                         p->instance_id.c_str(), nullptr);
+        }
         /* Tiêu thụ request dù thành hay bại: không retry ngầm ở tick sau với
          * cùng artifact lỗi. */
         p->has_pending = false;
@@ -403,6 +425,8 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
             p->last_successful_base_step = 0;
             task.last_dispatch_succeeded_ = false;
             out->faults++;
+            log_trace(StTraceEventKind::RUNTIME_FAULT, now_ns, false, task.config().id.c_str(),
+                     p->instance_id.c_str(), p->last_fault_code);
             /* Required input không GOOD/mapped/coercible làm hủy cả cycle.
              * Không execute bằng slot cũ vì như vậy stale/bad sẽ bị trình bày
              * như dữ liệu live và output mới vẫn có thể được publish. */
@@ -420,6 +444,8 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
             p->last_successful_base_step = 0;
             task.last_dispatch_succeeded_ = false;
             out->faults++;
+            log_trace(StTraceEventKind::RUNTIME_FAULT, now_ns, false, task.config().id.c_str(),
+                     p->instance_id.c_str(), p->last_fault_code);
             /* Fault của MỘT Program dừng cả Task: các Program trong một Task
              * thường phối hợp (Program 0 tính setpoint, Program 1 dùng nó), nên
              * chạy tiếp sẽ đẩy đầu ra vào tổ hợp chưa từng được thiết kế
@@ -448,6 +474,8 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
      * SCHEDULER_SPEC §6.1 cũ gắn overrun vào SafetyManager đã bị supersede
      * bởi DDD-CTRL-PROG-001, xem thông báo đầu file đó. */
     if (task.monitor_.should_force_safe()) {
+        log_trace(StTraceEventKind::OVERRUN, wall_clock_(), false, task.config().id.c_str(),
+                 nullptr, st_diag_code::kRtTaskOverrun);
         for (auto& p : task.programs()) {
             if (p->state != StProgramState::RUNNING) continue;
             p->fault_count++;
