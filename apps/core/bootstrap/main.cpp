@@ -79,6 +79,10 @@ int main(int argc, char** argv)
     bool scan_ms_from_cli = false;
     uint64_t base_step_ns = 1000000000ull; /* base step 1s Rev A */
     int rt_prio = 80;
+    /* TASK-PROG-306: mặc định GRAPH_ONLY — không đổi hành vi cũ nếu không
+     * truyền cờ. PROGRAM_ONLY là lựa chọn TĨNH tại khởi động; cutover LIVE có
+     * rollback trong lúc hệ đang chạy là TASK-PROG-404, không phải ở đây. */
+    CutoverMode programming_mode = CutoverMode::GRAPH_ONLY;
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
@@ -100,10 +104,22 @@ int main(int argc, char** argv)
             base_step_ns = static_cast<uint64_t>(ms) * 1000000ull;
             scan_ms_from_cli = true;
         }
+        else if (a == "--programming-mode" && i + 1 < argc) {
+            const std::string m = argv[++i];
+            if (m == "graph_only") programming_mode = CutoverMode::GRAPH_ONLY;
+            else if (m == "program_only") programming_mode = CutoverMode::PROGRAM_ONLY;
+            else {
+                std::fprintf(stderr,
+                             "ERROR core.bad_programming_mode '%s' (cần graph_only|program_only)\n",
+                             m.c_str());
+                return 1;
+            }
+        }
         else if (a == "--help") {
             std::printf("usage: mkddc-core [--sock PATH] [--fieldbus-sock PATH] [--graph FILE]"
                         " [--safe-state-conf FILE] [--io-conf FILE] [--alarm-conf FILE]"
                         " [--schedule-conf FILE] [--scan-ms N]"
+                        " [--programming-mode graph_only|program_only]"
                         " [--log-level LVL]\n");
             return 0;
         }
@@ -209,10 +225,22 @@ int main(int argc, char** argv)
                          graph.declared_scan_ms());
         }
     }
-    std::fprintf(stderr, "INFO  core.base_step_ms=%llu (GRAPH_ONLY chuyển tiếp)\n",
-                 static_cast<unsigned long long>(base_step_ns / 1000000ull));
+    std::fprintf(stderr, "INFO  core.base_step_ms=%llu programming_mode=%s\n",
+                 static_cast<unsigned long long>(base_step_ns / 1000000ull),
+                 programming_mode == CutoverMode::PROGRAM_ONLY ? "program_only" : "graph_only");
 
     PriorityResolver resolver;
+
+    /* TASK-PROG-306: PROGRAM_ONLY dựng StScheduler Rev A làm producer Local
+     * logic DUY NHẤT (ScanLoop khoá graph.execute() tương ứng — xem
+     * scan_loop.cpp). graph.json vẫn load/restore phía trên nên vẫn là
+     * backup immutable cho Restore, không bị xoá khi đổi mode. Task/Program
+     * thật được BE nạp qua control API sau khi UDS transport nối (còn mở,
+     * xem ghi chú provenance) — bootstrap chỉ dựng scheduler rỗng, không tự
+     * activate gì. */
+    StScheduler programming_scheduler(programming_mode == CutoverMode::PROGRAM_ONLY
+                                          ? StSchedulerProfile::REV_A
+                                          : StSchedulerProfile::SUPPORTING_AS_BUILT);
 
     /* io_safe_state.conf → relinquish default MỨC 6 (quan hệ chốt: safe_state
      * override luôn là 0V/4mA/open cố định — xem safe_state_config.hpp).
@@ -271,7 +299,9 @@ int main(int argc, char** argv)
     }
 
     ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver,
-                   &safe, &writer, &bacnet, &metrics, fieldbus_sockfd, &alarms, &schedules});
+                   &safe, &writer, &bacnet, &metrics, fieldbus_sockfd, &alarms, &schedules,
+                   programming_mode == CutoverMode::PROGRAM_ONLY ? &programming_scheduler : nullptr,
+                   programming_mode});
 
     /* SIGHUP → reload io_config + io_safe_state + graph ở ranh giới scan;
      * fail → giữ config cũ (khác boot fail-fast); manual đang giữ không mất */

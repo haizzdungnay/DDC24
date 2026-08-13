@@ -32,6 +32,15 @@
 
 namespace core {
 
+/* TASK-PROG-306, DDD-CTRL-PROG-001 §10 / OD-PROG-013: một Point Local logic
+ * không được có hai producer. GRAPH_ONLY (mặc định, hành vi trước
+ * TASK-PROG-306 giữ nguyên) và PROGRAM_ONLY loại trừ lẫn nhau tại CHÍNH
+ * ScanLoop — không phải quy ước cấu hình cần kỷ luật vận hành để không
+ * bật nhầm cả hai. Cutover LIVE có rollback (đổi mode khi hệ đang chạy,
+ * an toàn nếu package mới lỗi) là phạm vi TASK-PROG-404; đây chỉ là lựa
+ * chọn mode tại thời điểm khởi động (bootstrap). */
+enum class CutoverMode : uint8_t { GRAPH_ONLY = 0, PROGRAM_ONLY = 1 };
+
 struct ScanDeps {
     IoSnapshotReaderPort* reader;
     PointTable*       table;
@@ -50,6 +59,10 @@ struct ScanDeps {
     /* ACTION 10: Program Runtime. nullptr = không có chương trình ST nào được
      * cấu hình — scan loop chạy y như trước, không thêm chi phí nào. */
     StScheduler*      st_sched = nullptr;
+    /* TASK-PROG-306: quyết định GRAPH hay PROGRAM là producer của Local
+     * output trong scan này. Mặc định GRAPH_ONLY — không đổi hành vi bootstrap
+     * cũ nếu caller không set field này. */
+    CutoverMode       mode = CutoverMode::GRAPH_ONLY;
 };
 
 class ScanLoop {
