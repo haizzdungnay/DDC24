@@ -4,18 +4,18 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.39 |
+| Phiên bản | 3.40 |
 | Ngày | 2026-08-13 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
-| Trạng thái | **ACTIVE — candidate v2.29 `IMPLEMENTATION IN PROGRESS`; P1 6/6, P2 8/8, P3 7/8 SOURCE/DOD DONE; G3 IN PROGRESS; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
+| Trạng thái | **ACTIVE — candidate v2.30 `IMPLEMENTATION IN PROGRESS`; P1 6/6, P2 8/8, P3 8/8 SOURCE/HOST DOD DONE (ĐÃ ĐÓNG); G3 IN PROGRESS; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | source authority `f35234c` (`TASK-PROG-306`); PR/merge commit ghi bổ sung sau khi merge — xem §4.6 |
-| PR nguồn | Chờ tạo/merge PR cho nhánh `feat/programming-bootstrap-cutover-mode-20260813`; ghi bổ sung sau khi merge |
-| Candidate trước | v2.28 tại source `c6ab2bd`, merge `35519ce` (PR #162) — **SUPERSEDED bởi TASK-PROG-306**, xem §4.6 |
+| Candidate commit | source authority `29907a5` (`TASK-PROG-307`); PR/merge commit ghi bổ sung sau khi merge — xem §4.7 |
+| PR nguồn | Chờ tạo/merge PR cho nhánh `test/programming-p3-soak-load-20260813`; ghi bổ sung sau khi merge |
+| Candidate trước | v2.29 tại source `f35234c`, merge `44d3fb9` (PR #163) — **SUPERSEDED bởi TASK-PROG-307**, xem §4.7 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
-| Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.29 không đổi requirement/design decision |
+| Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.30 không đổi requirement/design decision |
 
 ## 1. Phạm vi và phán quyết
 
@@ -62,8 +62,8 @@ Việc ghim candidate xác định đúng baseline được duyệt. Nó **khôn
 - tự mở `RELEASE_READY`.
 
 `AUTH-PROG-2026-08-11-03` đã mở `PLAN_READY` và mọi `IMPLEMENT_READY[*]`; việc
-ghim hash bảo đảm team đọc đúng candidate v2.29: baseline đã phê duyệt cộng
-trạng thái triển khai thật của `TASK-PROG-100..306`.
+ghim hash bảo đảm team đọc đúng candidate v2.30: baseline đã phê duyệt cộng
+trạng thái triển khai thật của `TASK-PROG-100..307` (P3 đã đóng).
 
 Baseline gốc `05c1c480418a2256f1010527f9d90fb6ff549b86` vẫn được giữ để so
 sánh/rollback. Chuỗi candidate của vòng P0 là
@@ -97,11 +97,11 @@ candidate v2.7; delta trực tiếp so với v2.23 được liệt kê ở §4.
 | 19 | `docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md` | `ac7fed9c3134f32f16f28dee7d9b3f60585ef62df749d0148fc15770ba8fc6ba` | `6a09f28979d99ebfc07e8183a1ad01085a7e4488` | 335 | ✱ |
 | 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `566d6bf39078c949894f7c1c07e519b05ba09f8fcedb615abd95a37f0958d65e` | `446f0c8e25bc27d6aa5517b918310ad10d31be3a` | 327 | ✱ |
 | 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `082bf4c19d715dcf167b7bcc7f59c7d6d43cc934ebbece2d9d9d4e5f2a05123f` | `11be789c2362edd99e77021443461362853c1ac6` | 347 | ✱ |
-| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `f79d3a57216a96cbcef451b9b221adb4b630c3978cf8a516b3fb115501311219` | `41f77e5075b482df42bda06a4a0230f3929ae478` | 1169 | ✱ |
+| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `a6f51e52520be0c92a629c80919bf5a6154180b5348030cf0efc808bdbc0c53a` | `b3358138e45ac0993594f0c3f85e8116a5e2bcef` | 1170 | ✱ |
 
 So với candidate v2.7, **22/22 hồ sơ đã đổi** để tạo nền v2.8 được phê duyệt.
-Candidate v2.29 hiện tại đổi dòng 9, 22 so với v2.28 để ghi `TASK-PROG-306`
-DONE và progress P3 7/8; dấu `✱` tiếp tục biểu thị delta
+Candidate v2.30 hiện tại đổi dòng 22 so với v2.29 để ghi `TASK-PROG-307`
+DONE và P3 đóng 8/8; dấu `✱` tiếp tục biểu thị delta
 tích lũy so với v2.7.
 
 ## 3. Hồ sơ hỗ trợ ngoài mẫu số 22
@@ -272,6 +272,28 @@ Candidate v2.29 thay đổi **2/22** hồ sơ:
   feature branch đã xóa — ghi bổ sung, không đổi hồ sơ nào trong mẫu số 22
   nên không cần candidate mới riêng cho việc này.
 
+### 4.7 v2.30 so với v2.29
+
+Candidate v2.30 thay đổi **1/22** hồ sơ:
+
+- `PLAN-PROG-053` v0.39 (hồ sơ #22 duy nhất): P3 `8/8` — **ĐÃ ĐÓNG về
+  source/host DoD**, tổng `29/49`, ghi `TASK-PROG-307 DONE` tại `29907a5`
+  và next `TASK-PROG-400` (mở P4). Target evidence (10.000 chu kỳ WCET thật
+  trên Forlinx) vẫn `BLOCKED` — cần phần cứng vật lý, ghi rõ không phải
+  thiếu source.
+- Source Task 307 khóa tại `29907a5`: soak 10.000 `ScanLoop::step()` không
+  tăng cấp phát, symbol-scan `mkddc-core` xác nhận lại; CTest 969/969 PASS;
+  không đổi Go/FE.
+- **21/22 hồ sơ còn lại (#1–21) byte-identical với v2.29** — Control
+  Semantics KHÔNG đổi ở candidate này (307 là verification/QA, không phải
+  quyết định thiết kế mới); khoảng hở As-Built cho 302..306 ở Index/
+  Architecture/FW-SOM/VVP/Risk/Trace vẫn CHƯA đóng.
+- `AUTH-PROG-2026-08-11-03` tiếp tục hiệu lực; v2.30 không đổi
+  requirement/design decision.
+- Candidate v2.29 (Task 306) đã merge qua PR #163 tại `44d3fb9`; remote
+  feature branch đã xóa — ghi bổ sung, không đổi hồ sơ nào trong mẫu số 22
+  nên không cần candidate mới riêng cho việc này.
+
 ## 5. Cách tái kiểm
 
 **Bước bắt buộc trước khi đọc để review:**
@@ -352,3 +374,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.37 | 2026-08-13 | Ghi bổ sung PR #160, merge commit `288f136` chứa candidate v2.26; remote feature branch đã xóa. Phát hành candidate v2.27 sau `TASK-PROG-304`: cập nhật hash/blob Control v0.6 và Plan v0.36; 20/22 hồ sơ còn lại giữ nguyên — khoảng hở As-Built 302/303/304 ở Index/Architecture/FW-SOM/VVP/Risk/Trace vẫn còn (xem §4.4). P3 5/8, next TASK-PROG-305; 0/32 PASS; commit/PR Task 304 chờ ghi sau merge |
 | 3.38 | 2026-08-13 | Ghi bổ sung PR #161, merge commit `bc468cb` chứa candidate v2.27; remote feature branch đã xóa. Phát hành candidate v2.28 sau `TASK-PROG-305`: cập nhật hash/blob Control v0.7 và Plan v0.37; 20/22 hồ sơ còn lại giữ nguyên — khoảng hở As-Built 302/303/304/305 vẫn còn (xem §4.5). P3 6/8, next TASK-PROG-306; 0/32 PASS; commit/PR Task 305 chờ ghi sau merge |
 | 3.39 | 2026-08-13 | Ghi bổ sung PR #162, merge commit `35519ce` chứa candidate v2.28; remote feature branch đã xóa. Phát hành candidate v2.29 sau `TASK-PROG-306`: cập nhật hash/blob Control v0.8 và Plan v0.38; 20/22 hồ sơ còn lại giữ nguyên — khoảng hở As-Built 302..306 vẫn còn (xem §4.6). P3 7/8, next TASK-PROG-307; 0/32 PASS; commit/PR Task 306 chờ ghi sau merge |
+| 3.40 | 2026-08-13 | Ghi bổ sung PR #163, merge commit `44d3fb9` chứa candidate v2.29; remote feature branch đã xóa. Phát hành candidate v2.30 sau `TASK-PROG-307`: cập nhật hash/blob Plan v0.39 (hồ sơ #22 duy nhất). **P3 đóng 8/8 source/host DoD**; 21/22 hồ sơ còn lại giữ nguyên. Tổng 29/49, next TASK-PROG-400 (P4); 0/32 PASS; commit/PR Task 307 chờ ghi sau merge |
