@@ -8,6 +8,60 @@
 
 ## [Unreleased]
 
+### Added — Programming P5 TASK-PROG-500: nền tảng FE bốn workspace (2026-08-13)
+
+**Khoảng hở BE phát hiện khi bắt đầu S5-A.** `GET /capabilities`, `GET
+/runtime` và `GET /audit` đã có trong OpenAPI (`x-implementation-status:
+contract-only`) nhưng router Go luôn rơi vào stub `503
+PRG-ERR-UNAVAILABLE-001` — PGM-01 không thể hiển thị Core/Active/Draft/hoạt
+động gần đây bằng dữ liệu thật. Sửa tối thiểu tại đúng owner (BE, theo quy tắc
+gap ở task): thêm `RuntimeService` (`apps/web-api/internal/programming/
+application/runtime.go`) gọi Core qua `coreipc` (action `CAPABILITIES`/
+`STATUS`) và `Store.ListAuditRecords` mới (cursor HMAC keyset, không OFFSET);
+nối handler `transport/http/runtime.go` và wiring ở `internal/app/main.go`.
+`GET /runtime` luôn trả `200` với authority thật kể cả khi Core mất kết nối
+(`producerState=UNAVAILABLE`, `taskState=UNKNOWN`) — không suy trạng thái từ
+DB Web, không bịa `RUNNING`/`safeState=true` khi chưa xác nhận
+(`RSK-PROG-010`). Cập nhật `x-implementation-status` ba operation này sang
+`task-prog-500` trong `contracts/openapi/openapi.yaml`.
+
+**Frontend.** Dựng `apps/web-ui/src/features/programming/`:
+`ProgrammingRoutes.tsx` (4 route chuẩn + 3 redirect route cũ còn dựng được
+bằng `<Route>`, dòng thứ tư/`​.../commission` giữ nguyên và dòng thứ năm
+`/runtime` không tab do `RuntimeServicePage` tự mặc định — UX-WEB-PROG-001
+§11.1), `layout/{ProgrammingLayout,ProgrammingHeader,ProgrammingContextBar}`
+(persistent "Đang vận hành"/Core, một `<h1>` duy nhất), `api/{authClient,
+queries,mutations,errorCopy}` (bọc `ProgrammingApiClient` sinh sẵn với
+`Authorization` từ `AuthProvider`, hook đọc theo mẫu `useModbusRuntime` sẵn có
+— dự án chưa dùng react-query nên không thêm dependency mới), `model/types.ts`
+(DTO tay khớp schema OpenAPI vì generator chỉ sinh type nhóm Commission), và
+`overview/OverviewPage.tsx` (`RunningApplicationPanel`, `CoreSafeStatePanel`,
+`DraftAttentionPanel` có "Tạo bản nháp" thật cho admin qua `POST /projects`,
+`ProgrammingAttentionList`, `RecentEngineeringTimeline`). Route mới nằm sau cờ
+FE `PROGRAMMING_REV_A_ENABLED` (`VITE_PROGRAMMING_REV_A`, mặc định TẮT) —
+tách hẳn khỏi `LEGACY_GRAPH_DEMO_ENABLED` của trang demo graph cũ; `NavRail`
+và `ROUTE_MIN_ROLE['/eng/programming'] = 'viewer'` cập nhật theo. Trang
+Thiết kế/Kiểm tra & Vận hành/Runtime & Bảo trì hiện là placeholder thật (không
+mock) chờ TASK-PROG-501..505 nối tiếp theo đúng thứ tự lát cắt S5-B/C/D.
+
+**Kiểm chứng.** Go: `go build ./...`, `go vet ./...` sạch;
+`go test ./... -count=1` toàn bộ 18 package PASS, gồm 8 test mới cho
+`RuntimeService` (capabilities/runtime ready & unavailable, audit phân trang
+cursor HMAC, cursor giả bị từ chối) và 2 test router mới. FE:
+`npx vitest --run --environment jsdom src` 58 file/494 test PASS (không giảm);
+`npx tsc --noEmit` sạch; `npm run lint` (`--max-warnings=0`) sạch trên toàn
+`src`; `npm run build` PASS (contract drift gate `check:programming-contracts`
+25/25 operation đồng bộ, error catalog 20/99 khớp SHA-256). Chưa có bằng chứng
+Chrome DevTools/Playwright cho slice này — dời sang TASK-PROG-506 theo đúng
+cấu trúc gate cuối cùng trước PR; `chrome-devtools` MCP không có trong phiên
+này (không có `codex mcp`/tool tương đương được cấp), ghi rõ để không nhận
+nhầm là đã kiểm chứng trình duyệt. Flag Web `PROGRAMMING_REV_A` và FE
+`VITE_PROGRAMMING_REV_A` giữ mặc định TẮT; `RELEASE_READY` không đổi.
+
+Refs: `TASK-PROG-500`, Plan 53 §5.9 S5-A, `docs/02_design/software/
+PROGRAMMING_FE_DESIGN.md` §0.1, `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md`
+§11/§16.1/§22.
+
 ### Added — Hoàn tất Programming P4: Commission/Restore, cutover và recovery (2026-08-13)
 
 **TASK-PROG-403..405.** Web API nay có coordinator Commission/Restore bền

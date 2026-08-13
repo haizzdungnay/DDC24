@@ -5,7 +5,7 @@ import { useAuth } from '../../features/auth'
 import { ROUTE_MIN_ROLE, roleAtLeast } from '../../features/auth'
 import { useI18n } from '../i18n'
 import { PRODUCT_INFO } from '../productInfo'
-import { LEGACY_GRAPH_DEMO_ENABLED } from '../config'
+import { PROGRAMMING_REV_A_ENABLED } from '../config'
 import type { HealthResponse, UserRole } from '../types'
 import { cn } from '../utils'
 
@@ -105,7 +105,10 @@ function NavGroups({ alarmCount, collapsed, role, onNavigate }: {
         const isOpen = collapsed || openGroups[group.id]
         const Chevron = isOpen ? ChevronDown : ChevronRight
         const items = group.items.filter((item) =>
-          (item.key !== 'programming' || LEGACY_GRAPH_DEMO_ENABLED) && isVisibleForRole(item.to, role)
+          /* TASK-PROG-500: nav chỉ hiện khi cờ Programming Rev A bật — tách
+           * hẳn khỏi `LEGACY_GRAPH_DEMO_ENABLED`, vì đó là cờ của trang demo
+           * graph cũ, không liên quan tới bốn workspace Programming Rev A. */
+          (item.key !== 'programming' || PROGRAMMING_REV_A_ENABLED) && isVisibleForRole(item.to, role)
         )
         if (!items.length) return null
         return (
