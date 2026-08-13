@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <memory>
 #include <string>
 
 #include <pthread.h>
@@ -241,6 +242,30 @@ int main(int argc, char** argv)
     StScheduler programming_scheduler(programming_mode == CutoverMode::PROGRAM_ONLY
                                           ? StSchedulerProfile::REV_A
                                           : StSchedulerProfile::SUPPORTING_AS_BUILT);
+    std::unique_ptr<StRetainService> retain_service;
+    if (programming_mode == CutoverMode::PROGRAM_ONLY) {
+        const char* configured_state = std::getenv("PROGRAMMING_STATE_DIR");
+        const char* shared_state = std::getenv("STATE_DIR");
+        const char* configured_target = std::getenv("PROGRAMMING_TARGET_ID");
+        const std::string programming_state = configured_state && configured_state[0]
+            ? configured_state
+            : (shared_state && shared_state[0]
+                   ? std::string(shared_state) + "/programming"
+                   : "/data/mkddc/programming");
+        const std::string target_identity = configured_target && configured_target[0]
+            ? configured_target : "controller-local";
+        retain_service = std::make_unique<StRetainService>(
+            programming_state + "/retain", target_identity, true);
+        if (!retain_service->ready()) {
+            std::fprintf(stderr, "ERROR programming.retain_init_fail path=%s error=%s\n",
+                         (programming_state + "/retain").c_str(),
+                         retain_service->error().c_str());
+            return 1;
+        }
+        programming_scheduler.set_retain_service(retain_service.get());
+        std::fprintf(stderr, "INFO  programming.retain_ready path=%s target=%s\n",
+                     (programming_state + "/retain").c_str(), target_identity.c_str());
+    }
 
     /* io_safe_state.conf → relinquish default MỨC 6 (quan hệ chốt: safe_state
      * override luôn là 0V/4mA/open cố định — xem safe_state_config.hpp).
@@ -380,6 +405,10 @@ int main(int argc, char** argv)
     };
 
     loop.run(g_shutdown, base_step_ns, after_scan, &nctx);
+
+    /* Flush latest committed generation trước khi process rời đi. Filesystem
+     * vẫn thuộc worker/non-RT; scan đã dừng nên không có snapshot mới. */
+    if (retain_service) retain_service->shutdown_and_flush();
 
     /* COR-010: ghi snapshot khi shutdown sạch (SIGTERM) */
     if (graph.loaded())

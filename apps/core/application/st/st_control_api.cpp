@@ -61,6 +61,14 @@ json instance_state_json(const StProgramInstance& p, const std::string& task_id)
     j["runCount"] = p.run_count;
     j["faultCount"] = p.fault_count;
     j["hasLastKnownGood"] = !p.last_known_good.empty();
+    j["retainState"] = st_retain_restore_state_name(p.retain_restore_state);
+    j["retainDetailCode"] = p.retain_reject_code ? json(p.retain_reject_code) : json(nullptr);
+    const uint64_t saved_generation = p.retain_mailbox
+        ? p.retain_mailbox->last_saved_generation() : 0;
+    j["retainGeneration"] = saved_generation > p.retain_generation
+        ? saved_generation : p.retain_generation;
+    j["retainWriteCount"] = p.retain_mailbox ? p.retain_mailbox->write_count() : 0;
+    j["retainWriteFailures"] = p.retain_mailbox ? p.retain_mailbox->write_fail_count() : 0;
     if (p.last_fault_code) {
         j["lastFault"] = {{"code", p.last_fault_code},
                           {"pc", p.last_fault_pc},
@@ -71,7 +79,7 @@ json instance_state_json(const StProgramInstance& p, const std::string& task_id)
     if (const StLoadedProgram* prog = p.runtime.program()) {
         j["programName"] = prog->program_name;
         j["artifactSha256"] = st_base64_encode(prog->sha256, 32);
-        j["hasRetain"] = !prog->retain_entries.empty();
+        j["hasRetain"] = prog->has_retain();
 
         /* TASK-PROG-305 "monitor": source/quality/freshness per input binding,
          * theo GET /runtime/monitor (Interface Spec §7/§8). Đọc lại từ

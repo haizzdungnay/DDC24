@@ -44,6 +44,13 @@ VAR_OUTPUT n : INT; END_VAR
 END_PROGRAM
 )ST";
 
+const char* kRetainCounter = R"ST(
+PROGRAM retained_counter
+VAR RETAIN n : INT; END_VAR
+    n := n + 1;
+END_PROGRAM
+)ST";
+
 void setup(StScheduler* s)
 {
     std::string err;
@@ -455,6 +462,25 @@ TEST(StControlApi, StatusIncludesArtifactHashForBeToVerifyWhatIsRunning)
     ASSERT_FALSE(p["artifactSha256"].is_null());
     EXPECT_EQ(p["artifactSha256"].get<std::string>().size(), 44u) << "SHA-256 base64";
     EXPECT_EQ(p["programName"], "c");
+}
+
+TEST(StControlApi, StatusExposesRetainColdInitAndWriteHealth)
+{
+    StScheduler scheduler;
+    std::string error;
+    setup(&scheduler);
+    ASSERT_TRUE(scheduler.request_activation("p", build(kRetainCounter), &error)) << error;
+    scheduler.tick(0);
+
+    const json response = call(&scheduler, {{"action", "program_status"}});
+    const json& program = response["tasks"][0]["programs"][0];
+    EXPECT_TRUE(program["hasRetain"].get<bool>());
+    EXPECT_EQ(program["retainState"], "COLD_INIT_MISSING");
+    EXPECT_TRUE(program["retainDetailCode"].is_null())
+        << "thiếu record lần đầu là cold-init bình thường, không phải corruption";
+    EXPECT_EQ(program["retainGeneration"], 0);
+    EXPECT_EQ(program["retainWriteCount"], 0);
+    EXPECT_EQ(program["retainWriteFailures"], 0);
 }
 
 } // namespace core

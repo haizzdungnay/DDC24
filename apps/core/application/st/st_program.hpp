@@ -15,6 +15,7 @@
 #ifndef CORE_ST_PROGRAM_HPP
 #define CORE_ST_PROGRAM_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -94,6 +95,10 @@ const char* st_fb_type_name(StFbType t);
  * không ai được tự đoán bố trí. Xem TYPED_IR_ARTIFACT_SPEC §4.5. */
 int st_fb_input_count(StFbType t);
 int st_fb_output_count(StFbType t);
+/* Số byte canonical dùng để lưu trạng thái nội bộ của một FB RETAIN.
+ * Đây là kích thước wire, không phải sizeof(StFbState): tuyệt đối không ghi
+ * padding/ABI của compiler ra đĩa. */
+std::size_t st_fb_retain_state_size(StFbType t);
 /* Tên tham số vào thứ `idx` (vd TON: 0="IN", 1="PT"), nullptr nếu ngoài biên. */
 const char* st_fb_input_name(StFbType t, int idx);
 StType st_fb_input_type(StFbType t, int idx);

@@ -140,6 +140,27 @@ const char* st_fb_type_name(StFbType t)
 int st_fb_input_count(StFbType t)  { return fb_spec(t).n_in; }
 int st_fb_output_count(StFbType t) { return fb_spec(t).n_out; }
 
+std::size_t st_fb_retain_state_size(StFbType t)
+{
+    switch (t) {
+    case StFbType::TON:
+    case StFbType::TOF:
+        /* timing:u8 + elapsed_ns:i64 + q:u8 */
+        return 10;
+    case StFbType::R_TRIG:
+    case StFbType::F_TRIG:
+        return 1; /* prev_clk:u8 */
+    case StFbType::PID:
+        /* integral/prev_pv/prev_output:f32 + pid_first:u8.
+         * pid_prev_call_ns là mốc monotonic của process nên phải rebase khi
+         * restore, không được ghi raw qua restart. */
+        return 13;
+    case StFbType::NONE:
+        return 0;
+    }
+    return 0;
+}
+
 const char* st_fb_input_name(StFbType t, int idx)
 {
     const FbSpec s = fb_spec(t);

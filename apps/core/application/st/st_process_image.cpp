@@ -385,6 +385,9 @@ bool st_apply_all_outputs(StScheduler* scheduler, PriorityResolver* resolver,
         stats->output_batches_committed++;
         stats->output_commit_generation = generation;
     }
+    /* TASK-PROG-402: chỉ checkpoint state của cycle đã qua trọn output
+     * preflight/commit. Worker ghi atomic ngoài scan; hàm này chỉ copy mailbox. */
+    scheduler->publish_committed_retain_snapshots();
     return true;
 }
 

@@ -122,7 +122,7 @@ TEST(StCompileCli, ReportsCompilerProfileVersionForDeployEvidence)
 {
     const CliRun run = run_cli({"--version"});
     ASSERT_EQ(run.exit_code, 0);
-    EXPECT_NE(run.stdout_text.find("compiler_version=fwsom-st-1.1.0"), std::string::npos);
+    EXPECT_NE(run.stdout_text.find("compiler_version=fwsom-st-1.2.0"), std::string::npos);
     EXPECT_NE(run.stdout_text.find("profile_id=revA-1t-1-5-30"), std::string::npos);
     EXPECT_NE(run.stdout_text.find("artifact_schema=1"), std::string::npos);
     EXPECT_NE(run.stdout_text.find("target_abi=3841"), std::string::npos);

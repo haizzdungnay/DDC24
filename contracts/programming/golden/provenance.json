@@ -3,15 +3,15 @@
   "source": "apps/core/application/st/samples/ahu_fan_control.st",
   "sourceFileSha256": "c26d679829d59de65b2c94ed643d459fd8ee7dfd6b20491d273aa13d093fc6ae",
   "artifact": "contracts/programming/golden/rev_a_ahu_fan_control.mkir",
-  "artifactFileSha256": "5b9a41ccf9e470ba5386991f20a90dfaf9a76fa57a113e6433ea698deefc511c",
+  "artifactFileSha256": "4caa01e6b6e7c3575f775b32ca2df9728d0a2233c9e248c1fa08cd026fe2d538",
   "profile": "contracts/programming/rev_a_profile_v1.json",
   "profileFileSha256": "94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc",
   "generator": "mkddc-st-compile",
   "integrityMode": "HASH_ONLY",
   "buildManifest": "contracts/programming/golden/build_manifest_st_v1.json",
-  "buildManifestFileSha256": "bca61e85fdda8b63ebb2cc4d9080f6b5f10fc53f2d3145f9e44aa970b43c7053",
+  "buildManifestFileSha256": "b1d1fa3365785c754e5450dcd5b7c8cfbc8fc1f174ea36bd7688de21f7cfd85f",
   "fbdArtifact": "contracts/programming/golden/rev_a_ahu_fan_enable_fbd.mkir",
-  "fbdArtifactFileSha256": "47e6d878595bf8187dd6d9995d094f85a600c9ebc78cf5d4604cbd307b63e0f8",
+  "fbdArtifactFileSha256": "289be809a89a16ad4b25e7af8645e6af07bb1b20832550df0952c7dadafdeb13",
   "fbdBuildManifest": "contracts/programming/golden/build_manifest_fbd_v1.json",
-  "fbdBuildManifestFileSha256": "eb00df1af03d16a8de41b38fd6aaff0dffe414c71f1171ac48a82d45e54d7b62"
+  "fbdBuildManifestFileSha256": "776f213b8dad0eb627d3f1ad9e4b3171ede42c1529146330587dc0e70055acc7"
 }

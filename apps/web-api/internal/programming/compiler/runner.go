@@ -193,7 +193,7 @@ func decodeCLIResponse(raw []byte) (cliResponse, error) {
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return cliResponse{}, fmt.Errorf("%w: nhiều JSON value", ErrInvalidOutput)
 	}
-	if response.CompilerVersion != "fwsom-st-1.1.0" || response.ArtifactSchemaVersion != 1 || response.TargetABI != 3841 {
+	if response.CompilerVersion != "fwsom-st-1.2.0" || response.ArtifactSchemaVersion != 1 || response.TargetABI != 3841 {
 		return cliResponse{}, fmt.Errorf("%w: version/ABI", ErrInvalidOutput)
 	}
 	return response, nil
