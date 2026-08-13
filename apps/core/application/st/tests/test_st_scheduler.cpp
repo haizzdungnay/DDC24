@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "st/st_compile.hpp"
+#include "st/st_diagnostic.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_scheduler.hpp"
 #include "st/st_test_key.hpp"
@@ -379,6 +380,75 @@ TEST(StScheduler, TaskOverrunTriggersForceSafeAtThreshold)
     EXPECT_FALSE(s.any_force_safe());
     t->monitor().record(200 * kMs, 100 * kMs);
     EXPECT_TRUE(s.any_force_safe());
+}
+
+TEST(StScheduler, ThreeConsecutiveRealOverrunsFaultTaskAtHostLevel)
+{
+    /* TASK-PROG-304: trước đây run_task() đo exec_ns bằng now_ns - now_ns
+     * (cùng một tham số, không đổi trong hàm) — LUÔN LÀ 0, nên overrun không
+     * bao giờ phát hiện được dù Task chạy chậm tới đâu trên bất kỳ phần cứng
+     * nào. Test này lái qua đường THẬT (on_base_step -> run_task -> đồng hồ
+     * WCET riêng), không nạp trực tiếp vào monitor như test phía trên. */
+    StScheduler s;
+    std::string err;
+    StTaskConfig c = task_cfg("T", 0, /*period=*/100, /*budget=*/10);
+    c.overrun_threshold = 3;
+    ASSERT_TRUE(s.add_task(c, &err));
+    ASSERT_TRUE(s.add_program("T", "p", 0, &err));
+    deploy(s, "p", counter_program(), 0);
+
+    uint64_t clock_ns = 0;
+    s.set_wall_clock_for_test([&clock_ns]() {
+        clock_ns += 20 * kMs; /* mỗi lần đọc "trôi" 20 ms — vượt budget 10 ms */
+        return clock_ns;
+    });
+
+    s.tick(100 * kMs);
+    EXPECT_EQ(s.find_program("p")->state, StProgramState::RUNNING) << "overrun 1/3 chưa đủ ngưỡng";
+    s.tick(200 * kMs);
+    EXPECT_EQ(s.find_program("p")->state, StProgramState::RUNNING) << "overrun 2/3 chưa đủ ngưỡng";
+    s.tick(300 * kMs);
+    EXPECT_EQ(s.find_program("p")->state, StProgramState::FAULTED)
+        << "overrun 3/3 liên tiếp phải fault ĐÚNG Task này";
+    EXPECT_STREQ(s.find_program("p")->last_fault_code, st_diag_code::kRtTaskOverrun);
+    EXPECT_FALSE(s.find_task("T")->last_dispatch_succeeded());
+
+    /* Không tự hồi phục — phải reset_fault tường minh (SPEC §8), kể cả khi
+     * đồng hồ "nhanh lại" ở tick sau. */
+    s.tick(400 * kMs);
+    EXPECT_EQ(s.find_program("p")->state, StProgramState::FAULTED)
+        << "FAULT không tự rời khi chưa reset_fault";
+}
+
+TEST(StScheduler, OneOrTwoOverrunsDoNotFaultOtherIndependentTask)
+{
+    /* "SafetyManager condition độc lập" (TASK-PROG-303/304): overrun của
+     * Task A không được lan sang Task B — mỗi Task tự chịu trách nhiệm ngân
+     * sách của mình, không có kênh chung nào ép cả hai cùng safe/fault. */
+    StScheduler s;
+    std::string err;
+    StTaskConfig slow = task_cfg("SLOW", 0, /*period=*/100, /*budget=*/10);
+    slow.overrun_threshold = 3;
+    StTaskConfig fast = task_cfg("FAST", 1, /*period=*/100, /*budget=*/100);
+    ASSERT_TRUE(s.add_task(slow, &err));
+    ASSERT_TRUE(s.add_task(fast, &err));
+    ASSERT_TRUE(s.add_program("SLOW", "p_slow", 0, &err));
+    ASSERT_TRUE(s.add_program("FAST", "p_fast", 0, &err));
+    deploy(s, "p_slow", counter_program(), 0);
+    deploy(s, "p_fast", counter_program(), 0);
+
+    uint64_t clock_ns = 0;
+    s.set_wall_clock_for_test([&clock_ns]() {
+        clock_ns += 20 * kMs;
+        return clock_ns;
+    });
+
+    s.tick(100 * kMs);
+    s.tick(200 * kMs);
+    EXPECT_EQ(s.find_program("p_slow")->state, StProgramState::RUNNING);
+    EXPECT_EQ(s.find_program("p_fast")->state, StProgramState::RUNNING)
+        << "Task FAST không overrun (exec_ns 20ms < budget 100ms) và không bị Task SLOW kéo theo";
+    EXPECT_GT(counter_of(s, "p_fast"), 0) << "Task FAST vẫn chạy bình thường";
 }
 
 TEST(StScheduler, DisabledTaskDoesNotForceSafe)

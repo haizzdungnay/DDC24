@@ -7,6 +7,41 @@
 ---
 
 ## [Unreleased]
+### Fixed — Overrun Task fault đúng phạm vi, không plant-wide safe Programming P3 (2026-08-13)
+
+**TASK-PROG-304.** Phát hiện và sửa một bug an toàn: `StScheduler::run_task()`
+đo `exec_ns = now_ns - start` trong đó cả hai đều LÀ THAM SỐ `now_ns` được
+truyền vào (mốc dùng chung một tick cho FB/deadline theo đúng chủ đích thiết
+kế) — không đổi trong hàm nên phép trừ LUÔN ra `0`. Hệ quả: dù một Task chạy
+chậm tới đâu, trên bất kỳ phần cứng nào (host, target, HIL), `OverrunMonitor`
+không bao giờ thấy `exec_ns > budget_ns` — cơ chế "3 overrun liên tiếp làm
+Task FAULT" của `OD-PROG-012` chưa từng có hiệu lực dù đã được thiết kế và
+đo (`monitor_.record()` vẫn được gọi, chỉ là luôn nhận số 0).
+
+Sửa bằng cách thêm đồng hồ WCET RIÊNG (`StScheduler::wall_clock_`, mặc định
+`clock_gettime(CLOCK_MONOTONIC)`, tiêm được cho test) khác với `now_ns` của
+tick — đúng theo `task_start`/`exec_ns` trong pseudocode
+`PROGRAM_TASK_SCHEDULER_SPEC` §5. Đọc đồng hồ này không phá bất biến "một
+mốc chung cho FB/deadline" (`DDD-CTRL-PROG-001` §4) vì nó không tham gia
+tính toán chương trình, chỉ phục vụ đo sức khoẻ thời gian. Sau khi
+`should_force_safe()` đúng (3 overrun liên tiếp), MỌI Program `RUNNING` của
+Task đó chuyển `FAULTED` (mã lỗi mới `ST-RT-010`), giữ hold-last, không
+publish output mới — tái dùng cơ chế atomic-mức-Task từ TASK-PROG-302/303.
+
+**Quyết định an toàn quan trọng:** KHÔNG chạm `SafetyManager`/`SafeState`.
+`PROGRAM_TASK_SCHEDULER_SPEC` §6.1 (bản Supporting As-Built cũ, đã supersede)
+từng gắn Task overrun vào `SafetyManager` để ép TOÀN TRẠM về safe-state;
+`DDD-CTRL-PROG-001` §9 (authority Target hiện hành) chốt "3 overrun liên
+tiếp → Task FAULT; KHÔNG plant-wide safe". `StScheduler` không có tham
+chiếu nào tới `SafeState` trong toàn bộ interface, nên bất biến này là cấu
+trúc — không cách nào code sau vô tình nối lại đường cũ.
+
+**Kiểm chứng.** Release build sạch bật Modbus/BACnet/HMI và CTest `962/962`
+PASS; 4 test overrun mới lái qua đường THẬT (`on_base_step → run_task →
+đồng hồ WCET`, không nạp trực tiếp vào monitor như test cũ): 3 overrun liên
+tiếp fault đúng Task và không tự hồi phục thiếu `reset_fault`; overrun của
+Task A không lan sang Task B độc lập. Không đổi Go/FE. Source `4d744ac`.
+
 ### Added — PID anti-windup và read-back priority 5 Programming P3 (2026-08-13)
 
 **TASK-PROG-303.** Thêm `StFbType::PID` (giá trị wire `5`, byte-compatible

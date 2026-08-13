@@ -4,9 +4,18 @@
 #include <new>
 #include <utility>
 
+#include <ctime>
+
 #include "st/st_diagnostic.hpp"
 
 namespace core {
+
+uint64_t default_monotonic_wall_clock_ns()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
+}
 
 const char* st_program_state_name(StProgramState s)
 {
@@ -356,7 +365,12 @@ void StScheduler::apply_pending_activations_at_boundary()
 
 void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out)
 {
-    const uint64_t start = now_ns;
+    /* task_start là đồng hồ RIÊNG cho WCET (SPEC §5) — KHÁC now_ns (mốc
+     * logic chung của tick, dùng cho FB/deadline). Đọc chung một mốc ở đây
+     * luôn cho exec_ns=0, không bao giờ phát hiện được overrun dù Task chạy
+     * chậm tới đâu; đây là lỗi đã có trước TASK-PROG-304, không phải hành vi
+     * định trước. */
+    const uint64_t task_start = wall_clock_();
     uint32_t ran = 0;
     task.last_dispatch_base_step_ = base_step_count_;
     task.last_dispatch_succeeded_ = true;
@@ -421,11 +435,31 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
         ran++;
     }
 
-    const uint64_t exec_ns = now_ns - start;
+    const uint64_t exec_ns = wall_clock_() - task_start;
     task.stats_.run_count++;
     task.stats_.last_exec_ns = exec_ns;
     if (exec_ns > task.stats_.max_exec_ns) task.stats_.max_exec_ns = exec_ns;
     task.monitor_.record(exec_ns, static_cast<uint64_t>(task.config().budget_ms) * 1000000ull);
+
+    /* OD-PROG-012 / DDD-CTRL-PROG-001 §9: 3 overrun liên tiếp làm ĐÚNG Task
+     * đó FAULT, không phải lỗi riêng một Program và KHÔNG plant-wide safe —
+     * bất biến đó thuộc cấu trúc (StScheduler không có tham chiếu tới
+     * SafetyManager/SafeState để phá được dù có muốn). PROGRAM_TASK_
+     * SCHEDULER_SPEC §6.1 cũ gắn overrun vào SafetyManager đã bị supersede
+     * bởi DDD-CTRL-PROG-001, xem thông báo đầu file đó. */
+    if (task.monitor_.should_force_safe()) {
+        for (auto& p : task.programs()) {
+            if (p->state != StProgramState::RUNNING) continue;
+            p->fault_count++;
+            p->last_fault_code = st_diag_code::kRtTaskOverrun;
+            p->last_fault_pc = 0;
+            p->last_fault_line = 0;
+            p->state = StProgramState::FAULTED;
+            p->last_successful_base_step = 0;
+            out->faults++;
+        }
+        task.last_dispatch_succeeded_ = false;
+    }
 
     out->programs_run += ran;
     out->tasks_run++;
