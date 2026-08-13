@@ -8,6 +8,59 @@
 
 ## [Unreleased]
 
+### Added — Programming P5 TASK-PROG-501/502/503: workspace Thiết kế (S5-B) (2026-08-13)
+
+**FE.** Hoàn thiện PGM-02 (`DesignWorkspacePage`) — một workspace, ba tab dùng
+chung một Draft/ETag đúng ràng buộc DDD-FE-PROG-001 §0.1:
+
+- `design/useDraftWorkspace.ts`: `useDraftWorkspace(projectId)` nạp
+  `GET /projects/{projectId}` (có `draft` content nhờ gap-fill BE ở commit
+  trước), `save(operations)` gửi đúng một batch `PATCH .../draft` với
+  `If-Match`, cập nhật `document`/`etag` từ CHÍNH đọc-ngược của server
+  (`response.resource.content`) — không optimistic tự suy. `409` giữ
+  `conflict{expected,actual}` mà KHÔNG xoá buffer đang gõ ở component gọi.
+  `useCheckWorkflow(projectId)`: seal Revision → tạo Check → poll
+  `GET /checks/{id}` mỗi 1,5 s tới trạng thái cuối; không tự retry khi lỗi —
+  người dùng phải chủ động bấm lại (UX §7/§18).
+- `design/editor/ProgramsTab.tsx` (TASK-PROG-501+502): `ApplicationTree` +
+  `SourceEditor` ST (textarea keyboard-first, buffer cục bộ tách khỏi
+  `document` đã lưu) + **`StructuredFbdEditor` mount thẳng cho Program FBD**
+  — dùng nguyên model/reducer/component đã có ở `features/programming/fbd/`
+  (`TASK-PROG-201`), không viết model/reducer/shortcut thứ hai. FBD lưu qua
+  cùng `replaceProgramSource` với `source` là `canonicalFbdJson(document)`
+  (chuỗi JSON) — khớp đúng kiểu `Source string` mà
+  `application/draft.go#replaceProgramSource` yêu cầu bất kể ngôn ngữ. Thêm
+  chương trình mới gửi MỘT batch `[upsertProgram, setTask]` vì
+  `validateDraftDocument` (Go) buộc `task.programOrder` chứa đúng tập
+  `programId` hiện có — tách hai lời gọi sẽ luôn fail ở nửa đường.
+- `design/mapping/MappingTab.tsx` (TASK-PROG-503): bảng Variable↔Point +
+  `PointPickerDialog` lọc theo category/hướng/khả năng ghi, gọi
+  `GET /point-catalog` thật (xem gap-fill BE). Quality sáu mức hiển thị
+  nguyên văn từ catalog, không chuẩn hoá `OFFLINE/STALE/UNKNOWN` về giá trị
+  giả. Ánh xạ mới gửi batch `[upsertVariable, upsertBinding]` vì binding luôn
+  cần một Variable đã tồn tại (`DM-PROG-001` §3.5).
+- `design/task/ExecutionTab.tsx` (TASK-PROG-503): đúng một Task
+  `Control_Main`, chu kỳ chỉ `1/5/30 s` (select, không cho gõ tự do), sắp thứ
+  tự Program bằng nút lên/xuống (bàn phím-hoàn-toàn, không kéo-thả chuột).
+- `shared/ProblemsDrawer.tsx`: dùng chung cho ba tab của PGM-02 (và PGM-03 ở
+  TASK-PROG-504); diagnostic hiển thị qua `programmingErrorCopy(code)` — không
+  in thẳng `messageKey` nội bộ ra người dùng.
+- `DesignWorkspacePage.tsx`: gắn tab-error-badge (đếm diagnostic theo
+  program/binding/khác), banner 409 (Tải lại / Giữ bản đang gõ), banner kết
+  quả Check (giữ đúng "bản đang chạy không đổi" bất kể PASS/FAIL), nút "Mở
+  Kiểm tra & Đưa vào vận hành" chỉ bật khi Check `PASSED`.
+
+**Test/evidence.** `npx tsc --noEmit` sạch; `npm run lint` sạch; `npx vitest
+--run --environment jsdom src` → 59 file/**497** test PASS (494 cũ + 3 mới:
+save batch upsertProgram+setTask đúng thứ tự, 409 giữ buffer + banner, FBD
+program mount `StructuredFbdEditor` thật — không placeholder). `npm run
+build` PASS (contract drift 25/25, error catalog 20/99, FBD self-test 10/10).
+Chrome DevTools/Playwright cho luồng FBD keyboard-only dời sang TASK-PROG-506
+(MCP không có trong phiên).
+
+Refs: TASK-PROG-501, TASK-PROG-502, TASK-PROG-503, Plan 53 §5.9 S5-B,
+DDD-FE-PROG-001 §0.1/§5, UX-WEB-PROG-001 §5/§16.2/§22.
+
 ### Added — Programming P5 TASK-PROG-500: nền tảng FE bốn workspace (2026-08-13)
 
 **Khoảng hở BE phát hiện khi bắt đầu S5-A.** `GET /capabilities`, `GET

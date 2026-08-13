@@ -6,6 +6,7 @@ import { useI18n } from '../../../shared/i18n'
 import type {
   ProgrammingAuditPage,
   ProgrammingCapabilities,
+  ProgrammingPointCatalogPage,
   ProgrammingProjectPage,
   ProgrammingRuntime,
   RemoteState
@@ -84,6 +85,14 @@ export function useProgrammingProjects(): RemoteState<ProgrammingProjectPage> {
     [client]
   )
   return useProgrammingResource(load, 0)
+}
+
+/** `GET /point-catalog` — tab Điểm & Ánh xạ có nhịp làm mới riêng (UX §0.1
+ * ràng buộc 3: `usePointCatalogQuery` tách khỏi `useDraftQuery`). */
+export function useProgrammingPointCatalog(): RemoteState<ProgrammingPointCatalogPage> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => client.request<ProgrammingPointCatalogPage>('getProgrammingPointCatalog'), [client])
+  return useProgrammingResource(load, 10000)
 }
 
 /** `GET /audit` — dùng cho `RecentEngineeringTimeline` của PGM-01 (5 bản ghi mới nhất). */
