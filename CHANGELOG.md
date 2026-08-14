@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Docs — thêm finding Critical mới vào As-Built Gap Report: Binding Variable↔Point chưa nối vào compiler (2026-08-14)
+
+Trong lúc hỗ trợ user commission `AHU_FanControl` trên board Foxlinx thật (ba
+fix Mapping tab/Point Picker/safe-state message ở các mục dưới), phát hiện dù
+Binding cấu hình đúng 100%, `safeStateNoControllerOnly` không bao giờ về
+`false`. Đào tới gốc: `compiler.Input` (Go `runner.go`) chỉ chở mã nguồn ST
+thô; CLI `mkddc-st-compile` không có tham số nhận binding — `io_bindings`
+trong mọi artifact compile qua pipeline hiện tại **luôn rỗng**, bất kể Points
+& Mapping cấu hình đúng đến đâu. Không phải quên một cờ CLI: ngữ pháp ST
+(`ST_SUBSET_SPEC_MK-DDC-24_VI.md` §10) không có cú pháp khai báo binding, còn
+định dạng artifact (`st_loader.cpp`) đã sẵn chỗ nhận `SEC_IO_BINDING` — khâu
+"bindings đi từ Draft vào compiled artifact bằng cách nào" chưa từng được
+thiết kế.
+
+Theo yêu cầu user: không tự chọn cơ chế sửa (mở rộng cú pháp ST vs manifest
+binding riêng qua CLI/IPC mới) — ghi thành finding Critical mới
+`F-PROG-ASBUILT-013` + quyết định `D-07` trong
+`docs/07_records/reviews/PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md`
+(bump Rev 1.0 → 1.1) để PM/CTO/Compiler owner chốt hướng trước khi code.
+Thêm §4 tái hiện kỹ thuật đầy đủ trích dẫn nguồn; hạ UC-05 xuống nhóm
+"Không đạt do defect hiện hành"; ghi chú đây rất có thể là nguyên nhân gốc
+của `F-PROG-ASBUILT-010` (Monitor `items=0`) đã có từ Rev 1.0. Đồng bộ
+`docs/README.md` và `docs/07_records/reviews/README.md` từ "12 finding"
+sang "13 finding".
+
+Refs: `REV-PROG-ASBUILT-GAP-2026-08-14` Rev 1.1.
+
 ### Fixed — 503 ngắt quãng trên `GET /api/v1/programming/runtime/monitor` do tự đụng nội bộ (2026-08-14)
 
 Bối cảnh: user báo lỗi kèm network log thật từ trình duyệt — trang
