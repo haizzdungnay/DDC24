@@ -377,17 +377,18 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await expect(page.getByText('Control_Main')).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('05-design-execution.png'), fullPage: true })
 
-    // UJ-PROG-05 — Kiểm tra
+    // UJ-PROG-05 — Kiểm tra (D-01: PGM-02 chỉ lưu rồi điều hướng, PGM-03 sở
+    // hữu toàn bộ seal/run/poll/result — không còn seal/Check inline ở đây).
     await page.getByRole('tab', { name: 'Chương trình', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Kiểm tra' })).toBeEnabled()
     await page.getByRole('button', { name: 'Kiểm tra' }).click()
-    await expect(page.getByText('Kiểm tra đạt. Bản đang chạy không đổi.')).toBeVisible({ timeout: 10_000 })
+    await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/commission`)
+    await expect(page.getByText('Chưa có Kiểm tra nào.')).toBeVisible()
+    await page.getByRole('button', { name: 'Kiểm tra' }).click()
+    await expect(page.getByText('PASSED')).toBeVisible({ timeout: 10_000 })
+    await page.screenshot({ path: testInfo.outputPath('06-commission.png'), fullPage: true })
 
     // UJ-PROG-06 — Đưa vào vận hành
-    await page.getByRole('button', { name: 'Mở Kiểm tra & Đưa vào vận hành' }).click()
-    await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/commission`)
-    await expect(page.getByText('PASSED')).toBeVisible()
-    await page.screenshot({ path: testInfo.outputPath('06-commission.png'), fullPage: true })
 
     await page.getByRole('button', { name: 'Đưa vào vận hành…' }).click()
     const dialog = page.getByRole('dialog')

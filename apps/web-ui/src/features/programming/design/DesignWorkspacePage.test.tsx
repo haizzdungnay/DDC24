@@ -49,12 +49,13 @@ function baseProject(): ProgrammingProject {
   }
 }
 
-function renderWorkspace() {
+function renderWorkspace(initialPath = '/eng/programming/projects/project-1/design') {
   return render(
     <I18nProvider>
-      <MemoryRouter initialEntries={['/eng/programming/projects/project-1/design']}>
+      <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/eng/programming/projects/:projectId/design" element={<DesignWorkspacePage />} />
+          <Route path="/eng/programming/projects/:projectId/commission" element={<div>Check &amp; Commission page</div>} />
         </Routes>
       </MemoryRouter>
     </I18nProvider>
@@ -166,19 +167,11 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Lệnh FBD' })).toBeInTheDocument())
   })
 
-  it('gửi targetProfile công khai đúng OpenAPI khi tạo Check', async () => {
+  it('nút Kiểm tra điều hướng sang PGM-03 (Check & Commission), không tự seal/check (D-01)', async () => {
     const project = baseProject()
-    project.baseRevisionId = 'b1111111-1111-4111-8111-111111111111'
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      if (operationId === 'createProgrammingRevision') {
-        return Promise.resolve({
-          resource: { projectId: 'project-1', revisionId: 'b324bb9b-2bb5-4fce-8789-f6d0fe493f6a' },
-          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
-        })
-      }
-      if (operationId === 'createProgrammingCheck') return new Promise(() => {})
       throw new Error(`unexpected operation ${operationId}`)
     })
 
@@ -186,14 +179,29 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kiểm tra' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra' }))
 
-    await waitFor(() => {
-      const call = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingCheck')
-      expect(call).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('Check & Commission page')).toBeInTheDocument())
+    // D-01: PGM-02 không được tự gọi seal/Check — đó là việc của PGM-03 giờ.
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingRevision')).toBe(false)
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingCheck')).toBe(false)
+  })
+
+  it('URL mang line/column/length (điều hướng từ Problems ở PGM-03) nhảy đúng vùng chọn trong ST editor (F-PROG-ASBUILT-003)', async () => {
+    const source = 'PROGRAM P\nVAR_OUTPUT X : BOOL; END_VAR\nX := ;\nEND_PROGRAM\n'
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
     })
-    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingCheck')!
-    expect(options.body).toEqual({ schemaVersion: '1.0', targetProfile: 'MK-DDC-24-REV-A' })
-    const [, sealOptions] = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingRevision')!
-    expect(sealOptions.body.baseRevisionId).toBe('b1111111-1111-4111-8111-111111111111')
+
+    renderWorkspace('/eng/programming/projects/project-1/design?tab=programs&program=program-1&line=3&column=6&length=1')
+
+    const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+    const expectedOffset = source.indexOf('X := ;') + 5 // vị trí ';' — cột 6, dòng 3
+    await waitFor(() => expect(textarea.selectionStart).toBe(expectedOffset))
+    expect(textarea.selectionEnd).toBe(expectedOffset + 1)
   })
 
   it('giữ dirty state, chặn Check/beforeunload và Ctrl+S lưu đúng buffer ST', async () => {

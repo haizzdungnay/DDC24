@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { CheckCircle2, ClipboardCheck } from 'lucide-react'
+import { ClipboardCheck } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { Button } from '../../../shared/components/Button'
-import { useDraftWorkspace, useCheckWorkflow } from './useDraftWorkspace'
+import { useDraftWorkspace } from './useDraftWorkspace'
 import { ProgramsTab } from './editor/ProgramsTab'
 import { MappingTab } from './mapping/MappingTab'
 import { ExecutionTab } from './task/ExecutionTab'
-import { ProblemsDrawer } from '../shared/ProblemsDrawer'
 import { Modal } from '../../../shared/components/Modal'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
@@ -23,9 +22,14 @@ const TAB_LABEL: Record<DesignTab, [string, string]> = {
   execution: ['Thực thi', 'Execution']
 }
 
+/* D-01: PGM-02 không còn tự chạy Check nên không còn nguồn diagnostic nào ở
+ * trang này — hằng số module-level tránh tạo mảng rỗng mới mỗi render. */
+const EMPTY_DIAGNOSTICS: ProgrammingDiagnostic[] = []
+
 /**
  * PGM-02 Thiết kế — `UJ-PROG-02/03/04` (TASK-PROG-501..503). Một workspace,
- * ba tab, một context Draft/ETag và một `ProblemsDrawer` dùng chung
+ * ba tab, một context Draft/ETag. D-01: Check/Problems giờ ở PGM-03
+ * (`CheckCommissionPage`) — trang này chỉ lưu rồi điều hướng, có dirty guard
  * (DDD-FE-PROG-001 §0.1). Tab là trạng thái URL, đọc/ghi bằng `replace`
  * trong `useEffect` (không setState lúc render).
  */
@@ -42,7 +46,22 @@ export function DesignWorkspacePage() {
   // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-03
   // (Check) chọn sẵn đúng Program bị lỗi khi mở workspace Thiết kế.
   const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>(() => searchParams.get('program') ?? undefined)
-  const [focusDiagnostic, setFocusDiagnostic] = useState<ProgrammingDiagnostic | null>(null)
+  /* D-01/F-PROG-ASBUILT-003: PGM-03 giờ sở hữu Check/Problems (không phải ở
+   * đây nữa) — khi người dùng bấm một diagnostic ở đó, nó điều hướng sang đây
+   * kèm `line/column/length` trong query string thay vì state cùng trang.
+   * Đọc một lần lúc mount, đúng pattern `selectedProgramId` ở trên; không cần
+   * setter vì trang này không còn tự phát sinh diagnostic nào nữa. */
+  const [focusDiagnostic] = useState<ProgrammingDiagnostic | null>(() => {
+    const programId = searchParams.get('program')
+    const line = searchParams.get('line')
+    const column = searchParams.get('column')
+    if (!programId || !line || !column) return null
+    const length = searchParams.get('length')
+    return {
+      code: '', severity: 'ERROR', messageKey: '',
+      location: { programId, line: Number(line), column: Number(column), length: length ? Number(length) : 1 }
+    }
+  })
   const [programOperations, setProgramOperations] = useState<ProgrammingDraftOperation[]>([])
   const [executionOperations, setExecutionOperations] = useState<ProgrammingDraftOperation[]>([])
   const [discardVersion, setDiscardVersion] = useState(0)
@@ -62,30 +81,26 @@ export function DesignWorkspacePage() {
   }, [requested, tab, setSearchParams])
 
   const workspace = useDraftWorkspace(projectId)
-  const checkWorkflow = useCheckWorkflow(projectId)
   const pendingOperations = useMemo(() => [...programOperations, ...executionOperations], [executionOperations, programOperations])
   const draftDirty = pendingOperations.length > 0
 
   const updateProgramOperations = useCallback((operations: ProgrammingDraftOperation[]) => setProgramOperations(operations), [])
   const updateExecutionOperations = useCallback((operations: ProgrammingDraftOperation[]) => setExecutionOperations(operations), [])
 
+  /* D-01: PGM-02 không còn tự chạy Check nên không có `checkState` thật để
+   * báo — Check/Commission (PGM-03) là nơi duy nhất cập nhật giá trị này giờ
+   * (`CheckCommissionPage`). Giữ nguyên `idle` ở đây thay vì suy đoán. */
   useEffect(() => {
     if (workspace.status !== 'ready' || !workspace.project) return
-    const phase = checkWorkflow.state.phase
-    const checkState = phase === 'sealing' || phase === 'checking'
-      ? 'checking'
-      : phase === 'done'
-        ? checkWorkflow.state.check.state === 'PASSED' ? 'passed' : 'failed'
-        : phase === 'error' ? 'unknown' : 'idle'
     setEditingContext({
       projectId: workspace.project.projectId,
       projectName: workspace.project.name,
       draftRevisionId: workspace.project.draftRevisionId,
       dirty: draftDirty,
-      checkState
+      checkState: 'idle'
     })
     return () => setEditingContext(null)
-  }, [checkWorkflow.state, draftDirty, setEditingContext, workspace.project, workspace.status])
+  }, [draftDirty, setEditingContext, workspace.project, workspace.status])
 
   useEffect(() => {
     if (!draftDirty) return undefined
@@ -109,17 +124,6 @@ export function DesignWorkspacePage() {
     }
   }, [draftDirty])
 
-  const diagnostics: ProgrammingDiagnostic[] = checkWorkflow.state.phase === 'done' ? checkWorkflow.state.check.diagnostics : []
-  const tabErrorCount = useMemo(() => {
-    const counts: Record<DesignTab, number> = { programs: 0, mapping: 0, execution: 0 }
-    for (const diagnostic of diagnostics) {
-      if (diagnostic.location?.bindingId) counts.mapping += 1
-      else if (diagnostic.location?.programId) counts.programs += 1
-      else counts.execution += 1
-    }
-    return counts
-  }, [diagnostics])
-
   if (workspace.status === 'loading') {
     return <StateBlock state="loading" title={pick('Đang tải Draft…', 'Loading draft…')} />
   }
@@ -132,62 +136,45 @@ export function DesignWorkspacePage() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-2">
         <div role="tablist" aria-label={pick('Tab workspace Thiết kế', 'Design workspace tabs')} className="flex gap-1">
-          {VALID_TABS.map((candidate) => {
-            const errors = tabErrorCount[candidate]
-            return (
-              <button
-                key={candidate}
-                type="button"
-                role="tab"
-                aria-selected={candidate === tab}
-                className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1.5 text-sm font-medium ${
-                  candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
-                }`}
-                onClick={() =>
-                  setSearchParams(
-                    (current) => {
-                      const next = new URLSearchParams(current)
-                      next.set('tab', candidate)
-                      return next
-                    },
-                    { replace: true }
-                  )
-                }
-              >
-                {pick(...TAB_LABEL[candidate])}
-                {errors > 0 && <span className="ml-1.5 rounded-full bg-[var(--c-fault-bg)] px-1.5 text-[10px] font-bold text-[var(--c-on-fault)]">{errors}</span>}
-              </button>
-            )
-          })}
+          {VALID_TABS.map((candidate) => (
+            <button
+              key={candidate}
+              type="button"
+              role="tab"
+              aria-selected={candidate === tab}
+              className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1.5 text-sm font-medium ${
+                candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+              }`}
+              onClick={() =>
+                setSearchParams(
+                  (current) => {
+                    const next = new URLSearchParams(current)
+                    next.set('tab', candidate)
+                    return next
+                  },
+                  { replace: true }
+                )
+              }
+            >
+              {pick(...TAB_LABEL[candidate])}
+            </button>
+          ))}
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
+            {/* D-01: PGM-02 không tự seal/run Check nữa — chỉ điều hướng sang
+             * PGM-03 (Check & Commission), nơi giờ sở hữu toàn bộ vòng
+             * seal/run/poll/result. Nút vẫn khoá khi Draft chưa lưu, đúng
+             * "dirty guard" D-01 yêu cầu. */}
             <Button
               size="sm"
               variant="secondary"
               icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
-              loading={checkWorkflow.state.phase === 'sealing' || checkWorkflow.state.phase === 'checking'}
               disabled={draftDirty}
-              onClick={() => workspace.project && void checkWorkflow.runCheck(workspace.project)}
+              onClick={() => navigate(`/eng/programming/projects/${projectId}/commission`)}
             >
               {pick('Kiểm tra', 'Check')}
             </Button>
-            {checkWorkflow.state.phase === 'done' && checkWorkflow.state.check.state === 'PASSED' && (() => {
-              const passedCheck = checkWorkflow.state.check
-              return (
-                <Button
-                  size="sm"
-                  icon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-                  onClick={() =>
-                    navigate(`/eng/programming/projects/${projectId}/commission?revisionId=${encodeURIComponent(passedCheck.revisionId)}&checkId=${encodeURIComponent(passedCheck.checkId)}`, {
-                      state: { revisionId: passedCheck.revisionId, checkId: passedCheck.checkId }
-                    })
-                  }
-                >
-                  {pick('Mở Kiểm tra & Đưa vào vận hành', 'Open Check & Commission')}
-                </Button>
-              )
-            })()}
           </div>
         )}
       </div>
@@ -205,28 +192,9 @@ export function DesignWorkspacePage() {
           </div>
         </div>
       )}
-      {checkWorkflow.state.phase === 'error' && (
-        <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
-          {checkWorkflow.state.message}
-        </div>
-      )}
       {draftDirty && (
         <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
           {pick('Draft có thay đổi chưa lưu. Hãy lưu trước khi Kiểm tra.', 'The draft has unsaved changes. Save before running Check.')}
-        </div>
-      )}
-      {checkWorkflow.state.phase === 'done' && (
-        <div
-          role="status"
-          className={`rounded-[var(--radius)] border p-3 text-sm ${
-            checkWorkflow.state.check.state === 'PASSED'
-              ? 'border-[var(--c-good)] bg-[var(--c-good-bg)] text-[var(--c-good-fg)]'
-              : 'border-[var(--c-fault)] bg-[var(--c-fault-bg)] text-[var(--c-fault-fg)]'
-          }`}
-        >
-          {checkWorkflow.state.check.state === 'PASSED'
-            ? pick('Kiểm tra đạt. Bản đang chạy không đổi.', 'Check passed. The running version is unchanged.')
-            : pick(`Kiểm tra không đạt (${checkWorkflow.state.check.state}). Bản đang chạy không đổi.`, `Check did not pass (${checkWorkflow.state.check.state}). The running version is unchanged.`)}
         </div>
       )}
 
@@ -243,7 +211,7 @@ export function DesignWorkspacePage() {
           selectedProgramId={selectedProgramId}
           onSelectProgram={setSelectedProgramId}
           onSave={workspace.save}
-          diagnostics={diagnostics}
+          diagnostics={EMPTY_DIAGNOSTICS}
           focusDiagnostic={focusDiagnostic}
           onPendingOperationsChange={updateProgramOperations}
           discardVersion={discardVersion}
@@ -255,32 +223,6 @@ export function DesignWorkspacePage() {
       <div hidden={tab !== 'execution'}>
         <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} onPendingOperationsChange={updateExecutionOperations} discardVersion={discardVersion} />
       </div>
-
-      {diagnostics.length > 0 && (
-        <div>
-          <h3 className="mb-1 text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Vấn đề', 'Problems')}</h3>
-          <ProblemsDrawer
-            diagnostics={diagnostics}
-            onSelect={(diagnostic) => {
-              if (diagnostic.location?.bindingId) {
-                setSearchParams((current) => {
-                  const next = new URLSearchParams(current)
-                  next.set('tab', 'mapping')
-                  return next
-                })
-              } else if (typeof diagnostic.location?.programId === 'string') {
-                setFocusDiagnostic(diagnostic)
-                setSelectedProgramId(diagnostic.location.programId)
-                setSearchParams((current) => {
-                  const next = new URLSearchParams(current)
-                  next.set('tab', 'programs')
-                  return next
-                })
-              }
-            }}
-          />
-        </div>
-      )}
 
       <Modal
         open={pendingNavigation !== null}

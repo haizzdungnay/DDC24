@@ -4,6 +4,7 @@ import { useProgrammingCapabilities, useProgrammingProjects, useProgrammingRunti
 import type { ProgrammingCapabilities, ProgrammingRuntime, RemoteState } from '../model/types'
 import { ProgrammingHeader } from './ProgrammingHeader'
 import { ProgrammingContextBar } from './ProgrammingContextBar'
+import { ProgrammingDesktopNav } from './ProgrammingDesktopNav'
 import { ProgrammingMobileNav } from './ProgrammingMobileNav'
 
 interface ProgrammingRuntimeContextValue {
@@ -69,6 +70,7 @@ export function ProgrammingLayout() {
             runtime.refresh()
           }}
         />
+        <ProgrammingDesktopNav projectId={visibleEditingContext?.projectId ?? null} />
         <ProgrammingContextBar runtimeStatus={runtime.status} runtime={runtime.data} editing={visibleEditingContext} />
         <Outlet />
       </div>

@@ -60,7 +60,12 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
     if (intervalMs <= 0) return undefined
     const timer = window.setInterval(run, intervalMs)
     return () => window.clearInterval(timer)
-  }, [run, intervalMs])
+    // `load` cố ý nằm trong deps dù `run()` luôn đọc qua `loadRef` (giá trị
+    // mới nhất) — thiếu nó, đổi định danh tài nguyên (vd `checkId` từ
+    // `undefined` sang giá trị thật sau một `navigate` cùng trang, xem D-01/
+    // `CheckCommissionPage`) sẽ không tự fetch lại, chỉ đọc mãi kết quả rỗng
+    // của lần mount đầu tới khi ai đó gọi `refresh()` thủ công.
+  }, [run, load, intervalMs])
 
   return { status, data, error, refresh: run }
 }

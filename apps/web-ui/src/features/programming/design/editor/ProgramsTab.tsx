@@ -9,6 +9,15 @@ import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import { canonicalFbdJson, FBD_PROFILE_ID, FBD_SCHEMA_VERSION, type FbdDocument } from '../../fbd/model'
 import type { ProgrammingDiagnostic, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingProgram } from '../../model/types'
 
+/** F-PROG-ASBUILT-001/D-02: Program ST mới không được bắt đầu ở `document: ''`
+ * — compiler luôn Check FAILED ngay khi tạo. Định danh `PROGRAM` cố định
+ * (không lấy từ tên hiển thị, có thể có dấu/khoảng trắng không hợp lệ trong
+ * ST) — `compilerInput()` (BE) định tuyến theo `programId` (UUID), không đọc
+ * tên khai báo trong source, nên định danh này chỉ cần là ST hợp lệ. */
+function stProgramTemplate(): string {
+  return 'PROGRAM NewProgram\nEND_PROGRAM\n'
+}
+
 function emptyFbdDocument(name: string): FbdDocument {
   return {
     $schema: '../../fbd_v1.schema.json',
@@ -114,7 +123,7 @@ export function ProgramsTab({
       name,
       kind: 'PROGRAM',
       language,
-      document: language === 'FBD' ? canonicalFbdJson(emptyFbdDocument(name)) : '',
+      document: language === 'FBD' ? canonicalFbdJson(emptyFbdDocument(name)) : stProgramTemplate(),
       executionOrder: document.programs.length,
       functionalTags: []
     }
@@ -298,6 +307,10 @@ function SourceEditor({
   const { pick } = useI18n()
   const committed = typeof program.document === 'string' ? program.document : ''
   const dirty = source !== committed
+  /* D-02: chặn lưu ST rỗng — compiler luôn Check FAILED, Save không nên để
+   * người dùng tự khám phá điều đó sau một vòng round-trip mạng. */
+  const isEmptySource = source.trim().length === 0
+  const canSave = dirty && !isEmptySource
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const lineGutterRef = useRef<HTMLPreElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -356,7 +369,8 @@ function SourceEditor({
                 size="sm"
                 icon={<Save className="h-4 w-4" aria-hidden="true" />}
                 loading={saving}
-                disabled={!dirty}
+                disabled={!canSave}
+                title={isEmptySource ? pick('Mã nguồn ST không được để trống', 'ST source cannot be empty') : undefined}
                 onClick={() => void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'ST', source }])}
               >
                 {pick('Lưu', 'Save')}
@@ -417,7 +431,7 @@ function SourceEditor({
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
               event.preventDefault(); setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0)
             }
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && canEdit && dirty) {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && canEdit && canSave) {
               event.preventDefault(); void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'ST', source }])
             }
           }}
@@ -448,7 +462,12 @@ function SourceEditor({
           {pick(`${diagnostics.length} diagnostic. Chọn lỗi trong khay Vấn đề để tới đúng dòng/cột.`, `${diagnostics.length} diagnostic(s). Select one in Problems to jump to its line and column.`)}
         </p>
       )}
-      {dirty && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
+      {isEmptySource && (
+        <p className="text-xs text-[var(--c-fault-fg)]">
+          {pick('Mã nguồn ST không được để trống — cần ít nhất khung PROGRAM/END_PROGRAM để lưu.', 'ST source cannot be empty — needs at least a PROGRAM/END_PROGRAM skeleton to save.')}
+        </p>
+      )}
+      {dirty && !isEmptySource && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
     </div>
   )
 }
