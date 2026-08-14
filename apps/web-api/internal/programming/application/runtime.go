@@ -104,15 +104,20 @@ type CapabilitiesLimits struct {
 // snapshot cuối-scan do Core công bố; khi nguồn monitor lỗi, trạng thái phải hạ
 // về UNAVAILABLE/UNKNOWN thay vì suy đoán hệ thống đang khỏe.
 type RuntimeView struct {
-	SchemaVersion    string           `json:"schemaVersion"`
-	ControllerID     string           `json:"controllerId"`
-	ProducerState    string           `json:"producerState"`
-	ActiveRevisionID *string          `json:"activeRevisionId"`
-	LKGRevisionID    *string          `json:"lkgRevisionId"`
-	TaskState        string           `json:"taskState"`
-	SafeState        bool             `json:"safeState"`
-	ObservedAt       string           `json:"observedAt"`
-	Task             *TaskMetricsView `json:"task"`
+	SchemaVersion    string  `json:"schemaVersion"`
+	ControllerID     string  `json:"controllerId"`
+	ProducerState    string  `json:"producerState"`
+	ActiveRevisionID *string `json:"activeRevisionId"`
+	LKGRevisionID    *string `json:"lkgRevisionId"`
+	TaskState        string  `json:"taskState"`
+	SafeState        bool    `json:"safeState"`
+	// SafeStateNoControllerOnly: true khi SafeState chỉ do chưa có Program
+	// nào đang thật sự điều khiển output (trigger T7 đơn độc ở Core), không
+	// có lỗi I/O/stale/overrun thật đi kèm — Commission một Program có output
+	// sẽ tự giải quyết, không phải một fault cần khắc phục trước khi Commission.
+	SafeStateNoControllerOnly bool             `json:"safeStateNoControllerOnly"`
+	ObservedAt                string           `json:"observedAt"`
+	Task                      *TaskMetricsView `json:"task"`
 }
 
 func (s *RuntimeService) GetCapabilities(ctx context.Context) (CapabilitiesView, error) {
@@ -154,6 +159,7 @@ func (s *RuntimeService) GetRuntime(ctx context.Context) (RuntimeView, error) {
 	}
 	producerState := "READY"
 	safeState := false
+	safeStateNoControllerOnly := false
 	var task *TaskMetricsView
 	if s.monitor != nil {
 		truth, monitorErr := s.monitor.ReadProgrammingMonitorSnapshot(ctx)
@@ -161,6 +167,7 @@ func (s *RuntimeService) GetRuntime(ctx context.Context) (RuntimeView, error) {
 			producerState = "DEGRADED"
 		} else {
 			safeState = truth.SafeState
+			safeStateNoControllerOnly = truth.SafeStateNoControllerOnly
 			task = truth.Task
 			if task != nil {
 				taskState = task.State
@@ -171,15 +178,16 @@ func (s *RuntimeService) GetRuntime(ctx context.Context) (RuntimeView, error) {
 		}
 	}
 	return RuntimeView{
-		SchemaVersion:    "1.0",
-		ControllerID:     s.controllerID,
-		ProducerState:    producerState,
-		ActiveRevisionID: firstNonNil(payload.ActiveRevisionID, response.ActiveRevisionID),
-		LKGRevisionID:    firstNonNil(payload.LKGRevisionID, response.LKGRevisionID),
-		TaskState:        taskState,
-		SafeState:        safeState,
-		ObservedAt:       observedAt,
-		Task:             task,
+		SchemaVersion:             "1.0",
+		ControllerID:              s.controllerID,
+		ProducerState:             producerState,
+		ActiveRevisionID:          firstNonNil(payload.ActiveRevisionID, response.ActiveRevisionID),
+		LKGRevisionID:             firstNonNil(payload.LKGRevisionID, response.LKGRevisionID),
+		TaskState:                 taskState,
+		SafeState:                 safeState,
+		SafeStateNoControllerOnly: safeStateNoControllerOnly,
+		ObservedAt:                observedAt,
+		Task:                      task,
 	}, nil
 }
 

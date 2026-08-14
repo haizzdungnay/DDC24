@@ -40,6 +40,48 @@ func newRuntimeService(t *testing.T, reader RuntimeStatusReader) *RuntimeService
 	return service
 }
 
+func newRuntimeServiceWithMonitor(t *testing.T, reader RuntimeStatusReader, monitor MonitorSnapshotProvider) *RuntimeService {
+	t.Helper()
+	service, err := NewRuntimeService(RuntimeServiceOptions{Runtime: reader, Monitor: monitor, ControllerID: "controller-local"})
+	if err != nil {
+		t.Fatalf("NewRuntimeService: %v", err)
+	}
+	return service
+}
+
+// safeStateNoControllerOnly phải đi xuyên suốt từ MonitorTruthSnapshot tới
+// RuntimeView — đây là điều kiện CheckCommissionPage dùng để không chặn
+// Commission khi lý do duy nhất khiến Core safe là "chưa ai điều khiển output"
+// (trigger T7 đơn độc ở Core), khác với safe-state do lỗi thật.
+func TestRuntimeServiceGetRuntimePropagatesSafeStateNoControllerOnly(t *testing.T) {
+	monitor := fakeMonitorProvider{snapshot: MonitorTruthSnapshot{SafeState: true, SafeStateNoControllerOnly: true}}
+	service := newRuntimeServiceWithMonitor(t, &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY"}, monitor)
+	view, err := service.GetRuntime(context.Background())
+	if err != nil {
+		t.Fatalf("GetRuntime: %v", err)
+	}
+	if !view.SafeState || !view.SafeStateNoControllerOnly {
+		t.Fatalf("safeState/safeStateNoControllerOnly phải truyền nguyên từ monitor: %+v", view)
+	}
+}
+
+// Safe-state do lỗi thật (iop_fault/stale/graph_bad/overrun) đi kèm
+// no_controller: Core (scan_loop.cpp) đã tính safeStateNoControllerOnly=false
+// trong trường hợp này — RuntimeService chỉ cần truyền nguyên, không tự suy
+// diễn thêm gì (chính sách quyết định "cho Commission hay không" nằm ở FE
+// coreReady, không phải ở tầng này).
+func TestRuntimeServiceGetRuntimeKeepsSafeStateNoControllerOnlyFalseWhenRealFault(t *testing.T) {
+	monitor := fakeMonitorProvider{snapshot: MonitorTruthSnapshot{SafeState: true, SafeStateNoControllerOnly: false}}
+	service := newRuntimeServiceWithMonitor(t, &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY"}, monitor)
+	view, err := service.GetRuntime(context.Background())
+	if err != nil {
+		t.Fatalf("GetRuntime: %v", err)
+	}
+	if !view.SafeState || view.SafeStateNoControllerOnly {
+		t.Fatalf("safeState phải true và safeStateNoControllerOnly phải false khi có lỗi thật: %+v", view)
+	}
+}
+
 func TestRuntimeServiceCapabilitiesReadyWhenCoreReachable(t *testing.T) {
 	service := newRuntimeService(t, &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY"})
 	capabilities, err := service.GetCapabilities(context.Background())

@@ -87,21 +87,28 @@ type ScanStatus struct {
 }
 
 type webIPCResponse struct {
-	ID                    uint64               `json:"id"`
-	Result                string               `json:"result"`
-	AppliedValue          any                  `json:"applied_value,omitempty"`
-	ActiveSource          string               `json:"active_source,omitempty"`
-	RemainingTTLS         uint32               `json:"remaining_ttl_s,omitempty"`
-	Error                 string               `json:"error,omitempty"`
-	AlarmID               string               `json:"alarmId,omitempty"`
-	Alarms                []coreAlarmState     `json:"alarms,omitempty"`
-	SnapshotID            uint64               `json:"snapshotId,omitempty"`
-	SnapshotObservedAtUTC string               `json:"snapshotObservedAtUtc,omitempty"`
-	CapturedMonotonicNs   uint64               `json:"capturedMonotonicNs,omitempty"`
-	SafeState             bool                 `json:"safeState,omitempty"`
-	Task                  *RuntimeTaskSnapshot `json:"task,omitempty"`
-	Points                []RuntimePoint       `json:"points,omitempty"`
-	Schedules             []coreScheduleState  `json:"schedules,omitempty"`
+	ID                    uint64           `json:"id"`
+	Result                string           `json:"result"`
+	AppliedValue          any              `json:"applied_value,omitempty"`
+	ActiveSource          string           `json:"active_source,omitempty"`
+	RemainingTTLS         uint32           `json:"remaining_ttl_s,omitempty"`
+	Error                 string           `json:"error,omitempty"`
+	AlarmID               string           `json:"alarmId,omitempty"`
+	Alarms                []coreAlarmState `json:"alarms,omitempty"`
+	SnapshotID            uint64           `json:"snapshotId,omitempty"`
+	SnapshotObservedAtUTC string           `json:"snapshotObservedAtUtc,omitempty"`
+	CapturedMonotonicNs   uint64           `json:"capturedMonotonicNs,omitempty"`
+	SafeState             bool             `json:"safeState,omitempty"`
+	// SafeStateNoControllerOnly: true CHỈ KHI safe-state đến từ trigger T7
+	// (no_controller) đơn độc — không có iop_fault/stale/graph_input_bad/
+	// overrun đi kèm. Xem apps/core/domain/safety/safe_state.hpp §5.2 và
+	// runtime_point_snapshot.hpp. Dùng để không chặn Commission khi lý do
+	// duy nhất là "chưa có Program nào đang thật sự điều khiển output" —
+	// đúng điều Commission sẽ giải quyết.
+	SafeStateNoControllerOnly bool                 `json:"safeStateNoControllerOnly,omitempty"`
+	Task                      *RuntimeTaskSnapshot `json:"task,omitempty"`
+	Points                    []RuntimePoint       `json:"points,omitempty"`
+	Schedules                 []coreScheduleState  `json:"schedules,omitempty"`
 }
 
 // coreScheduleState là trạng thái runtime lịch do controller trả về
@@ -230,12 +237,13 @@ func (c *CoreClient) ReadPointSnapshot(ctx context.Context) (RuntimePointSnapsho
 		return RuntimePointSnapshot{}, fmt.Errorf("core rejected point snapshot: %s", resp.Error)
 	}
 	return RuntimePointSnapshot{
-		SnapshotID:            resp.SnapshotID,
-		SnapshotObservedAtUTC: resp.SnapshotObservedAtUTC,
-		CapturedMonotonicNs:   resp.CapturedMonotonicNs,
-		SafeState:             resp.SafeState,
-		Task:                  resp.Task,
-		Points:                resp.Points,
+		SnapshotID:                resp.SnapshotID,
+		SnapshotObservedAtUTC:     resp.SnapshotObservedAtUTC,
+		CapturedMonotonicNs:       resp.CapturedMonotonicNs,
+		SafeState:                 resp.SafeState,
+		SafeStateNoControllerOnly: resp.SafeStateNoControllerOnly,
+		Task:                      resp.Task,
+		Points:                    resp.Points,
 	}, nil
 }
 

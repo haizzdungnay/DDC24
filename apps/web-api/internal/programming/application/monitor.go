@@ -19,8 +19,13 @@ type MonitorSnapshotProvider interface {
 type MonitorTruthSnapshot struct {
 	ObservedAt string
 	SafeState  bool
-	Task       *TaskMetricsView
-	Points     []MonitorPointTruth
+	// SafeStateNoControllerOnly: true khi safe-state chỉ do chưa có Program
+	// nào đang thật sự điều khiển output (trigger T7 đơn độc), không có lỗi
+	// I/O/stale/overrun thật đi kèm. Dùng để RuntimeService không chặn
+	// Commission trong đúng trường hợp mà Commission sẽ tự giải quyết.
+	SafeStateNoControllerOnly bool
+	Task                      *TaskMetricsView
+	Points                    []MonitorPointTruth
 }
 
 type MonitorPointTruth struct {

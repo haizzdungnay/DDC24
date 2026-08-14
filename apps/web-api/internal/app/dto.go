@@ -262,12 +262,16 @@ type RuntimeTaskSnapshot struct {
 }
 
 type RuntimePointSnapshot struct {
-	SnapshotID            uint64               `json:"snapshotId"`
-	SnapshotObservedAtUTC string               `json:"snapshotObservedAtUtc"`
-	CapturedMonotonicNs   uint64               `json:"capturedMonotonicNs"`
-	SafeState             bool                 `json:"safeState"`
-	Task                  *RuntimeTaskSnapshot `json:"task"`
-	Points                []RuntimePoint       `json:"points"`
+	SnapshotID            uint64 `json:"snapshotId"`
+	SnapshotObservedAtUTC string `json:"snapshotObservedAtUtc"`
+	CapturedMonotonicNs   uint64 `json:"capturedMonotonicNs"`
+	SafeState             bool   `json:"safeState"`
+	// SafeStateNoControllerOnly: xem chú thích cùng tên ở core_client.go —
+	// true khi safe-state chỉ do chưa có Program nào điều khiển output,
+	// không có lỗi thật đi kèm.
+	SafeStateNoControllerOnly bool                 `json:"safeStateNoControllerOnly"`
+	Task                      *RuntimeTaskSnapshot `json:"task"`
+	Points                    []RuntimePoint       `json:"points"`
 }
 
 type HistorianPolicyPatch struct {

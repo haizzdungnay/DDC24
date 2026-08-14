@@ -64,9 +64,10 @@ func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx
 		trackedOverrides = adapter.app.overrides.Snapshot()
 	}
 	result := programmingapplication.MonitorTruthSnapshot{
-		ObservedAt: snapshot.SnapshotObservedAtUTC,
-		SafeState:  snapshot.SafeState,
-		Points:     make([]programmingapplication.MonitorPointTruth, 0, len(points)),
+		ObservedAt:                snapshot.SnapshotObservedAtUTC,
+		SafeState:                 snapshot.SafeState,
+		SafeStateNoControllerOnly: snapshot.SafeStateNoControllerOnly,
+		Points:                    make([]programmingapplication.MonitorPointTruth, 0, len(points)),
 	}
 	if snapshot.Task != nil {
 		result.Task = &programmingapplication.TaskMetricsView{
