@@ -217,6 +217,76 @@ TEST(StCompileCli, PreservesStructuredTextDiagnosticLocation)
     EXPECT_GT(result.at("diagnostics")[0].at("column").get<uint32_t>(), 0u);
 }
 
+TEST(StCompileCli, IoMapInBindsVariablesIntoArtifactBindingSection)
+{
+    const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
+    const std::string io_map_path = temporary_path("/tmp/mkddc-cli-iomap-XXXXXX");
+    ASSERT_FALSE(io_map_path.empty());
+    const nlohmann::json io_map = {
+        {"entries", nlohmann::json::array({
+            {{"variable", "SupplyTemp"}, {"direction", "input"}, {"pointId", "UI-01"},
+             {"type", "REAL"}, {"category", "LOCAL"}},
+            {{"variable", "FanEnable"}, {"direction", "output"}, {"pointId", "DO-01"},
+             {"type", "BOOL"}, {"category", "LOCAL"}},
+            {{"variable", "FanSpeed"}, {"direction", "output"}, {"pointId", "AO-01"},
+             {"type", "REAL"}, {"category", "LOCAL"}},
+        })},
+    };
+    ASSERT_TRUE(write_text(io_map_path, io_map.dump()));
+    const CliRun run = run_cli({"--source", source, "--source-id", "cli-io-map",
+                                "--io-map-in", io_map_path});
+    ::unlink(io_map_path.c_str());
+    ASSERT_EQ(run.exit_code, 0) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_TRUE(result.at("ok"));
+    EXPECT_EQ(result.at("ioBindingCount"), 3u);
+}
+
+TEST(StCompileCli, IoMapInRejectsBindingBoolOutputToReadOnlyPoint)
+{
+    /* Tái hiện đúng bug thật F-PROG-ASBUILT-013 phát hiện qua Mapping tab:
+     * AlarmHigh (BOOL, VAR_OUTPUT) bind vào UI-09 — UI là ngõ vào vật lý
+     * read-only, không phải lỗi giả định. */
+    const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
+    const std::string io_map_path = temporary_path("/tmp/mkddc-cli-iomap-bad-XXXXXX");
+    ASSERT_FALSE(io_map_path.empty());
+    const nlohmann::json io_map = {
+        {"entries", nlohmann::json::array({
+            {{"variable", "AlarmHigh"}, {"direction", "output"}, {"pointId", "UI-09"},
+             {"type", "BOOL"}, {"category", "LOCAL"}, {"writable", false}},
+        })},
+    };
+    ASSERT_TRUE(write_text(io_map_path, io_map.dump()));
+    const CliRun run = run_cli({"--source", source, "--source-id", "cli-io-map-bad",
+                                "--io-map-in", io_map_path});
+    ::unlink(io_map_path.c_str());
+    ASSERT_EQ(run.exit_code, 1);
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_FALSE(result.at("ok"));
+    EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-IOMAP-002");
+}
+
+TEST(StCompileCli, IoMapInRejectsUnsupportedVirtualPointCategory)
+{
+    const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
+    const std::string io_map_path = temporary_path("/tmp/mkddc-cli-iomap-vp-XXXXXX");
+    ASSERT_FALSE(io_map_path.empty());
+    const nlohmann::json io_map = {
+        {"entries", nlohmann::json::array({
+            {{"variable", "FanEnable"}, {"direction", "output"}, {"pointId", "BV-01"},
+             {"type", "BOOL"}, {"category", "VP"}},
+        })},
+    };
+    ASSERT_TRUE(write_text(io_map_path, io_map.dump()));
+    const CliRun run = run_cli({"--source", source, "--source-id", "cli-io-map-vp",
+                                "--io-map-in", io_map_path});
+    ::unlink(io_map_path.c_str());
+    ASSERT_EQ(run.exit_code, 1);
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_FALSE(result.at("ok"));
+    EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-IOMAP-008");
+}
+
 TEST(StCompileCli, SignedCompatibilityPathUsesPublicHalfOfProvidedKey)
 {
     std::array<unsigned char, crypto_sign_SEEDBYTES> seed{};

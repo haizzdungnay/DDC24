@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "st/st_diagnostic.hpp"
+#include "st/st_ir.hpp"
 #include "st/st_program.hpp"
 
 namespace core {
@@ -67,6 +68,37 @@ bool valid_st_point_id(const std::string& point_id);
  *         binding, trùng binding). */
 bool validate_io_map(const StProgram& prog, const std::vector<StIoMapEntry>& entries,
                      std::vector<StDiagnostic>* diagnostics);
+
+/* F-PROG-ASBUILT-013 / D-07 (REV-PROG-ASBUILT-GAP-2026-08-14): nối io_map đã
+ * validate vào artifact thật — trước hàm này, `validate_io_map()` là logic
+ * "chết", không nơi nào trong pipeline compile từng gọi tới, nên
+ * `StIrModule::io_bindings` luôn rỗng bất kể Mapping tab cấu hình đúng đến
+ * đâu (không Program nào từng điều khiển được output vật lý qua Rev A).
+ *
+ * Khác `validate_io_map()`: hàm này CHO PHÉP binding một phần — biến chưa có
+ * entry vẫn hợp lệ (không bắt buộc mọi VAR_INPUT/VAR_OUTPUT phải bind), khớp
+ * đúng UC-05 hiện hành (Mapping tab cho map từng biến một, không ép làm hết
+ * một lượt) và không đổi hành vi Check của các Program đã có/đang phát triển
+ * dở. Đã bind thì validate chặt y hệt `validate_io_map()` (variable tồn tại,
+ * direction/type khớp, point identity hợp lệ, không trùng biến/không trùng
+ * physical point).
+ *
+ * `module` phải là kết quả `compile_st_to_ir`/`compile_st_source` đã thành
+ * công (cần `.variables[].slot` để gán `StIrIoBinding.slot`). Chỉ
+ * `category == "LOCAL"` được hỗ trợ — "VP" hiện KHÔNG có đường dẫn runtime
+ * thật tới Core (VP chỉ là overlay cấu hình phía Web API, không ghi được vào
+ * SHM AV/BV mà Core đọc — phát hiện phụ khi điều tra F-013, xem
+ * `F-PROG-ASBUILT-014`), "MB_RTU" chưa được kiểm chứng target nên cũng bị từ
+ * chối tường minh trong bản này — không đoán/silently-wrong, trả diagnostic
+ * rõ ràng thay vì âm thầm ghi sai chỗ.
+ *
+ * true  = mọi entry (nếu có) hợp lệ; `module->io_bindings` được thay bằng
+ *         danh sách đã resolve (biến không có entry thì không có trong đó,
+ *         y hệt hành vi "chưa map thì không điều khiển gì" hiện tại).
+ * false = *diagnostics có lỗi đầu tiên gặp phải (fail-closed); `module`
+ *         không đổi. */
+bool resolve_io_bindings(StIrModule* module, const std::vector<StIoMapEntry>& entries,
+                         std::vector<StDiagnostic>* diagnostics);
 
 } // namespace core
 

@@ -168,7 +168,8 @@ if(CORE_BUILD_TESTS)
       application/schedule/tests/test_schedule_runtime.cpp domain/graph/tests/test_runtime_point_snapshot.cpp
       domain/graph/tests/test_ext_256_datagram.cpp
       adapters/diagnostics/tests/test_core_metrics.cpp adapters/ipc/tests/test_output_writer.cpp
-      application/st/tests/test_st_io_map.cpp application/st/tests/test_st_cyclic_runtime.cpp
+      application/st/tests/test_st_io_map.cpp application/st/tests/test_st_resolve_io_bindings.cpp
+      application/st/tests/test_st_cyclic_runtime.cpp
       application/st/tests/test_st_validate_cli.cpp application/st/tests/test_st_compile_cli.cpp
       application/st/tests/test_st_limits.cpp
       application/st/tests/test_st_lang.cpp application/st/tests/test_st_ir.cpp
