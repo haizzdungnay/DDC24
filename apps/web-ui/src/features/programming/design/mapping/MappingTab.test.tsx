@@ -82,6 +82,52 @@ describe('MappingTab — chọn biến từ VAR_INPUT/VAR_OUTPUT, không gõ tay
     expect(operations[1]).toMatchObject({ op: 'upsertBinding', binding: { point: { category: 'VP', pointId: 'p1' } } })
   })
 
+  it('lọc bỏ Point không tương thích hướng/kiểu — tái hiện đúng lỗi thật AlarmHigh (BOOL, OUTPUT) bị chọn nhầm UI-09 (REAL, READ)', async () => {
+    catalogItems.length = 0
+    catalogItems.push(
+      { category: 'LOCAL', pointId: 'UI-09', deviceId: undefined, name: 'UI-09', dataType: 'REAL', direction: 'READ', writable: false, quality: 'BAD', value: 0 },
+      { category: 'VP', pointId: 'vp-alarm', deviceId: undefined, name: 'vp-alarm', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: false }
+    )
+    const document = baseDocument()
+    document.programs.push({
+      programId: 'program-1', name: 'AHU_FanControl', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM AHU_FanControl\nVAR_OUTPUT\n  AlarmHigh : BOOL;\nEND_VAR\nEND_PROGRAM'
+    })
+    const onSave = vi.fn().mockResolvedValue(true)
+
+    render(<I18nProvider><MappingTab document={document} saving={false} onSave={onSave} /></I18nProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
+    const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
+
+    // UI-09 (REAL, READ) không được hiện — không thể ghi BOOL output vào đó.
+    expect(within(dialog).queryByText(/UI-09/)).not.toBeInTheDocument()
+    expect(within(dialog).getByText(/vp-alarm/)).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByText(/vp-alarm/))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ánh xạ' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const operations = onSave.mock.calls[0][0]
+    expect(operations[1]).toMatchObject({ op: 'upsertBinding', binding: { point: { category: 'VP', pointId: 'vp-alarm' } } })
+  })
+
+  it('hết Point tương thích thì báo rõ lý do (kiểu/hướng), không chỉ "không khớp bộ lọc"', async () => {
+    catalogItems.length = 0
+    catalogItems.push({ category: 'LOCAL', pointId: 'UI-09', deviceId: undefined, name: 'UI-09', dataType: 'REAL', direction: 'READ', writable: false, quality: 'BAD', value: 0 })
+    const document = baseDocument()
+    document.programs.push({
+      programId: 'program-1', name: 'AHU_FanControl', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM AHU_FanControl\nVAR_OUTPUT\n  AlarmHigh : BOOL;\nEND_VAR\nEND_PROGRAM'
+    })
+
+    render(<I18nProvider><MappingTab document={document} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
+    const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
+
+    expect(within(dialog).getByText(/Không có Point kiểu BOOL, hướng ghi được/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Ánh xạ' })).toBeDisabled()
+  })
+
   it('ẩn biến đã ánh xạ rồi, hiện thông báo khi hết biến khả dụng', async () => {
     const document = baseDocument()
     document.programs.push({

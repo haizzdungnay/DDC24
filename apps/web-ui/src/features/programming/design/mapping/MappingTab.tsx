@@ -29,6 +29,20 @@ function declaredInterfaceVariables(program: ProgrammingProgram | undefined): Ma
   }
 }
 
+/** OUTPUT chỉ ghép được Point WRITE/READ_WRITE; INPUT chỉ ghép được Point
+ *  READ/READ_WRITE — Core (`PointWriter::can_write`) fail-closed từ chối ghi
+ *  vào Point không phải AV/BV/MSV/EXT (Universal Input = PointKind::AI
+ *  không nằm trong danh sách đó). Kiểu dữ liệu cũng phải khớp: ghi BOOL vào
+ *  Point REAL không có nghĩa. Không lọc theo `writable` ở đây — checkbox
+ *  "Chỉ ghi được" là lựa chọn thủ công riêng của user, không trộn với ràng
+ *  buộc tự động này. */
+function isCompatiblePoint(variable: MappableVariable, entry: ProgrammingPointCatalogEntry): boolean {
+  const directionOk = variable.direction === 'OUTPUT'
+    ? entry.direction === 'WRITE' || entry.direction === 'READ_WRITE'
+    : entry.direction === 'READ' || entry.direction === 'READ_WRITE'
+  return directionOk && entry.dataType === variable.type
+}
+
 const QUALITY_BADGE: Record<string, string> = {
   GOOD: 'online',
   UNCERTAIN: 'warning',
@@ -191,11 +205,19 @@ function PointPickerDialog({
     setVariableName(availableVariables[0]?.name ?? '')
   }, [availableVariables])
 
+  /* Point không tương thích hướng/kiểu với biến đã chọn không được cho ghép —
+   * đúng lỗ hổng vừa gây lỗi thật: OUTPUT (BOOL) bị map vào Point READ-only
+   * kiểu REAL (LOCAL:UI-09, Universal Input — PointKind::AI ở Core, không
+   * nằm trong danh sách PointWriter::can_write() cho phép ghi). st_process_
+   * image.cpp gom output CẢ CHƯƠNG TRÌNH vào một batch; một binding không ghi
+   * được làm preflight_outputs() từ chối TOÀN BỘ batch — output khác đúng
+   * (AO/DO vật lý) cũng không bao giờ commit theo. */
   const filtered = catalogItems.filter(
     (entry) =>
       (categoryFilter === 'ALL' || entry.category === categoryFilter) &&
       (directionFilter === 'ALL' || entry.direction === directionFilter) &&
-      (!writableOnly || entry.writable)
+      (!writableOnly || entry.writable) &&
+      (!chosenVariable || isCompatiblePoint(chosenVariable, entry))
   )
 
   return (
@@ -271,7 +293,14 @@ function PointPickerDialog({
         ) : catalogStatus === 'error' ? (
           <StateBlock state="error" title={pick('Không tải được danh mục Point.', 'Could not load the point catalog.')} />
         ) : filtered.length === 0 ? (
-          <p className="p-3 text-sm text-[var(--c-text-dim)]">{pick('Không có Point khớp bộ lọc.', 'No point matches the filter.')}</p>
+          <p className="p-3 text-sm text-[var(--c-text-dim)]">
+            {chosenVariable
+              ? pick(
+                  `Không có Point kiểu ${chosenVariable.type}, hướng ${chosenVariable.direction === 'OUTPUT' ? 'ghi được (WRITE/READ_WRITE)' : 'đọc được (READ/READ_WRITE)'} khớp bộ lọc — cần đúng loại cho biến ${chosenVariable.direction === 'OUTPUT' ? 'OUTPUT' : 'INPUT'} này.`,
+                  `No ${chosenVariable.type} Point with ${chosenVariable.direction === 'OUTPUT' ? 'writable (WRITE/READ_WRITE)' : 'readable (READ/READ_WRITE)'} direction matches — required for this ${chosenVariable.direction} variable.`
+                )
+              : pick('Không có Point khớp bộ lọc.', 'No point matches the filter.')}
+          </p>
         ) : (
           <ul>
             {filtered.map((entry) => {

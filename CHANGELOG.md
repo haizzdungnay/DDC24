@@ -8,6 +8,57 @@
 
 ## [Unreleased]
 
+### Fixed — Mapping tab cho ghép Point sai hướng/kiểu, một binding hỏng chặn cả batch output (2026-08-14)
+
+Bối cảnh: user phản bác đúng — lượt trước tôi kết luận nhầm "cả 3 output map
+vào Virtual Point" khi chưa tra bảng Mapping thật. User đưa bảng thật:
+`FanSpeed → LOCAL:AO-01` và `FanEnable → LOCAL:DO-01` là Point vật lý **đúng
+loại**. Chỉ `AlarmHigh → LOCAL:UI-09` sai: `UI` (Universal Input) là kênh
+**INPUT vật lý**, hướng hiển thị `READ` (không phải `READ_WRITE`), kiểu
+`REAL` (không phải `BOOL` như `AlarmHigh` khai trong ST).
+
+**Chuỗi nguyên nhân xác nhận qua source, không suy đoán**:
+
+1. `PointWriter::can_write()` (`point_writer.cpp`) fail-closed: chỉ cho ghi
+   `PointKind::AV/BV/MSV/EXT` — `AI` (Universal Input ánh xạ nội bộ, xem
+   `point_table.hpp:16` `Point ai_[KX_N_UI]`) **không** nằm trong danh sách.
+   Ghi `AlarmHigh` (BOOL) vào `UI-09` chắc chắn fail ở bước này.
+2. `st_apply_all_outputs()` (`st_process_image.cpp`) gom output **của cả
+   chương trình** vào một batch, gọi **một lần** `preflight_outputs()` rồi
+   **một lần** `commit_outputs()` cho toàn batch — không phải từng binding
+   độc lập. Một proposal fail preflight (`AlarmHigh`) làm **toàn bộ batch bị
+   từ chối, không commit gì** — kể cả `FanSpeed`/`FanEnable` dù bản thân
+   chúng đúng 100%. Đây là lý do `safeStateNoControllerOnly` vẫn `true` sau
+   Commission dù 2/3 output map đúng: chưa output nào từng thật sự ghi được.
+
+**Gốc rễ ở FE**: `MappingTab.tsx` (`PointPickerDialog`) cho chọn **bất kỳ**
+Point trong danh mục để ghép với một biến, không lọc theo hướng/kiểu dữ liệu
+tương thích — không có gì ngăn người dùng chọn nhầm Point `READ`-only,
+`REAL` cho một biến `VAR_OUTPUT` `BOOL`.
+
+Thêm `isCompatiblePoint(variable, entry)`: OUTPUT chỉ ghép được Point
+`WRITE`/`READ_WRITE`; INPUT chỉ ghép được `READ`/`READ_WRITE`; kiểu dữ liệu
+phải khớp (`entry.dataType === variable.type`). Áp filter này vào danh sách
+Point trong `PointPickerDialog` — Point không tương thích **không hiện ra**
+để chọn nhầm nữa. Hết Point tương thích thì hiện lý do rõ ràng (kiểu + hướng
+cần) thay vì "Không có Point khớp bộ lọc" mơ hồ.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 559/559 PASS (68
+file, +2 test mới tái hiện đúng lỗi thật: `AlarmHigh` BOOL/OUTPUT bị lọc bỏ
+`UI-09` REAL/READ, chỉ còn Point BOOL/READ_WRITE hợp lệ; và test xác nhận
+thông báo lý do khi hết Point tương thích); `npm run lint` sạch; `tsc
+--noEmit` sạch; `VITE_PROGRAMMING_REV_A=1 npm run build` qua, dist mới
+`index-SxaaAyMU.js`; deploy board Foxlinx (FE-only), verify public bundle
+chứa filter mới.
+
+**Việc user cần làm thủ công** (không tự sửa hộ vì đây là chỉnh Draft nghiệp
+vụ, không phải bug code): xoá binding `AlarmHigh → LOCAL:UI-09` hiện có trong
+Draft, ghép lại `AlarmHigh` vào một Point ghi được (Virtual Point BOOL hoặc
+DO vật lý còn trống), Check lại, Commission lại.
+
+Refs: user report "tao đưa vào đúng mà" kèm ảnh bảng Mapping thật; cùng
+chuỗi điều tra `safeStateNoControllerOnly` ở hai mục trên.
+
 ### Fixed — cảnh báo "PRG-SAFE-ACTIVE" hiện sai mức nghiêm trọng khi safe-state chỉ do chưa có output vật lý (2026-08-14)
 
 Bối cảnh: sau khi Commission thành công `AHU_FanControl` (fix deadlock ở mục
