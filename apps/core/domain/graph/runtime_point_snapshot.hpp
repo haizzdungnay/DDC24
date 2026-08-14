@@ -27,12 +27,31 @@ struct RuntimePointSnapshotRow {
     std::array<char, 9> unit{};
     uint64_t updated_at_monotonic_ns = 0;
     uint32_t generation = 1;
+    bool program_value_present = false;
+    float program_value = 0.0f;
+    uint8_t effective_priority = 0;
+};
+
+struct RuntimeTaskSnapshot {
+    bool present = false;
+    std::array<char, 33> id{};
+    uint32_t period_ms = 0;
+    uint32_t budget_ms = 0;
+    std::array<char, 12> state{};
+    uint32_t run_count = 0;
+    uint32_t missed_release_count = 0;
+    uint64_t last_exec_ns = 0;
+    uint64_t max_exec_ns = 0;
+    uint32_t overrun_count = 0;
+    uint32_t consecutive_overruns = 0;
 };
 
 struct RuntimePointSnapshot {
     uint64_t snapshot_id = 0;
     uint64_t observed_utc_ms = 0;
     uint64_t captured_monotonic_ns = 0;
+    bool safe_state = false;
+    RuntimeTaskSnapshot task{};
     std::array<RuntimePointSnapshotRow, KX_HIST_PHYSICAL_COUNT> rows{};
 };
 

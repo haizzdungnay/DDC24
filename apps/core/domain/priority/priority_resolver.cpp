@@ -131,6 +131,24 @@ int PriorityResolver::winning_do_level(int ch) const
     return PRIO_DEFAULT;
 }
 
+bool PriorityResolver::ao_value_at_level(int level, int ch, float* value) const
+{
+    if (!value || !valid_level(level) || ch < 0 || ch >= KX_N_AO) return false;
+    const Slot& slot = ao_[level - 1][ch];
+    if (!slot.active) return false;
+    *value = slot.value;
+    return true;
+}
+
+bool PriorityResolver::do_value_at_level(int level, int ch, bool* value) const
+{
+    if (!value || !valid_level(level) || ch < 0 || ch >= KX_N_DO) return false;
+    const Slot& slot = do_[level - 1][ch];
+    if (!slot.active) return false;
+    *value = slot.value != 0.0f;
+    return true;
+}
+
 const char* prio_source_name(int level)
 {
     /* Khi thêm level mới: (1) thêm PRIO_XXX trong .hpp, (2) bump PRIO_LEVELS,

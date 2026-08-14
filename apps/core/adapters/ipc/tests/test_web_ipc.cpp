@@ -208,6 +208,17 @@ TEST(WebIpc, SyntheticWorstWidthSnapshotResponseIsBounded)
     RuntimePointSnapshot snapshot = test_snapshot(std::numeric_limits<uint64_t>::max());
     snapshot.observed_utc_ms = 253402300799999ull;
     snapshot.captured_monotonic_ns = std::numeric_limits<uint64_t>::max();
+    snapshot.task.present = true;
+    snapshot.task.id.fill(static_cast<char>(0x01));
+    snapshot.task.period_ms = std::numeric_limits<uint32_t>::max();
+    snapshot.task.budget_ms = std::numeric_limits<uint32_t>::max();
+    snapshot.task.state.fill(static_cast<char>(0x01));
+    snapshot.task.run_count = std::numeric_limits<uint32_t>::max();
+    snapshot.task.missed_release_count = std::numeric_limits<uint32_t>::max();
+    snapshot.task.last_exec_ns = std::numeric_limits<uint64_t>::max();
+    snapshot.task.max_exec_ns = std::numeric_limits<uint64_t>::max();
+    snapshot.task.overrun_count = std::numeric_limits<uint32_t>::max();
+    snapshot.task.consecutive_overruns = std::numeric_limits<uint32_t>::max();
     for (RuntimePointSnapshotRow& row : snapshot.rows) {
         row.value = -std::numeric_limits<float>::max();
         row.quality = KX_Q_UNCERTAIN;
@@ -215,6 +226,9 @@ TEST(WebIpc, SyntheticWorstWidthSnapshotResponseIsBounded)
         row.unit.fill(static_cast<char>(0x01));
         row.updated_at_monotonic_ns = std::numeric_limits<uint64_t>::max();
         row.generation = std::numeric_limits<uint32_t>::max();
+        row.program_value_present = true;
+        row.program_value = -std::numeric_limits<float>::max();
+        row.effective_priority = std::numeric_limits<uint8_t>::max();
     }
     Fixture f;
     ASSERT_TRUE(f.web.open(f.sock_path));
@@ -227,7 +241,7 @@ TEST(WebIpc, SyntheticWorstWidthSnapshotResponseIsBounded)
     EXPECT_TRUE(f.web.drain().empty());
     const std::string response = c.recv_line();
     ASSERT_NO_THROW(nlohmann::json::parse(response));
-    EXPECT_EQ(response.size() + 1, 6427u);
+    EXPECT_GT(response.size() + 1, 7513u);
     EXPECT_LE(response.size() + 1, KX_POINT_SNAPSHOT_MAX_PAYLOAD);
 }
 

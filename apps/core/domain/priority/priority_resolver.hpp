@@ -61,6 +61,11 @@ public:
     int winning_ao_level(int ch) const;
     int winning_do_level(int ch) const;
 
+    /* Snapshot quan sát chỉ-đọc theo đúng một mức. Trả false khi slot chưa
+     * active hoặc tham số sai; caller không được thay false bằng giá trị 0. */
+    bool ao_value_at_level(int level, int ch, float* value) const;
+    bool do_value_at_level(int level, int ch, bool* value) const;
+
 private:
     struct Slot {
         bool  active = false;

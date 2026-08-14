@@ -2,7 +2,9 @@
 
 #include "graph/point_writer.hpp"
 
+#include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 
 namespace core {
@@ -221,9 +223,30 @@ void ScanLoop::step()
     /* Physical output is realtime-critical. Publish/serialization is nonessential. */
     d_.writer->write(out);
 
-    d_.web->publish_point_snapshot(snapshot_publisher_.build(
+    RuntimePointSnapshot runtime_snapshot = snapshot_publisher_.build(
         next_snapshot_id_++, static_cast<uint64_t>(clock.utc_epoch_ms), clock.monotonic_ns, *d_.table,
-        last_io_, out, *d_.resolver, d_.safe->active()));
+        last_io_, out, *d_.resolver, d_.safe->active());
+    if (d_.st_sched && !d_.st_sched->tasks().empty()) {
+        const StTask& task = *d_.st_sched->tasks().front();
+        RuntimeTaskSnapshot& target = runtime_snapshot.task;
+        target.present = true;
+        const std::string& task_id = task.config().id;
+        std::memcpy(target.id.data(), task_id.data(),
+                    std::min(task_id.size(), target.id.size() - 1));
+        target.period_ms = task.config().period_ms;
+        target.budget_ms = task.config().budget_ms;
+        const char* state = task.monitor().should_force_safe() ? "FAULT" :
+            (program_owner && task.enabled() ? "RUNNING" : "STOPPED");
+        std::memcpy(target.state.data(), state,
+                    std::min(std::strlen(state), target.state.size() - 1));
+        target.run_count = task.stats().run_count;
+        target.missed_release_count = task.stats().missed_release_count;
+        target.last_exec_ns = task.stats().last_exec_ns;
+        target.max_exec_ns = task.stats().max_exec_ns;
+        target.overrun_count = task.monitor().stats().total;
+        target.consecutive_overruns = task.monitor().stats().consecutive;
+    }
+    d_.web->publish_point_snapshot(runtime_snapshot);
 
     for (const WebCommand& cmd : pending_alarm_) {
         if (cmd.kind == WebCommandKind::ScheduleState) {

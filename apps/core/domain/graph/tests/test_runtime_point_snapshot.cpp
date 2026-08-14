@@ -139,6 +139,43 @@ TEST(RuntimePointSnapshot, BuildsFixedOrderedPhysicalRows)
     EXPECT_EQ(text(snapshot.rows[23].id), "DO-04");
 }
 
+TEST(RuntimePointSnapshot, KeepsProgramProposalSeparateFromWinningOverride)
+{
+    IoSnapshot io = make_io();
+    PointTable table;
+    table.update_inputs(io);
+    PriorityResolver resolver;
+    ASSERT_TRUE(resolver.set_ao(PRIO_LOCAL_LOGIC, 0, 4.0f));
+    ASSERT_TRUE(resolver.set_ao(PRIO_LOCAL_MANUAL, 0, 7.0f));
+    const OutputCmd resolved = resolver.resolve();
+
+    RuntimePointSnapshotPublisher publisher;
+    auto snapshot = publisher.build(1, 1000, 2000, table, io, resolved,
+                                    resolver, false);
+    snapshot.task.present = true;
+    std::memcpy(snapshot.task.id.data(), "main", 5);
+    std::memcpy(snapshot.task.state.data(), "RUNNING", 8);
+    snapshot.task.period_ms = 1000;
+    snapshot.task.budget_ms = 200;
+    snapshot.task.overrun_count = 3;
+
+    const auto& ao = snapshot.rows[KX_N_UI];
+    EXPECT_FLOAT_EQ(ao.value, 7.0f);
+    EXPECT_TRUE(ao.program_value_present);
+    EXPECT_FLOAT_EQ(ao.program_value, 4.0f);
+    EXPECT_EQ(ao.effective_priority, PRIO_LOCAL_MANUAL);
+    EXPECT_EQ(ao.source, SnapshotSource::MANUAL);
+
+    const auto json = nlohmann::json::parse(serialize_runtime_point_snapshot(snapshot));
+    EXPECT_EQ(json.at("safeState"), false);
+    EXPECT_EQ(json.at("task").at("taskId"), "main");
+    EXPECT_EQ(json.at("task").at("state"), "RUNNING");
+    EXPECT_EQ(json.at("task").at("overrunCount"), 3);
+    EXPECT_EQ(json.at("points").at(KX_N_UI).at("value"), 7.0);
+    EXPECT_EQ(json.at("points").at(KX_N_UI).at("programValue"), 4.0);
+    EXPECT_EQ(json.at("points").at(KX_N_UI).at("effectivePriority"), 2);
+}
+
 TEST(RuntimePointSnapshot, PreservesBoundedSevenAndEightByteUnits)
 {
     IoSnapshot io = make_io();
