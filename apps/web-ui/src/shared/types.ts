@@ -1139,6 +1139,12 @@ export interface AiInputConfig {
   mathFunction: number
   enabled: boolean
   note: string
+  /** Chuỗi `type`/`unit` gốc từ `io_config.conf` (vd `NTC20k`, `PT1000`, `RPM`) —
+   *  FE chưa có control chọn biến thể riêng nên giữ nguyên khi round-trip thay
+   *  vì tự ý hạ cấp về giá trị mặc định của nhóm signalType. Xem
+   *  `REV-UI-CFG-GAP-2026-08-14` finding `F-UI-CFG-002`. */
+  ioType?: string
+  ioUnit?: string
 }
 
 export interface DiInputConfig {
