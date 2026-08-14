@@ -8,6 +8,74 @@
 
 ## [Unreleased]
 
+### Added — nút xóa Program ở PGM-02, gap không nằm trong báo cáo ISO nào (2026-08-14)
+
+Bối cảnh: user hỏi trực tiếp trên board "không có nút xóa program???" sau khi
+đọc CHANGELOG đợt sửa BUG-019. Kiểm tra `ProgramsTab.tsx` xác nhận **đúng
+vậy** — cây Program chỉ có `ST+`/`FBD+` (tạo) và Inspector (đổi tên/kind/tag),
+không có cách nào xóa một Program đã tạo qua UI, dù:
+
+- `removeProgram` đã có sẵn trong `ProgrammingDraftOperation`
+  (`model/types.ts`) từ trước.
+- Backend `draft.go` (`removeObjectOperation`) đã implement generic remove
+  theo id cho `programs`/`variables`/`bindings`, fail-closed nếu vi phạm
+  ràng buộc.
+- Nhưng **không nơi nào trong FE gọi `op: 'removeProgram'`** — tra toàn bộ
+  `features/programming/` chỉ thấy đúng một chỗ, ở chính định nghĩa type.
+
+Rà lại theo yêu cầu "review lại toàn bộ UC": đối chiếu 15 route REST của
+Programming (`router.go`) với FE, chỉ có đúng gap này (`DELETE
+/runtime/traces/{traceId}` đã nối `stopProgrammingTrace` ở `WatchTab.tsx`;
+`retain/reset` cố ý khoá theo quyết định D-01..D-06 của
+`REV-PROG-ASBUILT-GAP-2026-08-14`, không phải oversight nên không đụng tới).
+`removeProgram` không có test Go nào theo tên (`upsertProgram` thì có, ở
+`checks_test.go`/`bundles_test.go`) — xác nhận đây là năng lực dựng sẵn ở
+backend nhưng FE chưa bao giờ nối tới, không phải quyết định sản phẩm cần
+PM/CTO chốt như các gap khác trong báo cáo As-Built.
+
+Lý do xóa Program không đơn giản là một `op`: `draft.go`
+`validateDraftDocument` fail-closed hai lớp — mọi `variable.programId` phải
+trỏ tới Program còn tồn tại, và `task.programOrder` phải khớp **chính xác**
+tập Program còn lại (không thiếu/không thừa id). Xóa một Program mà không dọn
+Variable/Binding của nó và không cập nhật `programOrder` trong cùng batch sẽ
+bị backend từ chối cả batch — đây nhiều khả năng là lý do FE trước đây bỏ
+qua, không phải quên đơn thuần.
+
+Thêm nút xóa (icon thùng rác, chỉ hiện khi `canEdit`) cạnh mỗi Program trong
+cây; bấm vào mở `Modal` xác nhận (tái dùng component đã có, cùng kiểu với
+dialog "Restore previous version") nêu rõ hậu quả xóa cả mã nguồn/biến/ánh
+xạ, không thể hoàn tác sau khi lưu — nhất quán với mức độ nghiêm trọng cao
+hơn thao tác gỡ một mapping đơn lẻ ở `MappingTab.tsx` (vốn xóa thẳng không hỏi).
+Khi xác nhận, gửi một batch bốn thao tác: `removeBinding` cho từng binding
+tham chiếu biến của Program, `removeVariable` cho từng biến, `removeProgram`,
+và `setTask` với `programOrder` đã lọc bỏ id vừa xóa — đúng thứ tự để
+validate không bao giờ thấy trạng thái trung gian vi phạm ràng buộc. Nếu
+Program đang bị xóa đang được chọn, tự chuyển selection sang Program còn lại
+đầu tiên (hoặc bỏ chọn nếu hết Program).
+
+Thêm test `DesignWorkspacePage.test.tsx` dựng Program có Variable+Binding
+thật, bấm xóa, xác nhận Modal hiện đúng nội dung rồi kiểm batch bốn operation
+gửi lên đúng thứ tự và nội dung.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 547/547 pass (67
+file, +1 test mới); `npm run lint` sạch; `tsc --noEmit` sạch;
+`VITE_PROGRAMMING_REV_A=1 npm run build` qua, dist mới `index-CT-9uOgd.js`
+(`grep -c REVA_SCOPE_ROADMAP` = 0, bundle có logic xóa và text "Xóa chương
+trình?"); deploy board Foxlinx qua `scp` + swap atomic
+(`dist.pre-delete-program-20260814`), `systemctl is-active mkddc-web-pi` =
+`active`, public `mekong-fac.ddns.net:8082` xác nhận phục vụ đúng bundle mới
+qua `Last-Modified` khớp giờ deploy và nội dung bundle tải qua HTTP có tính
+năng mới.
+
+Ngoài phạm vi, không tự sửa: 12 finding Critical/High/Medium khác trong
+`REV-PROG-ASBUILT-GAP-2026-08-14` (UC-PROG-03 vòng sửa/check gãy do ETag
+stale, template ST rỗng lúc tạo, diagnostic thiếu dòng/cột, IA desktop chưa
+có nav bốn workspace, v.v.) — đều đã có finding ID, owner đề nghị và cần
+quyết định PM/CTO (D-01..D-06) trước khi code, không phải gap đơn giản như
+xóa Program.
+
+Refs: `REV-PROG-ASBUILT-GAP-2026-08-14`.
+
 ### Fixed — badge "1 Draft issues" thiếu số ít theo báo cáo ISO Phase 3 (TR-MKDDC24-P3-20260814-03, 2026-08-14)
 
 Bối cảnh: báo cáo `TR-MKDDC24-P3-20260814-03` test Programs Tab (ST Editor,

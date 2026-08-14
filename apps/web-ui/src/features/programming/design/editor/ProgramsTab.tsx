@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FilePlus, Save, Search, X } from 'lucide-react'
+import { FilePlus, Save, Search, Trash2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { createUuid } from '../../../../shared/crypto'
 import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
+import { Modal } from '../../../../shared/components/Modal'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import { canonicalFbdJson, FBD_PROFILE_ID, FBD_SCHEMA_VERSION, type FbdDocument } from '../../fbd/model'
 import type { ProgrammingDiagnostic, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingProgram } from '../../model/types'
@@ -39,7 +40,7 @@ export function ProgramsTab({
   document: ProgrammingDraftDocument
   saving: boolean
   selectedProgramId: string | undefined
-  onSelectProgram: (programId: string) => void
+  onSelectProgram: (programId: string | undefined) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   diagnostics: ProgrammingDiagnostic[]
   focusDiagnostic: ProgrammingDiagnostic | null
@@ -53,6 +54,8 @@ export function ProgramsTab({
   const [buffers, setBuffers] = useState<Record<string, string>>({})
   const [projectTagsDraft, setProjectTagsDraft] = useState(() => document.project.functionalTags.join(', '))
   const [metadataDrafts, setMetadataDrafts] = useState<Record<string, ProgramMetadataDraft>>({})
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const pendingDeleteProgram = document.programs.find((program) => program.programId === pendingDeleteId)
 
   useEffect(() => {
     setBuffers((current) => {
@@ -123,6 +126,29 @@ export function ProgramsTab({
     })
   }
 
+  /** Xóa Program kéo theo Variable/Binding của nó — backend fail-closed nếu
+   *  Variable còn `programId` trỏ tới Program không tồn tại, và
+   *  `task.programOrder` phải khớp chính xác tập Program còn lại (draft.go
+   *  `validateDraftDocument`), nên phải gửi cả bốn thao tác trong một batch. */
+  function removeProgram(programId: string) {
+    const variableIds = document.variables.filter((variable) => variable.programId === programId).map((variable) => variable.variableId)
+    const bindingIds = document.bindings.filter((binding) => variableIds.includes(binding.variableId)).map((binding) => binding.bindingId)
+    const operations: ProgrammingDraftOperation[] = [
+      ...bindingIds.map((bindingId): ProgrammingDraftOperation => ({ op: 'removeBinding', bindingId })),
+      ...variableIds.map((variableId): ProgrammingDraftOperation => ({ op: 'removeVariable', variableId })),
+      { op: 'removeProgram', programId },
+      { op: 'setTask', task: { ...document.task, programOrder: document.task.programOrder.filter((id) => id !== programId) } }
+    ]
+    void onSave(operations).then((ok) => {
+      setPendingDeleteId(null)
+      if (!ok) return
+      if (selectedProgramId === programId) {
+        const remaining = document.programs.find((program) => program.programId !== programId)
+        onSelectProgram(remaining?.programId)
+      }
+    })
+  }
+
   return (
     <div className="grid gap-4 md:grid-cols-[280px_1fr]">
       <nav aria-label={pick('Cây ứng dụng', 'Application tree')} className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
@@ -166,7 +192,7 @@ export function ProgramsTab({
         ) : (
           <ul className="space-y-0.5">
             {document.programs.map((program) => (
-              <li key={program.programId}>
+              <li key={program.programId} className="flex items-center gap-1">
                 <button
                   type="button"
                   aria-current={program.programId === selectedProgramId ? 'true' : undefined}
@@ -177,11 +203,39 @@ export function ProgramsTab({
                 >
                   {program.name} <span className="text-[var(--c-text-dim)]">· {program.language}</span>
                 </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-fault-fg)]"
+                    title={pick('Xóa chương trình', 'Delete program')}
+                    onClick={() => setPendingDeleteId(program.programId)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         )}
       </nav>
+      <Modal
+        open={pendingDeleteId !== null}
+        title={pick('Xóa chương trình?', 'Delete program?')}
+        danger
+        confirmLabel={pick('Xóa', 'Delete')}
+        confirmLoading={saving}
+        onConfirm={() => {
+          if (pendingDeleteId) removeProgram(pendingDeleteId)
+        }}
+        onClose={() => setPendingDeleteId(null)}
+      >
+        <p>
+          {pick(
+            `Xóa "${pendingDeleteProgram?.name ?? ''}" sẽ xóa cả mã nguồn, biến và ánh xạ liên quan tới Program này. Không thể hoàn tác sau khi lưu.`,
+            `Deleting "${pendingDeleteProgram?.name ?? ''}" also removes its source code, variables, and mappings. This cannot be undone after saving.`
+          )}
+        </p>
+      </Modal>
       <div>
         {!selected ? (
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Chọn một chương trình ở cây bên trái.', 'Select a program from the tree on the left.')}</p>

@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
@@ -227,5 +227,51 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(true))
     const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
     expect(options.body.operations).toEqual([{ op: 'replaceProgramSource', programId: 'program-1', language: 'ST', source: 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 2;' }])
+  })
+
+  it('xóa Program hỏi xác nhận rồi gửi batch removeBinding+removeVariable+removeProgram+setTask', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
+    project.draft!.variables.push({ variableId: 'var-1', programId: 'program-1', name: 'X', type: 'REAL', class: 'LOCAL', initialValue: 0, retain: false })
+    project.draft!.bindings.push({
+      bindingId: 'bind-1', variableId: 'var-1', point: { category: 'VP', pointId: 'p1' },
+      direction: 'READ', dataType: 'REAL', writable: false, qualityPolicy: 'REQUIRE_GOOD'
+    })
+    project.draft!.task.programOrder = ['program-1']
+
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: baseDocument() },
+          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
+    expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTitle('Xóa chương trình'))
+    const dialog = screen.getByRole('dialog', { name: 'Xóa chương trình?' })
+    expect(within(dialog).getByText(/Điều khiển AHU/)).toHaveTextContent('Không thể hoàn tác sau khi lưu.')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xóa' }))
+
+    await waitFor(() => {
+      const call = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')
+      expect(call).toBeTruthy()
+    })
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
+    expect(options.body.operations).toEqual([
+      { op: 'removeBinding', bindingId: 'bind-1' },
+      { op: 'removeVariable', variableId: 'var-1' },
+      { op: 'removeProgram', programId: 'program-1' },
+      { op: 'setTask', task: { taskId: 'task-1', periodMs: 1000, programOrder: [] } }
+    ])
+    await waitFor(() => expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument())
   })
 })
