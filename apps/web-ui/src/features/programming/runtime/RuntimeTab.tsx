@@ -41,13 +41,23 @@ export function RuntimeTab({ runtime, status }: { runtime: ProgrammingRuntime | 
           </div>
         </dl>
         {runtime?.safeState && (
-          <div role="alert" className="mt-3 rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
-            <p className="font-semibold">PRG-SAFE-ACTIVE — {pick('Safe-state đang tác động', 'Safe-state is active')}</p>
-            <p className="mt-1 text-xs">
-              {pick('Nguyên nhân: Core chưa cung cấp mã chi tiết.', 'Reason: Core did not provide a detailed code.')} · {pick('Phạm vi', 'Scope')}: {task?.taskId ?? 'Control_Main'} / {pick('các output do Program điều khiển', 'Program-controlled outputs')}.
-            </p>
-            <p className="mt-1 text-xs">{pick('Hành động: giữ Commission/Restore bị khóa và kiểm tra Core, I/O, alarm.', 'Action: keep Commission/Restore locked and inspect Core, I/O, and alarms.')}</p>
-          </div>
+          runtime.safeStateNoControllerOnly ? (
+            <div role="status" className="mt-3 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
+              <p className="font-semibold">PRG-SAFE-ACTIVE — {pick('Chưa có output vật lý do Program điều khiển', 'No physical output is Program-controlled yet')}</p>
+              <p className="mt-1 text-xs">
+                {pick('Nguyên nhân: chưa Program nào ghi AO/DO vật lý ở mức trên Default — bình thường nếu logic chỉ dùng Virtual Point.', 'Reason: no Program is writing physical AO/DO above the Default level yet — expected if this logic only uses Virtual Points.')} · {pick('Phạm vi', 'Scope')}: {task?.taskId ?? 'Control_Main'} / {pick('các output do Program điều khiển', 'Program-controlled outputs')}.
+              </p>
+              <p className="mt-1 text-xs">{pick('Đưa vào vận hành và Khôi phục KHÔNG bị khóa vì lý do này.', 'Commission and Restore are NOT locked because of this.')}</p>
+            </div>
+          ) : (
+            <div role="alert" className="mt-3 rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
+              <p className="font-semibold">PRG-SAFE-ACTIVE — {pick('Safe-state đang tác động do lỗi', 'Safe-state is active due to a fault')}</p>
+              <p className="mt-1 text-xs">
+                {pick('Nguyên nhân: I/O lỗi/dữ liệu cũ/quá giờ — Core chưa cung cấp mã chi tiết hơn.', 'Reason: I/O fault/stale data/overrun — Core did not provide a more detailed code.')} · {pick('Phạm vi', 'Scope')}: {task?.taskId ?? 'Control_Main'} / {pick('các output do Program điều khiển', 'Program-controlled outputs')}.
+              </p>
+              <p className="mt-1 text-xs">{pick('Hành động: giữ Commission/Restore bị khóa và kiểm tra Core, I/O, alarm.', 'Action: keep Commission/Restore locked and inspect Core, I/O, and alarms.')}</p>
+            </div>
+          )
         )}
       </Panel>
 

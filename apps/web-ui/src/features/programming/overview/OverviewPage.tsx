@@ -181,15 +181,30 @@ function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | n
   if (runtime?.producerState === 'UNAVAILABLE') items.push({ code: 'PRG-CORE-UNAVAILABLE', severity: 'error', text: pick('Không kết nối được Core.', 'Core is unreachable.'), scope: 'Core', action: pick('Kiểm tra service/Core và kết nối IPC.', 'Check the service/Core and IPC connection.') })
   else if (runtime?.producerState === 'DEGRADED') items.push({ code: 'PRG-CORE-DEGRADED', severity: 'warning', text: pick('Core đang suy giảm; dữ liệu có thể cũ.', 'Core is degraded; data may be stale.'), scope: 'Core', action: pick('Chỉ chẩn đoán; mọi mutation runtime đang bị khóa.', 'Diagnose only; runtime mutations are locked.') })
   if (runtime?.taskState === 'FAULT') items.push({ code: 'PRG-TASK-FAULT', severity: 'error', text: pick('Tác vụ điều khiển đang lỗi (FAULT).', 'The control task is faulted.'), scope: runtime.task?.taskId ?? 'Control_Main', action: pick('Mở Runtime để xem số lần quá giờ và trạng thái tác vụ.', 'Open Runtime to inspect overruns and task state.') })
-  if (runtime?.safeState) items.push({
-    code: 'PRG-SAFE-ACTIVE',
-    severity: 'error',
-    text: pick('Safe-state đang tác động; Core chưa cung cấp mã nguyên nhân chi tiết.', 'Safe-state is active; Core did not provide a detailed reason code.'),
-    scope: runtime.task?.taskId
-      ? `${runtime.task.taskId} / ${pick('các output do Program điều khiển', 'Program-controlled outputs')}`
-      : pick('Các output do Program điều khiển (chưa có danh sách Point)', 'Program-controlled outputs (Point list unavailable)'),
-    action: pick('Giữ Commission/Restore bị khóa; kiểm tra Core, I/O và alarm trước khi phục hồi.', 'Keep Commission/Restore locked; inspect Core, I/O, and alarms before recovery.')
-  })
+  if (runtime?.safeState) items.push(
+    runtime.safeStateNoControllerOnly
+      ? {
+          code: 'PRG-SAFE-ACTIVE',
+          severity: 'warning',
+          text: pick(
+            'Safe-state đang tác động vì chưa Program nào ghi output vật lý ở mức trên Default — bình thường nếu logic chỉ dùng Virtual Point.',
+            'Safe-state is active because no Program is writing physical output above Default yet — expected if this logic only uses Virtual Points.'
+          ),
+          scope: runtime.task?.taskId
+            ? `${runtime.task.taskId} / ${pick('các output do Program điều khiển', 'Program-controlled outputs')}`
+            : pick('Các output do Program điều khiển (chưa có danh sách Point)', 'Program-controlled outputs (Point list unavailable)'),
+          action: pick('Không chặn Đưa vào vận hành/Khôi phục. Mở Runtime nếu mong đợi có output vật lý.', 'Does not block Commission/Restore. Open Runtime if you expect a physical output.')
+        }
+      : {
+          code: 'PRG-SAFE-ACTIVE',
+          severity: 'error',
+          text: pick('Safe-state đang tác động do lỗi thật (I/O/dữ liệu cũ/quá giờ); Core chưa cung cấp mã nguyên nhân chi tiết hơn.', 'Safe-state is active due to a real fault (I/O/stale data/overrun); Core did not provide a more detailed reason code.'),
+          scope: runtime.task?.taskId
+            ? `${runtime.task.taskId} / ${pick('các output do Program điều khiển', 'Program-controlled outputs')}`
+            : pick('Các output do Program điều khiển (chưa có danh sách Point)', 'Program-controlled outputs (Point list unavailable)'),
+          action: pick('Giữ Commission/Restore bị khóa; kiểm tra Core, I/O và alarm trước khi phục hồi.', 'Keep Commission/Restore locked; inspect Core, I/O, and alarms before recovery.')
+        }
+  )
 
   return (
     <Panel title={pick('Việc cần chú ý', 'Attention required')}>

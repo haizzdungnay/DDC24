@@ -144,13 +144,25 @@ describe('RuntimeServicePage — S5-D (TASK-PROG-505)', () => {
     click.mockRestore()
   })
 
-  it('hiển thị chi tiết safe-state thay vì chỉ Có/Không', async () => {
+  it('hiển thị chi tiết safe-state thay vì chỉ Có/Không — safe-state do lỗi thật (không phải no-controller-only)', async () => {
     stubDefaultEndpoints({
-      getProgrammingRuntime: () => Promise.resolve({ schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY', activeRevisionId: ACTIVE_ID, lkgRevisionId: LKG_ID, taskState: 'RUNNING', safeState: true, observedAt: '2026-08-13T00:00:00Z', task: { taskId: 'Control_Main', periodMs: 1000, budgetMs: 200, state: 'RUNNING', runCount: 1, missedReleaseCount: 0, lastExecNs: 1, maxExecNs: 1, overrunCount: 0, consecutiveOverruns: 0 } })
+      getProgrammingRuntime: () => Promise.resolve({ schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY', activeRevisionId: ACTIVE_ID, lkgRevisionId: LKG_ID, taskState: 'RUNNING', safeState: true, safeStateNoControllerOnly: false, observedAt: '2026-08-13T00:00:00Z', task: { taskId: 'Control_Main', periodMs: 1000, budgetMs: 200, state: 'RUNNING', runCount: 1, missedReleaseCount: 0, lastExecNs: 1, maxExecNs: 1, overrunCount: 0, consecutiveOverruns: 0 } })
     })
     renderPage()
     expect(await screen.findByText(/PRG-SAFE-ACTIVE/)).toBeInTheDocument()
-    expect(screen.getByText(/Nguyên nhân: Core chưa cung cấp mã chi tiết/)).toBeInTheDocument()
+    expect(screen.getByText(/Nguyên nhân: I\/O lỗi\/dữ liệu cũ\/quá giờ/)).toBeInTheDocument()
+    expect(screen.getByText(/giữ Commission\/Restore bị khóa/)).toBeInTheDocument()
+  })
+
+  it('safeState=true nhưng chỉ do chưa ai điều khiển (safeStateNoControllerOnly) hiện cảnh báo nhẹ, không nói bị khóa', async () => {
+    stubDefaultEndpoints({
+      getProgrammingRuntime: () => Promise.resolve({ schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY', activeRevisionId: ACTIVE_ID, lkgRevisionId: LKG_ID, taskState: 'RUNNING', safeState: true, safeStateNoControllerOnly: true, observedAt: '2026-08-13T00:00:00Z', task: { taskId: 'Control_Main', periodMs: 1000, budgetMs: 200, state: 'RUNNING', runCount: 1, missedReleaseCount: 0, lastExecNs: 1, maxExecNs: 1, overrunCount: 0, consecutiveOverruns: 0 } })
+    })
+    renderPage()
+    expect(await screen.findByText(/PRG-SAFE-ACTIVE/)).toBeInTheDocument()
+    expect(screen.getByText(/chưa Program nào ghi AO\/DO vật lý/)).toBeInTheDocument()
+    expect(screen.getByText(/KHÔNG bị khóa vì lý do này/)).toBeInTheDocument()
+    expect(screen.queryByText(/giữ Commission\/Restore bị khóa/)).not.toBeInTheDocument()
   })
 
   it('có bottom navigation bốn workspace trên shell Programming', async () => {

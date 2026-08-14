@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Fixed — cảnh báo "PRG-SAFE-ACTIVE" hiện sai mức nghiêm trọng khi safe-state chỉ do chưa có output vật lý (2026-08-14)
+
+Bối cảnh: sau khi Commission thành công `AHU_FanControl` (fix deadlock ở mục
+ngay dưới), user hỏi tiếp "lỗi gì" khi thấy tab Runtime vẫn hiện hộp đỏ
+`PRG-SAFE-ACTIVE — Safe-state is active` với "Action: keep Commission/Restore
+locked". Tra `GET /programming/runtime` thật trên board: `safeState: true`
+nhưng **`safeStateNoControllerOnly: true`** — đúng loại đã sửa ở mục dưới,
+Commission/Restore **không** còn bị khoá. Vấn đề là `RuntimeTab.tsx` và
+`OverviewPage.tsx` (mục "Việc cần chú ý") chưa từng đọc field mới này —
+hiện cứng banner đỏ + text "giữ Commission/Restore bị khóa" bất cứ khi nào
+`safeState=true`, bất kể lý do.
+
+Đào thêm một lớp: `st_process_image.cpp` (`preflight_outputs`/`commit_outputs`)
+chỉ gọi `resolver->set_ao/set_do` (đăng ký "đang điều khiển" cho
+`any_active_above_default()`) cho `PointKind::AO`/`BO` — tức Local I/O vật
+lý. Output map vào **Virtual Point** (nhánh `default:`) đi qua
+`PointWriter::write()` riêng, không đụng `PriorityResolver`. `AHU_FanControl`
+của user map cả 3 output (`FanEnable`/`FanSpeed`/`AlarmHigh`) vào VP (board
+lab không có AO/DO vật lý) — nên dù Program đã Active và chạy đúng
+(`taskState: RUNNING`, `overrunCount: 0`, ghi VP thành công, không bị
+`safeState` chặn vì `SafeState::apply()` chỉ ghi đè `ao[]`/`dout[]` vật lý,
+không đụng VP), T7 vẫn coi "chưa ai điều khiển AO/DO vật lý" — **đúng sự
+thật, không phải bug**: board này thực sự không có output vật lý nào đang
+chạy.
+
+Sửa hai chỗ hiển thị dùng chung field `safeStateNoControllerOnly` đã có sẵn
+(không cần đổi gì ở Core/Go/contract — field đã tồn tại từ mục dưới):
+- `RuntimeTab.tsx`: `safeStateNoControllerOnly=true` → box màu vàng
+  (`role="status"`), text giải thích "chưa Program nào ghi AO/DO vật lý ở
+  mức trên Default — bình thường nếu logic chỉ dùng Virtual Point" +
+  "Đưa vào vận hành và Khôi phục KHÔNG bị khóa vì lý do này". `false` → giữ
+  box đỏ gốc, đổi text rõ "do lỗi" thay vì mơ hồ.
+- `OverviewPage.tsx` (`ProgrammingAttentionList`): cùng logic,
+  `severity: 'warning'` thay vì `'error'` khi no-controller-only.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 557/557 PASS (68
+file, +3 test mới: 1 ở `OverviewPage.test.tsx`, 2 ở
+`RuntimeServicePage.test.tsx` xác nhận cả hai nhánh severity/text đúng);
+`npm run lint` sạch; `tsc --noEmit` sạch; `VITE_PROGRAMMING_REV_A=1 npm run
+build` qua, dist mới `index-CJ1xp68k.js`; deploy board Foxlinx (FE-only, Core/
+Go không đổi), verify public bundle chứa text mới.
+
+Refs: user report "lỗi gì" trên tab Runtime sau Commission; cùng chuỗi điều
+tra `safeStateNoControllerOnly` ở mục dưới.
+
 ### Fixed — Commission bị khoá vĩnh viễn khi safe-state chỉ do "chưa ai điều khiển" (2026-08-14)
 
 Bối cảnh: user hỏi "commission này có lỗi gì" — trang Đưa vào vận hành báo

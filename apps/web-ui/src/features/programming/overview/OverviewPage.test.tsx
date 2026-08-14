@@ -89,4 +89,20 @@ describe('OverviewPage — Việc cần chú ý (TR-MKDDC24-P2-20260814-02)', ()
     await screen.findByText('Đang vận hành / LKG')
     expect(screen.getAllByText(ACTIVE_ID).length).toBeGreaterThan(0)
   })
+
+  it('safeState=true chỉ do chưa ai điều khiển (safeStateNoControllerOnly) hiện mức cảnh báo nhẹ, không nói bị khóa', async () => {
+    stubDefaultEndpoints({
+      getProgrammingRuntime: () => Promise.resolve({
+        schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY',
+        activeRevisionId: ACTIVE_ID, lkgRevisionId: LKG_ID, taskState: 'RUNNING', safeState: true, safeStateNoControllerOnly: true,
+        observedAt: '2026-08-14T00:00:00Z',
+        task: { taskId: 'Control_Main', periodMs: 1000, budgetMs: 200, state: 'RUNNING', runCount: 1, missedReleaseCount: 0, lastExecNs: 1, maxExecNs: 1, overrunCount: 0, consecutiveOverruns: 0 }
+      })
+    })
+    renderOverview('vi')
+    const item = await screen.findByRole('button', { name: /PRG-SAFE-ACTIVE/ })
+    expect(item).toHaveTextContent(/chưa Program nào ghi output vật lý/)
+    expect(item).toHaveTextContent(/Không chặn Đưa vào vận hành\/Khôi phục/)
+    expect(item).not.toHaveTextContent(/Giữ Commission\/Restore bị khóa/)
+  })
 })
