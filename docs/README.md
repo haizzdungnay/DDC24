@@ -29,7 +29,7 @@
 | [Programming Implementation Plan](03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | v0.55: tổng `43/53`; P5 corrective đang thực hiện; team vẫn được viết/merge code, release chưa được mở |
 | [Programming Risk Register](07_records/PROGRAMMING_RISK_REGISTER.md) | 16 rủi ro, design control, owner, evidence gate và residual |
 | [Programming Docs Sync Report](07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record đồng bộ docs theo ADR-023 ngày 2026-08-03 |
-| [Programming — Báo cáo As-Built/gap PM-CTO 2026-08-14](07_records/reviews/PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md) | hiện trạng source đa lớp, 12 finding; UC-PROG-03 sai từ bước 2; quyết định cần PM/CTO và NO-GO release |
+| [Programming — Báo cáo As-Built/gap PM-CTO 2026-08-14](07_records/reviews/PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md) | hiện trạng source đa lớp, 13 finding (Rev 1.1: thêm Binding→compiler chưa nối); UC-PROG-03 sai từ bước 2; quyết định cần PM/CTO và NO-GO release |
 | [DDC-24 Baseline Source Fix Report](07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | kết quả CI, Point Model, Config Apply, health/recovery và readiness trước Programming Design |
 | [Modbus RTU Point As-Built Report](07_records/reviews/MODBUS_RTU_POINT_AS_BUILT_REPORT.md) | coverage FE/BE/iobus/Core/WS, simulator và blocker RS485 thật |
 | [Modbus RTU Point Detailed Design](02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md) | design In Review: Bus/Device/Point, typed runtime, quality, atomic apply, write result và HIL gate |
