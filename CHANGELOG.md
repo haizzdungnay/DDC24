@@ -66,6 +66,84 @@ hai lỗi thật còn sót trong source hiện tại (BUG-014, BUG-015/TC-L02/TC
 sạch (`eslint src --max-warnings=0`); `npm run build` → qua (`tsc --noEmit` +
 `vite build`, dist mới `index-jEXuMFA9.js`).
 
+### Changed — Product Spec Programming V2.2 Hybrid: áp quyết định review PM/CTO đợt 2 (candidate.2, 2026-08-14)
+
+Cập nhật `PROGRAMMING_PRODUCT_SPEC_V2.2_HYBRID.md` theo đúng các điểm review
+được chốt (không reopen Program-centric/Task-centric/Output Candidate/atomic
+activation/ST-FBD scope/Task removal khỏi Normal UX):
+
+- **§8** tách lifecycle tuyến tính cũ thành hai state domain độc lập —
+  Engineering/Revision State (§8.1) và Runtime Program State (§8.2) — cộng
+  §8.3 "Revision Truth" với ví dụ bắt buộc `Editing r16/CHECK_FAILED` +
+  `Active r15/RUNNING` để khóa rằng Check/Commission failure của Editing
+  không đổi trạng thái Active.
+- **§14.1** khóa thuật ngữ **"Commission Changes"** thay vì "Commission riêng
+  một Program", kèm ví dụ bắt buộc `Active r20 (P1-P4)` → sửa P1 → candidate
+  `r21` → activate atomic → `Active = r21`.
+- **§10.1/§10.4** đổi multicore thành **TARGET-DEPENDENT RUNTIME CAPABILITY**,
+  thêm Product MUST quote cho independent scheduling; **§18** tách `AC-08`
+  thành `AC-08A` (Scheduling Independence) và `AC-08B` (Multicore Capability),
+  lan cập nhật trace ở `CPR-HYB-003/004/010` và bảng OLD/V2.1/V2.2 (§24).
+- **§7.1** khóa ranh giới Published Signal **không tự động** là canonical
+  Point type mới; nâng thành Product-level blocker bắt buộc khóa ở
+  `TBD-HYB-06` trước `IMPLEMENT_READY[HYBRID]`.
+- **§13** sửa output ownership rule: bỏ câu "each writable Point SHALL have
+  one owner", thay bằng "at most one direct Program owner … unless an
+  explicit multi-producer arbitration contract exists" — 0/1 owner = VALID,
+  >1 = REJECT trừ arbitration contract explicit/deterministic/versioned.
+- **§11** tách field "Dependency" mơ hồ thành ba loại độc lập: Data
+  Dependency (11.1), Execution Dependency (11.2), Health/Availability
+  Dependency (11.3), mỗi loại có field bắt buộc riêng.
+- **§10.2** thêm Product requirement "Programs whose required
+  fault-containment semantics cannot be preserved inside the same internal
+  runtime Task SHALL NOT be mapped into that Task" và mở rộng input Auto Task
+  Mapping (fault containment, data visibility, output ownership,
+  timing/safety, target capability).
+- **§9.2/§9.3** tách Advanced properties: Explicit Dependency/Disable
+  Policy/RETAIN Policy là Advanced Product-configurable ưu tiên Rev hiện tại;
+  raw Scheduling Priority/Deadline/Watchdog chuyển sang lớp "Runtime
+  Policy/Advanced Diagnostics/TBD", không mặc định user-configurable trước
+  khi `TBD-HYB-04` khóa.
+- **§1, §20.4** thêm nhãn bằng chứng `STD` + bảng traceability tham chiếu
+  IEC 61131-3 (ST/FBD/POU), IEC TR 61131-8, ISO 16484 series, IEC 62443 — ghi
+  rõ đây chỉ là tham chiếu, không phải compliance claim; đồng thời liệt kê rõ
+  Program-centric UX/Auto Task Mapping/Published Signal/Independent-by-default/
+  Multicore policy là MK PRODUCT DECISION/BENCHMARK-INFORMED, không phải
+  IEC/ISO requirement.
+- **§10.3.1** định nghĩa "10 Program Reference Fixture": `P1-P4` (1 s,
+  PID/scaling/control), `P5-P7` (5 s, sequencing/supervisory), `P8-P10`
+  (30 s, supervisory/energy/monitoring) + downstream measurement class
+  (IR/workload size, runtime state size, Point count, output count,
+  execution-load class); không khóa WCET cụ thể khi chưa có target
+  measurement.
+- **§18** thêm `AC-18` (Engineering Plane Isolation — local control phải
+  sống khi FE/BE/engineering session mất kết nối, FE/BE không được bịa
+  runtime state) và `AC-19` (Restart and Enable Intent — phân biệt
+  Commissioned Revision/Enable-Disable intent/Runtime State/RETAIN State sau
+  reboot); thêm `CPR-HYB-013/014` tương ứng ở §19.
+- **§17.1** đổi tên "Product Information Architecture" thành "Candidate
+  Product Workspace / Candidate Information Architecture", ghi rõ đây là
+  candidate IA mà UI/UX Design có quyền gộp/tách page, Product Spec chỉ khóa
+  capability bắt buộc, Task Manager không trở lại Normal UX.
+- **§23** phân nhóm gate P0 (`TBD-HYB-03/05/06/07/08/09/11` — phải khóa
+  trước `IMPLEMENT_READY[HYBRID]`), P1 (`TBD-HYB-02/04/10/12`) và Governance
+  (`TBD-HYB-01`); nâng gate của `TBD-HYB-11` từ `RELEASE_READY` lên
+  `IMPLEMENT_READY[HYBRID]` cho khớp nhóm P0 theo quyết định review.
+- **§25.2** thêm dòng Revision History `V2.2-HYBRID-candidate.2`.
+
+Giữ nguyên ranh giới authority: tài liệu vẫn `In Review — READY FOR PM/CTO
+REVIEW`, không nâng `APPROVED/ACTIVE/IMPLEMENT_READY/RELEASE_READY`, không
+đổi Product Spec `Active`, không claim IEC/ISO compliance, không tự thêm TBD
+mới ngoài làm rõ nội dung `TBD-HYB-01..12` đã có.
+
+Verification: `python3 scripts/docs_iso_harness.py --expect` → `PASS — mọi
+phép kiểm bắt buộc đạt`; `python3 scripts/candidate_pin_check.py` → `PASS —
+cây làm việc khớp candidate đã ghim` (22/22); soát tay: 20 dòng `AC-*` (01..07,
+08A, 08B, 09..17, 18, 19), 10 `PD-HYB-*` không đổi, 14 `CPR-HYB-*` (12 cũ + 2
+mới), 12 `TBD-HYB-*` không đổi số lượng, `0` trailing whitespace, `0` local
+link thiếu. Không chạy build/browser vì thay đổi chỉ là Product Spec, không
+đổi source hoặc UI runtime.
+
 ### Added — Product Spec Programming V2.2 Hybrid để PM/CTO review (2026-08-14)
 
 - Thêm candidate `PROGRAMMING_PRODUCT_SPEC_V2.2_HYBRID.md` theo mental model
