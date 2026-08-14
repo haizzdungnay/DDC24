@@ -2918,7 +2918,7 @@ components:
     ProgrammingRuntime:
       type: object
       additionalProperties: false
-      required: [schemaVersion, controllerId, producerState, activeRevisionId, lkgRevisionId, taskState, safeState, observedAt, task]
+      required: [schemaVersion, controllerId, producerState, activeRevisionId, lkgRevisionId, taskState, safeState, safeStateNoControllerOnly, observedAt, task]
       properties:
         schemaVersion: { type: string, const: "1.0" }
         controllerId: { type: string, minLength: 1, maxLength: 128 }
@@ -2927,6 +2927,14 @@ components:
         lkgRevisionId: { type: [string, "null"], format: uuid }
         taskState: { type: string, enum: [STOPPED, STARTING, RUNNING, FAULT, UNKNOWN] }
         safeState: { type: boolean }
+        safeStateNoControllerOnly:
+          type: boolean
+          description: >-
+            true CHỈ KHI safeState=true đến từ trigger T7 (no_controller) đơn
+            độc ở Core — không có iop_fault/stale/graph_input_bad/overrun đi
+            kèm. Commission một Program có output sẽ tự giải quyết trường hợp
+            này; false thì safeState do lỗi thật, không được coi là an toàn
+            để Commission bỏ qua.
         observedAt: { type: string, format: date-time }
         task:
           oneOf:
