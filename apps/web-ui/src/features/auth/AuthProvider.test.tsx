@@ -18,9 +18,10 @@ vi.mock('../../shared/api/client', () => ({ setAuthHeaderProvider: mocks.setAuth
 vi.mock('../../shared/api/history', () => ({ setHistoryAuthHeaderProvider: mocks.setHistoryAuthHeaderProvider }))
 
 import { AuthProvider, useAuth } from './AuthProvider'
+import { I18nProvider } from '../../shared/i18n'
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <AuthProvider>{children}</AuthProvider>
+  <I18nProvider><AuthProvider>{children}</AuthProvider></I18nProvider>
 )
 
 function mockLoginResponse(body: unknown) {

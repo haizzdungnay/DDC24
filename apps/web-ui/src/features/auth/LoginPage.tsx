@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react'
-import { Eye, EyeOff, LockKeyhole, UserRound } from 'lucide-react'
+import { ChevronDown, Eye, EyeOff, LockKeyhole, UserRound } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
 import { DEVICE_DEFAULTS, IS_DEMO } from '../../shared/config'
@@ -29,7 +29,7 @@ export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { t, pick } = useI18n()
+  const { lang, setLang, t, pick } = useI18n()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -43,13 +43,20 @@ export function LoginPage() {
       setError(pick('Nhập tên đăng nhập', 'Enter a username'))
       return
     }
+    // TC-L03 (TR-MKDDC24-P1-20260814-01): username có nhưng password rỗng
+    // trước đây lọt qua guard này, gửi thẳng lên server và ăn một roundtrip
+    // thừa cho một lỗi biết chắc phía client — chặn cùng cách với username.
+    if (!password) {
+      setError(pick('Nhập mật khẩu', 'Enter a password'))
+      return
+    }
     setLoading(true)
     setError(null)
     try {
       await login(password, username.trim())
       navigate(returnTo, { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : pick('Đăng nhập thất bại', 'Sign in failed'))
     } finally {
       setLoading(false)
     }
@@ -61,13 +68,25 @@ export function LoginPage() {
       await login('', 'guest')
       navigate(returnTo, { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : pick('Đăng nhập thất bại', 'Sign in failed'))
     }
   }
 
   return (
     <main className="login-skyline grid min-h-screen place-items-center overflow-hidden p-6 relative">
       <section className="panel-shadow relative z-10 w-full max-w-md rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-7">
+        {/* BUG-001 (TR-MKDDC24-P1-20260814-01): trang đăng nhập trước đây
+            không có cách nào đổi ngôn ngữ — người dùng bị `detectDefaultLang`
+            (theo `navigator.language`) khoá tới khi đăng nhập xong mới thấy
+            nút đổi ở TopBar. Thêm cùng một nút, cùng style, ngay tại đây. */}
+        <button
+          type="button"
+          className="absolute right-4 top-4 flex h-9 items-center gap-1.5 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2.5 text-xs font-semibold text-[var(--c-text)]"
+          onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')}
+          aria-label={pick('Đổi ngôn ngữ', 'Toggle language')}
+        >
+          {lang.toUpperCase()} <ChevronDown className="h-4 w-4" aria-hidden="true" />
+        </button>
         <div className="text-center">
           <div className="text-2xl font-black"><span className="text-[var(--c-accent-2)]">DDC</span> 24</div>
           <h1 className="mt-4 text-xl font-semibold">{t('loginTitle')}</h1>
