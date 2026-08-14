@@ -8,21 +8,261 @@
 
 ## [Unreleased]
 
-### Added — Candidate thiết kế ứng dụng AHU hiệu suất cao (2026-08-13)
+### Fixed — i18n Modbus RTU + đăng nhập theo báo cáo ISO 29119-3 (TR-MKDDC24-P1-20260814-01, 2026-08-14)
 
-- Thêm bộ hồ sơ Proposed/M3 cho ứng dụng AHU vòng kín: Product Spec, 51
-  requirement, architecture, 13 open decision, design index, Detailed Design
-  control app/plant simulator/fake MCU/simulation interface/UIUX.
-- Thêm ba asset UI/UX render được cho Runtime desktop/mobile và fault drawer;
-  mọi dữ liệu trên asset được ghi rõ là minh họa, không phải runtime/HIL evidence.
-- Bộ hồ sơ chỉ phục vụ review PM/CTO/Product/HVAC/Engineering; chưa được phê
-  duyệt để implement, chưa có source, Test Result, HIL hoặc release claim.
+Bối cảnh: báo cáo QA `TR-MKDDC24-P1-20260814-01` chạy trên board Foxlinx
+(`0.1.0-be-b6c`, deploy ngay sau commit `fb242cb`) phát hiện lại một phần
+BUG-001..004 (đã sửa ở `fb242cb` nhưng board lúc test là bản trước fix) và
+hai lỗi thật còn sót trong source hiện tại (BUG-014, BUG-015/TC-L02/TC-L03).
 
-Verification: docs harness `--expect` PASS; review authority và candidate pin
-AHU riêng chưa được tạo nên trạng thái giữ `PROPOSED`, 0 M4/M5.
+- **BUG-014 — toàn bộ feature Modbus RTU không đổi ngôn ngữ**: `ModbusRtuLayout`
+  và 6 trang con (`OverviewPage`/`PortsPage`/`DevicesPage`/`PointsPage`/
+  `MappingPage`/`DiagnosticsPage`) cùng 4 component dùng chung
+  (`ConfigStateBanner`/`HierarchyTree`/`RegisterPreview`/`useModbusConfig`)
+  chưa từng gọi `useI18n` — 100% chuỗi hiển thị (tiêu đề, tab, label form,
+  hint, header bảng, thông báo trạng thái/lỗi) hardcode tiếng Việt, đứng yên
+  khi chuyển sang English. `shared.ts` cũng có 3 điểm cùng họ:
+  `READ_ONLY_HINT` (hằng số), `describeApiError()`, `deviceLinkLabel()` đều
+  trả cứng tiếng Việt vì là hàm thuần (không gọi được hook). Sửa: đổi
+  `READ_ONLY_HINT` thành `readOnlyHint(lang)`, thêm tham số `lang` cho
+  `describeApiError()`/`deviceLinkLabel()` — cùng quy ước với
+  `healthReasonLabel(reasonCode, lang)` đã có ở `StateAtoms.tsx`; toàn bộ
+  JSX bọc qua `pick(vi, en)`. Cập nhật 6 test file tương ứng: bọc
+  `<I18nProvider>` quanh cây render, seed `localStorage['mkddc-lang']='vi'`
+  trong `beforeEach` để giữ nguyên mọi assertion tiếng Việt hiện có.
+- **BUG-014 phụ — Diagnostics vẫn tiếng Việt ở chế độ EN**: `DashboardPage.tsx`
+  (2 nơi: `OverviewHeader`, `HealthStrip`) và `DiagnosticsPage.tsx` (dashboard)
+  gọi `healthReasonLabel(reasonCode)` thiếu tham số `lang` — mặc định rơi về
+  `'vi'` bất kể locale đang chọn (chỉ `TopBar.tsx` truyền đúng). Đây chính là
+  nguồn "Bình thường"/"Bus không mở được" mà báo cáo bắt được ở Diagnostics.
+  Thêm `lang` vào cả 3 lời gọi.
+- **BUG-004 phụ — Activity Log ở Dashboard vẫn tiếng Việt**: trang
+  `/activity` đã dịch đúng từ `fb242cb` (`ACTION_LABELS` dạng tuple), nhưng
+  widget "HOẠT ĐỘNG GẦN ĐÂY" ngay trên Dashboard có một dict **khác**,
+  `activityActionLabels: Record<string, string>`, độc lập và không hề qua
+  `pick()`. Đổi sang tuple `[vi, en]` giống `ActivityPage.tsx`.
+- **TC-L02/TC-L03 — lỗi đăng nhập luôn tiếng Việt, password rỗng round-trip
+  lên server**: `AuthProvider.login()` `throw new Error('Đăng nhập thất
+  bại')` hardcode, hiện cả khi đang ở English. Thêm `useI18n()` vào
+  `AuthProvider` → phải đảo thứ tự provider ở `main.tsx`
+  (`I18nProvider` nay bọc NGOÀI `AuthProvider`, trước đây ngược lại và
+  không ai cần thứ tự cũ). `LoginPage.submit()` chỉ chặn username rỗng, không
+  chặn password rỗng — username có + password rỗng thì gửi thẳng lên server,
+  ăn một roundtrip thừa cho lỗi biết chắc phía client rồi mới thấy thông báo
+  (mà thông báo đó lại luôn tiếng Việt, xem trên). Thêm guard password rỗng
+  cùng cách với username.
+- **BUG-001 — trang đăng nhập không có cách đổi ngôn ngữ**: `/eng/` xác nhận
+  lại là tiền tố "Engineering" (không đổi gì, giống kết luận `fb242cb`); phần
+  hợp lệ trong finding là Login page không có nút đổi ngôn ngữ như TopBar —
+  người dùng bị khoá theo `detectDefaultLang()` (auto theo trình duyệt) cho
+  tới sau khi đăng nhập. Thêm nút `EN|VI` cùng style TopBar vào góc trên bên
+  phải form đăng nhập.
+- Sửa kèm một bug trùng lặp phát hiện khi sửa i18n: `PointsPage.tsx` render
+  HAI LẦN nguyên khối banner "Cột Quality không phải số trực tiếp" (copy-paste
+  y hệt, không liên quan i18n) — gộp còn một.
 
-Refs: `PROD-AHUHP-001`, `SRS-AHUHP-001`, `ARCH-AHUHP-001`,
-`DES-INDEX-AHUHP-001`, `OD-AHUHP-001`.
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 543/543 pass
+(66 test file, gồm 10 file trong `features/modbus-rtu`); `npm run lint` →
+sạch (`eslint src --max-warnings=0`); `npm run build` → qua (`tsc --noEmit` +
+`vite build`, dist mới `index-jEXuMFA9.js`).
+
+### Added — Product Spec Programming V2.2 Hybrid để PM/CTO review (2026-08-14)
+
+- Thêm candidate `PROGRAMMING_PRODUCT_SPEC_V2.2_HYBRID.md` theo mental model
+  Program-centric và Task-centric internal runtime: 10 Product Decision,
+  Auto Task Mapping, multicore/fault/data/output semantics, AC-01..17, ma trận
+  migration và bảng `OLD vs V2.1 vs V2.2 HYBRID`.
+- Giữ đúng ranh giới authority: tài liệu ở trạng thái `In Review`, không thay
+  Product Spec `Active`, không claim Hybrid đã implement, không đóng gap và
+  không thay đổi `RELEASE_READY`.
+
+Verification: `python3 scripts/docs_iso_harness.py --expect` PASS toàn bộ ngưỡng;
+`python3 scripts/candidate_pin_check.py` PASS `22/22`; kiểm riêng candidate có
+`0` local link thiếu, `0` trailing whitespace, 12 dòng Executive Summary,
+10 Product Decision và đủ AC-01..10. Không chạy build/browser vì thay đổi chỉ là
+Product Spec, không đổi source hoặc UI runtime.
+
+### Fixed — Dashboard báo sai FAULT cho domain Local I/O (2026-08-14)
+
+- Badge "Local I/O" trên Dashboard hiện FAULT đỏ kèm "8 điểm chất lượng bad"
+  dù board hoạt động bình thường. Điều tra trực tiếp trên board Foxlinx (SSH
+  tunnel + `/api/v1/points` + `/data/config/io_config.conf`): 8 điểm bad là
+  UI-09..UI-16, tất cả có `"type": "none"` — Signal Type "Không hoạt động",
+  tức người dùng chủ ý chưa nối cảm biến. Core trả `quality=bad` đúng thiết
+  kế (không có dữ liệu thật), nhưng `overviewHealth()`
+  (`apps/web-api/internal/app/overview.go`) đếm mọi điểm UI/AO/DO bad vào
+  domain `local_io` không phân biệt "chưa cấu hình" với "hỏng thật" — cùng
+  họ lỗi FE-DIAG-01/FE-DATA-01 (báo sai mức độ nghiêm trọng khi thiếu dữ
+  liệu là chủ ý).
+- Sửa: `overlayPointMetadata()` (`points.go`) nay mang field `type` của
+  `io_config.conf` sang `PointDTO.SignalType` (trước chỉ dùng cho Virtual
+  Points); `overviewHealth()` bỏ qua điểm `SignalType="none"` khi đếm
+  bad/stale cho domain `local_io`. Điểm bad THẬT (không phải `none`) vẫn báo
+  FAULT đúng — có test chốt cả hai chiều.
+- Xác nhận trực tiếp trên board Foxlinx: trước fix
+  `local_io=fault/bad_quality_points`, sau khi deploy binary aarch64 mới
+  `local_io=good/ok` — không đổi cấu hình/phần cứng, chỉ đổi phần mềm đọc
+  đúng ngữ nghĩa. Ghi nhận phụ ngoài phạm vi: `overallState` board vẫn
+  `fault` vì domain `modbus` báo "2 bus không mở được" — sự cố Modbus RTU
+  riêng biệt, chưa điều tra trong phiên này.
+
+Verification: `go build ./...`/`go vet ./...` sạch; `go test ./... -count=1`
+100% PASS (17 package, không hồi quy); 2 test mới
+(`TestOverviewHealthLocalIOIgnoresDisabledChannels`,
+`TestOverlayPointMetadataMangSignalTypeTuIOConfig`).
+
+Refs: F-DASH-LOCALIO-01.
+
+### Fixed — Kênh chưa cấu hình hiện đỏ BAD/FAULT ở Monitor, Dashboard, Sơ đồ (2026-08-14)
+
+- Nối tiếp F-DASH-LOCALIO-01 (mục trên): sau khi Dashboard hết báo FAULT giả,
+  người dùng chỉ ra Monitor page vẫn hiện UI-09..16 (Signal Type "none", chủ ý
+  chưa nối cảm biến) với chấm đỏ + chữ "BAD" — y hệt một fault phần cứng thật.
+  Cùng vấn đề ở panel ghim Dashboard và `ControllerDiagram` (LED đỏ + tooltip
+  "FAULT"/"NO SIGNAL" cho kênh không hề hỏng).
+- Nguyên nhân: các nơi hiển thị (`MonitorPage.AnalogRow`, `StatusBadge`/
+  `QualityBadge` trong detail panel, `DashboardPage.WorkspaceTile`,
+  `ControllerDiagram.qualityState`/`signalState`) chỉ đọc `point.quality`,
+  không dùng `point.signalType` (đã có sẵn trên type FE, đã được backend điền
+  ở fix trên) để phân biệt "chưa cấu hình" với "hỏng thật".
+- Sửa: thêm `isChannelNotConfigured(point)` dùng chung
+  (`shared/utils.ts`, kiểm `signalType === 'none'`), áp dụng tại 4 điểm trên —
+  dot/label riêng "Chưa cấu hình"/"Not configured" màu trung tính, value/unit
+  hiện `—` thay vì "0.0"/"-" (S3: thiếu số liệu thì gạch ngang, không phải 0).
+  `ControllerDiagram` trả `'off'` thay vì `'bad'`/`'nosignal'` — sửa luôn số
+  đếm "X FAULT" ở đầu sơ đồ vì dùng chung hàm đếm. Điểm bad THẬT (signalType
+  khác "none") vẫn hiện đỏ đúng như cũ.
+- Sửa tiếp stat card đầu Monitor page: "Điểm lỗi / mất tín hiệu" và "Điểm
+  UI/AO bình thường" vẫn đếm theo `point.quality` thô nên board thật trước
+  fix hiện 12/60% và 9/36% (36% "lỗi" toàn là kênh chưa dùng); sau fix
+  12/100% và 1/4%. Bộ lọc "Trạng thái → Fault" cũng loại tương tự.
+- Ngoài phạm vi: `npm run build` bị chặn bởi lỗi biên dịch không liên quan
+  (`apps/web-ui/src/features/modbus-rtu/pages/PointsPage.tsx` import hằng số
+  `READ_ONLY_HINT` đã bị đổi thành hàm `readOnlyHint(lang)` — tàn dư một lần
+  đổi tên dở dang, không phải do phiên này). Đã vá tối thiểu 2 dòng để
+  `vite build` chạy được (không mở rộng thêm i18n cho file đó); một agent
+  khác đang làm việc song song trên file này đã hoàn thiện tiếp ngay sau đó.
+
+Verification: `npx vitest --run --environment jsdom src` 537/537 PASS trên
+mọi file liên quan (4 test fail còn lại thuộc `MappingPage.test.tsx`,
+modbus-rtu, không liên quan, đang có người khác xử lý); lint sạch;
+`npm run build` PASS; đã deploy dist mới lên board Foxlinx (backup trước khi
+ghi đè, service `active`, health `ok`).
+
+Refs: F-DASH-LOCALIO-01.
+
+### Fixed — 13 lỗi UI khảo sát thực tế trên board (BUG-001..013, 2026-08-14)
+
+- **i18n mặc định (BUG-001)**: `I18nProvider` trước đây luôn mặc định `vi` cho
+  hồ sơ mới, bất kể trình duyệt. Xác nhận `/eng/` là tiền tố "Engineering"
+  (nhóm route công cụ kỹ thuật), không phải route ngôn ngữ — không có gì để
+  sửa ở đó. Sửa đúng gốc theo W3C i18n Best Practice: hồ sơ mới theo
+  `navigator.language` (`en*` → `en`, còn lại → `vi`); lựa chọn đã lưu trong
+  `localStorage` luôn được ưu tiên tuyệt đối.
+- **Commissioning Prerequisites (BUG-002)**: 4 mục điều kiện tiên quyết
+  (`CommissioningPage.tsx`) hardcode tiếng Việt, không dùng `pick()` — đứng
+  yên tiếng Việt dù đã chuyển UI sang English. Đã bọc toàn bộ `label`/`detail`
+  qua `pick(vi, en)`.
+- **Scheduler (BUG-003)**: `SchedulerGridPage.tsx` không import `useI18n`,
+  100% chuỗi hardcode tiếng Việt (tiêu đề, toolbar, 10 cột bảng, toast, banner
+  di trú). i18n hoá toàn trang; đồng thời tham số hoá locale cho
+  `statusPresentation`/`formatValue`/`weeklySummary`/`DAY_LABELS` (dùng chung
+  bởi `StatusDot`, hiện đúng cột Trạng thái/Tuần/Hiện tại theo locale khi
+  render trên chính trang Scheduler).
+- **Activity Log (BUG-004)**: `ACTION_LABELS` là dict tiếng Việt cứng, cột
+  header đã i18n nhưng giá trị Action thì không — đổi sang tuple `[vi, en]`
+  và `pick()` tại nơi render.
+- **Program mới trùng tên (BUG-005/006)**: tên mặc định `ST+`/`FBD+` vốn đã
+  qua `pick()` (không tái hiện được BUG-005 với source hiện tại — nghi board
+  đang chạy build cũ hơn commit sửa `08757e5`); phần thật còn thiếu là
+  **không có validate trùng tên** — bấm `ST+` hai lần tạo hai Program cùng
+  tên, không cảnh báo. Thêm `isDuplicateProgramName`/`uniqueProgramName`:
+  Program mới tự nhận tên duy nhất (`New program 2`, `3`, …); đổi tên tay ở
+  Inspector bị chặn (kèm thông báo) nếu trùng tên Program khác.
+- **ST Editor Find bar (BUG-011)**: không có nút đóng, bấm lại `Find` không
+  toggle, Escape chỉ đóng khi focus đúng ô input. Thêm nút X, đổi `Find`
+  thành toggle mở/đóng, thêm Escape ngay trên textarea khi search đang mở.
+- **ST Editor Format (BUG-013)**: `formatStSource` cũ chỉ thêm indent cho
+  dòng có sẵn `\n`, dán code 1 dòng thì không đổi gì; `collectStSymbols` yêu
+  cầu khai báo VAR đứng đầu dòng (`^`) nên panel "Symbols & Types" báo trống
+  ngay cả khi có VAR block. Format nay tách từ khoá khối
+  (`PROGRAM/VAR/END_VAR/IF/...`) và câu lệnh (`;`) ra dòng riêng rồi thụt lề
+  theo độ sâu khối; regex nhận diện VAR nới điều kiện biên (đầu file, sau
+  `;`/xuống dòng, hoặc ngay sau từ khoá `VAR*`) nên nhận ra khai báo bất kể
+  đã Format hay chưa.
+- **Vấn đề Check thiếu ngữ cảnh (BUG-007)**: `ProblemsDrawer` chỉ hiện
+  `code` + UUID Program cắt 8 ký tự + số dòng — thiếu cột và biến. Bổ sung
+  cột/biến (`location.column`/`bindingId`) vào chuỗi vị trí. Trang Check
+  (PGM-03) trước đây không truyền `onSelect` nên bấm vào lỗi không đi đâu cả;
+  nay điều hướng sang đúng Program ở workspace Thiết kế qua deep-link
+  `?tab=programs&program=<id>` (không tự chế thêm hành vi seal/focus xuyên
+  route — quyền sở hữu Check giữa PGM-02/PGM-03 vẫn là quyết định D-01 mở
+  trong `REV-PROG-ASBUILT-GAP-2026-08-14`, không tự chọn thay PM/Product).
+- **FAULT badge không tương tác (BUG-008)**: badge trạng thái ở TopBar là
+  `<span>` tĩnh, không title/click. Thêm `title` (lý do qua
+  `healthReasonLabel`, nay có bản EN) và bọc trong `Link` tới `/diagnostics`.
+- **FBD status announcement (BUG-012)**: `commands.ts` (reducer thuần, không
+  gọi được `useI18n`) ghi thẳng câu tiếng Việt vào `announcement`, vùng
+  `aria-live` luôn tiếng Việt bất kể locale UI. Đổi `announcement` từ
+  `string` sang `{ code, params }`; dịch tại `StructuredFbdEditor` qua
+  `translateFbdAnnouncement(pick, ...)` lúc render.
+- **BUG-009/010 đã đúng trong source hiện tại** — không sửa: tên controller ở
+  `TopBar`/`NavRail` đã có `title`; nút "Restore previous version" đã có
+  `Modal` xác nhận bắt buộc nhập lý do + mật khẩu. Nhiều khả năng board đang
+  chạy build cũ hơn các commit đã sửa; sẽ tự đúng sau khi deploy lại.
+
+Phát hiện phụ khi chạy full Playwright suite (ngoài gate bắt buộc của repo):
+`playwright.config.ts` chưa khai `locale`, nên `navigator.language` (và do đó
+default mới của BUG-001) phụ thuộc locale ngẫu nhiên của máy CI. Đặt
+`locale: 'vi-VN'` khớp thị trường thật của sản phẩm — đúng như
+`network-qa.spec.ts` đã làm trước đó. Việc này lộ ra 6 spec (`point-names`,
+`trends`, `pa3-dashboard` 1 dòng, và `fe-pages-health` 2 bài) vốn đã hardcode
+kỳ vọng tiếng Anh mà không khai `mkddc-lang=en` — **lỗi có sẵn từ trước, không
+phải do thay đổi phiên này** (xác nhận qua screenshot lỗi: trang login hiện
+đúng tiếng Việt theo thiết kế). Đã sửa `point-names.spec.ts`/`trends.spec.ts`
+(seed `mkddc-lang=en` như `network-qa.spec.ts`) và một dòng ở
+`pa3-dashboard.spec.ts`. **Chưa sửa `fe-pages-health.spec.ts`** (2 bài, 11
+trang không liên quan tới BUG-001..013: Dashboard/Monitor/Alarms/Settings×4/
+Commissioning/Inputs/Outputs/Virtual Points) — ngoài phạm vi phiên này, cần
+đối chiếu từng trang riêng; ghi lại làm việc cần làm tiếp.
+
+Verification: `npx vitest --run --environment jsdom src` **537/537 PASS** (65
+file, +16 test mới); `npm run lint` sạch; `tsc --noEmit` sạch; `npm run build`
+PASS (kèm `check:programming-contracts`: error catalog 20/99, API client 25
+operation, FBD self-test 10/10); `npx playwright test` **64/66 PASS** (2 fail
+thuộc `fe-pages-health.spec.ts`, ngoài phạm vi, xem trên).
+
+Refs: `REV-PROG-ASBUILT-GAP-2026-08-14`, `PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md`.
+
+### Removed — Dọn Markdown trùng, lịch sử và sai cây source (2026-08-14)
+
+- Loại 43 file Markdown không còn authority: ba snapshot/audit As-Built đã bị
+  báo cáo `REV-PROG-ASBUILT-GAP-2026-08-14` thay thế; tám báo cáo source ngày
+  2026-08-09; 12 record + README archive dùng cây source trước tái cấu trúc; ba
+  plan agent còn trỏ `services/`/`web/backend/`; Plan 48 đã thực thi xong; một
+  prompt refactor, một bản nháp yêu cầu, một backlog thô, register QA tự xác
+  nhận lỗi thời với 23 link chết và hai audit/checklist ngày 2026-06-11 dùng
+  hàng chục đường dẫn tuyệt đối/cây source cũ không còn được dẫn.
+- Loại trọn corpus candidate AHU hiệu suất cao chưa được triển khai: 10 hồ sơ
+  Product/Requirements/Decision/Architecture/Design và ba SVG UI/UX minh họa.
+  Giữ nguyên sample/source AHU chung của Programming vì chúng không thuộc
+  candidate `AHU_HIGH_PERFORMANCE` và vẫn có consumer trong code/test.
+- Giữ nguyên 22/22 hồ sơ Programming đã ghim, toàn bộ Detailed Design đang dùng,
+  contract, risk/trace, Test Result và bằng chứng target/HIL. Đồng bộ Document
+  Hub, Control, review index, Plan 54 và các liên kết còn giá trị sang authority
+  hiện hành; nội dung đã loại phục hồi được từ commit
+  `b69fdf152fd1b424bb4ab2239b5cf97b0e86b554`.
+- Không đụng các bản sao bàn giao/log/`Yeucau.md` đang bị Git ignore vì đó là dữ
+  liệu cục bộ ngoài phạm vi controlled repository.
+
+Verification: quét filesystem không còn file corpus AHUHP;
+`candidate_pin_check.py` **22/22 PASS**; `docs_iso_harness.py --expect` **PASS**
+với 0 link/anchor/path thiếu và 0 ID trùng; quét toàn bộ 341 Markdown tracked
+còn lại đạt 0 liên kết tương đối thiếu đích và 0 nhóm trùng SHA-256;
+`git diff --check` sạch. Không chạy build/test code hoặc browser vì thay đổi
+thuộc phiên dọn này chỉ là tài liệu/asset thiết kế và không đổi runtime.
+
+Refs: `DOC-CTRL-001`, `DOC-GOV-001`, `REV-PROG-ASBUILT-GAP-2026-08-14`.
 
 ### Changed — Ghi nhận As-Built Programming và NO-GO UC-PROG-03 (2026-08-14)
 
