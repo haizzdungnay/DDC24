@@ -61,7 +61,16 @@ export function CheckCommissionPage() {
   const presentKeys = useMemo(() => IMPACT_GROUP_ORDER.filter((key) => impact?.[key].status === 'PRESENT'), [impact])
   const hasUnavailable = useMemo(() => IMPACT_GROUP_ORDER.some((key) => !impact || impact[key].status !== 'NONE' && impact[key].status !== 'PRESENT'), [impact])
   const checkPassed = check.data?.state === 'PASSED'
-  const coreReady = runtime.status === 'ready' && runtime.data?.producerState === 'READY' && runtime.data.safeState === false
+  /* `safeState=true` một mình không chặn Commission: nếu lý do DUY NHẤT là
+   * `safeStateNoControllerOnly` (Core trigger T7 — chưa Program nào đang
+   * điều khiển output), Commission đúng là hành động giải quyết nó, không
+   * phải một fault cần khắc phục trước. Vẫn chặn khi safeState=true mà
+   * `safeStateNoControllerOnly=false` (lỗi I/O/stale/overrun thật — xem
+   * apps/core/domain/safety/safe_state.hpp §5.2). */
+  const coreReady =
+    runtime.status === 'ready' &&
+    runtime.data?.producerState === 'READY' &&
+    (runtime.data.safeState === false || runtime.data.safeStateNoControllerOnly === true)
   const readyToCommission = checkPassed && changes.status === 'ready' && overrides.status === 'ready' && !hasUnavailable && coreReady && !!projectId
 
   useEffect(() => {
@@ -229,9 +238,17 @@ export function CheckCommissionPage() {
         )}
       </Panel>
 
+      {coreReady && runtime.data?.safeState === true && runtime.data.safeStateNoControllerOnly === true && (
+        <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
+          {pick(
+            'Core đang ở trạng thái an toàn vì chưa có Program nào điều khiển output — Đưa vào vận hành Program này sẽ tự giải quyết.',
+            'Core is in safe state because no Program is currently controlling outputs — commissioning this Program will resolve it.'
+          )}
+        </div>
+      )}
       {!coreReady && (
         <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
-          {pick('Core chưa READY hoặc đang ở trạng thái an toàn — Đưa vào vận hành bị chặn.', 'Core is not READY or is in safe state — Commission is blocked.')}
+          {pick('Core chưa READY hoặc đang ở trạng thái an toàn do lỗi — Đưa vào vận hành bị chặn.', 'Core is not READY or is in a fault safe state — Commission is blocked.')}
         </div>
       )}
       {overrides.status === 'error' && (

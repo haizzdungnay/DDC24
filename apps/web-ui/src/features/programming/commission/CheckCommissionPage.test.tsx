@@ -162,10 +162,30 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).not.toBeDisabled()
   })
 
+  it('safeState=true nhưng chỉ do chưa ai điều khiển (safeStateNoControllerOnly) không chặn Commission', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
+      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: true, safeStateNoControllerOnly: true, observedAt: '2026-08-13T00:00:00Z' })
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
+      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
+      if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderPage()
+    await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
+
+    // Banner giải thích — không phải banner chặn.
+    await waitFor(() => expect(screen.getByText(/Core đang ở trạng thái an toàn vì chưa có Program nào điều khiển output/)).toBeInTheDocument())
+    expect(screen.queryByText(/Đưa vào vận hành bị chặn/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).not.toBeDisabled()
+  })
+
   it('Core safe-state và lỗi đọc override đều fail-closed dù Check PASSED', async () => {
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
-      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: true, observedAt: '2026-08-13T00:00:00Z' })
+      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: true, safeStateNoControllerOnly: false, observedAt: '2026-08-13T00:00:00Z' })
       if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
       if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
       if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())

@@ -8,6 +8,101 @@
 
 ## [Unreleased]
 
+### Fixed — Commission bị khoá vĩnh viễn khi safe-state chỉ do "chưa ai điều khiển" (2026-08-14)
+
+Bối cảnh: user hỏi "commission này có lỗi gì" — trang Đưa vào vận hành báo
+"Core is not READY or is in safe state — Commission is blocked" dù Check đã
+PASSED và không có mục Impact nào "Unavailable". Đào sâu thay vì báo cáo hời
+hợt (yêu cầu của user: "tìm hiểu nguyên nhân sâu"):
+
+**Chuỗi nguyên nhân xác nhận bằng dữ liệu thật (không suy đoán)**:
+
+1. Gọi thẳng `GET /api/v1/programming/runtime` qua API (không qua UI) —
+   `producerState: "READY"` (không phải DEGRADED như nghi ngờ ban đầu),
+   `safeState: true`, Task `RUNNING` khoẻ mạnh (`runCount` tăng đều,
+   `overrunCount: 0`). Loại trừ giả thuyết timeout IPC.
+2. `apps/core/domain/safety/safe_state.cpp` có 5 trigger an toàn (T1/T2 IOP
+   fault, T3 SHM stale, T6 graph input BAD, **T7 no_controller**, T8
+   overrun). Log Core không có `safe_state.enter` mới, không overrun → còn
+   lại T7.
+3. Đọc thẳng nội dung Revision đang `RUNNING` (`1ab7cb9b...`) qua API: comment
+   `"Check target không output"`, chỉ có `Counter := Counter + 1;`, **không
+   VAR_INPUT/VAR_OUTPUT, không Variable/Binding nào** — chương trình test từ
+   phiên trước, cố tình không đụng output.
+4. `PriorityResolver::any_active_above_default()` chỉ `true` khi có
+   `set_ao`/`set_do` ở mức < Default(6). Chương trình đang chạy không ghi gì
+   → T7 đúng đắn kích hoạt: "không ai điều khiển → về safe". **Đây là hành vi
+   an toàn thiết kế đúng, không phải bug** — Core hoạt động chính xác.
+
+**Bug thật nằm ở chỗ khác**: `apps/core/application/st/st_process_image.cpp`
+xác nhận khi một Program ghi `VAR_OUTPUT` đã bind Point thật, nó gọi
+`resolver->set_ao/set_do(PRIO_LOCAL_LOGIC, ...)` — đúng mức "trên Default" —
+nghĩa là Commission Program `AHU_FanControl` (đã map `FanEnable`/`FanSpeed`/
+`AlarmHigh`) sẽ TỰ giải quyết T7. Nhưng `CheckCommissionPage.tsx` (`coreReady`)
+chặn Commission bất cứ khi nào `safeState=true`, **không phân biệt** "an toàn
+vì chưa ai điều khiển" (Commission chính là cách giải quyết) với "an toàn vì
+lỗi thật" (I/O fault/stale/overrun — Commission không được phép bỏ qua) —
+tạo **deadlock**: không bao giờ thoát được safe-state qua Commission, đúng
+lúc Commission là hành động duy nhất giải quyết nó. Xác nhận thêm: backend
+Go (`operations.go`) và Core cutover (`programming_runtime_coordinator.cpp`)
+đều **không** có kiểm tra `safeState` nào khi Commission — chặn hoàn toàn chỉ
+nằm ở FE, một gate quá rộng cho một trường hợp cụ thể.
+
+**Sửa xuyên suốt 3 tầng** (không đổi logic 4 trigger còn lại, chỉ phân biệt
+rõ T7 đơn độc):
+
+- **C++**: `RuntimePointSnapshot` (`runtime_point_snapshot.hpp/cpp`) thêm
+  `safe_state_no_controller_only` — `true` CHỈ KHI `safe_state` active VÀ
+  caller xác nhận T7 là trigger duy nhất. `scan_loop.cpp` tính từ
+  `SafeState::triggers()` ngay tại điểm gọi `build()` (đã có sẵn `d_.safe`
+  trong scope). Serialize thêm vào JSON `point_snapshot` qua `web_ipc`.
+- **Go**: propagate xuyên `core_client.go` (`webIPCResponse`) →
+  `dto.go` (`RuntimePointSnapshot`) → `programming_pointcatalog.go` (adapter)
+  → `monitor.go` (`MonitorTruthSnapshot`) → `runtime.go` (`RuntimeView`,
+  `GetRuntime`). Không tự suy diễn gì thêm ở tầng Go — chỉ truyền nguyên giá
+  trị Core đã tính, đúng nguyên tắc "Core là nguồn sự thật duy nhất".
+- **Contract**: `openapi.yaml` thêm `safeStateNoControllerOnly` (required)
+  vào `ProgrammingRuntime`.
+- **FE**: `model/types.ts` thêm field; `CheckCommissionPage.tsx` sửa
+  `coreReady` — cho phép Commission khi `safeState=false` **HOẶC**
+  `safeStateNoControllerOnly=true`; thêm banner giải thích màu vàng (không
+  phải đỏ-chặn) khi rơi đúng trường hợp này, và đổi banner chặn thật thành
+  "an toàn do lỗi" để không gây hiểu nhầm hai tình huống là một.
+
+**Không sửa gì ở 4 trigger còn lại** — T1/T2/T3/T6/T8 tiếp tục chặn Commission
+y hệt trước, đúng như phải vậy (không nới an toàn cho lỗi thật).
+
+**Kiểm chứng**:
+- C++: `cmake --fresh -S . -B build/fw ... (Modbus/BACnet/HMI ON)` +
+  `ctest` → **1007/1007 PASS**, gồm 3 test mới (`RuntimePointSnapshot.
+  SafeStateNoControllerOnlyOnlyTrueWhenRequestedAndSafeActive`,
+  `ScanLoop.NoControllerAloneMarksSafeStateAsCommissionRecoverable`,
+  `ScanLoop.FaultAlongsideNoControllerIsNotCommissionRecoverable` — test sau
+  xác nhận IOP fault thật đi kèm vẫn giữ cờ `false`, không nới an toàn nhầm).
+- Go: `go vet ./...` sạch; `go test ./... -count=1` PASS toàn bộ 18 package,
+  gồm 4 test mới (propagate qua `RuntimeService.GetRuntime` và adapter
+  `ReadProgrammingMonitorSnapshot`).
+- FE: `npx vitest --run --environment jsdom src` → **555/555 PASS** (68 file,
+  +1 test mới cho `coreReady`); `npm run lint` sạch; `tsc --noEmit` sạch;
+  `VITE_PROGRAMMING_REV_A=1 npm run build` qua.
+- **Deploy board Foxlinx cả 3 tầng** (khác mọi lần trước — lần này đổi cả
+  Core/Go, không chỉ FE): cross-compile `aarch64-linux-gnu` qua
+  `platform/cmake/toolchain-aarch64-linux-gnu.cmake` (`mkddc-core` build
+  thành công; `mkddc-hmi` fail link `-lfreetype`/`-ldrm` — môi trường cross
+  thiếu gói aarch64 cho HMI, **không liên quan tới thay đổi phiên này**,
+  không cần deploy lại HMI nên không chặn) và `GOOS=linux GOARCH=arm64
+  CGO_ENABLED=0 go build` cho `mkddc-web`; backup 3 bản cũ
+  (`*.pre-safestate-fix-20260814`), swap, restart `mkddc-core`+`mkddc-web-pi`.
+  Verify **trực tiếp qua API thật trên board**: `GET
+  /api/v1/programming/runtime` trả `safeState: true,
+  safeStateNoControllerOnly: true` đúng như thiết kế (Active Revision vẫn là
+  chương trình test không output); bundle live chứa logic `coreReady` mới và
+  banner giải thích; 4 service (`mkddc-core/-iobus/-netcfg`, `mkddc-web-pi`)
+  `active`, log sạch không AUDIT/ERROR lạ.
+
+Refs: user report "commission bị chặn", điều tra trực tiếp qua SSH + API
+trên board `mekong-fac.ddns.net:8082`.
+
 ### Fixed — Mapping tab bắt gõ tay tên biến thay vì chọn từ chương trình (2026-08-14)
 
 Bối cảnh: user phản ánh trực tiếp — tab "Điểm & Ánh xạ" bắt gõ tay ô "Tên

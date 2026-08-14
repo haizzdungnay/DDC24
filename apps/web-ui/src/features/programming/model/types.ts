@@ -40,6 +40,10 @@ export interface ProgrammingRuntime {
   lkgRevisionId: string | null
   taskState: ProgrammingTaskState
   safeState: boolean
+  /** true CHỈ KHI `safeState` đến từ trigger T7 (no_controller) đơn độc ở
+   *  Core — không có iop_fault/stale/graph_input_bad/overrun đi kèm. Commission
+   *  một Program có output sẽ tự giải quyết trường hợp này. */
+  safeStateNoControllerOnly: boolean
   observedAt: string
   task?: ProgrammingTaskMetrics | null
 }
