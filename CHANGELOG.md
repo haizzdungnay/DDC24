@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### Fixed — trang Programming trên board Foxlinx bị tắt ngoài ý muốn (2026-08-14)
+
+Triệu chứng: user báo `http://mekong-fac.ddns.net:8082/eng/programming` hiện
+"Graphical programming is not available" (đưa người dùng sang Virtual
+points/Scheduler/Alarm settings) thay vì bốn workspace Programming thật đã
+deploy PASS hôm trước (`EV-PROG-P5-507`,
+`docs/07_records/test-evidence/fw-som/2026-08-13-foxlinx-programming-p5-deploy.md`).
+
+Nguyên nhân gốc: `PROGRAMMING_REV_A_ENABLED` (`apps/web-ui/src/shared/config.ts`)
+là cờ **build-time** — Vite bake giá trị `VITE_PROGRAMMING_REV_A` vào bundle
+lúc `vite build`, không đọc được từ runtime/server sau khi đã build. Board
+Foxlinx đã "bật cờ vĩnh viễn" theo `TASK-PROG-507`, nhưng phiên sửa i18n Modbus
+RTU cùng ngày (mục Fixed bên dưới) chạy đúng lệnh cũ trong
+`FOXLINX_DEPLOY_CHECKLIST.md` §3.3 — `npm run build` KHÔNG có
+`VITE_PROGRAMMING_REV_A=1` — nên dist mới (`index-jEXuMFA9.js`, deploy
+`2026-08-14T05:37Z`) bake lại giá trị mặc định tắt của `.env.production` và
+âm thầm regress route `/eng/programming` về nhánh "Rev B scope" dù không đổi
+dòng code nào liên quan Programming.
+
+Cách sửa: rebuild `apps/web-ui` từ đúng HEAD hiện tại (`645dff9`, đã gồm cả
+fix i18n) với `VITE_PROGRAMMING_REV_A=1 npm run build` (dist mới
+`index-CoD2L1Si.js`, xác nhận `grep -c REVA_SCOPE_ROADMAP` = 0 trong bundle,
+tức nhánh placeholder đã bị tree-shake khỏi build); deploy lên board qua
+`scp` (Foxlinx không có `rsync`) + swap atomic `dist` ↔
+`dist.pre-programming-fix-20260814`, restart `mkddc-web-pi`. Xác nhận route
+public `mekong-fac.ddns.net:8082` phục vụ đúng bundle mới (index.html trỏ
+`index-CoD2L1Si.js`, bundle tải qua HTTP cũng có `REVA_SCOPE_ROADMAP` = 0).
+Cờ BE `PROGRAMMING_REV_A=1` ở `/etc/mkddc-web.env` không bị đợt deploy FE-only
+này chạm tới nên giữ nguyên.
+
+Phòng tái diễn: thêm cảnh báo + lệnh build đúng vào
+`docs/08_hardware/foxlinx-som-ddc24/FOXLINX_DEPLOY_CHECKLIST.md` §3.3, kèm
+bước tự-kiểm `grep -c REVA_SCOPE_ROADMAP` trước khi copy dist lên board.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 543/543 pass
+(không đổi code, chỉ đổi cờ build); `npm run lint` sạch; build production
+với `VITE_PROGRAMMING_REV_A=1` qua (`tsc --noEmit` + `vite build`); board
+Foxlinx `systemctl is-active mkddc-web-pi` = `active`, `GET /` nội bộ
+(`127.0.0.1:8081`) và public (`mekong-fac.ddns.net:8082`) đều `200`.
+
 ### Fixed — i18n Modbus RTU + đăng nhập theo báo cáo ISO 29119-3 (TR-MKDDC24-P1-20260814-01, 2026-08-14)
 
 Bối cảnh: báo cáo QA `TR-MKDDC24-P1-20260814-01` chạy trên board Foxlinx
