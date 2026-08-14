@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ShieldCheck } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
@@ -29,11 +29,9 @@ interface NavState {
 
 /**
  * PGM-03 Kiểm tra & Đưa vào vận hành — `UJ-PROG-05/06` (TASK-PROG-504). Trang
- * chỉ nhận `revisionId/checkId` qua `navigate(..., {state})` từ nút "Mở Kiểm
- * tra & Đưa vào vận hành" của PGM-02 (S5-B) — vào thẳng bằng URL/reload không
- * có ngữ cảnh Check nào để tin, nên phải quay lại Thiết kế chạy Kiểm tra lại.
- * Đây là lựa chọn AN TOÀN có chủ đích, không phải thiếu sót: không có route
- * nào trả "Check mới nhất của Project" để suy đoán thay.
+ * nhận `revisionId/checkId` từ query canonical và dùng `location.state` làm
+ * tương thích điều hướng trong phiên. Deep-link/reload không suy đoán Check
+ * "mới nhất": chỉ đọc đúng hai định danh bất biến đã có trong URL.
  */
 export function CheckCommissionPage() {
   const { pick } = useI18n()
@@ -41,8 +39,13 @@ export function CheckCommissionPage() {
   const canEdit = roleAtLeast(session?.role, 'admin')
   const { projectId } = useParams<{ projectId: string }>()
   const location = useLocation()
-  const navState = (location.state as NavState | null) ?? null
-  const { runtime } = useProgrammingRuntimeContext()
+  const [searchParams] = useSearchParams()
+  const locationState = (location.state as NavState | null) ?? null
+  const navState: NavState = {
+    revisionId: searchParams.get('revisionId') ?? locationState?.revisionId,
+    checkId: searchParams.get('checkId') ?? locationState?.checkId
+  }
+  const { runtime, setEditingContext } = useProgrammingRuntimeContext()
 
   const check = useProgrammingCheck(navState?.checkId)
   const changes = useProgrammingRevisionChanges(runtime.data?.activeRevisionId ?? 'none', navState?.revisionId)
@@ -57,7 +60,19 @@ export function CheckCommissionPage() {
   const presentKeys = useMemo(() => IMPACT_GROUP_ORDER.filter((key) => impact?.[key].status === 'PRESENT'), [impact])
   const hasUnavailable = useMemo(() => IMPACT_GROUP_ORDER.some((key) => !impact || impact[key].status !== 'NONE' && impact[key].status !== 'PRESENT'), [impact])
   const checkPassed = check.data?.state === 'PASSED'
-  const readyToCommission = checkPassed && changes.status === 'ready' && !hasUnavailable && !!projectId
+  const coreReady = runtime.status === 'ready' && runtime.data?.producerState === 'READY' && runtime.data.safeState === false
+  const readyToCommission = checkPassed && changes.status === 'ready' && overrides.status === 'ready' && !hasUnavailable && coreReady && !!projectId
+
+  useEffect(() => {
+    if (!projectId) return
+    const checkState = check.status !== 'ready' || !check.data
+      ? 'checking'
+      : check.data.state === 'PASSED'
+        ? 'passed'
+        : check.data.state === 'FAILED' || check.data.state === 'TIMED_OUT' ? 'failed' : 'checking'
+    setEditingContext({ projectId, projectName: '', draftRevisionId: '', dirty: false, checkState })
+    return () => setEditingContext(null)
+  }, [check.data, check.status, projectId, setEditingContext])
 
   if (!navState?.revisionId || !navState?.checkId) {
     return (
@@ -89,7 +104,7 @@ export function CheckCommissionPage() {
   }
 
   function submitCommission() {
-    if (!impact || !navState?.revisionId || !navState?.checkId) return
+    if (!readyToCommission || !impact || !navState.revisionId || !navState.checkId) return
     void commission.submit(
       {
         revisionId: navState.revisionId,
@@ -201,6 +216,17 @@ export function CheckCommissionPage() {
         )}
       </Panel>
 
+      {!coreReady && (
+        <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
+          {pick('Core chưa READY hoặc đang ở trạng thái an toàn — Đưa vào vận hành bị chặn.', 'Core is not READY or is in safe state — Commission is blocked.')}
+        </div>
+      )}
+      {overrides.status === 'error' && (
+        <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
+          {pick('Không xác minh được override hiện hành — Đưa vào vận hành bị chặn.', 'Active overrides could not be verified — Commission is blocked.')}
+        </div>
+      )}
+
       {canEdit && (
         <div className="flex justify-end">
           <Button icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />} disabled={!readyToCommission} onClick={openConfirmDialog}>
@@ -245,7 +271,7 @@ export function CheckCommissionPage() {
         title={pick('Xác nhận Đưa vào vận hành', 'Confirm Commission')}
         confirmLabel={pick('Gửi lệnh', 'Submit')}
         confirmLoading={submitting}
-        confirmDisabled={submitting || presentKeys.some((key) => !acknowledged.has(key)) || password.length === 0 || changes.status !== 'ready'}
+        confirmDisabled={submitting || presentKeys.some((key) => !acknowledged.has(key)) || password.length === 0 || !readyToCommission}
         onConfirm={submitCommission}
         onClose={() => {
           if (submitting) return

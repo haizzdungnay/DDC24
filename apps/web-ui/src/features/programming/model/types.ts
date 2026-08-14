@@ -34,12 +34,93 @@ export type ProgrammingTaskState = 'STOPPED' | 'STARTING' | 'RUNNING' | 'FAULT' 
 
 export interface ProgrammingRuntime {
   schemaVersion: string
+  controllerId: string
   producerState: ProgrammingTargetState
   activeRevisionId: string | null
   lkgRevisionId: string | null
   taskState: ProgrammingTaskState
   safeState: boolean
   observedAt: string
+  task?: ProgrammingTaskMetrics | null
+}
+
+export interface ProgrammingTaskMetrics {
+  taskId: string
+  periodMs: number
+  budgetMs: number
+  state: 'STOPPED' | 'RUNNING' | 'FAULT'
+  runCount: number
+  missedReleaseCount: number
+  lastExecNs: number
+  maxExecNs: number
+  overrunCount: number
+  consecutiveOverruns: number
+}
+
+export interface ProgrammingMonitorSample {
+  variableId: string
+  variableName: string
+  programId: string
+  point: ProgrammingPointIdentity
+  direction: 'READ' | 'WRITE' | 'READ_WRITE'
+  dataType: string
+  unit?: string
+  programValue: unknown
+  actualValue: unknown
+  overriddenBy: string | null
+  effectivePriority: number | null
+  overrideActor: string | null
+  overrideRemainingS: number | null
+  quality: 'GOOD' | 'UNCERTAIN' | 'BAD' | 'STALE' | 'OFFLINE' | 'UNKNOWN'
+  observedAt: string
+  freshness: 'LIVE' | 'STALE' | 'UNAVAILABLE'
+}
+
+export interface ProgrammingMonitorPage {
+  schemaVersion: string
+  activeRevisionId: string | null
+  safeState: boolean
+  task: ProgrammingTaskMetrics | null
+  items: ProgrammingMonitorSample[]
+}
+
+export interface ProgrammingTraceRequest {
+  schemaVersion: '1.0'
+  variableIds: string[]
+  durationMs: number
+  samplePeriodMs: number
+}
+
+export interface ProgrammingTraceAccepted {
+  traceId: string
+  statusUrl: string
+  state: 'RUNNING' | 'COMPLETED'
+  requestHash: string
+  acceptedAt: string
+  correlationId: string
+}
+
+export interface ProgrammingTraceValue {
+  variableId: string
+  programValue: unknown
+  actualValue: unknown
+  overriddenBy: string | null
+  effectivePriority: number | null
+  quality: ProgrammingMonitorSample['quality']
+  freshness: ProgrammingMonitorSample['freshness']
+}
+
+export interface ProgrammingTrace {
+  traceId: string
+  state: 'RUNNING' | 'COMPLETED' | 'STOPPED' | 'FAILED'
+  variableIds: string[]
+  durationMs: number
+  samplePeriodMs: number
+  startedAt: string
+  updatedAt: string
+  stopReason: 'DURATION_REACHED' | 'QUOTA_REACHED' | 'USER_STOPPED' | 'SOURCE_UNAVAILABLE' | null
+  droppedSamples: number
+  samples: Array<{ sequence: number; observedAt: string; values: ProgrammingTraceValue[] }>
 }
 
 /** Data Model §3.3 — Program document. `document` là source ST (string) khi

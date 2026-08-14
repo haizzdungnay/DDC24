@@ -1,13 +1,23 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useMemo, useState } from 'react'
 import { Outlet, useParams } from 'react-router-dom'
-import { useProgrammingCapabilities, useProgrammingRuntime } from '../api/queries'
+import { useProgrammingCapabilities, useProgrammingProjects, useProgrammingRuntime } from '../api/queries'
 import type { ProgrammingCapabilities, ProgrammingRuntime, RemoteState } from '../model/types'
 import { ProgrammingHeader } from './ProgrammingHeader'
 import { ProgrammingContextBar } from './ProgrammingContextBar'
+import { ProgrammingMobileNav } from './ProgrammingMobileNav'
 
 interface ProgrammingRuntimeContextValue {
   capabilities: RemoteState<ProgrammingCapabilities>
   runtime: RemoteState<ProgrammingRuntime>
+  setEditingContext: (context: ProgrammingEditingContext | null) => void
+}
+
+export interface ProgrammingEditingContext {
+  projectId: string
+  projectName: string
+  draftRevisionId: string
+  dirty: boolean
+  checkState: 'idle' | 'checking' | 'passed' | 'failed' | 'unknown'
 }
 
 const ProgrammingRuntimeContext = createContext<ProgrammingRuntimeContextValue | null>(null)
@@ -29,12 +39,29 @@ export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
 export function ProgrammingLayout() {
   const capabilities = useProgrammingCapabilities()
   const runtime = useProgrammingRuntime()
+  const projects = useProgrammingProjects()
+  const [editingContext, setEditingContext] = useState<ProgrammingEditingContext | null>(null)
   const { projectId } = useParams<{ projectId?: string }>()
   const refreshing = capabilities.status === 'loading' || runtime.status === 'loading'
 
+  const listedProject = useMemo(() => {
+    if (projects.status !== 'ready' || !projects.data) return null
+    return projects.data.items.find((item) => item.projectId === projectId) ?? projects.data.items[0] ?? null
+  }, [projectId, projects.data, projects.status])
+  const routeEditingContext = editingContext && (!projectId || editingContext.projectId === projectId) ? editingContext : null
+  const visibleEditingContext = listedProject
+    ? {
+        projectId: listedProject.projectId,
+        projectName: routeEditingContext?.projectName || listedProject.name,
+        draftRevisionId: routeEditingContext?.draftRevisionId || listedProject.draftRevisionId,
+        dirty: routeEditingContext?.dirty ?? false,
+        checkState: routeEditingContext?.checkState ?? ('idle' as const)
+      }
+    : routeEditingContext
+
   return (
-    <ProgrammingRuntimeContext.Provider value={{ capabilities, runtime }}>
-      <div className="space-y-4">
+    <ProgrammingRuntimeContext.Provider value={{ capabilities, runtime, setEditingContext }}>
+      <div className="space-y-4 pb-16 md:pb-0">
         <ProgrammingHeader
           refreshing={refreshing}
           onRefresh={() => {
@@ -42,9 +69,10 @@ export function ProgrammingLayout() {
             runtime.refresh()
           }}
         />
-        <ProgrammingContextBar runtimeStatus={runtime.status} runtime={runtime.data} activeProjectId={projectId} />
+        <ProgrammingContextBar runtimeStatus={runtime.status} runtime={runtime.data} editing={visibleEditingContext} />
         <Outlet />
       </div>
+      <ProgrammingMobileNav projectId={visibleEditingContext?.projectId ?? null} />
     </ProgrammingRuntimeContext.Provider>
   )
 }

@@ -3,6 +3,7 @@ import { useEffect, useId, useReducer, useRef } from 'react'
 
 import { Button } from '../../../shared/components/Button'
 import { useI18n } from '../../../shared/i18n'
+import { createUuid } from '../../../shared/crypto'
 import {
   createFbdEditorState,
   fbdEditorReducer,
@@ -19,7 +20,7 @@ export interface StructuredFbdEditorProps {
 }
 
 function newUuid(): string {
-  return crypto.randomUUID().toLowerCase()
+  return createUuid()
 }
 
 function newNetwork(index: number): FbdNetwork {

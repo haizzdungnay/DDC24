@@ -20,8 +20,9 @@ const TAB_LABEL: Record<RuntimeTabKey, [string, string]> = {
  * PGM-04 Runtime & Bảo trì — `UJ-PROG-07/08` (TASK-PROG-505). Tab
  * `?tab=runtime|watch|service` mặc định `runtime` — đây cũng là đích của
  * redirect `/runtime` (không tab) theo UX §11.1 dòng 5 (xem
- * `shared/LegacyTabRedirect.tsx`). `DangerZone` tách khỏi ba tab chỉ-đọc,
- * đặt cố định dưới cùng.
+ * `shared/LegacyTabRedirect.tsx`). `DangerZone` chỉ mount trong tab service;
+ * tab Runtime/Watch giữ thuần đọc để hành động nguy hiểm không chen vào luồng
+ * chẩn đoán.
  */
 export function RuntimeServicePage() {
   const { pick } = useI18n()
@@ -72,9 +73,12 @@ export function RuntimeServicePage() {
 
       {tab === 'runtime' && <RuntimeTab runtime={runtime.data} status={runtime.status} />}
       {tab === 'watch' && <WatchTab />}
-      {tab === 'service' && <VersionsTab runtime={runtime.data} />}
-
-      <DangerZone runtime={runtime.data} runtimeStatus={runtime.status} />
+      {tab === 'service' && (
+        <>
+          <VersionsTab runtime={runtime.data} />
+          <DangerZone runtime={runtime.data} runtimeStatus={runtime.status} />
+        </>
+      )}
     </div>
   )
 }

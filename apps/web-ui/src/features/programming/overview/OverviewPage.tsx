@@ -176,10 +176,17 @@ function DraftAttentionPanel({ projects }: { projects: ReturnType<typeof useProg
 
 function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | null }) {
   const { pick } = useI18n()
-  const items: Array<{ severity: 'error' | 'warning'; text: string }> = []
-  if (runtime?.producerState === 'UNAVAILABLE') items.push({ severity: 'error', text: pick('Không kết nối được Core.', 'Core is unreachable.') })
-  else if (runtime?.producerState === 'DEGRADED') items.push({ severity: 'warning', text: pick('Core đang suy giảm.', 'Core is degraded.') })
-  if (runtime?.taskState === 'FAULT') items.push({ severity: 'error', text: pick('Tác vụ điều khiển đang lỗi (FAULT).', 'The control task is faulted.') })
+  const items: Array<{ code: string; severity: 'error' | 'warning'; text: string; scope: string; action: string }> = []
+  if (runtime?.producerState === 'UNAVAILABLE') items.push({ code: 'PRG-CORE-UNAVAILABLE', severity: 'error', text: pick('Không kết nối được Core.', 'Core is unreachable.'), scope: 'Core', action: pick('Kiểm tra service/Core và kết nối IPC.', 'Check the service/Core and IPC connection.') })
+  else if (runtime?.producerState === 'DEGRADED') items.push({ code: 'PRG-CORE-DEGRADED', severity: 'warning', text: pick('Core đang suy giảm; dữ liệu có thể cũ.', 'Core is degraded; data may be stale.'), scope: 'Core', action: pick('Chỉ chẩn đoán; mọi mutation runtime đang bị khóa.', 'Diagnose only; runtime mutations are locked.') })
+  if (runtime?.taskState === 'FAULT') items.push({ code: 'PRG-TASK-FAULT', severity: 'error', text: pick('Tác vụ điều khiển đang lỗi (FAULT).', 'The control task is faulted.'), scope: runtime.task?.taskId ?? 'Control_Main', action: pick('Mở Runtime để xem số lần quá giờ và trạng thái tác vụ.', 'Open Runtime to inspect overruns and task state.') })
+  if (runtime?.safeState) items.push({
+    code: 'PRG-SAFE-ACTIVE',
+    severity: 'error',
+    text: pick('Safe-state đang tác động; Core chưa cung cấp mã nguyên nhân chi tiết.', 'Safe-state is active; Core did not provide a detailed reason code.'),
+    scope: runtime.task?.taskId ? `${runtime.task.taskId} / outputs do Program điều khiển` : pick('Các output do Program điều khiển (chưa có danh sách Point)', 'Program-controlled outputs (Point list unavailable)'),
+    action: pick('Giữ Commission/Restore bị khóa; kiểm tra Core, I/O và alarm trước khi phục hồi.', 'Keep Commission/Restore locked; inspect Core, I/O, and alarms before recovery.')
+  })
 
   return (
     <Panel title={pick('Việc cần chú ý', 'Attention required')}>
@@ -188,9 +195,12 @@ function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | n
       ) : (
         <ul className="space-y-2">
           {items.map((item) => (
-            <li key={item.text} className="flex items-center gap-2 text-sm">
-              <AlertTriangle className={item.severity === 'error' ? 'h-4 w-4 text-[var(--c-fault-fg)]' : 'h-4 w-4 text-[var(--c-warn-fg)]'} aria-hidden="true" />
-              {item.text}
+            <li key={item.code} className="flex items-start gap-2 rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-sm">
+              <AlertTriangle className={item.severity === 'error' ? 'mt-0.5 h-4 w-4 shrink-0 text-[var(--c-fault-fg)]' : 'mt-0.5 h-4 w-4 shrink-0 text-[var(--c-warn-fg)]'} aria-hidden="true" />
+              <span>
+                <strong className="font-mono text-xs">{item.code}</strong> — {item.text}
+                <span className="mt-1 block text-xs text-[var(--c-text-dim)]">{pick('Phạm vi', 'Scope')}: {item.scope} · {pick('Hành động', 'Action')}: {item.action}</span>
+              </span>
             </li>
           ))}
         </ul>

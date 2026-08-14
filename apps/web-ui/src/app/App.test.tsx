@@ -71,6 +71,18 @@ describe('LoginRoute giữ deep link sau khi đăng nhập', () => {
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
   })
 
+  it('giữ cả query và hash của deep link Programming', () => {
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/login', state: { from: '/eng/programming/runtime?tab=service#danger-zone' } }]}>
+        <Routes>
+          <Route path="/login" element={<LoginRoute />} />
+          <Route path="/eng/programming/runtime" element={<div>Programming service</div>} />
+        </Routes>
+      </MemoryRouter>
+    )
+    expect(screen.getByText('Programming service')).toBeInTheDocument()
+  })
+
   it('về trang chủ khi state.from là đường dẫn ngoài, chặn open redirect', () => {
     authMocks.role = 'admin'
     render(

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link2, Plus, Trash2 } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
+import { createUuid } from '../../../../shared/crypto'
 import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
 import { StateBlock } from '../../../../shared/components/StateBlock'
@@ -253,8 +254,8 @@ function PointPickerDialog({
           disabled={!selected || !variableName.trim() || !programId}
           onClick={() => {
             if (!selected) return
-            const variableId = crypto.randomUUID()
-            const bindingId = crypto.randomUUID()
+            const variableId = createUuid()
+            const bindingId = createUuid()
             void onSubmit([
               {
                 op: 'upsertVariable',

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, ClipboardCheck } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
@@ -10,7 +10,9 @@ import { ProgramsTab } from './editor/ProgramsTab'
 import { MappingTab } from './mapping/MappingTab'
 import { ExecutionTab } from './task/ExecutionTab'
 import { ProblemsDrawer } from '../shared/ProblemsDrawer'
-import type { ProgrammingDiagnostic } from '../model/types'
+import { Modal } from '../../../shared/components/Modal'
+import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
+import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
@@ -31,12 +33,19 @@ export function DesignWorkspacePage() {
   const { pick } = useI18n()
   const { session } = useAuth()
   const navigate = useNavigate()
+  const { setEditingContext } = useProgrammingRuntimeContext()
   const canEdit = roleAtLeast(session?.role, 'admin')
   const { projectId } = useParams<{ projectId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const requested = searchParams.get('tab')
   const tab: DesignTab = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as DesignTab) : 'programs'
   const [selectedProgramId, setSelectedProgramId] = useState<string>()
+  const [focusDiagnostic, setFocusDiagnostic] = useState<ProgrammingDiagnostic | null>(null)
+  const [programOperations, setProgramOperations] = useState<ProgrammingDraftOperation[]>([])
+  const [executionOperations, setExecutionOperations] = useState<ProgrammingDraftOperation[]>([])
+  const [discardVersion, setDiscardVersion] = useState(0)
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
+  const [savingBeforeNavigation, setSavingBeforeNavigation] = useState(false)
 
   useEffect(() => {
     if (requested === tab) return
@@ -52,6 +61,51 @@ export function DesignWorkspacePage() {
 
   const workspace = useDraftWorkspace(projectId)
   const checkWorkflow = useCheckWorkflow(projectId)
+  const pendingOperations = useMemo(() => [...programOperations, ...executionOperations], [executionOperations, programOperations])
+  const draftDirty = pendingOperations.length > 0
+
+  const updateProgramOperations = useCallback((operations: ProgrammingDraftOperation[]) => setProgramOperations(operations), [])
+  const updateExecutionOperations = useCallback((operations: ProgrammingDraftOperation[]) => setExecutionOperations(operations), [])
+
+  useEffect(() => {
+    if (workspace.status !== 'ready' || !workspace.project) return
+    const phase = checkWorkflow.state.phase
+    const checkState = phase === 'sealing' || phase === 'checking'
+      ? 'checking'
+      : phase === 'done'
+        ? checkWorkflow.state.check.state === 'PASSED' ? 'passed' : 'failed'
+        : phase === 'error' ? 'unknown' : 'idle'
+    setEditingContext({
+      projectId: workspace.project.projectId,
+      projectName: workspace.project.name,
+      draftRevisionId: workspace.project.draftRevisionId,
+      dirty: draftDirty,
+      checkState
+    })
+    return () => setEditingContext(null)
+  }, [checkWorkflow.state, draftDirty, setEditingContext, workspace.project, workspace.status])
+
+  useEffect(() => {
+    if (!draftDirty) return undefined
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault()
+    const interceptInternalLink = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const target = event.target
+      const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null
+      if (!anchor || anchor.target || anchor.download) return
+      const url = new URL(anchor.href, window.location.href)
+      if (url.origin !== window.location.origin || url.href === window.location.href) return
+      event.preventDefault()
+      event.stopPropagation()
+      setPendingNavigation(`${url.pathname}${url.search}${url.hash}`)
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    globalThis.document.addEventListener('click', interceptInternalLink, true)
+    return () => {
+      window.removeEventListener('beforeunload', warnBeforeUnload)
+      globalThis.document.removeEventListener('click', interceptInternalLink, true)
+    }
+  }, [draftDirty])
 
   const diagnostics: ProgrammingDiagnostic[] = checkWorkflow.state.phase === 'done' ? checkWorkflow.state.check.diagnostics : []
   const tabErrorCount = useMemo(() => {
@@ -111,6 +165,7 @@ export function DesignWorkspacePage() {
               variant="secondary"
               icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
               loading={checkWorkflow.state.phase === 'sealing' || checkWorkflow.state.phase === 'checking'}
+              disabled={draftDirty}
               onClick={() => workspace.project && void checkWorkflow.runCheck(workspace.project)}
             >
               {pick('Kiểm tra', 'Check')}
@@ -122,7 +177,7 @@ export function DesignWorkspacePage() {
                   size="sm"
                   icon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
                   onClick={() =>
-                    navigate(`/eng/programming/projects/${projectId}/commission`, {
+                    navigate(`/eng/programming/projects/${projectId}/commission?revisionId=${encodeURIComponent(passedCheck.revisionId)}&checkId=${encodeURIComponent(passedCheck.checkId)}`, {
                       state: { revisionId: passedCheck.revisionId, checkId: passedCheck.checkId }
                     })
                   }
@@ -153,6 +208,11 @@ export function DesignWorkspacePage() {
           {checkWorkflow.state.message}
         </div>
       )}
+      {draftDirty && (
+        <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
+          {pick('Draft có thay đổi chưa lưu. Hãy lưu trước khi Kiểm tra.', 'The draft has unsaved changes. Save before running Check.')}
+        </div>
+      )}
       {checkWorkflow.state.phase === 'done' && (
         <div
           role="status"
@@ -175,13 +235,23 @@ export function DesignWorkspacePage() {
           DDD-FE-PROG-001 §0.1 ràng buộc 1. Phát hiện qua Playwright E2E
           (TASK-PROG-506), sửa ngay trong cùng phiên. */}
       <div hidden={tab !== 'programs'}>
-        <ProgramsTab document={document} saving={workspace.saving} selectedProgramId={selectedProgramId} onSelectProgram={setSelectedProgramId} onSave={workspace.save} />
+        <ProgramsTab
+          document={document}
+          saving={workspace.saving}
+          selectedProgramId={selectedProgramId}
+          onSelectProgram={setSelectedProgramId}
+          onSave={workspace.save}
+          diagnostics={diagnostics}
+          focusDiagnostic={focusDiagnostic}
+          onPendingOperationsChange={updateProgramOperations}
+          discardVersion={discardVersion}
+        />
       </div>
       <div hidden={tab !== 'mapping'}>
         <MappingTab document={document} saving={workspace.saving} onSave={workspace.save} />
       </div>
       <div hidden={tab !== 'execution'}>
-        <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} />
+        <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} onPendingOperationsChange={updateExecutionOperations} discardVersion={discardVersion} />
       </div>
 
       {diagnostics.length > 0 && (
@@ -197,6 +267,7 @@ export function DesignWorkspacePage() {
                   return next
                 })
               } else if (typeof diagnostic.location?.programId === 'string') {
+                setFocusDiagnostic(diagnostic)
                 setSelectedProgramId(diagnostic.location.programId)
                 setSearchParams((current) => {
                   const next = new URLSearchParams(current)
@@ -208,6 +279,44 @@ export function DesignWorkspacePage() {
           />
         </div>
       )}
+
+      <Modal
+        open={pendingNavigation !== null}
+        title={pick('Draft có thay đổi chưa lưu', 'Draft has unsaved changes')}
+        cancelLabel={pick('Ở lại', 'Stay')}
+        confirmLabel={pick('Lưu Draft', 'Save Draft')}
+        confirmLoading={savingBeforeNavigation}
+        onClose={() => setPendingNavigation(null)}
+        onConfirm={() => {
+          if (!pendingNavigation) return
+          setSavingBeforeNavigation(true)
+          void workspace.save(pendingOperations).then((saved) => {
+            setSavingBeforeNavigation(false)
+            if (!saved) return
+            const destination = pendingNavigation
+            setPendingNavigation(null)
+            navigate(destination)
+          })
+        }}
+      >
+        <p>{pick('Lưu toàn bộ thay đổi trong một batch, bỏ thay đổi cục bộ, hoặc ở lại trang.', 'Save all changes in one batch, discard local changes, or stay on this page.')}</p>
+        <Button
+          className="mt-3"
+          variant="danger"
+          disabled={savingBeforeNavigation}
+          onClick={() => {
+            if (!pendingNavigation) return
+            const destination = pendingNavigation
+            setDiscardVersion((current) => current + 1)
+            setProgramOperations([])
+            setExecutionOperations([])
+            setPendingNavigation(null)
+            navigate(destination)
+          }}
+        >
+          {pick('Bỏ thay đổi cục bộ', 'Discard local changes')}
+        </Button>
+      </Modal>
     </div>
   )
 }

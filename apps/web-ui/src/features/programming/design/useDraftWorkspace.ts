@@ -3,6 +3,7 @@ import { useProgrammingApiClient } from '../api/authClient'
 import { ProgrammingApiError } from '../api/generated/client'
 import { programmingErrorCopy } from '../api/errorCopy'
 import { useI18n } from '../../../shared/i18n'
+import { createUuid } from '../../../shared/crypto'
 import type { ProgrammingCheck, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingProject } from '../model/types'
 
 // Contract HTTP dùng tên profile công khai có dấu gạch ngang. Chuỗi
@@ -80,8 +81,8 @@ export function useDraftWorkspace(projectId: string | undefined) {
             path: { projectId },
             body: { schemaVersion: '1.0', baseRevisionId: project.baseRevisionId, operations },
             ifMatch: project.etag,
-            idempotencyKey: crypto.randomUUID(),
-            correlationId: crypto.randomUUID()
+            idempotencyKey: createUuid(),
+            correlationId: createUuid()
           }
         )
         setProject((current) => (current ? { ...current, etag: response.etag, draft: response.resource.content } : current))
@@ -164,8 +165,8 @@ export function useCheckWorkflow(projectId: string | undefined) {
           path: { projectId },
           body: { schemaVersion: '1.0', baseRevisionId: project.baseRevisionId, label: new Date().toISOString(), comment: '' },
           ifMatch: project.etag,
-          idempotencyKey: crypto.randomUUID(),
-          correlationId: crypto.randomUUID()
+          idempotencyKey: createUuid(),
+          correlationId: createUuid()
         })
         const revisionId = sealed.resource.revisionId
         const accepted = await client.request<{ checkId: string; statusUrl: string; state: string; requestHash: string; acceptedAt: string; correlationId: string }>(
@@ -173,8 +174,8 @@ export function useCheckWorkflow(projectId: string | undefined) {
           {
             path: { revisionId },
             body: { schemaVersion: '1.0', targetProfile: REV_A_TARGET_PROFILE },
-            idempotencyKey: crypto.randomUUID(),
-            correlationId: crypto.randomUUID()
+            idempotencyKey: createUuid(),
+            correlationId: createUuid()
           }
         )
         setState({ phase: 'checking', checkId: accepted.checkId })

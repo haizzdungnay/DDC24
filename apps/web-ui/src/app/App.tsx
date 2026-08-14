@@ -34,7 +34,10 @@ import { ProgrammingRoutes } from '../features/programming/ProgrammingRoutes'
 function ProtectedShell() {
   const { isAuthenticated } = useAuth()
   const location = useLocation()
-  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  if (!isAuthenticated) {
+    const returnTo = `${location.pathname}${location.search}${location.hash}`
+    return <Navigate to="/login" replace state={{ from: returnTo }} />
+  }
   /* PA3-205: `OverviewProvider` bọc NGOÀI shell vì cả TopBar lẫn Landing đều
      đọc cùng một snapshot. Đặt nó bên trong Dashboard sẽ đưa ta về đúng lỗi
      PA3-F12: hai vùng của một màn hình poll riêng và nói hai điều khác nhau. */
