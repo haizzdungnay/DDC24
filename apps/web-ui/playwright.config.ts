@@ -11,7 +11,13 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:4174',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
-    video: 'off'
+    video: 'off',
+    // Người dùng thật của MK-DDC-24 chủ yếu ở VN; kể từ khi `I18nProvider`
+    // đọc `navigator.language` cho hồ sơ trình duyệt mới (BUG-001 — không còn
+    // hard-code 'vi'), locale của Chrome do Playwright dựng phải khớp thực tế
+    // thị trường, nếu không mọi assertion tiếng Việt "mặc định" sẽ phụ thuộc
+    // locale ngẫu nhiên của máy CI thay vì phản ánh người dùng thật.
+    locale: 'vi-VN'
   },
   projects: [
     {

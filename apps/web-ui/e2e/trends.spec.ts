@@ -111,6 +111,10 @@ async function openTrends(page: Page): Promise<URL[]> {
     return json(route, [])
   })
 
+  // Spec này kiểm chính xác copy tiếng Anh. Khai báo locale thay vì phụ thuộc
+  // ngôn ngữ mặc định của ứng dụng (profile mới hiện mặc định tiếng Việt theo
+  // navigator.language — xem playwright.config.ts và network-qa.spec.ts).
+  await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'en'))
   await page.goto('/login')
   await page.getByLabel('Username', { exact: true }).fill('admin')
   await page.getByLabel('Password', { exact: true }).fill('e2e')
