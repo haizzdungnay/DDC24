@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -85,6 +86,78 @@ func TestCorePointSnapshotRejectsMismatchedResponseID(t *testing.T) {
 	path, _ := fakeCoreSocket(t, `{"id":99,"result":"accepted","snapshotId":7,"snapshotObservedAtUtc":"2026-07-17T10:00:00Z","capturedMonotonicNs":456,"points":[]}`)
 	if _, err := (&CoreClient{SockPath: path}).ReadPointSnapshot(context.Background()); err == nil {
 		t.Fatal("expected mismatched response id error")
+	}
+}
+
+// TestCorePointSnapshotCoalescesConcurrentCallers khoá lại hành vi dồn request
+// đã sửa: Core (`WebIpc::drain`) chỉ chấp nhận đúng MỘT `point_snapshot` mỗi
+// scan cycle (periodMs=1000 trên Foxlinx) — request thứ hai trong cùng cycle
+// bị từ chối "busy". Trước khi sửa, HistorianShadowScheduler (tick 100ms) và
+// Programming Runtime Monitor (FE poll ~1 Hz) mỗi bên tự dial một kết nối
+// riêng, nên tự đụng nhau và gây 503 dù Core hoàn toàn khoẻ mạnh — quan sát
+// thật trên board Foxlinx 2026-08-14. Test này gọi 8 caller đồng thời và xác
+// nhận Core chỉ nhận đúng MỘT round-trip.
+func TestCorePointSnapshotCoalescesConcurrentCallers(t *testing.T) {
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("mkddc-core-test-coalesce-%d-%d.sock", os.Getpid(), time.Now().UnixNano()))
+	_ = os.Remove(path)
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Skipf("unix socket unavailable: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = ln.Close()
+		_ = os.Remove(path)
+	})
+
+	var connCount int32
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			atomic.AddInt32(&connCount, 1)
+			go func(conn net.Conn) {
+				defer conn.Close()
+				line, err := bufio.NewReader(conn).ReadBytes('\n')
+				if err != nil {
+					return
+				}
+				var cmd map[string]any
+				if err := json.Unmarshal(line, &cmd); err != nil {
+					return
+				}
+				// Giữ connection mở một nhịp để mở rộng cửa sổ đua: nếu code
+				// KHÔNG dồn request, caller thứ hai sẽ kịp tự dial một kết nối
+				// riêng trong lúc caller đầu còn đang chờ.
+				time.Sleep(150 * time.Millisecond)
+				resp := fmt.Sprintf(`{"id":%v,"result":"accepted","snapshotId":7,"snapshotObservedAtUtc":"2026-07-17T10:00:00Z","capturedMonotonicNs":456,"points":[]}`, cmd["id"])
+				_, _ = conn.Write([]byte(resp + "\n"))
+			}(conn)
+		}
+	}()
+
+	client := &CoreClient{SockPath: path}
+	const callers = 8
+	var wg sync.WaitGroup
+	results := make([]error, callers)
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			_, err := client.ReadPointSnapshot(context.Background())
+			results[idx] = err
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range results {
+		if err != nil {
+			t.Fatalf("caller %d: %v", i, err)
+		}
+	}
+	if got := atomic.LoadInt32(&connCount); got != 1 {
+		t.Fatalf("expected exactly 1 Core round-trip for %d concurrent callers, got %d", callers, got)
 	}
 }
 

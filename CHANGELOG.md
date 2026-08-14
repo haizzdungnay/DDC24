@@ -8,6 +8,66 @@
 
 ## [Unreleased]
 
+### Fixed — 503 ngắt quãng trên `GET /api/v1/programming/runtime/monitor` do tự đụng nội bộ (2026-08-14)
+
+Bối cảnh: user báo lỗi kèm network log thật từ trình duyệt — trang
+`/eng/programming/runtime?tab=watch` nhận `503 Service Unavailable` từ
+`GET /api/v1/programming/runtime/monitor` trên board Foxlinx
+(`mekong-fac.ddns.net:8082`).
+
+**Xác nhận trực tiếp trên board** (không suy đoán): SSH vào board, đọc
+`journalctl -u mkddc-web-pi` theo thời gian thực trong lúc user vẫn đang mở
+tab — thấy đúng request đó xen kẽ `status=200`/`status=503` với `dur_ms` gần
+như bằng nhau (~650–720ms) ở CẢ hai trường hợp, và tần suất fail rơi vào
+khoảng 30–40% số request. `mkddc-core`, `mkddc-iobus`, `mkddc-web-pi` đều
+`active` — không phải Core chết.
+
+**Nguyên nhân gốc**: `WebIpc::drain()` (`apps/core/adapters/ipc/web_ipc.cpp`)
+chỉ chấp nhận đúng **MỘT** lệnh `point_snapshot` mỗi scan cycle
+(`periodMs=1000` đo được thật trên board qua `GET .../programming/runtime`);
+lệnh thứ hai trong cùng cycle bị từ chối `"busy"`. `mkddc-web` (Go) có
+**hai nguồn độc lập, không biết về nhau** cùng gọi
+`CoreClient.ReadPointSnapshot` (op `point_snapshot`):
+1. `HistorianShadowScheduler` — tick nội bộ mỗi 100ms
+   (`historian_shadow_runtime.go`), tự đọc snapshot mỗi khi có policy đến hạn.
+2. `RuntimeService.GetMonitor` — phục vụ trực tiếp mỗi lần FE poll trang
+   Programming Runtime Monitor (~1 lần/giây).
+
+Mỗi lần hai nguồn này vô tình rơi cùng một scan cycle của Core, một bên thắng
+(`200`), bên kia nhận `"busy"` → `mkddc-web` map lỗi này (không phân biệt với
+Core thật sự chết) thành `PRG-ERR-UNAVAILABLE-001` → HTTP `503`
+(`writeMappedError`, `apps/web-api/internal/programming/transport/http/projects.go`).
+Đây là race hoàn toàn nội bộ trong chính `mkddc-web` — Core không hề có lỗi.
+
+**Cách sửa**: dồn (coalesce) mọi lệnh gọi `CoreClient.ReadPointSnapshot` đồng
+thời thành đúng MỘT round-trip IPC tới Core (`apps/web-api/internal/app/core_client.go`,
+field `snapshotMu`/`snapshotInFlight`) — caller đến sau chỉ chờ chung kết quả
+của caller đang bay (leader chạy với context riêng để một caller huỷ ngang
+không làm hỏng kết quả các caller khác đang chờ). Vì mọi lệnh `point_snapshot`
+trong toàn hệ thống đều đi qua một `*CoreClient` singleton duy nhất (xác nhận
+qua `grep`: không có tiến trình C++ nào khác gửi op này), việc dồn tại đây
+loại bỏ hoàn toàn khả năng `mkddc-web` tự gửi hai lệnh chồng nhau.
+
+**Verification**:
+- `go build ./...`, `go vet ./...`: sạch.
+- Test mới `TestCorePointSnapshotCoalescesConcurrentCallers`
+  (`internal/app/core_client_test.go`): 8 caller gọi đồng thời, khẳng định
+  Core chỉ nhận đúng 1 round-trip — PASS.
+- `go test ./... -count=1`: toàn bộ package `mkddc-web` PASS (không có
+  package Go nào khác trong sửa đổi này).
+- Deploy lại `mkddc-web` (cross-compile `GOOS=linux GOARCH=arm64
+  CGO_ENABLED=0`) lên board Foxlinx, restart `mkddc-web-pi`.
+  Smoke test sau deploy: 40/40 request liên tiếp tới
+  `/api/v1/programming/runtime/monitor` → `200 OK`. Đối chiếu
+  `journalctl` với traffic THẬT của trình duyệt user (remote
+  `101.99.36.34`) trong 90 giây sau deploy: 130/130 request → `200`
+  (trước đó cùng remote này đang có `503` xen kẽ).
+
+Refs: `apps/web-api/internal/app/core_client.go`,
+`apps/web-api/internal/app/historian_shadow_runtime.go`,
+`apps/web-api/internal/programming/application/monitor.go`,
+`apps/core/adapters/ipc/web_ipc.cpp`.
+
 ### Fixed — Mapping tab cho ghép Point sai hướng/kiểu, một binding hỏng chặn cả batch output (2026-08-14)
 
 Bối cảnh: user phản bác đúng — lượt trước tôi kết luận nhầm "cả 3 output map

@@ -11,6 +11,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -40,6 +41,24 @@ type CoreClient struct {
 	// literal `&CoreClient{IOShm: ..., PLCShm: ...}` vẫn dùng được như trước.
 	ioSeg  shmSegment
 	plcSeg shmSegment
+
+	// snapshotMu/snapshotInFlight dồn (coalesce) mọi lệnh gọi ReadPointSnapshot
+	// đồng thời thành MỘT round-trip `point_snapshot` duy nhất tới Core. Core
+	// (`WebIpc::drain`) chỉ chấp nhận đúng MỘT `point_snapshot` mỗi scan cycle
+	// (periodMs=1000 trên Foxlinx) — request thứ hai trong cùng cycle bị từ
+	// chối "busy". Không dồn thì hai nguồn độc lập trong chính web-api này
+	// (HistorianShadowScheduler tick 100ms + Programming Runtime Monitor poll
+	// ~1 Hz từ FE) tự đụng nhau, và 40% request `/programming/runtime/monitor`
+	// nhận 503 dù Core hoàn toàn khoẻ mạnh — quan sát thật trên board Foxlinx
+	// 2026-08-14 (journal `mkddc-web`, xen kẽ status=200/503 dur_ms~650-720).
+	snapshotMu       sync.Mutex
+	snapshotInFlight *coreSnapshotCall
+}
+
+type coreSnapshotCall struct {
+	done   chan struct{}
+	result RuntimePointSnapshot
+	err    error
 }
 
 // Close nhả mmap của hai segment SHM. An toàn khi gọi nhiều lần.
@@ -224,7 +243,39 @@ func (c *CoreClient) ReadPoints(ctx context.Context) ([]PointDTO, error) {
 	return decodePoints(plcData, ioData), nil
 }
 
+// ReadPointSnapshot dồn mọi caller đồng thời vào một leader duy nhất — xem
+// giải thích ở field `snapshotMu`/`snapshotInFlight`. Caller theo sau chỉ chờ
+// kết quả của leader (hoặc bỏ cuộc theo ctx của chính mình); leader luôn chạy
+// round-trip thật với context riêng để một caller huỷ ngang không làm hỏng
+// kết quả mà các caller khác đang chờ chung.
 func (c *CoreClient) ReadPointSnapshot(ctx context.Context) (RuntimePointSnapshot, error) {
+	c.snapshotMu.Lock()
+	if call := c.snapshotInFlight; call != nil {
+		c.snapshotMu.Unlock()
+		select {
+		case <-call.done:
+			return call.result, call.err
+		case <-ctx.Done():
+			return RuntimePointSnapshot{}, ctx.Err()
+		}
+	}
+	call := &coreSnapshotCall{done: make(chan struct{})}
+	c.snapshotInFlight = call
+	c.snapshotMu.Unlock()
+
+	call.result, call.err = c.readPointSnapshotOnce(context.Background())
+	close(call.done)
+
+	c.snapshotMu.Lock()
+	if c.snapshotInFlight == call {
+		c.snapshotInFlight = nil
+	}
+	c.snapshotMu.Unlock()
+
+	return call.result, call.err
+}
+
+func (c *CoreClient) readPointSnapshotOnce(ctx context.Context) (RuntimePointSnapshot, error) {
 	id := atomic.AddUint64(&webCommandID, 1)
 	resp, err := c.sendWebIPC(ctx, map[string]any{"id": id, "op": "point_snapshot", "user": "web"})
 	if err != nil {
