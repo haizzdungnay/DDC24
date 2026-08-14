@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" role="img" aria-labelledby="title desc">
+  <title id="title">AHU High Performance — Runtime mobile</title>
+  <desc id="desc">Bản đặc tả trực quan mobile với safety luôn ở đầu, mimic cuộn dọc, KPI, alarm và action bar.</desc>
+  <defs><style>.bg{fill:#07111f}.s{fill:#102033;stroke:#29415c}.s2{fill:#0c1a2b;stroke:#29415c}.t{fill:#f1f5f9;font:13px Arial}.sm{fill:#a9b8c8;font:10px Arial}.h{fill:#f1f5f9;font:bold 18px Arial}.h2{fill:#f1f5f9;font:bold 14px Arial}.good{fill:#32d583}.warn{fill:#fdb022}.info{fill:#53b1fd}.btn{fill:#1570ef}</style></defs>
+  <rect class="bg" width="390" height="844"/>
+  <rect x="0" y="0" width="390" height="54" fill="#0b1727"/><text class="h2" x="16" y="33">☰  AHU-01</text><rect x="278" y="13" width="96" height="28" rx="14" fill="#183b2d" stroke="#32d583"/><circle cx="296" cy="27" r="4" class="good"/><text class="sm" x="306" y="31">NORMAL</text>
+  <text class="h" x="16" y="83">High Performance</text><text class="sm" x="16" y="100">14:32:08 · GOOD · AUTO</text>
+  <rect x="12" y="114" width="366" height="52" rx="10" fill="#123425" stroke="#32d583"/><circle cx="32" cy="140" r="6" class="good"/><text class="h2" x="47" y="138">An toàn NORMAL</text><text class="sm" x="47" y="153">Không có trip · write được phép</text><text class="t" x="351" y="144">›</text>
+  <rect x="12" y="178" width="366" height="302" rx="10" class="s"/><text class="h2" x="28" y="205">Đường gió</text>
+  <path d="M52 248H124V290H320" stroke="#32d583" stroke-width="8" fill="none"/><path d="M52 408H124V366H198" stroke="#a78bfa" stroke-width="8" fill="none"/><path d="M198 366H320" stroke="#fdb022" stroke-width="8" fill="none"/><path d="M124 290H334" stroke="#53b1fd" stroke-width="8" fill="none"/>
+  <text class="h2" x="28" y="236">FA</text><text class="sm" x="28" y="263">2,180 m³/h</text><text class="sm" x="28" y="276">VAV 64%</text>
+  <text class="h2" x="28" y="396">RA</text><text class="sm" x="28" y="423">1,720 m³/h</text><text class="sm" x="28" y="436">VAV 51%</text>
+  <text class="h2" x="316" y="278">SA</text><text class="sm" x="292" y="308">3,900 m³/h</text><text class="sm" x="309" y="321">72%</text>
+  <text class="h2" x="316" y="354">EA</text><text class="sm" x="292" y="384">1,680 m³/h</text><text class="sm" x="309" y="397">49%</text>
+  <rect x="140" y="254" width="48" height="72" rx="7" fill="#10324d" stroke="#53b1fd"/><text class="sm" x="149" y="273">CHW</text><text class="h2" x="149" y="304">38%</text>
+  <rect x="196" y="254" width="48" height="72" rx="7" fill="#412522" stroke="#f97066"/><text class="sm" x="207" y="273">HW</text><text class="h2" x="209" y="304">0%</text>
+  <circle cx="270" cy="290" r="27" fill="#173452" stroke="#53b1fd" stroke-width="2"/><text class="sm" x="251" y="294">SF 67%</text><circle cx="244" cy="366" r="23" fill="#2c2441" stroke="#a78bfa" stroke-width="2"/><text class="sm" x="227" y="370">RF 51%</text>
+  <rect x="28" y="445" width="334" height="24" rx="6" class="s2"/><text class="sm" x="38" y="461">SAT 13.1 °C   ·   Duct 286 Pa   ·   Filter 118 Pa</text>
+  <text class="sm" x="28" y="218">Command / read-back · quality cạnh từng point</text>
+  <text class="h2" x="16" y="510">Hiệu suất</text>
+  <rect x="12" y="522" width="176" height="90" rx="10" class="s"/><text class="sm" x="28" y="547">LƯU LƯỢNG SA</text><text class="h" x="28" y="580">3,900</text><text class="sm" x="89" y="580">m³/h</text><text x="28" y="600" fill="#32d583" style="font:10px Arial">● 97.5% mục tiêu</text>
+  <rect x="202" y="522" width="176" height="90" rx="10" class="s"/><text class="sm" x="218" y="547">NĂNG LƯỢNG RIÊNG</text><text class="h" x="218" y="580">0.82</text><text class="sm" x="264" y="580">kW/(m³/s)</text><text x="218" y="600" fill="#32d583" style="font:10px Arial">● Trong ngưỡng</text>
+  <text class="h2" x="16" y="642">Alarm và chất lượng</text><rect x="12" y="654" width="366" height="64" rx="10" class="s"/><circle cx="32" cy="681" r="5" class="warn"/><text class="t" x="47" y="679">Filter ΔP cao</text><text class="sm" x="47" y="698">118 Pa · chưa acknowledge</text><text class="t" x="350" y="687">›</text>
+  <rect x="12" y="730" width="366" height="42" rx="8" class="s2"/><circle cx="32" cy="751" r="4" class="good"/><text class="t" x="44" y="756">32/32 điểm GOOD</text>
+  <rect x="0" y="780" width="390" height="64" fill="#0b1727" stroke="#29415c"/><rect x="16" y="790" width="172" height="42" rx="8" class="btn"/><text class="t" x="60" y="816">Điều khiển</text><rect x="202" y="790" width="172" height="42" rx="8" class="s2"/><text class="t" x="249" y="816">Xem alarm</text>
+  <rect x="0" y="770" width="390" height="10" fill="#3b2a0e"/><text x="58" y="779" fill="#ffd998" style="font:8px Arial">DỮ LIỆU MINH HỌA — KHÔNG PHẢI BẰNG CHỨNG RUNTIME</text>
+</svg>
