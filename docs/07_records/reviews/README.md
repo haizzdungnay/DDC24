@@ -62,7 +62,7 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 |---|---|---|---|
 | [Baseline Source Fix Report](DDC24_BASELINE_SRC_FIX_REPORT.md) | 2026-08-03 | Record | CI, Point Model, Config Apply, health/recovery trước Programming Design |
 | [Programming Docs Sync Report](PROGRAMMING_DOCS_SYNC_REPORT.md) | 2026-08-03 | Complete | Đồng bộ docs theo Product Spec Programming Rev A |
-| [Programming As-Built/gap trình PM/CTO](PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md) | 2026-08-14 | **Active — NO-GO release** (Rev 1.1) | Tổng kết source Core/BE/FE/contract; 13 finding; UC-PROG-03 sai từ bước 2 và vòng sửa sau Check bị 409; Binding Variable↔Point chưa nối vào compiler (F-013) |
+| [Programming As-Built/gap trình PM/CTO](PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md) | 2026-08-14 | **Active — NO-GO release** (Rev 1.3) | Tổng kết source Core/BE/FE/contract; 15 finding, đóng 5 (`F-001/002/003/004/007`) + D-01/02/04; Binding Variable↔Point (F-013/D-07) đã triển khai + target-verify cho `LOCAL`; mở `F-005/006/008/009/014/015` |
 | [Audit FE/UI/UX Programming Plan 53](PROGRAMMING_FE_UX_IMPLEMENTATION_AUDIT_2026-08-13.md) | 2026-08-14 | **v1.4 — UC-PROG-03 KHÔNG ĐẠT** | Live source rỗng/diagnostic thiếu location/ETag-base stale; Draft đã hoàn nguyên, Active không đổi |
 | [Programming Design Set Review](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | 2026-08-09 | Complete | Rà 22 hồ sơ Programming: 12 finding tài liệu đã đóng, 22/22 đạt M3; M4/M5 chờ người thật |
 | [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-11 | **v2.0 — APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; P0 7/7 DONE; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` PASS |

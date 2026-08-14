@@ -8,6 +8,148 @@
 
 ## [Unreleased]
 
+### Added — Binding Manifest (D-07): compiler ST giờ thật sự nhận Variable↔Point Binding, đóng `F-PROG-ASBUILT-013` cho category `LOCAL` (2026-08-14)
+
+Theo authority PM/CTO chốt cho `D-07` (không mở lại phân tích, chỉ implement):
+triển khai kiến trúc Binding Manifest — CLI compiler nhận một manifest JSON
+riêng mô tả binding Variable↔Point, **không** đụng cú pháp ST (không thêm
+mệnh đề kiểu `AT` của IEC 61131-3 cổ điển).
+
+**C++ (`apps/core/application/st/`):**
+
+- `resolve_io_bindings()` mới (`st_io_map.cpp/.hpp`) — nối vào
+  `st_artifact_manifest.cpp` ngay sau `compile_reference()`, trước
+  `EncodeArtifactDeterministic()`; validate tồn tại biến, direction/type khớp
+  ST declare, không trùng biến/trùng physical output, category chỉ `LOCAL`,
+  point index/kind hợp lệ. Cho phép binding một phần (biến chưa map vẫn Check
+  được) — khác `validate_io_map()` cũ vốn bắt buộc map hết.
+- `mkddc-st-compile --io-map-in <path>` (`st_compile_main.cpp`) — đọc JSON
+  `{"entries":[...]}`; input sai hình dạng fail toàn CLI tại chỗ. JSON output
+  thêm `ioBindingCount` làm bằng chứng artifact thật sự mang binding.
+- Diagnostic mới `ST-IOMAP-008` cho category hợp lệ về định danh nhưng chưa có
+  runtime path (`VP`/`MB_RTU`) — từ chối tường minh thay vì bind sai.
+- 13 unit test (`test_st_resolve_io_bindings.cpp`, mới) + 3 CLI integration
+  test bằng binary thật (`test_st_compile_cli.cpp`), tái hiện đúng bug thật
+  `AlarmHigh(BOOL)→UI-09`. **1024/1024 CTest PASS.**
+
+**Go (`apps/web-api/internal/programming/`):**
+
+- `compiler.Input.IoMap []IoMapEntry` (`compiler/runner.go`) — ghi JSON tạm
+  trong scratch job, thêm `--io-map-in`; `Result.IoBindingCount` được
+  `validateSuccess()` ép bằng đúng số entry đã gửi (không chỉ tin CLI trả
+  `ok:true`).
+- `ioMapFromRevision()` (`application/checks.go`) — gom `RevisionObject` kind
+  `VARIABLE`/`BINDING` của Revision đã seal (đúng dữ liệu Mapping tab ghi qua
+  `upsertVariable`/`upsertBinding`), map `variable.class` sang `direction`
+  ST, fail-closed nếu binding trỏ biến class không phải `INPUT`/`OUTPUT`.
+- Test mới trong `checks_test.go` (Check thật resolve io_map từ Draft, và
+  fail-closed khi dữ liệu hỏng) + `runner_test.go` (CLI thật, cả hai chiều).
+  `go vet` sạch; `go test ./... -count=1` PASS mọi package.
+
+**Phát hiện phụ giữa chừng — vá luôn cùng phiên:** diagnostic `ST-IOMAP-008`
+mới thêm không có trong `contracts/programming/error_catalog_v1.json`;
+`scripts/generate_programming_errors.py --check` phát hiện drift (mọi lỗi
+category không hỗ trợ sẽ map sai về `PRG-ERR-UNAVAILABLE-001` thay vì lỗi
+validation 422 thật). Thêm mapping `ST-IOMAP-008 → PRG-ERR-MAP-003`, bump
+`catalogVersion` 1.4.0→1.5.0, regenerate Go/C++/TS.
+
+**Target thật trên Foxlinx** (`mkddc-core`/`mkddc-st-compile`/`web-api`
+cross-compile aarch64, deploy sau backup binary cũ): CLI trực tiếp trên board
+xác nhận `ioBindingCount:3` cho binding đúng, `ST-IOMAP-002` cho đúng bug thật
+`AlarmHigh→UI-09`, `ST-IOMAP-008` cho category `VP`. Chuỗi HTTP đầy đủ qua
+Program `AHU_FanControl` thật của user (project `FOX-P5-FULL-CHECK`): Draft→
+Seal→Check **PASSED**→Commission **SUCCEEDED**→`GET /runtime`:
+`safeStateNoControllerOnly` **`false`** (trước đây luôn `true` — đúng triệu
+chứng gốc)→`GET /runtime/monitor`: `programValue==actualValue` LIVE cho cả 5
+biến, `FanSpeed`/`AlarmHigh`/`FanEnable` tính đúng công thức từ cảm biến thật
+`UI-01`/`UI-02` mỗi chu kỳ scan.
+
+FE không cần đổi — Draft đã ghi đúng `variables[]`/`bindings[]` từ trước.
+**559/559 Vitest PASS**, lint sạch, build PASS.
+
+Đóng `F-PROG-ASBUILT-013` cho category `LOCAL`. Mở hai finding phụ phát sinh
+trong lúc triển khai/target-test, **chưa sửa**, chờ PM/CTO quyết hướng riêng:
+`F-PROG-ASBUILT-014` (category `VP` không có runtime path thật tới Core —
+`overlayVirtualPoints()` chỉ là overlay Web API, không map slot Core AV/BV/MSV)
+và `F-PROG-ASBUILT-015` (kênh `UI` cấu hình digital "dry" trong
+`io_config.conf`, vd. `UI-09`, không bind được vì `validate_point_contract()`/
+`map_kind()` hardcode mọi `UI` là `REAL`/`PointKind::AI`, dù Core domain đã có
+sẵn `PointKind::BI` riêng — sửa cần quyết định kiến trúc, ảnh hưởng tương
+thích artifact format, không sửa vội).
+
+Refs: `REV-PROG-ASBUILT-GAP-2026-08-14` Rev 1.2, `D-07`, §4.5/§4.6.
+
+### Fixed — Program ST mới không còn bắt đầu ở mã nguồn rỗng (`F-PROG-ASBUILT-001`/D-02) (2026-08-14)
+
+Nút `ST+` từng gán `document: ''` cho Program mới — Check luôn FAILED ngay
+sau khi tạo, không có cách nào tự nhận ra tới khi bấm Kiểm tra. Theo quyết
+định D-02 (không cho phép tạo Program ST rỗng), `ProgramsTab.addProgram()`
+giờ sinh template tối thiểu hợp lệ `PROGRAM NewProgram\nEND_PROGRAM\n` (định
+danh cố định, ASCII — `compilerInput()` định tuyến theo `programId` UUID chứ
+không đọc tên khai báo trong source, nên không cần sinh theo tên hiển thị có
+dấu/khoảng trắng). Thêm chặn thứ hai ở `SourceEditor`: nút Lưu (và Ctrl+S)
+khoá khi buffer rỗng/toàn khoảng trắng, kèm cảnh báo tại chỗ — không đợi tới
+khi Check thất bại mới biết.
+
+Refs: `F-PROG-ASBUILT-001`, `D-02`.
+
+### Fixed — PGM-03 giờ sở hữu toàn bộ vòng Check (seal/run/poll/result); ETag đồng bộ đúng sau seal (`F-PROG-ASBUILT-002`/`004`, D-01) (2026-08-14)
+
+Theo quyết định D-01 (PGM-03 sở hữu Check; PGM-02 chỉ lưu rồi điều hướng có
+dirty guard):
+
+- `CheckCommissionPage` (PGM-03) giờ tự `useDraftWorkspace`/`useCheckWorkflow`
+  — mở trực tiếp (không qua nút của PGM-02) hiện trạng thái "Chưa có Kiểm tra
+  nào." kèm nút Kiểm tra tự seal/run/poll; xong tự điều hướng-replace URL vào
+  `?revisionId=&checkId=` canonical, rơi lại đúng đường deep-link cũ (không
+  viết hai luồng hiển thị song song).
+- `DesignWorkspacePage` (PGM-02) bỏ toàn bộ `useCheckWorkflow`/Problems inline
+  — nút "Kiểm tra" giờ chỉ điều hướng sang `/commission` (vẫn khoá khi Draft
+  chưa lưu, đúng "dirty guard" D-01 yêu cầu), không tự gọi seal/Check nữa.
+- `useDraftWorkspace` thêm `syncAfterSeal(revisionId, etag)`, gọi ngay sau
+  seal thành công trong `useCheckWorkflow.runCheck()` — đóng
+  `F-PROG-ASBUILT-002` (seal đổi ETag/`baseRevisionId` của Draft nhưng FE
+  từng chỉ giữ `revisionId`, lần lưu kế tiếp dùng token cũ và bị 409 fail-
+  closed đúng như thiết kế, nhưng người dùng phải tự reload thủ công).
+- Diagnostic chọn trong Problems ở PGM-03 giờ mang thêm `line/column/length`
+  qua query string khi điều hướng sang PGM-02 (trước chỉ có `programId`) —
+  `SourceEditor` đọc lúc mount và tự chọn đúng vùng nguồn, đóng
+  `F-PROG-ASBUILT-003` (đã có sẵn cơ chế `focusDiagnostic`/`lineColumnToOffset`
+  từ trước, chỉ thiếu đường truyền dữ liệu giữa hai trang sau khi tách Check
+  ra khỏi PGM-02).
+
+**Phát hiện phụ, sửa luôn cùng phiên:** viết test cho luồng "mở PGM-03 trống
+→ bấm Kiểm tra → tự điều hướng vào kết quả" lộ ra `useProgrammingResource`
+(`api/queries.ts`) không bao giờ fetch lại khi định danh tài nguyên đổi giữa
+chừng (vd `checkId` từ `undefined` sang giá trị thật) nếu `intervalMs<=0` —
+effect gọi `run()` chỉ phụ thuộc `[run, intervalMs]`, không có `load` trong
+dependency, nên đổi `checkId` không kích hoạt fetch mới; trang kẹt vĩnh viễn
+ở kết quả rỗng của lần mount đầu. Bug tồn tại từ trước, chưa từng lộ ra vì
+kiến trúc cũ luôn có `checkId` ngay từ lần mount đầu (tới từ deep-link).
+Sửa: thêm `load` vào dependency của effect.
+
+Test: `DesignWorkspacePage.test.tsx` (nút Kiểm tra điều hướng, không tự seal/
+Check; URL mang line/column nhảy đúng vùng chọn), `CheckCommissionPage.test.tsx`
+(chạy Check mới từ trạng thái trống, 5 test deep-link cũ vẫn PASS sau khi
+thêm `useDraftWorkspace`), `e2e/programming.spec.ts` cập nhật đúng luồng hai
+bước Kiểm tra (PGM-02 điều hướng → PGM-03 tự chạy) — **10/10 Playwright PASS**
+(desktop + mobile). **571/571 Vitest PASS**, lint sạch, build PASS.
+
+Refs: `F-PROG-ASBUILT-002`, `F-PROG-ASBUILT-003`, `F-PROG-ASBUILT-004`, `D-01`.
+
+### Added — Desktop có điều hướng bốn workspace Programming (`F-PROG-ASBUILT-007`/D-04) (2026-08-14)
+
+Trước bản vá, desktop chỉ thấy tiêu đề tĩnh "Lập trình điều khiển", không có
+cách nào khác ngoài nút ngữ cảnh trong từng trang để đi Overview/Thiết kế/
+Kiểm tra/Runtime — mobile đã có `ProgrammingMobileNav` (bottom nav) từ trước
+nhưng desktop thì chưa. Thêm `ProgrammingDesktopNav` (`hidden md:flex`, cùng
+danh sách bốn mục với bản mobile, không dựng deep-link giả khi chưa có
+`projectId`), wire vào `ProgrammingLayout` ngay dưới Header. Test mới
+`ProgrammingDesktopNav.test.tsx` (3 case: chưa có Project, có Project, active
+state qua `aria-current`).
+
+Refs: `F-PROG-ASBUILT-007`, `D-04`.
+
 ### Docs — thêm finding Critical mới vào As-Built Gap Report: Binding Variable↔Point chưa nối vào compiler (2026-08-14)
 
 Trong lúc hỗ trợ user commission `AHU_FanControl` trên board Foxlinx thật (ba
