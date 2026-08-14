@@ -56,6 +56,28 @@ func TestHandlePointReturnsCreatedVirtualPoint(t *testing.T) {
 	}
 }
 
+// F-DASH-LOCALIO-01 — `overlayPointMetadata` phải mang field `type` của
+// io_config.conf (Signal Type — "0-10V", "none"...) sang PointDTO.SignalType,
+// vì đó là tín hiệu duy nhất `overviewHealth` dùng để phân biệt kênh UI chưa
+// cấu hình ("none") với kênh thật đang bad quality.
+func TestOverlayPointMetadataMangSignalTypeTuIOConfig(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	if err := os.WriteFile(filepath.Join(app.cfg.ConfigDir, "io_config.conf"), []byte(`{"ui":[{"ch":1,"tag":"UI-01","type":"0-10V"},{"ch":9,"tag":"UI-09","type":"none"}],"ao":[],"do":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	in := []PointDTO{
+		{ID: "UI-01", Kind: "UI", Quality: "good"},
+		{ID: "UI-09", Kind: "UI", Quality: "bad"},
+	}
+	out := app.overlayPointMetadata(in)
+	if out[0].SignalType != "0-10V" {
+		t.Errorf("UI-01 SignalType = %q, chờ 0-10V", out[0].SignalType)
+	}
+	if out[1].SignalType != "none" {
+		t.Errorf("UI-09 SignalType = %q, chờ none", out[1].SignalType)
+	}
+}
+
 func TestReadPointsReturnsCanonicalContractForPhysicalVirtualAndModbus(t *testing.T) {
 	app, _ := newTestAppWithAdmin(t)
 	if err := os.WriteFile(filepath.Join(app.cfg.ConfigDir, "io_config.conf"), []byte(`{"ui":[{"ch":1,"tag":"supply air","name":"Supply air","display_unit":"degC"}],"ao":[],"do":[]}`), 0o644); err != nil {

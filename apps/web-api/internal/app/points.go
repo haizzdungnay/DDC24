@@ -132,8 +132,8 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 		ioCfg = ConfigIO{}
 	}
 	metadata := map[string]struct {
-		tag, name, unit string
-		trend           bool
+		tag, name, unit, signalType string
+		trend                       bool
 	}{}
 	addRows := func(rows []map[string]any, prefix string) {
 		for _, row := range rows {
@@ -146,10 +146,13 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 			name, _, _ := stringField(row, "name")
 			unit, _, _ := stringField(row, "display_unit")
 			trend, _, _ := boolField(row, "trend_enabled")
+			// `type` chỉ có ý nghĩa ở kênh UI ("0-10V", "none"...); AO/DO
+			// không có field này nên signalType rỗng, không ảnh hưởng.
+			signalType, _, _ := stringField(row, "type")
 			metadata[id] = struct {
-				tag, name, unit string
-				trend           bool
-			}{fallbackPointTag(tag, id), strings.TrimSpace(name), strings.TrimSpace(unit), trend}
+				tag, name, unit, signalType string
+				trend                       bool
+			}{fallbackPointTag(tag, id), strings.TrimSpace(name), strings.TrimSpace(unit), strings.TrimSpace(signalType), trend}
 		}
 	}
 	addRows(ioCfg.UI, "UI")
@@ -189,6 +192,7 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 				point.Unit = meta.unit
 			}
 			point.LogEnabled = meta.trend
+			point.SignalType = meta.signalType
 		}
 		if point.Name == "" {
 			point.Name = id
