@@ -29,8 +29,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [16](16_CONTRACT_FREEZE.md) | Frozen contract (header wins) | FROZEN |
 | [17](17_QUICK_START_SOM_DEV.md) | Quickstart cho dev mới | Active |
 | [18](18_WEEK1_SOM_BRINGUP_CHECKLIST.md) | 8 mốc tuần đầu SOM | Active |
-| [19](19_DOCS_AUDIT_SOM_IMPLEMENTATION.md) | Docs audit 2026-06-11 | Historical |
-| [20](20_DOCS_FIX_CHECKLIST.md) | Fix checklist từ audit | Historical |
+| 19–20 — đã loại 2026-08-14 | Audit/checklist tài liệu ngày 2026-06-11 dùng cây source cũ; phục hồi tại `b69fdf1` khi cần điều tra lịch sử | Historical — không còn authority |
 | [21](21_VIRTUAL_COM_DECISION.md) | Virtual COM/PTY decision | Active |
 | [22](22_SOM_SRC_IMPLEMENTATION_PLAN.md) | SOM source S0-S8, gồm coherent historian snapshot + ADR-017 network authority NWC-000..017 | Active; network service target-verified, physical HIL/Web FE migration open |
 | [23](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | Stateful graph components plan | Active |

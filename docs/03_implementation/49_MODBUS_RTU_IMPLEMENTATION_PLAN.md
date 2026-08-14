@@ -826,7 +826,7 @@ của driver.
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 0.1 | 2026-08-04 | Tạo plan hai track; Track A không chờ quyết định, Track B sau cổng ADR-024 |
-| 0.2 | 2026-08-04 | Đổi số 48→49 (48 đã bị `PLAN_FIX_DEBUG_AND_BOARD_DEPLOY.md` dùng); thêm bảng task 74 mục, ma trận RACI, swimlane và đồ thị phụ thuộc; bổ sung nhóm A0 khảo sát phần cứng; chốt board Foxlinx là target nghiệm thu; **sửa lỗi cộng: Track B là 40–51 ngày, bản 0.1 ghi sai 34–45** |
+| 0.2 | 2026-08-04 | Đổi số 48→49 (số 48 từng dùng cho plan debug/deploy đã hoàn tất, phục hồi tại commit `b69fdf1`); thêm bảng task 74 mục, ma trận RACI, swimlane và đồ thị phụ thuộc; bổ sung nhóm A0 khảo sát phần cứng; chốt board Foxlinx là target nghiệm thu; **sửa lỗi cộng: Track B là 40–51 ngày, bản 0.1 ghi sai 34–45** |
 | 0.4 | 2026-08-05 | Sửa lỗi đánh số mục: mục "Definition of Done" bị đánh trùng số 7 với "Sơ đồ tiến độ", nay là §9 (§9 trước đó bị bỏ trống). Bổ sung §10.4 các gap mới phát hiện khi đồng bộ tài liệu ngày 2026-08-05 |
 | 0.6 | 2026-08-06 | Đóng `G-D`/`MBR-A002`/`MBR-A005` (auto-direction, xác nhận bởi Hardware owner) + `MBR-B310` (WS runtime). **Đính chính** B304/B308 của bản 0.5. Thêm §10.6.4 |
 | 0.5 | 2026-08-06 | Track B phần phần mềm hoàn thành: B0–B3 + B401/B402. Thêm §10.6 trạng thái từng task, số đo 4 gate, và danh sách việc còn chặn bởi `G-C`/`G-D`/device tree |

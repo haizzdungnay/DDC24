@@ -2,8 +2,9 @@
 
 > **Document ID:** SW-ST-SUBSET-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-07-28
-> **Workstream:** C0.4 (MS-02) — đóng workstream `C0.4` của
-> [`KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md`](../../07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
+> **Workstream:** Supporting As-Built của compiler ST; plan C0.4 lịch sử đã bị
+> [Plan 53](../../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) thay
+> thế và phục hồi được tại commit `b69fdf1`.
 > **Trạng thái:** Supporting As-Built — source hiện tại tại `apps/core/application/st/`; không phải Target authority Programming v2.2
 > **Nguồn quyết định:** ADR-020 (amended 2026-07-24), quyết định phạm vi ngôn ngữ 2026-07-28
 > **Tài liệu liên quan:** [`TYPED_IR_ARTIFACT_SPEC`](TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md) (C0.6),
@@ -21,9 +22,11 @@
 
 ## 0. Tài liệu này là gì và không là gì
 
-**Là:** đặc tả *normative* của tập con Structured Text mà FW SOM chấp nhận. Parser,
-semantic analyzer và compiler trong `services/core/st/` phải khớp chính xác tài liệu
-này. Khi code và tài liệu lệch nhau, **tài liệu này thắng** và code phải sửa.
+**Là:** đặc tả Supporting As-Built của tập con Structured Text mà FW SOM chấp
+nhận. Parser, semantic analyzer và compiler hiện nằm trong
+`apps/core/application/st/`. Khi source đã test lệch hồ sơ này, phải mở finding
+và reconcile với `DDD-LANG-PROG-001`; không tự coi mô tả lịch sử thắng code hay
+Target Design hiện hành.
 
 **Không là:** tài liệu tuyên bố tuân thủ IEC 61131-3. MK-DDC-24 Rev A.0 dùng cụm
 **"IEC 61131-3-aligned"** — vay mượn cú pháp và ngữ nghĩa ở nơi hợp lý, không claim

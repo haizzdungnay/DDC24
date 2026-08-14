@@ -2,7 +2,7 @@
 
 **ID:** REC-REVIEW-INDEX-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-14 (Programming P5 `8/11`; audit UC-PROG-03 NO-GO; 2 record BLOCKED, 0/32 PASS)
+**Cập nhật:** 2026-08-14 (đã loại record trùng/lịch sử khỏi cây Markdown; Programming P5 `8/11`; audit UC-PROG-03 NO-GO; 2 record BLOCKED, 0/32 PASS)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -18,8 +18,9 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 2. **Record viết trước `PLAN-ARCH-RESTRUCT-002` (2026-08-03) dùng cây thư mục
    cũ.** Xem bảng ánh xạ ở §3 — các path `services/`, `web/`, `src/frontend/`,
    `fw/`, `shared/`, `packaging/` đều **không còn tồn tại**.
-3. **`archive/` là hồ sơ lịch sử, không phải nguồn chuẩn.** Nó được giữ để truy
-   nguyên quyết định, không để dẫn chiếu khi làm việc mới.
+3. **Hồ sơ lịch sử không phải nguồn chuẩn.** Các bản đã mất hiệu lực được loại
+   khỏi cây Markdown và phục hồi từ commit Git được ghi ở §2; không dẫn chúng
+   làm hiện trạng khi làm việc mới.
 
 ---
 
@@ -86,10 +87,12 @@ dẫn chiếu nó như bản ghi quyết định `NO-GO` hiện hành.
 
 ---
 
-## 2. Hồ sơ lịch sử — `archive/`
+## 2. Hồ sơ lịch sử đã loại khỏi cây Markdown
 
-12 tài liệu đã chuyển sang [`archive/`](archive/README.md) ngày 2026-08-08. Lý do
-và đường phục hồi của từng tài liệu ghi trong README của thư mục đó. Tóm tắt:
+12 record từng nằm trong `reviews/archive/` đã bị thay thế hoàn toàn và dùng
+cây source trước `PLAN-ARCH-RESTRUCT-002`; chúng được loại ngày 2026-08-14 để
+không tiếp tục xuất hiện cạnh hồ sơ hiện hành. Nội dung đầy đủ phục hồi được từ
+commit `b69fdf152fd1b424bb4ab2239b5cf97b0e86b554`.
 
 | Cụm | Tài liệu | Vì sao là lịch sử |
 |---|---|---|
@@ -138,9 +141,9 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
    nhận xét chung.
 4. Khi finding được đóng: cập nhật **chính tài liệu record đó** (mục trạng thái)
    và dòng tương ứng ở §1 — không mở một file mới để nói rằng file cũ đã cũ.
-5. Chuyển sang `archive/` khi tài liệu đã bị thay thế hoàn toàn hoặc mất hiệu
-   lực; ghi lý do vào [`archive/README.md`](archive/README.md) và sửa mọi link
-   trỏ tới nó.
+5. Khi tài liệu bị thay thế hoàn toàn hoặc mất hiệu lực, hợp nhất phần còn giá
+   trị vào hồ sơ chủ quản, ghi commit phục hồi rồi loại file; sửa mọi link trỏ
+   tới bản cũ trong cùng thay đổi.
 
 ---
 
@@ -169,3 +172,4 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.18 | 2026-08-11 | Ghi provenance PR #145/merge `2899d02`/tree `cdef0e77` cho candidate v2.18; remote feature branch đã xóa |
 | 1.19 | 2026-08-11 | Đồng bộ review/evidence G2 `TASK-PROG-204`: sáu API Project/Draft/Revision + SQLite v2/ETag/idempotency/restart, P2 5/8, candidate v2.19; giữ 0/32 PASS, PR/merge chờ ghi provenance |
 | 1.20 | 2026-08-11 | Ghi provenance PR #147/merge `27a06e1`/tree `4e4e4d24` cho candidate v2.19; remote feature branch đã xóa, trạng thái P2/evidence không đổi |
+| 1.21 | 2026-08-14 | Loại 12 record lịch sử dùng cây source cũ cùng README archive; thay liên kết bằng authority hiện hành và ghim đường phục hồi tại commit `b69fdf1`; không đổi Test Result hay release gate |

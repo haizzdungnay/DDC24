@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-14 (Programming vẫn `APPROVED FOR IMPLEMENTATION`; audit As-Built xác nhận UC-PROG-03 NO-GO và `RELEASE_READY BLOCKED`)
+**Cập nhật:** 2026-08-14 (đã loại bản Markdown trùng/lịch sử và corpus AHUHP candidate chưa triển khai; Programming vẫn `APPROVED FOR IMPLEMENTATION`; audit As-Built xác nhận UC-PROG-03 NO-GO và `RELEASE_READY BLOCKED`)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -25,12 +25,11 @@
 | [Programming Traceability Matrix](07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
 | [Programming Open Decisions](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định: `17 DECIDED`, `0 OPEN`, `0 CLOSED`; baseline đã duyệt |
 | [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào bộ 22 hồ sơ yêu cầu, thiết kế, kiểm chứng và delivery Programming Rev A |
-| [Programming Documentation Roadmap](03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | dashboard: candidate v2.8 approved; chữ ký còn thiếu được miễn khỏi entry implementation |
-| [Programming Implementation Plan](03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | P0 7/7 DONE; P1 READY TO START; team được viết/merge code production ngay |
+| [Programming Documentation Roadmap](03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | v3.37: P0..P4 source/host DONE; P5 `8/11`; P6 `0/3`; `RELEASE_READY BLOCKED` |
+| [Programming Implementation Plan](03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | v0.55: tổng `43/53`; P5 corrective đang thực hiện; team vẫn được viết/merge code, release chưa được mở |
 | [Programming Risk Register](07_records/PROGRAMMING_RISK_REGISTER.md) | 16 rủi ro, design control, owner, evidence gate và residual |
 | [Programming Docs Sync Report](07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record đồng bộ docs theo ADR-023 ngày 2026-08-03 |
 | [Programming — Báo cáo As-Built/gap PM-CTO 2026-08-14](07_records/reviews/PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md) | hiện trạng source đa lớp, 12 finding; UC-PROG-03 sai từ bước 2; quyết định cần PM/CTO và NO-GO release |
-| [AHU hiệu suất cao — Design Index](02_design/AHU_HIGH_PERFORMANCE_DESIGN_INDEX.md) | cổng vào candidate Proposed/M3 cho product, requirement, architecture, control app, simulator, fake MCU, interface và UI/UX; chưa được phép implement |
 | [DDC-24 Baseline Source Fix Report](07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | kết quả CI, Point Model, Config Apply, health/recovery và readiness trước Programming Design |
 | [Modbus RTU Point As-Built Report](07_records/reviews/MODBUS_RTU_POINT_AS_BUILT_REPORT.md) | coverage FE/BE/iobus/Core/WS, simulator và blocker RS485 thật |
 | [Modbus RTU Point Detailed Design](02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md) | design In Review: Bus/Device/Point, typed runtime, quality, atomic apply, write result và HIL gate |
@@ -72,15 +71,10 @@
 - [Source specifications](01_specs/README.md)
 - [Implementation guides](03_implementation/README.md)
 - [Hardware review records](07_records/reviews/hardware/README.md)
-- [Hồ sơ rà soát lịch sử — `archive/`](07_records/reviews/archive/README.md) — cụm Program Runtime/IEC 61131-3, rà soát 2026-07-30 và audit UI/UX; **không phải nguồn chuẩn**
-- [IEC 61131-3 Program/SOM FW gap assessment](07_records/reviews/archive/KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md)
-- [IEC 61131-3 corrective design doc review — structure + design](07_records/reviews/archive/KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md)
-- [IEC 61131-3 Program/SOM FW decisions — Q0–Q9 CTO 2026-07-23, Decided/Closed](07_records/reviews/archive/KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md)
 - [ADR-020 — Mekong-owned IEC 61131-3-aligned Program Runtime](adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
-- [Program Runtime C0 Architecture and Feasibility Plan — lịch sử, chưa reconcile ADR-023](07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
-- [Program Runtime Implementation Plan C1–C10 — lịch sử, không được mở bởi nhiệm vụ hiện tại](07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md)
-- [Program Runtime document conflict report (ADR-020 remediation, 31/31 closed)](07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md)
-- [Program Runtime readiness review for C0 — C0_READY status](07_records/reviews/archive/PROGRAM_RUNTIME_READY_FOR_C0.md)
+- Hồ sơ Program Runtime/IEC 61131-3 và audit dùng cây source trước tái cấu trúc đã
+  được loại khỏi cây Markdown ngày 2026-08-14. Khi cần truy nguyên, phục hồi từ
+  commit `b69fdf152fd1b424bb4ab2239b5cf97b0e86b554`; chúng **không phải nguồn chuẩn**.
 
 Luồng đọc khuyến nghị cho Programming: Product baseline → Product Spec
 Programming → Requirements → Open Decisions → Design Index → Documentation
@@ -97,8 +91,10 @@ chủ đề khác, luồng đọc là Product → Requirements → System → ba
 Detailed design → Verification. Tài liệu `In Review` phải được đối chiếu
 baseline/code trước khi dùng cho release.
 
-Archive lịch sử không phải nguồn chuẩn: `archives/markdown-before-restructure-2026-07-22.tar.gz`
-và [`docs/07_records/reviews/archive/`](07_records/reviews/archive/README.md).
+Hồ sơ lịch sử không phải nguồn chuẩn. Snapshot trước tái cấu trúc nằm tại
+`archives/markdown-before-restructure-2026-07-22.tar.gz`; các bản Markdown bị
+loại trong đợt dọn 2026-08-14 phục hồi được từ commit
+`b69fdf152fd1b424bb4ab2239b5cf97b0e86b554`.
 
 Artifact hỗ trợ không phải Markdown được giữ tại
 [`contracts/openapi/openapi.yaml`](../contracts/openapi/openapi.yaml),
