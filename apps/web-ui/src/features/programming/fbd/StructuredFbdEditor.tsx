@@ -8,6 +8,7 @@ import {
   createFbdEditorState,
   fbdEditorReducer,
   resolveFbdKeyboardCommand,
+  translateFbdAnnouncement,
   type FbdEditorAction,
   type FbdKeyboardCommand,
 } from './commands'
@@ -246,7 +247,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
           </article>
         ))}
       </div>
-      <p className="sr-only" aria-live="polite" aria-atomic="true">{state.announcement}</p>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">{translateFbdAnnouncement(pick, state.announcement)}</p>
     </section>
   )
 }

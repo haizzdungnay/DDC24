@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FilePlus, Save, Search } from 'lucide-react'
+import { FilePlus, Save, Search, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { createUuid } from '../../../../shared/crypto'
 import { useAuth, roleAtLeast } from '../../../auth'
@@ -104,7 +104,8 @@ export function ProgramsTab({
 
   function addProgram(language: 'ST' | 'FBD') {
     const programId = createUuid()
-    const name = language === 'FBD' ? pick('FBD mới', 'New FBD') : pick('Chương trình mới', 'New program')
+    const baseName = language === 'FBD' ? pick('FBD mới', 'New FBD') : pick('Chương trình mới', 'New program')
+    const name = uniqueProgramName(document.programs, baseName)
     const newProgram: ProgrammingProgram = {
       programId,
       name,
@@ -208,6 +209,7 @@ export function ProgramsTab({
         {selected && (
           <ProgramInspector
             program={selected}
+            programs={document.programs}
             draft={metadataDrafts[selected.programId] ?? metadataOf(selected)}
             canEdit={canEdit}
             saving={saving}
@@ -277,7 +279,20 @@ function SourceEditor({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-[var(--c-text)]">{program.name}</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="ghost" icon={<Search className="h-4 w-4" aria-hidden="true" />} onClick={() => { setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0) }}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<Search className="h-4 w-4" aria-hidden="true" />}
+            aria-pressed={searchOpen}
+            onClick={() => {
+              setSearchOpen((open) => {
+                const next = !open
+                if (next) window.setTimeout(() => searchRef.current?.focus(), 0)
+                else textareaRef.current?.focus()
+                return next
+              })
+            }}
+          >
             {pick('Tìm', 'Find')}
           </Button>
           {canEdit && (
@@ -312,6 +327,13 @@ function SourceEditor({
           />
           <span className="text-xs text-[var(--c-text-dim)]">{matches.length} {pick('kết quả', 'matches')}</span>
           <Button size="sm" variant="ghost" disabled={matches.length === 0} onClick={() => matches.length > 0 && selectRange(nextMatch(matches, textareaRef.current?.selectionEnd ?? 0), searchText.length)}>{pick('Tiếp', 'Next')}</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<X className="h-4 w-4" aria-hidden="true" />}
+            aria-label={pick('Đóng tìm kiếm', 'Close find')}
+            onClick={() => { setSearchOpen(false); textareaRef.current?.focus() }}
+          />
         </div>
       )}
       <label className="sr-only" htmlFor={`programming-st-source-${program.programId}`}>
@@ -335,6 +357,9 @@ function SourceEditor({
           onSelect={updateCursor}
           onScroll={(event) => { if (lineGutterRef.current) lineGutterRef.current.scrollTop = event.currentTarget.scrollTop }}
           onKeyDown={(event) => {
+            if (event.key === 'Escape' && searchOpen) {
+              event.preventDefault(); setSearchOpen(false); return
+            }
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
               event.preventDefault(); setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0)
             }
@@ -451,6 +476,23 @@ function sameTags(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((item, index) => item === right[index])
 }
 
+/** So khớp tên không phân biệt hoa/thường và khoảng trắng đầu/cuối — hai
+ *  Program tên "New program" và " new program " coi là trùng. */
+export function isDuplicateProgramName(programs: ProgrammingProgram[], name: string, excludeProgramId?: string): boolean {
+  const normalized = name.trim().toLocaleLowerCase()
+  if (!normalized) return false
+  return programs.some((program) => program.programId !== excludeProgramId && program.name.trim().toLocaleLowerCase() === normalized)
+}
+
+/** Sinh tên duy nhất kiểu "New program 2", "New program 3" — tránh im lặng
+ *  tạo hai Program cùng tên khi bấm ST+/FBD nhiều lần (BUG-006). */
+export function uniqueProgramName(programs: ProgrammingProgram[], baseName: string): string {
+  if (!isDuplicateProgramName(programs, baseName)) return baseName
+  let suffix = 2
+  while (isDuplicateProgramName(programs, `${baseName} ${suffix}`)) suffix += 1
+  return `${baseName} ${suffix}`
+}
+
 function programSource(program: ProgrammingProgram): string {
   if (typeof program.document === 'string') return program.document
   return JSON.stringify(program.document)
@@ -467,27 +509,38 @@ function ProjectTagsEditor({ canEdit, value, saving, onChange, onSave }: { canEd
   )
 }
 
-function ProgramInspector({ program, draft, canEdit, saving, onChange, onSave }: { program: ProgrammingProgram; draft: ProgramMetadataDraft; canEdit: boolean; saving: boolean; onChange: (draft: ProgramMetadataDraft) => void; onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean> }) {
+function ProgramInspector({ program, programs, draft, canEdit, saving, onChange, onSave }: { program: ProgrammingProgram; programs: ProgrammingProgram[]; draft: ProgramMetadataDraft; canEdit: boolean; saving: boolean; onChange: (draft: ProgramMetadataDraft) => void; onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean> }) {
   const { pick } = useI18n()
   const dirty = !sameMetadata(draft, metadataOf(program))
+  const duplicateName = isDuplicateProgramName(programs, draft.name, program.programId)
   return (
     <section className="mt-4 rounded-[var(--radius)] border border-[var(--c-border)] p-3" aria-label={pick('Thuộc tính chương trình', 'Program properties')}>
       <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Thuộc tính', 'Inspector')}</h3>
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
-        <label className="text-xs text-[var(--c-text-dim)]">{pick('Tên', 'Name')}<input className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.name} readOnly={!canEdit} onChange={(event) => onChange({ ...draft, name: event.target.value })} /></label>
+        <label className="text-xs text-[var(--c-text-dim)]">
+          {pick('Tên', 'Name')}
+          <input className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.name} readOnly={!canEdit} onChange={(event) => onChange({ ...draft, name: event.target.value })} />
+          {duplicateName && <span className="mt-1 block text-xs font-normal normal-case text-[var(--c-fault-fg)]">{pick('Tên đã được dùng bởi chương trình khác.', 'This name is already used by another program.')}</span>}
+        </label>
         <label className="text-xs text-[var(--c-text-dim)]">{pick('Loại', 'Kind')}<select className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.kind} disabled={!canEdit} onChange={(event) => onChange({ ...draft, kind: event.target.value as ProgrammingProgram['kind'] })}><option value="PROGRAM">PROGRAM</option><option value="FUNCTION_BLOCK">FUNCTION_BLOCK</option><option value="FUNCTION">FUNCTION</option></select></label>
         <label className="text-xs text-[var(--c-text-dim)]">{pick('Tag chức năng', 'Functional tags')}<input className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.functionalTags} readOnly={!canEdit} onChange={(event) => onChange({ ...draft, functionalTags: event.target.value })} /></label>
       </div>
-      {canEdit && <Button className="mt-2" size="sm" loading={saving} disabled={!dirty || draft.name.trim().length === 0} onClick={() => void onSave([{ op: 'upsertProgram', program: { ...program, name: draft.name.trim(), kind: draft.kind, functionalTags: parseTags(draft.functionalTags) } }])}>{pick('Lưu thuộc tính', 'Save properties')}</Button>}
+      {canEdit && <Button className="mt-2" size="sm" loading={saving} disabled={!dirty || draft.name.trim().length === 0 || duplicateName} onClick={() => void onSave([{ op: 'upsertProgram', program: { ...program, name: draft.name.trim(), kind: draft.kind, functionalTags: parseTags(draft.functionalTags) } }])}>{pick('Lưu thuộc tính', 'Save properties')}</Button>}
     </section>
   )
 }
 
 interface StSymbol { name: string; type: string; offset: number; references: number }
 
-function collectStSymbols(source: string): StSymbol[] {
+/** Khai báo VAR hợp lệ ngay sau `^` (đầu file), sau `;`/xuống dòng (câu lệnh
+ *  trước đó), hoặc ngay sau từ khoá mở khối VAR* — KHÔNG bắt buộc đứng đầu
+ *  dòng như trước (BUG-013): source dán một dòng duy nhất (chưa qua Format)
+ *  vẫn phải nhận diện được khai báo. */
+const ST_VAR_DECLARATION = /(?:^|[;\n]|\bVAR(?:_INPUT|_OUTPUT|_IN_OUT|_TEMP)?\b)\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(BOOL|INT|DINT|UINT|REAL|TIME)\b/gi
+
+export function collectStSymbols(source: string): StSymbol[] {
   const output: StSymbol[] = []
-  const declaration = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(BOOL|INT|DINT|UINT|REAL|TIME)\b/gim
+  const declaration = new RegExp(ST_VAR_DECLARATION.source, ST_VAR_DECLARATION.flags)
   let match: RegExpExecArray | null
   while ((match = declaration.exec(source)) !== null) {
     const nameOffset = match.index + match[0].indexOf(match[1])
@@ -520,7 +573,39 @@ function lineColumnToOffset(source: string, line: number, column: number): numbe
   for (let index = 0; index < lineIndex; index += 1) offset += lines[index].length + 1
   return offset + Math.max(0, Math.min(lines[lineIndex]?.length ?? 0, column - 1))
 }
-function formatStSource(source: string): string {
-  const normalized = source.replace(/\r\n?/g, '\n').split('\n').map((line) => line.replace(/[\t ]+$/g, '').replace(/^\t+/g, (tabs) => '  '.repeat(tabs.length))).join('\n')
-  return normalized.length === 0 ? '' : `${normalized.replace(/\n+$/g, '')}\n`
+const ST_BLOCK_KEYWORDS = [
+  'END_PROGRAM', 'PROGRAM', 'END_FUNCTION_BLOCK', 'FUNCTION_BLOCK', 'END_FUNCTION', 'FUNCTION',
+  'END_VAR', 'VAR_IN_OUT', 'VAR_TEMP', 'VAR_INPUT', 'VAR_OUTPUT', 'VAR',
+  'END_IF', 'ELSIF', 'ELSE', 'IF', 'END_WHILE', 'WHILE', 'END_FOR', 'FOR', 'END_CASE', 'CASE', 'END_REPEAT', 'REPEAT'
+]
+const ST_KEYWORD_SPLIT = new RegExp(`\\b(${ST_BLOCK_KEYWORDS.join('|')})\\b`, 'g')
+const ST_OPEN_LINE = /^(PROGRAM|FUNCTION_BLOCK|FUNCTION|VAR|VAR_INPUT|VAR_OUTPUT|VAR_IN_OUT|VAR_TEMP|IF|WHILE|FOR|CASE|REPEAT)\b/
+const ST_CLOSE_LINE = /^(END_PROGRAM|END_FUNCTION_BLOCK|END_FUNCTION|END_VAR|END_IF|END_WHILE|END_FOR|END_CASE|END_REPEAT)\b/
+const ST_MID_LINE = /^(ELSIF|ELSE)\b/
+/** PROGRAM/FUNCTION_BLOCK/FUNCTION giữ tên định danh trên cùng dòng (`PROGRAM
+ *  test`) — mọi từ khoá khối khác xuống dòng cả trước lẫn sau. */
+const ST_NAMED_BLOCK_OPENERS = new Set(['PROGRAM', 'FUNCTION_BLOCK', 'FUNCTION'])
+
+/**
+ * BUG-013 — bản cũ chỉ thêm indent cho dòng đã có sẵn `\n`, nên code dán một
+ * dòng (`PROGRAM test VAR ... END_PROGRAM`) không đổi gì. Nay tách mỗi từ
+ * khoá khối và mỗi câu lệnh (`;`) ra dòng riêng trước, rồi mới thụt lề theo
+ * độ sâu khối — vừa sửa Format, vừa khiến `collectStSymbols` nhận ra VAR
+ * ngay cả khi người dùng chưa bấm Format.
+ */
+export function formatStSource(source: string): string {
+  const withBreaks = source
+    .replace(/\r\n?/g, '\n')
+    .replace(ST_KEYWORD_SPLIT, (keyword) => ST_NAMED_BLOCK_OPENERS.has(keyword) ? `\n${keyword}` : `\n${keyword}\n`)
+    .replace(/;/g, ';\n')
+  const rawLines = withBreaks.split('\n').map((line) => line.trim()).filter((line) => line.length > 0)
+  let depth = 0
+  const indented: string[] = []
+  for (const line of rawLines) {
+    const closing = ST_CLOSE_LINE.test(line) || ST_MID_LINE.test(line)
+    if (closing) depth = Math.max(0, depth - 1)
+    indented.push(`${'  '.repeat(depth)}${line}`)
+    if (ST_OPEN_LINE.test(line) || ST_MID_LINE.test(line)) depth += 1
+  }
+  return indented.length === 0 ? '' : `${indented.join('\n')}\n`
 }

@@ -6,6 +6,7 @@ import { Button } from '../../shared/components/Button'
 import { Panel } from '../../shared/components/Panel'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
+import { useI18n } from '../../shared/i18n'
 import type { ScheduleObject, ScheduleStatus } from '../../shared/types'
 import { cn } from '../../shared/utils'
 import { useAuth, roleAtLeast } from '../auth'
@@ -26,6 +27,7 @@ import {
  * thì hiện gạch ngang — KHÔNG tính giá trị ở trình duyệt (nguyên tắc S2/S3).
  */
 export function SchedulerGridPage() {
+  const { pick } = useI18n()
   const { schedules, loading, error, legacyFormat, reload, upsert } = useScheduler()
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin')
@@ -60,10 +62,15 @@ export function SchedulerGridPage() {
     return (
       <StateBlock
         state="error"
-        title="Cấu hình lịch còn ở định dạng cũ"
-        detail={'Di trú sang mô hình Schedule Object v3.1 chạy lúc khởi động dịch vụ. ' +
-          'Hãy khởi động lại mkddc-web rồi mở lại trang này. Bản cũ được giữ nguyên tại ' +
-          'schedule.conf.v1.bak nên không mất gì.'}
+        title={pick('Cấu hình lịch còn ở định dạng cũ', 'Schedule config is still in the legacy format')}
+        detail={pick(
+          'Di trú sang mô hình Schedule Object v3.1 chạy lúc khởi động dịch vụ. ' +
+            'Hãy khởi động lại mkddc-web rồi mở lại trang này. Bản cũ được giữ nguyên tại ' +
+            'schedule.conf.v1.bak nên không mất gì.',
+          'Migration to the Schedule Object v3.1 model runs at service startup. ' +
+            'Restart mkddc-web and reopen this page. The old file is kept at ' +
+            'schedule.conf.v1.bak so nothing is lost.'
+        )}
         onRetry={() => { void reload() }}
       />
     )
@@ -72,7 +79,7 @@ export function SchedulerGridPage() {
     return (
       <StateBlock
         state="error"
-        title="Không tải được danh sách lịch"
+        title={pick('Không tải được danh sách lịch', 'Could not load the schedule list')}
         detail={error.message}
         onRetry={() => { void reload() }}
       />
@@ -82,13 +89,13 @@ export function SchedulerGridPage() {
   async function createSchedule() {
     const id = nextScheduleId(schedules)
     if (!id) {
-      toast.push('error', `Đã đạt trần ${MAX_SCHEDULES} lịch`)
+      toast.push('error', pick(`Đã đạt trần ${MAX_SCHEDULES} lịch`, `Reached the ${MAX_SCHEDULES}-schedule limit`))
       return
     }
     setBusy(true)
     try {
       const draft = blankSchedule(id)
-      draft.schedule_name = `Lịch ${id}`
+      draft.schedule_name = pick(`Lịch ${id}`, `Schedule ${id}`)
       const created = await apiClient.createSchedule(draft)
       upsert(created)
       navigate(`/eng/scheduler/${created.schedule_id}`)
@@ -109,7 +116,7 @@ export function SchedulerGridPage() {
         upsert(updated)
         results.push(`${id}: ${updated.status}`)
       } catch (err) {
-        results.push(`${id}: LỖI ${err instanceof Error ? err.message : String(err)}`)
+        results.push(`${id}: ${pick('LỖI', 'ERROR')} ${err instanceof Error ? err.message : String(err)}`)
       }
     }
     setBusy(false)
@@ -130,7 +137,7 @@ export function SchedulerGridPage() {
     setBusy(true)
     try {
       const parsed = JSON.parse(await file.text()) as ScheduleObject[]
-      if (!Array.isArray(parsed)) throw new Error('Tệp phải chứa một mảng Schedule Object')
+      if (!Array.isArray(parsed)) throw new Error(pick('Tệp phải chứa một mảng Schedule Object', 'File must contain an array of Schedule Object'))
       const existing = new Set(schedules.map((s) => s.schedule_id))
       let created = 0
       for (const item of parsed) {
@@ -145,7 +152,7 @@ export function SchedulerGridPage() {
         existing.add(saved.schedule_id)
         created++
       }
-      toast.push('success', `Đã nhập ${created}/${parsed.length} lịch, tất cả ở trạng thái nháp`)
+      toast.push('success', pick(`Đã nhập ${created}/${parsed.length} lịch, tất cả ở trạng thái nháp`, `Imported ${created}/${parsed.length} schedule(s), all set to draft`))
     } catch (err) {
       toast.push('error', err instanceof Error ? err.message : String(err))
     } finally {
@@ -157,26 +164,26 @@ export function SchedulerGridPage() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--c-text)]">Lịch vận hành</h1>
+          <h1 className="text-2xl font-bold text-[var(--c-text)]">{pick('Lịch vận hành', 'Scheduler')}</h1>
           <p className="mt-1 text-sm text-[var(--c-text-dim)]">
-            Lịch tuần · ngoại lệ · publish có kiểm chứng
+            {pick('Lịch tuần · ngoại lệ · publish có kiểm chứng', 'Weekly schedule · exceptions · verified publish')}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <CapacityMeter
-            label="lịch"
+            label={pick('lịch', 'schedules')}
             used={capacity.schedules}
             max={capacity.maxSchedules}
           />
           <CapacityMeter
-            label="điểm ghi"
+            label={pick('điểm ghi', 'write points')}
             used={capacity.points}
             max={capacity.maxPoints}
-            hint="Số điểm ghi nội bộ đang bị lịch chiếm"
+            hint={pick('Số điểm ghi nội bộ đang bị lịch chiếm', 'Internal write points currently claimed by schedules')}
           />
           {capacity.contested > 0 && (
             <span className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--c-warn-fg)]">
-              {capacity.contested} điểm bị nhiều lịch cùng ghi
+              {pick(`${capacity.contested} điểm bị nhiều lịch cùng ghi`, `${capacity.contested} point(s) written by multiple schedules`)}
             </span>
           )}
         </div>
@@ -188,9 +195,13 @@ export function SchedulerGridPage() {
         <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-4 py-3 text-sm text-[var(--c-warn-fg)]">
           <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>
-            <strong>{migratedCount} lịch</strong> đã chuyển từ định dạng cũ và đang <strong>tắt</strong>.
-            Mô hình mới giữ điểm ở giá trị mặc định ngoài khung giờ, khác mô hình cũ vốn nhả quyền —
-            điểm nào dùng chung với logic nội bộ sẽ đổi hành vi sau khi bật lại. Hãy kiểm tra rồi publish.
+            <strong>{pick(`${migratedCount} lịch`, `${migratedCount} schedule(s)`)}</strong>{' '}
+            {pick('đã chuyển từ định dạng cũ và đang', 'were migrated from the legacy format and are currently')}{' '}
+            <strong>{pick('tắt', 'disabled')}</strong>.{' '}
+            {pick(
+              'Mô hình mới giữ điểm ở giá trị mặc định ngoài khung giờ, khác mô hình cũ vốn nhả quyền — điểm nào dùng chung với logic nội bộ sẽ đổi hành vi sau khi bật lại. Hãy kiểm tra rồi publish.',
+              'The new model holds points at their default value outside the scheduled window, unlike the legacy model which released control — points shared with internal logic will change behaviour once re-enabled. Review then publish.'
+            )}
           </span>
         </div>
       )}
@@ -198,18 +209,18 @@ export function SchedulerGridPage() {
       <div className="flex flex-wrap items-center gap-2">
         <input
           className="h-9 w-56 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
-          placeholder="Tìm theo mã hoặc tên…"
+          placeholder={pick('Tìm theo mã hoặc tên…', 'Search by ID or name…')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="Tìm lịch"
+          aria-label={pick('Tìm lịch', 'Search schedules')}
         />
         <select
           className="h-9 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)]"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as 'all' | ScheduleStatus)}
-          aria-label="Lọc theo trạng thái"
+          aria-label={pick('Lọc theo trạng thái', 'Filter by status')}
         >
-          <option value="all">Mọi trạng thái</option>
+          <option value="all">{pick('Mọi trạng thái', 'All statuses')}</option>
           {(['DRAFT', 'VALIDATED', 'PUBLISHED', 'ACTIVE', 'INACTIVE', 'DISABLED', 'ERROR', 'OUT_OF_SYNC'] as ScheduleStatus[]).map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
@@ -221,20 +232,20 @@ export function SchedulerGridPage() {
             checked={onlyOutOfSync}
             onChange={(e) => setOnlyOutOfSync(e.target.checked)}
           />
-          Chỉ lịch lệch revision
+          {pick('Chỉ lịch lệch revision', 'Only out-of-sync revisions')}
         </label>
 
         <div className="ml-auto flex flex-wrap gap-2">
           <Button icon={<RefreshCw className="h-4 w-4" />} loading={loading} onClick={() => { void reload() }}>
-            Tải lại
+            {pick('Tải lại', 'Reload')}
           </Button>
           <Button
             icon={<Upload className="h-4 w-4" />}
             disabled={!canEdit || busy}
-            title={canEdit ? undefined : 'Cần quyền admin'}
+            title={canEdit ? undefined : pick('Cần quyền admin', 'Requires admin role')}
             onClick={() => fileRef.current?.click()}
           >
-            Nhập
+            {pick('Nhập', 'Import')}
           </Button>
           <input
             ref={fileRef}
@@ -244,52 +255,55 @@ export function SchedulerGridPage() {
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void importJson(f); e.target.value = '' }}
           />
           <Button icon={<Download className="h-4 w-4" />} onClick={exportJson} disabled={schedules.length === 0}>
-            Xuất
+            {pick('Xuất', 'Export')}
           </Button>
           <Button
             variant="primary"
             icon={<Plus className="h-4 w-4" />}
             disabled={!canEdit || busy || schedules.length >= MAX_SCHEDULES}
-            title={canEdit ? undefined : 'Cần quyền admin'}
+            title={canEdit ? undefined : pick('Cần quyền admin', 'Requires admin role')}
             onClick={() => { void createSchedule() }}
           >
-            Lịch mới
+            {pick('Lịch mới', 'New schedule')}
           </Button>
         </div>
       </div>
 
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-surface-2)] px-4 py-2 text-sm">
-          <span className="text-[var(--c-text)]">Đã chọn {selected.size} lịch</span>
-          <Button size="sm" disabled={!canEdit || busy} onClick={() => { void bulkSetEnabled(true) }}>Bật</Button>
-          <Button size="sm" disabled={!canEdit || busy} onClick={() => { void bulkSetEnabled(false) }}>Tắt</Button>
-          <Button size="sm" onClick={() => setSelected(new Set())}>Bỏ chọn</Button>
+          <span className="text-[var(--c-text)]">{pick(`Đã chọn ${selected.size} lịch`, `${selected.size} schedule(s) selected`)}</span>
+          <Button size="sm" disabled={!canEdit || busy} onClick={() => { void bulkSetEnabled(true) }}>{pick('Bật', 'Enable')}</Button>
+          <Button size="sm" disabled={!canEdit || busy} onClick={() => { void bulkSetEnabled(false) }}>{pick('Tắt', 'Disable')}</Button>
+          <Button size="sm" onClick={() => setSelected(new Set())}>{pick('Bỏ chọn', 'Clear selection')}</Button>
         </div>
       )}
 
-      <Panel title="Danh sách lịch" subtitle={`${visible.length}/${schedules.length}`}>
+      <Panel title={pick('Danh sách lịch', 'Schedule list')} subtitle={`${visible.length}/${schedules.length}`}>
         {loading && schedules.length === 0 ? (
-          <div className="p-6 text-sm text-[var(--c-text-dim)]">Đang tải…</div>
+          <div className="p-6 text-sm text-[var(--c-text-dim)]">{pick('Đang tải…', 'Loading…')}</div>
         ) : visible.length === 0 ? (
           <div className="p-6 text-sm text-[var(--c-text-dim)]">
             {schedules.length === 0
-              ? 'Chưa có lịch nào. Một Schedule Object gồm lịch tuần, ngoại lệ, giá trị mặc định và danh sách điểm điều khiển.'
-              : 'Không có lịch nào khớp bộ lọc.'}
+              ? pick(
+                'Chưa có lịch nào. Một Schedule Object gồm lịch tuần, ngoại lệ, giá trị mặc định và danh sách điểm điều khiển.',
+                'No schedules yet. A Schedule Object has a weekly schedule, exceptions, a default value and a list of controlled points.'
+              )
+              : pick('Không có lịch nào khớp bộ lọc.', 'No schedules match the filter.')}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-[var(--c-border)] text-left text-xs uppercase text-[var(--c-text-dim)]">
-                  <th className="w-8 px-2 py-2"><span className="sr-only">Chọn</span></th>
-                  <th className="px-2 py-2">Mã</th>
-                  <th className="px-2 py-2">Tên</th>
-                  <th className="px-2 py-2">Trạng thái</th>
-                  <th className="px-2 py-2">Tuần</th>
-                  <th className="px-2 py-2 text-right">Ngoại lệ</th>
-                  <th className="px-2 py-2 text-right">Điểm</th>
-                  <th className="px-2 py-2">Hiện tại</th>
-                  <th className="px-2 py-2">Kế tiếp</th>
+                  <th className="w-8 px-2 py-2"><span className="sr-only">{pick('Chọn', 'Select')}</span></th>
+                  <th className="px-2 py-2">{pick('Mã', 'ID')}</th>
+                  <th className="px-2 py-2">{pick('Tên', 'Name')}</th>
+                  <th className="px-2 py-2">{pick('Trạng thái', 'Status')}</th>
+                  <th className="px-2 py-2">{pick('Tuần', 'Week')}</th>
+                  <th className="px-2 py-2 text-right">{pick('Ngoại lệ', 'Exceptions')}</th>
+                  <th className="px-2 py-2 text-right">{pick('Điểm', 'Points')}</th>
+                  <th className="px-2 py-2">{pick('Hiện tại', 'Current')}</th>
+                  <th className="px-2 py-2">{pick('Kế tiếp', 'Next')}</th>
                   <th className="px-2 py-2 text-right">Rev</th>
                 </tr>
               </thead>
@@ -321,6 +335,7 @@ export function SchedulerGridPage() {
 function ScheduleRowView({
   schedule, checked, onToggle
 }: { schedule: ScheduleObject; checked: boolean; onToggle: () => void }) {
+  const { pick, locale, lang } = useI18n()
   const rt = schedule.runtime
   return (
     <tr className="border-b border-[var(--c-border)] align-top hover:bg-[var(--c-surface-2)]">
@@ -330,7 +345,7 @@ function ScheduleRowView({
           className="h-4 w-4 accent-[var(--c-accent)]"
           checked={checked}
           onChange={onToggle}
-          aria-label={`Chọn ${schedule.schedule_id}`}
+          aria-label={pick(`Chọn ${schedule.schedule_id}`, `Select ${schedule.schedule_id}`)}
         />
       </td>
       <td className="px-2 py-2 font-mono">
@@ -343,17 +358,17 @@ function ScheduleRowView({
       </td>
       <td className="px-2 py-2"><StatusDot schedule={schedule} /></td>
       <td className="max-w-[14rem] truncate px-2 py-2 font-mono text-xs text-[var(--c-text-dim)]"
-          title={weeklySummary(schedule.weekly_schedule, schedule.value_type)}>
-        {weeklySummary(schedule.weekly_schedule, schedule.value_type)}
+          title={weeklySummary(schedule.weekly_schedule, schedule.value_type, lang)}>
+        {weeklySummary(schedule.weekly_schedule, schedule.value_type, lang)}
       </td>
       <td className="px-2 py-2 text-right">{schedule.exception_schedule.length || EM_DASH}</td>
       <td className="px-2 py-2 text-right">{schedule.target_objects.length || EM_DASH}</td>
       {/* Hai cột dưới đây đến từ controller. Chưa publish ⇒ gạch ngang. */}
       <td className="px-2 py-2 font-semibold text-[var(--c-text)]">
-        {rt ? formatValue(rt.effective_value, schedule.value_type) : EM_DASH}
+        {rt ? formatValue(rt.effective_value, schedule.value_type, lang) : EM_DASH}
       </td>
       <td className="px-2 py-2 font-mono text-xs">
-        {rt?.next_transition_at ? new Date(rt.next_transition_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : EM_DASH}
+        {rt?.next_transition_at ? new Date(rt.next_transition_at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : EM_DASH}
       </td>
       <td className="px-2 py-2 text-right font-mono text-xs">{schedule.revision}</td>
     </tr>

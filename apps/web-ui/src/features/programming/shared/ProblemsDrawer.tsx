@@ -31,7 +31,14 @@ export function ProblemsDrawer({
           const Icon = diagnostic.severity === 'ERROR' ? AlertCircle : diagnostic.severity === 'WARNING' ? AlertTriangle : Info
           const iconClass = diagnostic.severity === 'ERROR' ? 'text-[var(--c-fault-fg)]' : diagnostic.severity === 'WARNING' ? 'text-[var(--c-warn-fg)]' : 'text-[var(--c-info)]'
           const location = diagnostic.location
-          const locationText = location ? [location.programId && `program ${String(location.programId).slice(0, 8)}`, location.line !== undefined && `dòng ${location.line}`].filter(Boolean).join(' · ') : undefined
+          const locationText = location
+            ? [
+              location.programId && pick(`chương trình ${String(location.programId).slice(0, 8)}`, `program ${String(location.programId).slice(0, 8)}`),
+              location.line !== undefined && pick(`dòng ${location.line}`, `line ${location.line}`),
+              location.column !== undefined && pick(`cột ${location.column}`, `col ${location.column}`),
+              location.bindingId && pick(`biến ${location.bindingId}`, `variable ${location.bindingId}`)
+            ].filter(Boolean).join(' · ')
+            : undefined
           return (
             <li key={`${diagnostic.code}-${index}`}>
               <button

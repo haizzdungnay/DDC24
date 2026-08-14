@@ -1,13 +1,15 @@
 import type { ScheduleObject, ScheduleRuntimeState } from '../../../shared/types'
 import { EM_DASH, overrideSourceLabel, statusPresentation } from '../shared'
 import { cn } from '../../../shared/utils'
+import { useI18n } from '../../../shared/i18n'
 
 /**
  * Trạng thái lịch. Mỗi trạng thái có KÝ HIỆU riêng, không chỉ có màu — đọc
  * được khi in đen trắng và khi người dùng bị mù màu (nguyên tắc S8).
  */
 export function StatusDot({ schedule, className }: { schedule: ScheduleObject; className?: string }) {
-  const p = statusPresentation(schedule.status)
+  const { lang } = useI18n()
+  const p = statusPresentation(schedule.status, lang)
   const applied = schedule.runtime?.applied_revision
   const outOfSync = schedule.status === 'OUT_OF_SYNC'
 

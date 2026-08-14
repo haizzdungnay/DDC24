@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ShieldCheck } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
@@ -38,6 +38,7 @@ export function CheckCommissionPage() {
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin')
   const { projectId } = useParams<{ projectId: string }>()
+  const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const locationState = (location.state as NavState | null) ?? null
@@ -132,7 +133,19 @@ export function CheckCommissionPage() {
               <StatusBadge state={check.data.state === 'PASSED' ? 'online' : 'fault'} label={check.data.state} />
               <span className="text-sm text-[var(--c-text-dim)]">Revision {navState.revisionId.slice(0, 8)}</span>
             </div>
-            {check.data.diagnostics.length > 0 && <ProblemsDrawer diagnostics={check.data.diagnostics} />}
+            {check.data.diagnostics.length > 0 && (
+              <ProblemsDrawer
+                diagnostics={check.data.diagnostics}
+                onSelect={(diagnostic) => {
+                  // BUG-007 — lỗi Check trước đây không dẫn đi đâu cả. PGM-03 không
+                  // sở hữu editor (D-01 còn mở, xem As-Built gap report), nên chỉ
+                  // điều hướng sang workspace Thiết kế đúng Program bị lỗi — không
+                  // tự chế thêm hành vi seal/focus xuyên route.
+                  if (!projectId || typeof diagnostic.location?.programId !== 'string') return
+                  navigate(`/eng/programming/projects/${projectId}/design?tab=programs&program=${diagnostic.location.programId}`)
+                }}
+              />
+            )}
             {!checkPassed && <p className="text-sm text-[var(--c-warn-fg)]">{pick('Chỉ Kiểm tra PASSED mới mở được Đưa vào vận hành.', 'Only a PASSED check unlocks Commission.')}</p>}
           </div>
         )}

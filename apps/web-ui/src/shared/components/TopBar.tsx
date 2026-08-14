@@ -10,7 +10,7 @@ import type { ConnectionState, CurrentUser } from '../types'
 import { formatDataAge } from '../utils'
 import { Button } from './Button'
 import { StatusBadge } from './StatusBadge'
-import { HealthChip, SeverityBadge } from './pa3/StateAtoms'
+import { HealthChip, SeverityBadge, healthReasonLabel } from './pa3/StateAtoms'
 
 /**
  * TopBar — PA3-203 / UX-DES §2.2.
@@ -57,7 +57,15 @@ export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: 
         <span className="hidden sm:inline-flex"><StatusBadge state={IS_DEMO ? 'demo' : 'live'} label={IS_DEMO ? t('demo') : t('live')} /></span>
         {snapshot && (
           <>
-            <span className="hidden md:inline-flex"><HealthChip state={snapshot.overallState} /></span>
+            {/* BUG-008 — badge FAULT/DEGRADED trước đây không click/hover được,
+                người trực không biết vì sao mà phải mở Diagnostics dò thủ công. */}
+            <Link
+              to="/diagnostics"
+              className="hidden md:inline-flex"
+              aria-label={pick(`Trạng thái ${snapshot.overallState}: ${healthReasonLabel(snapshot.overallReasonCode, lang)}. Mở Chẩn đoán.`, `Status ${snapshot.overallState}: ${healthReasonLabel(snapshot.overallReasonCode, lang)}. Open Diagnostics.`)}
+            >
+              <HealthChip state={snapshot.overallState} title={healthReasonLabel(snapshot.overallReasonCode, lang)} />
+            </Link>
             {/* Tuổi dữ liệu là số đo an toàn, không phải trang trí: người trực
                 phải biết mình đang nhìn dữ liệu bao nhiêu giây tuổi. `—` khi
                 không point nào có mốc thời gian thật (PA3-F04). */}

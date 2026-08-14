@@ -51,10 +51,10 @@ const qualityVisuals: Record<PointQuality, Visual> = {
 
 const chipClass = 'inline-flex items-center gap-1.5 rounded-[var(--radius)] border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide'
 
-function Chip({ visual, text, className }: { visual: Visual; text?: string; className?: string }) {
+function Chip({ visual, text, className, title }: { visual: Visual; text?: string; className?: string; title?: string }) {
   const Glyph = visual.icon
   return (
-    <span className={cn(chipClass, className)} style={{ color: visual.fg, backgroundColor: visual.bg, borderColor: visual.border }}>
+    <span className={cn(chipClass, className)} style={{ color: visual.fg, backgroundColor: visual.bg, borderColor: visual.border }} title={title}>
       <Glyph className="h-3.5 w-3.5" aria-hidden="true" />
       {text ?? visual.label}
     </span>
@@ -65,8 +65,8 @@ export function healthStateLabel(state: OverviewHealthState): string {
   return healthVisuals[state]?.label ?? healthVisuals.unknown.label
 }
 
-export function HealthChip({ state, className }: { state: OverviewHealthState; className?: string }) {
-  return <Chip visual={healthVisuals[state] ?? healthVisuals.unknown} className={className} />
+export function HealthChip({ state, className, title }: { state: OverviewHealthState; className?: string; title?: string }) {
+  return <Chip visual={healthVisuals[state] ?? healthVisuals.unknown} className={className} title={title} />
 }
 
 export function SeverityBadge({ severity, count, className }: { severity: AttentionSeverity; count?: number; className?: string }) {
@@ -132,7 +132,31 @@ export const HEALTH_REASON_LABELS: Record<string, string> = {
   point_quality_degraded: 'Chất lượng điểm suy giảm'
 }
 
-export function healthReasonLabel(reasonCode: string): string {
+export const HEALTH_REASON_LABELS_EN: Record<string, string> = {
+  ok: 'Normal',
+  core_unreachable: 'Cannot reach core',
+  core_partial_read: 'Incomplete core read',
+  points_unreadable: 'Could not read the point table',
+  no_points_reported: 'Authority reported no points',
+  no_local_points: 'No local I/O points',
+  bad_quality_points: 'Some points have BAD quality',
+  stale_points: 'Some points are stale/offline',
+  not_configured: 'Not configured',
+  telemetry_unpublished: 'iobus has not published telemetry',
+  bus_not_open: 'Bus could not open',
+  slave_offline: 'Slave device offline',
+  no_ipv4_address: 'No IPv4 address yet',
+  historian_disabled: 'Historian is disabled',
+  policy_unreadable: 'Could not read historian config',
+  no_logged_points: 'History logging not enabled',
+  policy_unhealthy: 'Some logged points are unhealthy',
+  critical_alarm_active: 'A Critical alarm is active',
+  high_alarm_active: 'A High alarm is active',
+  point_quality_degraded: 'Point quality is degraded'
+}
+
+export function healthReasonLabel(reasonCode: string, lang: 'vi' | 'en' = 'vi'): string {
   if (!reasonCode) return '—'
-  return HEALTH_REASON_LABELS[reasonCode] ?? reasonCode
+  const labels = lang === 'en' ? HEALTH_REASON_LABELS_EN : HEALTH_REASON_LABELS
+  return labels[reasonCode] ?? reasonCode
 }

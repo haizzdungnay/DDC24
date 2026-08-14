@@ -21,16 +21,16 @@ import { NO_DATA, formatDateTime } from '../../shared/utils'
  * không tự tính gì cả — nó hiển thị nguyên văn thứ kho Activity đã ghi.
  */
 
-const ACTION_LABELS: Record<string, string> = {
-  login: 'Đăng nhập',
-  point_force: 'Ép giá trị điểm',
-  point_release: 'Nhả lệnh ép',
-  point_override: 'Ép tay có thời hạn',
-  point_metadata: 'Sửa siêu dữ liệu điểm',
-  alarm_ack: 'Xác nhận cảnh báo',
-  alarm_suppress: 'Tạm ẩn cảnh báo',
-  commissioning_test: 'Kiểm tra commissioning',
-  override_expired: 'Hết hạn ép tay'
+const ACTION_LABELS: Record<string, [string, string]> = {
+  login: ['Đăng nhập', 'Login'],
+  point_force: ['Ép giá trị điểm', 'Force point value'],
+  point_release: ['Nhả lệnh ép', 'Release force'],
+  point_override: ['Ép tay có thời hạn', 'Timed manual override'],
+  point_metadata: ['Sửa siêu dữ liệu điểm', 'Edit point metadata'],
+  alarm_ack: ['Xác nhận cảnh báo', 'Acknowledge alarm'],
+  alarm_suppress: ['Tạm ẩn cảnh báo', 'Suppress alarm'],
+  commissioning_test: ['Kiểm tra commissioning', 'Commissioning test'],
+  override_expired: ['Hết hạn ép tay', 'Override expired']
 }
 
 const PAGE_SIZE = 50
@@ -181,7 +181,9 @@ export function ActivityPage() {
 }
 
 function ActivityTableRow({ event }: { event: ActivityEvent }) {
+  const { pick } = useI18n()
   const link = event.objectType && event.objectId ? resolveDrilldown(event.objectType, event.objectId) : null
+  const actionLabel = ACTION_LABELS[event.action]
   const outcomeColor = event.outcome === 'accepted' || event.outcome === 'ok'
     ? 'var(--c-good-fg)'
     : event.outcome === 'rejected' || event.outcome === 'denied' || event.outcome === 'not_found'
@@ -191,7 +193,7 @@ function ActivityTableRow({ event }: { event: ActivityEvent }) {
     <tr className="border-t border-[var(--c-border)]">
       <td className="mono whitespace-nowrap px-3 py-2">{formatDateTime(event.time)}</td>
       <td className="px-3 py-2">{event.kind}</td>
-      <td className="px-3 py-2 font-semibold">{ACTION_LABELS[event.action] ?? event.action}</td>
+      <td className="px-3 py-2 font-semibold">{actionLabel ? pick(actionLabel[0], actionLabel[1]) : event.action}</td>
       <td className="mono px-3 py-2">
         {link ? <Link to={link} className="text-[var(--c-accent)]">{event.objectId}</Link> : (event.objectId || NO_DATA)}
       </td>

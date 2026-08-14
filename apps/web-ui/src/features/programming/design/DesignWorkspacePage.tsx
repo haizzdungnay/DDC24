@@ -39,7 +39,9 @@ export function DesignWorkspacePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const requested = searchParams.get('tab')
   const tab: DesignTab = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as DesignTab) : 'programs'
-  const [selectedProgramId, setSelectedProgramId] = useState<string>()
+  // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-03
+  // (Check) chọn sẵn đúng Program bị lỗi khi mở workspace Thiết kế.
+  const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>(() => searchParams.get('program') ?? undefined)
   const [focusDiagnostic, setFocusDiagnostic] = useState<ProgrammingDiagnostic | null>(null)
   const [programOperations, setProgramOperations] = useState<ProgrammingDraftOperation[]>([])
   const [executionOperations, setExecutionOperations] = useState<ProgrammingDraftOperation[]>([])
