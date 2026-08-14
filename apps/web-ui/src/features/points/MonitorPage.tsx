@@ -36,7 +36,7 @@ type MonitorStateFilter = 'all' | 'forced' | 'fault' | 'offline' | 'writable' | 
 function matchesStateFilter(point: Point, filter: MonitorStateFilter): boolean {
   switch (filter) {
     case 'forced': return point.forced === true
-    case 'fault': return point.fault === true || point.quality === 'bad'
+    case 'fault': return (point.fault === true || point.quality === 'bad') && !isChannelNotConfigured(point)
     case 'offline': return point.quality === 'offline' || point.online === false
     case 'writable': return point.writable === true || point.kind === 'AO' || point.kind === 'DO'
     case 'logging': return point.logEnabled === true
@@ -221,6 +221,10 @@ export function MonitorPage() {
   }), [filtered])
 
   const analogPoints = points.filter((point) => point.kind === 'UI' || point.kind === 'AO' || point.kind === 'virtual')
+  // Kênh "Chưa cấu hình" (signalType none) không được tính vào tổng "lỗi/mất
+  // tín hiệu" hay mẫu số "% bình thường" — nó chưa hề được đưa vào vận hành,
+  // không phải một điểm đang lỗi (F-DASH-LOCALIO-01).
+  const configuredAnalogPoints = analogPoints.filter((point) => !isChannelNotConfigured(point))
   const stats = {
     total: points.length,
     ui: points.filter((point) => point.kind === 'UI').length,
@@ -228,9 +232,9 @@ export function MonitorPage() {
     ao: points.filter((point) => point.kind === 'AO').length,
     virtual: points.filter((point) => point.kind === 'virtual').length,
     on: points.filter((point) => Boolean(point.value)).length,
-    analogTotal: analogPoints.length,
-    analogGood: analogPoints.filter((point) => point.quality === 'good').length,
-    abnormal: points.filter((point) => point.quality !== 'good').length
+    analogTotal: configuredAnalogPoints.length,
+    analogGood: configuredAnalogPoints.filter((point) => point.quality === 'good').length,
+    abnormal: points.filter((point) => point.quality !== 'good' && !isChannelNotConfigured(point)).length
   }
 
   function openPointModal(point: Point) {
