@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { collectStSymbols, formatStSource, isDuplicateProgramName, uniqueProgramName } from './ProgramsTab'
+import { collectStInterfaceVariables, collectStSymbols, formatStSource, isDuplicateProgramName, uniqueProgramName } from './ProgramsTab'
 import type { ProgrammingProgram } from '../../model/types'
 
 function program(overrides: Partial<ProgrammingProgram> = {}): ProgrammingProgram {
@@ -58,6 +58,47 @@ describe('collectStSymbols (BUG-013)', () => {
 
   it('rỗng khi không có VAR nào', () => {
     expect(collectStSymbols('PROGRAM t END_PROGRAM')).toHaveLength(0)
+  })
+})
+
+describe('collectStInterfaceVariables (Mapping tab phải chọn từ VAR_INPUT/VAR_OUTPUT, không gõ tay)', () => {
+  const reference = `PROGRAM AHU_FanControl
+VAR_INPUT
+    SupplyTemp  : REAL;
+    Setpoint    : REAL;
+    Occupied    : BOOL;
+END_VAR
+VAR_OUTPUT
+    FanEnable   : BOOL;
+    FanSpeed    : REAL;
+END_VAR
+VAR
+    StartDelay  : TON;
+    Deviation   : REAL;
+END_VAR
+    Deviation := SupplyTemp - Setpoint;
+END_PROGRAM`
+
+  it('chỉ lấy biến trong VAR_INPUT/VAR_OUTPUT, bỏ qua VAR cục bộ', () => {
+    expect(collectStInterfaceVariables(reference)).toEqual([
+      { name: 'SupplyTemp', type: 'REAL', direction: 'INPUT' },
+      { name: 'Setpoint', type: 'REAL', direction: 'INPUT' },
+      { name: 'Occupied', type: 'BOOL', direction: 'INPUT' },
+      { name: 'FanEnable', type: 'BOOL', direction: 'OUTPUT' },
+      { name: 'FanSpeed', type: 'REAL', direction: 'OUTPUT' }
+    ])
+  })
+
+  it('vẫn nhận diện được khi source chưa Format (một dòng)', () => {
+    const oneLine = 'PROGRAM t VAR_INPUT SupplyTemp:REAL; END_VAR VAR_OUTPUT FanEnable:BOOL; END_VAR END_PROGRAM'
+    expect(collectStInterfaceVariables(oneLine)).toEqual([
+      { name: 'SupplyTemp', type: 'REAL', direction: 'INPUT' },
+      { name: 'FanEnable', type: 'BOOL', direction: 'OUTPUT' }
+    ])
+  })
+
+  it('rỗng khi chương trình không khai báo VAR_INPUT/VAR_OUTPUT', () => {
+    expect(collectStInterfaceVariables('PROGRAM t VAR x : BOOL; END_VAR END_PROGRAM')).toEqual([])
   })
 })
 

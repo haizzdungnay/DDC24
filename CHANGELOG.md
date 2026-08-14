@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Fixed — Mapping tab bắt gõ tay tên biến thay vì chọn từ chương trình (2026-08-14)
+
+Bối cảnh: user phản ánh trực tiếp — tab "Điểm & Ánh xạ" bắt gõ tay ô "Tên
+biến" khi thêm ánh xạ, đúng ra phải **chọn (select)** trong danh sách biến đã
+khai báo ở chính chương trình, không phải gõ tự do.
+
+Xác nhận đúng: `PointPickerDialog` (`MappingTab.tsx`) trước đây có `<input>`
+tự do cho "Tên biến" — không đối chiếu gì với `VAR_INPUT`/`VAR_OUTPUT` thật
+trong mã ST hay node INPUT/OUTPUT trong FBD. Gõ sai chính tả (kể cả khác hoa/
+thường) tạo ra một `Variable` "mồ côi" không liên quan gì tới biến thật, và
+UI không cảnh báo gì — đúng loại lỗi user vừa gặp phải khi làm theo hướng dẫn
+quy trình.
+
+Cách sửa — đọc thẳng từ source đã lưu của Program thay vì cho gõ tay:
+
+- **ST**: thêm `collectStInterfaceVariables` (`ProgramsTab.tsx`) — quét khối
+  `VAR_INPUT`/`VAR_OUTPUT` (không lấy `VAR` cục bộ, vì đó không phải biên I/O
+  cần map), nhận diện được cả khi source chưa qua Format (một dòng, giống
+  cách `collectStSymbols` đã làm cho BUG-013).
+- **FBD**: thêm `collectFbdInterfaceVariables` (`fbd/model.ts`) — đọc
+  `parameters.variable` của node `kind: 'INPUT'|'OUTPUT'` (đúng shape golden
+  fixture `ahu_fan_enable.json`).
+- `PointPickerDialog`: đổi `<input>` thành `<select>`, danh sách lấy từ hai
+  hàm trên theo `program.language`, **lọc bỏ biến đã có Binding rồi** (tránh
+  map trùng cùng một biến hai lần — rủi ro có sẵn từ trước, không phải lỗi
+  mới). Không còn biến khả dụng thì `<select>` disable kèm thông báo giải
+  thích, nút "Ánh xạ" cũng disable.
+- Tiện thể sửa luôn phần dữ liệu tạo `Variable`: trước đây `type` lấy từ
+  `dataType` của **Point** đã chọn (sai — biến ST khai báo `REAL` có thể bị
+  ghi `type: 'BOOL'` nếu chọn nhầm Point khác kiểu, không ai biết vì không
+  validate) và `class` luôn hardcode `'LOCAL'`; nay `type`/`class` lấy đúng
+  từ khai báo thật (`INPUT`/`OUTPUT`) vì giờ đã biết chính xác biến nào được
+  chọn.
+
+Thêm `MappingTab.test.tsx` (chưa từng có test riêng cho tab này) + mở rộng
+`ProgramsTab.test.ts`/`fbd/model.test.ts` cho hai hàm parse mới.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 554/554 pass (68
+file, +7 test mới); `npm run lint` sạch; `tsc --noEmit` sạch;
+`VITE_PROGRAMMING_REV_A=1 npm run build` qua, dist mới `index-Bck7izjW.js`
+(`grep -c REVA_SCOPE_ROADMAP` = 0); deploy board Foxlinx qua `scp` + swap
+atomic (`dist.pre-mapping-select-20260814`), `systemctl is-active
+mkddc-web-pi` = `active`, public `mekong-fac.ddns.net:8082` xác nhận
+`Last-Modified` khớp giờ deploy và phục vụ đúng bundle mới.
+
 ### Added — nút xóa Program ở PGM-02, gap không nằm trong báo cáo ISO nào (2026-08-14)
 
 Bối cảnh: user hỏi trực tiếp trên board "không có nút xóa program???" sau khi

@@ -106,6 +106,28 @@ export function canonicalFbdJson(document: FbdDocument): string {
   return JSON.stringify(canonicalizeFbdDocument(document))
 }
 
+export interface FbdInterfaceVariable {
+  name: string
+  type: FbdDataType
+  direction: 'INPUT' | 'OUTPUT'
+}
+
+/** Biến biên ngoài của Program FBD — node `kind: 'INPUT'|'OUTPUT'` mang tên
+ *  qua `parameters.variable` (xem golden `ahu_fan_enable.json`). Dùng để mời
+ *  chọn thay vì bắt Mapping tab gõ tay tên biến không đối chiếu được. */
+export function collectFbdInterfaceVariables(document: FbdDocument): FbdInterfaceVariable[] {
+  const output: FbdInterfaceVariable[] = []
+  for (const network of document.networks) {
+    for (const node of network.nodes) {
+      if (node.kind !== 'INPUT' && node.kind !== 'OUTPUT') continue
+      const variable = node.parameters.variable
+      if (typeof variable !== 'string' || variable.length === 0) continue
+      output.push({ name: variable, type: node.typeRef as FbdDataType, direction: node.kind })
+    }
+  }
+  return output
+}
+
 function typeRefMatchesKind(node: FbdNode): boolean {
   if (node.kind === 'INPUT' || node.kind === 'OUTPUT' || node.kind === 'CONSTANT') return scalarTypes.has(node.typeRef)
   if (node.kind === 'FUNCTION') return pureFunctions.has(node.typeRef)
