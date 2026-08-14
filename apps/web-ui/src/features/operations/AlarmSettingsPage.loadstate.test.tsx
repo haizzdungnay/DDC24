@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
@@ -15,7 +16,15 @@ const api = vi.hoisted(() => ({
 vi.mock('../../shared/api/client', () => ({ apiClient: api }))
 
 function renderPage() {
-  return render(<I18nProvider><ToastProvider><AlarmSettingsPage /></ToastProvider></I18nProvider>)
+  return render(
+    <I18nProvider>
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/eng/alarm-settings']}>
+          <AlarmSettingsPage />
+        </MemoryRouter>
+      </ToastProvider>
+    </I18nProvider>
+  )
 }
 
 /* FE-DATA-02 (review FE 2026-08-05): `loadError` đã tồn tại nhưng chỉ hiện thành

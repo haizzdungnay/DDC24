@@ -1,6 +1,7 @@
 import { BellRing, Plus, RefreshCw, Save, SlidersHorizontal, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '../../shared/api/client'
 import { Button } from '../../shared/components/Button'
 import { Panel } from '../../shared/components/Panel'
@@ -48,6 +49,7 @@ interface ValidationIssue {
 export function AlarmSettingsPage() {
   const { t, pick } = useI18n()
   const toast = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [rows, setRows] = useState<AlarmSetting[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -55,6 +57,7 @@ export function AlarmSettingsPage() {
   const [loadError, setLoadError] = useState('')
   const [statusMessage, setStatusMessage] = useState('')
   const [virtualPoints, setVirtualPoints] = useState<VirtualPoint[]>([])
+  const deepLinkApplied = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -83,6 +86,36 @@ export function AlarmSettingsPage() {
   useEffect(() => {
     setSelectedIndex((index) => rows.length === 0 ? 0 : Math.min(index, rows.length - 1))
   }, [rows.length])
+
+  /* Deep-link từ tab "Cảnh báo & Lưu trữ" của trang Inputs (Plan 55 task 1.6):
+   * `?newSource=UI:5` tạo một alarm mới với source điền sẵn `{kind:'UI',
+   * channel:5}`; `?edit=ALM-014` chỉ chọn sẵn dòng có ID đó. Chỉ áp dụng MỘT
+   * lần khi rows đã tải xong (`deepLinkApplied`) — không lặp lại nếu rows đổi
+   * do save/reload sau đó, và không đè lên lựa chọn thủ công của người dùng. */
+  useEffect(() => {
+    if (deepLinkApplied.current || loading) return
+    const newSource = searchParams.get('newSource')
+    const editId = searchParams.get('edit')
+    if (!newSource && !editId) return
+    deepLinkApplied.current = true
+    if (newSource) {
+      const match = /^(UI|AO|DO|VP)[:-](\d+)$/i.exec(newSource)
+      if (match && rows.length < maxAlarms) {
+        const kind = normalizeSourceKind(match[1])
+        const channel = Number(match[2])
+        setRows((current) => [...current, createAlarm(current, virtualPoints, makeSource(kind, channel, virtualPoints))])
+        setSelectedIndex(rows.length)
+      }
+    } else if (editId) {
+      const index = rows.findIndex((row) => row.id === editId)
+      if (index >= 0) setSelectedIndex(index)
+    }
+    setSearchParams((params) => {
+      params.delete('newSource')
+      params.delete('edit')
+      return params
+    }, { replace: true })
+  }, [loading, rows, searchParams, setSearchParams, virtualPoints])
 
   const selected = rows[selectedIndex]
   const issues = useMemo(() => validateAlarms(rows, pick, virtualPoints), [rows, pick, virtualPoints])
@@ -564,14 +597,14 @@ function normalizeForSave(row: AlarmSetting, virtualPoints: VirtualPoint[] = [])
   return next
 }
 
-function createAlarm(rows: AlarmSetting[], virtualPoints: VirtualPoint[]): AlarmSetting {
+function createAlarm(rows: AlarmSetting[], virtualPoints: VirtualPoint[], source?: AlarmSource): AlarmSetting {
   const id = nextAlarmId(rows)
   return {
     id,
     label: `Alarm ${id.replace(/^ALM-/, '')}`,
     enabled: true,
     alarmType: 1,
-    sources: [nextSource([], virtualPoints)],
+    sources: [source ?? nextSource([], virtualPoints)],
     priority: 'medium',
     clearMode: 'auto',
     delayS: 0,

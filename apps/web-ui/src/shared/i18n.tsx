@@ -195,7 +195,15 @@ const copy = {
     outputsForceError: 'Không force được output',
     outputsSaveTitle: 'Lưu cấu hình Outputs?',
     outputsSaveBody: 'Chỉ các field wired hiện có sẽ ghi qua backend hook.',
-    outputsDemoNote: 'Demo/local'
+    outputsDemoNote: 'Demo/local',
+    tabElectrical: 'Điện & Cảm biến',
+    tabScaling: 'Scaling & Đơn vị',
+    tabSignal: 'Xử lý tín hiệu',
+    tabCalibration: 'Hiệu chuẩn',
+    tabAlarmStorage: 'Cảnh báo & Lưu trữ',
+    tabDiagnostics: 'Chẩn đoán',
+    quickSetup: 'Thiết lập nhanh',
+    registerReference: 'Xem theo thanh ghi (u0-u7)'
   },
   en: {
     overview: 'Overview',
@@ -389,7 +397,15 @@ const copy = {
     outputsForceError: 'Could not force output',
     outputsSaveTitle: 'Save Outputs config?',
     outputsSaveBody: 'Only available wired fields write through the backend hooks.',
-    outputsDemoNote: 'Demo/local'
+    outputsDemoNote: 'Demo/local',
+    tabElectrical: 'Electrical & Sensor',
+    tabScaling: 'Scaling & Units',
+    tabSignal: 'Signal Processing',
+    tabCalibration: 'Calibration',
+    tabAlarmStorage: 'Alarms & Storage',
+    tabDiagnostics: 'Diagnostics',
+    quickSetup: 'Quick Setup',
+    registerReference: 'View by register (u0-u7)'
   }
 } as const
 

@@ -1,7 +1,7 @@
-import { Activity, ChevronLeft, ChevronRight, LayoutGrid, Pencil, Save, SlidersHorizontal, Wand2 } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, LayoutGrid, Pencil, Plus, Save, Wand2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type React from 'react'
-import { apiClient } from '../../shared/api/client'
+import { useNavigate } from 'react-router-dom'
+import { apiClient, unitToIo } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
 import { Button } from '../../shared/components/Button'
 import { Modal } from '../../shared/components/Modal'
@@ -9,32 +9,36 @@ import { Panel } from '../../shared/components/Panel'
 import { PointNameConflictNotice } from '../../shared/components/PointNameConflictNotice'
 import { PointLoggingSection } from '../../shared/components/PointLoggingSection'
 import { StateBlock } from '../../shared/components/StateBlock'
+import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useToast } from '../../shared/components/Toast'
 import { TrendChart } from '../../shared/components/TrendChart'
 import { IS_DEMO } from '../../shared/config'
 import { getDemoPoints } from '../../shared/demo/simulator'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
-import { isDigitalContact, type AiInputConfig, type AiSignalType, type Point, type TrendSample } from '../../shared/types'
-import { cn, formatTime, formatValue, isVisibleUniversalInput, pointNumber, uiNode } from '../../shared/utils'
+import { isDigitalContact, type AiInputConfig, type AiSignalType, type AlarmSetting, type Point, type TrendSample } from '../../shared/types'
+import { clamp, cn, formatDataAge, formatTime, formatValue, isVisibleUniversalInput, NO_DATA, pointNumber, uiNode } from '../../shared/utils'
 
-type ViewMode = 'summary' | 'wizard' | 'advanced'
-type WizardStep = 'signal' | 'min' | 'max' | 'range' | 'unit' | 'filter' | 'cal' | 'math'
+type TabKey = 'electrical' | 'scaling' | 'signal' | 'calibration' | 'alarmStorage' | 'diagnostics'
+type ElectricalMode = 'none' | 'volt' | 'voltCurrent' | 'resistance' | 'dry' | 'potentiometer' | 'light' | 'pulse'
 type Translate = ReturnType<typeof useI18n>['t']
+type PickText = ReturnType<typeof useI18n>['pick']
 type LiveTrendSample = TrendSample & { raw: number }
 
-const signalOptions: AiSignalType[] = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-const unitOptions = [0, 1, 2, 3, 4]
+const tabOrder: TabKey[] = ['electrical', 'scaling', 'signal', 'calibration', 'alarmStorage', 'diagnostics']
+const electricalModes: ElectricalMode[] = ['none', 'volt', 'voltCurrent', 'resistance', 'dry', 'potentiometer', 'light', 'pulse']
+const sensorProfiles = ['NTC10k', 'NTC20k'] as const
 const rangeMultiplierOptions = [0, 1, 2, 3, 4, 5]
 const mathFunctionOptions = [0, 1, 2, 3]
 
 export function InputsPage() {
   const { t, pick } = useI18n()
   const toast = useToast()
+  const navigate = useNavigate()
   const [configs, setConfigs] = useState<AiInputConfig[]>([])
   const [selectedChannel, setSelectedChannel] = useState(1)
-  const [viewMode, setViewMode] = useState<ViewMode>('summary')
-  const [wizardIndex, setWizardIndex] = useState(0)
+  const [activeTab, setActiveTab] = useState<TabKey>('electrical')
+  const [wizardActive, setWizardActive] = useState(false)
   const [loading, setLoading] = useState(true)
   /* FE-DATA-02 (review FE 2026-08-05): trước đây lỗi tải chỉ đi ra toast rồi
    * biến mất, còn trang thì hiện danh sách kênh rỗng — không phân biệt được
@@ -48,6 +52,7 @@ export function InputsPage() {
   const [errorFocusPath, setErrorFocusPath] = useState<string>()
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
   const virtualPointsState = useApi(apiClient.getVirtualPoints, [], { refreshMs: 2000 })
+  const alarmsState = useApi(apiClient.getAlarmSettings, [])
   const persistedNameConflicts = useMemo(() => pointNameConflicts([
     ...(pointsState.data ?? []).map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
     ...(virtualPointsState.data ?? []).map((point) => ({ id: point.id, name: point.name ?? point.label, kind: 'virtual' }))
@@ -91,12 +96,20 @@ export function InputsPage() {
   }, [configs, errorFocusPath, tagErrors])
 
   const selected = configs.find((config) => config.channel === selectedChannel) ?? configs[0]
-  const steps = useMemo(() => wizardSteps(selected?.signalType ?? 0), [selected?.signalType])
-  const currentStep = steps[Math.min(wizardIndex, steps.length - 1)] ?? 'signal'
+  const wizardEligible = Boolean(selected && selected.signalType === 0 && !selected.enabled)
 
-  useEffect(() => {
-    setWizardIndex((index) => Math.min(index, steps.length - 1))
-  }, [steps.length])
+  // SRC-F-04: chỉ rơi về điểm demo khi đang CHẠY demo.
+  //
+  // Trước đây nhánh này chạy cả ở bản live: kênh nào không có điểm thật —
+  // vì core chết, vì kênh chưa cấu hình, vì API lỗi — sẽ mượn một điểm demo
+  // và trang hiện giá trị, đơn vị, biểu đồ xu hướng như thể đo được thật.
+  // Đó là kiểu hỏng tệ nhất cho màn hình vận hành: nó không báo lỗi, nó bịa
+  // ra một hiện thực bình thường. Cùng lớp lỗi FE-DIAG-01 (2026-08-06).
+  // Ở live, không có điểm thì `point` để undefined và các ô hiện trạng thái
+  // trống — người trực thấy ngay là chưa có dữ liệu.
+  const livePoint = selected ? findAiPoint(pointsState.data ?? [], selected.channel) : undefined
+  const demoPoint = selected && !livePoint && IS_DEMO ? findAiPoint(getDemoPoints(), selected.channel) : undefined
+  const point = livePoint ?? demoPoint
 
   function updateChannel(channel: number, patch: Partial<AiInputConfig>) {
     setConfigs((current) => current.map((config) => {
@@ -154,7 +167,7 @@ export function InputsPage() {
       toast.push('success', t('saveSuccess'))
       if (closeConfirm) {
         setConfirmOpen(false)
-        setViewMode('advanced')
+        setWizardActive(false)
       }
     } catch (error) {
       const errors = pointTagFieldErrors(error)
@@ -172,6 +185,14 @@ export function InputsPage() {
 
   function saveConfigs(nextConfigs = configs) {
     void persistConfigs(nextConfigs)
+  }
+
+  function goToAddAlarm(channel: number) {
+    navigate(`/eng/alarm-settings?newSource=UI:${channel}`)
+  }
+
+  function goToEditAlarm(id: string) {
+    navigate(`/eng/alarm-settings?edit=${encodeURIComponent(id)}`)
   }
 
   // FE-DATA-02: chỉ chặn khi KHÔNG có gì trong tay; hỏng giữa chừng vẫn giữ bảng.
@@ -210,7 +231,7 @@ export function InputsPage() {
                 type="button"
                 onClick={() => {
                   setSelectedChannel(config.channel)
-                  setWizardIndex(0)
+                  setWizardActive(false)
                 }}
                 className={cn(
                   'flex min-h-12 items-center gap-3 rounded-[var(--radius)] border px-3 py-2 text-left text-sm transition',
@@ -234,50 +255,61 @@ export function InputsPage() {
           className="min-w-0 [&>div:first-child]:flex-wrap"
           title={selected ? `${aiNode(selected.channel)} - ${selected.label}` : t('empty')}
           action={
-            <div className="flex max-w-full flex-wrap rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-1">
-              <ModeButton active={viewMode === 'summary'} icon={<Activity className="h-4 w-4" />} label={pick('Summary', 'Summary')} onClick={() => setViewMode('summary')} />
-              <ModeButton active={viewMode === 'wizard'} icon={<Wand2 className="h-4 w-4" />} label={t('wizard')} onClick={() => setViewMode('wizard')} />
-              <ModeButton active={viewMode === 'advanced'} icon={<SlidersHorizontal className="h-4 w-4" />} label={t('advanced')} onClick={() => setViewMode('advanced')} />
-            </div>
+            selected && wizardEligible && !wizardActive ? (
+              <Button icon={<Wand2 className="h-4 w-4" />} onClick={() => { setWizardActive(true); setActiveTab('electrical') }}>{t('quickSetup')}</Button>
+            ) : undefined
           }
         >
           {selected && (
             <div className="space-y-5">
-              <ChannelBasics
+              <ChannelHeader
                 config={selected}
-                rawValue={findAiPoint(pointsState.data ?? [], selected.channel)?.raw}
-                rawUnit={findAiPoint(pointsState.data ?? [], selected.channel)?.rawUnit}
+                point={point}
                 tagError={tagErrors[`ui[${configs.findIndex((config) => config.channel === selected.channel)}].tag`]}
                 nameError={tagErrors[`ui[${configs.findIndex((config) => config.channel === selected.channel)}].name`]}
                 onChange={(patch) => updateChannel(selected.channel, patch)}
               />
               <PointNameConflictNotice pointId={aiNode(selected.channel)} conflictIds={nameConflicts.get(aiNode(selected.channel))} />
-              <PointLoggingSection pointId={aiNode(selected.channel)} label={selected.label} kind="UI" />
-              {viewMode === 'summary' ? (
-                <AiSummary
+
+              {wizardActive && (
+                <WizardProgress
+                  index={tabOrder.indexOf(activeTab)}
+                  count={tabOrder.length}
+                  onPrevious={() => setActiveTab(tabOrder[Math.max(tabOrder.indexOf(activeTab) - 1, 0)])}
+                  onNext={() => setActiveTab(tabOrder[Math.min(tabOrder.indexOf(activeTab) + 1, tabOrder.length - 1)])}
+                  onFinish={requestSave}
+                  onExit={() => setWizardActive(false)}
+                />
+              )}
+
+              <TabBar activeTab={activeTab} onSelect={setActiveTab} t={t} />
+
+              {activeTab === 'electrical' && <ElectricalModeTab config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />}
+              {activeTab === 'scaling' && <ScalingTab config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />}
+              {activeTab === 'signal' && <SignalConditioningTab config={selected} configs={configs} onChange={(patch) => updateChannel(selected.channel, patch)} />}
+              {activeTab === 'calibration' && <CalibrationTab config={selected} point={point} onChange={(patch) => updateChannel(selected.channel, patch)} />}
+              {activeTab === 'alarmStorage' && (
+                <AlarmStorageTab
+                  config={selected}
+                  alarms={alarmsState.data ?? []}
+                  loading={alarmsState.loading}
+                  error={Boolean(alarmsState.error)}
+                  onAddAlarm={() => goToAddAlarm(selected.channel)}
+                  onEditAlarm={goToEditAlarm}
+                />
+              )}
+              {activeTab === 'diagnostics' && (
+                <DiagnosticsTab
                   config={selected}
                   configs={configs}
-                  points={pointsState.data ?? []}
+                  point={point}
                   onChange={(patch) => updateChannel(selected.channel, patch)}
                   onSave={(nextConfigs) => { void saveConfigs(nextConfigs) }}
                   saving={saving}
                 />
-              ) : viewMode === 'wizard' ? (
-                <WizardPanel
-                  config={selected}
-                  step={currentStep}
-                  steps={steps}
-                  stepIndex={Math.min(wizardIndex, steps.length - 1)}
-                  stepCount={steps.length}
-                  onChange={(patch) => updateChannel(selected.channel, patch)}
-                  onStepSelect={setWizardIndex}
-                  onPrevious={() => setWizardIndex((index) => Math.max(index - 1, 0))}
-                  onNext={() => setWizardIndex((index) => Math.min(index + 1, steps.length - 1))}
-                  onFinish={requestSave}
-                />
-              ) : (
-                <AdvancedPanel config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />
               )}
+
+              <RegisterReferenceDetails config={selected} />
             </div>
           )}
         </Panel>
@@ -298,8 +330,8 @@ export function InputsPage() {
         livePoints={pointsState.data ?? []}
         onEdit={(channel) => {
           setSelectedChannel(channel)
-          setWizardIndex(0)
-          setViewMode('advanced')
+          setWizardActive(false)
+          setActiveTab('electrical')
           setOverviewOpen(false)
         }}
         onClose={() => setOverviewOpen(false)}
@@ -309,7 +341,7 @@ export function InputsPage() {
 }
 
 function InputsOverviewModal({ open, configs, livePoints, onEdit, onClose }: { open: boolean; configs: AiInputConfig[]; livePoints: Point[]; onEdit: (channel: number) => void; onClose: () => void }) {
-  const { t, pick } = useI18n()
+  const { pick } = useI18n()
   return (
     <Modal open={open} size="xl" title={pick('Tổng quan UI', 'UI Overview')} onClose={onClose}>
       <div className="max-h-[70vh] overflow-auto rounded-[var(--radius)] border border-[var(--c-border)]">
@@ -336,12 +368,12 @@ function InputsOverviewModal({ open, configs, livePoints, onEdit, onClose }: { o
                     <span className="block font-semibold text-[var(--c-text)]">{aiNode(config.channel)}</span>
                     <span className="block text-xs text-[var(--c-text-dim)]">{config.label}</span>
                   </td>
-                  <td className="px-3 py-2 text-xs">{signalLabel(config.signalType, t)}</td>
+                  <td className="px-3 py-2 text-xs">{electricalSummary(config, pick)}</td>
                   <td className="px-3 py-2">
                     <span className="font-mono font-semibold">{live ? formatValue(live.value, live.unit) : '--'}</span>
                     <span className="ml-2 text-xs text-[var(--c-text-dim)]">{live?.quality ?? '--'}</span>
                   </td>
-                  <td className="px-3 py-2 text-xs">{unitLabel(config.unit, t)}</td>
+                  <td className="px-3 py-2 text-xs">{engineeringUnitLabel(config.unit, pick)}</td>
                   <td className="px-3 py-2 font-mono text-xs">{config.displayMin}–{config.displayMax}</td>
                   <td className="px-3 py-2 text-xs">
                     <span className={config.enabled ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-text-dim)]'}>{config.enabled ? 'EN' : 'OFF'}</span>
@@ -359,34 +391,384 @@ function InputsOverviewModal({ open, configs, livePoints, onEdit, onClose }: { o
   )
 }
 
-function AiSummary({
+function ChannelHeader({ config, point, tagError, nameError, onChange }: { config: AiInputConfig; point?: Point; tagError?: string; nameError?: string; onChange: (patch: Partial<AiInputConfig>) => void }) {
+  const { t, pick } = useI18n()
+  const booleanInput = isDigitalContact(config.signalType) || typeof point?.value === 'boolean'
+  const unit = point?.unit
+  const rawCell = !booleanInput && typeof point?.raw === 'number' && point?.rawUnit ? { value: point.raw, unit: point.rawUnit } : undefined
+  return (
+    <div className="space-y-3 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_140px_minmax(0,1fr)_120px]">
+        <label className="space-y-1">
+          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tag</span>
+          <input
+            aria-invalid={Boolean(tagError)}
+            aria-describedby={tagError ? `ui-${config.channel}-tag-error` : undefined}
+            className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm text-[var(--c-text-dim)]"
+            data-point-field={`ui[${config.channel - 1}].tag`}
+            value={aiNode(config.channel)}
+            readOnly
+          />
+          {tagError && <span id={`ui-${config.channel}-tag-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{tagError}</span>}
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{t('channelLabel')}</span>
+          <input className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 font-mono text-sm text-[var(--c-text-dim)]" value={config.channel} readOnly />
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Label</span>
+          <input
+            aria-invalid={Boolean(nameError)}
+            aria-describedby={nameError ? `ui-${config.channel}-name-error` : undefined}
+            className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+            data-point-field={`ui[${config.channel - 1}].name`}
+            value={config.label}
+            onChange={(event) => onChange({ label: event.target.value })}
+          />
+          {nameError && <span id={`ui-${config.channel}-name-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{nameError}</span>}
+        </label>
+        <label className="flex items-end gap-2 pb-2 text-sm font-semibold text-[var(--c-text-dim)]">
+          <input
+            className="h-4 w-4 accent-[var(--c-accent)]"
+            type="checkbox"
+            checked={config.enabled}
+            onChange={(event) => onChange({ enabled: event.target.checked })}
+          />
+          {t('enableChannel')}
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-4 border-t border-[var(--c-border)] pt-3 text-sm">
+        {point ? <StatusBadge state={point.quality} /> : <span className="text-xs font-semibold text-[var(--c-text-dim)]">{NO_DATA}</span>}
+        <span>
+          <span className="text-xs uppercase text-[var(--c-text-dim)]">{pick('Giá trị', 'Value')}: </span>
+          <span className="font-mono font-semibold text-[var(--c-text)]">{point ? formatLiveValue(point, unit, booleanInput) : NO_DATA}</span>
+        </span>
+        {rawCell && (
+          <span>
+            <span className="text-xs uppercase text-[var(--c-text-dim)]">{t('rawValue')}: </span>
+            <span className="font-mono text-[var(--c-text)]">{formatStat(rawCell.value, rawCell.unit)}</span>
+          </span>
+        )}
+        <span className="text-xs text-[var(--c-text-dim)]">{pick('Cập nhật', 'Updated')}: {updatedAgoLabel(point, pick)}</span>
+      </div>
+    </div>
+  )
+}
+
+function TabBar({ activeTab, onSelect, t }: { activeTab: TabKey; onSelect: (tab: TabKey) => void; t: Translate }) {
+  return (
+    <div className="flex flex-wrap gap-1 overflow-x-auto border-b border-[var(--c-border)]">
+      {tabOrder.map((tab) => (
+        <button
+          key={tab}
+          type="button"
+          onClick={() => onSelect(tab)}
+          className={cn(
+            'whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition',
+            activeTab === tab
+              ? 'border-[var(--c-accent)] text-[var(--c-text)]'
+              : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+          )}
+        >
+          {tabLabel(tab, t)}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function WizardProgress({ index, count, onPrevious, onNext, onFinish, onExit }: {
+  index: number
+  count: number
+  onPrevious: () => void
+  onNext: () => void
+  onFinish: () => void
+  onExit: () => void
+}) {
+  const { t, pick } = useI18n()
+  const atEnd = index === count - 1
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-surface-2)] px-3 py-2">
+      <div className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{index + 1} / {count}</div>
+      <div className="h-2 min-w-24 flex-1 rounded-full bg-[var(--c-bg)]">
+        <div className="h-2 rounded-full bg-[var(--c-accent)]" style={{ width: `${((index + 1) / count) * 100}%` }} />
+      </div>
+      <Button size="sm" icon={<ChevronLeft className="h-4 w-4" />} onClick={onPrevious} disabled={index === 0}>{t('previous')}</Button>
+      <Button size="sm" variant="primary" icon={!atEnd ? <ChevronRight className="h-4 w-4" /> : undefined} onClick={atEnd ? onFinish : onNext}>
+        {atEnd ? t('finish') : t('next')}
+      </Button>
+      <Button size="sm" onClick={onExit}>{pick('Thoát', 'Exit')}</Button>
+    </div>
+  )
+}
+
+function ElectricalModeTab({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
+  const { pick } = useI18n()
+  const mode = electricalModeOf(config.signalType)
+  const sensorProfile = sensorProfileOf(config.ioType)
+
+  function selectMode(next: ElectricalMode) {
+    const signalType = electricalModeToSignalType(next, config.signalType)
+    onChange(signalTypePatch(signalType, config.analogCurrent))
+  }
+
+  return (
+    <div className="space-y-4">
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold text-[var(--c-text)]">{pick('Electrical Mode', 'Electrical Mode')}</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {electricalModes.map((item) => (
+            <label key={item} className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-sm text-[var(--c-text)]">
+              <input
+                type="radio"
+                className="h-4 w-4 accent-[var(--c-accent)]"
+                name={`electrical-mode-${config.channel}`}
+                checked={mode === item}
+                onChange={() => selectMode(item)}
+              />
+              {electricalModeLabel(item, pick)}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      {mode === 'voltCurrent' && (
+        <label className="block max-w-xs space-y-2">
+          <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Chế độ tín hiệu', 'Signal mode')}</span>
+          <SignalModeSelect value={Boolean(config.analogCurrent)} onChange={(analogCurrent) => onChange({ analogCurrent })} />
+        </label>
+      )}
+
+      {mode === 'resistance' && (
+        <div className="space-y-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
+          <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Sensor Profile', 'Sensor Profile')}</span>
+          <div className="flex flex-wrap gap-4">
+            {sensorProfiles.map((profile) => (
+              <label key={profile} className="flex items-center gap-2 text-sm text-[var(--c-text)]">
+                <input
+                  type="radio"
+                  className="h-4 w-4 accent-[var(--c-accent)]"
+                  name={`sensor-profile-${config.channel}`}
+                  checked={sensorProfile === profile}
+                  onChange={() => onChange({ ioType: profile })}
+                />
+                {profile}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-[var(--c-text-dim)]">
+            {pick('PT100/PT1000 chưa lắp trên Rev A (ADR-010) — không chọn được ở đây.', 'PT100/PT1000 are not fitted on Rev A (ADR-010) — not selectable here.')}
+          </p>
+          {config.ioType && !sensorProfile && (
+            <p className="text-xs text-[var(--c-warn-fg)]">
+              {pick(`Giá trị hiện tại trên thiết bị: ${config.ioType} — chưa có control chọn cho biến thể này.`, `Current device value: ${config.ioType} — no control for this variant yet.`)}
+            </p>
+          )}
+        </div>
+      )}
+
+      {mode === 'dry' && (
+        <div className="space-y-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
+          <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Kiểu tiếp điểm', 'Contact kind')}</span>
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-sm text-[var(--c-text)]">
+              <input type="radio" className="h-4 w-4 accent-[var(--c-accent)]" name={`contact-kind-${config.channel}`} checked={config.signalType === 4} onChange={() => onChange({ signalType: 4 })} />
+              {pick('NO — Thường hở (Open contact direct)', 'NO — Normally open (Open contact direct)')}
+            </label>
+            <label className="flex items-center gap-2 text-sm text-[var(--c-text)]">
+              <input type="radio" className="h-4 w-4 accent-[var(--c-accent)]" name={`contact-kind-${config.channel}`} checked={config.signalType === 5} onChange={() => onChange({ signalType: 5 })} />
+              {pick('NC — Thường đóng (Open contact reversed)', 'NC — Normally closed (Open contact reversed)')}
+            </label>
+          </div>
+          <p className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
+            {pick(
+              'Đây là chế độ phụ trợ KHÔNG cách ly của một chân UI, không phải DI công nghiệp an toàn. Không dùng cho tín hiệu an toàn/interlock quan trọng.',
+              'This is a non-isolated auxiliary mode of a UI pin, not a safety-rated industrial DI. Do not use for safety/interlock signals.'
+            )}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ScalingTab({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
+  const { pick } = useI18n()
+  const [lowLabel, highLabel] = scaleEndpointLabels(config, pick)
+  const ioUnitMismatch = Boolean(config.ioUnit) && config.ioUnit !== unitToIo(config.unit)
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Dải điện/tín hiệu vào', 'Input electrical range')}</span>
+        <p className="mt-1 text-sm text-[var(--c-text)]">{rawRangeLabel(config, pick)}</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block space-y-1">
+          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{lowLabel}</span>
+          <SmallNumberInput value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{highLabel}</span>
+          <SmallNumberInput value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} />
+        </label>
+      </div>
+      <p className="text-xs text-[var(--c-text-dim)]">
+        {pick('Quy đổi tuyến tính từ dải điện/tín hiệu vào sang đơn vị kỹ thuật (raw → engineering).', 'Linear conversion from the input electrical range to engineering units (raw → engineering).')}
+      </p>
+
+      <details className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-[var(--c-text)]">{pick('Nâng cao: Hệ số dải (Range Multiplier)', 'Advanced: Range Multiplier')}</summary>
+        <div className="mt-3 max-w-xs">
+          <RangeMultiplierSelect value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} />
+        </div>
+      </details>
+
+      <div className="max-w-xs space-y-2">
+        <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Đơn vị kỹ thuật', 'Engineering unit')}</span>
+        <EngineeringUnitSelect value={config.unit} onChange={(unit) => onChange({ unit })} />
+        {ioUnitMismatch && (
+          <p className="text-xs text-[var(--c-warn-fg)]">
+            {pick(
+              `Thiết bị đang lưu unit gốc "${config.ioUnit}" — chưa có trong danh sách trên. Chọn một giá trị ở trên sẽ THAY chuỗi này; để nguyên nếu không muốn đổi.`,
+              `Device currently stores raw unit "${config.ioUnit}" — not in the list above. Picking a value above will REPLACE this string; leave it untouched if you don't want to change it.`
+            )}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SignalConditioningTab({ config, configs, onChange }: { config: AiInputConfig; configs: AiInputConfig[]; onChange: (patch: Partial<AiInputConfig>) => void }) {
+  const { pick } = useI18n()
+  const siblings = configs.filter((item) => item.channel !== config.channel && config.mathFunction !== 0 && item.mathFunction === config.mathFunction)
+  return (
+    <div className="space-y-5">
+      <div className="max-w-xs space-y-2">
+        <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Số mẫu lọc trung bình động', 'Moving-average filter samples')}</span>
+        <SmallNumberInput value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} />
+        <p className="text-xs text-[var(--c-text-dim)]">
+          {pick(
+            'Dùng chung cho cả tín hiệu số và tương tự. Chưa có debounce/thời gian tối thiểu ON-OFF riêng cho tiếp điểm.',
+            'Shared for both digital and analog signals. No separate debounce/min ON-OFF time for contacts yet.'
+          )}
+        </p>
+      </div>
+      <div className="max-w-xs space-y-2">
+        <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Hàm toán liên kênh', 'Cross-channel math function')}</span>
+        <MathFunctionSelect value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} />
+        {config.mathFunction !== 0 && (
+          <p className="text-xs text-[var(--c-text-dim)]">
+            {siblings.length > 0
+              ? pick(`Các kênh khác đang dùng cùng hàm: ${siblings.map((item) => aiNode(item.channel)).join(', ')}`, `Other channels using the same function: ${siblings.map((item) => aiNode(item.channel)).join(', ')}`)
+              : pick('Chưa có kênh nào khác dùng cùng hàm này.', 'No other channel uses this function yet.')}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CalibrationTab({ config, point, onChange }: { config: AiInputConfig; point?: Point; onChange: (patch: Partial<AiInputConfig>) => void }) {
+  const { pick } = useI18n()
+  const [standardValue, setStandardValue] = useState('')
+  const currentValue = typeof point?.value === 'number' ? point.value : undefined
+
+  function applyOffset() {
+    const standard = Number(standardValue)
+    if (!Number.isFinite(standard) || currentValue === undefined) return
+    onChange({ sensorCal: clamp(config.sensorCal + (standard - currentValue), -12.7, 12.8) })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="max-w-xs space-y-2">
+        <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Offset hiện tại', 'Current offset')}</span>
+        <SmallNumberInput value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} />
+      </div>
+
+      <div className="max-w-sm space-y-3 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
+        <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Trợ giúp tính offset', 'Offset helper')}</span>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-[var(--c-text-dim)]">{pick('Giá trị đang đọc', 'Current reading')}</span>
+          <span className="font-mono text-[var(--c-text)]">{currentValue !== undefined ? formatStat(currentValue, point?.unit) : NO_DATA}</span>
+        </div>
+        <label className="block space-y-1">
+          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Giá trị chuẩn đo được', 'Measured reference value')}</span>
+          <input className={controlClass()} type="number" step={0.1} value={standardValue} onChange={(event) => setStandardValue(event.target.value)} />
+        </label>
+        <Button size="sm" disabled={currentValue === undefined || standardValue === ''} onClick={applyOffset}>{pick('Tính offset', 'Compute offset')}</Button>
+        <p className="text-xs text-[var(--c-text-dim)]">{pick('Chỉ điền lại ô "Offset hiện tại" ở trên — bạn tự bấm Lưu.', 'Only fills the "Current offset" field above — you still need to click Save.')}</p>
+      </div>
+
+      <p className="text-xs text-[var(--c-text-dim)]">
+        {pick(
+          'Chỉ hỗ trợ hiệu chuẩn 1 điểm (offset). Chưa có gain/2-point, chưa lưu ngày/người hiệu chuẩn, chưa có nút khôi phục mặc định.',
+          'Only 1-point (offset) calibration is supported. No gain/2-point, no calibration date/user log, no factory-reset button yet.'
+        )}
+      </p>
+    </div>
+  )
+}
+
+function AlarmStorageTab({ config, alarms, loading, error, onAddAlarm, onEditAlarm }: {
+  config: AiInputConfig
+  alarms: AlarmSetting[]
+  loading: boolean
+  error: boolean
+  onAddAlarm: () => void
+  onEditAlarm: (id: string) => void
+}) {
+  const { t, pick } = useI18n()
+  const related = alarms.filter((alarm) => alarm.sources.some((source) => source.kind === 'UI' && source.channel === config.channel))
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Alarm đang giám sát kênh này', 'Alarms watching this channel')}</span>
+          <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={onAddAlarm}>{pick('Thêm alarm cho kênh này', 'Add alarm for this channel')}</Button>
+        </div>
+        {error && <p className="text-sm text-[var(--c-fault-fg)]">{pick('Không tải được danh sách alarm liên quan.', 'Could not load related alarms.')}</p>}
+        {!error && loading && <p className="text-sm text-[var(--c-text-dim)]">{t('loading')}</p>}
+        {!error && !loading && related.length === 0 && <p className="text-sm text-[var(--c-text-dim)]">{pick('Chưa có alarm nào giám sát kênh này.', 'No alarm watches this channel yet.')}</p>}
+        {related.map((alarm) => (
+          <div key={alarm.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-3 py-2 text-sm">
+            <div>
+              <span className="font-semibold text-[var(--c-text)]">{alarm.id}</span>
+              <span className="ml-2 text-[var(--c-text-dim)]">{alarm.label || alarm.id}</span>
+              <span className="ml-2 text-xs text-[var(--c-text-dim)]">{alarm.enabled ? pick('Đang bật', 'Enabled') : pick('Đang tắt', 'Disabled')}</span>
+            </div>
+            <Button size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => onEditAlarm(alarm.id)}>{pick('Sửa', 'Edit')}</Button>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-[var(--c-text)]">{pick('Lưu trữ (Historian)', 'Storage (Historian)')}</h3>
+        <PointLoggingSection pointId={aiNode(config.channel)} label={config.label} kind="UI" />
+      </div>
+    </div>
+  )
+}
+
+function DiagnosticsTab({
   config,
   configs,
-  points,
+  point,
   onChange,
   onSave,
   saving
 }: {
   config: AiInputConfig
   configs: AiInputConfig[]
-  points: Point[]
+  point?: Point
   onChange: (patch: Partial<AiInputConfig>) => void
   onSave: (nextConfigs: AiInputConfig[]) => void
   saving: boolean
 }) {
-  const { pick, t } = useI18n()
-  const livePoint = findAiPoint(points, config.channel)
-  // SRC-F-04: chỉ rơi về điểm demo khi đang CHẠY demo.
-  //
-  // Trước đây nhánh này chạy cả ở bản live: kênh nào không có điểm thật —
-  // vì core chết, vì kênh chưa cấu hình, vì API lỗi — sẽ mượn một điểm demo
-  // và trang hiện giá trị, đơn vị, biểu đồ xu hướng như thể đo được thật.
-  // Đó là kiểu hỏng tệ nhất cho màn hình vận hành: nó không báo lỗi, nó bịa
-  // ra một hiện thực bình thường. Cùng lớp lỗi FE-DIAG-01 (2026-08-06).
-  // Ở live, không có điểm thì `point` để undefined và các ô hiện trạng thái
-  // trống — người trực thấy ngay là chưa có dữ liệu.
-  const demoPoint = !livePoint && IS_DEMO ? findAiPoint(getDemoPoints(), config.channel) : undefined
-  const point = livePoint ?? demoPoint
+  const { pick } = useI18n()
   const pointId = point?.id ?? aiNode(config.channel)
   const displayPointId = aiNode(config.channel)
   const { data, reset } = useAiLiveTrend(pointId, point)
@@ -414,16 +796,23 @@ function AiSummary({
       <div className="space-y-4">
         <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Dữ liệu trực tiếp', 'Live Data')}</h3>
+            <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Thống kê tức thời', 'Live statistics')}</h3>
             <Button size="sm" onClick={() => reset()}>{pick('Đặt lại', 'Reset')}</Button>
           </div>
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <LiveDataItem label={pick('Giá trị', 'Value')} value={point ? formatLiveValue(point, unit, booleanInput) : '--'} />
-            {rawCell && <LiveDataItem label={t('rawValue')} value={formatStat(rawCell.value, rawCell.unit)} />}
-            <LiveDataItem label={pick('Nhỏ nhất', 'Minimum')} value={stats ? formatStat(stats.min, unit) : '--'} />
-            <LiveDataItem label={pick('Lớn nhất', 'Maximum')} value={stats ? formatStat(stats.max, unit) : '--'} />
-            <LiveDataItem label={pick('Trung bình', 'Average')} value={stats ? formatStat(stats.avg, unit) : '--'} />
+          <dl className="grid gap-3 sm:grid-cols-3">
+            <LiveDataItem label={pick('Nhỏ nhất', 'Minimum')} value={stats ? formatStat(stats.min, unit) : NO_DATA} />
+            <LiveDataItem label={pick('Lớn nhất', 'Maximum')} value={stats ? formatStat(stats.max, unit) : NO_DATA} />
+            <LiveDataItem label={pick('Trung bình', 'Average')} value={stats ? formatStat(stats.avg, unit) : NO_DATA} />
           </dl>
+          {point && point.quality !== 'good' && (
+            <p className="mt-3 text-xs text-[var(--c-warn-fg)]">qualityReason: {point.qualityReason ?? NO_DATA}</p>
+          )}
+          <p className="mt-3 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2 text-xs text-[var(--c-text-dim)]">
+            {pick(
+              'Bộ điều khiển hiện chỉ báo lỗi mức board (không phân biệt được kênh nào). Chẩn đoán từng kênh (đứt dây/chập dây) cần mở rộng firmware — xem Phase 3 trong plan implement.',
+              'The controller currently only reports board-level faults (cannot tell which channel). Per-channel diagnostics (open/short circuit) needs a firmware extension — see Phase 3 in the implementation plan.'
+            )}
+          </p>
         </section>
 
         <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
@@ -454,6 +843,34 @@ function AiSummary({
         </Button>
       </section>
     </div>
+  )
+}
+
+function RegisterReferenceDetails({ config }: { config: AiInputConfig }) {
+  const { t } = useI18n()
+  const rows: Array<[string, string, string]> = [
+    ['u0', t('signalTypeLabel'), config.signalType === 2 ? `${signalLabel(config.signalType, t)} / ${config.analogCurrent ? t('signalModeCurrent') : t('signalModeVolt')}` : signalLabel(config.signalType, t)],
+    ['u1', t('displayMinLabel'), String(config.displayMin)],
+    ['u2', t('displayMaxLabel'), String(config.displayMax)],
+    ['u3', t('rangeMultiplierLabel'), rangeLabel(config.rangeMultiplier, t)],
+    ['u4', t('unitsLabel'), unitLabel(config.unit, t)],
+    ['u5', t('filterSamplesLabel'), String(config.filterSamples)],
+    ['u6', t('sensorCalibrationLabel'), String(config.sensorCal)],
+    ['u7', t('mathFunctionLabel'), mathFunctionLabel(config.mathFunction, t)]
+  ]
+  return (
+    <details className="overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]">
+      <summary className="cursor-pointer bg-[var(--c-surface-2)] px-3 py-2 text-sm font-semibold text-[var(--c-text)]">{t('registerReference')}</summary>
+      <div>
+        {rows.map(([register, name, value]) => (
+          <div key={register} className="grid grid-cols-[70px_minmax(0,1fr)_minmax(120px,220px)] items-center gap-3 border-t border-[var(--c-border)] px-3 py-2 text-sm">
+            <span className="font-mono text-xs text-[var(--c-text-dim)]">{String(config.channel).padStart(2, '0')} {register}</span>
+            <span className="text-[var(--c-text)]">{name}</span>
+            <span className="font-mono text-[var(--c-text-dim)]">{value}</span>
+          </div>
+        ))}
+      </div>
+    </details>
   )
 }
 
@@ -513,245 +930,14 @@ function formatLiveValue(point: Point, unit: string | undefined, booleanInput: b
   return formatValue(point.value, unit)
 }
 
-function ChannelBasics({ config, rawValue, rawUnit, tagError, nameError, onChange }: { config: AiInputConfig; rawValue?: number; rawUnit?: string; tagError?: string; nameError?: string; onChange: (patch: Partial<AiInputConfig>) => void }) {
-  const { t } = useI18n()
-  return (
-    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_140px_minmax(0,1fr)_180px_120px]">
-      <label className="space-y-1">
-        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tag</span>
-        <input
-          aria-invalid={Boolean(tagError)}
-          aria-describedby={tagError ? `ui-${config.channel}-tag-error` : undefined}
-          className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm text-[var(--c-text-dim)]"
-          data-point-field={`ui[${config.channel - 1}].tag`}
-          value={aiNode(config.channel)}
-          readOnly
-        />
-        {tagError && <span id={`ui-${config.channel}-tag-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{tagError}</span>}
-      </label>
-      <label className="space-y-1">
-        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{t('channelLabel')}</span>
-        <input className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 font-mono text-sm text-[var(--c-text-dim)]" value={config.channel} readOnly />
-      </label>
-      <label className="space-y-1">
-        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Label</span>
-        <input
-          aria-invalid={Boolean(nameError)}
-          aria-describedby={nameError ? `ui-${config.channel}-name-error` : undefined}
-          className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
-          data-point-field={`ui[${config.channel - 1}].name`}
-          value={config.label}
-          onChange={(event) => onChange({ label: event.target.value })}
-        />
-        {nameError && <span id={`ui-${config.channel}-name-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{nameError}</span>}
-      </label>
-      <label className="flex items-end gap-2 pb-2 text-sm font-semibold text-[var(--c-text-dim)]">
-        <input
-          className="h-4 w-4 accent-[var(--c-accent)]"
-          type="checkbox"
-          checked={config.enabled}
-          onChange={(event) => onChange({ enabled: event.target.checked })}
-        />
-        {t('enableChannel')}
-      </label>
-      {typeof rawValue === 'number' && rawUnit && (
-        <div className="space-y-1">
-          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Raw</span>
-          <div className="flex h-10 items-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 font-mono text-sm text-[var(--c-text-dim)]">
-            {formatStat(rawValue, rawUnit)}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+function updatedAgoLabel(point: Point | undefined, pick: PickText): string {
+  if (!point?.updatedAt) return NO_DATA
+  const age = formatDataAge(point.updatedAt)
+  if (age === NO_DATA) return NO_DATA
+  return pick(`${age} trước`, `${age} ago`)
 }
 
-function WizardPanel({
-  config,
-  step,
-  steps,
-  stepIndex,
-  stepCount,
-  onChange,
-  onStepSelect,
-  onPrevious,
-  onNext,
-  onFinish
-}: {
-  config: AiInputConfig
-  step: WizardStep
-  steps: WizardStep[]
-  stepIndex: number
-  stepCount: number
-  onChange: (patch: Partial<AiInputConfig>) => void
-  onStepSelect: (index: number) => void
-  onPrevious: () => void
-  onNext: () => void
-  onFinish: () => void
-}) {
-  const { t } = useI18n()
-  const atEnd = stepIndex === stepCount - 1
-
-  return (
-    <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">
-          {stepIndex + 1} / {stepCount}
-        </div>
-        <div className="h-2 flex-1 rounded-full bg-[var(--c-surface-2)]">
-          <div className="h-2 rounded-full bg-[var(--c-accent)]" style={{ width: `${((stepIndex + 1) / stepCount) * 100}%` }} />
-        </div>
-      </div>
-
-      <div className="mb-4 overflow-x-auto border-b border-[var(--c-border)]">
-        <div className="flex min-w-max gap-1">
-          {steps.map((item, index) => (
-            <button
-              key={item}
-              type="button"
-              title={`${wizardStepLabel(item, t)}: ${wizardStepValue(item, config, t)}`}
-              onClick={() => onStepSelect(index)}
-              className={cn(
-                'min-w-20 border-b-2 px-3 py-2 text-left text-xs font-semibold transition',
-                index === stepIndex
-                  ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]'
-                  : 'border-transparent text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'
-              )}
-            >
-              <span className="block font-mono">{wizardStepRegister(item)}</span>
-              <span className="block max-w-28 truncate">{wizardStepLabel(item, t)}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="min-h-44">
-        {step === 'signal' && <SignalTypeField config={config} onChange={onChange} />}
-        {step === 'min' && <NumberField label={t('displayMinLabel')} value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} />}
-        {step === 'max' && <NumberField label={t('displayMaxLabel')} value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} />}
-        {step === 'range' && <RangeMultiplierField value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} />}
-        {step === 'unit' && <UnitField value={config.unit} onChange={(unit) => onChange({ unit })} />}
-        {step === 'filter' && <NumberField label={t('filterSamplesLabel')} value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} />}
-        {step === 'cal' && <NumberField label={t('sensorCalibrationLabel')} value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} />}
-        {step === 'math' && <MathFunctionField value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} />}
-      </div>
-
-      <div className="mt-5 flex justify-between gap-2">
-        <Button icon={<ChevronLeft className="h-4 w-4" />} onClick={onPrevious} disabled={stepIndex === 0}>
-          {t('previous')}
-        </Button>
-        <Button variant="primary" icon={!atEnd ? <ChevronRight className="h-4 w-4" /> : undefined} onClick={atEnd ? onFinish : onNext}>
-          {atEnd ? t('finish') : t('next')}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function AdvancedPanel({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
-  const { t } = useI18n()
-  const rows = [
-    { register: 'u0', name: t('signalTypeLabel'), wired: true, control: <SignalTypeSelect value={config.signalType} onChange={(signalType) => onChange(signalTypePatch(signalType, config.analogCurrent))} /> },
-    ...(config.signalType === 2 ? [{ register: 'u0', name: t('signalModeLabel'), wired: true, control: <AnalogSignalModeSelect value={Boolean(config.analogCurrent)} onChange={(analogCurrent) => onChange({ analogCurrent })} /> }] : []),
-    { register: 'u1', name: t('displayMinLabel'), wired: true, control: <SmallNumberInput value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} /> },
-    { register: 'u2', name: t('displayMaxLabel'), wired: true, control: <SmallNumberInput value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} /> },
-    { register: 'u3', name: t('rangeMultiplierLabel'), wired: true, control: <RangeMultiplierSelect value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /> },
-    { register: 'u4', name: t('unitsLabel'), wired: true, control: <UnitSelect value={config.unit} signalType={config.signalType} onChange={(unit) => onChange({ unit })} /> },
-    { register: 'u5', name: t('filterSamplesLabel'), wired: true, control: <SmallNumberInput value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /> },
-    { register: 'u6', name: t('sensorCalibrationLabel'), wired: true, control: <SmallNumberInput value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} /> },
-    { register: 'u7', name: t('mathFunctionLabel'), wired: true, control: <MathFunctionSelect value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} /> }
-  ]
-
-  return (
-    <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]">
-      <div className="grid grid-cols-[90px_minmax(0,1fr)_minmax(160px,240px)_82px] bg-[var(--c-surface-2)] px-3 py-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">
-        <span>{t('register')}</span>
-        <span>{t('channelLabel')}</span>
-        <span>{t('value')}</span>
-        <span>Mode</span>
-      </div>
-      {rows.map((row) => (
-        <div key={`${row.register}-${row.name}`} className="grid grid-cols-[90px_minmax(0,1fr)_minmax(160px,240px)_82px] items-center gap-3 border-t border-[var(--c-border)] px-3 py-3 text-sm">
-          <span className="font-mono text-[var(--c-text-dim)]">{String(config.channel).padStart(2, '0')} {row.register}</span>
-          <span className="font-medium text-[var(--c-text)]">{row.name}</span>
-          {row.control}
-          <ModeBadge wired={row.wired} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function SignalTypeField({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
-  const { t } = useI18n()
-  return (
-    <div className="space-y-3">
-      <FieldHeader label={t('signalTypeLabel')} wired />
-      <SignalTypeSelect value={config.signalType} onChange={(signalType) => onChange(signalTypePatch(signalType, config.analogCurrent))} />
-      {config.signalType === 2 && <AnalogSignalModeField value={Boolean(config.analogCurrent)} onChange={(analogCurrent) => onChange({ analogCurrent })} />}
-    </div>
-  )
-}
-
-function AnalogSignalModeField({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
-  const { t } = useI18n()
-  return (
-    <label className="block space-y-2">
-      <FieldHeader label={t('signalModeLabel')} wired />
-      <AnalogSignalModeSelect value={value} onChange={onChange} />
-    </label>
-  )
-}
-
-function UnitField({ value, onChange, signalType }: { value: number; onChange: (value: number) => void; signalType?: AiSignalType }) {
-  const { t } = useI18n()
-  return (
-    <div className="space-y-3">
-      <FieldHeader label={t('unitsLabel')} wired />
-      <UnitSelect value={value} signalType={signalType} onChange={onChange} />
-    </div>
-  )
-}
-
-function RangeMultiplierField({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const { t } = useI18n()
-  return (
-    <div className="space-y-3">
-      <FieldHeader label={t('rangeMultiplierLabel')} wired />
-      <RangeMultiplierSelect value={value} onChange={onChange} />
-    </div>
-  )
-}
-
-function MathFunctionField({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const { t } = useI18n()
-  return (
-    <div className="space-y-3">
-      <FieldHeader label={t('mathFunctionLabel')} wired />
-      <MathFunctionSelect value={value} onChange={onChange} />
-    </div>
-  )
-}
-
-function NumberField({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) {
-  return (
-    <label className="block space-y-2">
-      <FieldHeader label={label} wired />
-      <SmallNumberInput value={value} min={min} max={max} step={step} onChange={onChange} />
-    </label>
-  )
-}
-
-function SignalTypeSelect({ value, onChange }: { value: AiSignalType; onChange: (value: AiSignalType) => void }) {
-  const { t } = useI18n()
-  return (
-    <select className={controlClass()} value={value} onChange={(event) => onChange(Number(event.target.value) as AiSignalType)}>
-      {signalOptions.map((option) => <option key={option} value={option}>{signalLabel(option, t)}</option>)}
-    </select>
-  )
-}
-
-function AnalogSignalModeSelect({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
+function SignalModeSelect({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
   const { t } = useI18n()
   return (
     <select className={controlClass()} value={value ? 'current' : 'volt'} onChange={(event) => onChange(event.target.value === 'current')}>
@@ -761,48 +947,30 @@ function AnalogSignalModeSelect({ value, onChange }: { value: boolean; onChange:
   )
 }
 
-function UnitSelect({ value, onChange, signalType }: { value: number; onChange: (value: number) => void; signalType?: AiSignalType }) {
-  const { t } = useI18n()
-  const availableUnits = signalType === 0 ? [0] : unitOptions
+function EngineeringUnitSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const { pick } = useI18n()
   return (
     <select className={controlClass()} value={value} onChange={(event) => onChange(Number(event.target.value))}>
-      {availableUnits.map((option) => <option key={option} value={option}>{unitLabel(option, t)}</option>)}
+      {[0, 1, 2, 3, 4].map((option) => <option key={option} value={option}>{engineeringUnitLabel(option, pick)}</option>)}
     </select>
   )
 }
 
 function RangeMultiplierSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const { t } = useI18n()
+  const { pick } = useI18n()
   return (
     <select className={controlClass()} value={value} onChange={(event) => onChange(Number(event.target.value))}>
-      {rangeMultiplierOptions.map((option) => <option key={option} value={option}>{rangeLabel(option, t)}</option>)}
+      {rangeMultiplierOptions.map((option) => <option key={option} value={option}>{rangeMultiplierCleanLabel(option, pick)}</option>)}
     </select>
   )
 }
 
 function MathFunctionSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const { t } = useI18n()
+  const { pick } = useI18n()
   return (
     <select className={controlClass()} value={value} onChange={(event) => onChange(Number(event.target.value))}>
-      {mathFunctionOptions.map((option) => <option key={option} value={option}>{mathFunctionLabel(option, t)}</option>)}
+      {mathFunctionOptions.map((option) => <option key={option} value={option}>{mathFunctionCleanLabel(option, pick)}</option>)}
     </select>
-  )
-}
-
-function FieldHeader({ label, wired }: { label: string; wired?: boolean }) {
-  return (
-    <span className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]">
-      {label}
-      <ModeBadge wired={wired} />
-    </span>
-  )
-}
-
-function ModeBadge({ wired }: { wired?: boolean }) {
-  return (
-    <span className={cn('rounded-[var(--radius)] border px-2 py-0.5 text-center text-[10px] font-bold uppercase', wired ? 'border-[var(--c-good)] bg-[var(--c-good-bg)] text-[var(--c-good-fg)]' : 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]')}>
-      {wired ? 'wired' : 'demo'}
-    </span>
   )
 }
 
@@ -820,57 +988,103 @@ function SmallNumberInput({ value, min, max, step = 1, onChange }: { value: numb
   )
 }
 
-function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        'inline-flex h-8 items-center gap-2 rounded-[calc(var(--radius)-4px)] px-3 text-xs font-semibold transition',
-        active ? 'bg-[var(--c-surface-2)] text-[var(--c-text)]' : 'text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
-      )}
-      onClick={onClick}
-    >
-      {icon}
-      {label}
-    </button>
-  )
+function tabLabel(tab: TabKey, t: Translate): string {
+  if (tab === 'electrical') return t('tabElectrical')
+  if (tab === 'scaling') return t('tabScaling')
+  if (tab === 'signal') return t('tabSignal')
+  if (tab === 'calibration') return t('tabCalibration')
+  if (tab === 'alarmStorage') return t('tabAlarmStorage')
+  return t('tabDiagnostics')
 }
 
-function wizardSteps(_signalType: AiSignalType): WizardStep[] {
-  return ['signal', 'min', 'max', 'range', 'unit', 'filter', 'cal', 'math']
+function electricalModeOf(signalType: AiSignalType): ElectricalMode {
+  if (signalType === 1) return 'volt'
+  if (signalType === 2) return 'voltCurrent'
+  if (signalType === 3) return 'resistance'
+  if (signalType === 4 || signalType === 5) return 'dry'
+  if (signalType === 6) return 'potentiometer'
+  if (signalType === 7) return 'light'
+  if (signalType === 8) return 'pulse'
+  return 'none'
 }
 
-function wizardStepLabel(step: WizardStep, t: Translate): string {
-  if (step === 'signal') return t('signalTypeLabel')
-  if (step === 'min') return t('displayMinLabel')
-  if (step === 'max') return t('displayMaxLabel')
-  if (step === 'range') return t('rangeMultiplierLabel')
-  if (step === 'unit') return t('unitsLabel')
-  if (step === 'filter') return t('filterSamplesLabel')
-  if (step === 'cal') return t('sensorCalibrationLabel')
-  return t('mathFunctionLabel')
+function electricalModeToSignalType(mode: ElectricalMode, currentSignalType: AiSignalType): AiSignalType {
+  if (mode === 'volt') return 1
+  if (mode === 'voltCurrent') return 2
+  if (mode === 'resistance') return 3
+  if (mode === 'dry') return currentSignalType === 5 ? 5 : 4
+  if (mode === 'potentiometer') return 6
+  if (mode === 'light') return 7
+  if (mode === 'pulse') return 8
+  return 0
 }
 
-function wizardStepRegister(step: WizardStep): string {
-  if (step === 'signal') return 'u0'
-  if (step === 'min') return 'u1'
-  if (step === 'max') return 'u2'
-  if (step === 'range') return 'u3'
-  if (step === 'unit') return 'u4'
-  if (step === 'filter') return 'u5'
-  if (step === 'cal') return 'u6'
-  return 'u7'
+function electricalModeLabel(mode: ElectricalMode, pick: PickText): string {
+  if (mode === 'volt') return pick('Điện áp 0-10V', 'Voltage 0-10V')
+  if (mode === 'voltCurrent') return pick('Điện áp/dòng (2-10V hoặc 4-20mA)', 'Voltage/current (2-10V or 4-20mA)')
+  if (mode === 'resistance') return pick('Điện trở', 'Resistance')
+  if (mode === 'dry') return pick('Tiếp điểm khô', 'Dry contact')
+  if (mode === 'potentiometer') return pick('Biến trở', 'Potentiometer')
+  if (mode === 'light') return pick('Ánh sáng/chuyển động', 'Light/motion')
+  if (mode === 'pulse') return pick('Đếm xung', 'Pulse counting')
+  return pick('Không dùng', 'Not used')
 }
 
-function wizardStepValue(step: WizardStep, config: AiInputConfig, t: Translate): string {
-  if (step === 'signal') return config.signalType === 2 ? `${signalLabel(config.signalType, t)} / ${config.analogCurrent ? t('signalModeCurrent') : t('signalModeVolt')}` : signalLabel(config.signalType, t)
-  if (step === 'min') return String(config.displayMin)
-  if (step === 'max') return String(config.displayMax)
-  if (step === 'range') return rangeLabel(config.rangeMultiplier, t)
-  if (step === 'unit') return unitLabel(config.unit, t)
-  if (step === 'filter') return String(config.filterSamples)
-  if (step === 'cal') return String(config.sensorCal)
-  return mathFunctionLabel(config.mathFunction, t)
+function sensorProfileOf(ioType?: string): typeof sensorProfiles[number] | undefined {
+  return ioType === 'NTC10k' || ioType === 'NTC20k' ? ioType : undefined
+}
+
+function rawRangeLabel(config: AiInputConfig, pick: PickText): string {
+  if (config.signalType === 0) return pick('Không dùng', 'Not used')
+  if (config.signalType === 1) return '0 V – 10 V'
+  if (config.signalType === 2) return config.analogCurrent ? '4 mA – 20 mA' : '2 V – 10 V'
+  if (config.signalType === 3) return pick('Theo đường cong nhiệt trở (kΩ, phụ thuộc Sensor Profile)', 'Per thermistor curve (kΩ, depends on Sensor Profile)')
+  if (isDigitalContact(config.signalType)) return pick('Tiếp điểm khô (0/1)', 'Dry contact (0/1)')
+  if (config.signalType === 6) return pick('Biến trở (kΩ, tuỳ thiết bị)', 'Potentiometer (kΩ, device-dependent)')
+  if (config.signalType === 7) return pick('Ánh sáng/chuyển động (tuỳ cảm biến)', 'Light/motion (sensor-dependent)')
+  return pick('Đếm xung', 'Pulse count')
+}
+
+function scaleEndpointLabels(config: AiInputConfig, pick: PickText): [string, string] {
+  if (config.signalType === 1) return ['0 V =', '10 V =']
+  if (config.signalType === 2) return config.analogCurrent ? ['4 mA =', '20 mA ='] : ['2 V =', '10 V =']
+  return [pick('Đầu thấp =', 'Low end ='), pick('Đầu cao =', 'High end =')]
+}
+
+function electricalSummary(config: AiInputConfig, pick: PickText): string {
+  const mode = electricalModeOf(config.signalType)
+  const label = electricalModeLabel(mode, pick)
+  if (mode === 'resistance') {
+    const profile = sensorProfileOf(config.ioType)
+    return profile ? `${label} · ${profile}` : label
+  }
+  if (mode === 'dry') return `${label} · ${config.signalType === 5 ? 'NC' : 'NO'}`
+  if (mode === 'voltCurrent') return `${label} · ${config.analogCurrent ? '4-20mA' : '2-10V'}`
+  return label
+}
+
+function engineeringUnitLabel(value: number, pick: PickText): string {
+  if (value === 1) return '%'
+  if (value === 2) return '°C / °F'
+  if (value === 3) return 'Pa'
+  if (value === 4) return 'ppm'
+  return pick('Không hiển thị', 'Not shown')
+}
+
+function rangeMultiplierCleanLabel(value: number, pick: PickText): string {
+  if (value === 1) return pick('x10 (-500..2050)', 'x10 (-500..2050)')
+  if (value === 2) return pick('x100 (-5000..20500)', 'x100 (-5000..20500)')
+  if (value === 3) return pick('Căn bậc hai (-50..205)', 'Square root (-50..205)')
+  if (value === 4) return pick('Căn bậc hai x10 (-500..2050)', 'Square root x10 (-500..2050)')
+  if (value === 5) return pick('Căn bậc hai x100 (-5000..20500)', 'Square root x100 (-5000..20500)')
+  return pick('x1 (-50..205)', 'x1 (-50..205)')
+}
+
+function mathFunctionCleanLabel(value: number, pick: PickText): string {
+  if (value === 1) return pick('Trung bình (Avg)', 'Average (Avg)')
+  if (value === 2) return pick('Nhỏ nhất (Min)', 'Minimum (Min)')
+  if (value === 3) return pick('Lớn nhất (Max)', 'Maximum (Max)')
+  return pick('Không hoạt động', 'Not active')
 }
 
 function aiNode(channel: number): string {
