@@ -208,6 +208,8 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
     writer.append_uint(snapshot.captured_monotonic_ns);
     writer.append(",\"safeState\":");
     writer.append(snapshot.safe_state ? "true" : "false");
+    writer.append(",\"safeStateNoControllerOnly\":");
+    writer.append(snapshot.safe_state_no_controller_only ? "true" : "false");
     writer.append(",\"task\":");
     if (!snapshot.task.present) {
         writer.append("null");
@@ -272,13 +274,14 @@ std::string serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapsho
 RuntimePointSnapshot RuntimePointSnapshotPublisher::build(
     uint64_t snapshot_id, uint64_t observed_utc_ms, uint64_t captured_monotonic_ns,
     const PointTable& table, const IoSnapshot& io, const OutputCmd& resolved,
-    const PriorityResolver& resolver, bool safe_state_active)
+    const PriorityResolver& resolver, bool safe_state_active, bool safe_state_no_controller_only)
 {
     RuntimePointSnapshot snapshot;
     snapshot.snapshot_id = snapshot_id;
     snapshot.observed_utc_ms = observed_utc_ms;
     snapshot.captured_monotonic_ns = captured_monotonic_ns;
     snapshot.safe_state = safe_state_active;
+    snapshot.safe_state_no_controller_only = safe_state_active && safe_state_no_controller_only;
 
     for (int channel = 0; channel < KX_N_UI; ++channel) {
         RuntimePointSnapshotRow& row = snapshot.rows[static_cast<std::size_t>(channel)];

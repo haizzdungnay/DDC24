@@ -223,9 +223,17 @@ void ScanLoop::step()
     /* Physical output is realtime-critical. Publish/serialization is nonessential. */
     d_.writer->write(out);
 
+    /* Phân biệt safe-state "chưa ai điều khiển" (T7 đơn độc — Commission một
+     * Program có output tự giải quyết) khỏi safe-state do lỗi thật (T1/T2/T3/
+     * T6/T8 — Commission KHÔNG được coi là an toàn để bỏ qua). Xem
+     * safety/safe_state.hpp §5.2 và runtime_point_snapshot.hpp. */
+    const SafeState::Triggers& safe_triggers = d_.safe->triggers();
+    const bool safe_state_no_controller_only =
+        safe_triggers.no_controller && !safe_triggers.iop_fault && !safe_triggers.stale &&
+        !safe_triggers.graph_input_bad && !safe_triggers.overrun;
     RuntimePointSnapshot runtime_snapshot = snapshot_publisher_.build(
         next_snapshot_id_++, static_cast<uint64_t>(clock.utc_epoch_ms), clock.monotonic_ns, *d_.table,
-        last_io_, out, *d_.resolver, d_.safe->active());
+        last_io_, out, *d_.resolver, d_.safe->active(), safe_state_no_controller_only);
     if (d_.st_sched && !d_.st_sched->tasks().empty()) {
         const StTask& task = *d_.st_sched->tasks().front();
         RuntimeTaskSnapshot& target = runtime_snapshot.task;

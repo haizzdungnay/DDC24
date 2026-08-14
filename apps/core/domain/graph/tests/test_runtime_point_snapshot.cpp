@@ -176,6 +176,40 @@ TEST(RuntimePointSnapshot, KeepsProgramProposalSeparateFromWinningOverride)
     EXPECT_EQ(json.at("points").at(KX_N_UI).at("effectivePriority"), 2);
 }
 
+TEST(RuntimePointSnapshot, SafeStateNoControllerOnlyOnlyTrueWhenRequestedAndSafeActive)
+{
+    IoSnapshot io = make_io();
+    PointTable table;
+    table.update_inputs(io);
+    PriorityResolver resolver;
+    const OutputCmd resolved = resolver.resolve();
+    RuntimePointSnapshotPublisher publisher;
+
+    /* Không yêu cầu cờ (default) — luôn false dù safe_state đang active,
+     * giữ tương thích ngược cho mọi call site cũ (test_web_ipc.cpp và các
+     * TEST khác trong file này không truyền tham số thứ 9). */
+    const auto default_arg = publisher.build(1, 10, 100, table, io, resolved, resolver, true);
+    EXPECT_TRUE(default_arg.safe_state);
+    EXPECT_FALSE(default_arg.safe_state_no_controller_only);
+
+    /* Yêu cầu cờ nhưng safe_state không active — vẫn phải false (T7 không
+     * có ý nghĩa khi không ở safe-state). */
+    const auto not_safe = publisher.build(2, 20, 200, table, io, resolved, resolver, false, true);
+    EXPECT_FALSE(not_safe.safe_state);
+    EXPECT_FALSE(not_safe.safe_state_no_controller_only);
+
+    /* safe_state active VÀ caller xác nhận đây là "chỉ do no_controller" —
+     * đúng trường hợp scan_loop.cpp tính khi SafeState::Triggers chỉ có
+     * no_controller (Commission một Program có output sẽ tự giải quyết). */
+    const auto no_controller_only = publisher.build(3, 30, 300, table, io, resolved, resolver, true, true);
+    EXPECT_TRUE(no_controller_only.safe_state);
+    EXPECT_TRUE(no_controller_only.safe_state_no_controller_only);
+
+    const auto json = nlohmann::json::parse(serialize_runtime_point_snapshot(no_controller_only));
+    EXPECT_EQ(json.at("safeState"), true);
+    EXPECT_EQ(json.at("safeStateNoControllerOnly"), true);
+}
+
 TEST(RuntimePointSnapshot, PreservesBoundedSevenAndEightByteUnits)
 {
     IoSnapshot io = make_io();

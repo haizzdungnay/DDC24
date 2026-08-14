@@ -151,6 +151,79 @@ TEST(ScanLoop, FaultTriggersSafeOutputs)
     EXPECT_EQ(f.shm.do_cmd[0], 0) << "fault → safe ≤1 scan";
 }
 
+/* Fixture (trên) cố ý KHÔNG nối graph/resolver vào SafeState (chỉ test T1/T3
+ * độc lập, xem constructor comment ở safety/safe_state.hpp) nên T6/T7 luôn
+ * inert ở đó. Bootstrap thật (`bootstrap/main.cpp`) nối đủ ba:
+ * `SafeState safe(quality, &graph, &resolver);` — hai test dưới đây dựng lại
+ * đúng kiểu nối đó cục bộ, không đổi Fixture dùng chung để khỏi ảnh hưởng các
+ * test T1/T3 khác. */
+TEST(ScanLoop, NoControllerAloneMarksSafeStateAsCommissionRecoverable)
+{
+    kx_io_shm_t shm{};
+    shm.magic = KX_SHM_MAGIC;
+    shm.iop_status = KX_IOP_NORMAL;
+    shm.ts_ns = 1;
+    IobusReader reader;
+    reader.attach_external(&shm);
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;   /* không load — !graph.loaded() */
+    PriorityResolver resolver;   /* không set gì — !any_active_above_default() */
+    SafeState safe(quality, &graph, &resolver);
+    OutputWriter writer(reader);
+    BacnetObjTable bacnet;
+    CoreMetrics metrics;
+    ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer, &bacnet,
+                   &metrics});
+
+    /* Không set gì ở resolver, không load graph — đúng kịch bản "chương trình
+     * đang Active (nếu có) không ghi output nào": T7 (no_controller) là
+     * trigger DUY NHẤT, mọi trigger khác (fault/stale/graph_bad/overrun) đều
+     * false. Commission một Program có output phải tự giải quyết được. */
+    shm.ts_ns += 1000000;
+    loop.step();
+
+    EXPECT_TRUE(safe.active());
+    EXPECT_TRUE(safe.triggers().no_controller);
+    EXPECT_FALSE(safe.triggers().iop_fault);
+    EXPECT_FALSE(safe.triggers().stale);
+    EXPECT_TRUE(web.snapshot_for_test().safe_state);
+    EXPECT_TRUE(web.snapshot_for_test().safe_state_no_controller_only)
+        << "safe-state chỉ do chưa ai điều khiển — không phải lỗi thật";
+}
+
+TEST(ScanLoop, FaultAlongsideNoControllerIsNotCommissionRecoverable)
+{
+    kx_io_shm_t shm{};
+    shm.magic = KX_SHM_MAGIC;
+    shm.iop_status = KX_IOP_FAULT;   /* lỗi IOP thật, đi kèm no_controller */
+    shm.ts_ns = 1;
+    IobusReader reader;
+    reader.attach_external(&shm);
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;
+    PriorityResolver resolver;
+    SafeState safe(quality, &graph, &resolver);
+    OutputWriter writer(reader);
+    BacnetObjTable bacnet;
+    CoreMetrics metrics;
+    ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer, &bacnet,
+                   &metrics});
+
+    shm.ts_ns += 1000000;
+    loop.step();
+
+    EXPECT_TRUE(safe.active());
+    EXPECT_TRUE(safe.triggers().iop_fault);
+    EXPECT_TRUE(safe.triggers().no_controller);
+    EXPECT_TRUE(web.snapshot_for_test().safe_state);
+    EXPECT_FALSE(web.snapshot_for_test().safe_state_no_controller_only)
+        << "có lỗi IOP thật — không được coi là an toàn để Commission bỏ qua";
+}
+
 TEST(ScanLoop, StaleShmTriggersSafeWithin6Scans)
 {
     Fixture f;
