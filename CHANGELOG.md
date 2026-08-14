@@ -8,6 +8,58 @@
 
 ## [Unreleased]
 
+### Fixed — 3 lỗi Dashboard Programming theo báo cáo ISO Phase 2 (TR-MKDDC24-P2-20260814-02, 2026-08-14)
+
+Bối cảnh: báo cáo `TR-MKDDC24-P2-20260814-02` test lần đầu Dashboard của
+Programming (`/eng/programming`, chỉ hiện được sau fix cờ build ở mục Fixed
+bên dưới) — đúng khu vực chưa ai test được trước đó vì tính năng bị ẩn. Trước
+khi sửa, đối chiếu từng finding với source thật (đúng cách đã rút ra từ báo
+cáo Phase 1 hôm trước): phần "Phase 1 Re-check" của báo cáo này báo lại FAIL
+cho TC-L02/TC-L03/TC-L04/TC-L08 và liệt kê BUG-001..004/014 "active" — nhưng
+đọc `AuthProvider.tsx`/`LoginPage.tsx`/`features/points/*.tsx` hiện tại xác
+nhận cả bốn đã có `pick()` cho lỗi đăng nhập, guard password rỗng, nút đổi
+ngôn ngữ trên trang Login, và toàn bộ trang Inputs/Outputs đã gọi `useI18n`
+— **không phải hồi quy**, báo cáo không phản ánh đúng bản đã deploy cùng
+ngày. Ba finding còn lại (BUG-016/017/018), tất cả nằm trong
+`OverviewPage.tsx` (`ProgrammingAttentionList`) và `TopBar.tsx`, là thật, xác
+nhận bằng đọc code trực tiếp và đo Playwright:
+
+- **BUG-018 — rò tiếng Việt cứng khi có `taskId`**: `OverviewPage.tsx` dòng
+  187 nối chuỗi `` `${taskId} / outputs do Program điều khiển` `` không qua
+  `pick()`, trong khi nhánh không có `taskId` đã dịch đúng — chỉ lộ ra khi
+  runtime có `task.taskId` (đúng tình huống board thật, hiếm gặp trong test
+  trước đây vì tính năng luôn ẩn). Bọc phần văn bản qua `pick('các output do
+  Program điều khiển', 'Program-controlled outputs')`, giữ nguyên `taskId`.
+- **BUG-016 — mục "Việc cần chú ý" không bấm được**: `PRG-CORE-*`,
+  `PRG-TASK-FAULT`, `PRG-SAFE-ACTIVE` render bằng `<li>` phẳng dù chi tiết
+  (Active/LKG, Core connection, task table) đã có sẵn ở tab Runtime
+  (`RuntimeTab.tsx`). Đổi mỗi mục thành `<button>` điều hướng tới
+  `/eng/programming/runtime`, thêm dòng gợi ý "Mở Runtime để xem chi tiết →".
+  Không dựng trang chi tiết mới — tái dùng đúng đích mà nút "Mở runtime" ở
+  Card 1 đã trỏ tới.
+- **BUG-017 — badge trạng thái đè lên đồng hồ ở 768–1024px**: đo bằng
+  Playwright (`getBoundingClientRect` từng phần tử `<header>`) thay vì đoán —
+  phát hiện khối trái (`SYSTEM/DEMO/FAULT`) trong `TopBar.tsx` có `min-w-0`
+  nên box cha co lại (67px ở 768px) trong khi các badge con vẫn tràn ra ngoài
+  tới 332px, đúng lúc khối phải (đồng hồ, tên/role, ở `md:block` — hiện từ
+  768px) bắt đầu tại x=104 và vẽ đè lên. Nguyên nhân gốc: quá nhiều phần tử
+  cùng hiện ở `md:` (768px) — tổng bề rộng cần (~973px) vượt bề rộng header
+  thật (~766–790px). Đẩy khối đồng hồ/ngày và tên/role — thông tin phụ, đã có
+  ở nơi khác — từ `md:block` sang `xl:block`; đo lại xác nhận khoảng cách
+  16px sạch giữa hai khối ở cả 768px và 1024px, không còn chồng lấn.
+
+Thêm `apps/web-ui/src/features/programming/overview/OverviewPage.test.tsx`
+(chưa từng có file test riêng cho trang này — lỗ hổng coverage khiến BUG-016/
+018 lọt qua) kiểm cả hai regression: scope không rò tiếng Việt ở chế độ EN,
+và bấm mục cảnh báo điều hướng đúng sang Runtime.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 545/545 pass (67
+file, +2 test mới); `npm run lint` sạch; `VITE_PROGRAMMING_REV_A=1 npm run
+build` qua, dist mới `index-Yi22MKmM.js` (`grep -c REVA_SCOPE_ROADMAP` = 0,
+`grep -c "outputs do Program điều khiển"` = 0); deploy board Foxlinx qua
+`scp` + swap atomic, `systemctl is-active mkddc-web-pi` = `active`, public
+`mekong-fac.ddns.net:8082` phục vụ đúng bundle mới.
+
 ### Fixed — trang Programming trên board Foxlinx bị tắt ngoài ý muốn (2026-08-14)
 
 Triệu chứng: user báo `http://mekong-fac.ddns.net:8082/eng/programming` hiện

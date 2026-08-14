@@ -176,6 +176,7 @@ function DraftAttentionPanel({ projects }: { projects: ReturnType<typeof useProg
 
 function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | null }) {
   const { pick } = useI18n()
+  const navigate = useNavigate()
   const items: Array<{ code: string; severity: 'error' | 'warning'; text: string; scope: string; action: string }> = []
   if (runtime?.producerState === 'UNAVAILABLE') items.push({ code: 'PRG-CORE-UNAVAILABLE', severity: 'error', text: pick('Không kết nối được Core.', 'Core is unreachable.'), scope: 'Core', action: pick('Kiểm tra service/Core và kết nối IPC.', 'Check the service/Core and IPC connection.') })
   else if (runtime?.producerState === 'DEGRADED') items.push({ code: 'PRG-CORE-DEGRADED', severity: 'warning', text: pick('Core đang suy giảm; dữ liệu có thể cũ.', 'Core is degraded; data may be stale.'), scope: 'Core', action: pick('Chỉ chẩn đoán; mọi mutation runtime đang bị khóa.', 'Diagnose only; runtime mutations are locked.') })
@@ -184,7 +185,9 @@ function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | n
     code: 'PRG-SAFE-ACTIVE',
     severity: 'error',
     text: pick('Safe-state đang tác động; Core chưa cung cấp mã nguyên nhân chi tiết.', 'Safe-state is active; Core did not provide a detailed reason code.'),
-    scope: runtime.task?.taskId ? `${runtime.task.taskId} / outputs do Program điều khiển` : pick('Các output do Program điều khiển (chưa có danh sách Point)', 'Program-controlled outputs (Point list unavailable)'),
+    scope: runtime.task?.taskId
+      ? `${runtime.task.taskId} / ${pick('các output do Program điều khiển', 'Program-controlled outputs')}`
+      : pick('Các output do Program điều khiển (chưa có danh sách Point)', 'Program-controlled outputs (Point list unavailable)'),
     action: pick('Giữ Commission/Restore bị khóa; kiểm tra Core, I/O và alarm trước khi phục hồi.', 'Keep Commission/Restore locked; inspect Core, I/O, and alarms before recovery.')
   })
 
@@ -194,13 +197,27 @@ function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | n
         <p className="text-sm text-[var(--c-text-dim)]">{pick('Không có việc cần chú ý.', 'Nothing needs attention.')}</p>
       ) : (
         <ul className="space-y-2">
+          {/* BUG-016 (TR-MKDDC24-P2-20260814-02 / TC-D08): trước đây mỗi mục là
+              `<li>` phẳng, không click/điều hướng được — người dùng thấy
+              `PRG-SAFE-ACTIVE` nhưng không có lối vào chi tiết. Chi tiết
+              (Active/LKG, safe-state, Core connection, task table) đã có sẵn ở
+              tab Runtime (`RuntimeTab.tsx`) cho cả ba mã `PRG-CORE-*`,
+              `PRG-TASK-FAULT` và `PRG-SAFE-ACTIVE`, nên điều hướng thẳng tới
+              đó thay vì dựng lại một trang chi tiết mới. */}
           {items.map((item) => (
-            <li key={item.code} className="flex items-start gap-2 rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-sm">
-              <AlertTriangle className={item.severity === 'error' ? 'mt-0.5 h-4 w-4 shrink-0 text-[var(--c-fault-fg)]' : 'mt-0.5 h-4 w-4 shrink-0 text-[var(--c-warn-fg)]'} aria-hidden="true" />
-              <span>
-                <strong className="font-mono text-xs">{item.code}</strong> — {item.text}
-                <span className="mt-1 block text-xs text-[var(--c-text-dim)]">{pick('Phạm vi', 'Scope')}: {item.scope} · {pick('Hành động', 'Action')}: {item.action}</span>
-              </span>
+            <li key={item.code}>
+              <button
+                type="button"
+                onClick={() => navigate('/eng/programming/runtime')}
+                className="flex w-full items-start gap-2 rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-left text-sm hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--c-accent)]"
+              >
+                <AlertTriangle className={item.severity === 'error' ? 'mt-0.5 h-4 w-4 shrink-0 text-[var(--c-fault-fg)]' : 'mt-0.5 h-4 w-4 shrink-0 text-[var(--c-warn-fg)]'} aria-hidden="true" />
+                <span>
+                  <strong className="font-mono text-xs">{item.code}</strong> — {item.text}
+                  <span className="mt-1 block text-xs text-[var(--c-text-dim)]">{pick('Phạm vi', 'Scope')}: {item.scope} · {pick('Hành động', 'Action')}: {item.action}</span>
+                  <span className="mt-1 block text-xs font-semibold text-[var(--c-accent)]">{pick('Mở Runtime để xem chi tiết →', 'Open Runtime for details →')}</span>
+                </span>
+              </button>
             </li>
           ))}
         </ul>
