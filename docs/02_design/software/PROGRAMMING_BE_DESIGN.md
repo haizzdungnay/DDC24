@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-BE-PROG-001` |
-| Phiên bản | 1.4 |
-| Trạng thái | **M3 AS-BUILT + SUPPORTING TARGET PASS** — backend/compiler/Core chạy end-to-end trên Foxlinx; assurance release đánh giá riêng |
+| Phiên bản | 1.6 |
+| Trạng thái | **M3 AS-BUILT + CORRECTIVE VERIFIED** — Monitor/Trace 509 đã implement, qua host/target supporting evidence; source chưa merge |
 | Ngày | 2026-08-13 |
 | Chủ quản | Backend Lead |
 | Người review | Core Lead, Security Lead, Verification Lead, Operations Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **backend Go tổ chức ra sao**: chia package, lưu trữ, chạy compiler job, điều phối Commission, phân quyền, audit và migration. Đây là nơi biến hợp đồng API thành code chạy được. |
 | 2. Ai phải đọc file này? | BE Lead và lập trình viên Go (chủ quản); Core đọc §4 (điều phối Commission) và §6 (read model); Security đọc §7; Ops đọc §9; QA đọc §10 và §17. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-403/507` nối Commission/Restore/Get operation vào bounded module: SQLite v5, durable operation trước IPC, idempotency/single-flight/lease, verified staging, timeout `UNKNOWN`, authoritative Core read-back và terminal CommissionRecord + audit atomic. Foxlinx đang chạy compiler/Core/Web ARM64, cờ `ON`; Check và Commission output-free đã thành công. |
+| 3. Hệ thống hiện tại đang có gì? | Lifecycle Task 507 đã chạy trên Foxlinx. Task 509 thêm `ProgrammingMonitorService`, `TraceService` và bốn handler runtime/trace thật, thay 503 contract-only; mapping bảo vệ namespace LOCAL và chuẩn hóa quality. `EV-PROG-P5-510` xác nhận target Monitor `200`, Task/readiness và Trace validation; source chưa merge. |
 | 4. Thiết kế mới thay đổi điều gì? | Bounded module giữ các lớp `domain`, `store`, `application`, `compiler`, `artifact`, `coreipc`, `transport`; operation worker chạy ngoài transaction và không replay mutation mù. Core authoritative read-back quyết định terminal state; DB/HTTP ack không tự biến thành Active. |
-| 5. Team phải sửa module/contract nào? | §11–§12 ghi As-Built SQLite v5, `application.OperationService`, `artifact.Store.Stage`, runtime IPC và route P4. P5/P6 dùng contract này; không phá idempotency key, operation ID, impact acknowledgement hay source-of-truth active/LKG. |
-| 6. Điều gì còn bị chặn? | Không còn blocker source hoặc deploy P5. Fault/power/HIL, TLS assurance và Test Result có reviewer độc lập vẫn là gate release P6; chúng không yêu cầu tắt chức năng đã deploy. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Go tests PASS cho normal/replay/no-extra-staging, timeout/restart, staged recovery, Restore, terminal CommissionRecord và symlink/race cleanup; fresh CTest/Go gates PASS. `EV-PROG-P5-507` chứng minh target Check `PASSED`, Commission `SUCCEEDED/COMMITTED` và Core read-back; chưa thay Test Result độc lập/HIL. |
+| 5. Team phải sửa module/contract nào? | `application/{monitor,trace,runtime}.go`, `transport/http/runtime.go`, app Core adapter/DTO/wiring và OpenAPI v1.20.0; lifecycle/operation cũ giữ nguyên. |
+| 6. Điều gì còn bị chặn? | Source corrective chưa merge; positive Monitor/Trace có Variable Binding target, fault/power/HIL, TLS và Test Result độc lập vẫn là P6/release. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host test khóa monitor mapping, local/external identity, lowercase quality, trace idempotency/quota/retention/stop/source-failure. `EV-PROG-P5-510` ghi full Go gate và target deploy/API/rollback; Monitor empty đúng fixture không binding, positive Trace target còn mở. |
 
 Hai điều BE **không** được làm: tin vai trò do FE gửi trong payload, và báo
 thành công khi Core chưa xác nhận. Cả hai đều là rủi ro đã có tên —
@@ -165,8 +165,19 @@ identity join nhưng không ghi đè core fields. Mỗi field giữ `source/obse
 Core unreachable trả last observed data với `STALE/UNAVAILABLE`, không 500 toàn
 page nếu Project/Draft vẫn đọc được.
 
-Monitor/trace có backpressure, pagination/chunk và quota. WS/SSE event gap buộc
-client refetch. BE không giữ buffer vô hạn hoặc lịch sử ẩn ngoài retention policy.
+As-Built Task 509: `ProgrammingMonitorService` đọc Core point snapshot trước,
+join Variable/Binding của Revision active và chỉ overlay Point catalog lên point
+không LOCAL. LOCAL luôn giữ end-scan actual/winner/priority từ Core; point ngoài
+LOCAL giữ timestamp/quality của producer. Quality được trim/uppercase rồi map
+vào enum; unknown không thành GOOD.
+
+`TraceService` lấy mẫu cùng MonitorService, không ghi output: 1..32 variable,
+1 giây..10 phút, sample 100 ms..30 giây, tối đa 4 session đồng thời, 10.000 ô
+giá trị/session và 32 session terminal. Create giữ idempotency key+request hash;
+start/finish có audit; stop đồng bộ. Session nằm trong RAM, mất khi Web restart;
+source unavailable kết thúc `FAILED/SOURCE_UNAVAILABLE`. HTTP trace này không
+được quảng cáo là Core ring trace. WS/SSE chưa phải transport của P5; FE poll
+REST và refetch snapshot.
 
 ## 7. RBAC, audit và security
 
@@ -425,6 +436,8 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 |---|---|---|
 | Target fault/power/restart chưa thành Test Result | Backend Lead + Ops + Verification | chạy fault/power matrix P6 với executor/reviewer độc lập; happy path đã có `EV-PROG-P5-507` |
 | TLS/HIL assurance chưa hoàn tất | Platform + Verification | integration/security/HIL PASS và Test Result được review |
+| Corrective source chưa commit/merge | Backend Lead + Dev Lead | commit/PR/merge thật, chạy lại gate và candidate pin trước khi đổi trục `I` |
+| Positive Monitor/Trace target có Variable Binding | Backend Lead + Core + QA | fixture read-only an toàn có binding; đối chiếu row truth và start/get/stop, lưu raw output |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
@@ -442,6 +455,8 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 | 1.2 | 2026-08-13 | Đồng bộ `TASK-PROG-403` tại `c2f3189`: SQLite v5 operation/lease/generation, `OperationService` Commission/Restore/Get/worker/recovery, exact impact ack, verified hard-link staging + safe cleanup, timeout UNKNOWN/status-only reconcile và terminal CommissionRecord+audit atomic. Giữ flag OFF, TLS/target/HIL/Test Result còn mở. |
 | 1.3 | 2026-08-13 | `TASK-PROG-507` tại `d9a8e3b`: bổ sung `ProjectView.BaseRevisionID` và JSON `ProgrammingProject.baseRevisionId`; `projectView()` trả Draft ID trước seal, Revision nền sau seal. HTTP integration test khóa read-back sau seal, sửa conflict giả của Check/save lần hai. Foxlinx xác nhận `201/202`; compiler/Core Programming target vẫn thiếu và flag cuối OFF. |
 | 1.4 | 2026-08-13 | Hoàn tất target `TASK-PROG-507` tại `0f1526c`: Web normalize nil IO/safe-state slice thành `[]`, Core tương thích `null` legacy chỉ về default an toàn và vẫn reject type sai; deploy compiler/Core/Web ARM64, cờ `ON`, UDS `0660`; hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Active/LKG/Task đọc-ngược đúng. Supporting target evidence không thay Test Result/HIL. |
+| 1.5 | 2026-08-13 | `TASK-PROG-509`: nối Monitor/Trace source thật. `ProgrammingMonitorService` join Revision binding với Core/Point truth và bảo vệ namespace LOCAL; `TraceService` bounded/idempotent/audited/in-memory; runtime trả controller/task metric; HTTP routes/OpenAPI v1.20.0/FE client đồng bộ. Host Go tests PASS; target bản mới NOT_RUN do SSH. |
+| 1.6 | 2026-08-13 | `EV-PROG-P5-510`: full Go gate PASS; ARM64 Web deploy/hash/health/rollback rehearsal PASS; target Runtime/Task và Monitor `200` read-back đúng, Trace invalid selector `400`. Fixture active không binding nên chưa có positive row/Trace target; source chưa merge và không nâng Test Result. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -464,8 +479,10 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §11, §12 và §12.1–12.3 — package, function và 11 HTTP operation cụ thể trong `apps/web-api/internal/programming/` |
 | `DD-11` Verification | PASS | §10 test bắt buộc; §17 acceptance; gắn `VS-PROG-001/019/022/024` |
 | `DD-12` Compatibility/deploy/rollback | PASS | §9 migration và rollback, gồm thứ tự triển khai |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation/deploy P5 | 17 decision `DECIDED`; source tới Task 507 có trace và supporting target evidence. Release vẫn bị chặn bởi HIL/fault/power, `0/32` Test Result và residual risk chưa được chấp nhận |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; merge/release BLOCKED | 17 decision `DECIDED`; Task 509 có host/target supporting evidence. Source chưa merge; positive binding target, HIL/fault/power, `0/32` Test Result và residual risk vẫn mở. |
 
-Không còn blocker implementation/deploy P5. Contract/store/compiler/Check/
-Commission/Core UDS đã chạy trên Foxlinx. Các bài fault/power/HIL và review độc
-lập còn `NOT TESTED` theo phạm vi assurance P6; không phải thiếu backend.
+Không còn blocker deploy/read-back cho Monitor/Trace corrective: target evidence
+được ghi riêng ở `EV-PROG-P5-510`. Do fixture active không có Variable Binding,
+positive row/start-get-stop Trace target vẫn chưa chạy và không được suy diễn từ
+host test. Source chưa merge; fault/power/HIL và review độc lập vẫn `NOT TESTED`
+theo P6.

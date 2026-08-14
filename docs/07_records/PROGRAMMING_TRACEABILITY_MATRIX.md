@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.18 |
+| Phiên bản | 3.21 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
 | Cập nhật | 2026-08-13 |
 | Chủ quản | Verification Lead |
@@ -16,10 +16,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế/nơi sửa/kịch bản. `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6` hoàn tất source Commission/Restore atomic, durable operation/reconcile, exclusive safe-boundary owner và first-output/LKG rollback. Tổng **7/60** `I=Y`; hai record `BLOCKED`, 30 scenario `NOT_RUN`, **0/32 PASS**; mọi `T/P/R=N`. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có design/source target/scenario. Baseline merged có 22/60 `I=Y`. Corrective 508..510 đã qua full host gate và supporting target/browser evidence `EV-PROG-P5-510`; vòng live HTTP cuối bổ sung auth deep-link, ST save/restore, export/import fault, safe-state/RETAIN fail-closed và responsive/a11y. Source corrective **chưa merge**, nên theo §8 chưa được đổi `I`. Hai record `BLOCKED`, 30 scenario `NOT_RUN`, 0/32 PASS; mọi `T/P/R=N`. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
-| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `SYS-103`, `SYS-105`, `BE-106`, `BE-110`, `CORE-101`, `CORE-106`, `CORE-109 I=Y`; 53 dòng `I=N`. Toàn bộ `T/P/R` còn `N` tới khi workflow E2E/target/HIL đủ acceptance và reviewer độc lập ký. |
+| 6. Điều gì còn bị chặn? | Không còn approval hoặc SSH/deploy blocker. Corrective source cần merge để nâng thêm ba trục `I`; positive Monitor/Trace có Variable Binding target, reviewer accessibility độc lập, usability và HIL vẫn mở. Toàn bộ `T/P/R` còn `N` tới khi Test Result đủ acceptance và reviewer độc lập ký. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với bản thân ma trận: 60/60 dòng giải được về ID canonical, không trùng ID, không có dòng vi phạm `P=Y khi T=N` hay `R=Y khi P=N` — kiểm bằng harness ở [`PROG-REV-2026-08-09`](reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §2. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
@@ -130,20 +130,20 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `SYS-106` | SEC; BE; IFSPEC; RSK-012/015 | `66848a1` + `e8c289e` + `95b9388`: 11 route enforce role; `3e5281d`: duplicate/unknown fail-closed, 23 alias audit-secret reject và bundle audit no-source; full route matrix/re-auth/TLS target còn thiếu | 022/023 | Y/N/N/N/N |
 | `SYS-107` | SEC; BE; OPS; RSK-011 | `95b9388`: source-only ZIP/import Draft-only; `3e5281d`: hostile corpus 25 lớp, path NFC/metadata/bounds và snapshot 8 bảng zero-mutation; UI replacement/target/independent evidence còn thiếu | 021/023 | Y/N/N/N/N |
 | `SYS-108` | UX; FE; HMI boundary | Web routes + HMI route inspection | 028 | Y/N/N/N/N |
-| `FE-101` | UX; FE | `ccdc408`+`14a9299`: `ProgrammingRoutes.tsx` 4 route thật + 3 redirect (`LegacyTabRedirect`); `layout/{ProgrammingLayout,ProgrammingHeader,ProgrammingContextBar}.tsx`; Chrome/Playwright `VS-PROG-032` desktop+mobile PASS | 002/028/032 | Y/Y/N/N/N |
+| `FE-101` | UX; FE | baseline route/redirect đã merge; corrective 508 trong cây làm việc bổ sung context Controller/Project/Draft dirty/Check/Active/Core và Project fallback qua reload; audit `REV-PROG-FE-UX-2026-08-13` | 002/028/032 | Y/Y/N/N/N |
 | `FE-102` | UX; FE; LIFE; RSK-007 | `e58c745`+`ccdc408`: `RuntimeService.GetRuntime` (Go, không fabricate `producerState`/`safeState`) + `overview/OverviewPage.tsx` đọc Active/Draft/Core thật | 002/004/008/026 | Y/Y/N/N/N |
-| `FE-103` | LANG; UX; FE | `5f96d43`: `design/editor/ProgramsTab.tsx` (SourceEditor ST) + `shared/ProblemsDrawer.tsx` | 003/006 | Y/Y/N/N/N |
+| `FE-103` | LANG; UX; FE | baseline `ProgramsTab`+`ProblemsDrawer`; corrective 508 thêm gutter line, line/column, Ctrl+F/Ctrl+S, format, symbol/type/reference và diagnostic range | 003/006 | Y/Y/N/N/N |
 | `FE-104` | LANG; UX; FE | `52dfb57`: FBD model/validator/reducer (Task 201); `5f96d43`: mount thật vào `ProgramsTab` (không còn placeholder); `14a9299`: sửa mất focus bàn phím sau `DELETE_SELECTION`, Chrome/Playwright keyboard-only (Insert/Arrow/Enter/Delete/Ctrl+Z) PASS desktop+mobile | 005/006/028 | Y/Y/N/N/N |
 | `FE-105` | CTRL; FE; IFSPEC; RSK-010 | `628cebe`: BE `GET /point-catalog` join `App.ReadPoints`; `5f96d43`: `design/mapping/MappingTab.tsx` + `PointPickerDialog` | 017/018 | Y/Y/N/N/N |
-| `FE-106` | CTRL; FE | `5f96d43`: `design/task/ExecutionTab.tsx` (period 1000/5000/30000 ms, program order) | 009 | Y/Y/N/N/N |
-| `FE-107` | LIFE; UX; FE; RSK-007 | `0347efd`+`ca3e198`+`6069de6`+`d9a8e3b`+`0f1526c`: `useCheckWorkflow` gửi public profile, dùng `baseRevisionId`; `useCommissionWorkflow` timeout đi `UNKNOWN_RECONCILING`, không auto-replay. Foxlinx có hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED` và Core read-back (`EV-PROG-P5-507`) | 011/019/024/026 | Y/Y/N/N/N |
+| `FE-106` | CTRL; FE | baseline `ExecutionTab` period/order; corrective 508 sửa false-dirty khi save Program cập nhật Task trong tab luôn mount, đồng thời giữ local edit nếu có | 009 | Y/Y/N/N/N |
+| `FE-107` | LIFE; UX; FE; RSK-007 | baseline Check/Commission target ở `EV-PROG-P5-507`; corrective 508 thêm deep-link `revisionId/checkId` và readiness fail-closed theo impact/override/Core/safe-state. `EV-PROG-P5-510` xác nhận deep-link và safe-state chặn đúng trên target | 011/019/024/026 | Y/Y/N/N/N |
 | `FE-108` | CTRL; UX; FE; RSK-004 | `0347efd`+`771efd9`: BE `GET /overrides` join `OverrideRegistry.Snapshot` + `runtime/RuntimeTab.tsx` | 010/020 | Y/Y/N/N/N |
-| `FE-109` | IFSPEC; FE; BE; RSK-010 | `771efd9`: `runtime/WatchTab.tsx` đọc `runtime/monitor` qua REST polling (P5 không dùng kênh event/WS riêng — As-Built khác giả định ban đầu); 503 thật fail-closed khi backend chưa implement, không fabricate freshness | 018/026/027 | Y/Y/N/N/N |
+| `FE-109` | IFSPEC; FE; BE; RSK-010 | corrective 509 nối Monitor/Trace thật, tách program/actual/owner/priority/TTL/quality/freshness và start/get/stop bounded; `EV-PROG-P5-510` target Monitor `200`/empty đúng fixture không binding, Trace invalid `400`; positive row/Trace target còn mở | 018/026/027 | Y/Y/N/N/N |
 | `FE-110` | IFSPEC; FE; BE; RSK-008/014 | `4a1e9f5`: generated error catalog/client; `5f96d43`: `useDraftWorkspace` với `If-Match`, 409 giữ nguyên buffer đang gõ (Draft reducer/conflict flow nay đã có) | 024 | Y/Y/N/N/N |
-| `FE-111` | UX; FE | Toàn bộ P5 dùng `pick()` VI/EN tại chỗ (không namespace file riêng); Chrome/Playwright desktop+mobile xác nhận copy tiếng Việt hiển thị đúng — chưa có contrast/axe scan độc lập | 025/028 | Y/Y/N/N/N |
+| `FE-111` | UX; FE | Toàn bộ P5 dùng `pick()` VI/EN; Chrome/Playwright desktop+mobile xác nhận copy và responsive; `EV-PROG-P5-510` axe WCAG A/AA bốn workspace × hai viewport 8/8 scan, 0 violation; reviewer/Test Result độc lập còn thiếu | 025/028 | Y/Y/N/N/N |
 | `FE-112` | UX; FE | `5f96d43`: `ProblemsDrawer` dùng `programmingErrorCopy(pick, code)`, không hiển thị `messageKey` thô | 019/028 | Y/Y/N/N/N |
 | `FE-113` | UX §5 PGM-03; FE; LIFE; RSK-007 | `ca3e198`+`1961006`: `AcknowledgementChecklist` khớp đúng ba nhóm impact `PRESENT`; nhóm `retain` PRESENT dùng đúng câu UC-PROG-13 (sửa finding thật khi soát S5-E) | 011/019/031 | Y/Y/N/N/N |
-| `FE-114` | UX §5 PGM-04, §22 DangerZone; SEC; RSK-012 | `771efd9`: `runtime/DangerZone.tsx` (Restore/BundleImport/RetainReset) trong `RuntimeServicePage.tsx`, tách riêng khỏi Runtime/Watch; `RequireRole` chặn viewer | 022/031 | Y/Y/N/N/N |
+| `FE-114` | UX §5 PGM-04, §22 DangerZone; SEC; RSK-012 | baseline DangerZone + role; corrective 508 sửa render chỉ trong tab Phiên bản & Bảo trì, không nằm dưới Runtime/Watch | 022/031 | Y/Y/N/N/N |
 | `FE-115` | UX §5 PGM-02, §16.2; DM; IFSPEC | `628cebe`+`5f96d43`: `PointPickerDialog` lọc category/direction/writable + BE `GET /point-catalog` | 017/031 | Y/Y/N/N/N |
 | `BE-101` | DM; BE | `66848a1` + `e8c289e` + `95b9388`: lifecycle SQLite v4, Project/Draft/Revision/Check/Artifact/change/bundle và restart host; `TR-PROG-001-20260811-001 BLOCKED`: target/E2E độc lập còn thiếu | 001/019 | Y/N/N/N/N |
 | `BE-102` | DM; IFSPEC; BE; RSK-008 | `66848a1`: Draft ETag/CAS; `e8c289e`: Check receipt/lease; `95b9388`: bundle export/import receipt 24 giờ/replay/conflict; Core operation reconcile còn thiếu | 024 | Y/N/N/N/N |
@@ -153,7 +153,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `BE-106` | LIFE; IFSPEC; BE; RSK-007/008 | `c2f3189`: SQLite v5 operation/lease/generation, Commission/Restore worker, verified staging, timeout UNKNOWN, status-only reconcile và terminal CommissionRecord+audit atomic | 004/011/024 | Y/Y/N/N/N |
 | `BE-107` | SEC; BE; RSK-012 | `66848a1..95b9388`: authz handler+service/audit; `3e5281d`: 23 alias secret reject trước append và bundle audit no-source; full role/revocation/re-auth/CSRF/TLS matrix còn thiếu | 022 | Y/N/N/N/N |
 | `BE-108` | SEC; BE; RSK-011 | `95b9388`: ZIP source-only/import atomic; `3e5281d`: hostile corpus 25 lớp, raw/entry/count/path NFC/mode/flags/comment/timestamp/extra bounds, 8-table zero-mutation và fuzz; target/independent evidence còn thiếu | 021/023 | Y/N/N/N/N |
-| `BE-109` | CTRL; IFSPEC; BE; RSK-010 | runtime read model/events | 018/020/026 | Y/N/N/N/N |
+| `BE-109` | CTRL; IFSPEC; BE; RSK-010 | Task 509 trong cây làm việc: `application/monitor.go`, `trace.go`, runtime HTTP + app Core/Point adapter; full host gate PASS và `EV-PROG-P5-510` target Monitor `200`; chờ merge mới đổi `I`, positive binding target còn mở | 018/020/026 | Y/N/N/N/N |
 | `BE-110` | IFSPEC; BE; RSK-014 | OpenAPI/handler/generated TS + IPC nền; `4a1e9f5`: catalog; `95b9388`: OpenAPI v1.19, 11 handler, source bundle schema và G1 7/7 đồng bộ | 019/024 | Y/Y/N/N/N |
 | `CORE-101` | LANG; ART; SEC; RSK-006 | profile/serializer/loader + ST/FBD/common IR/manifest; `e8c289e`: worker verify artifact/manifest/hash và content-address read-back. Core requirement đã I=Y từ foundation; target evidence còn mở | 005/006/023 | Y/Y/N/N/N |
 | `CORE-102` | CTRL; FWSOM; RSK-002 | `a831a0d`: ScanLoop gọi `on_base_step()`, profile 1/1/1 và Task 30 s dispatch riêng; coherent process image/stage/atomic commit và production bootstrap còn thiếu | 009/015/016 | Y/N/N/N/N |
@@ -164,7 +164,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `CORE-107` | CTRL; FWSOM; RSK-005 | Task fault/metrics | 013 | Y/N/N/N/N |
 | `CORE-108` | CTRL; FWSOM; RSK-002 | `a831a0d`: base-step sequence + capability dải 500..2000 ms, systemd/comment runtime theo ADR-028; watchdog cadence/WCET `SCHED_FIFO` target và production wiring còn thiếu | 009/015 | Y/N/N/N/N |
 | `CORE-109` | LIFE §8; FWSOM §8; ART §4.6; RSK-009 | `3ca5d22`: `st_retain.{hpp,cpp}` record v2/store/mailbox/service; `st_scheduler.*` restore/checkpoint; `st_process_image.cpp` output-commit boundary; `bootstrap/main.cpp` service lifecycle; `st_control_api.cpp` + schema status health | 029/030 | Y/Y/N/N/N |
-| `CORE-110` | FWSOM; FE; IFSPEC | monitor/trace ring/events | 027 | Y/N/N/N/N |
+| `CORE-110` | FWSOM; FE; IFSPEC | Task 509 trong cây làm việc: `PriorityResolver` read-only slot, `RuntimePointSnapshot` program/effective priority/task và `ScanLoop` publish end-scan; full host gate PASS, target Active/Task read-back theo `EV-PROG-P5-510`; chờ merge, fixture binding target còn mở | 027 | Y/N/N/N/N |
 | `MCU-101` | FWMCU; ARCH | MCU app/IOP/BSP | 030 | Y/N/N/N/N |
 | `MCU-102` | FWMCU; HW; RSK-003/013 | timeout/safe HAL | 014/030 | Y/N/N/N/N |
 | `MCU-103` | FWMCU | IOP sequence/cache | 030 | Y/N/N/N/N |
@@ -175,7 +175,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `NFR-101` | LANG; ART; DM | profile/source/artifact bounds + FBD guard/equivalence/manifest; `e8c289e`: sandbox/artifact read-back; `3e5281d`: source/output/raw ZIP/entry/count one-over fail-closed và fuzz. Target OOM/capacity acceptance còn thiếu | 006/023 | Y/N/N/N/N |
 | `NFR-102` | LANG; BE; RSK-005 | `e8c289e`: compiler sandbox/timeout; `3e5281d`: SIGKILL/OOM, cleanup và output/source bounds host; target benchmark/concurrent load acceptance còn thiếu | 006/013/019 | Y/N/N/N/N |
 | `NFR-103` | CTRL; FWSOM; RSK-002/005 | `4f7e0ac`: runtime image/boundary instrumentation; `a831a0d`: Rev A cadence/base-step sequence, budget `<20%` và missed release host; load metrics/watchdog/IOP cùng target benchmark còn thiếu | 009/012/013/015 | Y/N/N/N/N |
-| `NFR-104` | FWSOM; FE; IFSPEC | trace/monitor buffers | 027 | Y/N/N/N/N |
+| `NFR-104` | FWSOM; FE; IFSPEC | Task 509 trong cây làm việc: HTTP trace 1..32 variable, ≤10 phút, ≤4 running, ≤10.000 value-cell/session, ≤32 terminal; host positive/fault PASS, target invalid selector `400`; chờ merge và positive target có binding | 027 | Y/N/N/N/N |
 | `NFR-105` | LIFE; FE; BE | `e9707b4`: reconnect + reconcile không replay mutation; target continuity/fault injection còn thiếu | 024/026/030 | Y/N/N/N/N |
 | `NFR-106` | DM; SEC; BE; RSK-008/012 | `66848a1` + `e8c289e` + `95b9388`: transaction/ETag/receipt/lease/audit chain/role guard; `3e5281d`: hostile reject giữ 8 bảng bất biến và 23 audit alias reject; latency/full RBAC/target evidence còn thiếu | 022/024 | Y/N/N/N/N |
 | `NFR-107` | UX; FE | i18n/a11y/responsive | 025/028 | Y/N/N/N/N |
@@ -243,6 +243,8 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 17 decision `DECIDED`; baseline approved | Product + discipline authority + Document Control | **Không còn blocker implementation** theo `AUTH-PROG-2026-08-11-03` |
 | Source Target chưa implement end-to-end | Dev Leads | commit/build mapping per requirement |
 | Test Result PASS 0/32; 2 record `BLOCKED` | QA + discipline leads | hoàn tất workflow E2E, rerun và independent review theo VVP |
+| Corrective source 508/509 chưa merge | Dev Leads | commit/PR/merge thật để nâng `I`; target supporting evidence đã có nhưng không nâng `T/P/R` |
+| Positive Monitor/Trace target có binding và review độc lập | QA + FE/BE/Core + Accessibility Reviewer | fixture read-only an toàn, raw output start/get/stop + row truth; review axe/bundle và ký Test Result theo VVP |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
@@ -275,6 +277,9 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 3.16 | 2026-08-13 | `TASK-PROG-500..506` tại `e58c745`..`14a9299` hoàn tất source **toàn bộ `FE-101..115`** (15/15): bốn workspace nối BE thật, Draft ETag/conflict, Check/Commission/Restore reconcile, error catalog, acknowledgement/impact, DangerZone, point-catalog filter; Chrome/Playwright thật desktop+mobile PASS `UJ-PROG-01..08` (`EV-PROG-P5-500-506`, VVP §11.5). §10.1 Evidence đổi từ `MISSING` sang trích dẫn evidence host+browser cho cả 8 journey, giữ rõ phần vẫn `MISSING` (`VS-PROG-031` usability người thật và các trục cần target/HIL). Tổng `I=Y` thành **22/60**; không tạo Test Result nào, 0/32 PASS và mọi `T/P/R=N` — bằng chứng browser không tự nâng `T`. |
 | 3.17 | 2026-08-13 | `TASK-PROG-507` tại `9606906`+`6069de6`+`d9a8e3b`: thêm `EV-PROG-P5-507` cho cleanup/backup/deploy web ARM64 và Chrome/API thật trên Foxlinx. Cập nhật FE-107 và journey 01/02/04/05 theo Project/Draft persistence, Revision `201`, Check `202`, WS `101`; ba lỗi target đã sửa. Không Commission; Check terminal fail-closed vì thiếu compiler, Core Programming/HIL/reviewer độc lập còn thiếu. Tổng `I=Y` giữ 22/60, mọi `T/P/R=N`, 0/32 PASS; supporting target evidence không tự nâng `T`. |
 | 3.18 | 2026-08-13 | Hoàn tất target `TASK-PROG-507` tại `0f1526c`: deploy FE/Web/compiler/Core ARM64, bật cờ production, hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Core read-back Active/LKG/Task `RUNNING`. Cập nhật FE-107 và journey 01/02/04/05/06/07; tổng `I=Y` giữ 22/60, mọi `T/P/R=N`, 0/32 PASS vì supporting target evidence không tự thay Test Result độc lập/HIL. |
+| 3.19 | 2026-08-13 | Audit `REV-PROG-FE-UX-2026-08-13` sửa overclaim P5 và mở 508..510. Cập nhật FE-101/103/106/107/109/114 theo context/editor/dirty/deep-link/readiness/Watch/Trace/Danger Zone; ghi source cụ thể cho BE-109/CORE-110/NFR-104. Vì corrective source chưa merge, tổng `I=Y` **giữ 22/60** đúng §8; target mới NOT_RUN, mọi `T/P/R=N`, 0/32 PASS. |
+| 3.20 | 2026-08-13 | Ghi `EV-PROG-P5-510`: full gate host và deploy/read-back/rollback Foxlinx PASS; Runtime/Monitor/safe-state target đúng, Chrome desktop/mobile sạch, axe 8/8 scan không violation. Cập nhật FE-107/109/111, BE-109, CORE-110, NFR-104 và tám journey. Vì source chưa merge và evidence chưa có reviewer/Test Result độc lập, tổng `I=Y` giữ 22/60, mọi `T/P/R=N`, 0/32 PASS. |
+| 3.21 | 2026-08-13 | Nối `EV-PROG-P5-510` rev 1.1 và audit rev 1.3 vào FE-101/103/107/111/114/115 cùng journey 01/02/04/07/08: HTTP không có Web Crypto vẫn hoạt động, auth giữ query/hash, ST save/restore, export `200`, import fault `422`, Restore/RETAIN fail-closed, mobile không tràn và axe 6/6 scan sạch. Đây vẫn là supporting evidence do implementer chạy; source chưa merge nên `I=Y` giữ 22/60, mọi `T/P/R=N`, 0/32 PASS. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -294,14 +299,14 @@ Product Requirement → UJ-PROG-* → Requirement (SRS) → Design/UI → Source
 
 | Journey | Workspace | Requirement chính | Design | Scenario | Evidence |
 |---|---|---|---|---|---|
-| `UJ-PROG-01` | `PGM-01` | SYS-108; FE-101/102/109 | UX §3, §5, §16.1; FE §2 | VS-001/002/026/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (Foxlinx route/context/Active/LKG/Task thật, chưa review độc lập); `VS-PROG-031` usability người thật vẫn MISSING |
-| `UJ-PROG-02` | `PGM-02` tab Chương trình | FE-101/103/104; CORE-101 | UX §5, §16.2; LANG §4–§5 | VS-003/005/006/007/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (Draft ST persistence và Check PASS desktop/mobile); `VS-PROG-031` MISSING |
-| `UJ-PROG-03` | `PGM-02` tab Điểm & Ánh xạ | FE-105/115; BE-109 | UX §16.2; DM §3.5 | VS-017/018/031 | `EV-PROG-P5-500-506`; `VS-PROG-031` MISSING |
-| `UJ-PROG-04` | `PGM-02` tab Thực thi | FE-106; CORE-102/108 | UX §5; CTRL §3 | VS-009/016/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (period/order đọc lại, Task `RUNNING` trên Foxlinx); timing/HIL và `VS-PROG-031` MISSING |
-| `UJ-PROG-05` | `PGM-03` giai đoạn Kiểm tra | FE-107/112; BE-103/104/105 | UX §5, §16.3; BE §3 | VS-006/019/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (hai Check target `PASSED`, artifact đã verify); reviewer/`VS-PROG-031` MISSING |
-| `UJ-PROG-06` | `PGM-03` giai đoạn Vận hành | SYS-103; FE-107/113; BE-106; CORE-106 | UX §16.3; LIFE §5–§7 | VS-004/011/014/015/020/029/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (Commission output-free `SUCCEEDED/COMMITTED`, Core read-back); output vật lý/HIL/người thật vẫn MISSING |
-| `UJ-PROG-07` | `PGM-04` Runtime, Theo dõi | FE-108/109; BE-109; CORE-110 | UX §16.4; FWSOM §9 | VS-010/013/018/027/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (Active/LKG/Task/producer thật); soak/timing/người thật vẫn MISSING |
-| `UJ-PROG-08` | `PGM-04` Phiên bản & Bảo trì | SYS-107; FE-114; BE-108; CORE-109 | UX §16.4; LIFE §8–§9; SEC §8 | VS-011/021/023/029/031 | `EV-PROG-P5-500-506` cho phần Restore E2E; `VS-PROG-021/023/029/031` cần target/security corpus review/người thật, vẫn MISSING |
+| `UJ-PROG-01` | `PGM-01` | SYS-108; FE-101/102/109 | UX §3, §5, §16.1; FE §2 | VS-001/002/026/031 | `EV-PROG-P5-500-506/507/510`: target route/context/Active/Task, responsive và axe; reviewer/usability vẫn MISSING |
+| `UJ-PROG-02` | `PGM-02` tab Chương trình | FE-101/103/104; CORE-101 | UX §5, §16.2; LANG §4–§5 | VS-003/005/006/007/031 | `EV-PROG-P5-500-506/507/510`: Draft/ST/editor context desktop/mobile; `VS-PROG-031` MISSING |
+| `UJ-PROG-03` | `PGM-02` tab Điểm & Ánh xạ | FE-105/115; BE-109 | UX §16.2; DM §3.5 | VS-017/018/031 | `EV-PROG-P5-500-506/510`; positive target có Variable Binding và `VS-PROG-031` MISSING |
+| `UJ-PROG-04` | `PGM-02` tab Thực thi | FE-106; CORE-102/108 | UX §5; CTRL §3 | VS-009/016/031 | `EV-PROG-P5-500-506/507/510`: false-dirty regression và Task target `RUNNING`; timing/HIL/usability MISSING |
+| `UJ-PROG-05` | `PGM-03` giai đoạn Kiểm tra | FE-107/112; BE-103/104/105 | UX §5, §16.3; BE §3 | VS-006/019/031 | `EV-PROG-P5-500-506/507/510`: Check baseline, corrective deep-link/readiness target; reviewer/usability MISSING |
+| `UJ-PROG-06` | `PGM-03` giai đoạn Vận hành | SYS-103; FE-107/113; BE-106; CORE-106 | UX §16.3; LIFE §5–§7 | VS-004/011/014/015/020/029/031 | `EV-PROG-P5-500-506/507/510`: Commission output-free baseline và corrective safe-state fail-closed; output vật lý/HIL/người thật MISSING |
+| `UJ-PROG-07` | `PGM-04` Runtime, Theo dõi | FE-108/109; BE-109; CORE-110 | UX §16.4; FWSOM §9 | VS-010/013/018/027/031 | `EV-PROG-P5-500-506/507/510`: Active/Task/Monitor `200` target; positive binding/Trace, soak/timing/người thật MISSING |
+| `UJ-PROG-08` | `PGM-04` Phiên bản & Bảo trì | SYS-107; FE-114; BE-108; CORE-109 | UX §16.4; LIFE §8–§9; SEC §8 | VS-011/021/023/029/031 | `EV-PROG-P5-500-506/510`: Restore E2E và Danger Zone đúng tab; security corpus review/power/usability MISSING |
 
 Bốn requirement mới của Amendment A1 gắn journey như sau: `FE-113` → `UJ-PROG-06`;
 `FE-114` → `UJ-PROG-08`; `FE-115` → `UJ-PROG-03`; `NFR-109` và `NFR-110` phủ cả

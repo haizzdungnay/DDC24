@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 1.7 |
-| Trạng thái | **M3 AS-BUILT + SUPPORTING TARGET PASS** — contract chạy end-to-end trên Foxlinx; Test Result độc lập/HIL vẫn là cổng release riêng |
+| Phiên bản | 1.9 |
+| Trạng thái | **M3 AS-BUILT + CORRECTIVE VERIFIED** — OpenAPI v1.20.0 có Monitor/Trace cụ thể; host/target supporting evidence có, source chưa merge |
 | Ngày | 2026-08-13 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
 | Nguồn thẩm quyền | `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001` |
-| Phạm vi phiên bản | Target Rev A; 25 OpenAPI operation; feature flag `ON` trên Foxlinx; Check `PASSED`, Commission `SUCCEEDED/COMMITTED` và Core read-back Active/LKG |
+| Phạm vi phiên bản | Target Rev A; 25 OpenAPI operation; v1.20.0 thêm schema runtime controller/task và Monitor/Trace; target evidence `EV-PROG-P5-510` |
 | Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001` |
 
 ## 0. Đọc nhanh
@@ -19,11 +19,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **hợp đồng** giữa các bên: REST và WebSocket giữa trình duyệt và BE, IPC giữa BE và Core. Định nghĩa đường dẫn, payload, mã lỗi, timeout, retry, idempotency và thứ tự sự kiện. Đây cũng là **nguồn chuẩn duy nhất của mã lỗi** `PRG-ERR-*`. |
 | 2. Ai phải đọc file này? | FE và BE bắt buộc đọc cùng nhau — hai bên phải review **một** hợp đồng, không phải hai bản mô tả. Core đọc §8 và §12 (hợp đồng BE↔Core). Security đọc §15. QA dựng contract test từ §14 và §18. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-403..405/507` nối Commission/Restore/Get operation với durable worker và Core UDS lifecycle. Foxlinx chạy compiler ARM64, socket peer-checked, cờ FE/BE `ON`; hai Check `PASSED`, một Commission output-free `SUCCEEDED/COMMITTED`, Active/LKG đọc-ngược đúng. Catalog v1.4.0 có 20 public/99 detail. |
+| 3. Hệ thống hiện tại đang có gì? | Task 507 đã nối Commission/Restore. Corrective Task 509 nối `GET /runtime/monitor` và ba operation Trace, thay 503 contract-only; OpenAPI v1.20.0/generated FE client đồng bộ. `EV-PROG-P5-510` xác nhận target Monitor `200`, Runtime/Task read-back và Trace validation; source chưa merge. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm nhóm `/api/v1/programming`, event WebSocket cho runtime/operation, và một giao thức nội bộ có phiên bản cho Commission. Nguyên tắc chi phối: `HTTP 2xx` chỉ nghĩa là **request đã được nhận**; chỉ read-back từ Core mới kết luận được Revision nào đang chạy. |
-| 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog, lifecycle operations, FE P5 và Core coordinator đã có source và đã deploy. P6 tiếp tục fault/power/HIL/IOP timing để cấp Test Result release; không phải phần code P5 còn thiếu. |
-| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Payload/limit/role đã được chốt bởi 17 decision `DECIDED`. TLS và giao thức BE↔Core là phần phải implement/test trong P1–P3, không phải điều kiện xin phép trước khi code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-P5-507`: compiler/Core/Web/FE ARM64 trên Foxlinx, hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Core read-back Active/LKG/Task `RUNNING`, Chrome desktop/mobile sạch Console/Network. Host gates đầy đủ vẫn PASS; supporting evidence này không tự thay Test Result độc lập/HIL. |
+| 5. Team phải sửa module/contract nào? | `contracts/openapi/openapi.yaml`, generated FE client, BE monitor/trace application+HTTP, Core point snapshot và FE Watch/Runtime. §3.1/§8 khóa giới hạn và authority. |
+| 6. Điều gì còn bị chặn? | Không có approval hoặc deploy blocker. Source chưa merge; positive Monitor/Trace có Variable Binding target, TLS/HIL/Test Result vẫn là release gate. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `REV-PROG-FE-UX-2026-08-13` có host tests cho mapping/idempotency/quota/source failure; `EV-PROG-P5-510` ghi deploy/hash/API/Chrome/rollback target. Monitor empty đúng fixture không binding; positive Trace target còn mở. |
 
 Vì sao mã lỗi phải tập trung ở đây: nếu mỗi component tự đặt mã, FE sẽ retry sai
 chỗ và che mất lỗi thật — đó là `RSK-PROG-014`. Quy tắc: FE quyết định dựa trên
@@ -98,6 +98,42 @@ buộc hai tập mã bằng nhau; §14 ánh xạ detail nội bộ ra mã công 
 | `POST /bundles/import` | admin | **As-Built 206** — validate, tạo Project/Draft mới; không Artifact/Check/Commission |
 | `POST /retain/reset` | admin | strong confirmation token + operation/audit |
 | `GET /audit` | viewer | timeline đã sanitize, phân trang |
+
+### 3.1 Hợp đồng Runtime Monitor và Trace As-Built v1.20.0
+
+`GET /runtime` bắt buộc có `controllerId`, `producerState`, Active/LKG,
+`taskState`, `safeState`, `observedAt` và object `task` khi producer READY. Task
+gồm `taskId`, `periodMs`, `budgetMs`, state, run/missed-release/overrun counters,
+`lastExecNs`, `maxExecNs`, `consecutiveOverruns`; FE không hiển thị `—` khi
+producer đã cung cấp metric.
+
+`GET /runtime/monitor` trả một snapshot:
+
+| Field | Kiểu/null | Authority/ngữ nghĩa |
+|---|---|---|
+| `activeRevisionId` | UUID/null | Core runtime read-back |
+| `safeState` | bool | Core; true chặn mutation nguy hiểm |
+| `task` | object/null | Core snapshot của một Task Rev A |
+| `items[].variableId/name/programId` | UUID/string/null | join từ Revision active; thiếu identity không được fabricate |
+| `items[].point` | `{category,deviceId?,pointId}` | Binding canonical |
+| `programValue` | scalar/null | proposal của Program ở mức 5, tách với actual |
+| `actualValue` | scalar/null | end-scan Point truth cho LOCAL; Point catalog cho producer ngoài LOCAL |
+| `overriddenBy/effectivePriority/overrideActor/overrideRemainingS` | nullable | winner/arbitration; TTL giây, `null` nghĩa không có hoặc không biết |
+| `quality` | `GOOD/UNCERTAIN/STALE/BAD/UNKNOWN` | không đổi missing/bad thành zero |
+| `observedAt/freshness` | RFC3339 + `LIVE/STALE/UNKNOWN` | freshness tính từ timestamp producer, không từ lúc HTTP trả |
+
+Trace HTTP là **read-only sampling của cùng MonitorService** trong Task 509:
+
+- request: 1..32 UUID variable, `durationMs` 1.000..600.000,
+  `samplePeriodMs` 100..30.000; `X-Idempotency-Key` bắt buộc;
+- quota: tối đa 4 session RUNNING, 10.000 ô giá trị
+  (`sample × variable`) mỗi session, 32 session terminal giữ trong RAM;
+- `POST` cùng key+hash trả cùng session, khác hash trả conflict; `DELETE` dừng
+  đồng bộ, lặp lại không xóa audit; source mất làm session `FAILED` với reason;
+- process Web restart làm mất session RAM và `GET` trả 404. Đây là As-Built có
+  chủ ý; không được mô tả như durable trace. Core `TRACE_START` ở §8 là đường
+  target cho trace RT/fault chuyên biệt và **chưa** là producer của HTTP trace
+  v1.20.0.
 
 ## 4. Payload mutation Draft
 
@@ -592,6 +628,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | `PROG-OD-001`: `17 DECIDED`, `0 OPEN`, `0 CLOSED` | Product + discipline authority | **APPROVED** | cập nhật OpenAPI/code theo baseline v2.8 |
 | TLS production chưa có | Security + Platform | **READY TO IMPLEMENT** | TLS/session/CSRF test theo Security DoD |
 | Operation worker/lifecycle target | BE + Core + QA | **SUPPORTING TARGET PASS** | `EV-PROG-P5-507` chứng minh happy path; fault/power/restart Test Result độc lập theo Plan 53 P6 |
+| Monitor/Trace v1.20.0 | Core + BE + FE + QA | **SOURCE IMPLEMENTED / SUPPORTING TARGET PASS / MERGE PENDING** | host tests + audit; `EV-PROG-P5-510` target Monitor `200`/Trace validation; positive binding/start-get-stop target còn mở |
 
 | Phiên bản | Ngày | Nội dung | Tác giả |
 |---|---|---|---|
@@ -612,6 +649,8 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 1.5 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: Commission/Restore/Get operation handler, durable idempotent state machine, STATUS/OPERATION_STATUS/STAGE/RESTORE/ACTIVATE UDS và catalog v1.4.0 20 public/99 detail. Giữ flag OFF và target/HIL Test Result chưa chạy. | BE + Core + QA |
 | 1.6 | 2026-08-13 | `TASK-PROG-507` tại `d9a8e3b`: Foxlinx phát hiện Check lần hai conflict giả vì `ProgrammingProject` chỉ trả Draft ID trong khi backend yêu cầu Revision nền sau seal. Bổ sung required response field `baseRevisionId`, khóa semantics first-seal/post-seal và test HTTP read-back; FE dùng field này cho save/seal. Target xác nhận Revision `201` + Check `202`; không Commission, flag cuối OFF. | BE + FE + QA |
 | 1.7 | 2026-08-13 | Hoàn tất `TASK-PROG-507` tại `0f1526c`: deploy compiler/Core/Web/FE ARM64 và bật cờ FE/BE trên Foxlinx. Sửa tương thích `ao/do:null` cũ theo fail-safe (`null` chỉ về default rỗng; type sai vẫn reject). Hai Check `PASSED`; Commission fixture không output `SUCCEEDED/COMMITTED`; Core đọc-ngược Active/LKG/Task `RUNNING`. `EV-PROG-P5-507` là supporting target evidence, không tự nâng Test Result/HIL. | BE + Core + FE + Ops + QA |
+| 1.8 | 2026-08-13 | `TASK-PROG-509`: OpenAPI v1.20.0 thay schema Monitor/Trace placeholder bằng field/limit cụ thể, runtime thêm `controllerId`+task metric. Nối source Core snapshot→BE MonitorService→HTTP và TraceService bounded/idempotent/audited→FE client. §3.1 ghi rõ HTTP trace lấy mẫu read model trong RAM, không giả là Core durable trace. Host test PASS; target corrective NOT_RUN do SSH. | BE + Core + FE + QA |
+| 1.9 | 2026-08-13 | `EV-PROG-P5-510`: deploy OpenAPI/runtime corrective trên Foxlinx, Monitor authenticated `200`, Task `RUNNING`, Trace selector rỗng `400`, service/hash/rollback rehearsal PASS. Fixture active không binding nên Monitor empty và chưa chạy positive Trace target; source chưa merge, không nâng Test Result. | BE + Core + FE + Ops + QA |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|

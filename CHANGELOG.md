@@ -8,6 +8,147 @@
 
 ## [Unreleased]
 
+### Added — Candidate thiết kế ứng dụng AHU hiệu suất cao (2026-08-13)
+
+- Thêm bộ hồ sơ Proposed/M3 cho ứng dụng AHU vòng kín: Product Spec, 51
+  requirement, architecture, 13 open decision, design index, Detailed Design
+  control app/plant simulator/fake MCU/simulation interface/UIUX.
+- Thêm ba asset UI/UX render được cho Runtime desktop/mobile và fault drawer;
+  mọi dữ liệu trên asset được ghi rõ là minh họa, không phải runtime/HIL evidence.
+- Bộ hồ sơ chỉ phục vụ review PM/CTO/Product/HVAC/Engineering; chưa được phê
+  duyệt để implement, chưa có source, Test Result, HIL hoặc release claim.
+
+Verification: docs harness `--expect` PASS; review authority và candidate pin
+AHU riêng chưa được tạo nên trạng thái giữ `PROPOSED`, 0 M4/M5.
+
+Refs: `PROD-AHUHP-001`, `SRS-AHUHP-001`, `ARCH-AHUHP-001`,
+`DES-INDEX-AHUHP-001`, `OD-AHUHP-001`.
+
+### Changed — Ghi nhận As-Built Programming và NO-GO UC-PROG-03 (2026-08-14)
+
+- Lập báo cáo `REV-PROG-ASBUILT-GAP-2026-08-14` cho PM/CTO: tổng kết source
+  Core/Web API/Web UI/contract/deploy hiện có; so với UI/UX, FE Design, Plan 53,
+  VVP và Trace; mở 12 finding có mức độ, owner, tác động và điều kiện đóng.
+- Tái hiện trên Foxlinx lỗi UC-PROG-03: `ST+` tạo source rỗng; Check FAILED chỉ
+  trả lỗi scope không có dòng/cột; seal tăng ETag/đổi base nhưng FE giữ state cũ,
+  làm lần lưu bản sửa tiếp theo xung đột 409 và không có expected/current.
+- Hoàn nguyên Draft về source ST hợp lệ sau phép thử; Active Revision không đổi;
+  không gửi Commission/Restore/RETAIN hay output vật lý. Lưu bốn ảnh supporting
+  evidence và nâng audit FE/UI/UX lên revision 1.4, evidence Foxlinx lên 1.2.
+- Ghi rõ solution hiện tại chỉ là bản tạm để review, P5 giữ `8/11`, Plan giữ
+  `43/53`, `0/32` Test Result PASS và `RELEASE_READY BLOCKED`; PR này không sửa
+  defect UC-03 và không deploy artifact mới.
+
+Verification: source review + Chromium cô lập `1440×1000` trên endpoint live;
+Draft recovery xác nhận trực quan; C++ Release Modbus/BACnet/HMI ON
+**1004/1004**; Go vet/test không cache PASS; FE **64 file/521 test** +
+lint/typecheck/build PASS; contract 25 operation, catalog 20/99, FBD 10/10;
+Playwright Programming + Network **11/11**; candidate **22/22** và docs harness
+PASS. Browser/host evidence không thay Test Result/HIL.
+
+Refs: `F-PROG-ASBUILT-001..012`, `UC-PROG-03`, `VS-PROG-005/006/024`,
+`REV-PROG-ASBUILT-GAP-2026-08-14`.
+
+### Fixed — Programming live HTTP, fail-closed và responsive theo audit 1.2 (2026-08-13)
+
+- Thay mọi lệnh Programming dùng trực tiếp `crypto.randomUUID` bằng helper UUID
+  v4 dựa trên `getRandomValues`, đồng thời dùng SHA-256 thuần JavaScript và
+  base64 theo khối cho bundle; endpoint HTTP không còn vỡ Save/Check/Trace/
+  Restore/Export/Import vì thiếu secure context.
+- Giữ đủ pathname/query/hash qua đăng nhập; fresh profile mặc định tiếng Việt;
+  thêm bottom navigation bốn workspace và chuyển Operation history thành card
+  mobile không mất cột.
+- Khóa Restore trừ khi Core đúng `READY` và safe-state không tác động. Gỡ hoàn
+  toàn request RETAIN dùng Active Revision giả; surface giữ disabled với lý do
+  contract-only cho tới khi backend trả affected-variable impact thật.
+- Thêm Export source-only; Import kiểm SHA-256 trên HTTP; Tổng quan/Runtime hiện
+  `PRG-SAFE-ACTIVE` với mức, lý do chưa có từ Core, phạm vi và hành động thay vì
+  chỉ boolean Có/Không.
+- Bổ sung test UUID fallback, mặc định i18n, query/hash, save batch trên profile
+  không có `randomUUID`, degraded/safe Restore, RETAIN fail-closed, Export,
+  safe-state, mobile nav/history và WCAG.
+- Sửa Network QA khai báo locale tiếng Anh rõ ràng; test không còn phụ thuộc
+  ngôn ngữ mặc định cũ sau khi fresh profile chuyển sang tiếng Việt.
+- Deploy atomic FE production có `VITE_PROGRAMMING_REV_A=1` lên Foxlinx. Lượt
+  probe health đầu quá sớm đã tự rollback; một bundle thiếu feature flag bị
+  browser read-back phát hiện và thay ngay. Artifact cuối có index SHA-256
+  `30ee074329685a801abaf468c6aaa5d1eacfecc515128e3483ebdd9d9cab5dbd`;
+  bốn service `active`, health mọi thành phần `ok`.
+- Live endpoint `:8082` xác nhận `isSecureContext=false`, Save Draft `200` rồi
+  hoàn nguyên source `200`, Export `200`, bundle sai bị Import từ chối `422`,
+  deep-link nguyên vẹn, Restore/RETAIN disabled, mobile không tràn ngang; axe
+  6/6 lượt Overview/Design/Service × desktop/mobile không có violation.
+
+Verification: C++ Release Modbus/BACnet/HMI ON **1004/1004**; Go vet/test không
+dùng cache PASS; FE **64 file/521 test** + lint/typecheck/build PASS; Playwright
+Programming 10/10 và Network QA 1/1, tổng **11/11 PASS**. Browser live
+Console/Network sạch ngoài `422` được chủ động tạo cho corpus Import sai.
+Supporting evidence không thay 0/32 Test Result hay `RELEASE_READY`.
+
+Refs: `F-PROG-LIVE-001..008`, audit revision 1.3, `EV-PROG-P5-510` revision 1.1.
+
+### Changed — Audit live 17 use case Programming và đối chiếu UI/UX (2026-08-13)
+
+- Kiểm thử lại `UC-PROG-01..17` trên endpoint
+  `http://mekong-fac.ddns.net:8082/` bằng Chrome thật tại desktop `1440×900`
+  và mobile `390×844`, đối chiếu `UX-WEB-PROG-001` cùng asset `PGM-01..04`.
+- Cập nhật `REV-PROG-FE-UX-2026-08-13` revision 1.2: 12/17 UC không đạt,
+  3/17 chưa đủ fixture/bằng chứng và 2/17 roadmap ngoài Rev A được ẩn đúng.
+- Ghi tám finding live, gồm lỗi mutation do `crypto.randomUUID` trên HTTP,
+  mất query deep-link sau đăng nhập, Save Draft không hoàn tất, Restore mở khi
+  Core suy giảm, RETAIN reset fail-open, thiếu ngữ nghĩa safe-state, thiếu
+  positive Monitor/Trace và các sai lệch i18n/mobile.
+- Không thực thi Commission/Restore/RETAIN reset cuối trên controller thật;
+  không lưu credential/token/header bí mật vào hồ sơ. Phán quyết hiện hành giữ
+  `RELEASE_READY BLOCKED`; audit browser này là supporting evidence, không phải
+  Test Result/HIL.
+
+Verification: kiểm tra trực tiếp bốn workspace và Console/Network; đối chiếu
+17 UC trong `UX-WEB-PROG-001`; `python3 scripts/docs_iso_harness.py --expect`.
+
+Refs: `REV-PROG-FE-UX-2026-08-13` revision 1.2, `UX-WEB-PROG-001` §16–17.
+
+### Changed — Programming P5 corrective audit UI/UX và Monitor/Trace (2026-08-13)
+
+- Audit bốn workspace/tám journey phát hiện baseline P5 còn thiếu editing
+  context/dirty guard/ST tooling/deep-link/readiness và backend Monitor/Trace
+  vẫn trả 503; mở `TASK-PROG-508..510`, đưa P5 về `IN_PROGRESS 8/11` và tổng
+  Plan 53 về 43/53 (81,1%).
+- Hoàn chỉnh FE: context Controller/Project/Draft dirty/Check/Active/Core; ST
+  gutter line, line/column, find/format/symbol/type/reference/diagnostic;
+  metadata/tag; save/discard/stay guard; Check khóa khi dirty; Commission
+  deep-link và readiness fail-closed; task metric; Watch/Trace; Danger Zone chỉ
+  ở tab Phiên bản & Bảo trì.
+- Nối Core→BE→OpenAPI v1.20.0→FE cho program proposal, actual, owner, effective
+  priority, TTL, quality/freshness và task metrics. Thêm Trace read-only bounded,
+  idempotent, audited, start/get/stop; in-memory/restart semantics được ghi rõ.
+- Browser E2E phát hiện thêm false-dirty thật: tab Thực thi luôn mount giữ
+  program order cũ sau thao tác tạo Program đã save; sửa chỉ đồng bộ server
+  update khi không có local edit, giữ nguyên local edit khi có.
+- Thêm `@axe-core/playwright` và ca `VS-PROG-028`: quét bốn workspace ở
+  desktop/mobile theo WCAG A/AA, cấm violation trong E2E.
+- Đồng bộ candidate v2.40 và hồ sơ Index/Interface/UIUX/FE/BE/FW-SOM/VVP/Trace/
+  Plan; sửa cùng revision hai asset PGM-02/PGM-04. Giữ 22/60 `I=Y` vì source
+  corrective chưa merge; 0/32 Test Result PASS.
+- Cross-build và deploy corrective lên `SOM-DDC-24-foxlinx` có backup/hash;
+  health/service/API read-back PASS. Rollback rehearsal về bản trước PASS, sau
+  đó tái deploy đúng artifact corrective PASS. Runtime đọc Active/Task
+  `RUNNING`; Monitor trả `200`/empty đúng fixture output-free không binding;
+  Trace selector rỗng trả `400`, không fabricate positive target data.
+- Chrome target thật ở desktop `1440×1000` và mobile `390×844`: bốn workspace,
+  0 Console error/warn/page error, 0 failed Programming request; axe **8/8 scan,
+  0 violation**. Ảnh và hash nằm trong `EV-PROG-P5-510`.
+
+Verification: C++ Release bật Modbus/BACnet/HMI build PASS, CTest **1004/1004**;
+Go vet/test mọi package PASS; FE **62 file/510 test**, lint/build PASS; OpenAPI
+25 operation, catalog lỗi 20/99, FBD mutation 10/10 và Playwright Programming +
+Network QA **7/7** PASS. Source chưa merge,
+positive Monitor/Trace có binding target, usability/HIL/Test Result độc lập còn
+mở; không nâng `RELEASE_READY`.
+
+Refs: TASK-PROG-508/509/510, REV-PROG-FE-UX-2026-08-13,
+EV-PROG-P5-510, candidate v2.40.
+
 ### Changed — Programming P5: ghi provenance PR #170 (2026-08-13)
 
 - Ghi bổ sung candidate v2.38 đã xuất hiện tại commit `b7c0ed2`, tree

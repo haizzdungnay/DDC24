@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 1.6 |
+| Phiên bản | 1.9 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 32/32 kịch bản là baseline DoD; hiện có 2/32 record `BLOCKED`, 0/32 PASS |
 | Ngày | 2026-08-13 |
 | Chủ quản | Verification Lead |
@@ -18,10 +18,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **cách chứng minh hệ thống làm đúng**: 32 kịch bản `VS-PROG-001..032`, mỗi kịch bản có đồ gá, điều kiện trước, các bước, kết quả kỳ vọng định lượng, môi trường và ai được ký. Cũng chốt cái gì **không** được tính là bằng chứng. |
 | 2. Ai phải đọc file này? | Verification Lead (chủ quản) và mọi discipline lead — vì mỗi người sở hữu một phần trong cột “execute/review”. Release authority đọc §5 để biết gate nào đang mở. |
-| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001/019` có record G1 `BLOCKED`; 30 scenario còn lại `NOT_RUN`, tổng PASS `0/32` (§8). `EV-PROG-P5-507` đã deploy đầy đủ FE/Web/compiler/Core lên Foxlinx, hai Check và Commission output-free thành công với Core read-back. HIL/power-cut/IOP timing và reviewer độc lập còn thiếu nên evidence này không tự thành Test Result. |
+| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001/019` có record `BLOCKED`; 30 scenario còn lại `NOT_RUN`, 0/32 PASS. Corrective 508..510 đã qua full host gate, deploy/read-back/rollback Foxlinx và browser/axe target theo `EV-PROG-P5-510`; vòng audit live HTTP cuối còn chứng minh UUID/hash fallback, auth deep-link, ST save/restore, export, import fault `422`, fail-closed và responsive. Source chưa merge và positive Monitor/Trace có binding target chưa chạy. |
 | 4. Thiết kế mới thay đổi điều gì? | Chuyển từ “có test” sang **bằng chứng có thẩm quyền**: mỗi lần chạy phải ghim commit, image, config và hash; Test Result là bất biến; chạy lại sinh ID mới. Trạng thái chỉ được là một trong `NOT_RUN/RUNNING/PASS/FAIL/BLOCKED/INVALIDATED`. |
 | 5. Team phải sửa module/contract nào? | Không sửa code. Cần dựng thư mục bằng chứng `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS`, cùng các đồ gá `H/B/T/L` ở §9. |
-| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Các giới hạn đã `DECIDED`. Đồ gá HIL (`L`) là deliverable/evidence của P6 và không chặn team bắt đầu P1–P5. |
+| 6. Điều gì còn bị chặn? | Không còn approval hoặc SSH/deploy blocker. Corrective source cần merge; positive Monitor/Trace có binding target, reviewer accessibility độc lập, usability, HIL và Test Result độc lập vẫn mở. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Chính file này định nghĩa. Với bản thân hồ sơ: 32/32 kịch bản có đặc tả đủ năm trục ở §9. Evidence host G2/G3/P4 chỉ hỗ trợ, không nâng verdict. Hiện có **2/32 record, 0/32 PASS, 2/32 BLOCKED**. |
 
 Ba loại bằng chứng **không** đủ để đóng một requirement: file tài liệu tồn tại;
@@ -394,6 +394,72 @@ executor cũng là người implement và chưa có reviewer độc lập. Vì v
 `TR-PROG-*`, catalog vẫn **2/32 record BLOCKED, 0/32 PASS**. Đây là ranh giới
 authority bằng chứng, không phải chức năng P5 chưa hoàn tất.
 
+### 11.7 Evidence corrective FE/Monitor/Trace `EV-PROG-P5-510`
+
+Record kiểm soát: [`REV-PROG-FE-UX-2026-08-13`](../07_records/reviews/PROGRAMMING_FE_UX_IMPLEMENTATION_AUDIT_2026-08-13.md).
+Record thực thi: [`EV-PROG-P5-510`](../07_records/test-evidence/fw-som/2026-08-13-foxlinx-programming-plan53-corrective.md).
+Source 508/509 được kiểm theo bốn nhóm:
+
+| Nhóm | Positive | Negative/fault | Expected định lượng |
+|---|---|---|---|
+| Draft/editor/context | save ST bằng nút/Ctrl+S; metadata/tag; diagnostic jump; context đủ sáu trục | dirty rời trang; Check khi dirty; Task server update trong tab ẩn | không mất buffer; save một batch; false-dirty về 0 sau read-back |
+| Commission readiness | deep-link/reload với `revisionId/checkId`; Check PASS/Core READY | override/impact 503, Core DEGRADED/safe-state | mọi unknown chặn Commission; không optimistic Active |
+| Monitor/Trace | local/external mapping; program≠actual; owner/priority/TTL/quality/freshness; start/get/stop | trùng point ID khác namespace; quality chữ thường; source mất; idempotency hash khác; quota/retention | 1..32 variable; 1 s..10 phút; 100 ms..30 s; ≤4 running; ≤10.000 value-cell/session; ≤32 terminal |
+| Browser | Chrome desktop + mobile đi `UJ-PROG-01..08`, Watch và Trace | console error/request failed thuộc Programming; Danger Zone sai tab | 0 console error và 0 failed request Programming ngoài fault case được chủ động inject |
+
+Kết quả thực thi trong phiên:
+
+- C++ Release Modbus/BACnet/HMI ON: build PASS, CTest **1004/1004**; Go vet/test
+  mọi package PASS; FE **62 file/510 test**, lint/build PASS;
+- local Playwright desktop/mobile và axe `VS-PROG-028` PASS;
+- Foxlinx: backup, cross-build/deploy ARM64, service/hash/API read-back, rollback
+  rehearsal và tái deploy PASS; bốn service `active`, health thành phần `ok`;
+- Runtime đọc Active/Task `RUNNING`; Monitor authenticated trả `200`, item `0`
+  đúng fixture output-free không binding; Trace selector rỗng trả `400`;
+- Chrome target bốn workspace × desktop/mobile: 0 Console error/warn/page error,
+  0 failed Programming request; axe WCAG A/AA **8/8 scan, 0 violation**.
+
+Host/target/browser evidence chỉ hỗ trợ `VS-PROG-018/020/025/026/027/028/032`.
+Positive row và start/get/stop Trace trên target chưa chạy vì Revision active
+không có Variable Binding; không fabricate dữ liệu. Source chưa merge, executor
+chưa độc lập và chưa có reviewer ký. Vì vậy không tạo `TR-PROG-*`, không nâng
+`T/P/R`; catalog giữ **2/32 BLOCKED, 0/32 PASS**.
+
+### 11.8 Bổ sung audit live HTTP và fail-closed `EV-PROG-P5-510` rev 1.1
+
+Vòng này kiểm lại đúng endpoint HTTP công khai, nơi `isSecureContext=false`,
+`crypto.randomUUID` và `crypto.subtle` không tồn tại. Bằng chứng được nối vào
+record thực thi §11.7, không tạo Test Result mới:
+
+| Hạng mục | Thao tác thật | Kết quả quan sát |
+|---|---|---|
+| Khởi tạo và ngôn ngữ | mở profile trình duyệt cô lập, không có ngôn ngữ lưu trước | giao diện mặc định tiếng Việt; không crash do Web Crypto |
+| Auth/deep-link | mở thẳng `/eng/programming/runtime?tab=service#danger-zone`, qua đăng nhập | quay lại đúng `pathname + search + hash` |
+| Draft ST | thêm một newline, lưu; sau đó phục hồi byte gốc và lưu lại | hai PATCH `200`; dirty trở về false; source đọc-ngược đúng byte ban đầu |
+| Export/import | tải bundle; import fixture không hợp lệ | export HTTP `200`; tải `mkddc-programming-1ab7cb9b.zip`; import đi tới backend và fail-closed HTTP `422`, không lỗi JavaScript |
+| Safe-state/RETAIN | target đang `safeState=true`; mở tab Bảo trì | Restore bị khóa; vùng cảnh báo có `PRG-SAFE-ACTIVE`, mức độ/lý do/phạm vi/hành động; RETAIN luôn bị khóa vì contract chưa có impact/read-back đầy đủ và không phát request |
+| Responsive/a11y | Overview, Design và Service ở desktop + mobile | 6/6 lượt axe WCAG A/AA có 0 violation; 0 console error; 0 failed request; mobile có bốn điều hướng và không tràn ngang |
+
+Artifact cuối được triển khai có SHA-256 tar
+`5e0d5cb8d57e38e22a6caaf7a7750db1b01803901e2e4899eba23e013c79f672`,
+SHA-256 `index.html`
+`30ee074329685a801abaf468c6aaa5d1eacfecc515128e3483ebdd9d9cab5dbd`;
+rollback nằm tại `/opt/mkddc-web/dist.rollback.20260813T1531Z`. Một lần deploy
+trung gian thiếu `VITE_PROGRAMMING_REV_A=1` đã bị live browser phát hiện và
+được thay ngay bằng artifact đúng profile; không dùng lần trung gian làm bằng
+chứng PASS.
+
+Ranh giới authority không đổi: đây là kiểm tra hỗ trợ do người implement thực
+hiện. Positive Monitor/Trace với Variable Binding, accessibility review độc lập,
+usability `≥5` kỹ thuật viên và target/HIL/power-cut vẫn chưa có Test Result;
+catalog giữ **2/32 BLOCKED, 0/32 PASS**, mọi `T/P/R=N`.
+
+Gate cuối sau khi bổ sung test hồi quy đạt: C++ Release Modbus/BACnet/HMI ON
+**1004/1004**, Go vet/test không cache PASS, FE **64 file/521 test** +
+lint/typecheck/build PASS, Playwright Programming 10/10 và Network QA 1/1
+(tổng **11/11 PASS**). Network QA khai báo locale tiếng Anh rõ ràng để không phụ
+thuộc mặc định profile mới là tiếng Việt.
+
 ## 12. Blocker, revision và sign-off
 
 | Blocker | Owner | Điều kiện mở |
@@ -401,6 +467,9 @@ authority bằng chứng, không phải chức năng P5 chưa hoàn tất.
 | Requirement/design: `17 DECIDED/0 OPEN/0 CLOSED`, baseline approved | Product + Architect + discipline authority | **Đã mở implementation** theo `AUTH-PROG-2026-08-11-03` |
 | P5 đã deploy đầy đủ và happy path target PASS | Core + HW + Ops + QA | chạy fault/power/restart/HIL P6 với executor/reviewer độc lập để cấp Test Result |
 | BSP/HW fixture/limits/HIL chưa có | FW/HW/Safety | controlled setup + calibrated instruments |
+| Corrective source chưa commit/merge | FE/BE/Core + Dev Lead | commit/PR/merge thật; chạy lại gate, candidate pin và docs harness trước khi đổi trục `I` |
+| Positive Monitor/Trace target có Variable Binding | QA + FE/BE/Core | fixture read-only an toàn có binding; kiểm row program/actual/owner/priority/quality/freshness và start/get/stop, lưu raw output |
+| Accessibility/Test Result độc lập | Accessibility Reviewer + QA | review tool evidence 8/8 scan và bundle mới; ký Test Result theo workflow §11 |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
@@ -420,6 +489,9 @@ authority bằng chứng, không phải chức năng P5 chưa hoàn tất.
 | 1.4 | 2026-08-13 | Đăng ký `EV-PROG-P5-500-506` cho P5 FE bốn workspace: source/host đầy đủ (Go 17 file test, CTest 1002/1002, FE vitest 502/502) + bằng chứng trình duyệt Chrome thật `TASK-PROG-506` (Playwright desktop+mobile, `UJ-PROG-01..08` 2/2 PASS mỗi project, FBD hoàn tất bằng phím thật, hai lỗi ứng dụng tự phát hiện+sửa ngay). Hỗ trợ một phần `VS-PROG-020/022/025/026/028/032`. Giữ nguyên 2 record BLOCKED, 0/32 PASS — chưa có executor/reviewer độc lập, target/HIL; `VS-PROG-027/029/030/031` vẫn NOT_RUN. |
 | 1.5 | 2026-08-13 | Đăng ký `EV-PROG-P5-507`: cleanup/backup/checksum, ARM64 deploy/read-back và Chrome desktop/mobile trên Foxlinx; Project/Draft/Revision/Check đạt HTTP `201/200/201/202`, Console sạch, WS `101`; ba lỗi target được sửa. Check terminal fail-closed vì thiếu compiler, Core Programming chưa deploy; flag cuối OFF/API 404, không Commission. Đây là supporting target evidence cho một phần `VS-019/025/026/028/032`, không Test Result; giữ 2/32 BLOCKED, 0/32 PASS. |
 | 1.6 | 2026-08-13 | Mở rộng `EV-PROG-P5-507` sau `0f1526c`: deploy compiler/Core/Web/FE ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Core read-back Active/LKG/Task `RUNNING`, Chrome sạch. P5 target happy path hoàn tất; giữ 2/32 BLOCKED, 0/32 PASS vì fault/power/HIL/usability và review độc lập chưa chạy. |
+| 1.7 | 2026-08-13 | Đăng ký `EV-PROG-P5-508-510` cho audit/corrective slice: định nghĩa test context/dirty/ST/deep-link/readiness, Monitor/Trace bounded và Chrome desktop/mobile; ghi rõ host evidence không kế thừa target 507. Source 508/509 đang VERIFYING; Task 510 target BLOCKED do SSH Foxlinx. Giữ 2/32 BLOCKED, 0/32 PASS. |
+| 1.8 | 2026-08-13 | Ghi `EV-PROG-P5-510`: full host gate, deploy/read-back/rollback rehearsal/tái deploy Foxlinx, Chrome desktop/mobile và axe 8/8 scan PASS. Đóng blocker SSH/tool scan; giữ source chưa merge, positive Monitor/Trace có binding, reviewer/usability/HIL/Test Result độc lập. Giữ 2/32 BLOCKED, 0/32 PASS và mọi `T/P/R=N`. |
+| 1.9 | 2026-08-13 | Bổ sung audit live HTTP cho `EV-PROG-P5-510` rev 1.1: UUID/SHA fallback không cần secure context, deep-link qua auth, ST save rồi phục hồi byte gốc, export `200`, import fault `422`, Restore/RETAIN fail-closed, mobile nav/no-overflow và axe 6/6 scan sạch. Ghim hash artifact/index/rollback; ghi rõ một deploy trung gian thiếu build flag đã bị thay. Giữ 2/32 BLOCKED, 0/32 PASS và mọi `T/P/R=N`. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

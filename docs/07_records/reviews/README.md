@@ -2,7 +2,7 @@
 
 **ID:** REC-REVIEW-INDEX-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-11 (`TASK-PROG-300 DONE`; P3 1/8; G3 IN_PROGRESS; 2 record BLOCKED, 0/32 PASS)
+**Cập nhật:** 2026-08-14 (Programming P5 `8/11`; audit UC-PROG-03 NO-GO; 2 record BLOCKED, 0/32 PASS)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -61,6 +61,8 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 |---|---|---|---|
 | [Baseline Source Fix Report](DDC24_BASELINE_SRC_FIX_REPORT.md) | 2026-08-03 | Record | CI, Point Model, Config Apply, health/recovery trước Programming Design |
 | [Programming Docs Sync Report](PROGRAMMING_DOCS_SYNC_REPORT.md) | 2026-08-03 | Complete | Đồng bộ docs theo Product Spec Programming Rev A |
+| [Programming As-Built/gap trình PM/CTO](PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md) | 2026-08-14 | **Active — NO-GO release** | Tổng kết source Core/BE/FE/contract; 12 finding; UC-PROG-03 sai từ bước 2 và vòng sửa sau Check bị 409 |
+| [Audit FE/UI/UX Programming Plan 53](PROGRAMMING_FE_UX_IMPLEMENTATION_AUDIT_2026-08-13.md) | 2026-08-14 | **v1.4 — UC-PROG-03 KHÔNG ĐẠT** | Live source rỗng/diagnostic thiếu location/ETag-base stale; Draft đã hoàn nguyên, Active không đổi |
 | [Programming Design Set Review](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | 2026-08-09 | Complete | Rà 22 hồ sơ Programming: 12 finding tài liệu đã đóng, 22/22 đạt M3; M4/M5 chờ người thật |
 | [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-11 | **v2.0 — APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; P0 7/7 DONE; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` PASS |
 | [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.32 — candidate v2.23** | Candidate định danh bằng **22 SHA-256**; PR #155 merge `424367a`, tree `7b81f79`; P3 1/8 |

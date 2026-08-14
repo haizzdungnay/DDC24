@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
   <title>PGM-02 Thiết kế — workspace desktop 1440 x 900</title>
-  <desc>Đặc tả thiết kế cho workspace PGM-02 gồm ba tab Chương trình, Điểm và Ánh xạ, Thực thi. Dữ liệu trong hình là minh họa, không phải dữ liệu runtime.</desc>
+  <desc>Revision 0.9. Đặc tả workspace PGM-02 gồm context Controller, Project, Draft dirty, Check, Active và Core; ba tab Chương trình, Điểm và Ánh xạ, Thực thi. Dữ liệu là minh họa, không phải dữ liệu runtime.</desc>
 
   <rect width="1440" height="900" fill="#C8CCD0"/>
 
@@ -44,16 +44,24 @@
 
   <!-- Context bar -->
   <rect x="252" y="80" width="1168" height="48" rx="8" fill="#D8DBDE" stroke="#636970"/>
-  <circle cx="272" cy="104" r="5" fill="#826500"/>
-  <text x="286" y="100" font-size="11" fill="#4A4F55">ĐANG SỬA</text>
-  <text x="286" y="115" font-size="13" font-weight="700" fill="#1C1F23">r17 · chưa lưu</text>
-  <line x1="420" y1="88" x2="420" y2="120" stroke="#636970"/>
-  <text x="440" y="100" font-size="11" fill="#4A4F55">ĐANG VẬN HÀNH</text>
-  <text x="440" y="115" font-size="13" font-weight="700" fill="#1C1F23">r15 · RUNNING · 14:22</text>
-  <line x1="700" y1="88" x2="700" y2="120" stroke="#636970"/>
-  <circle cx="720" cy="104" r="5" fill="#227742"/>
-  <text x="734" y="108" font-size="12" fill="#1C1F23">Core DDC-24-01 · RUNNING</text>
-  <text x="1200" y="108" font-size="11" fill="#4A4F55">Cập nhật 2 giây trước</text>
+  <text x="270" y="100" font-size="10" fill="#4A4F55">CONTROLLER</text>
+  <text x="270" y="115" font-size="12" font-weight="700" fill="#1C1F23">DDC-24-01</text>
+  <line x1="392" y1="88" x2="392" y2="120" stroke="#636970"/>
+  <text x="410" y="100" font-size="10" fill="#4A4F55">PROJECT</text>
+  <text x="410" y="115" font-size="12" font-weight="700" fill="#1C1F23">AHU-01</text>
+  <line x1="510" y1="88" x2="510" y2="120" stroke="#636970"/>
+  <circle cx="530" cy="104" r="5" fill="#826500"/>
+  <text x="544" y="100" font-size="10" fill="#4A4F55">ĐANG SỬA</text>
+  <text x="544" y="115" font-size="12" font-weight="700" fill="#1C1F23">r17 · chưa lưu</text>
+  <line x1="688" y1="88" x2="688" y2="120" stroke="#636970"/>
+  <text x="706" y="100" font-size="10" fill="#4A4F55">CHECK</text>
+  <text x="706" y="115" font-size="12" font-weight="700" fill="#826500">CHƯA CHẠY</text>
+  <line x1="812" y1="88" x2="812" y2="120" stroke="#636970"/>
+  <text x="830" y="100" font-size="10" fill="#4A4F55">ĐANG VẬN HÀNH</text>
+  <text x="830" y="115" font-size="12" font-weight="700" fill="#1C1F23">r15 · RUNNING</text>
+  <line x1="998" y1="88" x2="998" y2="120" stroke="#636970"/>
+  <circle cx="1018" cy="104" r="5" fill="#227742"/>
+  <text x="1032" y="108" font-size="12" fill="#1C1F23">Core RUNNING · cập nhật 2 giây trước</text>
 
   <!-- Tabs -->
   <line x1="252" y1="172" x2="1420" y2="172" stroke="#636970"/>
