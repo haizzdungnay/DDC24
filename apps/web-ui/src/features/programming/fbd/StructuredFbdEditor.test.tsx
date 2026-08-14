@@ -60,4 +60,12 @@ describe('StructuredFbdEditor', () => {
     fireEvent.keyDown(screen.getByRole('region', { name: /Structured FBD editor|Bộ dựng FBD/ }), { key: 'Insert' })
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('badge Draft issue số ít khi chỉ có đúng 1 lỗi (BUG-019)', () => {
+    const document = golden()
+    document.name = 'not a valid identifier' // vi phạm FBD-SCHEMA-ROOT-001, đúng 1 issue
+    renderEditor(document)
+    expect(screen.getByText('1 Draft issue')).toBeTruthy()
+    expect(screen.queryByText('1 Draft issues')).toBeNull()
+  })
 })

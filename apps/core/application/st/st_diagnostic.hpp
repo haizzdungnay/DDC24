@@ -79,6 +79,11 @@ constexpr const char* kIoMapBadPointId      = "ST-IOMAP-004";
 constexpr const char* kIoMapBadRange        = "ST-IOMAP-005";
 constexpr const char* kIoMapMissingBinding  = "ST-IOMAP-006";
 constexpr const char* kIoMapDuplicateBinding = "ST-IOMAP-007";
+/* F-PROG-ASBUILT-013/D-07: category hợp lệ về mặt định danh (LOCAL/VP/
+ * MB_RTU) nhưng chưa có đường dẫn runtime thật qua resolve_io_bindings() —
+ * hiện chỉ LOCAL được hỗ trợ. Tách khỏi ST-IOMAP-004 (identity sai format)
+ * vì đây là "đúng nhưng chưa hỗ trợ", không phải "sai cú pháp". */
+constexpr const char* kIoMapUnsupportedCategory = "ST-IOMAP-008";
 } // namespace st_diag_code
 
 struct StDiagnostic {

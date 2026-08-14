@@ -5,6 +5,7 @@ import type { ProgrammingImpactKey } from '../api/generated/client'
 import { programmingErrorCopy } from '../api/errorCopy'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth } from '../../auth'
+import { createUuid } from '../../../shared/crypto'
 import type { ProgrammingOperationView } from '../model/types'
 
 export type CommissionWorkflowState =
@@ -40,7 +41,7 @@ export function useCommissionWorkflow() {
     const storageKey = `programming.commission.idempotency.${revisionId}`
     const existing = sessionStorage.getItem(storageKey)
     if (existing) return existing
-    const created = crypto.randomUUID()
+    const created = createUuid()
     sessionStorage.setItem(storageKey, created)
     return created
   }, [])
@@ -96,7 +97,7 @@ export function useCommissionWorkflow() {
               cutover: { requested: 'PROGRAM_ONLY' }
             },
             idempotencyKey,
-            correlationId: crypto.randomUUID()
+            correlationId: createUuid()
           }
         )
         setState({ phase: 'polling', operationId: accepted.operationId })

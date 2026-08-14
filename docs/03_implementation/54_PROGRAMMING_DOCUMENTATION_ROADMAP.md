@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.36 |
-| Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.35; P1/P2/P3/P4 DONE về source/host; P5/P6 chưa bắt đầu; `RELEASE_READY BLOCKED`** |
-| Ngày baseline | 2026-08-13 |
+| Phiên bản | 3.37 |
+| Trạng thái | **IMPLEMENTATION IN PROGRESS — P0..P4 DONE về source/host; P5 `8/11`; P6 `0/3`; tổng `43/53`; `RELEASE_READY BLOCKED`** |
+| Ngày baseline | 2026-08-14 |
 | Chủ quản | System Engineering + Document Control |
 | Người phê duyệt | Product Owner, System Architect, Verification Lead |
 | Phạm vi | 22 hồ sơ điều khiển yêu cầu, thiết kế, kiểm chứng và triển khai Programming Rev A |
@@ -46,8 +46,8 @@ Nguồn để lập baseline:
 - [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md),
   [`RSK-PROG-001`](../07_records/PROGRAMMING_RISK_REGISTER.md) và
   [`TRACE-PROG-001`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md);
-- báo cáo As-Built theo mã nguồn tại
-  [`BAO_CAO_SRC_2026-08-09`](../07_records/BAO_CAO_SRC_2026-08-09/00_README.md);
+- báo cáo As-Built/gap hiện hành tại
+  [`REV-PROG-ASBUILT-GAP-2026-08-14`](../07_records/reviews/PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md);
 - rule “Cấu trúc bắt buộc của một file thiết kế” trong `AGENTS.md`.
 
 ### 1.1 Căn chỉnh mục tiêu chuẩn
@@ -573,6 +573,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.34 | 2026-08-11 | Ghi provenance `TASK-PROG-301`: PR #157 đã merge tại `d4fd15d`, tree `fe321c3`; remote feature branch đã xóa. Candidate v2.24/pin 22/22, P3 2/8 và ranh giới evidence/release không đổi; GitHub Actions không chạy step nào do billing/spending-limit, gate local đầy đủ vẫn PASS và đã ghi trong PR | Document Control |
 | 3.35 | 2026-08-13 | Đồng bộ tracker sau `TASK-PROG-402`: P3 DONE, P4 3/6, CORE-109 I=Y, phát hành candidate v2.34 do 6/22 hồ sơ baseline đổi; ghi rõ targeted 111/111, CTest 991/991, Go/FE/docs PASS nhưng `VS-PROG-029/030` chưa chạy, 0/32 PASS và RELEASE_READY BLOCKED. | Core + Verification + Document Control |
 | 3.36 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405`: P4 6/6 source/host, tổng 35/49, 7/60 I=Y; phát hành candidate v2.35 do 16/22 hồ sơ baseline đổi. CTest 1002/1002, Go/FE PASS; giữ feature OFF, 0/32 PASS và RELEASE_READY BLOCKED vì target/HIL/power-cut chưa chạy. | BE + Core + Verification + Document Control |
+| 3.37 | 2026-08-14 | Thay snapshot source ngày 2026-08-09 bằng báo cáo As-Built/gap hiện hành; đồng bộ header với Plan 53 v0.55: P0..P4 DONE source/host, P5 8/11, P6 0/3, tổng 43/53; không đổi 0/32 Test Result PASS hoặc `RELEASE_READY BLOCKED` | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

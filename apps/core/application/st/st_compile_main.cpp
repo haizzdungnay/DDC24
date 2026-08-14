@@ -33,11 +33,79 @@
 
 #include "st/st_control_api.hpp"
 #include "st/st_artifact_manifest.hpp"
+#include "st/st_io_map.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_limits.hpp"
 #include "st/st_profile_generated.hpp"
 
 namespace {
+
+/* F-PROG-ASBUILT-013/D-07 — parse ngược `st_type_name()`. Chuỗi lạ trả false,
+ * KHÔNG đoán về REAL — io_map là input từ BE, phải fail-closed như mọi input
+ * biên khác của CLI này. */
+bool parse_st_type(const std::string& text, core::StType* out)
+{
+    if (text == "BOOL") { *out = core::StType::BOOL; return true; }
+    if (text == "INT")  { *out = core::StType::INT;  return true; }
+    if (text == "DINT") { *out = core::StType::DINT; return true; }
+    if (text == "UINT") { *out = core::StType::UINT; return true; }
+    if (text == "REAL") { *out = core::StType::REAL; return true; }
+    if (text == "TIME") { *out = core::StType::TIME; return true; }
+    return false;
+}
+
+/* Đọc `--io-map-in <path>` — mảng JSON entry khớp `core::StIoMapEntry`.
+ * Field không hợp lệ (thiếu, sai kiểu JSON, type/direction/category không
+ * nhận diện được) làm toàn bộ CLI fail ngay tại đây — KHÔNG âm thầm bỏ qua
+ * entry lỗi rồi compile thiếu binding (đúng bug F-PROG-ASBUILT-013 vừa vá,
+ * không tái tạo dạng khác). Trả false + `*error_out` khi input sai hình dạng;
+ * nội dung binding sai logic (unknown var, type mismatch...) được
+ * `resolve_io_bindings()` bắt sau, có mã lỗi ST-IOMAP-* ổn định. */
+bool read_io_map(const std::string& path, std::vector<core::StIoMapEntry>* out,
+                 std::string* error_out)
+{
+    std::ifstream f(path, std::ios::binary);
+    if (!f) { *error_out = "cannot open --io-map-in file"; return false; }
+    nlohmann::json doc;
+    try {
+        f >> doc;
+    } catch (const std::exception& e) {
+        *error_out = std::string("--io-map-in is not valid JSON: ") + e.what();
+        return false;
+    }
+    if (!doc.is_object() || !doc.contains("entries") || !doc["entries"].is_array()) {
+        *error_out = "--io-map-in must be an object with an \"entries\" array";
+        return false;
+    }
+    out->clear();
+    for (const nlohmann::json& item : doc["entries"]) {
+        if (!item.is_object()) { *error_out = "io_map entry must be an object"; return false; }
+        core::StIoMapEntry entry;
+        try {
+            entry.variable = item.at("variable").get<std::string>();
+            entry.direction = item.at("direction").get<std::string>();
+            entry.point_id = item.at("pointId").get<std::string>();
+            const std::string type_text = item.at("type").get<std::string>();
+            if (!parse_st_type(type_text, &entry.type)) {
+                *error_out = "io_map entry for '" + entry.variable + "' has unknown type '" +
+                             type_text + "'";
+                return false;
+            }
+            entry.unit = item.value("unit", std::string());
+            entry.has_range = item.value("hasRange", false);
+            entry.range_min = item.value("rangeMin", 0.0f);
+            entry.range_max = item.value("rangeMax", 0.0f);
+            entry.category = item.value("category", std::string("LOCAL"));
+            entry.device_id = item.value("deviceId", std::string());
+            entry.writable = item.value("writable", true);
+        } catch (const std::exception& e) {
+            *error_out = std::string("io_map entry missing/malformed field: ") + e.what();
+            return false;
+        }
+        out->push_back(std::move(entry));
+    }
+    return true;
+}
 
 int emit(const nlohmann::json& j, int code)
 {
@@ -217,6 +285,7 @@ int main(int argc, char** argv)
     std::string key_path;
     std::string out_path;
     std::string manifest_out_path;
+    std::string io_map_path;
     bool sandbox = false;
 
     for (int i = 1; i < argc; i++) {
@@ -227,6 +296,7 @@ int main(int argc, char** argv)
         else if (a == "--key" && i + 1 < argc) key_path = argv[++i];
         else if (a == "--out" && i + 1 < argc) out_path = argv[++i];
         else if (a == "--manifest-out" && i + 1 < argc) manifest_out_path = argv[++i];
+        else if (a == "--io-map-in" && i + 1 < argc) io_map_path = argv[++i];
         else if (a == "--sandbox") sandbox = true;
         else if (a == "--version") {
             std::printf("compiler_version=%s profile_id=%s profile_sha256=%s "
@@ -240,7 +310,8 @@ int main(int argc, char** argv)
         else if (a == "--help") {
             std::printf("usage: mkddc-st-compile --source <path> [--language ST|FBD] "
                         "[--source-id <opaque>] [--key <hexfile>] [--out <artifact>] "
-                        "[--manifest-out <json>] [--sandbox] [--version]\n");
+                        "[--manifest-out <json>] [--io-map-in <json>] [--sandbox] "
+                        "[--version]\n");
             return 0;
         } else {
             return fail("ST-CLI-ARGS", "unknown argument '" + a + "'", 2);
@@ -252,6 +323,16 @@ int main(int argc, char** argv)
         return fail("ST-CLI-ARGS", "--language must be ST or FBD", 2);
     if (sandbox && !key_path.empty())
         return fail("ST-CLI-SANDBOX", "sandbox worker does not accept signing keys", 2);
+
+    /* F-PROG-ASBUILT-013/D-07: đọc io_map TRƯỚC sandbox (nếu bật) vì sandbox
+     * cấm mọi open/openat sau điểm này — cùng lý do out/manifest đã mở file
+     * trước dòng apply_worker_sandbox() bên dưới. */
+    std::vector<core::StIoMapEntry> io_map;
+    if (!io_map_path.empty()) {
+        std::string io_map_error;
+        if (!read_io_map(io_map_path, &io_map, &io_map_error))
+            return fail("ST-CLI-IO", io_map_error, 2);
+    }
 
     std::string source;
     if (!read_file(source_path, &source, core::st_limits::kMaxSourceBytes))
@@ -289,8 +370,8 @@ int main(int argc, char** argv)
     core::StArtifactBuildResult build;
     core::StManifestError build_error;
     const bool built = language == "ST"
-                           ? core::BuildStArtifact(source_id, source, &build, &build_error)
-                           : core::BuildFbdArtifact(source_id, source, &build, &build_error);
+                           ? core::BuildStArtifact(source_id, source, &build, &build_error, io_map)
+                           : core::BuildFbdArtifact(source_id, source, &build, &build_error, io_map);
     if (!built)
         return fail(build_error.code.c_str(), build_error.message, 1, source_id,
                     build_error.line, build_error.column, build_error.length);
@@ -355,6 +436,10 @@ int main(int argc, char** argv)
     j["manifest"] = manifest;
     j["instructionCount"] = build.module.code.size();
     j["slotCount"] = build.module.slot_count;
+    /* F-PROG-ASBUILT-013/D-07: BE/target evidence xác nhận artifact THẬT SỰ
+     * mang binding thay vì chỉ tin request đã gửi --io-map-in — 0 dù đã gửi
+     * io_map nghĩa là mọi entry đều rỗng (io_map_path rỗng), không phải lỗi. */
+    j["ioBindingCount"] = build.module.io_bindings.size();
     j["hasRetain"] = build.module.has_retain();
     j["compilerVersion"] = core::st_ir::kCompilerVersion;
     j["artifactSchemaVersion"] = core::st_ir::kSchemaVersion;

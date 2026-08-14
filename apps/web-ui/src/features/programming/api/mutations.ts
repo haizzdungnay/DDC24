@@ -3,6 +3,7 @@ import { useProgrammingApiClient } from './authClient'
 import { ProgrammingApiError } from './generated/client'
 import { programmingErrorCopy } from './errorCopy'
 import { useI18n } from '../../../shared/i18n'
+import { createUuid } from '../../../shared/crypto'
 import type { ProgrammingProject } from '../model/types'
 
 interface MutationResponse<T> {
@@ -31,8 +32,8 @@ export function useCreateProgrammingProject() {
       try {
         const response = await client.request<MutationResponse<ProgrammingProject>>('createProgrammingProject', {
           body: { schemaVersion: '1.0', name },
-          idempotencyKey: crypto.randomUUID(),
-          correlationId: crypto.randomUUID()
+          idempotencyKey: createUuid(),
+          correlationId: createUuid()
         })
         return response.resource
       } catch (reason) {

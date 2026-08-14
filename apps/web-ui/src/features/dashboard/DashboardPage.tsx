@@ -17,6 +17,7 @@ import {
   SeverityBadge,
   healthReasonLabel
 } from '../../shared/components/pa3/StateAtoms'
+import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { resolveDrilldown, safeInternalLink } from '../../shared/overview/drilldown'
@@ -29,6 +30,7 @@ import {
   formatDataAge,
   formatDateTime,
   formatValue,
+  isChannelNotConfigured,
   isFreshIso,
   mergePointsById,
   pointDisplayTag,
@@ -117,7 +119,7 @@ function OverviewHeader({ overview, receivedAt, degradedFetch, onRefresh }: {
   degradedFetch: boolean
   onRefresh: () => void
 }) {
-  const { pick } = useI18n()
+  const { lang, pick } = useI18n()
   const [, setTick] = useState(0)
   // Tuổi dữ liệu phải TRÔI theo thời gian thật. Nếu chỉ render lại khi có
   // snapshot mới, mất mạng sẽ đóng băng chữ "1s" mãi mãi.
@@ -144,7 +146,7 @@ function OverviewHeader({ overview, receivedAt, degradedFetch, onRefresh }: {
             )}
           </div>
           <p className="mt-2 text-sm text-[var(--c-text-dim)]">
-            {healthReasonLabel(overview.overallReasonCode)}
+            {healthReasonLabel(overview.overallReasonCode, lang)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -216,7 +218,7 @@ function HealthStrip({ health, onOpen }: { health: OverviewDomainHealth[]; onOpe
               {link && <ChevronRight className="h-4 w-4 shrink-0 text-[var(--c-accent)]" aria-hidden="true" />}
             </div>
             <div className="mt-2"><HealthChip state={domain.state} /></div>
-            <div className="mt-2 text-xs text-[var(--c-text-dim)]">{domain.detail || healthReasonLabel(domain.reasonCode)}</div>
+            <div className="mt-2 text-xs text-[var(--c-text-dim)]">{domain.detail || healthReasonLabel(domain.reasonCode, lang)}</div>
             {/* §5.1: mỗi ô phải nói ra nguồn và tuổi dữ liệu của chính nó. */}
             <div className="mono mt-1 text-[11px] text-[var(--c-text-dim)]">{domain.source} · {formatDataAge(domain.observedAt)}</div>
           </>
@@ -499,7 +501,8 @@ function WorkspaceTile({ id, point, onUnpin }: { id: string; point: Point | unde
   /* §8: point offline hiện `—`, KHÔNG hiện `0`. Một quạt mất liên lạc và một
      quạt đang dừng là hai chuyện khác nhau, và trên màn hình phải trông khác
      nhau. */
-  const showValue = point.quality !== 'offline'
+  const notConfigured = isChannelNotConfigured(point)
+  const showValue = point.quality !== 'offline' && !notConfigured
   return (
     <Link to={`/monitor?point=${encodeURIComponent(point.id)}`} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 transition hover:border-[var(--c-accent)]">
       <div className="flex items-start justify-between gap-2">
@@ -515,7 +518,9 @@ function WorkspaceTile({ id, point, onUnpin }: { id: string; point: Point | unde
       </div>
       <div className="mono mt-2 text-2xl font-bold">{showValue ? formatValue(point.value, point.unit) : NO_DATA}</div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <QualityBadge quality={point.quality} reason={point.qualityReason} />
+        {notConfigured
+          ? <StatusBadge state="inactive" label={pick('Chưa cấu hình', 'Not configured')} />
+          : <QualityBadge quality={point.quality} reason={point.qualityReason} />}
         {point.forced && <ForcedBadge remainingLabel={formatCountdown(point.overrideExpiresInS)} />}
       </div>
       <div className="mono mt-2 text-[11px] text-[var(--c-text-dim)]">
@@ -653,16 +658,16 @@ function TrendPreview() {
 
 /* ── 7. Activity ────────────────────────────────────────────────────────── */
 
-const activityActionLabels: Record<string, string> = {
-  login: 'Đăng nhập',
-  point_force: 'Ép giá trị điểm',
-  point_release: 'Nhả lệnh ép',
-  point_override: 'Ép tay có thời hạn',
-  point_metadata: 'Sửa siêu dữ liệu điểm',
-  alarm_ack: 'Xác nhận cảnh báo',
-  alarm_suppress: 'Tạm ẩn cảnh báo',
-  commissioning_test: 'Kiểm tra commissioning',
-  override_expired: 'Hết hạn ép tay'
+const activityActionLabels: Record<string, [string, string]> = {
+  login: ['Đăng nhập', 'Login'],
+  point_force: ['Ép giá trị điểm', 'Force point value'],
+  point_release: ['Nhả lệnh ép', 'Release force'],
+  point_override: ['Ép tay có thời hạn', 'Timed manual override'],
+  point_metadata: ['Sửa siêu dữ liệu điểm', 'Edit point metadata'],
+  alarm_ack: ['Xác nhận cảnh báo', 'Acknowledge alarm'],
+  alarm_suppress: ['Tạm ẩn cảnh báo', 'Suppress alarm'],
+  commissioning_test: ['Kiểm tra commissioning', 'Commissioning test'],
+  override_expired: ['Hết hạn ép tay', 'Override expired']
 }
 
 function ActivityPanel() {
@@ -711,7 +716,9 @@ function ActivityPanel() {
 }
 
 function ActivityRow({ event }: { event: ActivityEvent }) {
+  const { pick } = useI18n()
   const link = event.objectType && event.objectId ? resolveDrilldown(event.objectType, event.objectId) : null
+  const actionLabel = activityActionLabels[event.action]
   const outcomeColor = event.outcome === 'accepted' || event.outcome === 'ok'
     ? 'var(--c-good-fg)'
     : event.outcome === 'rejected' || event.outcome === 'denied'
@@ -721,7 +728,7 @@ function ActivityRow({ event }: { event: ActivityEvent }) {
     <li className="flex flex-wrap items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0 text-xs">
       <div className="min-w-0">
         <div className="font-semibold">
-          {activityActionLabels[event.action] ?? event.action}
+          {actionLabel ? pick(actionLabel[0], actionLabel[1]) : event.action}
           {event.objectId && <span className="mono ml-2 text-[var(--c-text-dim)]">{event.objectId}</span>}
         </div>
         <div className="mt-0.5 text-[var(--c-text-dim)]">

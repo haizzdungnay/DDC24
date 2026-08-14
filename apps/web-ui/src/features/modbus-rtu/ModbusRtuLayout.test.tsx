@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { I18nProvider } from '../../shared/i18n'
 import type { UserRole } from '../../shared/types'
 import { ModbusRtuLayout } from './ModbusRtuLayout'
 import { DevicesPage } from './pages/DevicesPage'
@@ -39,17 +40,19 @@ vi.mock('../auth', async (importOriginal) => {
 
 function renderAt(path: string) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/eng/modbus-rtu" element={<ModbusRtuLayout />}>
-          <Route index element={<OverviewPage />} />
-          <Route path="overview" element={<OverviewPage />} />
-          <Route path="devices" element={<DevicesPage />} />
-          <Route path="points" element={<PointsPage />} />
-          <Route path="diagnostics" element={<DiagnosticsPage />} />
-        </Route>
-      </Routes>
-    </MemoryRouter>
+    <I18nProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/eng/modbus-rtu" element={<ModbusRtuLayout />}>
+            <Route index element={<OverviewPage />} />
+            <Route path="overview" element={<OverviewPage />} />
+            <Route path="devices" element={<DevicesPage />} />
+            <Route path="points" element={<PointsPage />} />
+            <Route path="diagnostics" element={<DiagnosticsPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>
   )
 }
 
@@ -59,6 +62,8 @@ function renderAt(path: string) {
  * hình với suite dù 306/306 pass. Mọi kiểm tra ở đây phải đi qua router. */
 describe('ModbusRtuLayout + outlet', () => {
   beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('mkddc-lang', 'vi')
     auth.role = 'admin'
     api.getModbusDevices.mockResolvedValue([])
     api.getModbusPoints.mockResolvedValue([])

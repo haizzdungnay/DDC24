@@ -36,6 +36,32 @@ type Input struct {
 	SourceID string
 	Language string
 	Source   []byte
+	// IoMap là Binding Manifest (F-PROG-ASBUILT-013/D-07,
+	// REV-PROG-ASBUILT-GAP-2026-08-14) — mỗi entry map một VAR_INPUT/VAR_OUTPUT
+	// ST khai báo trong Source tới một Point thật. Rỗng = hành vi cũ trước vá
+	// (không --io-map-in, artifact không mang binding nào). Validate/reject
+	// (unknown var, type/direction sai, category không hỗ trợ, trùng
+	// biến/trùng physical output...) là trách nhiệm của compiler CLI
+	// (`resolve_io_bindings()`), không lặp logic đó ở đây.
+	IoMap []IoMapEntry
+}
+
+// IoMapEntry khớp field-for-field với `core::StIoMapEntry` JSON shape mà
+// `read_io_map()` (st_compile_main.cpp) parse — đổi tên field ở một phía mà
+// không đổi phía kia sẽ làm mọi Check có binding fail ở bước io_map (không
+// silently mất binding).
+type IoMapEntry struct {
+	Variable  string  `json:"variable"`
+	Direction string  `json:"direction"`
+	PointID   string  `json:"pointId"`
+	Type      string  `json:"type"`
+	Unit      string  `json:"unit,omitempty"`
+	HasRange  bool    `json:"hasRange,omitempty"`
+	RangeMin  float64 `json:"rangeMin,omitempty"`
+	RangeMax  float64 `json:"rangeMax,omitempty"`
+	Category  string  `json:"category"`
+	DeviceID  string  `json:"deviceId,omitempty"`
+	Writable  bool    `json:"writable"`
 }
 
 type Diagnostic struct {
@@ -62,6 +88,10 @@ type Result struct {
 	LibraryVersion        string
 	IntegrityMode         string
 	TargetABI             int64
+	// IoBindingCount là bằng chứng artifact THẬT SỰ mang binding (không chỉ
+	// tin request đã gửi IoMap) — validateSuccess() ép bằng đúng
+	// len(input.IoMap), 0 khi Check không gửi io_map (hành vi cũ, hợp lệ).
+	IoBindingCount int64
 }
 
 type Runner interface {
@@ -91,6 +121,7 @@ type cliResponse struct {
 	Manifest                json.RawMessage `json:"manifest"`
 	InstructionCount        *int64          `json:"instructionCount"`
 	SlotCount               *int64          `json:"slotCount"`
+	IoBindingCount          *int64          `json:"ioBindingCount"`
 	HasRetain               *bool           `json:"hasRetain"`
 	CompilerVersion         string          `json:"compilerVersion"`
 	ArtifactSchemaVersion   int             `json:"artifactSchemaVersion"`
@@ -109,6 +140,17 @@ func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error)
 		len(input.SourceID) < 1 || len(input.SourceID) > 128 || strings.ContainsAny(input.SourceID, "/\\") {
 		return Result{}, fmt.Errorf("tham số compiler worker không hợp lệ")
 	}
+	if len(input.IoMap) > 256 {
+		return Result{}, fmt.Errorf("tham số compiler worker không hợp lệ")
+	}
+	for _, entry := range input.IoMap {
+		if !boundedLen(entry.Variable, 1, 128) || !boundedLen(entry.PointID, 1, 64) ||
+			(entry.Direction != "input" && entry.Direction != "output") ||
+			!boundedLen(entry.Type, 1, 16) || !boundedLen(entry.Category, 1, 16) ||
+			len(entry.Unit) > 32 || len(entry.DeviceID) > 64 {
+			return Result{}, fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+	}
 	if err := ensurePrivateDirectory(r.ScratchRoot); err != nil {
 		return Result{}, err
 	}
@@ -126,13 +168,27 @@ func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error)
 	if err := writeExclusive(sourcePath, input.Source, 0o600); err != nil {
 		return Result{}, err
 	}
+	args := []string{"--source", sourcePath, "--language", input.Language, "--source-id", input.SourceID,
+		"--out", artifactPath, "--manifest-out", manifestPath}
+	if len(input.IoMap) > 0 {
+		ioMapPath := filepath.Join(jobRoot, "io_map.json")
+		ioMapJSON, err := json.Marshal(struct {
+			Entries []IoMapEntry `json:"entries"`
+		}{Entries: input.IoMap})
+		if err != nil {
+			return Result{}, err
+		}
+		if err := writeExclusive(ioMapPath, ioMapJSON, 0o600); err != nil {
+			return Result{}, err
+		}
+		args = append(args, "--io-map-in", ioMapPath)
+	}
+	args = append(args, "--sandbox")
 
 	compileCtx, cancel := context.WithTimeout(ctx, r.Timeout)
 	defer cancel()
 	stdout, stderr := &boundedBuffer{limit: maxStdoutBytes}, &boundedBuffer{limit: maxStderrBytes}
-	cmd := exec.CommandContext(compileCtx, r.BinaryPath,
-		"--source", sourcePath, "--language", input.Language, "--source-id", input.SourceID,
-		"--out", artifactPath, "--manifest-out", manifestPath, "--sandbox")
+	cmd := exec.CommandContext(compileCtx, r.BinaryPath, args...)
 	cmd.Dir = jobRoot
 	cmd.Env = []string{"LANG=C", "LC_ALL=C", "TZ=UTC", "PATH=/usr/bin:/bin"}
 	cmd.Stdin = nil
@@ -183,6 +239,10 @@ func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error)
 	return validateSuccess(response, artifactPath, manifestPath, input)
 }
 
+func boundedLen(text string, min, max int) bool {
+	return len(text) >= min && len(text) <= max
+}
+
 func decodeCLIResponse(raw []byte) (cliResponse, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -206,6 +266,7 @@ func validateSuccess(response cliResponse, artifactPath, manifestPath string, in
 		response.IntegrityMode == nil || response.SignaturePresent == nil || *response.SignaturePresent ||
 		response.SourceSHA256 == nil || response.BuildKeySHA256 == nil ||
 		response.SourceID == nil || *response.SourceID != input.SourceID || response.Language == nil || *response.Language != input.Language ||
+		response.IoBindingCount == nil || *response.IoBindingCount != int64(len(input.IoMap)) ||
 		*response.CompilerProfile != 1 || *response.ProfileID != "revA-1t-1-5-30" ||
 		*response.ProfileSHA256 != "94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc" ||
 		*response.LibraryVersion != "rev-a.1" ||
@@ -285,7 +346,8 @@ func validateSuccess(response cliResponse, artifactPath, manifestPath string, in
 	return Result{OK: true, Diagnostics: response.Diagnostics, Artifact: artifact, ArtifactSHA256: digest,
 		Manifest: canonicalManifest, CompilerVersion: response.CompilerVersion, ArtifactSchemaVersion: response.ArtifactSchemaVersion,
 		CompilerProfile: *response.CompilerProfile, ProfileID: *response.ProfileID, ProfileSHA256: *response.ProfileSHA256,
-		LibraryVersion: *response.LibraryVersion, IntegrityMode: *response.IntegrityMode, TargetABI: response.TargetABI}, nil
+		LibraryVersion: *response.LibraryVersion, IntegrityMode: *response.IntegrityMode, TargetABI: response.TargetABI,
+		IoBindingCount: *response.IoBindingCount}, nil
 }
 
 func ensurePrivateDirectory(root string) error {

@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
@@ -25,6 +25,9 @@ vi.mock('../../auth', async (importOriginal) => {
 
 const client = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => client }))
+vi.mock('../layout/ProgrammingLayout', () => ({
+  useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn() })
+}))
 
 function baseDocument(): ProgrammingDraftDocument {
   return {
@@ -46,12 +49,13 @@ function baseProject(): ProgrammingProject {
   }
 }
 
-function renderWorkspace() {
+function renderWorkspace(initialPath = '/eng/programming/projects/project-1/design') {
   return render(
     <I18nProvider>
-      <MemoryRouter initialEntries={['/eng/programming/projects/project-1/design']}>
+      <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/eng/programming/projects/:projectId/design" element={<DesignWorkspacePage />} />
+          <Route path="/eng/programming/projects/:projectId/commission" element={<div>Check &amp; Commission page</div>} />
         </Routes>
       </MemoryRouter>
     </I18nProvider>
@@ -63,10 +67,20 @@ beforeEach(() => {
   client.request.mockReset()
   localStorage.setItem('mkddc-lang', 'vi')
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   it('nạp Draft thật và cho phép thêm chương trình ST qua PATCH batch upsertProgram+setTask', async () => {
+    let counter = 0
+    vi.stubGlobal('crypto', {
+      getRandomValues: (bytes: Uint8Array) => {
+        bytes.fill(counter++)
+        return bytes
+      }
+    })
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
@@ -96,7 +110,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(setTaskOp.op).toBe('setTask')
     expect(setTaskOp.task.programOrder).toEqual([upsertOp.program.programId])
 
-    await waitFor(() => expect(screen.getByText(/New program/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: /New program/ })).toBeInTheDocument())
   })
 
   it('409 giữ nguyên buffer đang gõ và hiện banner reload/merge (UX §9)', async () => {
@@ -153,19 +167,11 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Lệnh FBD' })).toBeInTheDocument())
   })
 
-  it('gửi targetProfile công khai đúng OpenAPI khi tạo Check', async () => {
+  it('nút Kiểm tra điều hướng sang PGM-03 (Check & Commission), không tự seal/check (D-01)', async () => {
     const project = baseProject()
-    project.baseRevisionId = 'b1111111-1111-4111-8111-111111111111'
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      if (operationId === 'createProgrammingRevision') {
-        return Promise.resolve({
-          resource: { projectId: 'project-1', revisionId: 'b324bb9b-2bb5-4fce-8789-f6d0fe493f6a' },
-          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
-        })
-      }
-      if (operationId === 'createProgrammingCheck') return new Promise(() => {})
       throw new Error(`unexpected operation ${operationId}`)
     })
 
@@ -173,13 +179,107 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kiểm tra' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra' }))
 
+    await waitFor(() => expect(screen.getByText('Check & Commission page')).toBeInTheDocument())
+    // D-01: PGM-02 không được tự gọi seal/Check — đó là việc của PGM-03 giờ.
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingRevision')).toBe(false)
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingCheck')).toBe(false)
+  })
+
+  it('URL mang line/column/length (điều hướng từ Problems ở PGM-03) nhảy đúng vùng chọn trong ST editor (F-PROG-ASBUILT-003)', async () => {
+    const source = 'PROGRAM P\nVAR_OUTPUT X : BOOL; END_VAR\nX := ;\nEND_PROGRAM\n'
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?tab=programs&program=program-1&line=3&column=6&length=1')
+
+    const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+    const expectedOffset = source.indexOf('X := ;') + 5 // vị trí ';' — cột 6, dòng 3
+    await waitFor(() => expect(textarea.selectionStart).toBe(expectedOffset))
+    expect(textarea.selectionEnd).toBe(expectedOffset + 1)
+  })
+
+  it('giữ dirty state, chặn Check/beforeunload và Ctrl+S lưu đúng buffer ST', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 1;' })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string, options?: { body?: { operations: unknown[] } }) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        const updated = structuredClone(project)
+        updated.draft!.programs[0].document = 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 2;'
+        updated.etag = '"draft-1:2"'
+        return Promise.resolve({ resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: updated.draft }, etag: updated.etag, auditId: 'audit-2', correlationId: 'corr-2' })
+      }
+      throw new Error(`unexpected operation ${operationId} ${String(options)}`)
+    })
+
+    renderWorkspace()
+    fireEvent.click(await screen.findByText('Điều khiển AHU'))
+    const textarea = await screen.findByLabelText(/Mã nguồn ST/)
+    fireEvent.change(textarea, { target: { value: 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 2;' } })
+
+    await waitFor(() => expect(screen.getByText(/Draft có thay đổi chưa lưu/)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Kiểm tra' })).toBeDisabled()
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+
+    await waitFor(() => expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(true))
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
+    expect(options.body.operations).toEqual([{ op: 'replaceProgramSource', programId: 'program-1', language: 'ST', source: 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 2;' }])
+  })
+
+  it('xóa Program hỏi xác nhận rồi gửi batch removeBinding+removeVariable+removeProgram+setTask', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
+    project.draft!.variables.push({ variableId: 'var-1', programId: 'program-1', name: 'X', type: 'REAL', class: 'LOCAL', initialValue: 0, retain: false })
+    project.draft!.bindings.push({
+      bindingId: 'bind-1', variableId: 'var-1', point: { category: 'VP', pointId: 'p1' },
+      direction: 'READ', dataType: 'REAL', writable: false, qualityPolicy: 'REQUIRE_GOOD'
+    })
+    project.draft!.task.programOrder = ['program-1']
+
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: baseDocument() },
+          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
+    expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTitle('Xóa chương trình'))
+    const dialog = screen.getByRole('dialog', { name: 'Xóa chương trình?' })
+    expect(within(dialog).getByText(/Điều khiển AHU/)).toHaveTextContent('Không thể hoàn tác sau khi lưu.')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xóa' }))
+
     await waitFor(() => {
-      const call = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingCheck')
+      const call = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')
       expect(call).toBeTruthy()
     })
-    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingCheck')!
-    expect(options.body).toEqual({ schemaVersion: '1.0', targetProfile: 'MK-DDC-24-REV-A' })
-    const [, sealOptions] = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingRevision')!
-    expect(sealOptions.body.baseRevisionId).toBe('b1111111-1111-4111-8111-111111111111')
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
+    expect(options.body.operations).toEqual([
+      { op: 'removeBinding', bindingId: 'bind-1' },
+      { op: 'removeVariable', variableId: 'var-1' },
+      { op: 'removeProgram', programId: 'program-1' },
+      { op: 'setTask', task: { taskId: 'task-1', periodMs: 1000, programOrder: [] } }
+    ])
+    await waitFor(() => expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument())
   })
 })

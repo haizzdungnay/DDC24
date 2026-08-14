@@ -3,6 +3,7 @@ import type React from 'react'
 import { API_ORIGIN, AUTH_MODE, IS_DEMO } from '../../shared/config'
 import { setAuthHeaderProvider } from '../../shared/api/client'
 import { setHistoryAuthHeaderProvider } from '../../shared/api/history'
+import { useI18n } from '../../shared/i18n'
 import type { UserRole } from '../../shared/types'
 
 interface Session {
@@ -26,6 +27,7 @@ const base = `${API_ORIGIN.replace(/\/$/, '')}/api/v1`
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
+  const { pick } = useI18n()
 
   const getAuthHeader = useCallback((): Record<string, string> => {
     if (!session) return {}
@@ -74,7 +76,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ username, password })
     })
-    if (!response.ok) throw new Error('Đăng nhập thất bại')
+    // TC-L02/TC-L03 (TR-MKDDC24-P1-20260814-01): trước đây hard-code tiếng
+    // Việt, nên phiên English vẫn nhận "Đăng nhập thất bại" — dịch theo locale
+    // đang chọn thay vì luôn tiếng Việt.
+    if (!response.ok) throw new Error(pick('Đăng nhập thất bại', 'Sign in failed'))
     const body = await response.json() as { token?: string; role?: UserRole }
     if (body.token) {
       const provider = () => ({ Authorization: `Bearer ${body.token}` })
@@ -90,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn('mkddc: response login thiếu field "role"; mặc định về quyền viewer')
     }
     setSession({ username, role: body.role ?? 'viewer', token: body.token, loginAt: new Date().toISOString() })
-  }, [])
+  }, [pick])
 
   const logout = useCallback(() => {
     const revokeToken = session?.token

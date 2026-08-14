@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "60f050d184de1f37c668a7b85d6a52969dce03e11157389a58fc43c550a3e7d2" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.4.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "0aa6e47a477e59e15564039e938faaec602e19aad24efc3b7f64f4de5d99d848" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.5.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
@@ -56,6 +56,7 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-IOMAP-005": "PRG-ERR-MAP-003",
   "compiler\u0000ST-IOMAP-006": "PRG-ERR-MAP-003",
   "compiler\u0000ST-IOMAP-007": "PRG-ERR-MAP-003",
+  "compiler\u0000ST-IOMAP-008": "PRG-ERR-MAP-003",
   "compiler\u0000ST-LEX-001": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-LEX-002": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-LEX-003": "PRG-ERR-CHECK-001",

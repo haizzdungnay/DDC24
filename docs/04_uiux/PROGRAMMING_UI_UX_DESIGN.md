@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `UX-WEB-PROG-001` |
-| Phiên bản | 0.8 |
-| Trạng thái | **M3 — Review Ready** — Product `ACCEPT` IA bốn workspace/tám journey; chờ UX/FE/BE/QA/a11y review |
-| Ngày | 2026-08-10 |
+| Phiên bản | 1.1 |
+| Trạng thái | **M3 AS-BUILT + LIVE CORRECTIVE VERIFIED** — finding UI/safety audit 1.2 đã sửa/deploy; positive Trace/recommission, review/usability/release còn mở |
+| Ngày | 2026-08-13 |
 | Chủ quản | UX Lead + Frontend Lead |
 | Người review | Product Owner, Backend Lead, Verification Lead, Accessibility Reviewer |
 | Người phê duyệt | Product Owner + UX Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **người dùng thấy gì và bấm gì**: bốn workspace, tám user journey, 17 use case ở lớp kịch bản, cây component, chữ hiển thị VI/EN, trạng thái rỗng/lỗi/cũ, phím tắt và khả năng tiếp cận. Cả bốn workspace có bản thiết kế trực quan render được trong §16; PGM-01 có riêng desktop/mobile. FE dựng giao diện từ đây và Product duyệt trực tiếp bố cục bằng các asset đó. |
 | 2. Ai phải đọc file này? | UX và FE (chủ quản); Product Owner duyệt; BE đọc §24 để biết FE sẽ gọi API nào; QA dựng ca E2E/a11y từ §14 và §17; Accessibility reviewer đọc §13 và §27. |
-| 3. Hệ thống hiện tại đang có gì? | Route `/eng/programming` **có tồn tại** trong `apps/web-ui/src/app/App.tsx` nhưng đang bị feature flag `LEGACY_GRAPH_DEMO_ENABLED` chặn. Trang hiện tại là `features/dashboard/ProgrammingPage.tsx` — chỉ là demo graph cũ, **không** đáp ứng IA sáu trang. Có sẵn `UnavailableFeaturePage.tsx`, `NavRail` (đã có key `programming`), `AuthProvider`/`roles.ts` và `shared/i18n.tsx`. Chưa có API Programming nào. |
-| 4. Thiết kế mới thay đổi điều gì? | Dựng feature mới tại `apps/web-ui/src/features/programming/` với **bốn workspace** `PGM-01..04`; ba trang cũ gộp thành ba tab của workspace Thiết kế, và Check về chung chỗ với Commission. Nguyên tắc chi phối toàn bộ: **luôn tách “đang sửa” khỏi “đang vận hành”**, và **không bao giờ báo thành công lạc quan** — chỉ đọc ngược từ Core mới được đổi ô Active. |
-| 5. Team phải sửa module/contract nào? | §15 và §23. FE tạo feature mới, **không** mở rộng `features/dashboard/ProgrammingPage.tsx`; mở rộng i18n key `programming.*`; dùng lại identity/role hiện có nhưng server vẫn là bên quyết quyền. §28 quy định route cũ chỉ được xóa sau khi có redirect và release note. |
-| 6. Điều gì còn bị chặn? | `OD-PROG-016` chưa ký nên IA bốn workspace vẫn là đề xuất; route/API Programming chưa implement (§14); vai trò, hạn mức và một phần chữ hiển thị chờ `OD-PROG-001/003/011`; bằng chứng trình duyệt chỉ tạo được sau khi có slice FE. **Không dùng ảnh chụp mock để nâng M4/M5.** |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §14 sáu bài `UX-T-001..006`, trong đó `UX-T-006` là **usability test có người dùng thật** với bảy tiêu chí định lượng (§14.1); cộng `VS-PROG-002/025/026/028/031`. Tất cả **chưa chạy**. |
+| 3. Hệ thống hiện tại đang có gì? | Bốn workspace production chạy trên HTTP Foxlinx. Corrective 1.3 thêm UUID/SHA tương thích insecure context, full deep-link, Save/read-back, READY-only Restore, RETAIN disabled khi thiếu impact, safe-state attention, Export, tiếng Việt mặc định, bottom nav và operation card mobile. |
+| 4. Thiết kế mới thay đổi điều gì? | Giữ IA bốn workspace; bổ sung điều kiện bất biến: mutation runtime chỉ khi Core `READY` và không safe-state; RETAIN không có impact thật thì không mở modal; safe-state luôn sinh attention có code/reason/scope/action; mobile có nav bốn workspace và không dùng table cắt nội dung. |
+| 5. Team phải sửa module/contract nào? | §15/§23/§24. FE dùng feature Programming riêng, generated client OpenAPI và read model Monitor/Trace; server vẫn là authority cho role, readiness, runtime, arbitration và audit. |
+| 6. Điều gì còn bị chặn? | Source corrective chưa merge; positive Monitor/Trace có binding target, accessibility reviewer độc lập và `UX-T-006` usability người thật chưa chạy; 0/32 Test Result PASS. **Không dùng ảnh mock hay tool scan của implementer để nâng M4/M5.** |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Audit v1.3 và evidence v1.1: live deep-link, Save+hoàn nguyên, Export/Import validation, safety gates, ảnh desktop/mobile và axe 6/6; FE host 64 file/521 test, Playwright Programming 10/10 với secure APIs bị vô hiệu hóa và Network QA 1/1. `UX-T-001..005` chỉ supporting; `UX-T-006` vẫn NOT_RUN. |
 
 Quy ước ID dùng trong file. Lớp điều hướng là **user journey** `UJ-PROG-01`…
 `UJ-PROG-08`. Lớp kịch bản là `UC-PROG-01`…`UC-PROG-17`, giữ nguyên đặc tả chi
@@ -420,26 +420,30 @@ Bằng chứng bắt buộc cho mỗi phiên: hồ sơ người tham gia đã �
 commit, bản ghi thời gian từng nhiệm vụ, kết quả từng tiêu chí và ghi chú của
 người điều phối. **Không được ghi PASS khi chưa chạy.** Hiện trạng: `NOT RUN`.
 
-Blocker: route/API Programming chưa implement; role/capacity/copy cuối còn
-`PROG-OD-001`; browser evidence chỉ tạo sau FE slice. Không dùng mock screenshot
-để nâng M4/M5.
+Trạng thái 2026-08-13: route/API và bốn workspace đã implement. Supporting
+Chrome desktop/mobile trên đúng target tồn tại cho functional journey; axe tool
+scan 8/8 không có violation. Review accessibility độc lập và usability có người
+dùng thật vẫn `NOT_RUN`; source corrective chưa merge. Không dùng screenshot hay
+tool run của implementer để nâng M4/M5.
 
 ## 15. As-Built, khoảng trống và quyền sở hữu source
 
 | Thành phần hiện có | Bằng chứng source | Kết luận dùng lại |
 |---|---|---|
-| Route `/eng/programming` | `apps/web-ui/src/app/App.tsx` | Route có thật nhưng đang bị feature flag chặn; không được coi là sản phẩm Programming Rev A |
-| Trang Programming cũ | `apps/web-ui/src/features/dashboard/ProgrammingPage.tsx` | Chỉ là graph demo/validator cũ; không đáp ứng IA sáu trang, lifecycle Draft/Revision hay Commission |
-| Trang fallback | `apps/web-ui/src/features/dashboard/UnavailableFeaturePage.tsx` | Là trạng thái As-Built đúng khi feature chưa sẵn sàng; giữ tới khi gate FE-PROG đạt |
-| Navigation | `apps/web-ui/src/shared/components/NavRail.tsx` | Đã có key `programming`, nhưng visibility phụ thuộc `LEGACY_GRAPH_DEMO_ENABLED` |
+| Route `/eng/programming/*` | `apps/web-ui/src/app/App.tsx`, `features/programming/ProgrammingRoutes.tsx` | Bốn workspace thật sau `PROGRAMMING_REV_A_ENABLED`; ba route legacy redirect giữ `projectId` và `?tab=` |
+| Trang Programming cũ | `apps/web-ui/src/features/dashboard/ProgrammingPage.tsx` | Graph demo được giữ làm mã legacy nhưng không còn là đích route Programming |
+| Trang fallback | `apps/web-ui/src/features/dashboard/UnavailableFeaturePage.tsx` | Dùng khi capability/flag chưa cho surface mới; không giả dữ liệu runtime |
+| Navigation | `apps/web-ui/src/shared/components/NavRail.tsx` | Visibility dùng `PROGRAMMING_REV_A_ENABLED`, không còn phụ thuộc cờ graph demo |
 | Role và session | `apps/web-ui/src/features/auth/AuthProvider.tsx`, `roles.ts` | Dùng lại identity/role hiện có; server vẫn là authority cho từng action |
-| i18n | `apps/web-ui/src/shared/i18n.tsx` | Mở rộng key `programming.*`; không hard-code copy trong component |
+| i18n | `apps/web-ui/src/shared/i18n.tsx` + `pick()` tại feature | Copy VI/EN hiện được khai báo tại chỗ; khác cấu trúc namespace dự kiến nhưng có test và không parse raw server message |
+| Context/Design/Commission | `features/programming/layout/*`, `design/*`, `commission/*` | Context đầy đủ; dirty guard; ST/FBD; Check/Commission deep-link và readiness fail-closed |
+| Runtime/Watch/Trace | `features/programming/runtime/*`, `api/queries.ts`, `model/types.ts` | Task metric + monitor program/actual/owner/priority/TTL/quality/freshness + trace bounded từ API thật; Danger Zone chỉ ở tab bảo trì |
 
-Target code thuộc `apps/web-ui/src/features/programming/`; không mở rộng
-`features/dashboard/ProgrammingPage.tsx`. Route cũ chỉ được xóa/redirect sau khi
-route mới đạt test, migration bookmark và release note. Không có source producer
-REST/WS Programming hiện hành, vì vậy mọi mock phải nằm trong test fixture và
-không được import vào production bundle.
+Code hiệu lực thuộc `apps/web-ui/src/features/programming/`; không mở rộng
+`features/dashboard/ProgrammingPage.tsx`. Mock chỉ nằm trong test fixture và
+không được import vào production bundle. Producer REST Monitor/Trace nằm ở
+`apps/web-api/internal/programming`; end-scan truth LOCAL và task metric đi từ
+Core snapshot. Bản source này chưa được phép nhận target evidence của bản 507.
 
 Asset thiết kế được quản lý tại `docs/04_uiux/assets/programming/`. Đây là
 **đặc tả trực quan**, không phải ảnh chụp sản phẩm và không phải bằng chứng
@@ -990,7 +994,7 @@ ProgrammingLayout                      bọc cả 4 workspace; render trong AppS
 │   └── ProjectSelector
 ├── ProgrammingContextBar              persistent: controller/draft/active/core
 │   └── RunningVsEditingBadge
-└── <Outlet/>
+├── <Outlet/>
     ├── PGM-01 OverviewPage                    UJ-PROG-01
     │   ├── RunningApplicationPanel
     │   ├── CoreSafeStatePanel
@@ -1047,7 +1051,8 @@ ProgrammingLayout                      bọc cả 4 workspace; render trong AppS
         └── DangerZone                         tách khỏi vùng chỉ đọc
             ├── RestoreDialog
             ├── BundleImportPanel
-            └── RetainResetDialog
+            └── RetainResetLockedState        contract-only: không modal/request
+└── ProgrammingMobileNav                       <md, bốn workspace
 ```
 
 Bốn component mới so với bản 0.5, sinh ra từ việc gộp IA: `DesignTabs`,
@@ -1329,15 +1334,18 @@ nó được lưu bền chứ không chỉ nằm trong bộ nhớ trang; (c) sau
 | 0.6 | 2026-08-09 | Đơn giản hóa theo Amendment A1: IA rút còn **bốn workspace** (§3), tám user journey và ma trận migration 17 use case với trạng thái `MERGED/SCENARIO/ROADMAP` (§6); acceptance bốn workspace (§5); route mới kèm bảng chuyển hướng bookmark (§11.1); ba asset SVG mới cho PGM-02/03/04 gồm modal Commission và ngăn kéo Restore (§16); xác nhận **theo rủi ro thực tế** thay danh sách bốn ô cố định; vùng thao tác nguy hiểm tách khỏi vùng chỉ đọc; cây component và hợp đồng API theo workspace (§22, §24) |
 | 0.7 | 2026-08-10 | Đóng finding consumer review `F-CR-04`: bổ sung asset `PGM-04_RETAIN_RESET_DIALOG.svg` ba artboard cho `RetainResetDialog` — thao tác không hoàn tác được duy nhất còn thiếu bản đặc tả trực quan theo `DOC-GOV-001` §2.2; thêm §16.4.1 với ba quy tắc implement (không mở khi chưa có danh sách biến, fail-closed, không kết quả lạc quan) |
 | 0.8 | 2026-08-10 | Ghi Product Owner/CTO Phạm Đình Chương `ACCEPT` phương án `OD-PROG-016` bốn workspace/tám journey và hoãn template BMS theo `OD-PROG-017`; sửa gate R-3 theo decision thật sự được slice UI tiêu thụ. Giữ M3 vì UX/FE/BE/QA/a11y/browser evidence còn thiếu |
+| 0.9 | 2026-08-13 | Đồng bộ audit `REV-PROG-FE-UX-2026-08-13` và corrective slice 508..510: thay As-Built demo cũ bằng bốn workspace thật; khóa context/dirty/ST tooling/deep-link/readiness/Monitor/Trace/Danger Zone. Sửa asset PGM-02 để hiện Controller/Project/Draft dirty/Check/Active/Core và asset PGM-04 để tab Theo dõi có program/actual/owner/priority/TTL/quality, Trace bounded, không render Danger Zone. Target bản mới, axe/contrast và usability vẫn BLOCKED/NOT_RUN. |
+| 1.0 | 2026-08-13 | `EV-PROG-P5-510`: full FE gate và Chrome corrective trên Foxlinx desktop/mobile PASS; bốn workspace có ảnh controlled, Console/Network Programming sạch, axe WCAG A/AA 8/8 scan không violation. Source chưa merge; positive binding target, accessibility reviewer, `UX-T-006` usability và Test Result còn mở. |
+| 1.1 | 2026-08-13 | Audit live 1.2 phát hiện tám finding và corrective 1.3 đóng `001..006/008`: UUID/SHA HTTP, deep-link, Save, Restore/RETAIN fail-closed, safe-state detail, Export, vi mặc định, bottom nav/card mobile; sửa label Import và focus audit sau axe live. `007` partial vì thiếu positive binding/recommission. |
 
 | Vai trò | Phạm vi ký | Trạng thái | Bằng chứng cần có |
 |---|---|---|---|
 | UX Lead | IA, asset trực quan + wireframe §16, cây component §22–§23, token §27 | PENDING | biên bản review UX |
-| FE Lead | khả thi kỹ thuật §22–§25, rollout §28 | PENDING | xác nhận không còn finding P0/P1 phía FE |
-| BE Lead | hợp đồng API §24 khớp Interface Spec | PENDING | contract review chung với `IFSPEC-PROG-001` |
+| FE Lead | khả thi kỹ thuật §22–§25, rollout §28 | IMPLEMENTED / REVIEW PENDING | `TASK-PROG-508`; full host/target gate đã có, merge còn mở |
+| BE Lead | hợp đồng API §24 khớp Interface Spec | IMPLEMENTED / REVIEW PENDING | OpenAPI v1.20.0 + Monitor/Trace 509; target supporting evidence đã có, positive binding còn mở |
 | Product Owner | 17 UC §17, ưu tiên release, copy §26 | **ACCEPT — Phạm Đình Chương, 2026-08-10; ủy quyền điện tử** | bốn workspace/tám journey, scope Rev A và hoãn template BMS theo `AUTH-PROG-2026-08-10-01` |
 | Verification Lead (QA) | `UX-T-001..006` §14, trace §21 | PENDING | test specification đủ và trace không đứt |
-| Accessibility Reviewer | §13 và §27: bàn phím, focus, tương phản, zoom 200% | PENDING | bản ghi kiểm accessibility trên trình duyệt thật |
+| Accessibility Reviewer | §13 và §27: bàn phím, focus, tương phản, zoom 200% | PENDING | axe 8/8 target scan đã có; cần review độc lập và bản ghi thủ công focus/zoom |
 
 ## 30. Tự kiểm `DD-01..DD-13`
 
@@ -1345,7 +1353,7 @@ nó được lưu bền chứ không chỉ nằm trong bộ nhớ trang; (c) sau
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; lịch sử và bảng ký sáu vai trò §29 |
 | `DD-02` Mục tiêu/actor/phạm vi | PASS | §0, §1 mục tiêu, §2 persona và quyền, §3.2 tám journey, §6.1 migration 17 UC, §6.3 ưu tiên release |
-| `DD-03` As-Built | PASS | §15 dẫn đúng `App.tsx`, `ProgrammingPage.tsx`, `UnavailableFeaturePage.tsx`, `NavRail.tsx`, `AuthProvider.tsx`, `i18n.tsx` và cờ `LEGACY_GRAPH_DEMO_ENABLED` |
+| `DD-03` As-Built | PASS | §15 dẫn bốn route/component Programming thật, cờ `PROGRAMMING_REV_A_ENABLED`, context/design/commission/runtime/monitor/trace và ranh giới legacy demo |
 | `DD-04` Target ownership | PASS | §15 quyền sở hữu source; §22 cây component; §23 quyền theo component |
 | `DD-05` Data từng field | PASS | §19 hợp đồng field, validation phía client, authority phía server và cách hiển thị lỗi |
 | `DD-06` Interface | PASS | §24 method + path + capability + error cho chín surface, trỏ đúng Interface Spec |
@@ -1355,7 +1363,8 @@ nó được lưu bền chứ không chỉ nằm trong bộ nhớ trang; (c) sau
 | `DD-10` Repository mapping | PASS | §15 và §24 cột “FE target”; §27 trỏ `tokens.ts` và `styles.css` thật |
 | `DD-11` Verification | PASS | §14 `UX-T-001..005`; §21 trace 24 `UX-REQ-*` tới UC, mục thiết kế và `VS-PROG-*` |
 | `DD-12` Compatibility/rollout/rollback | PASS | §28 feature flag bốn giai đoạn, migration bookmark, lệch phiên bản FE/BE, rollback riêng FE |
-| `DD-13` Trace/risk/decision/sign-off | **BLOCKED** | Trace và risk đủ (§21, `RSK-PROG-007/010/012`), nhưng chưa có chữ ký. Owner: sáu vai trò ở §29. Ảnh hưởng: IA bốn workspace chưa được phê duyệt nên FE chưa khóa được route/component; không được bật cờ `PROGRAMMING_REV_A` ở R-3; chưa có bằng chứng usability. Gate: `DOC-G3`. Điều kiện mở: ký **`OD-PROG-016`** (IA và journey), đóng `OD-PROG-001` (vai trò), `OD-PROG-003` (hạn mức), `OD-PROG-006` (ngữ nghĩa FBD), `OD-PROG-011` (monitor/trace); có API Programming trên target; chạy `UX-T-001..006` trên trình duyệt thật |
+| `DD-13` Trace/risk/decision/sign-off | **PASS implementation; BLOCKED assurance/release** | IA/decision đã được phê duyệt. Source 508/509 có host/target supporting evidence nhưng chưa merge; FE/BE/QA/a11y review độc lập, positive binding target và `UX-T-006` usability còn mở. Owner: §29. Gate: P5/G6. Điều kiện mở: merge thật, reviewer accessibility, `≥5` kỹ thuật viên BMS và Test Result theo VVP. |
 
-Bằng chứng trình duyệt, usability và runtime vẫn `NOT IMPLEMENTED/NOT TESTED`.
-Ảnh chụp mock **không** được dùng để nâng M4 hay M5.
+Bằng chứng chức năng trình duyệt host và target corrective đã có ở mức
+supporting; accessibility review độc lập và usability vẫn chưa đủ. Ảnh chụp hoặc
+axe tool run của implementer **không** được dùng để nâng M4/M5 hoặc Test Result.

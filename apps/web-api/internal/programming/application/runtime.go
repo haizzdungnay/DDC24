@@ -26,6 +26,7 @@ type RuntimeServiceOptions struct {
 	Runtime      RuntimeStatusReader
 	Store        *programmingstore.Store
 	Catalog      PointCatalogProvider
+	Monitor      MonitorSnapshotProvider
 	Overrides    OverrideProvider
 	ControllerID string
 	CursorSecret []byte
@@ -41,11 +42,13 @@ type RuntimeService struct {
 	runtime      RuntimeStatusReader
 	store        *programmingstore.Store
 	catalog      PointCatalogProvider
+	monitor      MonitorSnapshotProvider
 	overrides    OverrideProvider
 	controllerID string
 	cursorSecret []byte
 	now          func() time.Time
 	newID        func() string
+	traces       *runtimeTraceStore
 }
 
 func NewRuntimeService(options RuntimeServiceOptions) (*RuntimeService, error) {
@@ -64,8 +67,9 @@ func NewRuntimeService(options RuntimeServiceOptions) (*RuntimeService, error) {
 		newID = func() string { return uuid.NewString() }
 	}
 	return &RuntimeService{
-		runtime: options.Runtime, store: options.Store, catalog: options.Catalog, overrides: options.Overrides,
+		runtime: options.Runtime, store: options.Store, catalog: options.Catalog, monitor: options.Monitor, overrides: options.Overrides,
 		controllerID: options.ControllerID, cursorSecret: options.CursorSecret, now: now, newID: newID,
+		traces: newRuntimeTraceStore(),
 	}, nil
 }
 
@@ -96,19 +100,24 @@ type CapabilitiesLimits struct {
 	Bindings              int `json:"bindings"`
 }
 
-// RuntimeView khớp schema `ProgrammingRuntime`. `SafeState` mặc định `false`
-// chỉ khi Core xác nhận kết nối OK (không có tín hiệu safe-state riêng trong
-// STATUS payload v1 hiện tại — theo dõi ở CHANGELOG như một giới hạn đã biết,
-// không phải suy đoán an toàn). Khi Core UNAVAILABLE thì toàn bộ trường suy ra
-// từ authority đều về trạng thái chưa biết, không phải giá trị "khỏe mạnh" giả.
+// RuntimeView khớp schema `ProgrammingRuntime`. SafeState và Task lấy từ cùng
+// snapshot cuối-scan do Core công bố; khi nguồn monitor lỗi, trạng thái phải hạ
+// về UNAVAILABLE/UNKNOWN thay vì suy đoán hệ thống đang khỏe.
 type RuntimeView struct {
 	SchemaVersion    string  `json:"schemaVersion"`
+	ControllerID     string  `json:"controllerId"`
 	ProducerState    string  `json:"producerState"`
 	ActiveRevisionID *string `json:"activeRevisionId"`
 	LKGRevisionID    *string `json:"lkgRevisionId"`
 	TaskState        string  `json:"taskState"`
 	SafeState        bool    `json:"safeState"`
-	ObservedAt       string  `json:"observedAt"`
+	// SafeStateNoControllerOnly: true khi SafeState chỉ do chưa có Program
+	// nào đang thật sự điều khiển output (trigger T7 đơn độc ở Core), không
+	// có lỗi I/O/stale/overrun thật đi kèm — Commission một Program có output
+	// sẽ tự giải quyết, không phải một fault cần khắc phục trước khi Commission.
+	SafeStateNoControllerOnly bool             `json:"safeStateNoControllerOnly"`
+	ObservedAt                string           `json:"observedAt"`
+	Task                      *TaskMetricsView `json:"task"`
 }
 
 func (s *RuntimeService) GetCapabilities(ctx context.Context) (CapabilitiesView, error) {
@@ -135,7 +144,7 @@ func (s *RuntimeService) GetRuntime(ctx context.Context) (RuntimeView, error) {
 	response, err := s.callStatus(ctx)
 	if err != nil {
 		return RuntimeView{
-			SchemaVersion: "1.0", ProducerState: "UNAVAILABLE", TaskState: "UNKNOWN",
+			SchemaVersion: "1.0", ControllerID: s.controllerID, ProducerState: "UNAVAILABLE", TaskState: "UNKNOWN",
 			SafeState: false, ObservedAt: observedAt,
 		}, nil
 	}
@@ -148,14 +157,37 @@ func (s *RuntimeService) GetRuntime(ctx context.Context) (RuntimeView, error) {
 			taskState = "STOPPED"
 		}
 	}
+	producerState := "READY"
+	safeState := false
+	safeStateNoControllerOnly := false
+	var task *TaskMetricsView
+	if s.monitor != nil {
+		truth, monitorErr := s.monitor.ReadProgrammingMonitorSnapshot(ctx)
+		if monitorErr != nil {
+			producerState = "DEGRADED"
+		} else {
+			safeState = truth.SafeState
+			safeStateNoControllerOnly = truth.SafeStateNoControllerOnly
+			task = truth.Task
+			if task != nil {
+				taskState = task.State
+			}
+			if truth.ObservedAt != "" {
+				observedAt = truth.ObservedAt
+			}
+		}
+	}
 	return RuntimeView{
-		SchemaVersion:    "1.0",
-		ProducerState:    "READY",
-		ActiveRevisionID: firstNonNil(payload.ActiveRevisionID, response.ActiveRevisionID),
-		LKGRevisionID:    firstNonNil(payload.LKGRevisionID, response.LKGRevisionID),
-		TaskState:        taskState,
-		SafeState:        false,
-		ObservedAt:       observedAt,
+		SchemaVersion:             "1.0",
+		ControllerID:              s.controllerID,
+		ProducerState:             producerState,
+		ActiveRevisionID:          firstNonNil(payload.ActiveRevisionID, response.ActiveRevisionID),
+		LKGRevisionID:             firstNonNil(payload.LKGRevisionID, response.LKGRevisionID),
+		TaskState:                 taskState,
+		SafeState:                 safeState,
+		SafeStateNoControllerOnly: safeStateNoControllerOnly,
+		ObservedAt:                observedAt,
+		Task:                      task,
 	}, nil
 }
 

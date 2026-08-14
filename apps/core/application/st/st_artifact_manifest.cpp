@@ -173,7 +173,8 @@ bool compile_reference(StSourceLanguage language, std::string_view source,
 }
 
 bool build(std::string_view source_id, StSourceLanguage language, std::string_view source,
-           StArtifactBuildResult* out, StManifestError* error)
+           StArtifactBuildResult* out, StManifestError* error,
+           const std::vector<StIoMapEntry>& io_map)
 {
     if (!out || !valid_source_id(source_id))
         return fail(error, st_manifest_error::kRequest, "sourceId không hợp lệ");
@@ -185,6 +186,23 @@ bool build(std::string_view source_id, StSourceLanguage language, std::string_vi
                            &anchors, error)) {
         return false;
     }
+
+    /* F-PROG-ASBUILT-013/D-07: bake io_map đã validate vào IR TRƯỚC khi
+     * encode — sau điểm này artifact bytes bất biến, không có chỗ "vá thêm
+     * binding sau". `candidate.module.variables[].slot` đã được gán xong bởi
+     * compile_reference() ở trên nên resolve_io_bindings() tra được slot
+     * đúng theo TÊN biến (io_map không cần/không biết slot). */
+    if (!io_map.empty()) {
+        std::vector<StDiagnostic> binding_diags;
+        if (!resolve_io_bindings(&candidate.module, io_map, &binding_diags)) {
+            const StDiagnostic& first = binding_diags.empty() ? StDiagnostic{} : binding_diags.front();
+            return fail(error, first.code.empty() ? st_manifest_error::kCompile : first.code.c_str(),
+                        first.message.empty() ? "io_map binding validation failed" : first.message,
+                        static_cast<uint32_t>(first.line), static_cast<uint32_t>(first.column),
+                        static_cast<uint32_t>(first.length));
+        }
+    }
+
     std::string encode_error;
     if (!EncodeArtifactDeterministic(candidate.module, &candidate.artifact, &encode_error))
         return fail(error, st_manifest_error::kEncode, encode_error);
@@ -209,15 +227,17 @@ bool build(std::string_view source_id, StSourceLanguage language, std::string_vi
 } // namespace
 
 bool BuildStArtifact(std::string_view source_id, std::string_view source,
-                     StArtifactBuildResult* out, StManifestError* error)
+                     StArtifactBuildResult* out, StManifestError* error,
+                     const std::vector<StIoMapEntry>& io_map)
 {
-    return build(source_id, StSourceLanguage::ST, source, out, error);
+    return build(source_id, StSourceLanguage::ST, source, out, error, io_map);
 }
 
 bool BuildFbdArtifact(std::string_view source_id, std::string_view source,
-                      StArtifactBuildResult* out, StManifestError* error)
+                      StArtifactBuildResult* out, StManifestError* error,
+                      const std::vector<StIoMapEntry>& io_map)
 {
-    return build(source_id, StSourceLanguage::FBD, source, out, error);
+    return build(source_id, StSourceLanguage::FBD, source, out, error, io_map);
 }
 
 bool CreateArtifactManifest(std::string_view source_id, StSourceLanguage language,

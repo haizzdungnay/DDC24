@@ -46,6 +46,9 @@ export const DAY_KEYS: ScheduleDayKey[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'S
 export const DAY_LABELS: Record<ScheduleDayKey, string> = {
   MON: 'T2', TUE: 'T3', WED: 'T4', THU: 'T5', FRI: 'T6', SAT: 'T7', SUN: 'CN'
 }
+export const DAY_LABELS_EN: Record<ScheduleDayKey, string> = {
+  MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat', SUN: 'Sun'
+}
 
 export function emptyWeekly(): ScheduleWeekly {
   return { MON: [], TUE: [], WED: [], THU: [], FRI: [], SAT: [], SUN: [] }
@@ -68,11 +71,16 @@ export function activeValue(valueType: ScheduleValueType): ScheduleValue {
   }
 }
 
-/** Nhãn người đọc cho một giá trị. Thiếu giá trị ⇒ gạch ngang (S3). */
-export function formatValue(value: ScheduleValue | null | undefined, valueType: ScheduleValueType): string {
+/** Nhãn người đọc cho một giá trị. Thiếu giá trị ⇒ gạch ngang (S3).
+ *
+ *  `lang` mặc định `'vi'` để không đổi hành vi những nơi gọi cũ chưa truyền
+ *  locale hiện tại (feature Scheduler còn nhiều tab dùng chung hàm này). */
+export function formatValue(value: ScheduleValue | null | undefined, valueType: ScheduleValueType, lang: 'vi' | 'en' = 'vi'): string {
   if (value === null || value === undefined) return EM_DASH
-  if (valueType === 'BINARY') return value === 'ACTIVE' ? 'BẬT' : 'TẮT'
-  if (valueType === 'BOOLEAN') return value ? 'BẬT' : 'TẮT'
+  const on = lang === 'en' ? 'ON' : 'BẬT'
+  const off = lang === 'en' ? 'OFF' : 'TẮT'
+  if (valueType === 'BINARY') return value === 'ACTIVE' ? on : off
+  if (valueType === 'BOOLEAN') return value ? on : off
   return String(value)
 }
 
@@ -169,7 +177,19 @@ export interface StatusPresentation {
   tone: string
 }
 
-export function statusPresentation(status: ScheduleStatus): StatusPresentation {
+export function statusPresentation(status: ScheduleStatus, lang: 'vi' | 'en' = 'vi'): StatusPresentation {
+  if (lang === 'en') {
+    switch (status) {
+      case 'DRAFT': return { glyph: '◐', label: 'Draft', tone: 'text-[var(--c-text-dim)]' }
+      case 'VALIDATED': return { glyph: '◑', label: 'Validated', tone: 'text-[var(--c-text)]' }
+      case 'PUBLISHED': return { glyph: '●', label: 'Published', tone: 'text-[var(--c-accent)]' }
+      case 'ACTIVE': return { glyph: '●', label: 'Active', tone: 'text-[var(--c-good-fg)]' }
+      case 'INACTIVE': return { glyph: '○', label: 'Inactive', tone: 'text-[var(--c-text-dim)]' }
+      case 'DISABLED': return { glyph: '⊘', label: 'Disabled', tone: 'text-[var(--c-text-dim)]' }
+      case 'ERROR': return { glyph: '✕', label: 'Error', tone: 'text-[var(--c-bad-fg)]' }
+      case 'OUT_OF_SYNC': return { glyph: '▲', label: 'Out of sync', tone: 'text-[var(--c-warn-fg)]' }
+    }
+  }
   switch (status) {
     case 'DRAFT': return { glyph: '◐', label: 'Nháp', tone: 'text-[var(--c-text-dim)]' }
     case 'VALIDATED': return { glyph: '◑', label: 'Đã kiểm', tone: 'text-[var(--c-text)]' }
@@ -199,7 +219,8 @@ export function overrideSourceLabel(source: string | null): string | null {
  * "T2-T6 08-18" — chữ đọc được ngay, thay vì một mini-chart 4 mm không đọc nổi.
  * Nhiều khoảng trong ngày thì liệt kê, quá dài thì cắt bằng dấu ba chấm.
  */
-export function weeklySummary(weekly: ScheduleWeekly, valueType: ScheduleValueType): string {
+export function weeklySummary(weekly: ScheduleWeekly, valueType: ScheduleValueType, lang: 'vi' | 'en' = 'vi'): string {
+  const dayLabels = lang === 'en' ? DAY_LABELS_EN : DAY_LABELS
   const perDay = DAY_KEYS.map((key) => ({
     key,
     ranges: dayToBlocks(weekly[key], valueType)
@@ -220,8 +241,8 @@ export function weeklySummary(weekly: ScheduleWeekly, valueType: ScheduleValueTy
   return groups
     .map((g) => {
       const span = g.days.length >= 3
-        ? `${DAY_LABELS[g.days[0]]}-${DAY_LABELS[g.days[g.days.length - 1]]}`
-        : g.days.map((k) => DAY_LABELS[k]).join(',')
+        ? `${dayLabels[g.days[0]]}-${dayLabels[g.days[g.days.length - 1]]}`
+        : g.days.map((k) => dayLabels[k]).join(',')
       return `${span} ${g.ranges}`
     })
     .join(' · ')

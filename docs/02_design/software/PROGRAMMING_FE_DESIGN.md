@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FE-PROG-001` |
-| Phiên bản | 1.1 |
-| Trạng thái | **M3 AS-BUILT; `TASK-PROG-500..507` DONE — bốn workspace đã bật và chạy end-to-end trên Foxlinx; usability/Test Result release đánh giá riêng** |
+| Phiên bản | 1.4 |
+| Trạng thái | **M3 AS-BUILT; audit live 1.2 đã corrective/deploy và tái kiểm 1.3, source chưa merge; assurance/release còn chặn** |
 | Ngày | 2026-08-13 |
 | Chủ quản | Frontend Lead |
 | Người review | UX Lead, Backend Lead, Verification Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **FE dựng code như thế nào** cho bốn workspace: thư mục feature, mô hình state, query/mutation, xử lý lỗi và chiến lược test. Trong khi [UI/UX Design](../../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) nói *người dùng thấy gì*, file này nói *React tổ chức ra sao*. |
 | 2. Ai phải đọc file này? | FE Lead và lập trình viên FE (chủ quản); UX đối chiếu với hồ sơ UI/UX; BE đọc §4 để biết FE sẽ gọi gì và kỳ vọng lỗi ra sao; QA đọc §10. |
-| 3. Hệ thống hiện tại đang có gì? | Bốn workspace `/eng/programming/*` đã dựng, nối BE thật và được bật trong bundle production Foxlinx (`VITE_PROGRAMMING_REV_A=1`, BE `PROGRAMMING_REV_A=1`). `ProgrammingRoutes.tsx` thay route legacy demo; `StructuredFbdEditor` mount thật; Check/Commission/read-back chạy end-to-end. |
-| 4. Thiết kế mới thay đổi điều gì? | (Đã thực hiện, không còn là "thay đổi sắp tới") Route/workspace/API orchestration cho cả bốn `PGM-01..04` đã dựng theo đúng §0.1/§16; Draft ETag/If-Match, Check/Commission/Restore reconcile, override/audit/operations-list đều đọc BE thật. |
-| 5. Team phải sửa module/contract nào? | Không còn — §11/§12 đã phản ánh source thật. Thay đổi tiếp theo (nếu có) là mở rộng chứ không phải dựng nền tảng. |
-| 6. Điều gì còn bị chặn? | Không còn blocker code. `S5-F` (usability `≥5` kỹ thuật viên BMS thật, sáu ngưỡng `UX-A-01..06`) vẫn `BLOCKED` — cần fixture `AHU-01` trên controller lab, không thể rút gọn bằng E2E mock hay demo nội bộ. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-P5-500-506` khóa host/browser; `EV-PROG-P5-507` khóa Foxlinx desktop/mobile, Console/Network sạch, hai Check `PASSED`, Commission `SUCCEEDED/COMMITTED`, Core read-back Active/LKG/Task `RUNNING`. Chưa đủ executor/reviewer độc lập để thành Test Result chính thức; `VS-PROG-027/029/030/031` vẫn `NOT_RUN`. |
+| 3. Hệ thống hiện tại đang có gì? | Bốn workspace `/eng/programming/*` đang chạy tại endpoint HTTP Foxlinx. Audit 1.3 đã sửa UUID/SHA trên insecure context, deep-link, batch save, fail-closed Restore/RETAIN, safe-state attention, Export/Import, i18n/mobile/a11y; Monitor/Trace positive binding còn thiếu. |
+| 4. Thiết kế mới thay đổi điều gì? | Context bar dùng Controller ID từ runtime và đủ Project/Draft dirty/Check/Active/Core; ST editor có line/column/find/format/symbol/type/ref/diagnostic; Draft guard theo batch; Commission deep-link; readiness fail-closed; Watch/Trace tiêu thụ read model thật xuyên Core→BE. |
+| 5. Team phải sửa module/contract nào? | §11/§12: `layout`, `design`, `commission`, `runtime`, `api/generated/client.ts`, OpenAPI; phía producer liên quan ở BE/Core được mô tả trong `DDD-BE-PROG-001` và `DDD-FWSOM-PROG-001`. |
+| 6. Điều gì còn bị chặn? | Source corrective chưa merge; positive Monitor/Trace có binding target, reviewer accessibility độc lập, `S5-F` usability và Test Result/HIL vẫn là assurance gate. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `REV-PROG-FE-UX-2026-08-13` v1.3 và `EV-PROG-P5-510` v1.1: HTTP live Save+hoàn nguyên/Export/invalid Import, safety gates, desktop/mobile và axe 6/6; host FE 64 file/521 test, Programming 10/10 trên profile thiếu `randomUUID/subtle` và Network QA 1/1. Supporting evidence không đổi 0/32 Test Result PASS. |
 
 Điều FE **không** sở hữu, nêu sớm để tránh viết nhầm: Draft persistence, tính
 diff, readiness, phân quyền, runtime state, chất lượng Point, bên thắng arbitration
@@ -253,7 +253,7 @@ chỉ render mock hoặc chưa có producer/API contract.
 
 ## 11. As-Built và source migration
 
-**As-Built `TASK-PROG-500..507` (2026-08-13):** `apps/web-ui/src/app/App.tsx`
+**As-Built `TASK-PROG-500..509` (2026-08-13):** `apps/web-ui/src/app/App.tsx`
 route `/eng/programming/*` qua `<RequireRole><ProgrammingRoutes/></RequireRole>`
 khi `PROGRAMMING_REV_A_ENABLED` (`shared/config.ts`, mặc định OFF production,
 bật `1` chỉ cho dev/e2e); `features/dashboard/ProgrammingPage.tsx` (legacy
@@ -264,14 +264,17 @@ cũng chuyển điều kiện hiện mục từ `LEGACY_GRAPH_DEMO_ENABLED` sang
 | As-Built | Vị trí source |
 |---|---|
 | `features/programming/ProgrammingRoutes.tsx` | 4 route thật (`overview/design/commission/runtime`) + 3 `<Navigate>` redirect route cũ (`programs/mapping/task` → `design?tab=`) qua `LegacyTabRedirect` |
-| `features/programming/layout/{ProgrammingLayout,ProgrammingHeader,ProgrammingContextBar}.tsx` | context `useProgrammingRuntimeContext` (capabilities+runtime fetch một lần), header Active/Core dùng chung mọi route |
+| `features/programming/layout/{ProgrammingLayout,ProgrammingHeader,ProgrammingContextBar}.tsx` | context `useProgrammingRuntimeContext` hợp nhất route/Project/runtime; hiển thị Controller ID, Project, Draft đang sửa + dirty, Check, Active và Core; không dùng hostname trình duyệt làm controller authority |
 | `features/programming/overview/OverviewPage.tsx` | `RunningApplicationPanel`, `CoreSafeStatePanel`, `DraftAttentionPanel`, `ProgrammingAttentionList`, `RecentEngineeringTimeline` — PGM-01 |
-| `features/programming/design/{DesignWorkspacePage,useDraftWorkspace}.tsx` + `design/editor/ProgramsTab.tsx` + `design/mapping/MappingTab.tsx` + `design/task/ExecutionTab.tsx` | PGM-02 ba tab dùng chung một Draft/ETag; ba tab **luôn mount**, ẩn bằng `hidden`; save/seal dùng `project.baseRevisionId` công khai thay vì suy từ Draft ID sau seal (sửa lỗi target TASK-PROG-507) |
+| `features/programming/design/{DesignWorkspacePage,useDraftWorkspace}.tsx` + `design/editor/ProgramsTab.tsx` + `design/mapping/MappingTab.tsx` + `design/task/ExecutionTab.tsx` | PGM-02 ba tab dùng chung Draft/ETag; tab luôn mount; pending operation hợp nhất thành dirty guard; save/bỏ/ở lại khi rời trang; Check khóa khi dirty; Task đồng bộ server update nếu không có local edit; ST có line/column/find/format/symbol/type/ref và diagnostic range |
 | `features/programming/fbd/*` | **As-Built Task 201**, mount thật vào `ProgramsTab` (không còn placeholder); `StructuredFbdEditor.tsx` thêm `sectionRef`+`tabIndex={-1}` để giữ focus bàn phím sau `DELETE_SELECTION` (sửa lỗi thật TASK-PROG-506) |
-| `features/programming/commission/{CheckCommissionPage,useCommissionWorkflow}.tsx` | PGM-03: readiness/`ChangeSummary`/`ImpactPanel`/`AcknowledgementChecklist` khớp đúng ba nhóm impact, re-auth, `UNKNOWN_RECONCILING` |
-| `features/programming/runtime/{RuntimeServicePage,RuntimeTab,WatchTab,VersionsTab,DangerZone,useRestoreWorkflow}.tsx` | PGM-04 ba tab + vùng thao tác nguy hiểm tách riêng |
+| `features/programming/commission/{CheckCommissionPage,useCommissionWorkflow}.tsx` | PGM-03: query canonical `revisionId/checkId`; readiness chỉ READY khi Check PASS, impact/override đọc được, Core READY và không safe-state; re-auth và `UNKNOWN_RECONCILING` |
+| `features/programming/runtime/{RuntimeServicePage,RuntimeTab,WatchTab,VersionsTab,DangerZone,useRestoreWorkflow}.tsx` | PGM-04: Runtime task metric thật; Watch/Trace; Danger Zone chỉ ở Service; Restore chỉ `READY && !safeState`; RETAIN contract-only luôn khóa; Export source-only; Import hash được trên HTTP; history dùng card mobile/focusable audit region |
+| `features/programming/layout/ProgrammingMobileNav.tsx` | Bottom navigation `Tổng quan/Thiết kế/Kiểm tra/Runtime` tại `<md`; project-dependent route bị disabled khi chưa có Project thay vì dựng deep-link giả |
+| `shared/crypto.ts` | UUID v4: ưu tiên `randomUUID`, fallback `getRandomValues`; không dùng `Math.random`; SHA-256 thuần JS và base64 theo khối cho bundle tối đa 4 MiB |
+| `app/App.tsx`, `shared/i18n.tsx` | Protected return URL giữ pathname/search/hash và chặn open redirect; fresh profile mặc định `vi`, chỉ dùng `en` khi giá trị lưu hợp lệ |
 | `features/programming/api/{authClient,queries,mutations,errorCopy}.ts` | `useProgrammingApiClient` (Authorization header thật), `useProgrammingResource` factory + hook theo resource, `programmingErrorCopy` map đủ 19 `PRG-ERR-*` |
-| `features/programming/model/types.ts` | DTO tay khớp OpenAPI (generator chỉ phủ Commission types) |
+| `features/programming/api/generated/client.ts`, `features/programming/model/types.ts` | client operation sinh từ OpenAPI v1.20.0; DTO UI khai báo tường minh cho runtime/monitor/trace và được khóa bằng typecheck/contract drift check |
 | `app/App.tsx`, `shared/components/NavRail.tsx`, `shared/config.ts`, `features/auth/roles.ts` | cờ `PROGRAMMING_REV_A_ENABLED`, `ROUTE_MIN_ROLE['/eng/programming']='viewer'` |
 | `shared/hooks/useWebSocket.ts` | reuse transport hiện có; Programming P5 **không** dùng WS riêng — Runtime/Watch poll qua REST theo freshness contract |
 | `shared/i18n.tsx` | copy Programming VI/EN đi qua `pick()` tại chỗ, không namespace file riêng (khác giả định 0.1..0.8) |
@@ -287,22 +290,19 @@ mã sinh tự động và ranh giới không được lẫn:
 
 ```text
 features/programming/api/
-├── client.generated.ts     sinh từ OpenAPI — cấm sửa tay
-├── models.generated.ts     sinh từ OpenAPI — cấm sửa tay
-├── queries.ts, mutations.ts   hook bọc client sinh tự động
-├── contracts.ts            type thu hẹp/discriminated union cho UI
-└── errors.ts, events.ts    chuẩn hóa `PRG-ERR-*` và envelope sự kiện
+├── generated/client.ts     danh mục operation sinh từ OpenAPI — cấm sửa tay
+├── authClient.ts           Authorization/correlation/idempotency transport
+├── queries.ts              hook resource/polling typed
+└── errorCopy.ts            `PRG-ERR-*` sang copy VI/EN
 
 features/programming/model/
-├── types.ts                DTO sinh tự động + union UI tường minh
-├── draftReducer.ts, operationReducer.ts
-├── selectors.ts
-└── queryKeys.ts
+└── types.ts                DTO/UI union tường minh dùng bởi bốn workspace
 ```
 
-Hai file `*.generated.ts` là đầu ra của bước sinh mã từ
-`contracts/openapi/openapi.yaml`; nếu chúng lệch với OpenAPI thì `FE-T-002`
-phải fail, không được sửa tay cho khớp.
+`generated/client.ts` là đầu ra của
+`node scripts/generate-programming-client.mjs`; `npm run
+check:programming-api` phải fail khi lệch `contracts/openapi/openapi.yaml`.
+Không tồn tại `client.generated.ts` hoặc `models.generated.ts` trong As-Built.
 
 | State | Owner | Persistence/lifecycle |
 |---|---|---|
@@ -365,8 +365,9 @@ storage scoped controller/action; xóa khi authoritative terminal/expiry.
 | `FE-T-007` | keyboard/desktop/mobile | UX-T-001..005 PASS |
 | `FE-T-008` | build/lint/Vitest/Playwright/browser | all gates + Console/Network evidence |
 
-Deploy theo server capability và cờ FE/BE; production Foxlinx hiện bật `ON` sau
-preflight compiler/Core/socket. Rollback route trả unavailable/read-only mà không xóa Draft/operation;
+Deploy theo server capability và cờ FE/BE. Bản Foxlinx của `TASK-PROG-507` đang
+bật `ON`; source 508/509 **chưa** được deploy/read-back và không được gắn với
+evidence đó. Rollback route trả unavailable/read-only mà không xóa Draft/operation;
 service worker/cache must not serve incompatible generated types.
 
 **As-Built deploy `TASK-PROG-507`:** giai đoạn đầu bật cờ trong drop-in `/run`
@@ -381,7 +382,9 @@ chạy Chrome thật (Playwright, không jsdom) trên `desktop-chrome` và
 redirect route cũ; FBD dùng đúng phím thật (`Insert/ArrowDown/Enter/Delete/
 Control+z`) không click chuột. `network-qa.spec.ts` 1/1 PASS; full e2e suite
 60/60 PASS, không hồi quy. Console/Network được kiểm trong suốt hành trình
-(không có error/failed request ngoài whitelist 503 contract-only). Chưa có
+(không có error/failed request ngoài whitelist 503 contract-only ở bản đó).
+Corrective E2E 508/509 xóa kỳ vọng 503 contract-only cho Monitor/Trace, lưu Draft
+trước Check và khóa trace create/stop trên desktop/mobile. Chưa có
 contrast/axe scan độc lập và chưa xác nhận route HMI vắng mặt trong cùng
 phiên — `VS-PROG-028` vẫn chỉ "hỗ trợ một phần" (VVP §11.5), không PASS đầy
 đủ.
@@ -427,7 +430,10 @@ chỉ update cache khi sequence/resource version hợp lệ, còn lại invalida
 |---|---|---|
 | `S5-F` usability test cần người dùng thật | UX Lead + Product | `≥5` kỹ thuật viên BMS thật chưa từng dùng sản phẩm + fixture `AHU-01` trên controller lab (Plan 53 §5.9) |
 | `VS-PROG-027/029/030` cần soak/power-fault/HIL vật lý | Core + HW + QA | Board/HIL fixture theo Plan 53 P6 |
-| Test Result chính thức cho `VS-PROG-020/022/025/026/028/032` | Verification Lead | executor + reviewer độc lập ký theo VVP §11 (evidence host/browser đã đủ, còn thiếu quy trình review) |
+| Test Result chính thức cho `VS-PROG-020/022/025/026/028/032` | Verification Lead | Target supporting evidence đã có; executor + reviewer độc lập chạy/ký theo VVP §11 |
+| Corrective source chưa commit/merge | FE Lead + Dev Lead | commit/PR/merge thật; chạy lại FE gate, candidate pin và docs harness |
+| Positive Monitor/Trace target có Variable Binding | FE + BE + Core + QA | fixture read-only an toàn; kiểm row truth và start/get/stop, lưu raw output |
+| Accessibility review độc lập | Accessibility Reviewer + QA | Review raw/browser evidence axe 8/8 scan và bundle 508/509; ký Test Result, không suy `T=Y` từ tool run của implementer |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
@@ -442,10 +448,13 @@ chỉ update cache khi sequence/resource version hợp lệ, còn lại invalida
 | 0.9 | 2026-08-13 | Đồng bộ As-Built `TASK-PROG-500..506` (`e58c745`..`14a9299`): bốn workspace `PGM-01..04` dựng xong nối BE thật, route legacy demo không còn được vào qua Programming, §11/§15/§17 viết lại theo source thật (không còn "target action" dự kiến). Thêm bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`, VVP §11.5) và hai lỗi ứng dụng thật phát hiện+sửa qua chính E2E (tab unmount mất nội dung đang gõ; FBD mất focus bàn phím sau Delete). `S5-F` usability người thật vẫn BLOCKED, không có đường tắt |
 | 1.0 | 2026-08-13 | Đồng bộ `TASK-PROG-507` (`9606906`+`6069de6`+`d9a8e3b`): browser Foxlinx phát hiện và sửa WS Origin 403, Check target profile 400 và conflict giả 409 sau seal. `ProgrammingProject.baseRevisionId` trở thành authority cho save/seal; test khóa request. Chrome desktop/mobile target sạch Console, Revision `201` + Check `202`; trạng thái cuối bundle/BE flag OFF, API 404, không Commission. `EV-PROG-P5-507` là supporting target evidence, không Test Result. |
 | 1.1 | 2026-08-13 | Hoàn tất target `TASK-PROG-507` tại `0f1526c`: cài compiler/Core/Web/FE ARM64, bật cờ FE/BE production; hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Core read-back Active/LKG/Task `RUNNING`. Chrome Foxlinx desktop/mobile sạch Console/Network. Supporting target evidence không tự nâng Test Result/HIL. |
+| 1.2 | 2026-08-13 | Audit `REV-PROG-FE-UX-2026-08-13` mở corrective slice 508..510 và sửa As-Built: context Controller/Project/Draft dirty/Check/Active/Core; ST tooling + metadata; dirty guard/deep-link; readiness fail-closed; Runtime metric; Watch/Trace thật; Danger Zone đúng tab. Sửa thêm regression Task order stale do ba tab luôn mount. Source 508/509 đang VERIFYING; target bản mới BLOCKED do SSH, nên không kế thừa `EV-PROG-P5-507`. |
+| 1.3 | 2026-08-13 | `EV-PROG-P5-510`: FE 62 file/510 test, lint/build và Playwright PASS; thêm `@axe-core/playwright`, quét WCAG A/AA bốn workspace desktop/mobile. Foxlinx corrective có 0 Console error/warn, 0 failed Programming request, axe 8/8 scan 0 violation; rollback/tái deploy PASS. Source chưa merge, positive binding target/usability/reviewer độc lập còn mở. |
+| 1.4 | 2026-08-13 | Đóng audit live 1.2 ở mức implementation/supporting evidence: HTTP-safe UUID/SHA, full return URL, live batch Save+hoàn nguyên, READY-only Restore, RETAIN fail-closed contract-only, safe-state detail, Export/Import, mặc định vi, bottom nav/card mobile và sửa hai finding axe. Artifact cuối Foxlinx hash `30ee0743…`; axe live 6/6 sạch. Positive binding/recommission/usability/Test Result vẫn mở. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| FE + UX + BE + Core + QA + Ops | **TASK-PROG-500..507 DONE (source/host/browser/target deploy DoD)** | `e58c745`..`0f1526c`, `EV-PROG-P5-500-506`, `EV-PROG-P5-507` |
+| FE + UX + BE + Core + QA + Ops | **P5 IN_PROGRESS 8/11; 508/509 HOST/TARGET VERIFIED nhưng chưa merge; 510 EXECUTED/VERIFYING** | `REV-PROG-FE-UX-2026-08-13`; `EV-PROG-P5-510` |
 | Frontend Lead + System Architect | **APPROVED FOR IMPLEMENTATION; RELEASE EVIDENCE BLOCKED** | `AUTH-PROG-2026-08-11-03`; Test Result chính thức (executor+reviewer độc lập) và `S5-F` usability người thật chưa có |
 
 Tự kiểm `DD-01..DD-13`:
@@ -464,12 +473,12 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §0.1 cây thư mục bốn workspace; §1, §2, §11, §12 — đường dẫn cụ thể trong `apps/web-ui/src/` |
 | `DD-11` Verification | PASS | §10 chiến lược test; §15 As-Built `FE-T-007/008` (Chrome/Playwright thật desktop+mobile); gắn `VS-PROG-020/022/025/026/028/032` (hỗ trợ một phần, VVP §11.5) |
 | `DD-12` Compatibility/deploy/rollback | PASS | §15 deploy và rollback; §0.1 năm chuyển hướng route (nay đã As-Built ở `ProgrammingRoutes.tsx`); chi tiết rollout/cờ/migration ở UI/UX §11.1 và §28 |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation/deploy P5, **BLOCKED cho release** | Owner: FE Lead, UX, BE, Core, QA, Ops. `TASK-PROG-500..507 DONE`; compiler/Core/Check/Commission target đã PASS supporting evidence. `S5-F`, HIL/fault/power và Test Result độc lập vẫn thiếu. Gate: `G6`. Điều kiện mở: `≥5` kỹ thuật viên BMS thật trên fixture `AHU-01` + P6/review độc lập tạo `TR-PROG-*` |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation, **BLOCKED cho merge/release** | Owner: FE Lead, UX, BE, Core, QA, Ops. 508/509 đã có host/target supporting evidence nhưng chưa merge. `S5-F`, accessibility review độc lập, positive binding target, HIL/fault/power và Test Result vẫn thiếu. Gate: P5/G6. Điều kiện mở ghi ở §17 và audit record. |
 
-Blocker release có đủ owner/ảnh hưởng/gate/điều kiện mở. Bốn workspace đã
-implement/test trên host **và** Foxlinx bằng Chrome thật (desktop+mobile), với
-Check/Commission/Core read-back thật. Phần còn `BLOCKED` là assurance P6,
-usability người dùng thật (`S5-F`) và chữ ký Test Result độc lập — không còn
-liên quan tới source/deploy FE. Nhắc lại bẫy của repo: `npm test`
+Blocker có đủ owner/ảnh hưởng/gate/điều kiện mở. Corrective source 508/509 đã có
+supporting evidence host và Foxlinx thật tại `EV-PROG-P5-510`, nhưng chưa merge
+và fixture active không có binding để chạy positive Trace target. Assurance P6,
+usability người dùng thật (`S5-F`) và chữ ký Test Result độc lập vẫn tách riêng.
+Nhắc lại bẫy của repo: `npm test`
 chỉ quét `src/`, muốn chạy E2E phải gọi Playwright riêng
 (`npx playwright test e2e/programming.spec.ts`).

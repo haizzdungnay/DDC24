@@ -7,6 +7,7 @@ import {
   createFbdEditorState,
   fbdEditorReducer,
   resolveFbdKeyboardCommand,
+  translateFbdAnnouncement,
 } from './commands'
 import type { FbdDocument, FbdNetwork, FbdWire } from './model'
 
@@ -43,7 +44,7 @@ describe('command reducer FBD', () => {
     state = fbdEditorReducer(state, { type: 'SET_CAN_EDIT', canEdit: false })
     state = fbdEditorReducer(state, { type: 'ADD_NETWORK', network: network(2) })
     expect(state.document.networks).toHaveLength(2)
-    expect(state.announcement).toContain('Không có quyền')
+    expect(state.announcement.code).toBe('no-edit-permission')
   })
 
   it('nối output→input tương thích và từ chối input đã có driver', () => {
@@ -67,7 +68,7 @@ describe('command reducer FBD', () => {
       wire: { ...wire, id: '50000000-0000-4000-8000-000000000005' },
     })
     expect(state.document.networks[0].wires).toHaveLength(3)
-    expect(state.announcement).toContain('driver')
+    expect(state.announcement.code).toBe('input-has-driver-or-limit')
   })
 
   it('xóa block kéo theo wire và đổi thứ tự có undo', () => {
@@ -122,13 +123,33 @@ describe('command reducer FBD', () => {
       network: { ...network(1), id: document.networks[0].id },
     })
     expect(state.document.networks).toHaveLength(1)
-    expect(state.announcement).toContain('UUID')
+    expect(state.announcement.code).toBe('network-uuid-invalid')
 
     state = fbdEditorReducer(state, {
       type: 'ADD_NETWORK',
       network: { ...network(2), id: 'NOT-A-UUID' },
     })
     expect(state.document.networks).toHaveLength(1)
-    expect(state.announcement).toContain('UUID')
+    expect(state.announcement.code).toBe('network-uuid-invalid')
+  })
+})
+
+describe('translateFbdAnnouncement (BUG-012)', () => {
+  const pick = (vi: string, _en: string) => vi
+  const pickEn = (_vi: string, en: string) => en
+
+  it('dịch mã có tham số đúng locale', () => {
+    expect(translateFbdAnnouncement(pick, { code: 'block-added', params: { type: 'AND' } })).toBe('Đã thêm block AND')
+    expect(translateFbdAnnouncement(pickEn, { code: 'block-added', params: { type: 'AND' } })).toBe('Added block AND')
+  })
+
+  it('dịch mã không tham số', () => {
+    expect(translateFbdAnnouncement(pick, { code: 'undone' })).toBe('Đã hoàn tác')
+    expect(translateFbdAnnouncement(pickEn, { code: 'undone' })).toBe('Undone')
+  })
+
+  it('mã idle hoặc lạ trả về chuỗi rỗng', () => {
+    expect(translateFbdAnnouncement(pick, { code: 'idle' })).toBe('')
+    expect(translateFbdAnnouncement(pick, { code: 'unknown-code' })).toBe('')
   })
 })

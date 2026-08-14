@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FWSOM-PROG-001` |
-| Phiên bản | 0.8 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; P3/P4 source/host DONE; target/HIL evidence còn mở** |
+| Phiên bản | 1.0 |
+| Trạng thái | **M3 AS-BUILT — P3/P4 source/host DONE; Task 509 snapshot qua host/target supporting evidence; source chưa merge, HIL còn mở** |
 | Ngày | 2026-08-13 |
 | Chủ quản | Core/Runtime Lead |
 | Người review | Controls Lead, Safety Lead, Backend Lead, Verification Lead |
@@ -22,15 +22,16 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **`mkddc-core` chạy Program như thế nào trên SOM**: phân lớp runtime, base step và scheduler, loader/activation, process image, arbitration, RETAIN, trace, và ngân sách luồng/thời gian. |
 | 2. Ai phải đọc file này? | Core/FW-SOM Lead (chủ quản); Controls đối chiếu với [Control Semantics](PROGRAMMING_CONTROL_SEMANTICS.md); BE đọc §5 để biết bàn giao artifact; QA đọc §11 và §17. |
-| 3. Hệ thống hiện tại đang có gì? | P3/P4 đã đóng source/host: prepared runtime, process image/PID/overrun/trace, journal/RETAIN, BE coordinator, bounded UDS `SO_PEERCRED`, safe-boundary cutover/rollback, first-output LKG và checkpoint recovery. Default vẫn GRAPH_ONLY, feature flag OFF. |
+| 3. Hệ thống hiện tại đang có gì? | P3/P4 đã đóng source/host và bản 507 chạy PROGRAM_ONLY trên Foxlinx. Task 509 mở rộng point snapshot với program proposal mức 5, effective priority và task metric sau scan; full host gate PASS, target Task/Runtime read-back theo `EV-PROG-P5-510`; source chưa merge. |
 | 4. Thiết kế mới thay đổi điều gì? | Biến các component rời rạc đó thành một runtime thật sự được nối vào: base step tách khỏi chu kỳ Task, loader chạy ngoài RT rồi bàn giao tại biên an toàn, process image đóng băng trong lúc Program chạy, output đi qua arbitration mức 5, RETAIN khôi phục trước lần chạy đầu. |
-| 5. Team phải sửa module/contract nào? | Source P4 nằm ở `application/programming`, `adapters/ipc/program_ipc_unix.*`, `st_scheduler.*`, `scan_loop.*` và bootstrap. P5/P6 dùng status/operation contract; không sửa đường IOP ownership. |
-| 6. Điều gì còn bị chặn? | Không còn source P4. Release còn cần 32/32 Test Result, power/restart/WCET/watchdog/IOP trên Forlinx/HIL và residual acceptance. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host targeted RETAIN/control/IR/manifest/integration `111/111 PASS`; full repository gate ghi trong Plan 53/CHANGELOG. `VS-PROG-029/030`, jitter/WCET/watchdog/IOP vẫn phải chạy **trên board**, chưa được suy từ host PASS. |
+| 5. Team phải sửa module/contract nào? | `domain/priority/priority_resolver.*`, `domain/graph/runtime_point_snapshot.*`, `application/runtime/scan_loop.cpp`; P4 source khác giữ nguyên. |
+| 6. Điều gì còn bị chặn? | Task 509 source chưa merge; positive snapshot có Variable Binding target còn mở. Release còn 32/32 Test Result, power/restart/WCET/watchdog/IOP trên HIL và residual acceptance. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host targeted snapshot/resolver/scan `41/41` và full CTest `1004/1004` PASS; `EV-PROG-P5-510` ghi ARM64 deploy, Active/Task/Monitor read-back và rollback. Fixture không binding nên program/actual row target chưa có; không suy `VS-PROG-029/030`/HIL từ evidence này. |
 
-Điểm dễ hiểu sai nhất: **PROGRAM_ONLY và RETAIN đã có source không đồng nghĩa
-được phép chạy production**. Default vẫn GRAPH, feature flag vẫn OFF và chưa có
-BE coordinator/UDS/cutover hoặc target/HIL Test Result.
+Điểm dễ hiểu sai nhất: **PROGRAM_ONLY và RETAIN đã chạy happy path trên board lab
+không đồng nghĩa được phép release production**. Cờ Programming đang ON trên
+Foxlinx lab và BE coordinator/UDS/cutover đã có supporting evidence, nhưng chưa
+có Test Result độc lập, output vật lý/HIL/power-fault hoặc residual acceptance.
 
 ## 1. Baseline thật
 
@@ -130,8 +131,12 @@ thấy Modbus TCP/BACnet Point.
 | activation compatible | seed state cùng logic + previous program value | first commit bằng previous program value |
 | binding/state mới không compatible | require transition/initial policy | Commission bị chặn nếu thiếu |
 
-Runtime snapshot publish `programValue`, `actualValue`, winner, priority, TTL và
-freshness. Không claim bumpless trước HIL AO/DO + PID/override/release.
+As-Built Task 509: `PriorityResolver` cho phép đọc riêng giá trị AO/DO tại một
+mức priority; `ScanLoop::step()` chụp proposal mức 5 **sau Program tick và sau
+arbitration**, cùng actual/winner/effective priority vào `RuntimePointSnapshot`.
+Snapshot thêm task ID/period/budget/state/run/missed-release/exec/overrun từ Task
+ST đầu tiên của profile Rev A. TTL/actor/freshness ngoài resolver được BE join từ
+override/Point metadata. Không claim bumpless trước HIL AO/DO + PID/override/release.
 
 ## 8. RETAIN
 
@@ -328,6 +333,8 @@ retain/trace. Exact policy/CPU affinity đo trên target rồi phê duyệt; kh�
 | Target semantics/ABI/RETAIN/cutover | Product + Architect + Controls | **Đã mở implementation** theo `AUTH-PROG-2026-08-11-03`; acceptance target vẫn độc lập |
 | Coordinator/IPC/cutover target chưa kiểm chứng | Core + BE Lead + QA | Forlinx/HIL integration, peer/service identity và power-fault Test Result |
 | Timing/HIL/power-loss chưa có evidence | Core + MCU + QA | target results approved |
+| Corrective source Task 509 chưa commit/merge | Core + Dev Lead | commit/PR/merge thật; chạy lại Core/full gates và candidate pin |
+| Positive snapshot target có Variable Binding | Core + BE + QA | fixture read-only an toàn có binding; đối chiếu program/actual/owner/priority/task qua Web API, lưu raw output |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
@@ -339,10 +346,12 @@ retain/trace. Exact policy/CPU affinity đo trên target rồi phê duyệt; kh�
 | 0.6 | 2026-08-11 | Đồng bộ `TASK-PROG-301` tại `a831a0d`: scheduler profile Rev A 1/1/1, period 1/5/30 s, budget `<20%`, `on_base_step()`/sequence/missed release, capability/schema và watchdog ADR-028; targeted 74/74, CTest 936/936; giữ production/target NOT TESTED |
 | 0.7 | 2026-08-13 | Đồng bộ P3 `300..307`, P4 `400..402`; mô tả As-Built PROGRAM_ONLY bootstrap và RETAIN v2 stable identity/layout/CRC/atomic/cold-init/async checkpoint; giữ default GRAPH, flag OFF, coordinator/cutover và target/HIL NOT TESTED. |
 | 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: coordinator/SQLite v5, bounded UDS `SO_PEERCRED`, safe-boundary exclusive cutover, first-output/LKG, rollback và CRC checkpoint recovery. Host fault/restart gates PASS; giữ default GRAPH, flag OFF và target/HIL/power-cut NOT TESTED. |
+| 0.9 | 2026-08-13 | `TASK-PROG-509`: mở rộng `RuntimePointSnapshot`/serializer với program proposal mức 5, effective priority và task metric; `PriorityResolver` thêm accessor read-only; `ScanLoop` publish end-scan truth. Targeted host 41/41 PASS; source mới chưa deploy/read-back Foxlinx và không nâng HIL/Test Result. |
+| 1.0 | 2026-08-13 | `EV-PROG-P5-510`: full CTest 1004/1004; cross-build/deploy Core ARM64 đúng hash, Runtime/Active/Task và Monitor target read-back, rollback rehearsal/tái deploy PASS. Fixture active không binding nên positive program/actual row chưa chạy; source chưa merge, HIL/Test Result không đổi. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Core Lead | **P3/P4 SOURCE/HOST DONE** | commits Plan 53; `3ca5d22`, `10d9ad6` |
+| Core Lead | **P3/P4 SOURCE/HOST DONE; Task 509 HOST/TARGET VERIFIED nhưng chưa merge** | commits P3/P4; audit và `EV-PROG-P5-510` cho corrective slice |
 | Controls + Safety + BE + QA | **WAIVED FOR IMPLEMENTATION; review/test độc lập còn mở** | `AUTH-PROG-2026-08-11-03` |
 | Runtime Architect + System Architect | **APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; target/HIL không được suy thành PASS |
 
@@ -364,5 +373,6 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-12` Compatibility/deploy/rollback | PASS | §17 deployment và rollback; §10 cutover/bootstrap/config |
 | `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; release BLOCKED | `AUTH-PROG-2026-08-11-03` đã mở source và P4 source/host đã đóng. Owner target: Runtime/Controls/Safety/Ops/QA; không giảm residual; G6 chỉ mở khi Test Result board/HIL độc lập hoàn tất |
 
-**Host test đã pass không chứng minh runtime đã hoạt động trên board.** Luồng
-Commission coordinator/cutover đã `IMPLEMENTED` ở source/host; bằng chứng target vẫn `NOT TESTED`.
+**Host test không tự chứng minh runtime trên board.** Snapshot extension Task 509
+đã có supporting target read-back ở `EV-PROG-P5-510`, nhưng fixture không có
+binding và executor chưa độc lập; không được nâng thành Test Result/HIL PASS.

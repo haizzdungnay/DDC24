@@ -184,8 +184,8 @@ test.describe('Inputs — live mobile không dựng dữ liệu', () => {
 
   test('không mượn điểm demo và không cuộn ngang ở 390 px', async ({ page }) => {
     await navigate(page, '/eng/inputs')
-    await expect(page.getByRole('heading', { name: 'Live Data' })).toBeVisible()
-    await expect(page.getByText('No live data for this channel yet.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Dữ liệu trực tiếp|Live Data/ })).toBeVisible()
+    await expect(page.getByText(/Chưa có dữ liệu live cho kênh này\.|No live data for this channel yet\./)).toBeVisible()
     await expect(page.getByText('23.7 C')).toHaveCount(0)
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     expect(overflow, 'trang Inputs không được cuộn ngang').toBeLessThanOrEqual(1)

@@ -1,6 +1,7 @@
 import { useI18n } from '../../../shared/i18n'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import type { ProgrammingRuntime, ProgrammingTargetState } from '../model/types'
+import type { ProgrammingEditingContext } from './ProgrammingLayout'
 
 /**
  * `ProgrammingContextBar` — UX §4/§16.1.4: phải hiện đồng thời "Đang sửa" và
@@ -14,11 +15,11 @@ import type { ProgrammingRuntime, ProgrammingTargetState } from '../model/types'
 export function ProgrammingContextBar({
   runtimeStatus,
   runtime,
-  activeProjectId
+  editing
 }: {
   runtimeStatus: 'loading' | 'ready' | 'error'
   runtime: ProgrammingRuntime | null
-  activeProjectId?: string
+  editing: ProgrammingEditingContext | null
 }) {
   const { pick } = useI18n()
   const coreBadgeState = coreConnectionBadge(runtimeStatus, runtime?.producerState)
@@ -30,11 +31,22 @@ export function ProgrammingContextBar({
       role="status"
       aria-live="polite"
     >
-      {activeProjectId && (
-        <span className="text-[var(--c-text-dim)]">
-          {pick('Project', 'Project')}: <span className="font-mono text-[var(--c-text)]">{activeProjectId}</span>
-        </span>
-      )}
+      <span className="text-[var(--c-text-dim)]">
+        {pick('CONTROLLER', 'CONTROLLER')}:{' '}
+        <span className="font-mono text-[var(--c-text)]">{runtime?.controllerId ?? pick('— chưa rõ', '— unknown')}</span>
+      </span>
+      <span className="text-[var(--c-text-dim)]">
+        {pick('PROJECT', 'PROJECT')}:{' '}
+        <span className="text-[var(--c-text)]">{editing?.projectName ?? pick('— chưa có', '— none')}</span>
+      </span>
+      <span className="text-[var(--c-text-dim)]">
+        {pick('ĐANG SỬA', 'EDITING')}:{' '}
+        <span className="font-mono text-[var(--c-text)]">{editing?.draftRevisionId ?? pick('— chưa có', '— none')}</span>
+        {editing?.dirty ? <strong className="ml-1 text-[var(--c-warn-fg)]">· {pick('Chưa lưu', 'Unsaved')}</strong> : null}
+        {editing && editing.checkState !== 'idle' ? (
+          <span className="ml-1 text-[var(--c-text-dim)]">· {checkStateLabel(pick, editing.checkState)}</span>
+        ) : null}
+      </span>
       <span className="text-[var(--c-text-dim)]">
         {pick('ĐANG VẬN HÀNH', 'RUNNING')}:{' '}
         <span className="font-mono text-[var(--c-text)]">{runtime?.activeRevisionId ?? pick('— chưa có', '— none')}</span>
@@ -44,6 +56,17 @@ export function ProgrammingContextBar({
       </span>
     </div>
   )
+}
+
+function checkStateLabel(
+  pick: (vi: string, en: string) => string,
+  state: ProgrammingEditingContext['checkState']
+): string {
+  if (state === 'checking') return pick('Đang kiểm tra', 'Checking')
+  if (state === 'passed') return pick('Kiểm tra đạt', 'Check passed')
+  if (state === 'failed') return pick('Kiểm tra lỗi', 'Check failed')
+  if (state === 'unknown') return pick('Kết quả chưa xác định', 'Result unknown')
+  return ''
 }
 
 function coreConnectionBadge(status: 'loading' | 'ready' | 'error', producerState?: ProgrammingTargetState) {

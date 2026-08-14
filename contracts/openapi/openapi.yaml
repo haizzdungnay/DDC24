@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.19.0"
+  version: "1.20.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-08-11"
-  note: "v1.19.0 nối change manifest và bundle source-only đồng bộ; giữ 25 route và schema major 1."
+  date: "2026-08-13"
+  note: "v1.20.0 hiện thực monitor/trace bounded và task metrics authoritative; giữ tương thích schema major 1."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -2000,13 +2000,13 @@ paths:
       operationId: getProgrammingRuntimeMonitor
       summary: Đọc mẫu runtime bounded kèm quality và freshness
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-509
       responses:
         "200":
           description: Tập mẫu monitor hiện hành
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProgrammingResourcePage" }
+              schema: { $ref: "#/components/schemas/ProgrammingMonitorPage" }
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
@@ -2015,7 +2015,7 @@ paths:
       operationId: createProgrammingTrace
       summary: Tạo trace session read-only có quota
       x-rbac: [admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-509
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
       requestBody:
@@ -2028,7 +2028,7 @@ paths:
           description: Trace session đã được nhận
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+              schema: { $ref: "#/components/schemas/ProgrammingTraceAccepted" }
         "400": { $ref: "#/components/responses/ProgrammingError" }
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
@@ -2046,13 +2046,13 @@ paths:
       operationId: getProgrammingTrace
       summary: Đọc mẫu và stop reason của trace session
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-509
       responses:
         "200":
           description: Trace session và mẫu bounded
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProgrammingResource" }
+              schema: { $ref: "#/components/schemas/ProgrammingTrace" }
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
         "404": { $ref: "#/components/responses/ProgrammingError" }
@@ -2061,7 +2061,7 @@ paths:
       operationId: stopProgrammingTrace
       summary: Dừng capture nhưng giữ metadata và audit
       x-rbac: [admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-509
       responses:
         "204": { description: Trace đã dừng hoặc đã ở trạng thái kết thúc }
         "401": { $ref: "#/components/responses/ProgrammingError" }
@@ -2682,8 +2682,126 @@ components:
           maxItems: 32
           uniqueItems: true
           items: { type: string, format: uuid }
-        durationMs: { type: integer, minimum: 1000, maximum: 300000 }
+        durationMs: { type: integer, minimum: 1000, maximum: 600000 }
         samplePeriodMs: { type: integer, minimum: 100, maximum: 30000 }
+    ProgrammingTaskMetrics:
+      type: object
+      additionalProperties: false
+      required: [taskId, periodMs, budgetMs, state, runCount, missedReleaseCount, lastExecNs, maxExecNs, overrunCount, consecutiveOverruns]
+      properties:
+        taskId: { type: string, minLength: 1, maxLength: 32 }
+        periodMs: { type: integer, minimum: 1 }
+        budgetMs: { type: integer, minimum: 1 }
+        state: { type: string, enum: [STOPPED, RUNNING, FAULT] }
+        runCount: { type: integer, minimum: 0 }
+        missedReleaseCount: { type: integer, minimum: 0 }
+        lastExecNs: { type: integer, minimum: 0 }
+        maxExecNs: { type: integer, minimum: 0 }
+        overrunCount: { type: integer, minimum: 0 }
+        consecutiveOverruns: { type: integer, minimum: 0 }
+    ProgrammingMonitorPointRef:
+      type: object
+      additionalProperties: false
+      required: [category, pointId]
+      properties:
+        category: { type: string, enum: [LOCAL, VP, MB_RTU] }
+        pointId: { type: string, minLength: 1, maxLength: 128 }
+        deviceId: { type: string, minLength: 1, maxLength: 128 }
+    ProgrammingMonitorSample:
+      type: object
+      additionalProperties: false
+      required: [variableId, variableName, programId, point, direction, dataType, programValue, actualValue, overriddenBy, effectivePriority, overrideActor, overrideRemainingS, quality, observedAt, freshness]
+      properties:
+        variableId: { type: string, format: uuid }
+        variableName: { type: string, minLength: 1, maxLength: 128 }
+        programId: { type: string, format: uuid }
+        point: { $ref: "#/components/schemas/ProgrammingMonitorPointRef" }
+        direction: { type: string, enum: [READ, WRITE, READ_WRITE] }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        unit: { type: string, maxLength: 32 }
+        programValue: { type: [number, integer, boolean, string, "null"] }
+        actualValue: { type: [number, integer, boolean, string, "null"] }
+        overriddenBy: { type: [string, "null"], maxLength: 64 }
+        effectivePriority: { type: [integer, "null"], minimum: 1, maximum: 6 }
+        overrideActor: { type: [string, "null"], maxLength: 128 }
+        overrideRemainingS: { type: [integer, "null"], minimum: 0 }
+        quality: { type: string, enum: [GOOD, UNCERTAIN, BAD, STALE, OFFLINE, UNKNOWN] }
+        observedAt: { type: string, format: date-time }
+        freshness: { type: string, enum: [LIVE, STALE, UNAVAILABLE] }
+    ProgrammingMonitorPage:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, activeRevisionId, safeState, task, items]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        activeRevisionId: { type: [string, "null"], format: uuid }
+        safeState: { type: boolean }
+        task:
+          oneOf:
+            - { $ref: "#/components/schemas/ProgrammingTaskMetrics" }
+            - { type: "null" }
+        items:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/ProgrammingMonitorSample" }
+    ProgrammingTraceAccepted:
+      type: object
+      additionalProperties: false
+      required: [traceId, statusUrl, state, requestHash, acceptedAt, correlationId]
+      properties:
+        traceId: { type: string, format: uuid }
+        statusUrl: { type: string, pattern: "^/api/v1/programming/runtime/traces/[A-Za-z0-9-]+$" }
+        state: { type: string, enum: [RUNNING, COMPLETED] }
+        requestHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        acceptedAt: { type: string, format: date-time }
+        correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+    ProgrammingTraceValue:
+      type: object
+      additionalProperties: false
+      required: [variableId, programValue, actualValue, overriddenBy, effectivePriority, quality, freshness]
+      properties:
+        variableId: { type: string, format: uuid }
+        programValue: { type: [number, integer, boolean, string, "null"] }
+        actualValue: { type: [number, integer, boolean, string, "null"] }
+        overriddenBy: { type: [string, "null"], maxLength: 64 }
+        effectivePriority: { type: [integer, "null"], minimum: 1, maximum: 6 }
+        quality: { type: string, enum: [GOOD, UNCERTAIN, BAD, STALE, OFFLINE, UNKNOWN] }
+        freshness: { type: string, enum: [LIVE, STALE, UNAVAILABLE] }
+    ProgrammingTraceSample:
+      type: object
+      additionalProperties: false
+      required: [sequence, observedAt, values]
+      properties:
+        sequence: { type: integer, minimum: 1, maximum: 10000 }
+        observedAt: { type: string, format: date-time }
+        values:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items: { $ref: "#/components/schemas/ProgrammingTraceValue" }
+    ProgrammingTrace:
+      type: object
+      additionalProperties: false
+      required: [traceId, state, variableIds, durationMs, samplePeriodMs, startedAt, updatedAt, stopReason, droppedSamples, samples]
+      properties:
+        traceId: { type: string, format: uuid }
+        state: { type: string, enum: [RUNNING, COMPLETED, STOPPED, FAILED] }
+        variableIds:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        durationMs: { type: integer, minimum: 1000, maximum: 600000 }
+        samplePeriodMs: { type: integer, minimum: 100, maximum: 30000 }
+        startedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        stopReason: { type: [string, "null"], enum: [DURATION_REACHED, QUOTA_REACHED, USER_STOPPED, SOURCE_UNAVAILABLE, null] }
+        droppedSamples: { type: integer, minimum: 0 }
+        samples:
+          type: array
+          maxItems: 10000
+          items: { $ref: "#/components/schemas/ProgrammingTraceSample" }
     ProgrammingCommissionRequest:
       type: object
       additionalProperties: false
@@ -2800,15 +2918,28 @@ components:
     ProgrammingRuntime:
       type: object
       additionalProperties: false
-      required: [schemaVersion, producerState, activeRevisionId, lkgRevisionId, taskState, safeState, observedAt]
+      required: [schemaVersion, controllerId, producerState, activeRevisionId, lkgRevisionId, taskState, safeState, safeStateNoControllerOnly, observedAt, task]
       properties:
         schemaVersion: { type: string, const: "1.0" }
+        controllerId: { type: string, minLength: 1, maxLength: 128 }
         producerState: { type: string, enum: [READY, DEGRADED, UNAVAILABLE] }
         activeRevisionId: { type: [string, "null"], format: uuid }
         lkgRevisionId: { type: [string, "null"], format: uuid }
         taskState: { type: string, enum: [STOPPED, STARTING, RUNNING, FAULT, UNKNOWN] }
         safeState: { type: boolean }
+        safeStateNoControllerOnly:
+          type: boolean
+          description: >-
+            true CHỈ KHI safeState=true đến từ trigger T7 (no_controller) đơn
+            độc ở Core — không có iop_fault/stale/graph_input_bad/overrun đi
+            kèm. Commission một Program có output sẽ tự giải quyết trường hợp
+            này; false thì safeState do lỗi thật, không được coi là an toàn
+            để Commission bỏ qua.
         observedAt: { type: string, format: date-time }
+        task:
+          oneOf:
+            - { $ref: "#/components/schemas/ProgrammingTaskMetrics" }
+            - { type: "null" }
     ProgrammingResource:
       type: object
       additionalProperties: true

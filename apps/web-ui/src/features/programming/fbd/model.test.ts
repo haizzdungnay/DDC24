@@ -2,11 +2,30 @@ import { describe, expect, it } from 'vitest'
 
 import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_fan_enable.json'
 
-import { canonicalFbdJson, canonicalizeFbdDocument, validateFbdDocument, type FbdDocument } from './model'
+import { canonicalFbdJson, canonicalizeFbdDocument, collectFbdInterfaceVariables, validateFbdDocument, type FbdDocument } from './model'
 
 function golden(): FbdDocument {
   return JSON.parse(JSON.stringify(goldenJson)) as FbdDocument
 }
+
+describe('collectFbdInterfaceVariables (Mapping tab phải chọn từ đây, không gõ tay)', () => {
+  it('lấy đúng tên biến từ parameters.variable của node INPUT/OUTPUT', () => {
+    expect(collectFbdInterfaceVariables(golden())).toEqual([
+      { name: 'OCCUPIED', type: 'BOOL', direction: 'INPUT' },
+      { name: 'ENABLE', type: 'BOOL', direction: 'INPUT' },
+      { name: 'FAN_CMD', type: 'BOOL', direction: 'OUTPUT' }
+    ])
+  })
+
+  it('bỏ qua node FUNCTION/FUNCTION_BLOCK và node INPUT/OUTPUT thiếu parameters.variable', () => {
+    const document = golden()
+    document.networks[0].nodes[0].parameters = {}
+    expect(collectFbdInterfaceVariables(document)).toEqual([
+      { name: 'ENABLE', type: 'BOOL', direction: 'INPUT' },
+      { name: 'FAN_CMD', type: 'BOOL', direction: 'OUTPUT' }
+    ])
+  })
+})
 
 describe('mô hình FBD canonical', () => {
   it('chấp nhận golden và ổn định byte sau khi đổi thứ tự mảng', () => {

@@ -18,7 +18,7 @@ import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { useRealtime } from '../../shared/realtime'
 import type { Point, PointKind, PointQuality, VirtualPoint } from '../../shared/types'
-import { NO_DATA, canonicalVirtualPointId, cn, formatCountdown, formatDateTime, formatTime, formatValue, isFreshIso, mergePointsById, pointDisplayTag, pointNumber, statusColor, statusFill } from '../../shared/utils'
+import { NO_DATA, canonicalVirtualPointId, cn, formatCountdown, formatDateTime, formatTime, formatValue, isChannelNotConfigured, isFreshIso, mergePointsById, pointDisplayTag, pointNumber, statusColor, statusFill } from '../../shared/utils'
 
 const MAX_TREND_POINTS = 18
 const REALTIME_STALE_MS = 2500
@@ -36,7 +36,7 @@ type MonitorStateFilter = 'all' | 'forced' | 'fault' | 'offline' | 'writable' | 
 function matchesStateFilter(point: Point, filter: MonitorStateFilter): boolean {
   switch (filter) {
     case 'forced': return point.forced === true
-    case 'fault': return point.fault === true || point.quality === 'bad'
+    case 'fault': return (point.fault === true || point.quality === 'bad') && !isChannelNotConfigured(point)
     case 'offline': return point.quality === 'offline' || point.online === false
     case 'writable': return point.writable === true || point.kind === 'AO' || point.kind === 'DO'
     case 'logging': return point.logEnabled === true
@@ -221,6 +221,10 @@ export function MonitorPage() {
   }), [filtered])
 
   const analogPoints = points.filter((point) => point.kind === 'UI' || point.kind === 'AO' || point.kind === 'virtual')
+  // Kênh "Chưa cấu hình" (signalType none) không được tính vào tổng "lỗi/mất
+  // tín hiệu" hay mẫu số "% bình thường" — nó chưa hề được đưa vào vận hành,
+  // không phải một điểm đang lỗi (F-DASH-LOCALIO-01).
+  const configuredAnalogPoints = analogPoints.filter((point) => !isChannelNotConfigured(point))
   const stats = {
     total: points.length,
     ui: points.filter((point) => point.kind === 'UI').length,
@@ -228,9 +232,9 @@ export function MonitorPage() {
     ao: points.filter((point) => point.kind === 'AO').length,
     virtual: points.filter((point) => point.kind === 'virtual').length,
     on: points.filter((point) => Boolean(point.value)).length,
-    analogTotal: analogPoints.length,
-    analogGood: analogPoints.filter((point) => point.quality === 'good').length,
-    abnormal: points.filter((point) => point.quality !== 'good').length
+    analogTotal: configuredAnalogPoints.length,
+    analogGood: configuredAnalogPoints.filter((point) => point.quality === 'good').length,
+    abnormal: points.filter((point) => point.quality !== 'good' && !isChannelNotConfigured(point)).length
   }
 
   function openPointModal(point: Point) {
@@ -658,15 +662,23 @@ function sparklineFallback(point: Point): number[] {
 function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onForce }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void }) {
   const { pick } = useI18n()
   const trendBuffer = useTrendBuffer(point.id, point.value, point.trend)
-  const statusText = point.quality === 'good' ? pick('Bình thường', 'Normal') : point.quality === 'uncertain' ? pick('Lỗi - HIGH', 'Fault - HIGH') : point.quality.toUpperCase()
+  // Kênh Signal Type = "none" ("Không hoạt động") là người dùng CHỦ Ý chưa
+  // nối cảm biến — Core trả quality=bad đúng thiết kế (không có dữ liệu
+  // thật), nhưng hiện đỏ "BAD" y hệt một fault phần cứng là báo sai mức độ
+  // nghiêm trọng (cùng họ với domain Local I/O ở Dashboard, đã sửa ở backend
+  // F-DASH-LOCALIO-01). Tách hiển thị: chấm/màu trung tính + nhãn riêng.
+  const notConfigured = isChannelNotConfigured(point)
+  const statusText = notConfigured
+    ? pick('Chưa cấu hình', 'Not configured')
+    : point.quality === 'good' ? pick('Bình thường', 'Normal') : point.quality === 'uncertain' ? pick('Lỗi - HIGH', 'Fault - HIGH') : point.quality.toUpperCase()
   return (
     <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[var(--c-accent-bg)]', selected && 'bg-[var(--c-accent-bg)]')}>
       <span className="mono font-semibold">{pointDisplayTag(point)}</span>
       <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
-      <span className="mono">{typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
-      <span className="mono text-[var(--c-text-dim)]">{point.unit ?? (point.kind === 'AO' ? 'V' : '-')}</span>
-      <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: statusFill(point.quality) }} />{statusText}</span>
-      <span onClick={(event) => { if (onForce) { event.stopPropagation(); onForce(point) } }}><Sparkline values={trendBuffer.length > 0 ? trendBuffer : sparklineFallback(point)} color={point.quality === 'good' ? 'var(--c-accent-2)' : point.quality === 'bad' ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)'} /></span>
+      <span className="mono">{notConfigured ? NO_DATA : typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
+      <span className="mono text-[var(--c-text-dim)]">{notConfigured ? NO_DATA : point.unit ?? (point.kind === 'AO' ? 'V' : '-')}</span>
+      <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: notConfigured ? statusFill('inactive') : statusFill(point.quality) }} />{statusText}</span>
+      <span onClick={(event) => { if (onForce) { event.stopPropagation(); onForce(point) } }}><Sparkline values={trendBuffer.length > 0 ? trendBuffer : sparklineFallback(point)} color={notConfigured ? 'var(--c-text-dim)' : point.quality === 'good' ? 'var(--c-accent-2)' : point.quality === 'bad' ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)'} /></span>
       <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
     </button>
   )
@@ -798,7 +810,10 @@ function PointDetailsModal({
               {formatValue(point.value, point.unit)}
             </div>
             <div className="mt-2 flex items-center justify-between gap-3">
-              <StatusBadge state={point.forced ? 'force' : point.quality} />
+              <StatusBadge
+                state={point.forced ? 'force' : isChannelNotConfigured(point) ? 'inactive' : point.quality}
+                label={!point.forced && isChannelNotConfigured(point) ? pick('Chưa cấu hình', 'Not configured') : undefined}
+              />
               <span className="mono text-xs text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
             </div>
           </div>
@@ -1006,7 +1021,11 @@ function DetailPanel({
             <dt className="text-[var(--c-text-dim)]">{pick('Nhóm I/O', 'I/O group')}</dt><dd>{groupText}</dd>
             <dt className="text-[var(--c-text-dim)]">{pick('Kiểu tín hiệu', 'Signal type')}</dt><dd>{point.signalType ?? point.sensorType ?? NO_DATA}</dd>
             <dt className="text-[var(--c-text-dim)]">{pick('Chất lượng', 'Quality')}</dt>
-            <dd><QualityBadge quality={point.quality} reason={point.qualityReason} /></dd>
+            <dd>
+              {isChannelNotConfigured(point)
+                ? <StatusBadge state="inactive" label={pick('Chưa cấu hình', 'Not configured')} />
+                : <QualityBadge quality={point.quality} reason={point.qualityReason} />}
+            </dd>
             {isBinary && (
               <>
                 <dt className="text-[var(--c-text-dim)]">{pick('Trạng thái hiện tại', 'Current status')}</dt>
@@ -1064,7 +1083,10 @@ function DetailPanel({
             )}
           </dl>
           <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge state={point.quality} />
+            <StatusBadge
+              state={isChannelNotConfigured(point) ? 'inactive' : point.quality}
+              label={isChannelNotConfigured(point) ? pick('Chưa cấu hình', 'Not configured') : undefined}
+            />
             {point.forced && <ForcedBadge remainingLabel={formatCountdown(point.overrideExpiresInS)} />}
           </div>
           {/* PA3-406: mọi lệnh ghi xuống điểm này đều để lại vết trong kho

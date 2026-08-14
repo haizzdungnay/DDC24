@@ -10,7 +10,7 @@ import type { ConnectionState, CurrentUser } from '../types'
 import { formatDataAge } from '../utils'
 import { Button } from './Button'
 import { StatusBadge } from './StatusBadge'
-import { HealthChip, SeverityBadge } from './pa3/StateAtoms'
+import { HealthChip, SeverityBadge, healthReasonLabel } from './pa3/StateAtoms'
 
 /**
  * TopBar — PA3-203 / UX-DES §2.2.
@@ -57,7 +57,15 @@ export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: 
         <span className="hidden sm:inline-flex"><StatusBadge state={IS_DEMO ? 'demo' : 'live'} label={IS_DEMO ? t('demo') : t('live')} /></span>
         {snapshot && (
           <>
-            <span className="hidden md:inline-flex"><HealthChip state={snapshot.overallState} /></span>
+            {/* BUG-008 — badge FAULT/DEGRADED trước đây không click/hover được,
+                người trực không biết vì sao mà phải mở Diagnostics dò thủ công. */}
+            <Link
+              to="/diagnostics"
+              className="hidden md:inline-flex"
+              aria-label={pick(`Trạng thái ${snapshot.overallState}: ${healthReasonLabel(snapshot.overallReasonCode, lang)}. Mở Chẩn đoán.`, `Status ${snapshot.overallState}: ${healthReasonLabel(snapshot.overallReasonCode, lang)}. Open Diagnostics.`)}
+            >
+              <HealthChip state={snapshot.overallState} title={healthReasonLabel(snapshot.overallReasonCode, lang)} />
+            </Link>
             {/* Tuổi dữ liệu là số đo an toàn, không phải trang trí: người trực
                 phải biết mình đang nhìn dữ liệu bao nhiêu giây tuổi. `—` khi
                 không point nào có mốc thời gian thật (PA3-F04). */}
@@ -75,7 +83,15 @@ export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: 
         </div>
       )}
       <div className="flex shrink-0 items-center gap-1 sm:gap-3">
-        <div className="hidden border-r border-[var(--c-border)] pr-6 text-right md:block">
+        {/* BUG-017 (TR-MKDDC24-P2-20260814-02 / TC-D10): ở 768–1023px, khối này
+            cùng khối trạng thái bên trái (SYSTEM/DEMO/FAULT) và badge sức khoẻ
+            (`md:inline-flex`) đồng thời hiện — tổng bề rộng nội dung vượt bề
+            rộng header thật (đo bằng Playwright: ~973px cần > ~790px có ở
+            1024px), khiến header không wrap mà đè chữ lên nhau. Đồng hồ/ngày
+            và tên/role là thông tin phụ (đã có ở trang User/nơi khác), đẩy
+            xuống `xl:` để nhường chỗ cho badge sức khoẻ — thứ operator cần
+            thấy ngay ở độ rộng máy tính bảng. */}
+        <div className="hidden border-r border-[var(--c-border)] pr-6 text-right xl:block">
           <div className="mono text-sm font-semibold">{now.toLocaleTimeString(locale, { hour12: false })}</div>
           <div className="text-xs text-[var(--c-text-dim)]">{now.toLocaleDateString(locale)}</div>
         </div>
@@ -85,7 +101,7 @@ export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: 
         </Link>
         <Link to="/help" className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Trợ giúp", "Help")}><CircleHelp className="h-5 w-5" /></Link>
         <Link to="/me" className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Người dùng", "User")}><UserRound className="h-5 w-5" /></Link>
-        <div className="hidden min-w-[132px] md:block">
+        <div className="hidden min-w-[132px] xl:block">
           <div className="text-sm font-semibold">{currentUser?.username ?? 'N/A'}</div>
           <div className="text-xs text-[var(--c-text-dim)]">{currentUser?.role ?? 'N/A'}</div>
         </div>

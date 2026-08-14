@@ -313,7 +313,7 @@ Trên bo: dừng `mkddc-core`, khẳng định `/api/v1/points` trả **503** (k
 
 | Task | Nội dung | Ngày | TT |
 |---|---|---:|---|
-| FIX-501 | Gate CI chạy **đủ 4 bộ** test và **thất bại khi test thất bại**. Rà lại ba gate từng bị ghi là rỗng trong [review 2026-07-30](../07_records/reviews/archive/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md) — nếu vẫn rỗng thì đây là nguyên nhân gốc của cả plan này | 1 | ☐ |
+| FIX-501 | Gate CI chạy **đủ 4 bộ** test và **thất bại khi test thất bại**. Rà lại ba gate từng bị ghi là rỗng trong review 2026-07-30 ([evidence deploy](../07_records/test-evidence/fw-som/2026-07-30-aarch64-deploy-review-fixes.md); record gốc phục hồi tại `b69fdf1`) — nếu vẫn rỗng thì đây là nguyên nhân gốc của cả plan này | 1 | ☐ |
 | FIX-502 | Kiểm tra biên tự động: normalizer FE **không được** trả literal mặc định cho dữ liệu vắng; thêm test bảng cho `pointValue` với mọi tổ hợp trường vắng | 0,5 | ☐ |
 | FIX-503 | Ghi vào `AGENTS.md`/`CLAUDE.md` quy tắc rút ra: **sửa một lỗi thì phải `grep` các chỗ cùng khuôn**, và bản vá phải kèm test chặn call site mới | 0,5 | ☐ |
 | FIX-504 | Cập nhật báo cáo rà soát: đánh dấu 15 finding đã đóng kèm commit và output kiểm chứng; ghi hồ sơ vào `docs/07_records/test-evidence/` | 0,5 | ☐ |
@@ -417,7 +417,7 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 |---|---|
 | [49_MODBUS_RTU_IMPLEMENTATION_PLAN](49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | 7/15 finding nằm trong phạm vi Modbus RTU; P2 đóng nốt phần `(bus, slave)` mà plan 49 mở ra khi chốt 2 cổng |
 | [50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN](50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | `REV-BE-05` chạm `virtualpoint_scheduler.go`. **Làm FIX-401 trước khi plan 50 vào P1**, nếu không bản viết lại sẽ mang theo lỗi bỏ dở vòng lặp |
-| [45_WEB_UX_REMEDIATION_AND_CICD_PLAN](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) | FIX-501 là phần CI/CD còn nợ của plan 45 — ba gate rỗng ghi trong [review 2026-07-30](../07_records/reviews/archive/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md) |
+| [45_WEB_UX_REMEDIATION_AND_CICD_PLAN](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) | FIX-501 là phần CI/CD còn nợ của plan 45 — ba gate rỗng ghi trong review 2026-07-30; [evidence deploy](../07_records/test-evidence/fw-som/2026-07-30-aarch64-deploy-review-fixes.md) giữ đường kiểm chứng, record gốc phục hồi tại `b69fdf1` |
 | [ENABLE_TTYS1_RS485_2](../08_hardware/foxlinx-som-ddc24/ENABLE_TTYS1_RS485_2.md) | FIX-201 kiểm chứng đầy đủ hai bus **chỉ khi** `ttyS1` được bật; trước đó phải mô phỏng bằng `bus_id` trong `fieldbus.conf` |
 
 ---

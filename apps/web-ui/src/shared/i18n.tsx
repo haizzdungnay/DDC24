@@ -405,8 +405,22 @@ interface I18nValue {
 
 const I18nContext = createContext<I18nValue | null>(null)
 
+function detectDefaultLang(): Language {
+  const stored = localStorage.getItem('mkddc-lang')
+  if (stored === 'en' || stored === 'vi') return stored
+  // Chưa từng chọn ngôn ngữ: theo Accept-Language của trình duyệt (W3C i18n
+  // Best Practice) thay vì luôn mặc định 'vi'. Người dùng vẫn đổi được bằng
+  // nút ngôn ngữ ở TopBar; lựa chọn đó ghi đè vĩnh viễn qua localStorage.
+  const browserLang = typeof navigator !== 'undefined' ? navigator.language : ''
+  return browserLang.toLowerCase().startsWith('en') ? 'en' : 'vi'
+}
+
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Language>(() => (localStorage.getItem('mkddc-lang') as Language) || 'en'); const setLang = (l: Language) => { setLangState(l); localStorage.setItem('mkddc-lang', l); };
+  const [lang, setLangState] = useState<Language>(detectDefaultLang)
+  const setLang = (next: Language) => {
+    setLangState(next)
+    localStorage.setItem('mkddc-lang', next)
+  }
   const value = useMemo<I18nValue>(() => ({
     lang,
     locale: lang === 'vi' ? 'vi-VN' : 'en-US',

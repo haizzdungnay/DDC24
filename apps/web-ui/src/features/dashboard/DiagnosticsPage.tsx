@@ -36,7 +36,7 @@ const emptyPoints: Point[] = []
  */
 export function DiagnosticsPage() {
   const navigate = useNavigate()
-  const { pick } = useI18n()
+  const { lang, pick } = useI18n()
   const { data: overview, status } = useOverview()
   const health = useApi(apiClient.getHealth, [], { refreshMs: 5000 })
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
@@ -81,7 +81,7 @@ export function DiagnosticsPage() {
                   <span className="text-sm font-semibold">{domain.domain}</span>
                   <HealthChip state={domain.state} />
                 </div>
-                <div className="mt-2 text-xs text-[var(--c-text-dim)]">{healthReasonLabel(domain.reasonCode)}</div>
+                <div className="mt-2 text-xs text-[var(--c-text-dim)]">{healthReasonLabel(domain.reasonCode, lang)}</div>
                 {domain.detail && <div className="mt-1 text-xs text-[var(--c-text)]">{domain.detail}</div>}
                 <div className="mono mt-2 text-[11px] text-[var(--c-text-dim)]">
                   {pick('Nguồn', 'Source')}: {domain.source} · {formatDataAge(domain.observedAt)}

@@ -187,8 +187,7 @@ và tiếp tục read-only; không queue/replay lệnh mù.
 | 16 | [CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) | tất cả | **trước khi code** — bản chốt hợp đồng, hết tranh cãi |
 | 17 | [QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md) | Dev 2 (mới) | ngày đầu tiên vào dự án |
 | 18 | [WEEK1_SOM_BRINGUP_CHECKLIST](18_WEEK1_SOM_BRINGUP_CHECKLIST.md) | Dev 2 | tuần đầu trên SOM |
-| 19 | [DOCS_AUDIT_SOM_IMPLEMENTATION](19_DOCS_AUDIT_SOM_IMPLEMENTATION.md) | Lead/PM | audit docs 2026-06-11 (meta) |
-| 20 | [DOCS_FIX_CHECKLIST](20_DOCS_FIX_CHECKLIST.md) | Lead/PM | tracker sửa docs theo audit (meta) |
+| 19–20 | Audit/checklist tài liệu ngày 2026-06-11 đã loại; phục hồi tại `b69fdf1` | Lead/PM | Historical — dùng cây source cũ, không còn authority |
 | 21 | [VIRTUAL_COM_DECISION](21_VIRTUAL_COM_DECISION.md) | Dev 2 + Tester | khi chưa có board, cần bridge serial ảo đúng chuẩn |
 | 22 | [SOM_SRC_IMPLEMENTATION_PLAN](22_SOM_SRC_IMPLEMENTATION_PLAN.md) | Dev 2 + Lead | khi cần plan cực chi tiết để dựng source SOM từ cây trống |
 | 23 | [GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | Dev 2 + Lead | S7 #4: stateful graph + persist counter |

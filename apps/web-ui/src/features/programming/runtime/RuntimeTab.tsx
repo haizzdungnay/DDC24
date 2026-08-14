@@ -5,11 +5,8 @@ import type { ProgrammingRuntime } from '../model/types'
 
 /**
  * Tab "Runtime" của PGM-04 (`UJ-PROG-07`) — `RuntimeSummary` + `TaskRuntimeTable`
- * + `CoreConnectionPanel`. `max/overrun/last-run` của Task KHÔNG có trong
- * STATUS payload UDS v1 hiện tại (`RuntimeOperationSnapshot` chỉ mang
- * producer/active/lkg/overrideIds, không có metric Task) — hiện `—` trung
- * thực thay vì suy đoán, và ghi rõ đây là khoảng hở Core cần một action UDS
- * mới, ngoài phạm vi tối thiểu của P5.
+ * + `CoreConnectionPanel`. Metric Task được chụp cùng point snapshot ở cuối
+ * scan; thiếu snapshot giữ `—`, không suy ra từ nhịp poll của trình duyệt.
  */
 export function RuntimeTab({ runtime, status }: { runtime: ProgrammingRuntime | null; status: 'loading' | 'ready' | 'error' }) {
   const { pick } = useI18n()
@@ -20,6 +17,7 @@ export function RuntimeTab({ runtime, status }: { runtime: ProgrammingRuntime | 
       : runtime.producerState === 'DEGRADED'
         ? pick('Core suy giảm', 'Core degraded')
         : pick('Core đang chạy', 'Core running')
+  const task = runtime?.task
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -42,6 +40,25 @@ export function RuntimeTab({ runtime, status }: { runtime: ProgrammingRuntime | 
             <dd className="text-[var(--c-text-dim)]">{runtime ? new Date(runtime.observedAt).toLocaleString() : '—'}</dd>
           </div>
         </dl>
+        {runtime?.safeState && (
+          runtime.safeStateNoControllerOnly ? (
+            <div role="status" className="mt-3 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
+              <p className="font-semibold">PRG-SAFE-ACTIVE — {pick('Chưa có output vật lý do Program điều khiển', 'No physical output is Program-controlled yet')}</p>
+              <p className="mt-1 text-xs">
+                {pick('Nguyên nhân: chưa Program nào ghi AO/DO vật lý ở mức trên Default — bình thường nếu logic chỉ dùng Virtual Point.', 'Reason: no Program is writing physical AO/DO above the Default level yet — expected if this logic only uses Virtual Points.')} · {pick('Phạm vi', 'Scope')}: {task?.taskId ?? 'Control_Main'} / {pick('các output do Program điều khiển', 'Program-controlled outputs')}.
+              </p>
+              <p className="mt-1 text-xs">{pick('Đưa vào vận hành và Khôi phục KHÔNG bị khóa vì lý do này.', 'Commission and Restore are NOT locked because of this.')}</p>
+            </div>
+          ) : (
+            <div role="alert" className="mt-3 rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
+              <p className="font-semibold">PRG-SAFE-ACTIVE — {pick('Safe-state đang tác động do lỗi', 'Safe-state is active due to a fault')}</p>
+              <p className="mt-1 text-xs">
+                {pick('Nguyên nhân: I/O lỗi/dữ liệu cũ/quá giờ — Core chưa cung cấp mã chi tiết hơn.', 'Reason: I/O fault/stale data/overrun — Core did not provide a more detailed code.')} · {pick('Phạm vi', 'Scope')}: {task?.taskId ?? 'Control_Main'} / {pick('các output do Program điều khiển', 'Program-controlled outputs')}.
+              </p>
+              <p className="mt-1 text-xs">{pick('Hành động: giữ Commission/Restore bị khóa và kiểm tra Core, I/O, alarm.', 'Action: keep Commission/Restore locked and inspect Core, I/O, and alarms.')}</p>
+            </div>
+          )
+        )}
       </Panel>
 
       <Panel title={pick('Kết nối Core', 'Core connection')}>
@@ -68,19 +85,20 @@ export function RuntimeTab({ runtime, status }: { runtime: ProgrammingRuntime | 
               <td className="py-1 pr-3">
                 <StatusBadge state={runtime?.taskState === 'RUNNING' ? 'online' : runtime?.taskState === 'FAULT' ? 'fault' : 'unknown'} label={runtime?.taskState ?? '—'} />
               </td>
-              <td className="py-1 pr-3 text-[var(--c-text-dim)]">—</td>
-              <td className="py-1 pr-3 text-[var(--c-text-dim)]">—</td>
-              <td className="py-1 text-[var(--c-text-dim)]">—</td>
+              <td className="py-1 pr-3 text-[var(--c-text-dim)]">{task ? formatDuration(task.lastExecNs) : '—'}</td>
+              <td className="py-1 pr-3 text-[var(--c-text-dim)]">{task ? formatDuration(task.maxExecNs) : '—'}</td>
+              <td className="py-1 text-[var(--c-text-dim)]">{task?.overrunCount ?? '—'}</td>
             </tr>
           </tbody>
         </table>
-        <p className="mt-2 text-xs text-[var(--c-text-dim)]">
-          {pick(
-            'Chu kỳ/lớn nhất/số lần quá giờ chưa có trong hợp đồng UDS STATUS hiện tại — Core cần bổ sung action riêng để mang metric Task, ngoài phạm vi tối thiểu của P5.',
-            'Last/max run and overrun count are not part of the current UDS STATUS contract — Core needs a dedicated action to carry task metrics; out of P5 minimal scope.'
-          )}
-        </p>
+        {task && <p className="mt-2 text-xs text-[var(--c-text-dim)]">{pick('Chu kỳ', 'Period')}: {task.periodMs} ms · {pick('Ngân sách', 'Budget')}: {task.budgetMs} ms · {pick('Lỡ nhịp', 'Missed releases')}: {task.missedReleaseCount}</p>}
       </Panel>
     </div>
   )
+}
+
+function formatDuration(valueNS: number): string {
+  if (valueNS >= 1_000_000) return `${(valueNS / 1_000_000).toFixed(2)} ms`
+  if (valueNS >= 1_000) return `${(valueNS / 1_000).toFixed(1)} µs`
+  return `${valueNS} ns`
 }

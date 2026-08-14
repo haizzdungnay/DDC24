@@ -8,6 +8,1127 @@
 
 ## [Unreleased]
 
+### Added — Binding Manifest (D-07): compiler ST giờ thật sự nhận Variable↔Point Binding, đóng `F-PROG-ASBUILT-013` cho category `LOCAL` (2026-08-14)
+
+Theo authority PM/CTO chốt cho `D-07` (không mở lại phân tích, chỉ implement):
+triển khai kiến trúc Binding Manifest — CLI compiler nhận một manifest JSON
+riêng mô tả binding Variable↔Point, **không** đụng cú pháp ST (không thêm
+mệnh đề kiểu `AT` của IEC 61131-3 cổ điển).
+
+**C++ (`apps/core/application/st/`):**
+
+- `resolve_io_bindings()` mới (`st_io_map.cpp/.hpp`) — nối vào
+  `st_artifact_manifest.cpp` ngay sau `compile_reference()`, trước
+  `EncodeArtifactDeterministic()`; validate tồn tại biến, direction/type khớp
+  ST declare, không trùng biến/trùng physical output, category chỉ `LOCAL`,
+  point index/kind hợp lệ. Cho phép binding một phần (biến chưa map vẫn Check
+  được) — khác `validate_io_map()` cũ vốn bắt buộc map hết.
+- `mkddc-st-compile --io-map-in <path>` (`st_compile_main.cpp`) — đọc JSON
+  `{"entries":[...]}`; input sai hình dạng fail toàn CLI tại chỗ. JSON output
+  thêm `ioBindingCount` làm bằng chứng artifact thật sự mang binding.
+- Diagnostic mới `ST-IOMAP-008` cho category hợp lệ về định danh nhưng chưa có
+  runtime path (`VP`/`MB_RTU`) — từ chối tường minh thay vì bind sai.
+- 13 unit test (`test_st_resolve_io_bindings.cpp`, mới) + 3 CLI integration
+  test bằng binary thật (`test_st_compile_cli.cpp`), tái hiện đúng bug thật
+  `AlarmHigh(BOOL)→UI-09`. **1024/1024 CTest PASS.**
+
+**Go (`apps/web-api/internal/programming/`):**
+
+- `compiler.Input.IoMap []IoMapEntry` (`compiler/runner.go`) — ghi JSON tạm
+  trong scratch job, thêm `--io-map-in`; `Result.IoBindingCount` được
+  `validateSuccess()` ép bằng đúng số entry đã gửi (không chỉ tin CLI trả
+  `ok:true`).
+- `ioMapFromRevision()` (`application/checks.go`) — gom `RevisionObject` kind
+  `VARIABLE`/`BINDING` của Revision đã seal (đúng dữ liệu Mapping tab ghi qua
+  `upsertVariable`/`upsertBinding`), map `variable.class` sang `direction`
+  ST, fail-closed nếu binding trỏ biến class không phải `INPUT`/`OUTPUT`.
+- Test mới trong `checks_test.go` (Check thật resolve io_map từ Draft, và
+  fail-closed khi dữ liệu hỏng) + `runner_test.go` (CLI thật, cả hai chiều).
+  `go vet` sạch; `go test ./... -count=1` PASS mọi package.
+
+**Phát hiện phụ giữa chừng — vá luôn cùng phiên:** diagnostic `ST-IOMAP-008`
+mới thêm không có trong `contracts/programming/error_catalog_v1.json`;
+`scripts/generate_programming_errors.py --check` phát hiện drift (mọi lỗi
+category không hỗ trợ sẽ map sai về `PRG-ERR-UNAVAILABLE-001` thay vì lỗi
+validation 422 thật). Thêm mapping `ST-IOMAP-008 → PRG-ERR-MAP-003`, bump
+`catalogVersion` 1.4.0→1.5.0, regenerate Go/C++/TS.
+
+**Target thật trên Foxlinx** (`mkddc-core`/`mkddc-st-compile`/`web-api`
+cross-compile aarch64, deploy sau backup binary cũ): CLI trực tiếp trên board
+xác nhận `ioBindingCount:3` cho binding đúng, `ST-IOMAP-002` cho đúng bug thật
+`AlarmHigh→UI-09`, `ST-IOMAP-008` cho category `VP`. Chuỗi HTTP đầy đủ qua
+Program `AHU_FanControl` thật của user (project `FOX-P5-FULL-CHECK`): Draft→
+Seal→Check **PASSED**→Commission **SUCCEEDED**→`GET /runtime`:
+`safeStateNoControllerOnly` **`false`** (trước đây luôn `true` — đúng triệu
+chứng gốc)→`GET /runtime/monitor`: `programValue==actualValue` LIVE cho cả 5
+biến, `FanSpeed`/`AlarmHigh`/`FanEnable` tính đúng công thức từ cảm biến thật
+`UI-01`/`UI-02` mỗi chu kỳ scan.
+
+FE không cần đổi — Draft đã ghi đúng `variables[]`/`bindings[]` từ trước.
+**559/559 Vitest PASS**, lint sạch, build PASS.
+
+Đóng `F-PROG-ASBUILT-013` cho category `LOCAL`. Mở hai finding phụ phát sinh
+trong lúc triển khai/target-test, **chưa sửa**, chờ PM/CTO quyết hướng riêng:
+`F-PROG-ASBUILT-014` (category `VP` không có runtime path thật tới Core —
+`overlayVirtualPoints()` chỉ là overlay Web API, không map slot Core AV/BV/MSV)
+và `F-PROG-ASBUILT-015` (kênh `UI` cấu hình digital "dry" trong
+`io_config.conf`, vd. `UI-09`, không bind được vì `validate_point_contract()`/
+`map_kind()` hardcode mọi `UI` là `REAL`/`PointKind::AI`, dù Core domain đã có
+sẵn `PointKind::BI` riêng — sửa cần quyết định kiến trúc, ảnh hưởng tương
+thích artifact format, không sửa vội).
+
+Refs: `REV-PROG-ASBUILT-GAP-2026-08-14` Rev 1.2, `D-07`, §4.5/§4.6.
+
+### Fixed — Program ST mới không còn bắt đầu ở mã nguồn rỗng (`F-PROG-ASBUILT-001`/D-02) (2026-08-14)
+
+Nút `ST+` từng gán `document: ''` cho Program mới — Check luôn FAILED ngay
+sau khi tạo, không có cách nào tự nhận ra tới khi bấm Kiểm tra. Theo quyết
+định D-02 (không cho phép tạo Program ST rỗng), `ProgramsTab.addProgram()`
+giờ sinh template tối thiểu hợp lệ `PROGRAM NewProgram\nEND_PROGRAM\n` (định
+danh cố định, ASCII — `compilerInput()` định tuyến theo `programId` UUID chứ
+không đọc tên khai báo trong source, nên không cần sinh theo tên hiển thị có
+dấu/khoảng trắng). Thêm chặn thứ hai ở `SourceEditor`: nút Lưu (và Ctrl+S)
+khoá khi buffer rỗng/toàn khoảng trắng, kèm cảnh báo tại chỗ — không đợi tới
+khi Check thất bại mới biết.
+
+Refs: `F-PROG-ASBUILT-001`, `D-02`.
+
+### Fixed — PGM-03 giờ sở hữu toàn bộ vòng Check (seal/run/poll/result); ETag đồng bộ đúng sau seal (`F-PROG-ASBUILT-002`/`004`, D-01) (2026-08-14)
+
+Theo quyết định D-01 (PGM-03 sở hữu Check; PGM-02 chỉ lưu rồi điều hướng có
+dirty guard):
+
+- `CheckCommissionPage` (PGM-03) giờ tự `useDraftWorkspace`/`useCheckWorkflow`
+  — mở trực tiếp (không qua nút của PGM-02) hiện trạng thái "Chưa có Kiểm tra
+  nào." kèm nút Kiểm tra tự seal/run/poll; xong tự điều hướng-replace URL vào
+  `?revisionId=&checkId=` canonical, rơi lại đúng đường deep-link cũ (không
+  viết hai luồng hiển thị song song).
+- `DesignWorkspacePage` (PGM-02) bỏ toàn bộ `useCheckWorkflow`/Problems inline
+  — nút "Kiểm tra" giờ chỉ điều hướng sang `/commission` (vẫn khoá khi Draft
+  chưa lưu, đúng "dirty guard" D-01 yêu cầu), không tự gọi seal/Check nữa.
+- `useDraftWorkspace` thêm `syncAfterSeal(revisionId, etag)`, gọi ngay sau
+  seal thành công trong `useCheckWorkflow.runCheck()` — đóng
+  `F-PROG-ASBUILT-002` (seal đổi ETag/`baseRevisionId` của Draft nhưng FE
+  từng chỉ giữ `revisionId`, lần lưu kế tiếp dùng token cũ và bị 409 fail-
+  closed đúng như thiết kế, nhưng người dùng phải tự reload thủ công).
+- Diagnostic chọn trong Problems ở PGM-03 giờ mang thêm `line/column/length`
+  qua query string khi điều hướng sang PGM-02 (trước chỉ có `programId`) —
+  `SourceEditor` đọc lúc mount và tự chọn đúng vùng nguồn, đóng
+  `F-PROG-ASBUILT-003` (đã có sẵn cơ chế `focusDiagnostic`/`lineColumnToOffset`
+  từ trước, chỉ thiếu đường truyền dữ liệu giữa hai trang sau khi tách Check
+  ra khỏi PGM-02).
+
+**Phát hiện phụ, sửa luôn cùng phiên:** viết test cho luồng "mở PGM-03 trống
+→ bấm Kiểm tra → tự điều hướng vào kết quả" lộ ra `useProgrammingResource`
+(`api/queries.ts`) không bao giờ fetch lại khi định danh tài nguyên đổi giữa
+chừng (vd `checkId` từ `undefined` sang giá trị thật) nếu `intervalMs<=0` —
+effect gọi `run()` chỉ phụ thuộc `[run, intervalMs]`, không có `load` trong
+dependency, nên đổi `checkId` không kích hoạt fetch mới; trang kẹt vĩnh viễn
+ở kết quả rỗng của lần mount đầu. Bug tồn tại từ trước, chưa từng lộ ra vì
+kiến trúc cũ luôn có `checkId` ngay từ lần mount đầu (tới từ deep-link).
+Sửa: thêm `load` vào dependency của effect.
+
+Test: `DesignWorkspacePage.test.tsx` (nút Kiểm tra điều hướng, không tự seal/
+Check; URL mang line/column nhảy đúng vùng chọn), `CheckCommissionPage.test.tsx`
+(chạy Check mới từ trạng thái trống, 5 test deep-link cũ vẫn PASS sau khi
+thêm `useDraftWorkspace`), `e2e/programming.spec.ts` cập nhật đúng luồng hai
+bước Kiểm tra (PGM-02 điều hướng → PGM-03 tự chạy) — **10/10 Playwright PASS**
+(desktop + mobile). **571/571 Vitest PASS**, lint sạch, build PASS.
+
+Refs: `F-PROG-ASBUILT-002`, `F-PROG-ASBUILT-003`, `F-PROG-ASBUILT-004`, `D-01`.
+
+### Added — Desktop có điều hướng bốn workspace Programming (`F-PROG-ASBUILT-007`/D-04) (2026-08-14)
+
+Trước bản vá, desktop chỉ thấy tiêu đề tĩnh "Lập trình điều khiển", không có
+cách nào khác ngoài nút ngữ cảnh trong từng trang để đi Overview/Thiết kế/
+Kiểm tra/Runtime — mobile đã có `ProgrammingMobileNav` (bottom nav) từ trước
+nhưng desktop thì chưa. Thêm `ProgrammingDesktopNav` (`hidden md:flex`, cùng
+danh sách bốn mục với bản mobile, không dựng deep-link giả khi chưa có
+`projectId`), wire vào `ProgrammingLayout` ngay dưới Header. Test mới
+`ProgrammingDesktopNav.test.tsx` (3 case: chưa có Project, có Project, active
+state qua `aria-current`).
+
+Refs: `F-PROG-ASBUILT-007`, `D-04`.
+
+### Docs — thêm finding Critical mới vào As-Built Gap Report: Binding Variable↔Point chưa nối vào compiler (2026-08-14)
+
+Trong lúc hỗ trợ user commission `AHU_FanControl` trên board Foxlinx thật (ba
+fix Mapping tab/Point Picker/safe-state message ở các mục dưới), phát hiện dù
+Binding cấu hình đúng 100%, `safeStateNoControllerOnly` không bao giờ về
+`false`. Đào tới gốc: `compiler.Input` (Go `runner.go`) chỉ chở mã nguồn ST
+thô; CLI `mkddc-st-compile` không có tham số nhận binding — `io_bindings`
+trong mọi artifact compile qua pipeline hiện tại **luôn rỗng**, bất kể Points
+& Mapping cấu hình đúng đến đâu. Không phải quên một cờ CLI: ngữ pháp ST
+(`ST_SUBSET_SPEC_MK-DDC-24_VI.md` §10) không có cú pháp khai báo binding, còn
+định dạng artifact (`st_loader.cpp`) đã sẵn chỗ nhận `SEC_IO_BINDING` — khâu
+"bindings đi từ Draft vào compiled artifact bằng cách nào" chưa từng được
+thiết kế.
+
+Theo yêu cầu user: không tự chọn cơ chế sửa (mở rộng cú pháp ST vs manifest
+binding riêng qua CLI/IPC mới) — ghi thành finding Critical mới
+`F-PROG-ASBUILT-013` + quyết định `D-07` trong
+`docs/07_records/reviews/PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md`
+(bump Rev 1.0 → 1.1) để PM/CTO/Compiler owner chốt hướng trước khi code.
+Thêm §4 tái hiện kỹ thuật đầy đủ trích dẫn nguồn; hạ UC-05 xuống nhóm
+"Không đạt do defect hiện hành"; ghi chú đây rất có thể là nguyên nhân gốc
+của `F-PROG-ASBUILT-010` (Monitor `items=0`) đã có từ Rev 1.0. Đồng bộ
+`docs/README.md` và `docs/07_records/reviews/README.md` từ "12 finding"
+sang "13 finding".
+
+Refs: `REV-PROG-ASBUILT-GAP-2026-08-14` Rev 1.1.
+
+### Fixed — 503 ngắt quãng trên `GET /api/v1/programming/runtime/monitor` do tự đụng nội bộ (2026-08-14)
+
+Bối cảnh: user báo lỗi kèm network log thật từ trình duyệt — trang
+`/eng/programming/runtime?tab=watch` nhận `503 Service Unavailable` từ
+`GET /api/v1/programming/runtime/monitor` trên board Foxlinx
+(`mekong-fac.ddns.net:8082`).
+
+**Xác nhận trực tiếp trên board** (không suy đoán): SSH vào board, đọc
+`journalctl -u mkddc-web-pi` theo thời gian thực trong lúc user vẫn đang mở
+tab — thấy đúng request đó xen kẽ `status=200`/`status=503` với `dur_ms` gần
+như bằng nhau (~650–720ms) ở CẢ hai trường hợp, và tần suất fail rơi vào
+khoảng 30–40% số request. `mkddc-core`, `mkddc-iobus`, `mkddc-web-pi` đều
+`active` — không phải Core chết.
+
+**Nguyên nhân gốc**: `WebIpc::drain()` (`apps/core/adapters/ipc/web_ipc.cpp`)
+chỉ chấp nhận đúng **MỘT** lệnh `point_snapshot` mỗi scan cycle
+(`periodMs=1000` đo được thật trên board qua `GET .../programming/runtime`);
+lệnh thứ hai trong cùng cycle bị từ chối `"busy"`. `mkddc-web` (Go) có
+**hai nguồn độc lập, không biết về nhau** cùng gọi
+`CoreClient.ReadPointSnapshot` (op `point_snapshot`):
+1. `HistorianShadowScheduler` — tick nội bộ mỗi 100ms
+   (`historian_shadow_runtime.go`), tự đọc snapshot mỗi khi có policy đến hạn.
+2. `RuntimeService.GetMonitor` — phục vụ trực tiếp mỗi lần FE poll trang
+   Programming Runtime Monitor (~1 lần/giây).
+
+Mỗi lần hai nguồn này vô tình rơi cùng một scan cycle của Core, một bên thắng
+(`200`), bên kia nhận `"busy"` → `mkddc-web` map lỗi này (không phân biệt với
+Core thật sự chết) thành `PRG-ERR-UNAVAILABLE-001` → HTTP `503`
+(`writeMappedError`, `apps/web-api/internal/programming/transport/http/projects.go`).
+Đây là race hoàn toàn nội bộ trong chính `mkddc-web` — Core không hề có lỗi.
+
+**Cách sửa**: dồn (coalesce) mọi lệnh gọi `CoreClient.ReadPointSnapshot` đồng
+thời thành đúng MỘT round-trip IPC tới Core (`apps/web-api/internal/app/core_client.go`,
+field `snapshotMu`/`snapshotInFlight`) — caller đến sau chỉ chờ chung kết quả
+của caller đang bay (leader chạy với context riêng để một caller huỷ ngang
+không làm hỏng kết quả các caller khác đang chờ). Vì mọi lệnh `point_snapshot`
+trong toàn hệ thống đều đi qua một `*CoreClient` singleton duy nhất (xác nhận
+qua `grep`: không có tiến trình C++ nào khác gửi op này), việc dồn tại đây
+loại bỏ hoàn toàn khả năng `mkddc-web` tự gửi hai lệnh chồng nhau.
+
+**Verification**:
+- `go build ./...`, `go vet ./...`: sạch.
+- Test mới `TestCorePointSnapshotCoalescesConcurrentCallers`
+  (`internal/app/core_client_test.go`): 8 caller gọi đồng thời, khẳng định
+  Core chỉ nhận đúng 1 round-trip — PASS.
+- `go test ./... -count=1`: toàn bộ package `mkddc-web` PASS (không có
+  package Go nào khác trong sửa đổi này).
+- Deploy lại `mkddc-web` (cross-compile `GOOS=linux GOARCH=arm64
+  CGO_ENABLED=0`) lên board Foxlinx, restart `mkddc-web-pi`.
+  Smoke test sau deploy: 40/40 request liên tiếp tới
+  `/api/v1/programming/runtime/monitor` → `200 OK`. Đối chiếu
+  `journalctl` với traffic THẬT của trình duyệt user (remote
+  `101.99.36.34`) trong 90 giây sau deploy: 130/130 request → `200`
+  (trước đó cùng remote này đang có `503` xen kẽ).
+
+Refs: `apps/web-api/internal/app/core_client.go`,
+`apps/web-api/internal/app/historian_shadow_runtime.go`,
+`apps/web-api/internal/programming/application/monitor.go`,
+`apps/core/adapters/ipc/web_ipc.cpp`.
+
+### Fixed — Mapping tab cho ghép Point sai hướng/kiểu, một binding hỏng chặn cả batch output (2026-08-14)
+
+Bối cảnh: user phản bác đúng — lượt trước tôi kết luận nhầm "cả 3 output map
+vào Virtual Point" khi chưa tra bảng Mapping thật. User đưa bảng thật:
+`FanSpeed → LOCAL:AO-01` và `FanEnable → LOCAL:DO-01` là Point vật lý **đúng
+loại**. Chỉ `AlarmHigh → LOCAL:UI-09` sai: `UI` (Universal Input) là kênh
+**INPUT vật lý**, hướng hiển thị `READ` (không phải `READ_WRITE`), kiểu
+`REAL` (không phải `BOOL` như `AlarmHigh` khai trong ST).
+
+**Chuỗi nguyên nhân xác nhận qua source, không suy đoán**:
+
+1. `PointWriter::can_write()` (`point_writer.cpp`) fail-closed: chỉ cho ghi
+   `PointKind::AV/BV/MSV/EXT` — `AI` (Universal Input ánh xạ nội bộ, xem
+   `point_table.hpp:16` `Point ai_[KX_N_UI]`) **không** nằm trong danh sách.
+   Ghi `AlarmHigh` (BOOL) vào `UI-09` chắc chắn fail ở bước này.
+2. `st_apply_all_outputs()` (`st_process_image.cpp`) gom output **của cả
+   chương trình** vào một batch, gọi **một lần** `preflight_outputs()` rồi
+   **một lần** `commit_outputs()` cho toàn batch — không phải từng binding
+   độc lập. Một proposal fail preflight (`AlarmHigh`) làm **toàn bộ batch bị
+   từ chối, không commit gì** — kể cả `FanSpeed`/`FanEnable` dù bản thân
+   chúng đúng 100%. Đây là lý do `safeStateNoControllerOnly` vẫn `true` sau
+   Commission dù 2/3 output map đúng: chưa output nào từng thật sự ghi được.
+
+**Gốc rễ ở FE**: `MappingTab.tsx` (`PointPickerDialog`) cho chọn **bất kỳ**
+Point trong danh mục để ghép với một biến, không lọc theo hướng/kiểu dữ liệu
+tương thích — không có gì ngăn người dùng chọn nhầm Point `READ`-only,
+`REAL` cho một biến `VAR_OUTPUT` `BOOL`.
+
+Thêm `isCompatiblePoint(variable, entry)`: OUTPUT chỉ ghép được Point
+`WRITE`/`READ_WRITE`; INPUT chỉ ghép được `READ`/`READ_WRITE`; kiểu dữ liệu
+phải khớp (`entry.dataType === variable.type`). Áp filter này vào danh sách
+Point trong `PointPickerDialog` — Point không tương thích **không hiện ra**
+để chọn nhầm nữa. Hết Point tương thích thì hiện lý do rõ ràng (kiểu + hướng
+cần) thay vì "Không có Point khớp bộ lọc" mơ hồ.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 559/559 PASS (68
+file, +2 test mới tái hiện đúng lỗi thật: `AlarmHigh` BOOL/OUTPUT bị lọc bỏ
+`UI-09` REAL/READ, chỉ còn Point BOOL/READ_WRITE hợp lệ; và test xác nhận
+thông báo lý do khi hết Point tương thích); `npm run lint` sạch; `tsc
+--noEmit` sạch; `VITE_PROGRAMMING_REV_A=1 npm run build` qua, dist mới
+`index-SxaaAyMU.js`; deploy board Foxlinx (FE-only), verify public bundle
+chứa filter mới.
+
+**Việc user cần làm thủ công** (không tự sửa hộ vì đây là chỉnh Draft nghiệp
+vụ, không phải bug code): xoá binding `AlarmHigh → LOCAL:UI-09` hiện có trong
+Draft, ghép lại `AlarmHigh` vào một Point ghi được (Virtual Point BOOL hoặc
+DO vật lý còn trống), Check lại, Commission lại.
+
+Refs: user report "tao đưa vào đúng mà" kèm ảnh bảng Mapping thật; cùng
+chuỗi điều tra `safeStateNoControllerOnly` ở hai mục trên.
+
+### Fixed — cảnh báo "PRG-SAFE-ACTIVE" hiện sai mức nghiêm trọng khi safe-state chỉ do chưa có output vật lý (2026-08-14)
+
+Bối cảnh: sau khi Commission thành công `AHU_FanControl` (fix deadlock ở mục
+ngay dưới), user hỏi tiếp "lỗi gì" khi thấy tab Runtime vẫn hiện hộp đỏ
+`PRG-SAFE-ACTIVE — Safe-state is active` với "Action: keep Commission/Restore
+locked". Tra `GET /programming/runtime` thật trên board: `safeState: true`
+nhưng **`safeStateNoControllerOnly: true`** — đúng loại đã sửa ở mục dưới,
+Commission/Restore **không** còn bị khoá. Vấn đề là `RuntimeTab.tsx` và
+`OverviewPage.tsx` (mục "Việc cần chú ý") chưa từng đọc field mới này —
+hiện cứng banner đỏ + text "giữ Commission/Restore bị khóa" bất cứ khi nào
+`safeState=true`, bất kể lý do.
+
+Đào thêm một lớp: `st_process_image.cpp` (`preflight_outputs`/`commit_outputs`)
+chỉ gọi `resolver->set_ao/set_do` (đăng ký "đang điều khiển" cho
+`any_active_above_default()`) cho `PointKind::AO`/`BO` — tức Local I/O vật
+lý. Output map vào **Virtual Point** (nhánh `default:`) đi qua
+`PointWriter::write()` riêng, không đụng `PriorityResolver`. `AHU_FanControl`
+của user map cả 3 output (`FanEnable`/`FanSpeed`/`AlarmHigh`) vào VP (board
+lab không có AO/DO vật lý) — nên dù Program đã Active và chạy đúng
+(`taskState: RUNNING`, `overrunCount: 0`, ghi VP thành công, không bị
+`safeState` chặn vì `SafeState::apply()` chỉ ghi đè `ao[]`/`dout[]` vật lý,
+không đụng VP), T7 vẫn coi "chưa ai điều khiển AO/DO vật lý" — **đúng sự
+thật, không phải bug**: board này thực sự không có output vật lý nào đang
+chạy.
+
+Sửa hai chỗ hiển thị dùng chung field `safeStateNoControllerOnly` đã có sẵn
+(không cần đổi gì ở Core/Go/contract — field đã tồn tại từ mục dưới):
+- `RuntimeTab.tsx`: `safeStateNoControllerOnly=true` → box màu vàng
+  (`role="status"`), text giải thích "chưa Program nào ghi AO/DO vật lý ở
+  mức trên Default — bình thường nếu logic chỉ dùng Virtual Point" +
+  "Đưa vào vận hành và Khôi phục KHÔNG bị khóa vì lý do này". `false` → giữ
+  box đỏ gốc, đổi text rõ "do lỗi" thay vì mơ hồ.
+- `OverviewPage.tsx` (`ProgrammingAttentionList`): cùng logic,
+  `severity: 'warning'` thay vì `'error'` khi no-controller-only.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 557/557 PASS (68
+file, +3 test mới: 1 ở `OverviewPage.test.tsx`, 2 ở
+`RuntimeServicePage.test.tsx` xác nhận cả hai nhánh severity/text đúng);
+`npm run lint` sạch; `tsc --noEmit` sạch; `VITE_PROGRAMMING_REV_A=1 npm run
+build` qua, dist mới `index-CJ1xp68k.js`; deploy board Foxlinx (FE-only, Core/
+Go không đổi), verify public bundle chứa text mới.
+
+Refs: user report "lỗi gì" trên tab Runtime sau Commission; cùng chuỗi điều
+tra `safeStateNoControllerOnly` ở mục dưới.
+
+### Fixed — Commission bị khoá vĩnh viễn khi safe-state chỉ do "chưa ai điều khiển" (2026-08-14)
+
+Bối cảnh: user hỏi "commission này có lỗi gì" — trang Đưa vào vận hành báo
+"Core is not READY or is in safe state — Commission is blocked" dù Check đã
+PASSED và không có mục Impact nào "Unavailable". Đào sâu thay vì báo cáo hời
+hợt (yêu cầu của user: "tìm hiểu nguyên nhân sâu"):
+
+**Chuỗi nguyên nhân xác nhận bằng dữ liệu thật (không suy đoán)**:
+
+1. Gọi thẳng `GET /api/v1/programming/runtime` qua API (không qua UI) —
+   `producerState: "READY"` (không phải DEGRADED như nghi ngờ ban đầu),
+   `safeState: true`, Task `RUNNING` khoẻ mạnh (`runCount` tăng đều,
+   `overrunCount: 0`). Loại trừ giả thuyết timeout IPC.
+2. `apps/core/domain/safety/safe_state.cpp` có 5 trigger an toàn (T1/T2 IOP
+   fault, T3 SHM stale, T6 graph input BAD, **T7 no_controller**, T8
+   overrun). Log Core không có `safe_state.enter` mới, không overrun → còn
+   lại T7.
+3. Đọc thẳng nội dung Revision đang `RUNNING` (`1ab7cb9b...`) qua API: comment
+   `"Check target không output"`, chỉ có `Counter := Counter + 1;`, **không
+   VAR_INPUT/VAR_OUTPUT, không Variable/Binding nào** — chương trình test từ
+   phiên trước, cố tình không đụng output.
+4. `PriorityResolver::any_active_above_default()` chỉ `true` khi có
+   `set_ao`/`set_do` ở mức < Default(6). Chương trình đang chạy không ghi gì
+   → T7 đúng đắn kích hoạt: "không ai điều khiển → về safe". **Đây là hành vi
+   an toàn thiết kế đúng, không phải bug** — Core hoạt động chính xác.
+
+**Bug thật nằm ở chỗ khác**: `apps/core/application/st/st_process_image.cpp`
+xác nhận khi một Program ghi `VAR_OUTPUT` đã bind Point thật, nó gọi
+`resolver->set_ao/set_do(PRIO_LOCAL_LOGIC, ...)` — đúng mức "trên Default" —
+nghĩa là Commission Program `AHU_FanControl` (đã map `FanEnable`/`FanSpeed`/
+`AlarmHigh`) sẽ TỰ giải quyết T7. Nhưng `CheckCommissionPage.tsx` (`coreReady`)
+chặn Commission bất cứ khi nào `safeState=true`, **không phân biệt** "an toàn
+vì chưa ai điều khiển" (Commission chính là cách giải quyết) với "an toàn vì
+lỗi thật" (I/O fault/stale/overrun — Commission không được phép bỏ qua) —
+tạo **deadlock**: không bao giờ thoát được safe-state qua Commission, đúng
+lúc Commission là hành động duy nhất giải quyết nó. Xác nhận thêm: backend
+Go (`operations.go`) và Core cutover (`programming_runtime_coordinator.cpp`)
+đều **không** có kiểm tra `safeState` nào khi Commission — chặn hoàn toàn chỉ
+nằm ở FE, một gate quá rộng cho một trường hợp cụ thể.
+
+**Sửa xuyên suốt 3 tầng** (không đổi logic 4 trigger còn lại, chỉ phân biệt
+rõ T7 đơn độc):
+
+- **C++**: `RuntimePointSnapshot` (`runtime_point_snapshot.hpp/cpp`) thêm
+  `safe_state_no_controller_only` — `true` CHỈ KHI `safe_state` active VÀ
+  caller xác nhận T7 là trigger duy nhất. `scan_loop.cpp` tính từ
+  `SafeState::triggers()` ngay tại điểm gọi `build()` (đã có sẵn `d_.safe`
+  trong scope). Serialize thêm vào JSON `point_snapshot` qua `web_ipc`.
+- **Go**: propagate xuyên `core_client.go` (`webIPCResponse`) →
+  `dto.go` (`RuntimePointSnapshot`) → `programming_pointcatalog.go` (adapter)
+  → `monitor.go` (`MonitorTruthSnapshot`) → `runtime.go` (`RuntimeView`,
+  `GetRuntime`). Không tự suy diễn gì thêm ở tầng Go — chỉ truyền nguyên giá
+  trị Core đã tính, đúng nguyên tắc "Core là nguồn sự thật duy nhất".
+- **Contract**: `openapi.yaml` thêm `safeStateNoControllerOnly` (required)
+  vào `ProgrammingRuntime`.
+- **FE**: `model/types.ts` thêm field; `CheckCommissionPage.tsx` sửa
+  `coreReady` — cho phép Commission khi `safeState=false` **HOẶC**
+  `safeStateNoControllerOnly=true`; thêm banner giải thích màu vàng (không
+  phải đỏ-chặn) khi rơi đúng trường hợp này, và đổi banner chặn thật thành
+  "an toàn do lỗi" để không gây hiểu nhầm hai tình huống là một.
+
+**Không sửa gì ở 4 trigger còn lại** — T1/T2/T3/T6/T8 tiếp tục chặn Commission
+y hệt trước, đúng như phải vậy (không nới an toàn cho lỗi thật).
+
+**Kiểm chứng**:
+- C++: `cmake --fresh -S . -B build/fw ... (Modbus/BACnet/HMI ON)` +
+  `ctest` → **1007/1007 PASS**, gồm 3 test mới (`RuntimePointSnapshot.
+  SafeStateNoControllerOnlyOnlyTrueWhenRequestedAndSafeActive`,
+  `ScanLoop.NoControllerAloneMarksSafeStateAsCommissionRecoverable`,
+  `ScanLoop.FaultAlongsideNoControllerIsNotCommissionRecoverable` — test sau
+  xác nhận IOP fault thật đi kèm vẫn giữ cờ `false`, không nới an toàn nhầm).
+- Go: `go vet ./...` sạch; `go test ./... -count=1` PASS toàn bộ 18 package,
+  gồm 4 test mới (propagate qua `RuntimeService.GetRuntime` và adapter
+  `ReadProgrammingMonitorSnapshot`).
+- FE: `npx vitest --run --environment jsdom src` → **555/555 PASS** (68 file,
+  +1 test mới cho `coreReady`); `npm run lint` sạch; `tsc --noEmit` sạch;
+  `VITE_PROGRAMMING_REV_A=1 npm run build` qua.
+- **Deploy board Foxlinx cả 3 tầng** (khác mọi lần trước — lần này đổi cả
+  Core/Go, không chỉ FE): cross-compile `aarch64-linux-gnu` qua
+  `platform/cmake/toolchain-aarch64-linux-gnu.cmake` (`mkddc-core` build
+  thành công; `mkddc-hmi` fail link `-lfreetype`/`-ldrm` — môi trường cross
+  thiếu gói aarch64 cho HMI, **không liên quan tới thay đổi phiên này**,
+  không cần deploy lại HMI nên không chặn) và `GOOS=linux GOARCH=arm64
+  CGO_ENABLED=0 go build` cho `mkddc-web`; backup 3 bản cũ
+  (`*.pre-safestate-fix-20260814`), swap, restart `mkddc-core`+`mkddc-web-pi`.
+  Verify **trực tiếp qua API thật trên board**: `GET
+  /api/v1/programming/runtime` trả `safeState: true,
+  safeStateNoControllerOnly: true` đúng như thiết kế (Active Revision vẫn là
+  chương trình test không output); bundle live chứa logic `coreReady` mới và
+  banner giải thích; 4 service (`mkddc-core/-iobus/-netcfg`, `mkddc-web-pi`)
+  `active`, log sạch không AUDIT/ERROR lạ.
+
+Refs: user report "commission bị chặn", điều tra trực tiếp qua SSH + API
+trên board `mekong-fac.ddns.net:8082`.
+
+### Fixed — Mapping tab bắt gõ tay tên biến thay vì chọn từ chương trình (2026-08-14)
+
+Bối cảnh: user phản ánh trực tiếp — tab "Điểm & Ánh xạ" bắt gõ tay ô "Tên
+biến" khi thêm ánh xạ, đúng ra phải **chọn (select)** trong danh sách biến đã
+khai báo ở chính chương trình, không phải gõ tự do.
+
+Xác nhận đúng: `PointPickerDialog` (`MappingTab.tsx`) trước đây có `<input>`
+tự do cho "Tên biến" — không đối chiếu gì với `VAR_INPUT`/`VAR_OUTPUT` thật
+trong mã ST hay node INPUT/OUTPUT trong FBD. Gõ sai chính tả (kể cả khác hoa/
+thường) tạo ra một `Variable` "mồ côi" không liên quan gì tới biến thật, và
+UI không cảnh báo gì — đúng loại lỗi user vừa gặp phải khi làm theo hướng dẫn
+quy trình.
+
+Cách sửa — đọc thẳng từ source đã lưu của Program thay vì cho gõ tay:
+
+- **ST**: thêm `collectStInterfaceVariables` (`ProgramsTab.tsx`) — quét khối
+  `VAR_INPUT`/`VAR_OUTPUT` (không lấy `VAR` cục bộ, vì đó không phải biên I/O
+  cần map), nhận diện được cả khi source chưa qua Format (một dòng, giống
+  cách `collectStSymbols` đã làm cho BUG-013).
+- **FBD**: thêm `collectFbdInterfaceVariables` (`fbd/model.ts`) — đọc
+  `parameters.variable` của node `kind: 'INPUT'|'OUTPUT'` (đúng shape golden
+  fixture `ahu_fan_enable.json`).
+- `PointPickerDialog`: đổi `<input>` thành `<select>`, danh sách lấy từ hai
+  hàm trên theo `program.language`, **lọc bỏ biến đã có Binding rồi** (tránh
+  map trùng cùng một biến hai lần — rủi ro có sẵn từ trước, không phải lỗi
+  mới). Không còn biến khả dụng thì `<select>` disable kèm thông báo giải
+  thích, nút "Ánh xạ" cũng disable.
+- Tiện thể sửa luôn phần dữ liệu tạo `Variable`: trước đây `type` lấy từ
+  `dataType` của **Point** đã chọn (sai — biến ST khai báo `REAL` có thể bị
+  ghi `type: 'BOOL'` nếu chọn nhầm Point khác kiểu, không ai biết vì không
+  validate) và `class` luôn hardcode `'LOCAL'`; nay `type`/`class` lấy đúng
+  từ khai báo thật (`INPUT`/`OUTPUT`) vì giờ đã biết chính xác biến nào được
+  chọn.
+
+Thêm `MappingTab.test.tsx` (chưa từng có test riêng cho tab này) + mở rộng
+`ProgramsTab.test.ts`/`fbd/model.test.ts` cho hai hàm parse mới.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 554/554 pass (68
+file, +7 test mới); `npm run lint` sạch; `tsc --noEmit` sạch;
+`VITE_PROGRAMMING_REV_A=1 npm run build` qua, dist mới `index-Bck7izjW.js`
+(`grep -c REVA_SCOPE_ROADMAP` = 0); deploy board Foxlinx qua `scp` + swap
+atomic (`dist.pre-mapping-select-20260814`), `systemctl is-active
+mkddc-web-pi` = `active`, public `mekong-fac.ddns.net:8082` xác nhận
+`Last-Modified` khớp giờ deploy và phục vụ đúng bundle mới.
+
+### Added — nút xóa Program ở PGM-02, gap không nằm trong báo cáo ISO nào (2026-08-14)
+
+Bối cảnh: user hỏi trực tiếp trên board "không có nút xóa program???" sau khi
+đọc CHANGELOG đợt sửa BUG-019. Kiểm tra `ProgramsTab.tsx` xác nhận **đúng
+vậy** — cây Program chỉ có `ST+`/`FBD+` (tạo) và Inspector (đổi tên/kind/tag),
+không có cách nào xóa một Program đã tạo qua UI, dù:
+
+- `removeProgram` đã có sẵn trong `ProgrammingDraftOperation`
+  (`model/types.ts`) từ trước.
+- Backend `draft.go` (`removeObjectOperation`) đã implement generic remove
+  theo id cho `programs`/`variables`/`bindings`, fail-closed nếu vi phạm
+  ràng buộc.
+- Nhưng **không nơi nào trong FE gọi `op: 'removeProgram'`** — tra toàn bộ
+  `features/programming/` chỉ thấy đúng một chỗ, ở chính định nghĩa type.
+
+Rà lại theo yêu cầu "review lại toàn bộ UC": đối chiếu 15 route REST của
+Programming (`router.go`) với FE, chỉ có đúng gap này (`DELETE
+/runtime/traces/{traceId}` đã nối `stopProgrammingTrace` ở `WatchTab.tsx`;
+`retain/reset` cố ý khoá theo quyết định D-01..D-06 của
+`REV-PROG-ASBUILT-GAP-2026-08-14`, không phải oversight nên không đụng tới).
+`removeProgram` không có test Go nào theo tên (`upsertProgram` thì có, ở
+`checks_test.go`/`bundles_test.go`) — xác nhận đây là năng lực dựng sẵn ở
+backend nhưng FE chưa bao giờ nối tới, không phải quyết định sản phẩm cần
+PM/CTO chốt như các gap khác trong báo cáo As-Built.
+
+Lý do xóa Program không đơn giản là một `op`: `draft.go`
+`validateDraftDocument` fail-closed hai lớp — mọi `variable.programId` phải
+trỏ tới Program còn tồn tại, và `task.programOrder` phải khớp **chính xác**
+tập Program còn lại (không thiếu/không thừa id). Xóa một Program mà không dọn
+Variable/Binding của nó và không cập nhật `programOrder` trong cùng batch sẽ
+bị backend từ chối cả batch — đây nhiều khả năng là lý do FE trước đây bỏ
+qua, không phải quên đơn thuần.
+
+Thêm nút xóa (icon thùng rác, chỉ hiện khi `canEdit`) cạnh mỗi Program trong
+cây; bấm vào mở `Modal` xác nhận (tái dùng component đã có, cùng kiểu với
+dialog "Restore previous version") nêu rõ hậu quả xóa cả mã nguồn/biến/ánh
+xạ, không thể hoàn tác sau khi lưu — nhất quán với mức độ nghiêm trọng cao
+hơn thao tác gỡ một mapping đơn lẻ ở `MappingTab.tsx` (vốn xóa thẳng không hỏi).
+Khi xác nhận, gửi một batch bốn thao tác: `removeBinding` cho từng binding
+tham chiếu biến của Program, `removeVariable` cho từng biến, `removeProgram`,
+và `setTask` với `programOrder` đã lọc bỏ id vừa xóa — đúng thứ tự để
+validate không bao giờ thấy trạng thái trung gian vi phạm ràng buộc. Nếu
+Program đang bị xóa đang được chọn, tự chuyển selection sang Program còn lại
+đầu tiên (hoặc bỏ chọn nếu hết Program).
+
+Thêm test `DesignWorkspacePage.test.tsx` dựng Program có Variable+Binding
+thật, bấm xóa, xác nhận Modal hiện đúng nội dung rồi kiểm batch bốn operation
+gửi lên đúng thứ tự và nội dung.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 547/547 pass (67
+file, +1 test mới); `npm run lint` sạch; `tsc --noEmit` sạch;
+`VITE_PROGRAMMING_REV_A=1 npm run build` qua, dist mới `index-CT-9uOgd.js`
+(`grep -c REVA_SCOPE_ROADMAP` = 0, bundle có logic xóa và text "Xóa chương
+trình?"); deploy board Foxlinx qua `scp` + swap atomic
+(`dist.pre-delete-program-20260814`), `systemctl is-active mkddc-web-pi` =
+`active`, public `mekong-fac.ddns.net:8082` xác nhận phục vụ đúng bundle mới
+qua `Last-Modified` khớp giờ deploy và nội dung bundle tải qua HTTP có tính
+năng mới.
+
+Ngoài phạm vi, không tự sửa: 12 finding Critical/High/Medium khác trong
+`REV-PROG-ASBUILT-GAP-2026-08-14` (UC-PROG-03 vòng sửa/check gãy do ETag
+stale, template ST rỗng lúc tạo, diagnostic thiếu dòng/cột, IA desktop chưa
+có nav bốn workspace, v.v.) — đều đã có finding ID, owner đề nghị và cần
+quyết định PM/CTO (D-01..D-06) trước khi code, không phải gap đơn giản như
+xóa Program.
+
+Refs: `REV-PROG-ASBUILT-GAP-2026-08-14`.
+
+### Fixed — badge "1 Draft issues" thiếu số ít theo báo cáo ISO Phase 3 (TR-MKDDC24-P3-20260814-03, 2026-08-14)
+
+Bối cảnh: báo cáo `TR-MKDDC24-P3-20260814-03` test Programs Tab (ST Editor,
+FBD Editor, Check Validation) liệt kê 8 defect (BUG-005/006/007/011/012/013/
+019/020). Đối chiếu từng finding với source thật trước khi sửa (đúng cách rút
+ra từ báo cáo Phase 1/2 cùng ngày — báo cáo hay test nhầm bản board cũ):
+
+- **7/8 finding đã sửa từ trước, không tái hiện được với source hiện tại**:
+  BUG-005/006 (tên mặc định `pick()` đúng locale + `uniqueProgramName` chặn
+  trùng tên), BUG-007 (`ProblemsDrawer` đã có cột/dòng/biến trong
+  `locationText`), BUG-011 (Find bar đã có nút X + Escape + toggle),
+  BUG-012 (`translateFbdAnnouncement` dịch `announcement` lúc render, không
+  còn ghi cứng tiếng Việt trong reducer), BUG-013 (`formatStSource` đã tách
+  từ khoá khối/câu lệnh ra dòng riêng, `collectStSymbols` nhận VAR không cần
+  đứng đầu dòng), BUG-020 (mục PROBLEMS đã là `<button onClick={onSelect}>`,
+  `onSelect` đã nối ở cả `DesignWorkspacePage.tsx` và
+  `CheckCommissionPage.tsx`) — toàn bộ đã vào commit `fb242cb` (13 lỗi
+  BUG-001..013) và được deploy lên board Foxlinx cùng đợt sửa báo cáo Phase 2
+  hôm nay; kết luận: Phase 3 test chạy trên bản board trước lượt deploy đó.
+- **BUG-019 — thật, chưa sửa**: `StructuredFbdEditor.tsx` dòng 178 ghép cứng
+  `` `${issues.length} Draft issues` `` không phân biệt số ít/nhiều — khi có
+  đúng 1 issue, badge hiện "1 Draft issues" (sai ngữ pháp). Sửa thành
+  `` `${issues.length} Draft ${issues.length === 1 ? 'issue' : 'issues'}` ``;
+  bản tiếng Việt ("lỗi Draft") không có biến thể số ít/nhiều nên giữ nguyên.
+  Thêm test `StructuredFbdEditor.test.tsx` dựng document vi phạm
+  `FBD-SCHEMA-ROOT-001` (đúng 1 issue) và xác nhận badge hiện "1 Draft issue"
+  chứ không phải "1 Draft issues".
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 546/546 pass (67
+file, +1 test mới); `npm run lint` sạch; `VITE_PROGRAMMING_REV_A=1 npm run
+build` qua, dist mới `index-CDzXG5-7.js` (`grep -c REVA_SCOPE_ROADMAP` = 0,
+bundle có `f.length===1?"issue":"issues"` xác nhận fix vào build); deploy
+board Foxlinx qua `scp` + swap atomic, `systemctl is-active mkddc-web-pi` =
+`active`.
+
+Refs: `TR-MKDDC24-P3-20260814-03`.
+
+### Fixed — 3 lỗi Dashboard Programming theo báo cáo ISO Phase 2 (TR-MKDDC24-P2-20260814-02, 2026-08-14)
+
+Bối cảnh: báo cáo `TR-MKDDC24-P2-20260814-02` test lần đầu Dashboard của
+Programming (`/eng/programming`, chỉ hiện được sau fix cờ build ở mục Fixed
+bên dưới) — đúng khu vực chưa ai test được trước đó vì tính năng bị ẩn. Trước
+khi sửa, đối chiếu từng finding với source thật (đúng cách đã rút ra từ báo
+cáo Phase 1 hôm trước): phần "Phase 1 Re-check" của báo cáo này báo lại FAIL
+cho TC-L02/TC-L03/TC-L04/TC-L08 và liệt kê BUG-001..004/014 "active" — nhưng
+đọc `AuthProvider.tsx`/`LoginPage.tsx`/`features/points/*.tsx` hiện tại xác
+nhận cả bốn đã có `pick()` cho lỗi đăng nhập, guard password rỗng, nút đổi
+ngôn ngữ trên trang Login, và toàn bộ trang Inputs/Outputs đã gọi `useI18n`
+— **không phải hồi quy**, báo cáo không phản ánh đúng bản đã deploy cùng
+ngày. Ba finding còn lại (BUG-016/017/018), tất cả nằm trong
+`OverviewPage.tsx` (`ProgrammingAttentionList`) và `TopBar.tsx`, là thật, xác
+nhận bằng đọc code trực tiếp và đo Playwright:
+
+- **BUG-018 — rò tiếng Việt cứng khi có `taskId`**: `OverviewPage.tsx` dòng
+  187 nối chuỗi `` `${taskId} / outputs do Program điều khiển` `` không qua
+  `pick()`, trong khi nhánh không có `taskId` đã dịch đúng — chỉ lộ ra khi
+  runtime có `task.taskId` (đúng tình huống board thật, hiếm gặp trong test
+  trước đây vì tính năng luôn ẩn). Bọc phần văn bản qua `pick('các output do
+  Program điều khiển', 'Program-controlled outputs')`, giữ nguyên `taskId`.
+- **BUG-016 — mục "Việc cần chú ý" không bấm được**: `PRG-CORE-*`,
+  `PRG-TASK-FAULT`, `PRG-SAFE-ACTIVE` render bằng `<li>` phẳng dù chi tiết
+  (Active/LKG, Core connection, task table) đã có sẵn ở tab Runtime
+  (`RuntimeTab.tsx`). Đổi mỗi mục thành `<button>` điều hướng tới
+  `/eng/programming/runtime`, thêm dòng gợi ý "Mở Runtime để xem chi tiết →".
+  Không dựng trang chi tiết mới — tái dùng đúng đích mà nút "Mở runtime" ở
+  Card 1 đã trỏ tới.
+- **BUG-017 — badge trạng thái đè lên đồng hồ ở 768–1024px**: đo bằng
+  Playwright (`getBoundingClientRect` từng phần tử `<header>`) thay vì đoán —
+  phát hiện khối trái (`SYSTEM/DEMO/FAULT`) trong `TopBar.tsx` có `min-w-0`
+  nên box cha co lại (67px ở 768px) trong khi các badge con vẫn tràn ra ngoài
+  tới 332px, đúng lúc khối phải (đồng hồ, tên/role, ở `md:block` — hiện từ
+  768px) bắt đầu tại x=104 và vẽ đè lên. Nguyên nhân gốc: quá nhiều phần tử
+  cùng hiện ở `md:` (768px) — tổng bề rộng cần (~973px) vượt bề rộng header
+  thật (~766–790px). Đẩy khối đồng hồ/ngày và tên/role — thông tin phụ, đã có
+  ở nơi khác — từ `md:block` sang `xl:block`; đo lại xác nhận khoảng cách
+  16px sạch giữa hai khối ở cả 768px và 1024px, không còn chồng lấn.
+
+Thêm `apps/web-ui/src/features/programming/overview/OverviewPage.test.tsx`
+(chưa từng có file test riêng cho trang này — lỗ hổng coverage khiến BUG-016/
+018 lọt qua) kiểm cả hai regression: scope không rò tiếng Việt ở chế độ EN,
+và bấm mục cảnh báo điều hướng đúng sang Runtime.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 545/545 pass (67
+file, +2 test mới); `npm run lint` sạch; `VITE_PROGRAMMING_REV_A=1 npm run
+build` qua, dist mới `index-Yi22MKmM.js` (`grep -c REVA_SCOPE_ROADMAP` = 0,
+`grep -c "outputs do Program điều khiển"` = 0); deploy board Foxlinx qua
+`scp` + swap atomic, `systemctl is-active mkddc-web-pi` = `active`, public
+`mekong-fac.ddns.net:8082` phục vụ đúng bundle mới.
+
+### Fixed — trang Programming trên board Foxlinx bị tắt ngoài ý muốn (2026-08-14)
+
+Triệu chứng: user báo `http://mekong-fac.ddns.net:8082/eng/programming` hiện
+"Graphical programming is not available" (đưa người dùng sang Virtual
+points/Scheduler/Alarm settings) thay vì bốn workspace Programming thật đã
+deploy PASS hôm trước (`EV-PROG-P5-507`,
+`docs/07_records/test-evidence/fw-som/2026-08-13-foxlinx-programming-p5-deploy.md`).
+
+Nguyên nhân gốc: `PROGRAMMING_REV_A_ENABLED` (`apps/web-ui/src/shared/config.ts`)
+là cờ **build-time** — Vite bake giá trị `VITE_PROGRAMMING_REV_A` vào bundle
+lúc `vite build`, không đọc được từ runtime/server sau khi đã build. Board
+Foxlinx đã "bật cờ vĩnh viễn" theo `TASK-PROG-507`, nhưng phiên sửa i18n Modbus
+RTU cùng ngày (mục Fixed bên dưới) chạy đúng lệnh cũ trong
+`FOXLINX_DEPLOY_CHECKLIST.md` §3.3 — `npm run build` KHÔNG có
+`VITE_PROGRAMMING_REV_A=1` — nên dist mới (`index-jEXuMFA9.js`, deploy
+`2026-08-14T05:37Z`) bake lại giá trị mặc định tắt của `.env.production` và
+âm thầm regress route `/eng/programming` về nhánh "Rev B scope" dù không đổi
+dòng code nào liên quan Programming.
+
+Cách sửa: rebuild `apps/web-ui` từ đúng HEAD hiện tại (`645dff9`, đã gồm cả
+fix i18n) với `VITE_PROGRAMMING_REV_A=1 npm run build` (dist mới
+`index-CoD2L1Si.js`, xác nhận `grep -c REVA_SCOPE_ROADMAP` = 0 trong bundle,
+tức nhánh placeholder đã bị tree-shake khỏi build); deploy lên board qua
+`scp` (Foxlinx không có `rsync`) + swap atomic `dist` ↔
+`dist.pre-programming-fix-20260814`, restart `mkddc-web-pi`. Xác nhận route
+public `mekong-fac.ddns.net:8082` phục vụ đúng bundle mới (index.html trỏ
+`index-CoD2L1Si.js`, bundle tải qua HTTP cũng có `REVA_SCOPE_ROADMAP` = 0).
+Cờ BE `PROGRAMMING_REV_A=1` ở `/etc/mkddc-web.env` không bị đợt deploy FE-only
+này chạm tới nên giữ nguyên.
+
+Phòng tái diễn: thêm cảnh báo + lệnh build đúng vào
+`docs/08_hardware/foxlinx-som-ddc24/FOXLINX_DEPLOY_CHECKLIST.md` §3.3, kèm
+bước tự-kiểm `grep -c REVA_SCOPE_ROADMAP` trước khi copy dist lên board.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 543/543 pass
+(không đổi code, chỉ đổi cờ build); `npm run lint` sạch; build production
+với `VITE_PROGRAMMING_REV_A=1` qua (`tsc --noEmit` + `vite build`); board
+Foxlinx `systemctl is-active mkddc-web-pi` = `active`, `GET /` nội bộ
+(`127.0.0.1:8081`) và public (`mekong-fac.ddns.net:8082`) đều `200`.
+
+### Fixed — i18n Modbus RTU + đăng nhập theo báo cáo ISO 29119-3 (TR-MKDDC24-P1-20260814-01, 2026-08-14)
+
+Bối cảnh: báo cáo QA `TR-MKDDC24-P1-20260814-01` chạy trên board Foxlinx
+(`0.1.0-be-b6c`, deploy ngay sau commit `fb242cb`) phát hiện lại một phần
+BUG-001..004 (đã sửa ở `fb242cb` nhưng board lúc test là bản trước fix) và
+hai lỗi thật còn sót trong source hiện tại (BUG-014, BUG-015/TC-L02/TC-L03).
+
+- **BUG-014 — toàn bộ feature Modbus RTU không đổi ngôn ngữ**: `ModbusRtuLayout`
+  và 6 trang con (`OverviewPage`/`PortsPage`/`DevicesPage`/`PointsPage`/
+  `MappingPage`/`DiagnosticsPage`) cùng 4 component dùng chung
+  (`ConfigStateBanner`/`HierarchyTree`/`RegisterPreview`/`useModbusConfig`)
+  chưa từng gọi `useI18n` — 100% chuỗi hiển thị (tiêu đề, tab, label form,
+  hint, header bảng, thông báo trạng thái/lỗi) hardcode tiếng Việt, đứng yên
+  khi chuyển sang English. `shared.ts` cũng có 3 điểm cùng họ:
+  `READ_ONLY_HINT` (hằng số), `describeApiError()`, `deviceLinkLabel()` đều
+  trả cứng tiếng Việt vì là hàm thuần (không gọi được hook). Sửa: đổi
+  `READ_ONLY_HINT` thành `readOnlyHint(lang)`, thêm tham số `lang` cho
+  `describeApiError()`/`deviceLinkLabel()` — cùng quy ước với
+  `healthReasonLabel(reasonCode, lang)` đã có ở `StateAtoms.tsx`; toàn bộ
+  JSX bọc qua `pick(vi, en)`. Cập nhật 6 test file tương ứng: bọc
+  `<I18nProvider>` quanh cây render, seed `localStorage['mkddc-lang']='vi'`
+  trong `beforeEach` để giữ nguyên mọi assertion tiếng Việt hiện có.
+- **BUG-014 phụ — Diagnostics vẫn tiếng Việt ở chế độ EN**: `DashboardPage.tsx`
+  (2 nơi: `OverviewHeader`, `HealthStrip`) và `DiagnosticsPage.tsx` (dashboard)
+  gọi `healthReasonLabel(reasonCode)` thiếu tham số `lang` — mặc định rơi về
+  `'vi'` bất kể locale đang chọn (chỉ `TopBar.tsx` truyền đúng). Đây chính là
+  nguồn "Bình thường"/"Bus không mở được" mà báo cáo bắt được ở Diagnostics.
+  Thêm `lang` vào cả 3 lời gọi.
+- **BUG-004 phụ — Activity Log ở Dashboard vẫn tiếng Việt**: trang
+  `/activity` đã dịch đúng từ `fb242cb` (`ACTION_LABELS` dạng tuple), nhưng
+  widget "HOẠT ĐỘNG GẦN ĐÂY" ngay trên Dashboard có một dict **khác**,
+  `activityActionLabels: Record<string, string>`, độc lập và không hề qua
+  `pick()`. Đổi sang tuple `[vi, en]` giống `ActivityPage.tsx`.
+- **TC-L02/TC-L03 — lỗi đăng nhập luôn tiếng Việt, password rỗng round-trip
+  lên server**: `AuthProvider.login()` `throw new Error('Đăng nhập thất
+  bại')` hardcode, hiện cả khi đang ở English. Thêm `useI18n()` vào
+  `AuthProvider` → phải đảo thứ tự provider ở `main.tsx`
+  (`I18nProvider` nay bọc NGOÀI `AuthProvider`, trước đây ngược lại và
+  không ai cần thứ tự cũ). `LoginPage.submit()` chỉ chặn username rỗng, không
+  chặn password rỗng — username có + password rỗng thì gửi thẳng lên server,
+  ăn một roundtrip thừa cho lỗi biết chắc phía client rồi mới thấy thông báo
+  (mà thông báo đó lại luôn tiếng Việt, xem trên). Thêm guard password rỗng
+  cùng cách với username.
+- **BUG-001 — trang đăng nhập không có cách đổi ngôn ngữ**: `/eng/` xác nhận
+  lại là tiền tố "Engineering" (không đổi gì, giống kết luận `fb242cb`); phần
+  hợp lệ trong finding là Login page không có nút đổi ngôn ngữ như TopBar —
+  người dùng bị khoá theo `detectDefaultLang()` (auto theo trình duyệt) cho
+  tới sau khi đăng nhập. Thêm nút `EN|VI` cùng style TopBar vào góc trên bên
+  phải form đăng nhập.
+- Sửa kèm một bug trùng lặp phát hiện khi sửa i18n: `PointsPage.tsx` render
+  HAI LẦN nguyên khối banner "Cột Quality không phải số trực tiếp" (copy-paste
+  y hệt, không liên quan i18n) — gộp còn một.
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 543/543 pass
+(66 test file, gồm 10 file trong `features/modbus-rtu`); `npm run lint` →
+sạch (`eslint src --max-warnings=0`); `npm run build` → qua (`tsc --noEmit` +
+`vite build`, dist mới `index-jEXuMFA9.js`).
+
+### Changed — Product Spec Programming V2.2 Hybrid: áp quyết định review PM/CTO đợt 2 (candidate.2, 2026-08-14)
+
+Cập nhật `PROGRAMMING_PRODUCT_SPEC_V2.2_HYBRID.md` theo đúng các điểm review
+được chốt (không reopen Program-centric/Task-centric/Output Candidate/atomic
+activation/ST-FBD scope/Task removal khỏi Normal UX):
+
+- **§8** tách lifecycle tuyến tính cũ thành hai state domain độc lập —
+  Engineering/Revision State (§8.1) và Runtime Program State (§8.2) — cộng
+  §8.3 "Revision Truth" với ví dụ bắt buộc `Editing r16/CHECK_FAILED` +
+  `Active r15/RUNNING` để khóa rằng Check/Commission failure của Editing
+  không đổi trạng thái Active.
+- **§14.1** khóa thuật ngữ **"Commission Changes"** thay vì "Commission riêng
+  một Program", kèm ví dụ bắt buộc `Active r20 (P1-P4)` → sửa P1 → candidate
+  `r21` → activate atomic → `Active = r21`.
+- **§10.1/§10.4** đổi multicore thành **TARGET-DEPENDENT RUNTIME CAPABILITY**,
+  thêm Product MUST quote cho independent scheduling; **§18** tách `AC-08`
+  thành `AC-08A` (Scheduling Independence) và `AC-08B` (Multicore Capability),
+  lan cập nhật trace ở `CPR-HYB-003/004/010` và bảng OLD/V2.1/V2.2 (§24).
+- **§7.1** khóa ranh giới Published Signal **không tự động** là canonical
+  Point type mới; nâng thành Product-level blocker bắt buộc khóa ở
+  `TBD-HYB-06` trước `IMPLEMENT_READY[HYBRID]`.
+- **§13** sửa output ownership rule: bỏ câu "each writable Point SHALL have
+  one owner", thay bằng "at most one direct Program owner … unless an
+  explicit multi-producer arbitration contract exists" — 0/1 owner = VALID,
+  >1 = REJECT trừ arbitration contract explicit/deterministic/versioned.
+- **§11** tách field "Dependency" mơ hồ thành ba loại độc lập: Data
+  Dependency (11.1), Execution Dependency (11.2), Health/Availability
+  Dependency (11.3), mỗi loại có field bắt buộc riêng.
+- **§10.2** thêm Product requirement "Programs whose required
+  fault-containment semantics cannot be preserved inside the same internal
+  runtime Task SHALL NOT be mapped into that Task" và mở rộng input Auto Task
+  Mapping (fault containment, data visibility, output ownership,
+  timing/safety, target capability).
+- **§9.2/§9.3** tách Advanced properties: Explicit Dependency/Disable
+  Policy/RETAIN Policy là Advanced Product-configurable ưu tiên Rev hiện tại;
+  raw Scheduling Priority/Deadline/Watchdog chuyển sang lớp "Runtime
+  Policy/Advanced Diagnostics/TBD", không mặc định user-configurable trước
+  khi `TBD-HYB-04` khóa.
+- **§1, §20.4** thêm nhãn bằng chứng `STD` + bảng traceability tham chiếu
+  IEC 61131-3 (ST/FBD/POU), IEC TR 61131-8, ISO 16484 series, IEC 62443 — ghi
+  rõ đây chỉ là tham chiếu, không phải compliance claim; đồng thời liệt kê rõ
+  Program-centric UX/Auto Task Mapping/Published Signal/Independent-by-default/
+  Multicore policy là MK PRODUCT DECISION/BENCHMARK-INFORMED, không phải
+  IEC/ISO requirement.
+- **§10.3.1** định nghĩa "10 Program Reference Fixture": `P1-P4` (1 s,
+  PID/scaling/control), `P5-P7` (5 s, sequencing/supervisory), `P8-P10`
+  (30 s, supervisory/energy/monitoring) + downstream measurement class
+  (IR/workload size, runtime state size, Point count, output count,
+  execution-load class); không khóa WCET cụ thể khi chưa có target
+  measurement.
+- **§18** thêm `AC-18` (Engineering Plane Isolation — local control phải
+  sống khi FE/BE/engineering session mất kết nối, FE/BE không được bịa
+  runtime state) và `AC-19` (Restart and Enable Intent — phân biệt
+  Commissioned Revision/Enable-Disable intent/Runtime State/RETAIN State sau
+  reboot); thêm `CPR-HYB-013/014` tương ứng ở §19.
+- **§17.1** đổi tên "Product Information Architecture" thành "Candidate
+  Product Workspace / Candidate Information Architecture", ghi rõ đây là
+  candidate IA mà UI/UX Design có quyền gộp/tách page, Product Spec chỉ khóa
+  capability bắt buộc, Task Manager không trở lại Normal UX.
+- **§23** phân nhóm gate P0 (`TBD-HYB-03/05/06/07/08/09/11` — phải khóa
+  trước `IMPLEMENT_READY[HYBRID]`), P1 (`TBD-HYB-02/04/10/12`) và Governance
+  (`TBD-HYB-01`); nâng gate của `TBD-HYB-11` từ `RELEASE_READY` lên
+  `IMPLEMENT_READY[HYBRID]` cho khớp nhóm P0 theo quyết định review.
+- **§25.2** thêm dòng Revision History `V2.2-HYBRID-candidate.2`.
+
+Giữ nguyên ranh giới authority: tài liệu vẫn `In Review — READY FOR PM/CTO
+REVIEW`, không nâng `APPROVED/ACTIVE/IMPLEMENT_READY/RELEASE_READY`, không
+đổi Product Spec `Active`, không claim IEC/ISO compliance, không tự thêm TBD
+mới ngoài làm rõ nội dung `TBD-HYB-01..12` đã có.
+
+Verification: `python3 scripts/docs_iso_harness.py --expect` → `PASS — mọi
+phép kiểm bắt buộc đạt`; `python3 scripts/candidate_pin_check.py` → `PASS —
+cây làm việc khớp candidate đã ghim` (22/22); soát tay: 20 dòng `AC-*` (01..07,
+08A, 08B, 09..17, 18, 19), 10 `PD-HYB-*` không đổi, 14 `CPR-HYB-*` (12 cũ + 2
+mới), 12 `TBD-HYB-*` không đổi số lượng, `0` trailing whitespace, `0` local
+link thiếu. Không chạy build/browser vì thay đổi chỉ là Product Spec, không
+đổi source hoặc UI runtime.
+
+### Added — Product Spec Programming V2.2 Hybrid để PM/CTO review (2026-08-14)
+
+- Thêm candidate `PROGRAMMING_PRODUCT_SPEC_V2.2_HYBRID.md` theo mental model
+  Program-centric và Task-centric internal runtime: 10 Product Decision,
+  Auto Task Mapping, multicore/fault/data/output semantics, AC-01..17, ma trận
+  migration và bảng `OLD vs V2.1 vs V2.2 HYBRID`.
+- Giữ đúng ranh giới authority: tài liệu ở trạng thái `In Review`, không thay
+  Product Spec `Active`, không claim Hybrid đã implement, không đóng gap và
+  không thay đổi `RELEASE_READY`.
+
+Verification: `python3 scripts/docs_iso_harness.py --expect` PASS toàn bộ ngưỡng;
+`python3 scripts/candidate_pin_check.py` PASS `22/22`; kiểm riêng candidate có
+`0` local link thiếu, `0` trailing whitespace, 12 dòng Executive Summary,
+10 Product Decision và đủ AC-01..10. Không chạy build/browser vì thay đổi chỉ là
+Product Spec, không đổi source hoặc UI runtime.
+
+### Fixed — Dashboard báo sai FAULT cho domain Local I/O (2026-08-14)
+
+- Badge "Local I/O" trên Dashboard hiện FAULT đỏ kèm "8 điểm chất lượng bad"
+  dù board hoạt động bình thường. Điều tra trực tiếp trên board Foxlinx (SSH
+  tunnel + `/api/v1/points` + `/data/config/io_config.conf`): 8 điểm bad là
+  UI-09..UI-16, tất cả có `"type": "none"` — Signal Type "Không hoạt động",
+  tức người dùng chủ ý chưa nối cảm biến. Core trả `quality=bad` đúng thiết
+  kế (không có dữ liệu thật), nhưng `overviewHealth()`
+  (`apps/web-api/internal/app/overview.go`) đếm mọi điểm UI/AO/DO bad vào
+  domain `local_io` không phân biệt "chưa cấu hình" với "hỏng thật" — cùng
+  họ lỗi FE-DIAG-01/FE-DATA-01 (báo sai mức độ nghiêm trọng khi thiếu dữ
+  liệu là chủ ý).
+- Sửa: `overlayPointMetadata()` (`points.go`) nay mang field `type` của
+  `io_config.conf` sang `PointDTO.SignalType` (trước chỉ dùng cho Virtual
+  Points); `overviewHealth()` bỏ qua điểm `SignalType="none"` khi đếm
+  bad/stale cho domain `local_io`. Điểm bad THẬT (không phải `none`) vẫn báo
+  FAULT đúng — có test chốt cả hai chiều.
+- Xác nhận trực tiếp trên board Foxlinx: trước fix
+  `local_io=fault/bad_quality_points`, sau khi deploy binary aarch64 mới
+  `local_io=good/ok` — không đổi cấu hình/phần cứng, chỉ đổi phần mềm đọc
+  đúng ngữ nghĩa. Ghi nhận phụ ngoài phạm vi: `overallState` board vẫn
+  `fault` vì domain `modbus` báo "2 bus không mở được" — sự cố Modbus RTU
+  riêng biệt, chưa điều tra trong phiên này.
+
+Verification: `go build ./...`/`go vet ./...` sạch; `go test ./... -count=1`
+100% PASS (17 package, không hồi quy); 2 test mới
+(`TestOverviewHealthLocalIOIgnoresDisabledChannels`,
+`TestOverlayPointMetadataMangSignalTypeTuIOConfig`).
+
+Refs: F-DASH-LOCALIO-01.
+
+### Fixed — Kênh chưa cấu hình hiện đỏ BAD/FAULT ở Monitor, Dashboard, Sơ đồ (2026-08-14)
+
+- Nối tiếp F-DASH-LOCALIO-01 (mục trên): sau khi Dashboard hết báo FAULT giả,
+  người dùng chỉ ra Monitor page vẫn hiện UI-09..16 (Signal Type "none", chủ ý
+  chưa nối cảm biến) với chấm đỏ + chữ "BAD" — y hệt một fault phần cứng thật.
+  Cùng vấn đề ở panel ghim Dashboard và `ControllerDiagram` (LED đỏ + tooltip
+  "FAULT"/"NO SIGNAL" cho kênh không hề hỏng).
+- Nguyên nhân: các nơi hiển thị (`MonitorPage.AnalogRow`, `StatusBadge`/
+  `QualityBadge` trong detail panel, `DashboardPage.WorkspaceTile`,
+  `ControllerDiagram.qualityState`/`signalState`) chỉ đọc `point.quality`,
+  không dùng `point.signalType` (đã có sẵn trên type FE, đã được backend điền
+  ở fix trên) để phân biệt "chưa cấu hình" với "hỏng thật".
+- Sửa: thêm `isChannelNotConfigured(point)` dùng chung
+  (`shared/utils.ts`, kiểm `signalType === 'none'`), áp dụng tại 4 điểm trên —
+  dot/label riêng "Chưa cấu hình"/"Not configured" màu trung tính, value/unit
+  hiện `—` thay vì "0.0"/"-" (S3: thiếu số liệu thì gạch ngang, không phải 0).
+  `ControllerDiagram` trả `'off'` thay vì `'bad'`/`'nosignal'` — sửa luôn số
+  đếm "X FAULT" ở đầu sơ đồ vì dùng chung hàm đếm. Điểm bad THẬT (signalType
+  khác "none") vẫn hiện đỏ đúng như cũ.
+- Sửa tiếp stat card đầu Monitor page: "Điểm lỗi / mất tín hiệu" và "Điểm
+  UI/AO bình thường" vẫn đếm theo `point.quality` thô nên board thật trước
+  fix hiện 12/60% và 9/36% (36% "lỗi" toàn là kênh chưa dùng); sau fix
+  12/100% và 1/4%. Bộ lọc "Trạng thái → Fault" cũng loại tương tự.
+- Ngoài phạm vi: `npm run build` bị chặn bởi lỗi biên dịch không liên quan
+  (`apps/web-ui/src/features/modbus-rtu/pages/PointsPage.tsx` import hằng số
+  `READ_ONLY_HINT` đã bị đổi thành hàm `readOnlyHint(lang)` — tàn dư một lần
+  đổi tên dở dang, không phải do phiên này). Đã vá tối thiểu 2 dòng để
+  `vite build` chạy được (không mở rộng thêm i18n cho file đó); một agent
+  khác đang làm việc song song trên file này đã hoàn thiện tiếp ngay sau đó.
+
+Verification: `npx vitest --run --environment jsdom src` 537/537 PASS trên
+mọi file liên quan (4 test fail còn lại thuộc `MappingPage.test.tsx`,
+modbus-rtu, không liên quan, đang có người khác xử lý); lint sạch;
+`npm run build` PASS; đã deploy dist mới lên board Foxlinx (backup trước khi
+ghi đè, service `active`, health `ok`).
+
+Refs: F-DASH-LOCALIO-01.
+
+### Fixed — 13 lỗi UI khảo sát thực tế trên board (BUG-001..013, 2026-08-14)
+
+- **i18n mặc định (BUG-001)**: `I18nProvider` trước đây luôn mặc định `vi` cho
+  hồ sơ mới, bất kể trình duyệt. Xác nhận `/eng/` là tiền tố "Engineering"
+  (nhóm route công cụ kỹ thuật), không phải route ngôn ngữ — không có gì để
+  sửa ở đó. Sửa đúng gốc theo W3C i18n Best Practice: hồ sơ mới theo
+  `navigator.language` (`en*` → `en`, còn lại → `vi`); lựa chọn đã lưu trong
+  `localStorage` luôn được ưu tiên tuyệt đối.
+- **Commissioning Prerequisites (BUG-002)**: 4 mục điều kiện tiên quyết
+  (`CommissioningPage.tsx`) hardcode tiếng Việt, không dùng `pick()` — đứng
+  yên tiếng Việt dù đã chuyển UI sang English. Đã bọc toàn bộ `label`/`detail`
+  qua `pick(vi, en)`.
+- **Scheduler (BUG-003)**: `SchedulerGridPage.tsx` không import `useI18n`,
+  100% chuỗi hardcode tiếng Việt (tiêu đề, toolbar, 10 cột bảng, toast, banner
+  di trú). i18n hoá toàn trang; đồng thời tham số hoá locale cho
+  `statusPresentation`/`formatValue`/`weeklySummary`/`DAY_LABELS` (dùng chung
+  bởi `StatusDot`, hiện đúng cột Trạng thái/Tuần/Hiện tại theo locale khi
+  render trên chính trang Scheduler).
+- **Activity Log (BUG-004)**: `ACTION_LABELS` là dict tiếng Việt cứng, cột
+  header đã i18n nhưng giá trị Action thì không — đổi sang tuple `[vi, en]`
+  và `pick()` tại nơi render.
+- **Program mới trùng tên (BUG-005/006)**: tên mặc định `ST+`/`FBD+` vốn đã
+  qua `pick()` (không tái hiện được BUG-005 với source hiện tại — nghi board
+  đang chạy build cũ hơn commit sửa `08757e5`); phần thật còn thiếu là
+  **không có validate trùng tên** — bấm `ST+` hai lần tạo hai Program cùng
+  tên, không cảnh báo. Thêm `isDuplicateProgramName`/`uniqueProgramName`:
+  Program mới tự nhận tên duy nhất (`New program 2`, `3`, …); đổi tên tay ở
+  Inspector bị chặn (kèm thông báo) nếu trùng tên Program khác.
+- **ST Editor Find bar (BUG-011)**: không có nút đóng, bấm lại `Find` không
+  toggle, Escape chỉ đóng khi focus đúng ô input. Thêm nút X, đổi `Find`
+  thành toggle mở/đóng, thêm Escape ngay trên textarea khi search đang mở.
+- **ST Editor Format (BUG-013)**: `formatStSource` cũ chỉ thêm indent cho
+  dòng có sẵn `\n`, dán code 1 dòng thì không đổi gì; `collectStSymbols` yêu
+  cầu khai báo VAR đứng đầu dòng (`^`) nên panel "Symbols & Types" báo trống
+  ngay cả khi có VAR block. Format nay tách từ khoá khối
+  (`PROGRAM/VAR/END_VAR/IF/...`) và câu lệnh (`;`) ra dòng riêng rồi thụt lề
+  theo độ sâu khối; regex nhận diện VAR nới điều kiện biên (đầu file, sau
+  `;`/xuống dòng, hoặc ngay sau từ khoá `VAR*`) nên nhận ra khai báo bất kể
+  đã Format hay chưa.
+- **Vấn đề Check thiếu ngữ cảnh (BUG-007)**: `ProblemsDrawer` chỉ hiện
+  `code` + UUID Program cắt 8 ký tự + số dòng — thiếu cột và biến. Bổ sung
+  cột/biến (`location.column`/`bindingId`) vào chuỗi vị trí. Trang Check
+  (PGM-03) trước đây không truyền `onSelect` nên bấm vào lỗi không đi đâu cả;
+  nay điều hướng sang đúng Program ở workspace Thiết kế qua deep-link
+  `?tab=programs&program=<id>` (không tự chế thêm hành vi seal/focus xuyên
+  route — quyền sở hữu Check giữa PGM-02/PGM-03 vẫn là quyết định D-01 mở
+  trong `REV-PROG-ASBUILT-GAP-2026-08-14`, không tự chọn thay PM/Product).
+- **FAULT badge không tương tác (BUG-008)**: badge trạng thái ở TopBar là
+  `<span>` tĩnh, không title/click. Thêm `title` (lý do qua
+  `healthReasonLabel`, nay có bản EN) và bọc trong `Link` tới `/diagnostics`.
+- **FBD status announcement (BUG-012)**: `commands.ts` (reducer thuần, không
+  gọi được `useI18n`) ghi thẳng câu tiếng Việt vào `announcement`, vùng
+  `aria-live` luôn tiếng Việt bất kể locale UI. Đổi `announcement` từ
+  `string` sang `{ code, params }`; dịch tại `StructuredFbdEditor` qua
+  `translateFbdAnnouncement(pick, ...)` lúc render.
+- **BUG-009/010 đã đúng trong source hiện tại** — không sửa: tên controller ở
+  `TopBar`/`NavRail` đã có `title`; nút "Restore previous version" đã có
+  `Modal` xác nhận bắt buộc nhập lý do + mật khẩu. Nhiều khả năng board đang
+  chạy build cũ hơn các commit đã sửa; sẽ tự đúng sau khi deploy lại.
+
+Phát hiện phụ khi chạy full Playwright suite (ngoài gate bắt buộc của repo):
+`playwright.config.ts` chưa khai `locale`, nên `navigator.language` (và do đó
+default mới của BUG-001) phụ thuộc locale ngẫu nhiên của máy CI. Đặt
+`locale: 'vi-VN'` khớp thị trường thật của sản phẩm — đúng như
+`network-qa.spec.ts` đã làm trước đó. Việc này lộ ra 6 spec (`point-names`,
+`trends`, `pa3-dashboard` 1 dòng, và `fe-pages-health` 2 bài) vốn đã hardcode
+kỳ vọng tiếng Anh mà không khai `mkddc-lang=en` — **lỗi có sẵn từ trước, không
+phải do thay đổi phiên này** (xác nhận qua screenshot lỗi: trang login hiện
+đúng tiếng Việt theo thiết kế). Đã sửa `point-names.spec.ts`/`trends.spec.ts`
+(seed `mkddc-lang=en` như `network-qa.spec.ts`) và một dòng ở
+`pa3-dashboard.spec.ts`. **Chưa sửa `fe-pages-health.spec.ts`** (2 bài, 11
+trang không liên quan tới BUG-001..013: Dashboard/Monitor/Alarms/Settings×4/
+Commissioning/Inputs/Outputs/Virtual Points) — ngoài phạm vi phiên này, cần
+đối chiếu từng trang riêng; ghi lại làm việc cần làm tiếp.
+
+Verification: `npx vitest --run --environment jsdom src` **537/537 PASS** (65
+file, +16 test mới); `npm run lint` sạch; `tsc --noEmit` sạch; `npm run build`
+PASS (kèm `check:programming-contracts`: error catalog 20/99, API client 25
+operation, FBD self-test 10/10); `npx playwright test` **64/66 PASS** (2 fail
+thuộc `fe-pages-health.spec.ts`, ngoài phạm vi, xem trên).
+
+Refs: `REV-PROG-ASBUILT-GAP-2026-08-14`, `PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md`.
+
+### Removed — Dọn Markdown trùng, lịch sử và sai cây source (2026-08-14)
+
+- Loại 43 file Markdown không còn authority: ba snapshot/audit As-Built đã bị
+  báo cáo `REV-PROG-ASBUILT-GAP-2026-08-14` thay thế; tám báo cáo source ngày
+  2026-08-09; 12 record + README archive dùng cây source trước tái cấu trúc; ba
+  plan agent còn trỏ `services/`/`web/backend/`; Plan 48 đã thực thi xong; một
+  prompt refactor, một bản nháp yêu cầu, một backlog thô, register QA tự xác
+  nhận lỗi thời với 23 link chết và hai audit/checklist ngày 2026-06-11 dùng
+  hàng chục đường dẫn tuyệt đối/cây source cũ không còn được dẫn.
+- Loại trọn corpus candidate AHU hiệu suất cao chưa được triển khai: 10 hồ sơ
+  Product/Requirements/Decision/Architecture/Design và ba SVG UI/UX minh họa.
+  Giữ nguyên sample/source AHU chung của Programming vì chúng không thuộc
+  candidate `AHU_HIGH_PERFORMANCE` và vẫn có consumer trong code/test.
+- Giữ nguyên 22/22 hồ sơ Programming đã ghim, toàn bộ Detailed Design đang dùng,
+  contract, risk/trace, Test Result và bằng chứng target/HIL. Đồng bộ Document
+  Hub, Control, review index, Plan 54 và các liên kết còn giá trị sang authority
+  hiện hành; nội dung đã loại phục hồi được từ commit
+  `b69fdf152fd1b424bb4ab2239b5cf97b0e86b554`.
+- Không đụng các bản sao bàn giao/log/`Yeucau.md` đang bị Git ignore vì đó là dữ
+  liệu cục bộ ngoài phạm vi controlled repository.
+
+Verification: quét filesystem không còn file corpus AHUHP;
+`candidate_pin_check.py` **22/22 PASS**; `docs_iso_harness.py --expect` **PASS**
+với 0 link/anchor/path thiếu và 0 ID trùng; quét toàn bộ 341 Markdown tracked
+còn lại đạt 0 liên kết tương đối thiếu đích và 0 nhóm trùng SHA-256;
+`git diff --check` sạch. Không chạy build/test code hoặc browser vì thay đổi
+thuộc phiên dọn này chỉ là tài liệu/asset thiết kế và không đổi runtime.
+
+Refs: `DOC-CTRL-001`, `DOC-GOV-001`, `REV-PROG-ASBUILT-GAP-2026-08-14`.
+
+### Changed — Ghi nhận As-Built Programming và NO-GO UC-PROG-03 (2026-08-14)
+
+- Lập báo cáo `REV-PROG-ASBUILT-GAP-2026-08-14` cho PM/CTO: tổng kết source
+  Core/Web API/Web UI/contract/deploy hiện có; so với UI/UX, FE Design, Plan 53,
+  VVP và Trace; mở 12 finding có mức độ, owner, tác động và điều kiện đóng.
+- Tái hiện trên Foxlinx lỗi UC-PROG-03: `ST+` tạo source rỗng; Check FAILED chỉ
+  trả lỗi scope không có dòng/cột; seal tăng ETag/đổi base nhưng FE giữ state cũ,
+  làm lần lưu bản sửa tiếp theo xung đột 409 và không có expected/current.
+- Hoàn nguyên Draft về source ST hợp lệ sau phép thử; Active Revision không đổi;
+  không gửi Commission/Restore/RETAIN hay output vật lý. Lưu bốn ảnh supporting
+  evidence và nâng audit FE/UI/UX lên revision 1.4, evidence Foxlinx lên 1.2.
+- Ghi rõ solution hiện tại chỉ là bản tạm để review, P5 giữ `8/11`, Plan giữ
+  `43/53`, `0/32` Test Result PASS và `RELEASE_READY BLOCKED`; PR này không sửa
+  defect UC-03 và không deploy artifact mới.
+
+Verification: source review + Chromium cô lập `1440×1000` trên endpoint live;
+Draft recovery xác nhận trực quan; C++ Release Modbus/BACnet/HMI ON
+**1004/1004**; Go vet/test không cache PASS; FE **64 file/521 test** +
+lint/typecheck/build PASS; contract 25 operation, catalog 20/99, FBD 10/10;
+Playwright Programming + Network **11/11**; candidate **22/22** và docs harness
+PASS. Browser/host evidence không thay Test Result/HIL.
+
+Refs: `F-PROG-ASBUILT-001..012`, `UC-PROG-03`, `VS-PROG-005/006/024`,
+`REV-PROG-ASBUILT-GAP-2026-08-14`.
+
+### Fixed — Programming live HTTP, fail-closed và responsive theo audit 1.2 (2026-08-13)
+
+- Thay mọi lệnh Programming dùng trực tiếp `crypto.randomUUID` bằng helper UUID
+  v4 dựa trên `getRandomValues`, đồng thời dùng SHA-256 thuần JavaScript và
+  base64 theo khối cho bundle; endpoint HTTP không còn vỡ Save/Check/Trace/
+  Restore/Export/Import vì thiếu secure context.
+- Giữ đủ pathname/query/hash qua đăng nhập; fresh profile mặc định tiếng Việt;
+  thêm bottom navigation bốn workspace và chuyển Operation history thành card
+  mobile không mất cột.
+- Khóa Restore trừ khi Core đúng `READY` và safe-state không tác động. Gỡ hoàn
+  toàn request RETAIN dùng Active Revision giả; surface giữ disabled với lý do
+  contract-only cho tới khi backend trả affected-variable impact thật.
+- Thêm Export source-only; Import kiểm SHA-256 trên HTTP; Tổng quan/Runtime hiện
+  `PRG-SAFE-ACTIVE` với mức, lý do chưa có từ Core, phạm vi và hành động thay vì
+  chỉ boolean Có/Không.
+- Bổ sung test UUID fallback, mặc định i18n, query/hash, save batch trên profile
+  không có `randomUUID`, degraded/safe Restore, RETAIN fail-closed, Export,
+  safe-state, mobile nav/history và WCAG.
+- Sửa Network QA khai báo locale tiếng Anh rõ ràng; test không còn phụ thuộc
+  ngôn ngữ mặc định cũ sau khi fresh profile chuyển sang tiếng Việt.
+- Deploy atomic FE production có `VITE_PROGRAMMING_REV_A=1` lên Foxlinx. Lượt
+  probe health đầu quá sớm đã tự rollback; một bundle thiếu feature flag bị
+  browser read-back phát hiện và thay ngay. Artifact cuối có index SHA-256
+  `30ee074329685a801abaf468c6aaa5d1eacfecc515128e3483ebdd9d9cab5dbd`;
+  bốn service `active`, health mọi thành phần `ok`.
+- Live endpoint `:8082` xác nhận `isSecureContext=false`, Save Draft `200` rồi
+  hoàn nguyên source `200`, Export `200`, bundle sai bị Import từ chối `422`,
+  deep-link nguyên vẹn, Restore/RETAIN disabled, mobile không tràn ngang; axe
+  6/6 lượt Overview/Design/Service × desktop/mobile không có violation.
+
+Verification: C++ Release Modbus/BACnet/HMI ON **1004/1004**; Go vet/test không
+dùng cache PASS; FE **64 file/521 test** + lint/typecheck/build PASS; Playwright
+Programming 10/10 và Network QA 1/1, tổng **11/11 PASS**. Browser live
+Console/Network sạch ngoài `422` được chủ động tạo cho corpus Import sai.
+Supporting evidence không thay 0/32 Test Result hay `RELEASE_READY`.
+
+Refs: `F-PROG-LIVE-001..008`, audit revision 1.3, `EV-PROG-P5-510` revision 1.1.
+
+### Changed — Audit live 17 use case Programming và đối chiếu UI/UX (2026-08-13)
+
+- Kiểm thử lại `UC-PROG-01..17` trên endpoint
+  `http://mekong-fac.ddns.net:8082/` bằng Chrome thật tại desktop `1440×900`
+  và mobile `390×844`, đối chiếu `UX-WEB-PROG-001` cùng asset `PGM-01..04`.
+- Cập nhật `REV-PROG-FE-UX-2026-08-13` revision 1.2: 12/17 UC không đạt,
+  3/17 chưa đủ fixture/bằng chứng và 2/17 roadmap ngoài Rev A được ẩn đúng.
+- Ghi tám finding live, gồm lỗi mutation do `crypto.randomUUID` trên HTTP,
+  mất query deep-link sau đăng nhập, Save Draft không hoàn tất, Restore mở khi
+  Core suy giảm, RETAIN reset fail-open, thiếu ngữ nghĩa safe-state, thiếu
+  positive Monitor/Trace và các sai lệch i18n/mobile.
+- Không thực thi Commission/Restore/RETAIN reset cuối trên controller thật;
+  không lưu credential/token/header bí mật vào hồ sơ. Phán quyết hiện hành giữ
+  `RELEASE_READY BLOCKED`; audit browser này là supporting evidence, không phải
+  Test Result/HIL.
+
+Verification: kiểm tra trực tiếp bốn workspace và Console/Network; đối chiếu
+17 UC trong `UX-WEB-PROG-001`; `python3 scripts/docs_iso_harness.py --expect`.
+
+Refs: `REV-PROG-FE-UX-2026-08-13` revision 1.2, `UX-WEB-PROG-001` §16–17.
+
+### Changed — Programming P5 corrective audit UI/UX và Monitor/Trace (2026-08-13)
+
+- Audit bốn workspace/tám journey phát hiện baseline P5 còn thiếu editing
+  context/dirty guard/ST tooling/deep-link/readiness và backend Monitor/Trace
+  vẫn trả 503; mở `TASK-PROG-508..510`, đưa P5 về `IN_PROGRESS 8/11` và tổng
+  Plan 53 về 43/53 (81,1%).
+- Hoàn chỉnh FE: context Controller/Project/Draft dirty/Check/Active/Core; ST
+  gutter line, line/column, find/format/symbol/type/reference/diagnostic;
+  metadata/tag; save/discard/stay guard; Check khóa khi dirty; Commission
+  deep-link và readiness fail-closed; task metric; Watch/Trace; Danger Zone chỉ
+  ở tab Phiên bản & Bảo trì.
+- Nối Core→BE→OpenAPI v1.20.0→FE cho program proposal, actual, owner, effective
+  priority, TTL, quality/freshness và task metrics. Thêm Trace read-only bounded,
+  idempotent, audited, start/get/stop; in-memory/restart semantics được ghi rõ.
+- Browser E2E phát hiện thêm false-dirty thật: tab Thực thi luôn mount giữ
+  program order cũ sau thao tác tạo Program đã save; sửa chỉ đồng bộ server
+  update khi không có local edit, giữ nguyên local edit khi có.
+- Thêm `@axe-core/playwright` và ca `VS-PROG-028`: quét bốn workspace ở
+  desktop/mobile theo WCAG A/AA, cấm violation trong E2E.
+- Đồng bộ candidate v2.40 và hồ sơ Index/Interface/UIUX/FE/BE/FW-SOM/VVP/Trace/
+  Plan; sửa cùng revision hai asset PGM-02/PGM-04. Giữ 22/60 `I=Y` vì source
+  corrective chưa merge; 0/32 Test Result PASS.
+- Cross-build và deploy corrective lên `SOM-DDC-24-foxlinx` có backup/hash;
+  health/service/API read-back PASS. Rollback rehearsal về bản trước PASS, sau
+  đó tái deploy đúng artifact corrective PASS. Runtime đọc Active/Task
+  `RUNNING`; Monitor trả `200`/empty đúng fixture output-free không binding;
+  Trace selector rỗng trả `400`, không fabricate positive target data.
+- Chrome target thật ở desktop `1440×1000` và mobile `390×844`: bốn workspace,
+  0 Console error/warn/page error, 0 failed Programming request; axe **8/8 scan,
+  0 violation**. Ảnh và hash nằm trong `EV-PROG-P5-510`.
+
+Verification: C++ Release bật Modbus/BACnet/HMI build PASS, CTest **1004/1004**;
+Go vet/test mọi package PASS; FE **62 file/510 test**, lint/build PASS; OpenAPI
+25 operation, catalog lỗi 20/99, FBD mutation 10/10 và Playwright Programming +
+Network QA **7/7** PASS. Source chưa merge,
+positive Monitor/Trace có binding target, usability/HIL/Test Result độc lập còn
+mở; không nâng `RELEASE_READY`.
+
+Refs: TASK-PROG-508/509/510, REV-PROG-FE-UX-2026-08-13,
+EV-PROG-P5-510, candidate v2.40.
+
 ### Changed — Programming P5: ghi provenance PR #170 (2026-08-13)
 
 - Ghi bổ sung candidate v2.38 đã xuất hiện tại commit `b7c0ed2`, tree

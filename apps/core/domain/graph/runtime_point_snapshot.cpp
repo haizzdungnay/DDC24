@@ -206,6 +206,28 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
     if (!append_utc_rfc3339_ms(writer, snapshot.observed_utc_ms)) return false;
     writer.append("\",\"capturedMonotonicNs\":");
     writer.append_uint(snapshot.captured_monotonic_ns);
+    writer.append(",\"safeState\":");
+    writer.append(snapshot.safe_state ? "true" : "false");
+    writer.append(",\"safeStateNoControllerOnly\":");
+    writer.append(snapshot.safe_state_no_controller_only ? "true" : "false");
+    writer.append(",\"task\":");
+    if (!snapshot.task.present) {
+        writer.append("null");
+    } else {
+        writer.append("{\"taskId\":\"");
+        writer.append_escaped(snapshot.task.id.data(), fixed_length(snapshot.task.id));
+        writer.append("\",\"periodMs\":"); writer.append_uint(snapshot.task.period_ms);
+        writer.append(",\"budgetMs\":"); writer.append_uint(snapshot.task.budget_ms);
+        writer.append(",\"state\":\"");
+        writer.append_escaped(snapshot.task.state.data(), fixed_length(snapshot.task.state));
+        writer.append("\",\"runCount\":"); writer.append_uint(snapshot.task.run_count);
+        writer.append(",\"missedReleaseCount\":"); writer.append_uint(snapshot.task.missed_release_count);
+        writer.append(",\"lastExecNs\":"); writer.append_uint(snapshot.task.last_exec_ns);
+        writer.append(",\"maxExecNs\":"); writer.append_uint(snapshot.task.max_exec_ns);
+        writer.append(",\"overrunCount\":"); writer.append_uint(snapshot.task.overrun_count);
+        writer.append(",\"consecutiveOverruns\":"); writer.append_uint(snapshot.task.consecutive_overruns);
+        writer.append("}");
+    }
     writer.append(",\"points\":[");
     for (std::size_t index = 0; index < snapshot.rows.size(); ++index) {
         const RuntimePointSnapshotRow& row = snapshot.rows[index];
@@ -225,6 +247,14 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
         writer.append("\",\"updatedAtMonotonicNs\":");
         writer.append_uint(row.updated_at_monotonic_ns);
         writer.append(",\"generation\":"); writer.append_uint(row.generation);
+        writer.append(",\"programValue\":");
+        if (row.program_value_present && std::isfinite(row.program_value))
+            writer.append_float(row.program_value);
+        else
+            writer.append("null");
+        writer.append(",\"effectivePriority\":");
+        if (row.effective_priority > 0) writer.append_uint(row.effective_priority);
+        else writer.append("null");
         writer.append("}");
     }
     writer.append("]}");
@@ -244,12 +274,14 @@ std::string serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapsho
 RuntimePointSnapshot RuntimePointSnapshotPublisher::build(
     uint64_t snapshot_id, uint64_t observed_utc_ms, uint64_t captured_monotonic_ns,
     const PointTable& table, const IoSnapshot& io, const OutputCmd& resolved,
-    const PriorityResolver& resolver, bool safe_state_active)
+    const PriorityResolver& resolver, bool safe_state_active, bool safe_state_no_controller_only)
 {
     RuntimePointSnapshot snapshot;
     snapshot.snapshot_id = snapshot_id;
     snapshot.observed_utc_ms = observed_utc_ms;
     snapshot.captured_monotonic_ns = captured_monotonic_ns;
+    snapshot.safe_state = safe_state_active;
+    snapshot.safe_state_no_controller_only = safe_state_active && safe_state_no_controller_only;
 
     for (int channel = 0; channel < KX_N_UI; ++channel) {
         RuntimePointSnapshotRow& row = snapshot.rows[static_cast<std::size_t>(channel)];
@@ -295,6 +327,10 @@ RuntimePointSnapshot RuntimePointSnapshotPublisher::build(
         const char* unit = current_mode ? "mA" : "V";
         std::memcpy(row.unit.data(), unit, std::strlen(unit));
         row.updated_at_monotonic_ns = ao_updated_at_[channel];
+        row.effective_priority = static_cast<uint8_t>(safe_state_active
+            ? PRIO_FIRE_SAFETY : resolver.winning_ao_level(channel));
+        row.program_value_present = resolver.ao_value_at_level(
+            PRIO_LOCAL_LOGIC, channel, &row.program_value);
     }
 
     for (int channel = 0; channel < KX_N_DO; ++channel) {
@@ -308,6 +344,12 @@ RuntimePointSnapshot RuntimePointSnapshotPublisher::build(
         row.source = SnapshotSource::IO;
         row.role = SnapshotRole::HARDWARE_FEEDBACK;
         row.updated_at_monotonic_ns = io.ts_ns;
+        row.effective_priority = static_cast<uint8_t>(safe_state_active
+            ? PRIO_FIRE_SAFETY : resolver.winning_do_level(channel));
+        bool program_value = false;
+        row.program_value_present = resolver.do_value_at_level(
+            PRIO_LOCAL_LOGIC, channel, &program_value);
+        row.program_value = program_value ? 1.0f : 0.0f;
     }
 
     return snapshot;

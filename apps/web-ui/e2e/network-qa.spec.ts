@@ -69,6 +69,9 @@ async function json(route: Parameters<Parameters<Page['route']>[1]>[0], body: un
 test('Network D/E runtime QA with mocked mutations and authority recovery', async ({ page }, testInfo) => {
   const artifactDir = testInfo.outputPath('network-qa')
   await mkdir(artifactDir, { recursive: true })
+  // Spec này kiểm chính xác copy tiếng Anh. Khai báo locale thay vì phụ thuộc
+  // ngôn ngữ mặc định của ứng dụng (profile mới hiện mặc định tiếng Việt).
+  await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'en'))
   let transaction = staticTransaction()
   let dhcpEvidence: { activeReason: string; interface: string; mode: string; ipv4: string; ipv4Disabled: boolean; zeroAddressVisible: boolean } | undefined
   let dhcpPageUrl = ''
@@ -155,7 +158,7 @@ test('Network D/E runtime QA with mocked mutations and authority recovery', asyn
   await expect(page.getByText('3/3 online', { exact: true })).toBeVisible()
   await expect(page.getByText('100%', { exact: true })).toBeVisible()
   // Hai tiêu đề này trước đây là chuỗi trộn cứng VI/EN không qua pick() (finding
-  // F-11); nay đã song ngữ hoá nên assertion bám bản tiếng Anh của locale mặc định.
+  // F-11); nay đã song ngữ hoá nên assertion bám locale tiếng Anh đã khai báo.
   await expect(page.getByText('NORTHBOUND — BACnet/IP up to BMS', { exact: true })).toBeVisible()
   await expect(page.getByText('SOUTHBOUND — RS-485 Modbus RTU master', { exact: true })).toBeVisible()
   await page.screenshot({ path: `${artifactDir}/network-summary.png`, fullPage: true })

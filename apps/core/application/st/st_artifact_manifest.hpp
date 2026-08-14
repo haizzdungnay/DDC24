@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "st/st_fbd_compile.hpp"
+#include "st/st_io_map.hpp"
 #include "st/st_ir.hpp"
 
 namespace core {
@@ -67,11 +68,17 @@ struct StManifestVerificationSummary {
     uint32_t source_map_entries = 0;
 };
 
-/* Cùng input canonical + sourceId + profile sinh cùng artifact và manifest. */
+/* Cùng input canonical + sourceId + profile sinh cùng artifact và manifest.
+ * `io_map` rỗng (mặc định) = hành vi cũ, `io_bindings` rỗng trong artifact
+ * (F-PROG-ASBUILT-013 trước khi vá). Khi có entry, mỗi entry được
+ * `resolve_io_bindings()` validate rồi bake vào artifact trước khi ký/hash —
+ * lỗi binding trả về false + *error, KHÔNG sinh artifact một phần. */
 bool BuildStArtifact(std::string_view source_id, std::string_view source,
-                     StArtifactBuildResult* out, StManifestError* error);
+                     StArtifactBuildResult* out, StManifestError* error,
+                     const std::vector<StIoMapEntry>& io_map = {});
 bool BuildFbdArtifact(std::string_view source_id, std::string_view source,
-                      StArtifactBuildResult* out, StManifestError* error);
+                      StArtifactBuildResult* out, StManifestError* error,
+                      const std::vector<StIoMapEntry>& io_map = {});
 
 /* Dùng khi bytes đã được ký sau compile. Với Rev A HASH_ONLY, Build* gọi hàm
  * này trực tiếp sau encode. */

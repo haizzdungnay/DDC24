@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.4.0",
+  "catalogVersion": "1.5.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     { "symbol": "ErrRequest", "code": "PRG-ERR-REQ-001", "ownerComponent": "api", "statusClass": "REQUEST", "httpStatuses": [400, 413, 422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.request", "allowedArgs": ["actual", "supportedMajor", "maxBytes"] },
@@ -107,6 +107,7 @@
     { "component": "compiler", "detailCode": "ST-IOMAP-005", "publicCode": "PRG-ERR-MAP-003" },
     { "component": "compiler", "detailCode": "ST-IOMAP-006", "publicCode": "PRG-ERR-MAP-003" },
     { "component": "compiler", "detailCode": "ST-IOMAP-007", "publicCode": "PRG-ERR-MAP-003" },
+    { "component": "compiler", "detailCode": "ST-IOMAP-008", "publicCode": "PRG-ERR-MAP-003" },
     { "component": "compiler", "detailCode": "ST-CLI-ARGS", "publicCode": "PRG-ERR-REQ-001" },
     { "component": "compiler", "detailCode": "ST-CLI-IO", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
     { "component": "compiler", "detailCode": "ST-CLI-KEY", "publicCode": "PRG-ERR-UNAVAILABLE-001" },

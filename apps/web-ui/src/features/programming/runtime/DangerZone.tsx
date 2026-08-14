@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
-import { AlertTriangle, RotateCcw, Upload } from 'lucide-react'
+import { AlertTriangle, Download, RotateCcw, Upload } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
+import { bytesToBase64, createUuid, sha256Hex } from '../../../shared/crypto'
 import { useAuth, roleAtLeast } from '../../auth'
 import { Panel } from '../../../shared/components/Panel'
 import { Button } from '../../../shared/components/Button'
@@ -20,7 +21,7 @@ export function DangerZone({ runtime, runtimeStatus }: { runtime: ProgrammingRun
   const { pick } = useI18n()
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin')
-  const coreReachable = runtimeStatus === 'ready' && runtime?.producerState !== 'UNAVAILABLE'
+  const coreMutationReady = runtimeStatus === 'ready' && runtime?.producerState === 'READY' && runtime.safeState === false
 
   if (!canEdit) {
     return (
@@ -35,24 +36,26 @@ export function DangerZone({ runtime, runtimeStatus }: { runtime: ProgrammingRun
   return (
     <Panel title={pick('Vùng thao tác nguy hiểm', 'Danger zone')} className="border-[var(--c-warn)]">
       <div className="space-y-4">
-        <RestoreSection runtime={runtime} coreReachable={coreReachable} />
+        <RestoreSection runtime={runtime} coreMutationReady={coreMutationReady} />
+        <div className="h-px bg-[var(--c-border)]" />
+        <BundleExportSection revisionId={runtime?.activeRevisionId ?? null} />
         <div className="h-px bg-[var(--c-border)]" />
         <BundleImportSection />
         <div className="h-px bg-[var(--c-border)]" />
-        <RetainResetSection coreReachable={coreReachable} />
+        <RetainResetSection />
       </div>
     </Panel>
   )
 }
 
-function RestoreSection({ runtime, coreReachable }: { runtime: ProgrammingRuntime | null; coreReachable: boolean }) {
+function RestoreSection({ runtime, coreMutationReady }: { runtime: ProgrammingRuntime | null; coreMutationReady: boolean }) {
   const { pick } = useI18n()
   const restore = useRestoreWorkflow()
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [password, setPassword] = useState('')
   const submitting = restore.state.phase === 'submitting' || restore.state.phase === 'polling'
-  const canRestore = coreReachable && !!runtime?.lkgRevisionId
+  const canRestore = coreMutationReady && !!runtime?.lkgRevisionId
 
   return (
     <div>
@@ -60,7 +63,7 @@ function RestoreSection({ runtime, coreReachable }: { runtime: ProgrammingRuntim
       <p className="mt-1 text-sm text-[var(--c-text-dim)]">
         {canRestore
           ? pick(`Khôi phục về LKG (${runtime!.lkgRevisionId!.slice(0, 8)}) — bản tốt gần nhất đã biết.`, `Restore to LKG (${runtime!.lkgRevisionId!.slice(0, 8)}) — the last known-good revision.`)
-          : pick('Chưa có LKG để khôi phục, hoặc Core không kết nối được.', 'No LKG to restore to, or Core is unreachable.')}
+          : pick('Chỉ cho phép khi có LKG, Core ở READY và safe-state không tác động.', 'Allowed only when an LKG exists, Core is READY, and safe-state is inactive.')}
       </p>
       <Button size="sm" variant="danger" className="mt-2" icon={<RotateCcw className="h-4 w-4" aria-hidden="true" />} disabled={!canRestore} onClick={() => setOpen(true)}>
         {pick('Khôi phục bản trước…', 'Restore previous…')}
@@ -127,6 +130,58 @@ function RestoreSection({ runtime, coreReachable }: { runtime: ProgrammingRuntim
   )
 }
 
+interface BundleExportResponse {
+  schemaVersion: string
+  bundleSha256: string
+  byteSize: number
+  selectedRevisionId: string
+  bundleBase64: string
+}
+
+function BundleExportSection({ revisionId }: { revisionId: string | null }) {
+  const { pick } = useI18n()
+  const client = useProgrammingApiClient()
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+
+  async function exportBundle() {
+    if (!revisionId) return
+    setBusy(true)
+    setResult(null)
+    try {
+      const response = await client.request<BundleExportResponse>('exportProgrammingBundle', {
+        body: { schemaVersion: '1.0', revisionIds: [revisionId] },
+        idempotencyKey: createUuid(),
+        correlationId: createUuid()
+      })
+      const binary = atob(response.bundleBase64)
+      const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }))
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `mkddc-programming-${response.selectedRevisionId.slice(0, 8)}.zip`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setResult(pick(`Đã xuất ${response.byteSize} byte · SHA-256 ${response.bundleSha256.slice(0, 12)}…`, `Exported ${response.byteSize} bytes · SHA-256 ${response.bundleSha256.slice(0, 12)}…`))
+    } catch (reason) {
+      setResult(reason instanceof ProgrammingApiError ? programmingErrorCopy(pick, reason.envelope.error.code) : pick('Không xuất được gói.', 'Could not export the bundle.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Xuất gói source-only', 'Export source-only bundle')}</h3>
+      <p className="mt-1 text-sm text-[var(--c-text-dim)]">{pick('Xuất Revision đang vận hành cùng manifest và SHA-256; không chứa artifact native.', 'Export the active revision with its manifest and SHA-256; native artifacts are excluded.')}</p>
+      <Button size="sm" variant="secondary" className="mt-2" icon={<Download className="h-4 w-4" aria-hidden="true" />} loading={busy} disabled={!revisionId} onClick={() => void exportBundle()}>
+        {pick('Xuất gói .zip', 'Export .zip bundle')}
+      </Button>
+      {result && <p className="mt-2 text-sm text-[var(--c-text)]">{result}</p>}
+    </div>
+  )
+}
+
 function BundleImportSection() {
   const { pick } = useI18n()
   const client = useProgrammingApiClient()
@@ -139,13 +194,12 @@ function BundleImportSection() {
     setResult(null)
     try {
       const raw = new Uint8Array(await file.arrayBuffer())
-      const digest = await crypto.subtle.digest('SHA-256', raw)
-      const expectedSha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-      const bundleBase64 = btoa(String.fromCharCode(...raw))
+      const expectedSha256 = sha256Hex(raw)
+      const bundleBase64 = bytesToBase64(raw)
       await client.request('importProgrammingBundle', {
         body: { schemaVersion: '1.0', name: file.name.replace(/\.zip$/i, ''), bundleBase64, expectedSha256 },
-        idempotencyKey: crypto.randomUUID(),
-        correlationId: crypto.randomUUID()
+        idempotencyKey: createUuid(),
+        correlationId: createUuid()
       })
       setResult(pick('Nhập gói thành công — đã tạo Project/Draft mới, chưa Active.', 'Bundle imported — a new Project/Draft was created, not yet active.'))
     } catch (reason) {
@@ -168,6 +222,7 @@ function BundleImportSection() {
         accept=".zip"
         className="sr-only"
         id="programming-bundle-import-input"
+        aria-label={pick('Tệp bundle Programming để nhập', 'Programming bundle file to import')}
         onChange={(event) => {
           const file = event.target.files?.[0]
           if (file) void handleFile(file)
@@ -181,67 +236,21 @@ function BundleImportSection() {
   )
 }
 
-function RetainResetSection({ coreReachable }: { coreReachable: boolean }) {
+function RetainResetSection() {
   const { pick } = useI18n()
-  const client = useProgrammingApiClient()
-  const [open, setOpen] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'sending' | 'locked' | 'error'>('idle')
-  const [message, setMessage] = useState<string | null>(null)
 
   return (
     <div>
       <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Đặt lại trạng thái lưu (RETAIN)', 'Reset RETAIN state')}</h3>
-      <p className="mt-1 text-sm text-[var(--c-text-dim)]">{pick('Thao tác không hoàn tác được và làm đổi trạng thái điều khiển đang chạy.', 'This action is not reversible and changes the running control state.')}</p>
-      <Button size="sm" variant="danger" className="mt-2" icon={<AlertTriangle className="h-4 w-4" aria-hidden="true" />} disabled={!coreReachable} onClick={() => setOpen(true)}>
+      <p id="programming-retain-locked-reason" role="status" className="mt-1 text-sm text-[var(--c-warn-fg)]">
+        {pick(
+          'Bị khóa an toàn: backend chưa cung cấp danh sách biến RETAIN bị ảnh hưởng và route hiện mới ở mức contract-only. Không gửi lệnh với Active Revision giả.',
+          'Safety locked: the backend does not provide the affected RETAIN variable list and the route is contract-only. No command is sent with a fabricated Active Revision.'
+        )}
+      </p>
+      <Button size="sm" variant="danger" className="mt-2" icon={<AlertTriangle className="h-4 w-4" aria-hidden="true" />} disabled aria-describedby="programming-retain-locked-reason">
         {pick('Đặt lại RETAIN…', 'Reset RETAIN…')}
       </Button>
-
-      <Modal
-        open={open}
-        title={pick('Đặt lại trạng thái lưu', 'Reset RETAIN state')}
-        confirmLabel={pick('Xác nhận đặt lại', 'Confirm reset')}
-        danger
-        confirmLoading={status === 'sending'}
-        confirmDisabled={status === 'sending' || status === 'locked'}
-        onConfirm={() => {
-          setStatus('sending')
-          setMessage(null)
-          void client
-            .request('resetProgrammingRetain', {
-              body: { schemaVersion: '1.0', expectedActiveRevisionId: '00000000-0000-4000-8000-000000000000', confirmationToken: crypto.randomUUID(), reason: 'operator-requested-retain-reset' },
-              idempotencyKey: crypto.randomUUID(),
-              correlationId: crypto.randomUUID()
-            })
-            .then(() => setStatus('idle'))
-            .catch((reason: unknown) => {
-              if (reason instanceof ProgrammingApiError && reason.status === 503) {
-                setStatus('locked')
-                setMessage(pick('Chưa tính được ảnh hưởng — thao tác bị khóa.', 'Impact could not be computed — the action is locked.'))
-                return
-              }
-              setStatus('error')
-              setMessage(reason instanceof ProgrammingApiError ? programmingErrorCopy(pick, reason.envelope.error.code) : pick('Không gửi được lệnh.', 'Could not submit the command.'))
-            })
-        }}
-        onClose={() => {
-          if (status === 'sending') return
-          setOpen(false)
-          setStatus('idle')
-        }}
-      >
-        {status === 'locked' ? (
-          <p>{message}</p>
-        ) : status === 'error' ? (
-          <p className="text-[var(--c-fault-fg)]">{message}</p>
-        ) : (
-          <p>
-            {pick(
-              'Danh sách biến RETAIN bị ảnh hưởng chưa tải được ở phiên bản này — nút xác nhận vẫn yêu cầu bấm rõ ràng, không có kết quả lạc quan trước khi Core đọc ngược.',
-              'The list of affected RETAIN variables cannot be loaded in this build yet — confirmation is still required explicitly, with no optimistic result before Core reads back.'
-            )}
-          </p>
-        )}
-      </Modal>
     </div>
   )
 }

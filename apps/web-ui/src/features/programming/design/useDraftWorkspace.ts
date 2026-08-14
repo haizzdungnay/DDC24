@@ -3,6 +3,7 @@ import { useProgrammingApiClient } from '../api/authClient'
 import { ProgrammingApiError } from '../api/generated/client'
 import { programmingErrorCopy } from '../api/errorCopy'
 import { useI18n } from '../../../shared/i18n'
+import { createUuid } from '../../../shared/crypto'
 import type { ProgrammingCheck, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingProject } from '../model/types'
 
 // Contract HTTP dùng tên profile công khai có dấu gạch ngang. Chuỗi
@@ -80,8 +81,8 @@ export function useDraftWorkspace(projectId: string | undefined) {
             path: { projectId },
             body: { schemaVersion: '1.0', baseRevisionId: project.baseRevisionId, operations },
             ifMatch: project.etag,
-            idempotencyKey: crypto.randomUUID(),
-            correlationId: crypto.randomUUID()
+            idempotencyKey: createUuid(),
+            correlationId: createUuid()
           }
         )
         setProject((current) => (current ? { ...current, etag: response.etag, draft: response.resource.content } : current))
@@ -107,7 +108,16 @@ export function useDraftWorkspace(projectId: string | undefined) {
     [client, project, projectId, pick]
   )
 
-  return { status, project, error, saving, conflict, save, reload: load, dismissConflict: () => setConflict(null) }
+  /* F-PROG-ASBUILT-002/D-07 plan: `createProgrammingRevision` (seal) trả ETag
+   * mới và đổi `baseRevisionId` của chính Draft này, nhưng không đổi
+   * `draft.content` — nên chỉ cần vá hai field, không cần reload cả Project.
+   * Gọi ngay sau seal thành công (xem `useCheckWorkflow.runCheck`) để lần lưu
+   * kế tiếp không dùng token cũ và bị 409. */
+  const syncAfterSeal = useCallback((revisionId: string, etag: string) => {
+    setProject((current) => (current ? { ...current, etag, baseRevisionId: revisionId } : current))
+  }, [])
+
+  return { status, project, error, saving, conflict, save, reload: load, dismissConflict: () => setConflict(null), syncAfterSeal }
 }
 
 export type CheckWorkflowState =
@@ -156,7 +166,7 @@ export function useCheckWorkflow(projectId: string | undefined) {
   )
 
   const runCheck = useCallback(
-    async (project: ProgrammingProject) => {
+    async (project: ProgrammingProject, onSealed?: (revisionId: string, etag: string) => void) => {
       if (!projectId) return
       setState({ phase: 'sealing' })
       try {
@@ -164,17 +174,21 @@ export function useCheckWorkflow(projectId: string | undefined) {
           path: { projectId },
           body: { schemaVersion: '1.0', baseRevisionId: project.baseRevisionId, label: new Date().toISOString(), comment: '' },
           ifMatch: project.etag,
-          idempotencyKey: crypto.randomUUID(),
-          correlationId: crypto.randomUUID()
+          idempotencyKey: createUuid(),
+          correlationId: createUuid()
         })
         const revisionId = sealed.resource.revisionId
+        /* F-PROG-ASBUILT-002: seal đổi ETag/baseRevisionId của Draft — báo
+         * ngay cho `useDraftWorkspace` (chủ sở hữu state Project) trước khi
+         * tạo Check, không đợi tới khi Check xong mới đồng bộ. */
+        onSealed?.(revisionId, sealed.etag)
         const accepted = await client.request<{ checkId: string; statusUrl: string; state: string; requestHash: string; acceptedAt: string; correlationId: string }>(
           'createProgrammingCheck',
           {
             path: { revisionId },
             body: { schemaVersion: '1.0', targetProfile: REV_A_TARGET_PROFILE },
-            idempotencyKey: crypto.randomUUID(),
-            correlationId: crypto.randomUUID()
+            idempotencyKey: createUuid(),
+            correlationId: createUuid()
           }
         )
         setState({ phase: 'checking', checkId: accepted.checkId })

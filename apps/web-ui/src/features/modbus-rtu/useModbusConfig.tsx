@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { apiClient } from '../../shared/api/client'
+import { useI18n } from '../../shared/i18n'
 import { ApiError } from '../../shared/types'
 import type {
   ModbusBus,
@@ -61,6 +62,7 @@ function newOperationId(): string {
 }
 
 export function ModbusConfigProvider({ children }: { children: ReactNode }) {
+  const { pick } = useI18n()
   const [draft, setDraftState] = useState<ModbusDraft>(emptyDraft)
   const [state, setState] = useState<ModbusConfigState | null>(null)
   const [ports, setPorts] = useState<ModbusPortCapability[]>([])
@@ -89,11 +91,11 @@ export function ModbusConfigProvider({ children }: { children: ReactNode }) {
       setPorts(portList)
       setError('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không tải được cấu hình Modbus RTU')
+      setError(err instanceof Error ? err.message : pick('Không tải được cấu hình Modbus RTU', 'Could not load Modbus RTU configuration'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [pick])
 
   useEffect(() => {
     void reload()
@@ -107,7 +109,7 @@ export function ModbusConfigProvider({ children }: { children: ReactNode }) {
 
   const save = useCallback(async () => {
     if (!state) return false
-    setStatus('Đang lưu bản nháp…')
+    setStatus(pick('Đang lưu bản nháp…', 'Saving draft…'))
     try {
       const result = await apiClient.saveModbusCandidate({
         base_revision: state.active_revision,
@@ -117,27 +119,34 @@ export function ModbusConfigProvider({ children }: { children: ReactNode }) {
       })
       setState((current) => (current ? { ...current, state: result.state, diff: result.diff ?? [] } : current))
       setFieldErrors({})
-      setStatus('Đã lưu bản nháp. Thay đổi CHƯA xuống thiết bị — bấm “Áp dụng” để phát.')
+      setStatus(pick(
+        'Đã lưu bản nháp. Thay đổi CHƯA xuống thiết bị — bấm “Áp dụng” để phát.',
+        'Draft saved. Changes have NOT reached the device yet — click "Apply" to push them.'
+      ))
       return true
     } catch (err) {
       if (err instanceof ApiError) {
         const next: Record<string, string> = {}
-        for (const detail of err.details) next[detail.path] = detail.message ?? 'không hợp lệ'
+        const invalidReason = pick('không hợp lệ', 'invalid')
+        for (const detail of err.details) next[detail.path] = detail.message ?? invalidReason
         setFieldErrors(next)
         setStatus(err.status === 412
-          ? 'Cấu hình trên thiết bị đã đổi từ lúc bạn mở trang. Hãy tải lại rồi soạn lại.'
+          ? pick(
+              'Cấu hình trên thiết bị đã đổi từ lúc bạn mở trang. Hãy tải lại rồi soạn lại.',
+              'The device configuration changed since you opened this page. Reload and redo your changes.'
+            )
           : err.message)
       } else {
-        setStatus(err instanceof Error ? err.message : 'Không lưu được bản nháp')
+        setStatus(err instanceof Error ? err.message : pick('Không lưu được bản nháp', 'Could not save draft'))
       }
       return false
     }
-  }, [draft, state])
+  }, [draft, pick, state])
 
   const apply = useCallback(async () => {
     if (!state) return false
     setApplying(true)
-    setStatus('Đang áp dụng cấu hình xuống iobus…')
+    setStatus(pick('Đang áp dụng cấu hình xuống iobus…', 'Applying configuration to iobus…'))
     try {
       const result = await apiClient.applyModbusConfig({
         base_revision: state.active_revision,
@@ -145,24 +154,24 @@ export function ModbusConfigProvider({ children }: { children: ReactNode }) {
       })
       await reload()
       const mode = result.reload_mode === 'service_restart'
-        ? ' (đã phải restart dịch vụ — có gián đoạn I/O)'
+        ? pick(' (đã phải restart dịch vụ — có gián đoạn I/O)', ' (had to restart the service — I/O was interrupted)')
         : ''
-      setStatus(`Đã áp dụng revision ${result.revision}${mode}.`)
+      setStatus(pick(`Đã áp dụng revision ${result.revision}${mode}.`, `Applied revision ${result.revision}${mode}.`))
       return true
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : 'Không áp dụng được cấu hình')
+      setStatus(err instanceof Error ? err.message : pick('Không áp dụng được cấu hình', 'Could not apply configuration'))
       await reload()
       return false
     } finally {
       setApplying(false)
     }
-  }, [reload, state])
+  }, [pick, reload, state])
 
   const discard = useCallback(async () => {
     await apiClient.discardModbusCandidate()
     await reload()
-    setStatus('Đã bỏ bản nháp.')
-  }, [reload])
+    setStatus(pick('Đã bỏ bản nháp.', 'Draft discarded.'))
+  }, [pick, reload])
 
   const lifecycle: ModbusConfigLifecycle = applying ? 'APPLYING' : (state?.state ?? 'CLEAN')
 

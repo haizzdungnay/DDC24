@@ -4,6 +4,7 @@ import { ProgrammingApiError } from '../api/generated/client'
 import { programmingErrorCopy } from '../api/errorCopy'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth } from '../../auth'
+import { createUuid } from '../../../shared/crypto'
 import type { ProgrammingOperationView } from '../model/types'
 
 export type RestoreWorkflowState =
@@ -64,13 +65,13 @@ export function useRestoreWorkflow() {
         const storageKey = `programming.restore.idempotency.${targetRevisionId}`
         let idempotencyKey = sessionStorage.getItem(storageKey)
         if (!idempotencyKey) {
-          idempotencyKey = crypto.randomUUID()
+          idempotencyKey = createUuid()
           sessionStorage.setItem(storageKey, idempotencyKey)
         }
         const accepted = await client.request<{ operationId: string }>('restoreProgrammingRevision', {
           body: { schemaVersion: '1.0', revisionId: targetRevisionId, expectedActiveRevisionId, reason },
           idempotencyKey,
-          correlationId: crypto.randomUUID()
+          correlationId: createUuid()
         })
         setState({ phase: 'polling', operationId: accepted.operationId })
         pollOperation(accepted.operationId)

@@ -104,6 +104,20 @@ describe('LoginPage multi-user sign-in', () => {
     expect(screen.getByText('Enter a username')).toBeInTheDocument()
   })
 
+  /* TC-L03 (TR-MKDDC24-P1-20260814-01): username điền nhưng password rỗng
+     trước đây lọt qua guard client-side, gửi thẳng lên server và ăn một
+     roundtrip thừa cho lỗi biết chắc phía client. */
+  it('refuses to submit an empty password instead of round-tripping to the server', async () => {
+    const user = userEvent.setup()
+    renderLogin()
+
+    await user.type(screen.getByLabelText('Username'), 'admin')
+    await user.click(screen.getByRole('button', { name: 'Sign In' }))
+
+    expect(mocks.login).not.toHaveBeenCalled()
+    expect(screen.getByText('Enter a password')).toBeInTheDocument()
+  })
+
   it('trims surrounding whitespace so a stray space does not fail the login', async () => {
     const user = userEvent.setup()
     renderLogin()
@@ -140,5 +154,18 @@ describe('LoginPage multi-user sign-in', () => {
     await user.click(screen.getByRole('button', { name: 'Sign In' }))
 
     expect(await screen.findByText('Đăng nhập thất bại')).toBeInTheDocument()
+  })
+})
+
+/* BUG-001 (TR-MKDDC24-P1-20260814-01): trang đăng nhập trước đây không có
+   cách nào đổi ngôn ngữ — chốt luôn theo `detectDefaultLang`. */
+describe('LoginPage language switcher', () => {
+  it('lets the operator switch language before signing in', async () => {
+    const user = userEvent.setup()
+    renderLogin()
+
+    expect(screen.getByRole('heading', { name: 'Welcome Back' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Toggle language' }))
+    expect(screen.getByRole('heading', { name: 'Đăng nhập' })).toBeInTheDocument()
   })
 })

@@ -13,6 +13,7 @@ import type {
   ProgrammingProjectPage,
   ProgrammingRevisionChanges,
   ProgrammingRuntime,
+  ProgrammingMonitorPage,
   RemoteState
 } from '../model/types'
 
@@ -59,7 +60,12 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
     if (intervalMs <= 0) return undefined
     const timer = window.setInterval(run, intervalMs)
     return () => window.clearInterval(timer)
-  }, [run, intervalMs])
+    // `load` cố ý nằm trong deps dù `run()` luôn đọc qua `loadRef` (giá trị
+    // mới nhất) — thiếu nó, đổi định danh tài nguyên (vd `checkId` từ
+    // `undefined` sang giá trị thật sau một `navigate` cùng trang, xem D-01/
+    // `CheckCommissionPage`) sẽ không tự fetch lại, chỉ đọc mãi kết quả rỗng
+    // của lần mount đầu tới khi ai đó gọi `refresh()` thủ công.
+  }, [run, load, intervalMs])
 
   return { status, data, error, refresh: run }
 }
@@ -162,14 +168,11 @@ export function useProgrammingOperations(limit = 20): RemoteState<ProgrammingOpe
   return useProgrammingResource(load, 0)
 }
 
-/**
- * `GET /runtime/monitor` — gọi API THẬT (không mock). Backend hiện trả `503
- * PRG-ERR-UNAVAILABLE-001` vì UDS chưa có action mang sample runtime theo
- * Point (chỉ có snapshot vòng đời operation ở P3/P4) — `useProgrammingResource`
- * phản ánh đúng lỗi thật đó, không phải trạng thái giả lập.
- */
-export function useProgrammingRuntimeMonitor(): RemoteState<unknown> {
+/** `GET /runtime/monitor` — snapshot cuối-scan authoritative, poll 1 Hz. Lỗi
+ * nguồn giữ nguyên trạng thái error/offline; hook không tái sử dụng sample cũ
+ * như dữ liệu LIVE. */
+export function useProgrammingRuntimeMonitor(): RemoteState<ProgrammingMonitorPage> {
   const client = useProgrammingApiClient()
-  const load = useCallback(() => client.request<unknown>('getProgrammingRuntimeMonitor'), [client])
-  return useProgrammingResource(load, 0)
+  const load = useCallback(() => client.request<ProgrammingMonitorPage>('getProgrammingRuntimeMonitor'), [client])
+  return useProgrammingResource(load, 1000)
 }

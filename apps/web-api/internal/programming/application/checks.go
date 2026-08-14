@@ -349,7 +349,98 @@ func compilerInput(revision programmingstore.RevisionSnapshot) (programmingcompi
 		diagnostic := scopeDiagnostic(programID)
 		return programmingcompiler.Input{}, &diagnostic
 	}
-	return programmingcompiler.Input{SourceID: programID, Language: language, Source: source}, nil
+	ioMap, diagnostic := ioMapFromRevision(revision, programID)
+	if diagnostic != nil {
+		return programmingcompiler.Input{}, diagnostic
+	}
+	return programmingcompiler.Input{SourceID: programID, Language: language, Source: source, IoMap: ioMap}, nil
+}
+
+// ioMapFromRevision dựng Binding Manifest (F-PROG-ASBUILT-013/D-07,
+// REV-PROG-ASBUILT-GAP-2026-08-14 §4) từ các RevisionObject kind VARIABLE/
+// BINDING của revision đã seal — đây là dữ liệu Mapping tab đã ghi qua
+// upsertVariable/upsertBinding (draft.go), KHÔNG phải nguồn mới. Trước bản vá
+// này compilerInput() chưa từng đọc hai collection này nên io_bindings luôn
+// rỗng trong artifact bất kể Mapping tab cấu hình đúng đến đâu (F-013).
+//
+// Chỉ biến class INPUT/OUTPUT mới tham gia io_map (khớp VAR_INPUT/VAR_OUTPUT
+// ST) — biến class khác nhưng vẫn có binding là dữ liệu hỏng (không lẽ xảy ra
+// qua Mapping tab UI hiện tại, nhưng payload Draft không có schema validation
+// chặt cho field này ở draft.go nên vẫn phải tự kiểm ở đây, fail-closed thay
+// vì gửi io_map sai lặng lẽ cho compiler). category/writable/pointId gửi
+// nguyên trạng cho compiler tự reject (VP/MB_RTU, sai kiểu, trùng...) — không
+// lặp logic validate ở BE, `resolve_io_bindings()` là authority duy nhất.
+func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID string) ([]programmingcompiler.IoMapEntry, *DiagnosticView) {
+	type variableInfo struct {
+		name      string
+		programID string
+		class     string
+		dataType  string
+	}
+	variables := make(map[string]variableInfo)
+	for _, object := range revision.Objects {
+		if object.Kind != "VARIABLE" {
+			continue
+		}
+		var payload struct {
+			VariableID string `json:"variableId"`
+			ProgramID  string `json:"programId"`
+			Name       string `json:"name"`
+			Type       string `json:"type"`
+			Class      string `json:"class"`
+		}
+		if err := json.Unmarshal(object.PayloadJSON, &payload); err != nil || payload.VariableID != object.ObjectID ||
+			payload.Name == "" || payload.Type == "" {
+			diagnostic := scopeDiagnostic(programID)
+			return nil, &diagnostic
+		}
+		variables[payload.VariableID] = variableInfo{name: payload.Name, programID: payload.ProgramID,
+			class: payload.Class, dataType: payload.Type}
+	}
+	var entries []programmingcompiler.IoMapEntry
+	for _, object := range revision.Objects {
+		if object.Kind != "BINDING" {
+			continue
+		}
+		var payload struct {
+			BindingID  string `json:"bindingId"`
+			VariableID string `json:"variableId"`
+			Point      struct {
+				Category string `json:"category"`
+				PointID  string `json:"pointId"`
+				DeviceID string `json:"deviceId"`
+			} `json:"point"`
+			DataType string `json:"dataType"`
+			Unit     string `json:"unit"`
+			Writable bool   `json:"writable"`
+		}
+		if err := json.Unmarshal(object.PayloadJSON, &payload); err != nil || payload.BindingID != object.ObjectID ||
+			payload.Point.PointID == "" || payload.Point.Category == "" || payload.DataType == "" {
+			diagnostic := scopeDiagnostic(programID)
+			return nil, &diagnostic
+		}
+		variable, found := variables[payload.VariableID]
+		if !found || variable.programID != programID {
+			diagnostic := scopeDiagnostic(programID)
+			return nil, &diagnostic
+		}
+		var direction string
+		switch variable.class {
+		case "INPUT":
+			direction = "input"
+		case "OUTPUT":
+			direction = "output"
+		default:
+			diagnostic := scopeDiagnostic(programID)
+			return nil, &diagnostic
+		}
+		entries = append(entries, programmingcompiler.IoMapEntry{
+			Variable: variable.name, Direction: direction, PointID: payload.Point.PointID,
+			Type: variable.dataType, Unit: payload.Unit, Category: payload.Point.Category,
+			DeviceID: payload.Point.DeviceID, Writable: payload.Writable,
+		})
+	}
+	return entries, nil
 }
 
 func compilerDiagnostic(item programmingcompiler.Diagnostic) DiagnosticView {

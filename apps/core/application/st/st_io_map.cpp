@@ -143,6 +143,170 @@ bool valid_st_point_id(const std::string& point_id)
            (prefix == "UI" || prefix == "DI" || prefix == "AO" || prefix == "DO");
 }
 
+namespace {
+
+/* LOCAL prefix (đã qua split_numbered_id/validate_point_contract, nên luôn
+ * là một trong bốn giá trị này) -> StPointKind IR. Không dùng cho VP/MB_RTU
+ * (resolve_io_bindings từ chối trước khi tới đây). */
+bool local_prefix_to_point_kind(const std::string& prefix, StPointKind* out)
+{
+    if (prefix == "UI") { *out = StPointKind::UI; return true; }
+    if (prefix == "DI") { *out = StPointKind::DI; return true; }
+    if (prefix == "AO") { *out = StPointKind::AO; return true; }
+    if (prefix == "DO") { *out = StPointKind::DO; return true; }
+    return false;
+}
+
+} // namespace
+
+bool resolve_io_bindings(StIrModule* module, const std::vector<StIoMapEntry>& entries,
+                         std::vector<StDiagnostic>* diagnostics)
+{
+    diagnostics->clear();
+    if (!module) {
+        push_diag(diagnostics, st_diag_code::kIoMapUnknownVar, "resolve_io_bindings: module null");
+        return false;
+    }
+
+    std::unordered_map<std::string, const StIrVariable*> vars;
+    for (const StIrVariable& v : module->variables) vars[v.name] = &v;
+
+    std::vector<StIrIoBinding> resolved;
+    std::unordered_map<std::string, int> binding_count;      /* trùng biến */
+    std::unordered_map<uint32_t, std::string> owner_of_point; /* trùng physical output */
+
+    for (const StIoMapEntry& e : entries) {
+        auto found = vars.find(e.variable);
+        if (found == vars.end()) {
+            push_diag(diagnostics, st_diag_code::kIoMapUnknownVar,
+                     "io_map entry references unknown variable '" + e.variable +
+                         "' (not declared in VAR_INPUT/VAR_OUTPUT)");
+            return false;
+        }
+        const StIrVariable& var = *found->second;
+        const bool expect_output = var.storage == StStorage::VAR_OUTPUT;
+        if (var.storage != StStorage::VAR_INPUT && var.storage != StStorage::VAR_OUTPUT) {
+            push_diag(diagnostics, st_diag_code::kIoMapUnknownVar,
+                     "io_map entry references '" + e.variable +
+                         "' which is not a VAR_INPUT/VAR_OUTPUT (storage mismatch)");
+            return false;
+        }
+
+        if (++binding_count[e.variable] > 1) {
+            push_diag(diagnostics, st_diag_code::kIoMapDuplicateBinding,
+                     "'" + e.variable + "' has more than 1 io_map entry, expected at most 1");
+            return false;
+        }
+
+        const std::string expected_dir = expect_output ? "output" : "input";
+        if (e.direction != "input" && e.direction != "output") {
+            push_diag(diagnostics, st_diag_code::kIoMapBadDirection,
+                     "io_map entry for '" + e.variable + "' has invalid direction '" + e.direction +
+                         "' (must be 'input' or 'output')");
+            return false;
+        }
+        if (e.direction != expected_dir) {
+            push_diag(diagnostics, st_diag_code::kIoMapBadDirection,
+                     "io_map entry for '" + e.variable + "' direction '" + e.direction +
+                         "' does not match declared " + expected_dir);
+            return false;
+        }
+        if (e.type != var.type) {
+            push_diag(diagnostics, st_diag_code::kIoMapTypeMismatch,
+                     "io_map entry for '" + e.variable + "' type does not match declared ST type");
+            return false;
+        }
+
+        if (e.category != "LOCAL") {
+            push_diag(diagnostics, st_diag_code::kIoMapUnsupportedCategory,
+                     "io_map entry for '" + e.variable + "' targets category '" + e.category +
+                         "' — chỉ 'LOCAL' được resolve_io_bindings() hỗ trợ trong bản này "
+                         "(xem F-PROG-ASBUILT-013/014, REV-PROG-ASBUILT-GAP-2026-08-14)");
+            return false;
+        }
+
+        std::vector<StDiagnostic> contract_diags;
+        if (!validate_point_contract(e, expect_output, &contract_diags)) {
+            for (StDiagnostic& d : contract_diags) diagnostics->push_back(std::move(d));
+            return false;
+        }
+
+        std::string prefix;
+        StPointKind kind{};
+        uint16_t index_1based = 0;
+        {
+            std::string parsed_prefix;
+            split_numbered_id(e.point_id, &parsed_prefix);
+            if (!local_prefix_to_point_kind(parsed_prefix, &kind)) {
+                push_diag(diagnostics, st_diag_code::kIoMapBadPointId,
+                         "io_map entry for '" + e.variable + "' has unrecognised LOCAL prefix");
+                return false;
+            }
+            /* digits đã được split_numbered_id/validate_point_contract xác nhận
+             * toàn chữ số, không rỗng, không toàn '0' — nhưng KHÔNG giới hạn độ
+             * dài, nên vẫn tự đếm và chặn tràn thủ công thay vì gọi std::stoul
+             * (ném std::out_of_range làm crash compiler process — sai triết lý
+             * fail-closed-không-crash của toàn bộ CLI này). */
+            const std::size_t dash = e.point_id.find('-');
+            const std::string digits = e.point_id.substr(dash + 1);
+            uint32_t value = 0;
+            bool overflow = digits.size() > 9;
+            if (!overflow) {
+                for (char c : digits) {
+                    value = value * 10 + static_cast<uint32_t>(c - '0');
+                    if (value > 0xFFFFu) { overflow = true; break; }
+                }
+            }
+            if (overflow) {
+                push_diag(diagnostics, st_diag_code::kIoMapBadPointId,
+                         "io_map entry for '" + e.variable + "' point index overflows for '" +
+                             e.point_id + "'");
+                return false;
+            }
+            index_1based = static_cast<uint16_t>(value);
+        }
+        if (index_1based == 0 || index_1based > st_point_kind_limit(kind)) {
+            push_diag(diagnostics, st_diag_code::kIoMapBadPointId,
+                     "io_map entry for '" + e.variable + "' point index out of range for '" +
+                         e.point_id + "'");
+            return false;
+        }
+        if (expect_output && !st_point_kind_allows_output(kind)) {
+            push_diag(diagnostics, st_diag_code::kIoMapBadDirection,
+                     "io_map entry for '" + e.variable + "' targets an input-only point kind for "
+                     "an OUTPUT variable");
+            return false;
+        }
+
+        if (expect_output) {
+            const uint32_t point_key = (static_cast<uint32_t>(kind) << 16) | index_1based;
+            auto owner = owner_of_point.find(point_key);
+            if (owner != owner_of_point.end()) {
+                push_diag(diagnostics, st_diag_code::kIoMapDuplicateBinding,
+                         "physical output '" + e.point_id + "' already bound to '" + owner->second +
+                             "' — one physical output can have only one owner");
+                return false;
+            }
+            owner_of_point[point_key] = e.variable;
+        }
+
+        StIrIoBinding binding;
+        binding.slot = var.slot;
+        binding.is_output = expect_output;
+        binding.point_kind = kind;
+        binding.point_index = index_1based;
+        binding.type = var.type;
+        if (e.has_range) {
+            binding.scale_min = e.range_min;
+            binding.scale_max = e.range_max;
+        }
+        resolved.push_back(binding);
+    }
+
+    module->io_bindings = std::move(resolved);
+    return true;
+}
+
 bool validate_io_map(const StProgram& prog, const std::vector<StIoMapEntry>& entries,
                      std::vector<StDiagnostic>* diagnostics)
 {

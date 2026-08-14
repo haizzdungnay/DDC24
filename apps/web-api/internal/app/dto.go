@@ -230,27 +230,48 @@ type ChangePasswordRequest struct {
 }
 
 type RuntimePoint struct {
-	ID                   string `json:"id"`
-	Kind                 string `json:"kind"`
-	Value                any    `json:"value"`
-	Quality              string `json:"quality"`
-	Source               string `json:"source"`
-	Role                 string `json:"role"`
-	Unit                 string `json:"unit,omitempty"`
-	SignalType           string `json:"signalType,omitempty"`
-	Enabled              bool   `json:"enabled,omitempty"`
-	LogEnabled           bool   `json:"logEnabled,omitempty"`
-	LogIntervalMs        *int   `json:"logIntervalMs,omitempty"`
-	RetentionS           int    `json:"retentionS,omitempty"`
-	UpdatedAtMonotonicNs uint64 `json:"updatedAtMonotonicNs"`
-	Generation           uint64 `json:"generation"`
+	ID                   string   `json:"id"`
+	Kind                 string   `json:"kind"`
+	Value                any      `json:"value"`
+	Quality              string   `json:"quality"`
+	Source               string   `json:"source"`
+	Role                 string   `json:"role"`
+	Unit                 string   `json:"unit,omitempty"`
+	SignalType           string   `json:"signalType,omitempty"`
+	Enabled              bool     `json:"enabled,omitempty"`
+	LogEnabled           bool     `json:"logEnabled,omitempty"`
+	LogIntervalMs        *int     `json:"logIntervalMs,omitempty"`
+	RetentionS           int      `json:"retentionS,omitempty"`
+	UpdatedAtMonotonicNs uint64   `json:"updatedAtMonotonicNs"`
+	Generation           uint64   `json:"generation"`
+	ProgramValue         *float64 `json:"programValue"`
+	EffectivePriority    *int     `json:"effectivePriority"`
+}
+
+type RuntimeTaskSnapshot struct {
+	TaskID              string `json:"taskId"`
+	PeriodMS            int    `json:"periodMs"`
+	BudgetMS            int    `json:"budgetMs"`
+	State               string `json:"state"`
+	RunCount            uint32 `json:"runCount"`
+	MissedReleaseCount  uint32 `json:"missedReleaseCount"`
+	LastExecNS          uint64 `json:"lastExecNs"`
+	MaxExecNS           uint64 `json:"maxExecNs"`
+	OverrunCount        uint32 `json:"overrunCount"`
+	ConsecutiveOverruns uint32 `json:"consecutiveOverruns"`
 }
 
 type RuntimePointSnapshot struct {
-	SnapshotID            uint64         `json:"snapshotId"`
-	SnapshotObservedAtUTC string         `json:"snapshotObservedAtUtc"`
-	CapturedMonotonicNs   uint64         `json:"capturedMonotonicNs"`
-	Points                []RuntimePoint `json:"points"`
+	SnapshotID            uint64 `json:"snapshotId"`
+	SnapshotObservedAtUTC string `json:"snapshotObservedAtUtc"`
+	CapturedMonotonicNs   uint64 `json:"capturedMonotonicNs"`
+	SafeState             bool   `json:"safeState"`
+	// SafeStateNoControllerOnly: xem chú thích cùng tên ở core_client.go —
+	// true khi safe-state chỉ do chưa có Program nào điều khiển output,
+	// không có lỗi thật đi kèm.
+	SafeStateNoControllerOnly bool                 `json:"safeStateNoControllerOnly"`
+	Task                      *RuntimeTaskSnapshot `json:"task"`
+	Points                    []RuntimePoint       `json:"points"`
 }
 
 type HistorianPolicyPatch struct {

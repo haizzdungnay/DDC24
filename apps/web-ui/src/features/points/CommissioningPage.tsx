@@ -92,39 +92,47 @@ export function CommissioningPage() {
     return [
       {
         id: 'authority',
-        label: 'Liên lạc với bộ điều khiển',
+        label: pick('Liên lạc với bộ điều khiển', 'Controller communication'),
         ok: snapshot ? snapshot.connected : !state.error,
         detail: snapshot
-          ? (snapshot.connected ? 'Core đang trả lời' : 'Core không trả lời — lệnh ghi có thể không tới thiết bị')
-          : 'Chưa đọc được tổng quan; dựa theo trạng thái đọc điểm',
+          ? (snapshot.connected
+            ? pick('Core đang trả lời', 'Core is responding')
+            : pick('Core không trả lời — lệnh ghi có thể không tới thiết bị', 'Core is not responding — write commands may not reach the device'))
+          : pick('Chưa đọc được tổng quan; dựa theo trạng thái đọc điểm', 'Overview not loaded yet; based on point-read status'),
         blocking: true
       },
       {
         id: 'outputs',
-        label: 'Có output để chạy thử',
+        label: pick('Có output để chạy thử', 'Outputs available to test'),
         ok: outputs.length > 0,
-        detail: outputs.length > 0 ? `${outputs.length} điểm AO/DO` : 'Authority không trả điểm AO/DO nào',
+        detail: outputs.length > 0
+          ? pick(`${outputs.length} điểm AO/DO`, `${outputs.length} AO/DO points`)
+          : pick('Authority không trả điểm AO/DO nào', 'Authority returned no AO/DO points'),
         blocking: true
       },
       {
         id: 'role',
-        label: 'Đủ quyền ghi',
+        label: pick('Đủ quyền ghi', 'Sufficient write permission'),
         ok: canCommission,
-        detail: canCommission ? `Vai trò ${session?.role}` : 'Cần operator hoặc admin',
+        detail: canCommission
+          ? pick(`Vai trò ${session?.role}`, `Role ${session?.role}`)
+          : pick('Cần operator hoặc admin', 'Requires operator or admin'),
         blocking: true
       },
       {
         id: 'forced',
-        label: 'Không còn điểm kẹt ép tay từ phiên trước',
+        label: pick('Không còn điểm kẹt ép tay từ phiên trước', 'No points still forced from a previous session'),
         ok: forced.length === 0,
         // KHÔNG chặn: đôi khi chính việc đang ép là chủ ý của phiên chạy thử.
         // Nhưng phải nói ra, vì đây là nguyên nhân phổ biến nhất của "thiết bị
         // không chạy theo lịch" sau một buổi commissioning.
-        detail: forced.length === 0 ? 'Mọi output đang thuộc điều khiển tự động' : `${forced.length} điểm còn bị ép — cân nhắc trả về tự động trước khi bắt đầu`,
+        detail: forced.length === 0
+          ? pick('Mọi output đang thuộc điều khiển tự động', 'All outputs are under automatic control')
+          : pick(`${forced.length} điểm còn bị ép — cân nhắc trả về tự động trước khi bắt đầu`, `${forced.length} point(s) still forced — consider releasing them before starting`),
         blocking: false
       }
     ]
-  }, [canCommission, forced.length, outputs.length, overview?.data, session?.role, state.error])
+  }, [canCommission, forced.length, outputs.length, overview?.data, pick, session?.role, state.error])
 
   const blocked = prerequisites.some((item) => item.blocking && !item.ok)
 

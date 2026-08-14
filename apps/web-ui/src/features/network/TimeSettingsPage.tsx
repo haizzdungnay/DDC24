@@ -7,6 +7,7 @@ import { Panel } from '../../shared/components/Panel'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useToast } from '../../shared/components/Toast'
 import { useI18n } from '../../shared/i18n'
+import { createUuid } from '../../shared/crypto'
 import type { TimeConfig, TimeStatus } from '../../shared/types'
 
 const inputClass = 'mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]'
@@ -84,7 +85,7 @@ export function TimeSettingsPage() {
         ntpServers: config.ntpServers,
         systemTime: config.ntpEnabled ? '' : config.systemTime,
         baseRevision: config.revision,
-        operationId: crypto.randomUUID()
+        operationId: createUuid()
       })
       result.warnings?.forEach((warning) => toast.push('warn', warning))
       toast.push('success', pick('Đã lưu cấu hình thời gian', 'Time settings saved'))

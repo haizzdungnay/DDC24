@@ -175,7 +175,10 @@ khóa strict unknown-field handling, exact capability `dns|management-hostname`,
 transaction và management hostname read-only. GET transaction status dùng permission `read`;
 POST mutation chỉ Admin. Code-local pass không đóng physical HIL; gate vẫn RED.
 
-Target evidence: [KX-DDC24 HMI–FW SOM deployment record](../07_records/reviews/archive/KX-DDC24-HMI-FWSOM-DEPLOY-2026-07-22.md).
+Record HMI–FW SOM ngày 2026-07-22 chỉ là lịch sử trên target cũ và phục hồi tại
+commit `b69fdf1`; nó không đóng gate Foxlinx hiện hành. Bằng chứng target mới
+phải được đăng ký trong [chỉ mục review](../07_records/reviews/README.md) hoặc
+`07_records/test-evidence/` và đáp ứng ma trận dưới đây.
 
 | Finding | Hiện trạng | Evidence cần để đóng |
 |---|---|---|

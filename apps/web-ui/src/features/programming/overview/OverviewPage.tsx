@@ -176,10 +176,35 @@ function DraftAttentionPanel({ projects }: { projects: ReturnType<typeof useProg
 
 function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | null }) {
   const { pick } = useI18n()
-  const items: Array<{ severity: 'error' | 'warning'; text: string }> = []
-  if (runtime?.producerState === 'UNAVAILABLE') items.push({ severity: 'error', text: pick('Không kết nối được Core.', 'Core is unreachable.') })
-  else if (runtime?.producerState === 'DEGRADED') items.push({ severity: 'warning', text: pick('Core đang suy giảm.', 'Core is degraded.') })
-  if (runtime?.taskState === 'FAULT') items.push({ severity: 'error', text: pick('Tác vụ điều khiển đang lỗi (FAULT).', 'The control task is faulted.') })
+  const navigate = useNavigate()
+  const items: Array<{ code: string; severity: 'error' | 'warning'; text: string; scope: string; action: string }> = []
+  if (runtime?.producerState === 'UNAVAILABLE') items.push({ code: 'PRG-CORE-UNAVAILABLE', severity: 'error', text: pick('Không kết nối được Core.', 'Core is unreachable.'), scope: 'Core', action: pick('Kiểm tra service/Core và kết nối IPC.', 'Check the service/Core and IPC connection.') })
+  else if (runtime?.producerState === 'DEGRADED') items.push({ code: 'PRG-CORE-DEGRADED', severity: 'warning', text: pick('Core đang suy giảm; dữ liệu có thể cũ.', 'Core is degraded; data may be stale.'), scope: 'Core', action: pick('Chỉ chẩn đoán; mọi mutation runtime đang bị khóa.', 'Diagnose only; runtime mutations are locked.') })
+  if (runtime?.taskState === 'FAULT') items.push({ code: 'PRG-TASK-FAULT', severity: 'error', text: pick('Tác vụ điều khiển đang lỗi (FAULT).', 'The control task is faulted.'), scope: runtime.task?.taskId ?? 'Control_Main', action: pick('Mở Runtime để xem số lần quá giờ và trạng thái tác vụ.', 'Open Runtime to inspect overruns and task state.') })
+  if (runtime?.safeState) items.push(
+    runtime.safeStateNoControllerOnly
+      ? {
+          code: 'PRG-SAFE-ACTIVE',
+          severity: 'warning',
+          text: pick(
+            'Safe-state đang tác động vì chưa Program nào ghi output vật lý ở mức trên Default — bình thường nếu logic chỉ dùng Virtual Point.',
+            'Safe-state is active because no Program is writing physical output above Default yet — expected if this logic only uses Virtual Points.'
+          ),
+          scope: runtime.task?.taskId
+            ? `${runtime.task.taskId} / ${pick('các output do Program điều khiển', 'Program-controlled outputs')}`
+            : pick('Các output do Program điều khiển (chưa có danh sách Point)', 'Program-controlled outputs (Point list unavailable)'),
+          action: pick('Không chặn Đưa vào vận hành/Khôi phục. Mở Runtime nếu mong đợi có output vật lý.', 'Does not block Commission/Restore. Open Runtime if you expect a physical output.')
+        }
+      : {
+          code: 'PRG-SAFE-ACTIVE',
+          severity: 'error',
+          text: pick('Safe-state đang tác động do lỗi thật (I/O/dữ liệu cũ/quá giờ); Core chưa cung cấp mã nguyên nhân chi tiết hơn.', 'Safe-state is active due to a real fault (I/O/stale data/overrun); Core did not provide a more detailed reason code.'),
+          scope: runtime.task?.taskId
+            ? `${runtime.task.taskId} / ${pick('các output do Program điều khiển', 'Program-controlled outputs')}`
+            : pick('Các output do Program điều khiển (chưa có danh sách Point)', 'Program-controlled outputs (Point list unavailable)'),
+          action: pick('Giữ Commission/Restore bị khóa; kiểm tra Core, I/O và alarm trước khi phục hồi.', 'Keep Commission/Restore locked; inspect Core, I/O, and alarms before recovery.')
+        }
+  )
 
   return (
     <Panel title={pick('Việc cần chú ý', 'Attention required')}>
@@ -187,10 +212,27 @@ function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | n
         <p className="text-sm text-[var(--c-text-dim)]">{pick('Không có việc cần chú ý.', 'Nothing needs attention.')}</p>
       ) : (
         <ul className="space-y-2">
+          {/* BUG-016 (TR-MKDDC24-P2-20260814-02 / TC-D08): trước đây mỗi mục là
+              `<li>` phẳng, không click/điều hướng được — người dùng thấy
+              `PRG-SAFE-ACTIVE` nhưng không có lối vào chi tiết. Chi tiết
+              (Active/LKG, safe-state, Core connection, task table) đã có sẵn ở
+              tab Runtime (`RuntimeTab.tsx`) cho cả ba mã `PRG-CORE-*`,
+              `PRG-TASK-FAULT` và `PRG-SAFE-ACTIVE`, nên điều hướng thẳng tới
+              đó thay vì dựng lại một trang chi tiết mới. */}
           {items.map((item) => (
-            <li key={item.text} className="flex items-center gap-2 text-sm">
-              <AlertTriangle className={item.severity === 'error' ? 'h-4 w-4 text-[var(--c-fault-fg)]' : 'h-4 w-4 text-[var(--c-warn-fg)]'} aria-hidden="true" />
-              {item.text}
+            <li key={item.code}>
+              <button
+                type="button"
+                onClick={() => navigate('/eng/programming/runtime')}
+                className="flex w-full items-start gap-2 rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-left text-sm hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--c-accent)]"
+              >
+                <AlertTriangle className={item.severity === 'error' ? 'mt-0.5 h-4 w-4 shrink-0 text-[var(--c-fault-fg)]' : 'mt-0.5 h-4 w-4 shrink-0 text-[var(--c-warn-fg)]'} aria-hidden="true" />
+                <span>
+                  <strong className="font-mono text-xs">{item.code}</strong> — {item.text}
+                  <span className="mt-1 block text-xs text-[var(--c-text-dim)]">{pick('Phạm vi', 'Scope')}: {item.scope} · {pick('Hành động', 'Action')}: {item.action}</span>
+                  <span className="mt-1 block text-xs font-semibold text-[var(--c-accent)]">{pick('Mở Runtime để xem chi tiết →', 'Open Runtime for details →')}</span>
+                </span>
+              </button>
             </li>
           ))}
         </ul>

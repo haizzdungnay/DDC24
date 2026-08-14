@@ -3,7 +3,7 @@
 **ID:** DOC-CTRL-001
 **Trạng thái:** Active
 **Chủ quản:** Project Engineering
-**Cập nhật:** 2026-08-11 (Programming candidate v2.8 `APPROVED FOR IMPLEMENTATION`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`; `17 DECIDED/0 OPEN/0 CLOSED`)
+**Cập nhật:** 2026-08-14 (loại Markdown trùng/lịch sử có đường phục hồi Git; Programming candidate hiện hành v2.41, authority phê duyệt nền v2.8 tiếp tục hiệu lực; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`; `17 DECIDED/0 OPEN/0 CLOSED`)
 
 ## Mục tiêu
 
@@ -61,14 +61,14 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 | [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | System/software/hardware/NFR requirements và acceptance Programming Rev A |
 | [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | register chủ quản: 22/22 hồ sơ đạt M3 — Review Ready. Vòng consumer review **kỹ thuật** đã chạy (`9/9` finding đóng) nhưng **`0/22` đạt `M4`** — `M4` đòi chữ ký người thật, xem `DOC-GOV-001` §3 |
 | [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | ownership, process/failure boundary, lifecycle và cutover target |
-| [Programming Documentation Roadmap](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | v3.1: candidate v2.8 approved; chữ ký còn thiếu `WAIVED FOR IMPLEMENTATION`; nằm ngoài mẫu số 22 |
-| [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | v0.17: P0 7/7 DONE; P1 READY TO START; mọi implementation gate PASS |
+| [Programming Documentation Roadmap](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | v3.37: P0..P4 source/host DONE; P5 `8/11`; P6 `0/3`; nằm ngoài mẫu số 22 |
+| [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | v0.55: tổng `43/53`; P5 corrective đang thực hiện; mọi implementation gate PASS, release gate BLOCKED |
 | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | risk/control/owner/evidence/residual gate |
 | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
 | [Programming Docs Sync Report](../07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record của lần đồng bộ 2026-08-03 |
 | [Programming Design Set Review 2026-08-09](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | record rà 22 hồ sơ + finding register `F-PROG-001..012`; căn cứ nâng M3 |
 | [Gói review cổng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | v2.0 — `ACCEPT ALL`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` |
-| [Manifest candidate P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | v3.2 — candidate v2.8 định danh bằng **22 SHA-256**, commit `b068b7d`; approved for implementation |
+| [Manifest candidate P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | v3.53 — candidate hiện hành v2.41 định danh bằng **22 SHA-256**; source corrective chưa merge; authority phê duyệt nền v2.8 tiếp tục hiệu lực |
 | [Consumer review liên chức năng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | v1.6 — `9/9` finding đóng; `0/8` chữ ký thật nhưng `8/8 WAIVED FOR IMPLEMENTATION`; không chặn code |
 | [ADR-026..031](DECISIONS.md) | 6/6 **`Accepted`** theo `AUTH-PROG-2026-08-11-03`; evidence thu trong implementation |
 | [DDC-24 Baseline Source Fix Report](../07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | record tổng hợp thay đổi source, test và readiness |
@@ -121,3 +121,10 @@ quyết định; mỗi tài liệu ghi rõ phát biểu nào không còn hiệu 
 - SHA-256 gói: `60b6631dfdc1395f4292960097872417d149f2572eb15fd2e224aa869cd98857`
 
 Phục hồi vào thư mục tạm, không ghi đè workspace: `mkdir /tmp/ddc-doc-recovery && tar -xzf archives/markdown-before-restructure-2026-07-22.tar.gz -C /tmp/ddc-doc-recovery`.
+
+Đợt dọn Markdown ngày 2026-08-14 loại các snapshot As-Built đã bị thay thế,
+record dùng cây source cũ, plan agent và prompt/backlog thô. Toàn bộ nội dung
+trước khi dọn phục hồi được từ commit
+`b69fdf152fd1b424bb4ab2239b5cf97b0e86b554`; phải checkout/extract vào thư mục
+tạm, không ghi đè cây làm việc hiện hành. Gói thiết kế Programming 22 hồ sơ,
+contract, risk/trace, test result và bằng chứng target/HIL không bị loại.

@@ -39,7 +39,7 @@ chúng không phải bằng chứng runtime production.
 | Product/requirements cũ đưa runtime ST/FBD cùng chi tiết POU/compiler/artifact như một khối. | Product Spec chỉ giữ hành vi sản phẩm; nghĩa vụ layer chuyển sang requirement; chi tiết solution không được phê duyệt trong nhiệm vụ này. |
 | Whole-product baseline có Modbus TCP và BACnet/IP nên dễ bị hiểu thành Programming Point. | Giữ chúng ở phạm vi giao tiếp toàn sản phẩm, đồng thời loại trừ rõ khỏi Programming Rev A. |
 | Component graph cũ có node Modbus TCP/BACnet và từng được mô tả là legacy importer cho FBD. | Phân loại là As-Built/legacy; không tạo Product Capability và để strategy migration ở OD-PROG-013. |
-| `docs/CHUONG_YEU_CAU.md` bản nháp trước chứa Modbus TCP/BACnet trong nguồn point. | Giữ nguyên file đầu vào của người dùng; áp dụng chỉ thị mới hơn trong yêu cầu hiện tại và ADR-023 làm baseline. |
+| Bản nháp đầu vào cũ từng chứa Modbus TCP/BACnet trong nguồn point. | Nội dung đã được Product Spec/ADR-023 thay thế; file thô bị loại ngày 2026-08-14 và phục hồi được từ commit `b69fdf1`. |
 | Verification cũ ghi gate G0 GREEN và mô tả “host execution” dễ bị đọc như runtime production. | Programming release gate trở lại RED theo Product Spec mới; host-only được tách thành evidence phát triển không đủ điều kiện đóng VR production. |
 | Traceability cũ trỏ C0/C1–C10 implementation plan và solution names chưa triển khai. | Ma trận mới chỉ truy Product Capability → Product Requirement → System Requirement → Verification Requirement; không lập hoặc dùng Implementation Plan. |
 

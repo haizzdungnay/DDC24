@@ -1,18 +1,19 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth, roleAtLeast } from '../auth'
+import { useI18n } from '../../shared/i18n'
 import { ConfigStateBanner } from './components/ConfigStateBanner'
 import { ModbusConfigProvider } from './useModbusConfig'
-import { READ_ONLY_HINT } from './shared'
+import { readOnlyHint } from './shared'
 
 const OVERVIEW_PATH = '/eng/modbus-rtu'
 
 const tabs = [
-  { label: 'Tổng quan', path: OVERVIEW_PATH },
-  { label: 'Cổng RS-485', path: '/eng/modbus-rtu/ports' },
-  { label: 'Thiết bị', path: '/eng/modbus-rtu/devices' },
-  { label: 'Points', path: '/eng/modbus-rtu/points' },
-  { label: 'Mapping', path: '/eng/modbus-rtu/mapping' },
-  { label: 'Diagnostics', path: '/eng/modbus-rtu/diagnostics' }
+  { label: ['Tổng quan', 'Overview'] as const, path: OVERVIEW_PATH },
+  { label: ['Cổng RS-485', 'RS-485 Ports'] as const, path: '/eng/modbus-rtu/ports' },
+  { label: ['Thiết bị', 'Devices'] as const, path: '/eng/modbus-rtu/devices' },
+  { label: ['Points', 'Points'] as const, path: '/eng/modbus-rtu/points' },
+  { label: ['Mapping', 'Mapping'] as const, path: '/eng/modbus-rtu/mapping' },
+  { label: ['Diagnostics', 'Diagnostics'] as const, path: '/eng/modbus-rtu/diagnostics' }
 ]
 
 /**
@@ -32,6 +33,7 @@ const tabs = [
 export function ModbusRtuLayout() {
   const location = useLocation()
   const { session } = useAuth()
+  const { lang, pick } = useI18n()
   const canEdit = roleAtLeast(session?.role, 'admin')
 
   const currentPath = location.pathname.replace(/\/$/, '') || location.pathname
@@ -46,7 +48,10 @@ export function ModbusRtuLayout() {
         <div>
           <h1 className="text-2xl font-bold text-[var(--c-text)]">Modbus RTU Management</h1>
           <p className="mt-1 text-sm text-[var(--c-text-dim)]">
-            Cấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.
+            {pick(
+              'Cấu hình, theo dõi thiết bị trường và giám sát telemetry giao tiếp RS485-1 / RS485-2.',
+              'Configure and monitor field devices, and watch RS485-1 / RS485-2 communication telemetry.'
+            )}
           </p>
         </div>
 
@@ -71,7 +76,7 @@ export function ModbusRtuLayout() {
                     : 'border-transparent text-[var(--c-text-dim)] hover:border-[var(--c-border)] hover:text-[var(--c-text)]'
                 }`}
               >
-                {tab.label}
+                {pick(tab.label[0], tab.label[1])}
               </Link>
             )
           })}
@@ -82,7 +87,7 @@ export function ModbusRtuLayout() {
           Cảnh báo chỉ-đọc đặt một lần ở layout để bốn page con không lặp lại. */}
       {!canEdit && (
         <div role="note" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
-          Chế độ chỉ xem. {READ_ONLY_HINT}
+          {pick('Chế độ chỉ xem.', 'Read-only mode.')} {readOnlyHint(lang)}
         </div>
       )}
 

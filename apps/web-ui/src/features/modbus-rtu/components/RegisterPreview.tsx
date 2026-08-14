@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useI18n } from '../../../shared/i18n'
 import type { ModbusRTUPoint } from '../../../shared/types'
 
 /**
@@ -63,6 +64,7 @@ interface RegisterPreviewProps {
 const NO_DATA = '—'
 
 export function RegisterPreview({ point, siblings = [], selfPointId }: RegisterPreviewProps) {
+  const { pick } = useI18n()
   const footprint = registerFootprint(point)
 
   const conflicts = useMemo(() => siblings.filter((other) => {
@@ -81,7 +83,7 @@ export function RegisterPreview({ point, siblings = [], selfPointId }: RegisterP
     <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-xs"
       data-testid="register-preview">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <span className="font-semibold">Dấu chân register</span>
+        <span className="font-semibold">{pick('Dấu chân register', 'Register footprint')}</span>
         <span className="font-mono" data-testid="footprint">
           {point.register_type} {footprint.start}
           {footprint.width > 1 ? `–${footprint.end}` : ''} ({footprint.width} register)
@@ -91,16 +93,16 @@ export function RegisterPreview({ point, siblings = [], selfPointId }: RegisterP
 
       {conflicts.length > 0 && (
         <p className="mt-2 text-[var(--c-danger,#c00)]" role="alert" data-testid="overlap-warning">
-          Chồng vùng register với: {conflicts.map((item) => item.point_id).join(', ')}. Hai Point
-          cùng trỏ vào một ô nhớ sẽ ghi đè nhau theo thứ tự không xác định.
+          {pick('Chồng vùng register với', 'Register range overlaps with')}: {conflicts.map((item) => item.point_id).join(', ')}.{' '}
+          {pick('Hai Point cùng trỏ vào một ô nhớ sẽ ghi đè nhau theo thứ tự không xác định.', 'Two Points pointing at the same memory cell will overwrite each other in an undefined order.')}
         </p>
       )}
 
       <table className="mt-2 w-full text-left font-mono">
         <thead>
           <tr className="text-[var(--c-text-dim)]">
-            <th className="font-normal">Mẫu thô</th>
-            <th className="font-normal">Giá trị quy đổi</th>
+            <th className="font-normal">{pick('Mẫu thô', 'Raw sample')}</th>
+            <th className="font-normal">{pick('Giá trị quy đổi', 'Converted value')}</th>
           </tr>
         </thead>
         <tbody>
@@ -109,7 +111,7 @@ export function RegisterPreview({ point, siblings = [], selfPointId }: RegisterP
               <td>{sample.raw}</td>
               <td data-testid={`sample-${sample.raw}`}>
                 {sample.engineering === null
-                  ? `${NO_DATA} (scale không hợp lệ)`
+                  ? pick(`${NO_DATA} (scale không hợp lệ)`, `${NO_DATA} (invalid scale)`)
                   : `${sample.engineering} ${point.unit ?? ''}`.trim()}
               </td>
             </tr>

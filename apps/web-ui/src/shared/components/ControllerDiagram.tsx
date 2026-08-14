@@ -3,7 +3,7 @@ import { IS_DEMO } from '../config'
 import { getDemoNetwork, getDemoPoints } from '../demo/simulator'
 import { useI18n } from '../i18n'
 import type { HealthResponse, IoChannel, NetworkData, Point, PointKind, PollState } from '../types'
-import { cn, formatDateTime } from '../utils'
+import { cn, formatDateTime, isChannelNotConfigured } from '../utils'
 import { Modal } from './Modal'
 
 type QualityState = 'good' | 'uncertain' | 'bad' | 'off'
@@ -58,6 +58,10 @@ function channelFromPoint(point: Point): IoChannel {
 
 function qualityState(point?: Point): QualityState {
   if (!point) return 'off'
+  // Kênh Signal Type "none" là người dùng chủ ý chưa nối — không phải fault
+  // phần cứng (F-DASH-LOCALIO-01). Đếm nó vào 'bad' sẽ vừa tô đèn đỏ sai vừa
+  // cộng nhầm vào số "FAULT" ở đầu sơ đồ (dòng 202 dùng đúng hàm này).
+  if (isChannelNotConfigured(point)) return 'off'
   if (point.fault || point.quality === 'bad') return 'bad'
   if (point.quality === 'uncertain' || point.quality === 'stale' || point.forced) return 'uncertain'
   return 'good'
@@ -87,7 +91,9 @@ function qualityText(state: QualityState): string {
 }
 
 function signalState(point?: Point): SignalState {
-  if (!point || point.fault || point.quality === 'bad' || point.quality === 'stale') return 'nosignal'
+  if (!point) return 'nosignal'
+  if (isChannelNotConfigured(point)) return 'off'
+  if (point.fault || point.quality === 'bad' || point.quality === 'stale') return 'nosignal'
   if (point.quality === 'uncertain' || point.forced) return 'warn'
   if (typeof point.value === 'boolean') return point.value ? 'on' : 'off'
   return 'on'

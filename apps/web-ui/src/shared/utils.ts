@@ -88,6 +88,18 @@ export function pointDisplayTag(point: Pick<Point, 'id' | 'tag' | 'kind'>): stri
   return point.kind === 'virtual' ? point.tag : point.id
 }
 
+/**
+ * Kênh UI/AO/DO có Signal Type "none" ("Không hoạt động") — người dùng CHỦ Ý
+ * chưa nối cảm biến/cơ cấu, không phải một fault. Core vẫn trả quality=bad
+ * cho kênh này (đúng thiết kế: không có dữ liệu thật), nên nơi hiển thị phải
+ * tự phân biệt, không được vẽ đỏ FAULT/BAD cho một kênh chưa cấu hình
+ * (F-DASH-LOCALIO-01 — cùng họ FE-DIAG-01/FE-DATA-01: không báo sai mức độ
+ * nghiêm trọng khi thiếu dữ liệu là chủ ý).
+ */
+export function isChannelNotConfigured(point: Pick<Point, 'signalType'>): boolean {
+  return (point.signalType ?? '').trim().toLowerCase() === 'none'
+}
+
 export function canonicalVirtualPointId(id: string): string {
   const match = id.trim().toUpperCase().match(/^(?:VP|AV)[-_]?0*(\d+)$/)
   return match ? `VP${Number(match[1])}` : id.trim().toUpperCase()

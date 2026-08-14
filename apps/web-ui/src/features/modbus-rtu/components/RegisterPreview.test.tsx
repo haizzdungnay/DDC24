@@ -1,8 +1,9 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ModbusRTUPoint } from '../../../shared/types'
 import { RegisterPreview, overlaps, registerFootprint, scaleSample } from './RegisterPreview'
+import { I18nProvider } from '../../../shared/i18n'
 
 function point(overrides: Partial<ModbusRTUPoint> = {}): ModbusRTUPoint {
   return {
@@ -13,6 +14,10 @@ function point(overrides: Partial<ModbusRTUPoint> = {}): ModbusRTUPoint {
   }
 }
 
+beforeEach(() => {
+  localStorage.clear()
+  localStorage.setItem('mkddc-lang', 'vi')
+})
 afterEach(cleanup)
 
 describe('registerFootprint', () => {
@@ -76,11 +81,13 @@ describe('scaleSample', () => {
 describe('RegisterPreview', () => {
   it('hiện dấu chân register và cảnh báo chồng lấn', () => {
     render(
-      <RegisterPreview
-        point={point({ address: 10, data_type: 'float32', scale: 0.1, offset: -10, unit: 'degC' })}
-        siblings={[point({ point_id: 'MB-OTHER', address: 11, data_type: 'uint16' })]}
-        selfPointId="MB-A"
-      />
+      <I18nProvider>
+        <RegisterPreview
+          point={point({ address: 10, data_type: 'float32', scale: 0.1, offset: -10, unit: 'degC' })}
+          siblings={[point({ point_id: 'MB-OTHER', address: 11, data_type: 'uint16' })]}
+          selfPointId="MB-A"
+        />
+      </I18nProvider>
     )
     expect(screen.getByTestId('footprint')).toHaveTextContent('holding_register 10–11 (2 register)')
     expect(screen.getByTestId('overlap-warning')).toHaveTextContent('MB-OTHER')
@@ -89,17 +96,19 @@ describe('RegisterPreview', () => {
 
   it('không cảnh báo khi không có điểm nào chồng vùng', () => {
     render(
-      <RegisterPreview
-        point={point({ address: 10, data_type: 'uint16' })}
-        siblings={[point({ point_id: 'MB-OTHER', address: 20 })]}
-        selfPointId="MB-A"
-      />
+      <I18nProvider>
+        <RegisterPreview
+          point={point({ address: 10, data_type: 'uint16' })}
+          siblings={[point({ point_id: 'MB-OTHER', address: 20 })]}
+          selfPointId="MB-A"
+        />
+      </I18nProvider>
     )
     expect(screen.queryByTestId('overlap-warning')).not.toBeInTheDocument()
   })
 
   it('nói rõ scale không hợp lệ thay vì hiện số quy đổi', () => {
-    render(<RegisterPreview point={point({ scale: 0 })} />)
+    render(<I18nProvider><RegisterPreview point={point({ scale: 0 })} /></I18nProvider>)
     expect(screen.getByTestId('sample-100')).toHaveTextContent('scale không hợp lệ')
   })
 })

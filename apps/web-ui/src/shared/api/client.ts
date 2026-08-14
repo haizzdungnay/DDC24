@@ -1,4 +1,5 @@
 import { API_ORIGIN, IS_DEMO } from '../config'
+import { createUuid } from '../crypto'
 import {
   ackDemoAlarm,
   createDemoUserAccount,
@@ -439,7 +440,7 @@ function normalizeUserAccount(raw: Record<string, unknown> | unknown): UserAccou
 }
 
 function normalizeAlarm(raw: Record<string, unknown>): Alarm {
-  const id = String(raw.id ?? raw.alarmId ?? raw.alarm_id ?? crypto.randomUUID())
+  const id = String(raw.id ?? raw.alarmId ?? raw.alarm_id ?? createUuid())
   const pointId = raw.pointId ?? raw.point_id
   const source = raw.source ?? pointId ?? raw.device ?? 'SYSTEM'
   const acknowledged = raw.acknowledged ?? raw.ack ?? raw.is_acknowledged

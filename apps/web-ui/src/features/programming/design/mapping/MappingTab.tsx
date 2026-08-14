@@ -1,11 +1,47 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link2, Plus, Trash2 } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
+import { createUuid } from '../../../../shared/crypto'
 import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
 import { StateBlock } from '../../../../shared/components/StateBlock'
 import { useProgrammingPointCatalog } from '../../api/queries'
-import type { ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingPointCatalogEntry } from '../../model/types'
+import { collectStInterfaceVariables } from '../editor/ProgramsTab'
+import { collectFbdInterfaceVariables, type FbdDocument } from '../../fbd/model'
+import type { ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
+
+interface MappableVariable { name: string; type: string; direction: 'INPUT' | 'OUTPUT' }
+
+/** Nguồn duy nhất của tên biến khả map: đọc từ chính source đã lưu của
+ *  Program (VAR_INPUT/VAR_OUTPUT cho ST, node INPUT/OUTPUT cho FBD) — không
+ *  cho gõ tay, vì tên gõ tay không đối chiếu được với biến thật trong logic
+ *  và im lặng tạo Variable "mồ côi" (user report 2026-08-14). */
+function declaredInterfaceVariables(program: ProgrammingProgram | undefined): MappableVariable[] {
+  if (!program) return []
+  if (program.language === 'ST') {
+    return collectStInterfaceVariables(typeof program.document === 'string' ? program.document : '')
+  }
+  if (typeof program.document !== 'string' || program.document.length === 0) return []
+  try {
+    return collectFbdInterfaceVariables(JSON.parse(program.document) as FbdDocument)
+  } catch {
+    return []
+  }
+}
+
+/** OUTPUT chỉ ghép được Point WRITE/READ_WRITE; INPUT chỉ ghép được Point
+ *  READ/READ_WRITE — Core (`PointWriter::can_write`) fail-closed từ chối ghi
+ *  vào Point không phải AV/BV/MSV/EXT (Universal Input = PointKind::AI
+ *  không nằm trong danh sách đó). Kiểu dữ liệu cũng phải khớp: ghi BOOL vào
+ *  Point REAL không có nghĩa. Không lọc theo `writable` ở đây — checkbox
+ *  "Chỉ ghi được" là lựa chọn thủ công riêng của user, không trộn với ràng
+ *  buộc tự động này. */
+function isCompatiblePoint(variable: MappableVariable, entry: ProgrammingPointCatalogEntry): boolean {
+  const directionOk = variable.direction === 'OUTPUT'
+    ? entry.direction === 'WRITE' || entry.direction === 'READ_WRITE'
+    : entry.direction === 'READ' || entry.direction === 'READ_WRITE'
+  return directionOk && entry.dataType === variable.type
+}
 
 const QUALITY_BADGE: Record<string, string> = {
   GOOD: 'online',
@@ -154,11 +190,34 @@ function PointPickerDialog({
   const [writableOnly, setWritableOnly] = useState(false)
   const [selected, setSelected] = useState<ProgrammingPointCatalogEntry>()
 
+  const selectedProgram = document.programs.find((program) => program.programId === programId)
+  const mappedNames = useMemo(
+    () => new Set(document.variables.filter((variable) => variable.programId === programId).map((variable) => variable.name)),
+    [document.variables, programId]
+  )
+  const availableVariables = useMemo(
+    () => declaredInterfaceVariables(selectedProgram).filter((variable) => !mappedNames.has(variable.name)),
+    [selectedProgram, mappedNames]
+  )
+  const chosenVariable = availableVariables.find((variable) => variable.name === variableName)
+
+  useEffect(() => {
+    setVariableName(availableVariables[0]?.name ?? '')
+  }, [availableVariables])
+
+  /* Point không tương thích hướng/kiểu với biến đã chọn không được cho ghép —
+   * đúng lỗ hổng vừa gây lỗi thật: OUTPUT (BOOL) bị map vào Point READ-only
+   * kiểu REAL (LOCAL:UI-09, Universal Input — PointKind::AI ở Core, không
+   * nằm trong danh sách PointWriter::can_write() cho phép ghi). st_process_
+   * image.cpp gom output CẢ CHƯƠNG TRÌNH vào một batch; một binding không ghi
+   * được làm preflight_outputs() từ chối TOÀN BỘ batch — output khác đúng
+   * (AO/DO vật lý) cũng không bao giờ commit theo. */
   const filtered = catalogItems.filter(
     (entry) =>
       (categoryFilter === 'ALL' || entry.category === categoryFilter) &&
       (directionFilter === 'ALL' || entry.direction === directionFilter) &&
-      (!writableOnly || entry.writable)
+      (!writableOnly || entry.writable) &&
+      (!chosenVariable || isCompatiblePoint(chosenVariable, entry))
   )
 
   return (
@@ -178,9 +237,29 @@ function PointPickerDialog({
           </select>
         </label>
         <label className="block text-xs font-medium text-[var(--c-text-dim)]">
-          {pick('Tên biến', 'Variable name')}
-          <input className="mt-1 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1.5 text-sm text-[var(--c-text)]" value={variableName} onChange={(event) => setVariableName(event.target.value)} />
+          {pick('Biến', 'Variable')}
+          <select
+            className="mt-1 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1.5 text-sm text-[var(--c-text)]"
+            value={variableName}
+            disabled={availableVariables.length === 0}
+            onChange={(event) => setVariableName(event.target.value)}
+          >
+            {availableVariables.length === 0 && <option value="">{pick('— Không có biến —', '— No variable —')}</option>}
+            {availableVariables.map((variable) => (
+              <option key={variable.name} value={variable.name}>
+                {variable.name} ({variable.direction === 'INPUT' ? pick('vào', 'in') : pick('ra', 'out')} · {variable.type})
+              </option>
+            ))}
+          </select>
         </label>
+        {availableVariables.length === 0 && (
+          <p className="text-xs font-normal normal-case text-[var(--c-text-dim)] md:col-span-2">
+            {pick(
+              'Chương trình chưa khai báo VAR_INPUT/VAR_OUTPUT (hoặc INPUT/OUTPUT node ở FBD) nào chưa được ánh xạ.',
+              'The program has no unmapped VAR_INPUT/VAR_OUTPUT (or FBD INPUT/OUTPUT node) declared.'
+            )}
+          </p>
+        )}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-3">
@@ -214,7 +293,14 @@ function PointPickerDialog({
         ) : catalogStatus === 'error' ? (
           <StateBlock state="error" title={pick('Không tải được danh mục Point.', 'Could not load the point catalog.')} />
         ) : filtered.length === 0 ? (
-          <p className="p-3 text-sm text-[var(--c-text-dim)]">{pick('Không có Point khớp bộ lọc.', 'No point matches the filter.')}</p>
+          <p className="p-3 text-sm text-[var(--c-text-dim)]">
+            {chosenVariable
+              ? pick(
+                  `Không có Point kiểu ${chosenVariable.type}, hướng ${chosenVariable.direction === 'OUTPUT' ? 'ghi được (WRITE/READ_WRITE)' : 'đọc được (READ/READ_WRITE)'} khớp bộ lọc — cần đúng loại cho biến ${chosenVariable.direction === 'OUTPUT' ? 'OUTPUT' : 'INPUT'} này.`,
+                  `No ${chosenVariable.type} Point with ${chosenVariable.direction === 'OUTPUT' ? 'writable (WRITE/READ_WRITE)' : 'readable (READ/READ_WRITE)'} direction matches — required for this ${chosenVariable.direction} variable.`
+                )
+              : pick('Không có Point khớp bộ lọc.', 'No point matches the filter.')}
+          </p>
         ) : (
           <ul>
             {filtered.map((entry) => {
@@ -250,15 +336,15 @@ function PointPickerDialog({
           size="sm"
           icon={<Link2 className="h-4 w-4" aria-hidden="true" />}
           loading={saving}
-          disabled={!selected || !variableName.trim() || !programId}
+          disabled={!selected || !chosenVariable || !programId}
           onClick={() => {
-            if (!selected) return
-            const variableId = crypto.randomUUID()
-            const bindingId = crypto.randomUUID()
+            if (!selected || !chosenVariable) return
+            const variableId = createUuid()
+            const bindingId = createUuid()
             void onSubmit([
               {
                 op: 'upsertVariable',
-                variable: { variableId, programId, name: variableName.trim(), type: selected.dataType, class: 'LOCAL', initialValue: null, retain: false }
+                variable: { variableId, programId, name: chosenVariable.name, type: chosenVariable.type, class: chosenVariable.direction, initialValue: null, retain: false }
               },
               {
                 op: 'upsertBinding',

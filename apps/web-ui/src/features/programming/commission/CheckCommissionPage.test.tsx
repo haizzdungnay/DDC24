@@ -34,6 +34,20 @@ function passedCheck(): ProgrammingCheck {
   return { checkId: CHECK_ID, revisionId: REVISION_ID, state: 'PASSED', diagnostics: [], createdAt: '2026-08-13T00:00:00Z', attemptCount: 1 }
 }
 
+function baseProject() {
+  return {
+    projectId: 'project-1', name: 'AHU-01', etag: '"draft-1:1"',
+    activeRevisionId: null, draftRevisionId: 'draft-1', baseRevisionId: 'draft-1', updatedAt: '2026-08-13T00:00:00Z',
+    draft: {
+      schemaVersion: 1,
+      project: { projectId: 'project-1', name: 'AHU-01', functionalTags: [] },
+      programs: [], variables: [], bindings: [],
+      task: { taskId: 'task-1', periodMs: 1000, programOrder: [] },
+      library: { profile: 'CORE_REVA', version: '1' }
+    }
+  }
+}
+
 function changesWithTwoPresentGroups(): ProgrammingRevisionChanges {
   return {
     fromRevisionId: 'none',
@@ -49,12 +63,13 @@ function changesWithTwoPresentGroups(): ProgrammingRevisionChanges {
   }
 }
 
-function renderPage() {
+function renderPage(useCanonicalQuery = false) {
+  const initialEntry = useCanonicalQuery
+    ? `/eng/programming/projects/project-1/commission?revisionId=${REVISION_ID}&checkId=${CHECK_ID}`
+    : { pathname: '/eng/programming/projects/project-1/commission', state: { revisionId: REVISION_ID, checkId: CHECK_ID } }
   return render(
     <I18nProvider>
-      <MemoryRouter
-        initialEntries={[{ pathname: '/eng/programming/projects/project-1/commission', state: { revisionId: REVISION_ID, checkId: CHECK_ID } }]}
-      >
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route element={<ProgrammingLayout />}>
             <Route path="/eng/programming/projects/:projectId/commission" element={<CheckCommissionPage />} />
@@ -79,6 +94,8 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
       if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
       if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
       if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
@@ -123,6 +140,8 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
       if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: null, lkgRevisionId: null, taskState: 'STOPPED', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
       if (operationId === 'compareProgrammingRevisions') {
         const changes = changesWithTwoPresentGroups()
@@ -137,5 +156,109 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
     await waitFor(() => expect(screen.getByText(/Đưa vào vận hành bị chặn/)).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).toBeDisabled()
+  })
+
+  it('deep-link query tải đúng Check/Revision sau reload và không phụ thuộc location.state', async () => {
+    client.request.mockImplementation((operationId: string, options?: { path?: Record<string, string> }) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
+      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
+      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
+      if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId} ${JSON.stringify(options)}`)
+    })
+
+    renderPage(true)
+    await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
+    const checkCall = client.request.mock.calls.find(([op]) => op === 'getProgrammingCheck')
+    const changesCall = client.request.mock.calls.find(([op]) => op === 'compareProgrammingRevisions')
+    expect(checkCall?.[1].path.checkId).toBe(CHECK_ID)
+    expect(changesCall?.[1].path.to).toBe(REVISION_ID)
+    expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).not.toBeDisabled()
+  })
+
+  it('safeState=true nhưng chỉ do chưa ai điều khiển (safeStateNoControllerOnly) không chặn Commission', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
+      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: true, safeStateNoControllerOnly: true, observedAt: '2026-08-13T00:00:00Z' })
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
+      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
+      if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderPage()
+    await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
+
+    // Banner giải thích — không phải banner chặn.
+    await waitFor(() => expect(screen.getByText(/Core đang ở trạng thái an toàn vì chưa có Program nào điều khiển output/)).toBeInTheDocument())
+    expect(screen.queryByText(/Đưa vào vận hành bị chặn/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).not.toBeDisabled()
+  })
+
+  it('Core safe-state và lỗi đọc override đều fail-closed dù Check PASSED', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
+      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: true, safeStateNoControllerOnly: false, observedAt: '2026-08-13T00:00:00Z' })
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
+      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
+      if (operationId === 'listProgrammingOverrides') return Promise.reject(new Error('Core override registry offline'))
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderPage()
+    await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Core chưa READY hoặc đang ở trạng thái an toàn/)).toBeInTheDocument())
+    expect(screen.getByText(/Không xác minh được override hiện hành/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).toBeDisabled()
+  })
+
+  it('D-01: mở PGM-03 không kèm Check nào tự seal/run/poll bằng nút "Kiểm tra", rồi hiện đúng kết quả', async () => {
+    const project = baseProject()
+    const sealedEtag = '"draft-1:2"'
+    client.request.mockImplementation((operationId: string, options?: { ifMatch?: string; body?: { baseRevisionId?: string } }) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
+      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: null, lkgRevisionId: null, taskState: 'RUNNING', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: 'draft-1' }] })
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'createProgrammingRevision') {
+        expect(options?.ifMatch).toBe(project.etag)
+        expect(options?.body?.baseRevisionId).toBe(project.baseRevisionId)
+        return Promise.resolve({ resource: { projectId: 'project-1', revisionId: REVISION_ID }, etag: sealedEtag, auditId: 'audit-1', correlationId: 'corr-1' })
+      }
+      if (operationId === 'createProgrammingCheck') {
+        return Promise.resolve({ checkId: CHECK_ID, statusUrl: '', state: 'QUEUED', requestHash: 'h', acceptedAt: '2026-08-13T00:00:00Z', correlationId: 'corr-2' })
+      }
+      if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
+      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
+      if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={['/eng/programming/projects/project-1/commission']}>
+          <Routes>
+            <Route element={<ProgrammingLayout />}>
+              <Route path="/eng/programming/projects/:projectId/commission" element={<CheckCommissionPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </I18nProvider>
+    )
+
+    expect(await screen.findByText('Chưa có Kiểm tra nào.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra' }))
+
+    // Sau khi seal+check xong, trang tự điều hướng vào đúng revisionId/checkId
+    // (D-01) và hiện lại toàn bộ panel kết quả y hệt đường deep-link cũ.
+    await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).not.toBeDisabled()
   })
 })

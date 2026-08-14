@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Save } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../../auth'
@@ -17,18 +17,44 @@ const ALLOWED_PERIODS = [1000, 5000, 30000] as const
 export function ExecutionTab({
   document,
   saving,
-  onSave
+  onSave,
+  onPendingOperationsChange,
+  discardVersion
 }: {
   document: ProgrammingDraftDocument
   saving: boolean
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
+  onPendingOperationsChange: (operations: ProgrammingDraftOperation[]) => void
+  discardVersion: number
 }) {
   const { pick } = useI18n()
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin')
   const [period, setPeriod] = useState<number>(document.task.periodMs)
   const [order, setOrder] = useState<string[]>(document.task.programOrder)
+  const previousCommittedTask = useRef(document.task)
   const dirty = period !== document.task.periodMs || order.join(',') !== document.task.programOrder.join(',')
+  const pendingOperations = useMemo<ProgrammingDraftOperation[]>(
+    () => dirty ? [{ op: 'setTask', task: { ...document.task, periodMs: period as 1000 | 5000 | 30000, programOrder: order } }] : [],
+    [dirty, document.task, order, period]
+  )
+
+  useEffect(() => {
+    const previous = previousCommittedTask.current
+    const hadLocalChanges = period !== previous.periodMs || order.join(',') !== previous.programOrder.join(',')
+    previousCommittedTask.current = document.task
+    if (!hadLocalChanges) {
+      setPeriod(document.task.periodMs)
+      setOrder(document.task.programOrder)
+    }
+  }, [document.task, order, period])
+
+  useEffect(() => onPendingOperationsChange(pendingOperations), [onPendingOperationsChange, pendingOperations])
+  useEffect(() => {
+    setPeriod(document.task.periodMs)
+    setOrder(document.task.programOrder)
+    previousCommittedTask.current = document.task
+  }, [discardVersion])
 
   const programName = (id: string) => document.programs.find((program) => program.programId === id)?.name ?? id
 

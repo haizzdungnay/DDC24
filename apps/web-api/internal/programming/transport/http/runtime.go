@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
+	"mkddc-web/internal/auth"
 	programmingapplication "mkddc-web/internal/programming/application"
 )
 
@@ -29,6 +31,66 @@ func handleRuntimeRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		}
 		writeRuntimeJSON(w, http.StatusOK, correlationID, runtime)
 		return true
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/programming/runtime/monitor":
+		monitor, err := service.GetMonitor(r.Context())
+		if err != nil {
+			writeMappedError(w, err, correlationID)
+			return true
+		}
+		writeRuntimeJSON(w, http.StatusOK, correlationID, monitor)
+		return true
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/programming/runtime/traces":
+		var request programmingapplication.TraceRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&request); err != nil {
+			writeMappedError(w, programmingapplication.ErrInvalidRequest, correlationID)
+			return true
+		}
+		principal := auth.PrincipalFromContext(r.Context())
+		if principal == nil {
+			writeMappedError(w, programmingapplication.ErrInvalidRequest, correlationID)
+			return true
+		}
+		accepted, err := service.CreateTrace(r.Context(), request,
+			programmingapplication.Actor{ID: principal.Username, Role: string(principal.Role)},
+			r.Header.Get("X-Idempotency-Key"), correlationID)
+		if err != nil {
+			writeMappedError(w, err, correlationID)
+			return true
+		}
+		writeRuntimeJSON(w, http.StatusAccepted, correlationID, accepted)
+		return true
+	case strings.HasPrefix(r.URL.Path, "/api/v1/programming/runtime/traces/"):
+		traceID := strings.TrimPrefix(r.URL.Path, "/api/v1/programming/runtime/traces/")
+		if strings.Contains(traceID, "/") || traceID == "" {
+			return false
+		}
+		if r.Method == http.MethodGet {
+			trace, err := service.GetTrace(traceID)
+			if err != nil {
+				writeMappedError(w, err, correlationID)
+				return true
+			}
+			writeRuntimeJSON(w, http.StatusOK, correlationID, trace)
+			return true
+		}
+		if r.Method == http.MethodDelete {
+			principal := auth.PrincipalFromContext(r.Context())
+			if principal == nil {
+				writeMappedError(w, programmingapplication.ErrInvalidRequest, correlationID)
+				return true
+			}
+			err := service.StopTrace(r.Context(), traceID,
+				programmingapplication.Actor{ID: principal.Username, Role: string(principal.Role)}, correlationID)
+			if err != nil {
+				writeMappedError(w, err, correlationID)
+				return true
+			}
+			w.Header().Set(correlationHeader, correlationID)
+			w.WriteHeader(http.StatusNoContent)
+			return true
+		}
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/programming/point-catalog":
 		limit := 500
 		if raw := r.URL.Query().Get("limit"); raw != "" {

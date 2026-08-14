@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+type programmingMonitorCore struct {
+	*pointsCore
+	snapshot RuntimePointSnapshot
+}
+
+func (core *programmingMonitorCore) ReadPointSnapshot(context.Context) (RuntimePointSnapshot, error) {
+	return core.snapshot, nil
+}
+
 func TestPointCatalogCategoryFromRealProducerKind(t *testing.T) {
 	cases := []struct {
 		kind             string
@@ -33,6 +42,7 @@ func TestPointCatalogQualityNeverFabricatesGood(t *testing.T) {
 	cases := map[string]string{
 		"GOOD": "GOOD", "UNCERTAIN": "UNCERTAIN", "BAD": "BAD", "STALE": "STALE",
 		"OFFLINE": "OFFLINE", "UNKNOWN": "UNKNOWN", "CONFIG_ERROR": "BAD",
+		"good": "GOOD", "stale": "STALE",
 		"":            "UNKNOWN",
 		"garbled_xyz": "UNKNOWN",
 	}
@@ -94,6 +104,39 @@ func TestListActiveOverridesOnlyReturnsForcedPointsAndNeverFabricatesActor(t *te
 	// chính web-api) ⇒ actor phải RỖNG, không được bịa.
 	if entry.ActorID != "" {
 		t.Fatalf("actorId = %q; muốn rỗng vì registry không biết", entry.ActorID)
+	}
+}
+
+func TestProgrammingMonitorUsesEndScanTruthOnlyForLocalPoints(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	programValue := 41.0
+	priority := 2
+	app.core = &programmingMonitorCore{
+		pointsCore: &pointsCore{points: []PointDTO{
+			{ID: "AO-01", Kind: "AO", Value: 60.0, Quality: "good", Source: "core", UpdatedAt: "2026-08-13T00:00:00Z", Unit: "V"},
+			{ID: "AO-01", Kind: "modbus_rtu", BusID: 1, SlaveAddr: 7, Value: 99.0, Quality: "stale", Source: "modbus_rtu", UpdatedAt: "2026-08-13T00:00:01Z"},
+		}},
+		snapshot: RuntimePointSnapshot{
+			SnapshotObservedAtUTC: "2026-08-13T00:00:02Z", SafeState: true, SafeStateNoControllerOnly: true,
+			Task:   &RuntimeTaskSnapshot{TaskID: "main", State: "RUNNING", PeriodMS: 1000, BudgetMS: 200},
+			Points: []RuntimePoint{{ID: "AO-01", Value: 62.0, ProgramValue: &programValue, EffectivePriority: &priority, Quality: "GOOD", Source: "manual", Unit: "V"}},
+		},
+	}
+
+	truth, err := app.programmingPointCatalog().ReadProgrammingMonitorSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("ReadProgrammingMonitorSnapshot: %v", err)
+	}
+	if !truth.SafeState || !truth.SafeStateNoControllerOnly || truth.Task == nil || truth.Task.TaskID != "main" || len(truth.Points) != 2 {
+		t.Fatalf("snapshot envelope sai: %+v", truth)
+	}
+	local := truth.Points[0]
+	if local.Category != "LOCAL" || local.ActualValue != 62.0 || local.ProgramValue == nil || *local.ProgramValue != 41.0 || local.ObservedAt != "2026-08-13T00:00:02Z" {
+		t.Fatalf("LOCAL không dùng end-scan truth: %+v", local)
+	}
+	external := truth.Points[1]
+	if external.Category != "MB_RTU" || external.ActualValue != 99.0 || external.ProgramValue != nil || external.ObservedAt != "2026-08-13T00:00:01Z" || external.Quality != "STALE" {
+		t.Fatalf("MB_RTU bị overlay nhầm theo ID vật lý: %+v", external)
 	}
 }
 

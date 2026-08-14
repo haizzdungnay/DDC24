@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PortsPage } from './PortsPage'
 import { ApiError } from '../../../shared/types'
+import { I18nProvider } from '../../../shared/i18n'
 
 const api = vi.hoisted(() => ({
   getModbusBuses: vi.fn(),
@@ -47,14 +48,18 @@ function bus(busID: string, extra: Record<string, unknown> = {}) {
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/eng/modbus-rtu/ports']}>
-      <PortsPage />
-    </MemoryRouter>
+    <I18nProvider>
+      <MemoryRouter initialEntries={['/eng/modbus-rtu/ports']}>
+        <PortsPage />
+      </MemoryRouter>
+    </I18nProvider>
   )
 }
 
 describe('PortsPage', () => {
   beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('mkddc-lang', 'vi')
     auth.role = 'admin'
     api.getModbusPorts.mockResolvedValue([
       { port: '/dev/rs485-1', alias: 'ttyS5', description: 'RS485-1 (cổng chính)', max_baud: 115200 },

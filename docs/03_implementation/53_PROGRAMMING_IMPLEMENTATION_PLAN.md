@@ -4,14 +4,14 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.52 |
+| Phiên bản | 0.55 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`.** Team được viết và merge code production ngay; `RELEASE_READY` được đánh giá riêng sau implementation |
 | Ngày phát hành | 2026-08-13 |
 | Chủ quản | Dev Lead + System Architect |
 | Người review | Product, FE/BE/Core/FW/HW/Security/QA/Ops Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
 | Khung trình bày | ISO/IEC/IEEE 16326 — nội dung kế hoạch quản lý dự án phần mềm; ánh xạ điều khoản ở §11 |
-| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate v2.35 ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v3.45 — kiểm bằng `python3 scripts/candidate_pin_check.py`; authority phê duyệt nền tiếp tục hiệu lực |
+| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate v2.41 ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v3.53 — kiểm bằng `python3 scripts/candidate_pin_check.py`; authority phê duyệt nền tiếp tục hiệu lực |
 | Quy tắc tài liệu | [`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) |
 
 > ## ✅ APPROVED FOR IMPLEMENTATION — được viết và merge code production
@@ -55,11 +55,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **thứ tự làm và điều kiện qua cửa**: bảy pha `P0..P6`, phụ thuộc giữa chúng, ai chịu trách nhiệm gì, và bằng chứng nào mở được mỗi gate `G0..G6`. |
 | 2. Ai phải đọc file này? | Dev Lead và Architect (chủ quản); Product và QA duyệt; mọi team đọc pha của mình. Đọc **sau** khi đã đọc hồ sơ thiết kế upstream của slice mình. |
-| 3. Hệ thống hiện tại đang có gì? | P0/P1/P2, P3 và P4 đã DONE về source/host DoD. `TASK-PROG-403..405` bổ sung operation coordinator bền vững, UDS peer-checked, cutover/rollback ở safe boundary và restart recovery có checkpoint. Hai record `VS-001/019` vẫn `BLOCKED`, 0/32 PASS; flag `OFF`, chưa Commission trên board. |
+| 3. Hệ thống hiện tại đang có gì? | P0..P4 và `TASK-PROG-500..507` đã đạt DoD đã ghi. Audit FE/UX ngày 2026-08-13 mở `TASK-PROG-508..510`: corrective đã qua full gate host, deploy/read-back/rollback Foxlinx và live browser desktop/mobile; vòng cuối đóng lỗi HTTP Web Crypto, auth deep-link, safe-state/RETAIN, export/import và mobile nav. Source 508/509 vẫn chưa merge. Hai record `VS-001/019` vẫn `BLOCKED`, 0/32 PASS. |
 | 4. Thiết kế mới thay đổi điều gì? | Xác lập nguyên tắc: **không mở gate bằng lời văn**. Mỗi pha có điều kiện vào và ra cụ thể; §6.1 định nghĩa Definition of Ready và Definition of Done cho từng task; §6.2 định nghĩa bằng chứng gate và điều kiện quay lui. |
 | 5. Team phải sửa module/contract nào? | §5.7 ánh xạ quyền sở hữu source và sản phẩm bàn giao theo pha; §5.8 có mẫu thẻ task và cách bàn giao theo lát cắt dọc. |
-| 6. Điều gì còn bị chặn? | **P3 ĐÃ ĐÓNG 8/8 và P4 ĐÃ ĐÓNG 6/6 ở mức source/host.** `RELEASE_READY` vẫn chờ 32/32 PASS, target/HIL/electrical/power-cut/IOP timing và residual acceptance — Forlinx cần phần cứng vật lý. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §5.2 chỉ rõ gate sở hữu từng scenario; §6.2 gắn bằng chứng bắt buộc. Hiện có 2/32 record `BLOCKED`, 0/32 PASS — đủ ghi nhận execution G1 nhưng không đủ release. |
+| 6. Điều gì còn bị chặn? | P3 đã đóng 8/8, P4 đã đóng 6/6. P5 hiện 8/11 đạt DoD: 508/509 đã implement và host/target verified nhưng chưa merge; 510 đã deploy/read-back/rollback, còn VERIFYING theo dependency và thiếu positive Monitor/Trace với binding trên target. `RELEASE_READY` vẫn chờ 32/32 PASS, usability người thật, target/HIL/electrical/power-cut/IOP timing và residual acceptance. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §5.2 chỉ rõ gate sở hữu từng scenario; §6.2 gắn bằng chứng bắt buộc. `EV-PROG-P5-510` ghi full host gate, Foxlinx deployment/read-back/rollback và Chrome/axe thật; đây là supporting evidence. Hiện có 2/32 record `BLOCKED`, 0/32 PASS — chưa đủ release. |
 
 Quan hệ với Plan 54: file này quản **việc code**; [Plan 54](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md)
 quản **việc tài liệu**. Hoàn tất bộ hồ sơ chỉ mở quyền *bắt đầu* implementation
@@ -361,8 +361,38 @@ supporting evidence; target/HIL vẫn `NOT RUN`, Commission vẫn feature-gated.
 | `PROG-505` | FE | P3/P4 | Runtime/Watch/Trace/Versions/Restore/Replacement |
 | `PROG-506` | FE+QA | 500–505 | Vitest/lint/build/Playwright/Chrome desktop+mobile/Console+Network |
 | `PROG-507` | FE+BE+Core+Ops+QA | 500–506 | Dọn dung lượng có backup; cross-build/deploy ARM64 FE/Web/compiler/Core; debug API/WS/config; bật cờ production; Check+Commission output-free+Core read-back; Chrome desktop/mobile; rollback |
+| `PROG-508` | FE+UX+QA | 500–507 | Đóng finding hậu kiểm FE: context Controller/Project/Draft/dirty/Check/Active/Core; ST line/column/find/format/symbol/type/diagnostic; metadata/tag; guard Draft; deep-link Commission; readiness fail-closed; Danger Zone chỉ ở tab bảo trì |
+| `PROG-509` | Core+BE+FE+QA | P3/P4/505/508 | Monitor/Trace thật xuyên Core→BE→OpenAPI→FE: program/actual/owner/priority/TTL/quality/freshness, task metric, trace bounded/idempotent/audit/stop; cấm 503 contract-only và cấm fabricate |
+| `PROG-510` | FE+BE+Core+Ops+QA | 508–509 | Gate đầy đủ host + Chrome desktop/mobile; cross-build ARM64; backup/deploy/read-back đúng Foxlinx; ghi supporting evidence mới và rollback; không nâng thành Test Result độc lập |
 
-Exit: `VS-002/008/017..022/025..028` PASS; không fake producer hoặc optimistic Active.
+Trạng thái corrective slice ngày 2026-08-13:
+
+- `PROG-508 IMPLEMENTED + HOST/TARGET VERIFIED / VERIFYING`: sửa các component `ProgrammingLayout`,
+  `ProgrammingContextBar`, `DesignWorkspacePage`, `ProgramsTab`, `ExecutionTab`,
+  `CheckCommissionPage`, `RuntimeServicePage`; full FE gate, Chrome desktop/mobile
+  và axe trên target đã PASS. Vòng live HTTP cuối còn thay UUID/SHA bằng helper
+  chạy được khi `isSecureContext=false`, giữ query/hash qua auth, bổ sung
+  export/import source-only, khóa Restore/RETAIN fail-closed và thêm điều hướng
+  mobile bốn workspace. Task chỉ thành `DONE` sau merge theo §6.1.
+- `PROG-509 IMPLEMENTED + HOST/TARGET VERIFIED / VERIFYING`: Core snapshot xuất program proposal,
+  priority thắng và task metric; BE tạo read model Monitor + Trace bounded;
+  OpenAPI v1.20.0 và FE Watch/Trace tiêu thụ dữ liệu thật. Target Monitor trả
+  `200`/empty đúng Revision output-free không có binding; Trace validation trả
+  `400` với selector rỗng. Positive row/start-get-stop target còn mở, không
+  fabricate dữ liệu.
+- `PROG-510 EXECUTED / VERIFYING`: full host gate PASS; cross-build ARM64,
+  backup/deploy/service/hash/API read-back, rollback rehearsal và tái deploy
+  đúng artifact đều PASS trên `SOM-DDC-24-foxlinx`; Chrome thật desktop/mobile
+  sạch Console/Network, axe 8/8 scan không có violation. Vòng cuối còn kiểm live
+  ST save rồi phục hồi byte gốc, export `200`, import fault `422`, deep-link,
+  safe-state và 6/6 lượt axe không violation; một artifact trung gian thiếu
+  `VITE_PROGRAMMING_REV_A=1` bị phát hiện và thay ngay, không dùng làm PASS. Record:
+  [`EV-PROG-P5-510`](../07_records/test-evidence/fw-som/2026-08-13-foxlinx-programming-plan53-corrective.md).
+  Task chưa thành DONE vì dependency source chưa merge và positive Monitor/Trace
+  có binding trên target chưa chạy.
+
+Exit release yêu cầu: `VS-002/008/017..022/025..028` có Test Result PASS độc
+lập; không fake producer hoặc optimistic Active. Hiện tại 0/32 PASS.
 
 #### P6 — FW MCU, HW, HIL và release (G5/G6)
 
@@ -459,9 +489,9 @@ tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ 
 | P2 | 8 | 8 | 100% | `DONE` | 2026-08-11 | 2026-08-11 | 0/3 | `TASK-PROG-200..207 DONE` về source/DoD; Test Result độc lập vẫn 0 PASS |
 | P3 | 8 | 8 | 100% | `DONE` (source/host DoD) | 2026-08-11 | 2026-08-13 | 0/7 | `TASK-PROG-300..307 DONE` về source/host DoD; target evidence (10k-cycle WCET Forlinx) còn `BLOCKED` — cần phần cứng vật lý |
 | P4 | 6 | 6 | 100% | `DONE` (source/host DoD) | 2026-08-13 | 2026-08-13 | 0/10 | `TASK-PROG-400..405 DONE` về source/host DoD; target/HIL/electrical/power-cut/IOP timing vẫn `NOT RUN` và thuộc P6/release evidence |
-| P5 | 8 | 8 | 100% | `DONE` (source/host+browser+deploy DoD) | 2026-08-13 | 2026-08-13 | 0/10 | `TASK-PROG-500..507 DONE`; `EV-PROG-P5-507` chứng minh cleanup/backup/deploy/read-back Foxlinx nhưng không phải Test Result; `S5-F` usability `≥5` kỹ thuật viên BMS thật vẫn `BLOCKED` — không tính vào 8 task |
+| P5 | 11 | 8 | 72,7% | `IN_PROGRESS` | 2026-08-13 | — | 0/10 | `TASK-PROG-500..507 DONE`; audit mở 508..510. 508/509 đã qua full gate host/target nhưng chưa đạt DoD merge; 510 đã deploy/read-back/rollback và còn VERIFYING theo dependency/positive binding target. `S5-F` usability vẫn `BLOCKED` và không tính là task. |
 | P6 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/1 | Chờ `HW-AUTH-*` và đồ gá HIL |
-| **Tổng** | **50** | **43** | **86,0%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P3, P4, P5 đã đóng source/host; P5 100% và đã deploy đầy đủ FE/Web/compiler/Core lên Foxlinx. P6 assurance/HIL/release evidence chưa bắt đầu |
+| **Tổng** | **53** | **43** | **81,1%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | Bản corrective đã chạy trên Foxlinx theo `EV-PROG-P5-510`, nhưng source chưa merge và supporting evidence không thay Test Result. P6 assurance/HIL/release evidence chưa bắt đầu. |
 
 Cột “Test Result đã có” cộng lại là `33`, không phải `32`: `VS-PROG-019` được
 tính hai lần vì phần contract của nó thuộc `G1` còn phần đầy đủ thuộc `G3`. Số
@@ -492,9 +522,9 @@ commit/Test Result Target đủ điều kiện.
 | P2 | 200–207 | 35–55 | P1 | DONE 8/8 về source/DoD; G2 evidence độc lập vẫn BLOCKED |
 | P3 | 300–307 | 35–55 | P1–P2 + P0-B runtime | SOURCE/HOST DONE 8/8; target timing/WCET Forlinx vẫn `NOT RUN` |
 | P4 | 400–405 | 30–45 | P3 + BE P2 | SOURCE/HOST DONE; lifecycle/power/fault/read-back target Test Results `NOT_RUN` |
-| P5 | 500–507 | 34–51 | P1/P2/P4 per task | DONE 8/8 về source/host/browser/deploy; usability người thật và Test Result release vẫn BLOCKED |
+| P5 | 500–510 | 48–70 | P1/P2/P4 per task | 500–507 DONE; 508/509 đã implement và đang VERIFYING; 510 chờ gate + deploy/read-back Foxlinx; usability người thật và Test Result release vẫn BLOCKED |
 | P6 | 600–606 | 25–45 + lab | all | NOT_STARTED; target/HIL/ops/security/release record |
-| **Tổng** | 50 task | **182–291 person-day + lab/review** | sequential gates, parallel lanes có kiểm soát | Implementation P1–P5 đã đi qua; `RELEASE_READY` vẫn RED |
+| **Tổng** | 53 task | **196–310 person-day + lab/review** | sequential gates, parallel lanes có kiểm soát | Implementation đang ở P5 corrective slice; `RELEASE_READY` vẫn RED |
 
 Estimate phải re-estimate khi decisions thay đổi capacity/FBD/library/TLS/HW.
 Không dùng tổng này làm deadline trước resource/calendar/board availability review.
@@ -873,8 +903,10 @@ Hai lát cắt này bị chặn ngoài `G0`: `S5-C` cần `IFSPEC-PROG-001` §6.
 và toàn bộ `P5` cần `OD-PROG-016` được phê duyệt. Nếu `OD-PROG-016` bị từ chối,
 `P5` quay lại năm lát cắt theo IA sáu trang và `S5-B` tách làm ba.
 
-**Trạng thái 2026-08-13**: `S5-A..E` **DONE (source/host/browser/deploy DoD)** —
-`TASK-PROG-500..507`, commit `e58c745..d9a8e3b`; bốn workspace nối BE thật,
+**Trạng thái 2026-08-13**: `S5-A..E` đã hoàn thành lát cắt ban đầu qua
+`TASK-PROG-500..507`. Audit FE/UX hậu triển khai mở `TASK-PROG-508..510`; vì
+vậy P5 quay lại `IN_PROGRESS` cho corrective slice, không xóa bằng chứng lịch sử.
+Bốn workspace nối BE thật,
 ba kịch bản fault xuyên suốt đã soát và một finding RETAIN copy đã sửa; riêng
 `TASK-PROG-506` bổ sung bằng chứng Chrome thật (Playwright desktop+mobile)
 cho toàn bộ tám journey (`EV-PROG-P5-500-506`, VVP §11.5). `S5-F` vẫn
@@ -888,7 +920,10 @@ backup, đọc-ngược hash/service/socket và kiểm Chrome desktop/mobile
 Web/contract và một lỗi config legacy; sau khi sửa/cài đủ, trạng thái production
 cờ FE/BE `ON`, hai Check `PASSED`, Commission output-free
 `SUCCEEDED/COMMITTED`, Core đọc-ngược đúng Active/LKG/Task `RUNNING`, system
-health `ok`. P5 đã hoàn tất 100%; P6 chỉ còn assurance/HIL/release evidence.
+health `ok` ở bản trước audit. Source mới 508/509 bổ sung context/dirty/editor,
+readiness và Monitor/Trace end-to-end; 510 phải chạy full gate, deploy và đọc
+ngược lại đúng Foxlinx trước khi P5 trở lại 100%. P6 vẫn là
+assurance/HIL/release evidence độc lập.
 
 ## 6. Kế hoạch kiểm soát
 
@@ -1012,7 +1047,7 @@ Kế hoạch này chỉ được đóng khi đủ **tất cả** điều kiện 
 
 | Điều kiện | Bằng chứng | Ai xác nhận |
 |---|---|---|
-| 50/50 task đạt DoD hoặc được `DESCOPED` có phê duyệt | §5.5 | Dev Lead |
+| 53/53 task đạt DoD hoặc được `DESCOPED` có phê duyệt | §5.5 | Dev Lead |
 | `G0..G6` đều `PASS` | §6.2 | Architect + Verification Lead |
 | 32/32 `VS-PROG-*` có Test Result được review | `VVP-PROG-001` §10 | Verification Lead |
 | 60/60 requirement có trace tới evidence | `TRACE-PROG-001` §6 | Document Control |
@@ -1057,7 +1092,7 @@ trỏ tới commit + test/evidence hiện tại.
 | G2/P2+P5 partial | BE+FE+Compiler | **SOURCE/DOD DONE — P2 8/8; EVIDENCE BLOCKED** | 2026-08-11 / 2026-08-11 | `TASK-PROG-200..207` DONE; Task 207 tại `3e5281d` có hostile corpus 25 lớp, audit-secret 23 alias, compiler timeout/OOM/output/source bounds và Go fuzz; `VS-001/019` vẫn BLOCKED, 0/32 PASS |
 | G3/P3 | Core+Controls+QA | **SOURCE/HOST DOD DONE — TASK-PROG-300..307 DONE (8/8)** | `4f7e0ac`, `a831a0d`, `f080056`, `85aa4d2`, `4d744ac`, `c6ab2bd`, `f35234c`, `29907a5`, `EV-PROG-G3-300/301` | Toàn bộ P3 host gates PASS; symbol-scan xác nhận không parser/compiler symbol trong `mkddc-core`; 10k-cycle WCET thật trên Forlinx vẫn `BLOCKED` — cần phần cứng, không phải thiếu source |
 | G4/P4 | BE+Core+FE | **P4 SOURCE/HOST DOD DONE — TASK-PROG-400..405 DONE (6/6)** | `a523a04`, `9227d27`, `3ca5d22`, `c2f3189`, `10d9ad6` | Journal/RETAIN/operation coordinator/UDS/cutover/rollback/restart recovery đã wire và host fault gates PASS; flag vẫn OFF, target/HIL/electrical/power-cut/IOP timing và 0/32 Test Result vẫn chặn G4 release authority |
-| P5 | BE+Core+FE+Ops | **SOURCE/HOST/BROWSER/TARGET DEPLOY DONE — TASK-PROG-500..507 DONE (8/8)** | `e58c745`..`0f1526c` | Bốn workspace nối BE thật; Chrome/Playwright host PASS tám journey; Foxlinx cleanup 22%→10%, backup/checksum, ARM64 FE/Web/compiler/Core, cờ ON, hai Check PASS và Commission output-free thành công với read-back (`EV-PROG-P5-507`). `S5-F`, HIL/fault/power và 0/32 Test Result vẫn chặn `RELEASE_READY`, không chặn tính năng P5 |
+| P5 | BE+Core+FE+Ops | **IN_PROGRESS — 8/11 task đạt DoD** | `TASK-PROG-500..507`; 508/509 trong cây làm việc | Corrective 508/509 đã qua full host/target supporting evidence `EV-PROG-P5-510` nhưng chưa merge; 510 EXECUTED/VERIFYING, positive binding target còn mở. `S5-F`, HIL/fault/power và 0/32 Test Result vẫn chặn `RELEASE_READY`. |
 | G5/P6 HIL | FW+HW+QA | NOT_STARTED | — | BSP/fixture + G3/G4 |
 | G6/release | Product+Release+QA | NOT_STARTED | — | VS 32/32 + residual acceptance |
 
@@ -1080,7 +1115,7 @@ không dùng hai bảng thay nhau.
 | Host build/toolchain ready | Dev/QA | **PASS kỹ thuật:** CTest 860/860; Go vet + 11 package test; FE 53 file/469 test + lint/build; tool version tại `PROG-P0-ENV-2026-08-10` §2 |
 | Evidence repository ready | Verification + Document Control | **ACTIVE:** `PROG-TR-REPO-001` có 2 record `BLOCKED`, checksum PASS; 0/32 PASS |
 | GitHub CI/security runner ready | GitHub Organization Admin | **DEFERRED — không phải entry implementation:** trạng thái `steps=[]` được xử lý ngoài P1 |
-| Target SOM lab ready | Ops/Lab admin | **DEFERRED — không phải entry implementation:** SSH chưa xác thực; cần trước target evidence, không trước khi viết code |
+| Target SOM lab ready | Ops/Lab admin | **PASS cho supporting P5:** `EV-PROG-P5-510` backup/deploy/read-back/rollback Foxlinx; HIL/release authority vẫn độc lập |
 | HIL fixture/instrument ready | HW + Safety + QA | **DEFERRED — không phải entry implementation:** cần cho P6/release evidence, không chặn P1–P5 |
 
 Các giá trị từng mang nhãn `TARGET-PENDING` đã được chốt bởi
@@ -1174,6 +1209,9 @@ khiển thiết bị thật:
 | 0.50 | 2026-08-13 | Hoàn tất `TASK-PROG-506` tại `14a9299`: Playwright E2E `apps/web-ui/e2e/programming.spec.ts` — toàn bộ `UJ-PROG-01..08` + redirect route cũ (`VS-PROG-032`), chạy Chrome thật trên `desktop-chrome` và `mobile-chrome` (Pixel 7), 2/2 PASS mỗi project; `network-qa.spec.ts` 1/1 PASS; full e2e 60/60 PASS. Qua chính E2E phát hiện và sửa hai lỗi ứng dụng thật: đổi tab Thiết kế unmount mất nội dung đang gõ (`DesignWorkspacePage.tsx`), và `DELETE_SELECTION` trong FBD làm mất focus bàn phím về `document.body` cắt chuỗi lệnh tiếp theo (`StructuredFbdEditor.tsx`) — cả hai sửa và tái xác nhận PASS trong cùng commit. `EV-PROG-P5-500-506` đăng ký ở VVP §11.5. **P5 ĐÓNG 7/7 source/host/browser DoD**, tổng 42/49; next `S5-F` (usability `≥5` kỹ thuật viên BMS thật — chờ fixture `AHU-01` lab, không có đường tắt); giữ 0/32 PASS, flag OFF ngoài dev/e2e và RELEASE_READY BLOCKED |
 | 0.51 | 2026-08-13 | Thêm và hoàn tất `TASK-PROG-507` tại `9606906`+`6069de6`+`d9a8e3b`: dọn Foxlinx 22%→10% có backup/checksum, xoay JWT secret yếu, cross-build ARM64, deploy web/API atomically và debug ba lỗi contract/runtime thật (WS Origin 403, target profile 400, Revision nền 409). Chrome target desktop/mobile sạch Console, Project/Draft persistence, Revision `201`, Check `202` rồi fail-closed `ST-WORKER-CRASH` vì compiler target chưa có; không Commission. Trạng thái cuối binary mới, cờ OFF/API 404, health 6/6 ok, giữ hai rollback. `EV-PROG-P5-507` là supporting target evidence, không Test Result. **P5 8/8**, tổng 43/50 (86,0%); `S5-F`, compiler/Core Programming target, HIL và 0/32 PASS vẫn chặn `RELEASE_READY`. |
 | 0.52 | 2026-08-13 | Hoàn tất deployment target của `TASK-PROG-507` tại `0f1526c`: cài compiler/Core/Web/FE ARM64, sửa safe-state legacy `null` theo fail-safe, chuẩn hóa IO bundle revision 2, bật cờ production. Hai Check target `PASSED`; Commission fixture không output `SUCCEEDED/COMMITTED`; Core đọc-ngược Active/LKG/Task `RUNNING`; Chrome desktop/mobile sạch Console/Network. **P5 8/8 và feature deploy 100%**; tổng Plan giữ 43/50 vì bảy task P6 assurance/HIL/release evidence là phạm vi độc lập, 0/32 Test Result PASS. |
+| 0.53 | 2026-08-13 | Audit FE/UX/use case không chấp nhận trạng thái P5 “100%” của bản trước làm kết luận vĩnh viễn: mở `TASK-PROG-508..510`, đưa P5 về `IN_PROGRESS 8/11` và tổng Plan thành 43/53 (81,1%). 508/509 đã implement trong cây làm việc: context/dirty/ST tooling/deep-link/readiness/Danger Zone và Monitor/Trace/task metric xuyên Core→BE→OpenAPI→FE; đang qua full gate. 510 chặn deploy/read-back bản mới vì SSH đúng Foxlinx từ host hiện tại từ chối xác thực. Giữ trung thực 0/32 Test Result PASS và không kế thừa target evidence cũ cho source mới. |
+| 0.54 | 2026-08-13 | Hoàn tất phần thực thi `TASK-PROG-510`: full host gate PASS; cross-build/deploy/read-back/rollback rehearsal/tái deploy trên Foxlinx PASS; Chrome desktop/mobile sạch Console/Network và axe 8/8 scan không violation (`EV-PROG-P5-510`). 508/509 vẫn VERIFYING vì source chưa merge; Monitor/Trace positive có binding target còn mở. Giữ P5 8/11, tổng 43/53, `I=Y` 22/60 và 0/32 Test Result PASS. |
+| 0.55 | 2026-08-13 | Đóng vòng audit FE live HTTP: bỏ phụ thuộc `crypto.randomUUID/subtle`, giữ deep-link qua auth, mặc định tiếng Việt, thêm export source-only/import fault, khóa Restore/RETAIN fail-closed và bổ sung mobile nav. Build đúng cờ được redeploy Foxlinx; live ST save/restore, export `200`, import `422`, desktop/mobile và axe 6/6 scan sạch. Gate cuối: CTest 1004/1004, Go vet/test PASS, FE 64 file/521 test + lint/typecheck/build, Playwright Programming + Network QA 11/11 PASS. Ghim `EV-PROG-P5-510` rev 1.1 và audit rev 1.3. Source 508/509 vẫn chưa merge, positive Monitor/Trace binding còn mở; giữ P5 8/11, tổng 43/53, `I=Y` 22/60 và 0/32 PASS. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -1197,5 +1235,6 @@ khiển thiết bị thật:
 | Cổng quyền hạn implementation | **PASS** | §4.2, §5.5 và §9.2 đồng nhất: `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`; không còn approval blocker |
 
 Kế hoạch đã được **phê duyệt để triển khai có kiểm soát**, không phải quyền cutover production. P1/P2,
-P3 và P4 đã hoàn tất source/host DoD; P5/P6 cùng mọi Test Result target/HIL vẫn
-theo tracker và phải được cập nhật sau mỗi commit/PR.
+P3 và P4 đã hoàn tất source/host DoD; P5 đang ở corrective slice 508..510; P6
+cùng mọi Test Result target/HIL vẫn theo tracker và phải được cập nhật sau mỗi
+commit/PR.

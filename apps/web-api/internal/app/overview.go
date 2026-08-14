@@ -409,6 +409,15 @@ func (a *App) overviewHealth(nowIso string, core CoreStatus, coreErr, pointsErr 
 			if point.Kind != "UI" && point.Kind != "AO" && point.Kind != "DO" {
 				continue
 			}
+			// Kênh Signal Type = "none" ("Không hoạt động") là do người dùng
+			// chủ ý chưa nối cảm biến — Core trả quality=bad đúng thiết kế
+			// (không có dữ liệu thật để báo), nhưng đó không phải một FAULT
+			// phần cứng. Gộp chung khiến board luôn đỏ FAULT dù mọi kênh đang
+			// dùng đều tốt, y hệt họ lỗi FE-DIAG-01/FE-DATA-01 (báo sai mức độ
+			// nghiêm trọng) đã sửa trước đây trong feature này.
+			if strings.EqualFold(point.SignalType, "none") {
+				continue
+			}
 			total++
 			switch strings.ToLower(point.Quality) {
 			case "bad":

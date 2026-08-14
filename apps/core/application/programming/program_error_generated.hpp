@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "60f050d184de1f37c668a7b85d6a52969dce03e11157389a58fc43c550a3e7d2";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.4.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "0aa6e47a477e59e15564039e938faaec602e19aad24efc3b7f64f4de5d99d848";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.5.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -73,7 +73,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 99> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 100> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -102,6 +102,7 @@ inline constexpr std::array<ComponentErrorMapping, 99> kComponentErrorMappings =
     {"compiler", "ST-IOMAP-005", ProgramPublicError::MapIdentity },
     {"compiler", "ST-IOMAP-006", ProgramPublicError::MapIdentity },
     {"compiler", "ST-IOMAP-007", ProgramPublicError::MapIdentity },
+    {"compiler", "ST-IOMAP-008", ProgramPublicError::MapIdentity },
     {"compiler", "ST-LEX-001", ProgramPublicError::Check },
     {"compiler", "ST-LEX-002", ProgramPublicError::Check },
     {"compiler", "ST-LEX-003", ProgramPublicError::Check },

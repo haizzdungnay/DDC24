@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
+import { useI18n } from '../../../shared/i18n'
 import type { ModbusImportError, ModbusRTUDevice, ModbusRTUPoint } from '../../../shared/types'
-import { NO_DATA, READ_ONLY_HINT, buttonClass, emptyPoint, inputClass } from '../shared'
+import { NO_DATA, buttonClass, emptyPoint, inputClass, readOnlyHint } from '../shared'
 import { Field } from '../components/Field'
 import { RegisterPreview } from '../components/RegisterPreview'
 import { useModbusRuntime } from '../useModbusRuntime'
@@ -22,6 +23,7 @@ type PendingWrite = { point_id: string; label: string; value: number }
  * `ModbusRtuLayout` (FE-MB-02, FE-MB-03).
  */
 export function PointsPage() {
+  const { lang, pick } = useI18n()
   const [devices, setDevices] = useState<ModbusRTUDevice[]>([])
   const [points, setPoints] = useState<ModbusRTUPoint[]>([])
   /* MBR-B310: giá trị runtime đến từ WebSocket, không còn poll 5 s một lần.
@@ -46,7 +48,7 @@ export function PointsPage() {
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin')
   const canCommission = roleAtLeast(session?.role, 'operator')
-  const readOnlyHint = canEdit ? undefined : READ_ONLY_HINT
+  const readOnlyHintText = canEdit ? undefined : readOnlyHint(lang)
 
   async function reload() {
     const [nextDevices, nextPoints] = await Promise.all([apiClient.getModbusDevices(), apiClient.getModbusPoints()])
@@ -61,16 +63,16 @@ export function PointsPage() {
 
   async function savePoint(event: FormEvent) {
     event.preventDefault()
-    setStatus('Đang áp dụng cấu hình Point…')
+    setStatus(pick('Đang áp dụng cấu hình Point…', 'Applying Point configuration…'))
     try {
       if (editingPoint) await apiClient.updateModbusPoint(point)
       else await apiClient.createModbusPoint(point)
       setPoint({ ...emptyPoint, device_id: devices[0]?.device_id ?? '' })
       setEditingPoint(false)
       await reload()
-      setStatus('Đã áp dụng Point Manager vào Core Point Table.')
+      setStatus(pick('Đã áp dụng Point Manager vào Core Point Table.', 'Point Manager applied to the Core Point Table.'))
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Không thể lưu Point')
+      setStatus(error instanceof Error ? error.message : pick('Không thể lưu Point', 'Could not save the Point'))
     }
   }
 
@@ -81,9 +83,9 @@ export function PointsPage() {
       await apiClient.deleteModbusPoint(pendingDelete.id)
       setPendingDelete(null)
       await reload()
-      setStatus(`Đã xoá ${pendingDelete.label}.`)
+      setStatus(pick(`Đã xoá ${pendingDelete.label}.`, `Deleted ${pendingDelete.label}.`))
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Không thể xoá')
+      setStatus(error instanceof Error ? error.message : pick('Không thể xoá', 'Could not delete'))
     } finally {
       setDeleting(false)
     }
@@ -96,9 +98,12 @@ export function PointsPage() {
       const res = await apiClient.writeModbusTest(writingPoint.point_id, Number(writingPoint.value))
       setWritingPoint(null)
       await reload()
-      setStatus(`Ghi thử ${writingPoint.label} thành công (giá trị ghi nhận: ${res.applied_value}).`)
+      setStatus(pick(
+        `Ghi thử ${writingPoint.label} thành công (giá trị ghi nhận: ${res.applied_value}).`,
+        `Test write for ${writingPoint.label} succeeded (recorded value: ${res.applied_value}).`
+      ))
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Không thể thực hiện ghi thử')
+      setStatus(error instanceof Error ? error.message : pick('Không thể thực hiện ghi thử', 'Could not perform the test write'))
     } finally {
       setTestWriting(false)
     }
@@ -114,9 +119,9 @@ export function PointsPage() {
       anchor.download = format === 'csv' ? 'modbus-points.csv' : 'modbus-config.json'
       anchor.click()
       URL.revokeObjectURL(url)
-      setStatus(`Đã xuất ${format.toUpperCase()}.`)
+      setStatus(pick(`Đã xuất ${format.toUpperCase()}.`, `Exported ${format.toUpperCase()}.`))
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Không xuất được cấu hình')
+      setStatus(error instanceof Error ? error.message : pick('Không xuất được cấu hình', 'Could not export the configuration'))
     }
   }
 
@@ -127,23 +132,29 @@ export function PointsPage() {
       const content = await file.text()
       const result = await apiClient.importModbusConfig(format, content)
       if (result.result !== 'staged') {
-        setImportErrors(result.errors ?? [{ message: 'File bị từ chối' }])
-        setStatus('File nhập bị từ chối — không dòng nào được nạp.')
+        setImportErrors(result.errors ?? [{ message: pick('File bị từ chối', 'File was rejected') }])
+        setStatus(pick('File nhập bị từ chối — không dòng nào được nạp.', 'The imported file was rejected — no rows were loaded.'))
         return
       }
-      setStatus(`Đã nạp ${result.point_count ?? 0} Point vào bản nháp. Bấm “Áp dụng” ở băng trạng thái để phát xuống thiết bị.`)
+      setStatus(pick(
+        `Đã nạp ${result.point_count ?? 0} Point vào bản nháp. Bấm "Áp dụng" ở băng trạng thái để phát xuống thiết bị.`,
+        `Loaded ${result.point_count ?? 0} Point(s) into the draft. Click "Apply" on the status bar to push them to the device.`
+      ))
       await reload()
     } catch (error) {
-      setImportErrors([{ message: error instanceof Error ? error.message : 'Không đọc được file' }])
+      setImportErrors([{ message: error instanceof Error ? error.message : pick('Không đọc được file', 'Could not read the file') }])
     }
   }
 
   return (
     <div className="space-y-5">
       <header>
-        <h2 className="text-xl font-bold text-[var(--c-text)]">Modbus RTU · Quản lý Point</h2>
+        <h2 className="text-xl font-bold text-[var(--c-text)]">{pick('Modbus RTU · Quản lý Point', 'Modbus RTU · Point Management')}</h2>
         <p className="mt-1 text-xs text-[var(--c-text-dim)]">
-          Ánh xạ thanh ghi Modbus RTU sang Point Table của Core. Mỗi lần lưu đều validate, tăng revision và áp cấu hình có rollback.
+          {pick(
+            'Ánh xạ thanh ghi Modbus RTU sang Point Table của Core. Mỗi lần lưu đều validate, tăng revision và áp cấu hình có rollback.',
+            'Maps Modbus RTU registers to the Core Point Table. Every save validates, bumps the revision, and applies with rollback support.'
+          )}
         </p>
       </header>
 
@@ -158,40 +169,31 @@ export function PointsPage() {
       {!runtime.live && runtime.staleReason && (
         <div role="note" data-testid="runtime-stale"
           className="rounded-[var(--radius)] border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-[var(--c-text)]">
-          Cột “Quality” không phải số trực tiếp: {runtime.staleReason}.
-        </div>
-      )}
-
-      {/* Số cũ mà không nói là cũ thì tệ hơn không hiện gì: người vận hành sẽ
-          quyết định dựa trên một giá trị không còn đúng. */}
-      {!runtime.live && runtime.staleReason && (
-        <div role="note" data-testid="runtime-stale"
-          className="rounded-[var(--radius)] border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-[var(--c-text)]">
-          Cột “Quality” không phải số trực tiếp: {runtime.staleReason}.
+          {pick('Cột "Quality" không phải số trực tiếp', 'The "Quality" column is not a live figure')}: {runtime.staleReason}.
         </div>
       )}
 
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
         <h3 className="text-base font-semibold text-[var(--c-text)]">
-          {editingPoint ? `Sửa Point: ${point.display_name} (${point.point_id})` : 'Thêm Point mới'}
+          {editingPoint ? pick(`Sửa Point: ${point.display_name} (${point.point_id})`, `Edit Point: ${point.display_name} (${point.point_id})`) : pick('Thêm Point mới', 'Add new Point')}
         </h3>
         <form className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" onSubmit={savePoint}>
-          <Field label="Point ID" hint="Định danh ổn định của Point. Để trống thì hệ thống tự sinh.">
-            <input className={inputClass} aria-label="Point ID" placeholder="Point ID (ổn định)" value={point.point_id} disabled={editingPoint} onChange={(e) => setPoint({ ...point, point_id: e.target.value })} />
+          <Field label="Point ID" hint={pick('Định danh ổn định của Point. Để trống thì hệ thống tự sinh.', 'The stable identifier of the Point. Leave empty to auto-generate.')}>
+            <input className={inputClass} aria-label="Point ID" placeholder={pick('Point ID (ổn định)', 'Point ID (stable)')} value={point.point_id} disabled={editingPoint} onChange={(e) => setPoint({ ...point, point_id: e.target.value })} />
           </Field>
-          <Field label="Thiết bị" hint="Point này đọc từ thiết bị nào.">
-            <select required className={inputClass} aria-label="Thiết bị" value={point.device_id} onChange={(e) => setPoint({ ...point, device_id: e.target.value })}>
-            <option value="">Chọn thiết bị</option>
+          <Field label={pick('Thiết bị', 'Device')} hint={pick('Point này đọc từ thiết bị nào.', 'Which device this Point reads from.')}>
+            <select required className={inputClass} aria-label={pick('Thiết bị', 'Device')} value={point.device_id} onChange={(e) => setPoint({ ...point, device_id: e.target.value })}>
+            <option value="">{pick('Chọn thiết bị', 'Select a device')}</option>
             {devices.map((row) => <option key={row.device_id} value={row.device_id}>{row.display_name}</option>)}
             </select>
           </Field>
-          <Field label="Tag name" hint="Tên duy nhất toàn hệ, dùng để tham chiếu Point trong logic và BACnet.">
+          <Field label="Tag name" hint={pick('Tên duy nhất toàn hệ, dùng để tham chiếu Point trong logic và BACnet.', 'A system-wide unique name, used to reference the Point in logic and BACnet.')}>
             <input required className={inputClass} aria-label="Tag name" placeholder="Tag name unique" value={point.tag_name} onChange={(e) => setPoint({ ...point, tag_name: e.target.value })} />
           </Field>
-          <Field label="Tên hiển thị" hint="Tên cho người vận hành đọc.">
+          <Field label={pick('Tên hiển thị', 'Display name')} hint={pick('Tên cho người vận hành đọc.', 'Name for the operator to read.')}>
             <input required className={inputClass} aria-label="Display name" placeholder="Display name" value={point.display_name} onChange={(e) => setPoint({ ...point, display_name: e.target.value })} />
           </Field>
-          <Field label="Loại thanh ghi" hint="coil / discrete input / holding register / input register.">
+          <Field label={pick('Loại thanh ghi', 'Register type')} hint="coil / discrete input / holding register / input register.">
             <select className={inputClass} aria-label="Register type" value={point.register_type} onChange={(e) => setPoint({ ...point, register_type: e.target.value as ModbusRTUPoint['register_type'] })}>
             <option value="coil">Coil</option>
             <option value="discrete_input">Discrete Input</option>
@@ -199,53 +201,53 @@ export function PointsPage() {
             <option value="holding_register">Holding Register</option>
             </select>
           </Field>
-          <Field label="Địa chỉ thanh ghi" hint="Địa chỉ 0-based, 0–65535. Nhiều tài liệu thiết bị đánh số từ 1 — trừ đi 1 khi nhập.">
+          <Field label={pick('Địa chỉ thanh ghi', 'Register address')} hint={pick('Địa chỉ 0-based, 0–65535. Nhiều tài liệu thiết bị đánh số từ 1 — trừ đi 1 khi nhập.', '0-based address, 0–65535. Many device manuals number from 1 — subtract 1 when entering.')}>
             <input type="number" min={0} max={65535} className={inputClass} aria-label="Address" value={point.address} onChange={(e) => setPoint({ ...point, address: Number(e.target.value) })} />
           </Field>
-          <Field label="Kiểu dữ liệu" hint="Quyết định Point chiếm 1 hay 2 thanh ghi.">
+          <Field label={pick('Kiểu dữ liệu', 'Data type')} hint={pick('Quyết định Point chiếm 1 hay 2 thanh ghi.', 'Determines whether the Point occupies 1 or 2 registers.')}>
             <select className={inputClass} aria-label="Data type" value={point.data_type} onChange={(e) => setPoint({ ...point, data_type: e.target.value as ModbusRTUPoint['data_type'] })}>
             {['bool', 'int16', 'uint16', 'int32', 'uint32', 'float32'].map((value) => <option key={value}>{value}</option>)}
             </select>
           </Field>
-          <Field label="Thứ tự byte" hint="Big-endian là mặc định của Modbus. Sai thứ tự cho ra số vô lý mà không có lỗi nào.">
+          <Field label={pick('Thứ tự byte', 'Byte order')} hint={pick('Big-endian là mặc định của Modbus. Sai thứ tự cho ra số vô lý mà không có lỗi nào.', 'Big-endian is the Modbus default. A wrong order produces a nonsensical value with no error.')}>
             <select className={inputClass} aria-label="Byte order" value={point.byte_order} onChange={(e) => setPoint({ ...point, byte_order: e.target.value as ModbusRTUPoint['byte_order'] })}>
             <option value="big">Big-endian byte</option>
             <option value="little">Little-endian byte</option>
             </select>
           </Field>
-          <Field label="Thứ tự word" hint="Chỉ có tác dụng với kiểu 32-bit (2 thanh ghi).">
+          <Field label={pick('Thứ tự word', 'Word order')} hint={pick('Chỉ có tác dụng với kiểu 32-bit (2 thanh ghi).', 'Only applies to 32-bit types (2 registers).')}>
             <select className={inputClass} aria-label="Word order" value={point.word_order} onChange={(e) => setPoint({ ...point, word_order: e.target.value as ModbusRTUPoint['word_order'] })}>
             <option value="high_low">High word → Low word</option>
             <option value="low_high">Low word → High word</option>
             </select>
           </Field>
-          <Field label="Hệ số nhân" hint="Giá trị quy đổi = thô × hệ số + bù. Hệ số 0 bị từ chối.">
+          <Field label={pick('Hệ số nhân', 'Scale factor')} hint={pick('Giá trị quy đổi = thô × hệ số + bù. Hệ số 0 bị từ chối.', 'Converted value = raw × scale + offset. A scale of 0 is rejected.')}>
             <input type="number" step="any" className={inputClass} aria-label="Scale" placeholder="Scale" value={point.scale} onChange={(e) => setPoint({ ...point, scale: Number(e.target.value) })} />
           </Field>
-          <Field label="Bù (offset)" hint="Cộng vào sau khi nhân hệ số.">
+          <Field label={pick('Bù (offset)', 'Offset')} hint={pick('Cộng vào sau khi nhân hệ số.', 'Added after multiplying by the scale.')}>
             <input type="number" step="any" className={inputClass} aria-label="Offset" placeholder="Offset" value={point.offset} onChange={(e) => setPoint({ ...point, offset: Number(e.target.value) })} />
           </Field>
-          <Field label="Đơn vị" hint="Đơn vị kỹ thuật hiển thị, ví dụ kWh, degC.">
+          <Field label={pick('Đơn vị', 'Unit')} hint={pick('Đơn vị kỹ thuật hiển thị, ví dụ kWh, degC.', 'The displayed engineering unit, e.g. kWh, degC.')}>
             <input className={inputClass} aria-label="Unit" placeholder="Unit" value={point.unit} onChange={(e) => setPoint({ ...point, unit: e.target.value })} />
           </Field>
-          <Field label="Quyền đọc/ghi" hint="Read = chỉ đọc; Read/Write cho phép ghi xuống thiết bị.">
+          <Field label={pick('Quyền đọc/ghi', 'Read/write access')} hint={pick('Read = chỉ đọc; Read/Write cho phép ghi xuống thiết bị.', 'Read = read-only; Read/Write allows writing to the device.')}>
             <select className={inputClass} aria-label="Read write" value={point.read_write} onChange={(e) => setPoint({ ...point, read_write: e.target.value as ModbusRTUPoint['read_write'] })}>
             <option value="read">Read</option>
             <option value="read_write">Read/Write</option>
             </select>
           </Field>
-          <Field label="Giá trị mặc định" hint="Dùng khi chưa có mẫu nào.">
+          <Field label={pick('Giá trị mặc định', 'Default value')} hint={pick('Dùng khi chưa có mẫu nào.', 'Used when no sample has been received yet.')}>
             <input type="number" step="any" className={inputClass} aria-label="Default value" placeholder="Default value" value={Number(point.default_value)} onChange={(e) => setPoint({ ...point, default_value: Number(e.target.value) })} />
           </Field>
-          <Field label="Giá trị an toàn" hint="Giá trị đưa về khi vào trạng thái an toàn.">
+          <Field label={pick('Giá trị an toàn', 'Safe value')} hint={pick('Giá trị đưa về khi vào trạng thái an toàn.', 'The value applied when entering the safe state.')}>
             <input type="number" step="any" className={inputClass} aria-label="Safe value" placeholder="Safe value" value={Number(point.safe_value)} onChange={(e) => setPoint({ ...point, safe_value: Number(e.target.value) })} />
           </Field>
           <label className="flex h-10 items-center gap-2 text-xs font-semibold text-[var(--c-text)]">
             <input type="checkbox" checked={point.enabled} onChange={(e) => setPoint({ ...point, enabled: e.target.checked })} />
-            Kích hoạt (Enabled)
+            {pick('Kích hoạt (Enabled)', 'Enabled')}
           </label>
           <div className="flex gap-2">
-            <button className={buttonClass} type="submit" disabled={!canEdit} title={readOnlyHint}>{editingPoint ? 'Cập nhật' : 'Thêm Point'}</button>
+            <button className={buttonClass} type="submit" disabled={!canEdit} title={readOnlyHintText}>{editingPoint ? pick('Cập nhật', 'Update') : pick('Thêm Point', 'Add Point')}</button>
             {editingPoint && (
               <button
                 className={buttonClass}
@@ -255,7 +257,7 @@ export function PointsPage() {
                   setEditingPoint(false)
                 }}
               >
-                Huỷ
+                {pick('Huỷ', 'Cancel')}
               </button>
             )}
           </div>
@@ -273,14 +275,14 @@ export function PointsPage() {
       {/* MBR-B308: import đi vào BẢN NHÁP và là all-or-nothing — một dòng sai là
           cả file bị từ chối, kèm số dòng để sửa đúng chỗ. */}
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
-        <h3 className="text-base font-semibold text-[var(--c-text)]">Nhập / Xuất danh sách Point</h3>
+        <h3 className="text-base font-semibold text-[var(--c-text)]">{pick('Nhập / Xuất danh sách Point', 'Import / Export Point list')}</h3>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button type="button" className={buttonClass + ' text-xs h-9'}
-            onClick={() => void downloadExport('csv')}>Xuất CSV</button>
+            onClick={() => void downloadExport('csv')}>{pick('Xuất CSV', 'Export CSV')}</button>
           <button type="button" className={buttonClass + ' text-xs h-9'}
-            onClick={() => void downloadExport('json')}>Xuất JSON</button>
+            onClick={() => void downloadExport('json')}>{pick('Xuất JSON', 'Export JSON')}</button>
           <label className={buttonClass + ' text-xs h-9 inline-flex cursor-pointer items-center'}>
-            Nhập file…
+            {pick('Nhập file…', 'Import file…')}
             <input type="file" accept=".csv,.json,text/csv,application/json" className="hidden"
               data-testid="import-input" disabled={!canEdit}
               onChange={(event) => {
@@ -290,20 +292,20 @@ export function PointsPage() {
               }} />
           </label>
           <span className="text-xs text-[var(--c-text-dim)]">
-            File nhập vào bản nháp; bấm “Áp dụng” ở băng trạng thái để phát xuống thiết bị.
+            {pick('File nhập vào bản nháp; bấm "Áp dụng" ở băng trạng thái để phát xuống thiết bị.', 'The file loads into the draft; click "Apply" on the status bar to push it to the device.')}
           </span>
         </div>
         {importErrors.length > 0 && (
           <div role="alert" data-testid="import-errors"
             className="mt-3 rounded-[var(--radius)] border border-[var(--c-danger,#c00)]/40 bg-red-500/5 p-3 text-xs">
             <p className="font-semibold text-[var(--c-danger,#c00)]">
-              File bị từ chối TOÀN BỘ — không dòng nào được nạp.
+              {pick('File bị từ chối TOÀN BỘ — không dòng nào được nạp.', 'The file was rejected ENTIRELY — no rows were loaded.')}
             </p>
             <ul className="mt-2 space-y-1 font-mono">
               {importErrors.map((issue, index) => (
                 <li key={index}>
-                  {issue.line ? `Dòng ${issue.line}` : 'File'}
-                  {issue.column ? ` · cột ${issue.column}` : ''}: {issue.message}
+                  {issue.line ? pick(`Dòng ${issue.line}`, `Line ${issue.line}`) : pick('File', 'File')}
+                  {issue.column ? pick(` · cột ${issue.column}`, ` · column ${issue.column}`) : ''}: {issue.message}
                 </li>
               ))}
             </ul>
@@ -317,13 +319,13 @@ export function PointsPage() {
             <thead>
               <tr className="border-b border-[var(--c-border)] text-xs text-[var(--c-text-dim)]">
                 <th className="py-2">Point ID / Tag</th>
-                <th className="py-2">Tên</th>
+                <th className="py-2">{pick('Tên', 'Name')}</th>
                 <th className="py-2">Register</th>
-                <th className="py-2">Kiểu / endian</th>
+                <th className="py-2">{pick('Kiểu / endian', 'Type / endian')}</th>
                 <th className="py-2">Scale + offset</th>
                 <th className="py-2">Quality</th>
                 <th className="py-2">R/W</th>
-                <th className="py-2 text-right">Thao tác</th>
+                <th className="py-2 text-right">{pick('Thao tác', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -345,31 +347,31 @@ export function PointsPage() {
                     <button
                       className={buttonClass + ' text-xs h-8 px-3'}
                       disabled={!canEdit}
-                      title={readOnlyHint}
+                      title={readOnlyHintText}
                       onClick={() => {
                         setPoint(row)
                         setEditingPoint(true)
                       }}
                     >
-                      Sửa
+                      {pick('Sửa', 'Edit')}
                     </button>
                     {row.read_write === 'read_write' && (
                       <button
                         className={buttonClass + ' text-xs h-8 px-3'}
                         disabled={!canCommission}
-                        title={canCommission ? undefined : 'Cần vai trò Operator hoặc Admin để ghi thử'}
+                        title={canCommission ? undefined : pick('Cần vai trò Operator hoặc Admin để ghi thử', 'Requires Operator or Admin role to test-write')}
                         onClick={() => setWritingPoint({ point_id: row.point_id, label: `${row.display_name} (${row.point_id})`, value: Number(row.default_value ?? 0) })}
                       >
-                        Ghi thử
+                        {pick('Ghi thử', 'Test write')}
                       </button>
                     )}
                     <button
                       className={buttonClass + ' text-xs h-8 px-3 text-red-600 dark:text-red-400'}
                       disabled={!canEdit}
-                      title={readOnlyHint}
+                      title={readOnlyHintText}
                       onClick={() => setPendingDelete({ id: row.point_id, label: `${row.tag_name} (${row.point_id})` })}
                     >
-                      Xoá
+                      {pick('Xoá', 'Delete')}
                     </button>
                   </td>
                 </tr>
@@ -377,7 +379,7 @@ export function PointsPage() {
             </tbody>
           </table>
           {points.length === 0 && (
-            <p className="mt-4 text-center text-xs text-[var(--c-text-dim)]">Chưa có Modbus RTU Point nào.</p>
+            <p className="mt-4 text-center text-xs text-[var(--c-text-dim)]">{pick('Chưa có Modbus RTU Point nào.', 'No Modbus RTU Points yet.')}</p>
           )}
         </div>
       </section>
@@ -385,13 +387,13 @@ export function PointsPage() {
       {pendingDelete && (
         <div role="dialog" aria-modal="true" aria-labelledby="mb-point-del" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-5 space-y-3">
-            <h3 id="mb-point-del" className="text-lg font-semibold text-[var(--c-text)]">Xoá Modbus RTU Point?</h3>
+            <h3 id="mb-point-del" className="text-lg font-semibold text-[var(--c-text)]">{pick('Xoá Modbus RTU Point?', 'Delete Modbus RTU Point?')}</h3>
             <p className="text-sm text-[var(--c-text)]">{pendingDelete.label}</p>
-            <p className="text-xs text-[var(--c-text-dim)]">Thao tác này áp dụng cấu hình mới vào iobus ngay lập tức.</p>
+            <p className="text-xs text-[var(--c-text-dim)]">{pick('Thao tác này áp dụng cấu hình mới vào iobus ngay lập tức.', 'This action applies the new configuration to iobus immediately.')}</p>
             <div className="flex justify-end gap-2 pt-2">
-              <button className={buttonClass} type="button" onClick={() => setPendingDelete(null)} disabled={deleting}>Huỷ</button>
+              <button className={buttonClass} type="button" onClick={() => setPendingDelete(null)} disabled={deleting}>{pick('Huỷ', 'Cancel')}</button>
               <button className={buttonClass + ' bg-red-600 text-white hover:bg-red-700'} type="button" onClick={confirmDelete} disabled={deleting}>
-                {deleting ? 'Đang xoá…' : 'Xoá'}
+                {deleting ? pick('Đang xoá…', 'Deleting…') : pick('Xoá', 'Delete')}
               </button>
             </div>
           </div>
@@ -401,10 +403,10 @@ export function PointsPage() {
       {writingPoint && (
         <div role="dialog" aria-modal="true" aria-labelledby="mb-write-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-5">
-            <h3 id="mb-write-title" className="text-lg font-semibold text-[var(--c-text)]">Ghi thử Modbus RTU Point</h3>
+            <h3 id="mb-write-title" className="text-lg font-semibold text-[var(--c-text)]">{pick('Ghi thử Modbus RTU Point', 'Test-write Modbus RTU Point')}</h3>
             <p className="mt-2 text-sm text-[var(--c-text)]">{writingPoint.label}</p>
             <div className="mt-4 space-y-2">
-              <label className="block text-xs font-semibold text-[var(--c-text-dim)]" htmlFor="mb-write-value">Giá trị cần ghi</label>
+              <label className="block text-xs font-semibold text-[var(--c-text-dim)]" htmlFor="mb-write-value">{pick('Giá trị cần ghi', 'Value to write')}</label>
               <input
                 id="mb-write-value"
                 type="number"
@@ -415,12 +417,12 @@ export function PointsPage() {
               />
             </div>
             <p className="mt-3 text-xs text-[var(--c-text-dim)]">
-              Lệnh sẽ được gửi xuống Core/iobus và đặt cờ dirty để ghi trực tiếp xuống thiết bị Modbus RTU.
+              {pick('Lệnh sẽ được gửi xuống Core/iobus và đặt cờ dirty để ghi trực tiếp xuống thiết bị Modbus RTU.', 'The command will be sent to Core/iobus and set the dirty flag to write directly to the Modbus RTU device.')}
             </p>
             <div className="mt-4 flex justify-end gap-2">
-              <button className={buttonClass} type="button" onClick={() => setWritingPoint(null)} disabled={testWriting}>Huỷ</button>
+              <button className={buttonClass} type="button" onClick={() => setWritingPoint(null)} disabled={testWriting}>{pick('Huỷ', 'Cancel')}</button>
               <button className={buttonClass} type="button" onClick={confirmTestWrite} disabled={testWriting}>
-                {testWriting ? 'Đang ghi…' : 'Xác nhận Ghi'}
+                {testWriting ? pick('Đang ghi…', 'Writing…') : pick('Xác nhận Ghi', 'Confirm Write')}
               </button>
             </div>
           </div>

@@ -19,13 +19,18 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <BrowserRouter>
       <ThemeProvider>
-        <AuthProvider>
-          <I18nProvider>
+        {/* BUG-015/TC-L02/TC-L03 (TR-MKDDC24-P1-20260814-01): `AuthProvider`
+            cần dịch thông báo lỗi đăng nhập theo locale qua `useI18n()`, nên
+            phải nằm TRONG `I18nProvider`. Trước đây thứ tự ngược lại vì
+            `AuthProvider` không đọc i18n; không có provider nào khác phụ
+            thuộc thứ tự này nên đảo an toàn. */}
+        <I18nProvider>
+          <AuthProvider>
             <ToastProvider>
               <App />
             </ToastProvider>
-          </I18nProvider>
-        </AuthProvider>
+          </AuthProvider>
+        </I18nProvider>
       </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>

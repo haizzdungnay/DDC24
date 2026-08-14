@@ -3,10 +3,12 @@ import { useEffect, useId, useReducer, useRef } from 'react'
 
 import { Button } from '../../../shared/components/Button'
 import { useI18n } from '../../../shared/i18n'
+import { createUuid } from '../../../shared/crypto'
 import {
   createFbdEditorState,
   fbdEditorReducer,
   resolveFbdKeyboardCommand,
+  translateFbdAnnouncement,
   type FbdEditorAction,
   type FbdKeyboardCommand,
 } from './commands'
@@ -19,7 +21,7 @@ export interface StructuredFbdEditorProps {
 }
 
 function newUuid(): string {
-  return crypto.randomUUID().toLowerCase()
+  return createUuid()
 }
 
 function newNetwork(index: number): FbdNetwork {
@@ -173,7 +175,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
           {state.document.networks.reduce((sum, item) => sum + item.wires.length, 0)}/512 wire
         </span>
         <span className={issues.length ? 'rounded-full bg-[var(--c-warn-bg)] px-2 py-1 text-[var(--c-warn-fg)]' : 'rounded-full bg-[var(--c-good-bg)] px-2 py-1 text-[var(--c-good-fg)]'}>
-          {issues.length ? pick(`${issues.length} lỗi Draft`, `${issues.length} Draft issues`) : pick('Canonical hợp lệ', 'Canonical valid')}
+          {issues.length ? pick(`${issues.length} lỗi Draft`, `${issues.length} Draft ${issues.length === 1 ? 'issue' : 'issues'}`) : pick('Canonical hợp lệ', 'Canonical valid')}
         </span>
         {!canEdit && <span className="rounded-full bg-[var(--c-surface-2)] px-2 py-1">{pick('Chỉ đọc', 'Read only')}</span>}
       </div>
@@ -245,7 +247,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
           </article>
         ))}
       </div>
-      <p className="sr-only" aria-live="polite" aria-atomic="true">{state.announcement}</p>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">{translateFbdAnnouncement(pick, state.announcement)}</p>
     </section>
   )
 }

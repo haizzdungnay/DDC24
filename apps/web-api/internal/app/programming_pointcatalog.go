@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	programmingapplication "mkddc-web/internal/programming/application"
 )
@@ -22,8 +23,9 @@ import (
 type programmingPointCatalogAdapter struct{ app *App }
 
 // programmingPointCatalog trả kiểu cụ thể (không phải interface hẹp) vì
-// adapter implement CẢ `PointCatalogProvider` lẫn `OverrideProvider` — main.go
-// (cùng package) gán nó vào cả hai field của `RuntimeServiceOptions`.
+// adapter implement `PointCatalogProvider`, `OverrideProvider` và
+// `MonitorSnapshotProvider` — main.go gán cùng adapter read-only này vào ba
+// field; không tạo authority Point thứ hai.
 func (a *App) programmingPointCatalog() programmingPointCatalogAdapter {
 	return programmingPointCatalogAdapter{app: a}
 }
@@ -38,6 +40,74 @@ func (adapter programmingPointCatalogAdapter) ListPointCatalog(ctx context.Conte
 		entries = append(entries, toPointCatalogEntry(point))
 	}
 	return entries, nil
+}
+
+func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx context.Context) (programmingapplication.MonitorTruthSnapshot, error) {
+	reader, ok := adapter.app.core.(historianSnapshotReader)
+	if !ok {
+		return programmingapplication.MonitorTruthSnapshot{}, fmt.Errorf("Core không hỗ trợ point_snapshot bounded")
+	}
+	snapshot, err := reader.ReadPointSnapshot(ctx)
+	if err != nil {
+		return programmingapplication.MonitorTruthSnapshot{}, err
+	}
+	points, err := adapter.app.ReadPoints(ctx)
+	if err != nil {
+		return programmingapplication.MonitorTruthSnapshot{}, err
+	}
+	physical := make(map[string]RuntimePoint, len(snapshot.Points))
+	for _, point := range snapshot.Points {
+		physical[point.ID] = point
+	}
+	trackedOverrides := map[string]overrideSnapshot{}
+	if adapter.app.overrides != nil {
+		trackedOverrides = adapter.app.overrides.Snapshot()
+	}
+	result := programmingapplication.MonitorTruthSnapshot{
+		ObservedAt:                snapshot.SnapshotObservedAtUTC,
+		SafeState:                 snapshot.SafeState,
+		SafeStateNoControllerOnly: snapshot.SafeStateNoControllerOnly,
+		Points:                    make([]programmingapplication.MonitorPointTruth, 0, len(points)),
+	}
+	if snapshot.Task != nil {
+		result.Task = &programmingapplication.TaskMetricsView{
+			TaskID: snapshot.Task.TaskID, PeriodMS: snapshot.Task.PeriodMS,
+			BudgetMS: snapshot.Task.BudgetMS, State: snapshot.Task.State,
+			RunCount: snapshot.Task.RunCount, MissedReleaseCount: snapshot.Task.MissedReleaseCount,
+			LastExecNS: snapshot.Task.LastExecNS, MaxExecNS: snapshot.Task.MaxExecNS,
+			OverrunCount: snapshot.Task.OverrunCount, ConsecutiveOverruns: snapshot.Task.ConsecutiveOverruns,
+		}
+	}
+	for _, point := range points {
+		category, deviceID := pointCatalogCategory(point)
+		truth := programmingapplication.MonitorPointTruth{
+			Category: category, PointID: point.ID, DeviceID: deviceID,
+			ObservedAt: point.UpdatedAt, ActualValue: point.Value, Source: point.Source,
+			Quality: pointCatalogQuality(point), Unit: point.Unit,
+		}
+		if sample, exists := physical[point.ID]; category == "LOCAL" && exists {
+			truth.ObservedAt = snapshot.SnapshotObservedAtUTC
+			truth.ActualValue = sample.Value
+			truth.ProgramValue = sample.ProgramValue
+			truth.Source = sample.Source
+			truth.EffectivePriority = sample.EffectivePriority
+			truth.Quality = sample.Quality
+			if sample.Unit != "" {
+				truth.Unit = sample.Unit
+			}
+		}
+		if point.OverrideExpiresInS != nil {
+			remaining := int64(*point.OverrideExpiresInS)
+			truth.OverrideRemainingS = &remaining
+		}
+		if tracked, exists := trackedOverrides[canonicalPointID(point.ID)]; exists {
+			truth.OverrideActor = tracked.User
+			remaining := int64(tracked.RemainingS)
+			truth.OverrideRemainingS = &remaining
+		}
+		result.Points = append(result.Points, truth)
+	}
+	return result, nil
 }
 
 // ListActiveOverrides — TASK-PROG-504. Chỉ những Point đang thật sự bị force
@@ -140,9 +210,10 @@ func pointCatalogDataType(point PointDTO) string {
 // (DM-PROG-001 — GOOD/UNCERTAIN/BAD/STALE/OFFLINE/UNKNOWN); giá trị lạ hoặc
 // rỗng về UNKNOWN, KHÔNG suy đoán thành GOOD (RSK-PROG-010).
 func pointCatalogQuality(point PointDTO) string {
-	switch point.Quality {
+	quality := strings.ToUpper(strings.TrimSpace(point.Quality))
+	switch quality {
 	case "GOOD", "UNCERTAIN", "BAD", "STALE", "OFFLINE", "UNKNOWN":
-		return point.Quality
+		return quality
 	case "CONFIG_ERROR":
 		return "BAD"
 	default:

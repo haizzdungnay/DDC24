@@ -120,4 +120,51 @@ func TestProcessRunnerWithOfficialCompiler(t *testing.T) {
 	if err != nil || !result.OK || len(result.Artifact) == 0 || len(result.Manifest) == 0 || result.TargetABI != 3841 {
 		t.Fatalf("official compile=%+v err=%v", result, err)
 	}
+	if result.IoBindingCount != 0 {
+		t.Fatalf("no io_map sent, IoBindingCount phải =0: %d", result.IoBindingCount)
+	}
+}
+
+// F-PROG-ASBUILT-013/D-07: kiểm chứng end-to-end với binary thật rằng
+// --io-map-in làm artifact THẬT SỰ mang binding (SEC_IO_BINDING không rỗng),
+// không chỉ tin request đã gửi IoMap — trước bản vá này resolve_io_bindings()
+// chưa từng được compilerInput() gọi tới nên io_bindings luôn rỗng dù Mapping
+// tab cấu hình đúng đến đâu.
+func TestProcessRunnerWithOfficialCompilerResolvesIoMapIntoArtifact(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sandbox compiler chỉ hỗ trợ Linux")
+	}
+	_, current, _, _ := runtime.Caller(0)
+	repo := filepath.Clean(filepath.Join(filepath.Dir(current), "..", "..", "..", "..", ".."))
+	binary := filepath.Join(repo, "build", "fw", "core", "mkddc-st-compile")
+	if _, err := os.Stat(binary); err != nil {
+		t.Skip("hãy build CMake gate trước Go integration")
+	}
+	runner := ProcessRunner{BinaryPath: binary, ScratchRoot: filepath.Join(t.TempDir(), "scratch"), Timeout: 10 * time.Second}
+	source := []byte("PROGRAM P\nVAR_INPUT SupplyTemp : REAL; END_VAR\nVAR_OUTPUT FanEnable : BOOL; END_VAR\n" +
+		"FanEnable := SupplyTemp > 25.0;\nEND_PROGRAM\n")
+	ioMap := []IoMapEntry{
+		{Variable: "SupplyTemp", Direction: "input", PointID: "UI-01", Type: "REAL", Category: "LOCAL", Writable: false},
+		{Variable: "FanEnable", Direction: "output", PointID: "DO-01", Type: "BOOL", Category: "LOCAL", Writable: true},
+	}
+	result, err := runner.Compile(context.Background(), Input{SourceID: "22222222-2222-4222-8222-222222222222",
+		Language: "ST", Source: source, IoMap: ioMap})
+	if err != nil || !result.OK || result.IoBindingCount != 2 {
+		t.Fatalf("compile với io_map=%+v err=%v", result, err)
+	}
+
+	// Tái hiện đúng bug thật (AlarmHigh BOOL -> UI-09 read-only): compile phải
+	// FAILED với diagnostic ST-IOMAP-002, không phải OK với binding bị bỏ qua
+	// lặng lẽ.
+	badIoMap := []IoMapEntry{
+		{Variable: "FanEnable", Direction: "output", PointID: "UI-01", Type: "BOOL", Category: "LOCAL", Writable: false},
+	}
+	badResult, err := runner.Compile(context.Background(), Input{SourceID: "22222222-2222-4222-8222-222222222222",
+		Language: "ST", Source: source, IoMap: badIoMap})
+	if err != nil {
+		t.Fatalf("io_map hỏng phải trả về Result{OK:false}, không phải error worker: %v", err)
+	}
+	if badResult.OK || len(badResult.Diagnostics) == 0 || badResult.Diagnostics[0].Code != "ST-IOMAP-002" {
+		t.Fatalf("io_map hỏng kết quả=%+v", badResult)
+	}
 }

@@ -94,10 +94,24 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../build/fw-aarch64/web-api
 
 ### 3.3 Frontend (web-ui) — Build trên máy dev, copy static
 
+> [!WARNING]
+> **Board Foxlinx đã bật cờ Programming Rev A VĨNH VIỄN** từ `TASK-PROG-507`
+> (`docs/07_records/test-evidence/fw-som/2026-08-13-foxlinx-programming-p5-deploy.md`).
+> `VITE_PROGRAMMING_REV_A` là biến build-time (Vite bake vào bundle, mặc định
+> TẮT ở `.env.production` vì production build thường KHÔNG bật — xem
+> `apps/web-ui/src/shared/config.ts`). Build FE cho board này mà **quên** biến
+> này sẽ âm thầm tắt route `/eng/programming` và render lại trang "Graphical
+> programming is not available" dù không đổi code gì — đúng regression đã xảy
+> ra ngày 2026-08-14 khi một phiên chỉ sửa i18n Modbus RTU rồi build/deploy
+> theo đúng lệnh cũ của mục này. **Luôn** export biến khi build cho Foxlinx:
+
 ```bash
 cd apps/web-ui
-npm run build
+VITE_PROGRAMMING_REV_A=1 npm run build
 # Output: ../../build/web-ui/dist/ → sẽ copy lên board
+# Kiểm nhanh trước khi copy: bundle KHÔNG được chứa "REVA_SCOPE_ROADMAP"
+# (chuỗi đó chỉ còn trong code khi cờ tắt/bị tree-shake sai):
+grep -c REVA_SCOPE_ROADMAP ../../build/web-ui/dist/assets/index-*.js   # phải = 0
 ```
 
 ### 3.4 Đóng gói release

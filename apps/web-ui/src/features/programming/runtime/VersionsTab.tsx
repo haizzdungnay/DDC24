@@ -41,7 +41,22 @@ export function VersionsTab({ runtime }: { runtime: ProgrammingRuntime | null })
         ) : operations.data.items.length === 0 ? (
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Chưa có thao tác nào.', 'No operations yet.')}</p>
         ) : (
-          <table className="w-full text-left text-sm">
+          <>
+          <ul className="space-y-2 md:hidden">
+            {operations.data.items.map((operation) => (
+              <li key={operation.operationId} className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-[var(--c-text)]">{operation.kind ?? '—'}</span>
+                  <StatusBadge state={operation.state === 'SUCCEEDED' ? 'online' : operation.state === 'FAILED' || operation.state === 'REJECTED' ? 'fault' : 'unknown'} label={operation.state} />
+                </div>
+                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
+                  <dt className="text-[var(--c-text-dim)]">{pick('Bản đích', 'Target')}</dt><dd className="font-mono">{(operation.requestedRevisionId ?? '—').slice(0, 8)}</dd>
+                  <dt className="text-[var(--c-text-dim)]">{pick('Cập nhật', 'Updated')}</dt><dd>{new Date(operation.updatedAt).toLocaleString()}</dd>
+                </dl>
+              </li>
+            ))}
+          </ul>
+          <table className="hidden w-full text-left text-sm md:table">
             <thead>
               <tr className="text-xs uppercase text-[var(--c-text-dim)]">
                 <th className="py-1 pr-3">{pick('Loại', 'Kind')}</th>
@@ -63,6 +78,7 @@ export function VersionsTab({ runtime }: { runtime: ProgrammingRuntime | null })
               ))}
             </tbody>
           </table>
+          </>
         )}
       </Panel>
 
@@ -74,7 +90,7 @@ export function VersionsTab({ runtime }: { runtime: ProgrammingRuntime | null })
         ) : audit.data.items.length === 0 ? (
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Chưa có hoạt động nào.', 'No activity yet.')}</p>
         ) : (
-          <ul className="max-h-64 space-y-1 overflow-y-auto text-sm">
+          <ul tabIndex={0} aria-label={pick('Danh sách nhật ký hoạt động có thể cuộn', 'Scrollable activity log')} className="max-h-64 space-y-1 overflow-y-auto text-sm focus:outline focus:outline-2 focus:outline-[var(--c-accent)]">
             {audit.data.items.map((entry) => (
               <li key={entry.auditId} className="flex items-center justify-between gap-2">
                 <span className="text-[var(--c-text)]">{entry.action}</span>

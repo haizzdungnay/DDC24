@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router-dom'
-import { AlertTriangle, ShieldCheck } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { AlertTriangle, ClipboardCheck, ShieldCheck } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
 import { Panel } from '../../../shared/components/Panel'
@@ -10,6 +10,7 @@ import { StateBlock } from '../../../shared/components/StateBlock'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import { useProgrammingCheck, useProgrammingOverrides, useProgrammingRevisionChanges } from '../api/queries'
+import { useDraftWorkspace, useCheckWorkflow } from '../design/useDraftWorkspace'
 import { useCommissionWorkflow } from './useCommissionWorkflow'
 import type { ProgrammingImpactKey } from '../api/generated/client'
 import { ProblemsDrawer } from '../shared/ProblemsDrawer'
@@ -29,25 +30,42 @@ interface NavState {
 
 /**
  * PGM-03 Kiểm tra & Đưa vào vận hành — `UJ-PROG-05/06` (TASK-PROG-504). Trang
- * chỉ nhận `revisionId/checkId` qua `navigate(..., {state})` từ nút "Mở Kiểm
- * tra & Đưa vào vận hành" của PGM-02 (S5-B) — vào thẳng bằng URL/reload không
- * có ngữ cảnh Check nào để tin, nên phải quay lại Thiết kế chạy Kiểm tra lại.
- * Đây là lựa chọn AN TOÀN có chủ đích, không phải thiếu sót: không có route
- * nào trả "Check mới nhất của Project" để suy đoán thay.
+ * nhận `revisionId/checkId` từ query canonical và dùng `location.state` làm
+ * tương thích điều hướng trong phiên. Deep-link/reload không suy đoán Check
+ * "mới nhất": chỉ đọc đúng hai định danh bất biến đã có trong URL.
  */
 export function CheckCommissionPage() {
   const { pick } = useI18n()
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin')
   const { projectId } = useParams<{ projectId: string }>()
+  const navigate = useNavigate()
   const location = useLocation()
-  const navState = (location.state as NavState | null) ?? null
-  const { runtime } = useProgrammingRuntimeContext()
+  const [searchParams] = useSearchParams()
+  const locationState = (location.state as NavState | null) ?? null
+  const navState: NavState = {
+    revisionId: searchParams.get('revisionId') ?? locationState?.revisionId,
+    checkId: searchParams.get('checkId') ?? locationState?.checkId
+  }
+  const { runtime, setEditingContext } = useProgrammingRuntimeContext()
 
+  /* D-01: PGM-03 sở hữu toàn bộ seal/run/poll Check — trước bản vá này chỉ
+   * PGM-02 gọi được `useCheckWorkflow`, nên mở PGM-03 trực tiếp (không đến từ
+   * nút "Mở Kiểm tra & Đưa vào vận hành" của PGM-02) không có cách nào bắt
+   * đầu Check, đúng gap ghi ở As-Built §3/`F-PROG-ASBUILT-004`. */
+  const workspace = useDraftWorkspace(projectId)
+  const checkWorkflow = useCheckWorkflow(projectId)
   const check = useProgrammingCheck(navState?.checkId)
   const changes = useProgrammingRevisionChanges(runtime.data?.activeRevisionId ?? 'none', navState?.revisionId)
   const overrides = useProgrammingOverrides()
   const commission = useCommissionWorkflow()
+
+  useEffect(() => {
+    if (checkWorkflow.state.phase !== 'done' || !projectId) return
+    const { revisionId, checkId } = checkWorkflow.state.check
+    if (navState.revisionId === revisionId && navState.checkId === checkId) return
+    navigate(`/eng/programming/projects/${projectId}/commission?revisionId=${encodeURIComponent(revisionId)}&checkId=${encodeURIComponent(checkId)}`, { replace: true })
+  }, [checkWorkflow.state, projectId, navState.revisionId, navState.checkId, navigate])
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [acknowledged, setAcknowledged] = useState<Set<ProgrammingImpactKey>>(new Set())
@@ -57,23 +75,82 @@ export function CheckCommissionPage() {
   const presentKeys = useMemo(() => IMPACT_GROUP_ORDER.filter((key) => impact?.[key].status === 'PRESENT'), [impact])
   const hasUnavailable = useMemo(() => IMPACT_GROUP_ORDER.some((key) => !impact || impact[key].status !== 'NONE' && impact[key].status !== 'PRESENT'), [impact])
   const checkPassed = check.data?.state === 'PASSED'
-  const readyToCommission = checkPassed && changes.status === 'ready' && !hasUnavailable && !!projectId
+  /* `safeState=true` một mình không chặn Commission: nếu lý do DUY NHẤT là
+   * `safeStateNoControllerOnly` (Core trigger T7 — chưa Program nào đang
+   * điều khiển output), Commission đúng là hành động giải quyết nó, không
+   * phải một fault cần khắc phục trước. Vẫn chặn khi safeState=true mà
+   * `safeStateNoControllerOnly=false` (lỗi I/O/stale/overrun thật — xem
+   * apps/core/domain/safety/safe_state.hpp §5.2). */
+  const coreReady =
+    runtime.status === 'ready' &&
+    runtime.data?.producerState === 'READY' &&
+    (runtime.data.safeState === false || runtime.data.safeStateNoControllerOnly === true)
+  const readyToCommission = checkPassed && changes.status === 'ready' && overrides.status === 'ready' && !hasUnavailable && coreReady && !!projectId
+
+  useEffect(() => {
+    if (!projectId) return
+    const workflowPhase = checkWorkflow.state.phase
+    // D-01: khi Check được chạy ngay tại trang này, `checkWorkflow.state` là
+    // nguồn đúng hơn `check` (hook deep-link theo `navState.checkId`, chưa có
+    // giá trị cho tới khi effect điều hướng-replace ở trên chạy xong).
+    const checkState =
+      workflowPhase === 'sealing' || workflowPhase === 'checking'
+        ? 'checking'
+        : workflowPhase === 'done'
+          ? (checkWorkflow.state.check.state === 'PASSED' ? 'passed' : 'failed')
+          : workflowPhase === 'error'
+            ? 'unknown'
+            : check.status !== 'ready' || !check.data
+              ? 'checking'
+              : check.data.state === 'PASSED'
+                ? 'passed'
+                : check.data.state === 'FAILED' || check.data.state === 'TIMED_OUT' ? 'failed' : 'checking'
+    setEditingContext({ projectId, projectName: '', draftRevisionId: '', dirty: false, checkState })
+    return () => setEditingContext(null)
+  }, [checkWorkflow.state, check.data, check.status, projectId, setEditingContext])
 
   if (!navState?.revisionId || !navState?.checkId) {
+    const phase = checkWorkflow.state.phase
+    const running = phase === 'sealing' || phase === 'checking'
     return (
       <div className="space-y-3">
-        <StateBlock
-          state="empty"
-          title={pick('Chưa có Revision để kiểm tra.', 'No revision to check yet.')}
-          detail={pick(
-            'Mở trang này từ nút "Mở Kiểm tra & Đưa vào vận hành" ở workspace Thiết kế sau khi Kiểm tra đạt.',
-            'Open this page from the "Open Check & Commission" button in the Design workspace after a check passes.'
-          )}
-        />
+        {phase === 'error' ? (
+          <StateBlock state="error" title={checkWorkflow.state.message} onRetry={checkWorkflow.reset} />
+        ) : (
+          <StateBlock
+            state={running ? 'loading' : 'empty'}
+            title={
+              phase === 'sealing'
+                ? pick('Đang niêm phong Draft…', 'Sealing the draft…')
+                : phase === 'checking'
+                  ? pick('Đang kiểm tra…', 'Checking…')
+                  : pick('Chưa có Kiểm tra nào.', 'No check yet.')
+            }
+            detail={
+              running
+                ? undefined
+                : pick(
+                    'Bấm "Kiểm tra" để niêm phong Draft hiện tại thành Revision và biên dịch. Draft phải đã lưu ở workspace Thiết kế trước đó.',
+                    'Press "Check" to seal the current draft into a revision and compile it. The draft must already be saved in the Design workspace.'
+                  )
+            }
+          />
+        )}
+        {canEdit && !running && phase !== 'error' && (
+          <Button
+            icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
+            disabled={workspace.status !== 'ready' || !workspace.project}
+            onClick={() => workspace.project && void checkWorkflow.runCheck(workspace.project, workspace.syncAfterSeal)}
+          >
+            {pick('Kiểm tra', 'Check')}
+          </Button>
+        )}
         {projectId && (
-          <Link className="text-sm font-medium text-[var(--c-accent)] underline" to={`/eng/programming/projects/${projectId}/design`}>
-            {pick('Về workspace Thiết kế', 'Back to the Design workspace')}
-          </Link>
+          <div>
+            <Link className="text-sm font-medium text-[var(--c-accent)] underline" to={`/eng/programming/projects/${projectId}/design`}>
+              {pick('Về workspace Thiết kế', 'Back to the Design workspace')}
+            </Link>
+          </div>
         )}
       </div>
     )
@@ -89,7 +166,7 @@ export function CheckCommissionPage() {
   }
 
   function submitCommission() {
-    if (!impact || !navState?.revisionId || !navState?.checkId) return
+    if (!readyToCommission || !impact || !navState.revisionId || !navState.checkId) return
     void commission.submit(
       {
         revisionId: navState.revisionId,
@@ -117,7 +194,24 @@ export function CheckCommissionPage() {
               <StatusBadge state={check.data.state === 'PASSED' ? 'online' : 'fault'} label={check.data.state} />
               <span className="text-sm text-[var(--c-text-dim)]">Revision {navState.revisionId.slice(0, 8)}</span>
             </div>
-            {check.data.diagnostics.length > 0 && <ProblemsDrawer diagnostics={check.data.diagnostics} />}
+            {check.data.diagnostics.length > 0 && (
+              <ProblemsDrawer
+                diagnostics={check.data.diagnostics}
+                onSelect={(diagnostic) => {
+                  // BUG-007 — lỗi Check trước đây không dẫn đi đâu cả. D-01: PGM-03 sở
+                  // hữu Check/result nhưng editor vẫn ở PGM-02 — điều hướng sang đúng
+                  // Program kèm line/column/length qua query string (F-PROG-ASBUILT-003)
+                  // để `SourceEditor` chọn đúng vùng nguồn ngay khi PGM-02 mount, không
+                  // chỉ chọn đúng Program rồi bắt người dùng tự tìm dòng lỗi.
+                  if (!projectId || typeof diagnostic.location?.programId !== 'string') return
+                  const params = new URLSearchParams({ tab: 'programs', program: diagnostic.location.programId })
+                  if (typeof diagnostic.location.line === 'number') params.set('line', String(diagnostic.location.line))
+                  if (typeof diagnostic.location.column === 'number') params.set('column', String(diagnostic.location.column))
+                  if (typeof diagnostic.location.length === 'number') params.set('length', String(diagnostic.location.length))
+                  navigate(`/eng/programming/projects/${projectId}/design?${params.toString()}`)
+                }}
+              />
+            )}
             {!checkPassed && <p className="text-sm text-[var(--c-warn-fg)]">{pick('Chỉ Kiểm tra PASSED mới mở được Đưa vào vận hành.', 'Only a PASSED check unlocks Commission.')}</p>}
           </div>
         )}
@@ -201,6 +295,25 @@ export function CheckCommissionPage() {
         )}
       </Panel>
 
+      {coreReady && runtime.data?.safeState === true && runtime.data.safeStateNoControllerOnly === true && (
+        <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
+          {pick(
+            'Core đang ở trạng thái an toàn vì chưa có Program nào điều khiển output — Đưa vào vận hành Program này sẽ tự giải quyết.',
+            'Core is in safe state because no Program is currently controlling outputs — commissioning this Program will resolve it.'
+          )}
+        </div>
+      )}
+      {!coreReady && (
+        <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
+          {pick('Core chưa READY hoặc đang ở trạng thái an toàn do lỗi — Đưa vào vận hành bị chặn.', 'Core is not READY or is in a fault safe state — Commission is blocked.')}
+        </div>
+      )}
+      {overrides.status === 'error' && (
+        <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
+          {pick('Không xác minh được override hiện hành — Đưa vào vận hành bị chặn.', 'Active overrides could not be verified — Commission is blocked.')}
+        </div>
+      )}
+
       {canEdit && (
         <div className="flex justify-end">
           <Button icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />} disabled={!readyToCommission} onClick={openConfirmDialog}>
@@ -245,7 +358,7 @@ export function CheckCommissionPage() {
         title={pick('Xác nhận Đưa vào vận hành', 'Confirm Commission')}
         confirmLabel={pick('Gửi lệnh', 'Submit')}
         confirmLoading={submitting}
-        confirmDisabled={submitting || presentKeys.some((key) => !acknowledged.has(key)) || password.length === 0 || changes.status !== 'ready'}
+        confirmDisabled={submitting || presentKeys.some((key) => !acknowledged.has(key)) || password.length === 0 || !readyToCommission}
         onConfirm={submitCommission}
         onClose={() => {
           if (submitting) return
