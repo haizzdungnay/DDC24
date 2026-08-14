@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Point } from './types'
-import { NO_DATA, formatValue, pointNumber } from './utils'
+import { NO_DATA, formatValue, isChannelNotConfigured, pointNumber } from './utils'
 
 
 // REV-FE-04: nơi hiển thị và nơi tính toán phải phân biệt "chưa có số đo" với 0.
@@ -23,5 +23,20 @@ describe('formatValue và pointNumber với dữ liệu chưa đo', () => {
     expect(pointNumber({ ...base, value: 0 })).toBe(0)
     expect(pointNumber({ ...base, value: true })).toBe(1)
     expect(pointNumber({ ...base, value: 21.5 })).toBe(21.5)
+  })
+})
+
+// F-DASH-LOCALIO-01: kênh Signal Type "none" là chủ ý chưa nối, không phải fault.
+describe('isChannelNotConfigured', () => {
+  it('true khi signalType là "none" (không phân biệt hoa/thường, khoảng trắng)', () => {
+    expect(isChannelNotConfigured({ signalType: 'none' })).toBe(true)
+    expect(isChannelNotConfigured({ signalType: 'None' })).toBe(true)
+    expect(isChannelNotConfigured({ signalType: ' NONE ' })).toBe(true)
+  })
+
+  it('false với signal type thật hoặc thiếu field', () => {
+    expect(isChannelNotConfigured({ signalType: '0-10V' })).toBe(false)
+    expect(isChannelNotConfigured({ signalType: undefined })).toBe(false)
+    expect(isChannelNotConfigured({ signalType: '' })).toBe(false)
   })
 })
