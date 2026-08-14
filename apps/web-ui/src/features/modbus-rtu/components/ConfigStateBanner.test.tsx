@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConfigStateBanner } from './ConfigStateBanner'
 import { ModbusConfigProvider } from '../useModbusConfig'
+import { I18nProvider } from '../../../shared/i18n'
 
 const api = vi.hoisted(() => ({
   getModbusCandidate: vi.fn(),
@@ -26,14 +27,18 @@ vi.mock('../../auth', () => ({
 
 function renderBanner() {
   render(
-    <ModbusConfigProvider>
-      <ConfigStateBanner />
-    </ModbusConfigProvider>
+    <I18nProvider>
+      <ModbusConfigProvider>
+        <ConfigStateBanner />
+      </ModbusConfigProvider>
+    </I18nProvider>
   )
 }
 
 describe('ConfigStateBanner', () => {
   beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('mkddc-lang', 'vi')
     auth.role = 'admin'
     api.getModbusCandidate.mockResolvedValue({ config: {}, base_revision: 4 })
     api.getModbusPorts.mockResolvedValue([])

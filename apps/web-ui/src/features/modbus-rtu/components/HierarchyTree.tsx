@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, Cable, Cpu, Radio } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HealthChip } from '../../../shared/components/pa3/StateAtoms'
+import { useI18n } from '../../../shared/i18n'
 import { NO_DATA } from '../../../shared/utils'
 import type { ModbusBusInfo, ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint, OverviewHealthState } from '../../../shared/types'
 
@@ -63,6 +64,7 @@ function busIdOf(device: ModbusRTUDevice, buses: ModbusBusInfo[]): string | null
 }
 
 export function HierarchyTree({ buses, devices, points, diagnostics, telemetryAvailable }: HierarchyTreeProps) {
+  const { pick } = useI18n()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const diagByDevice = useMemo(() => new Map(diagnostics.map((item) => [item.device_id, item])), [diagnostics])
   const pointsByDevice = useMemo(() => {
@@ -98,13 +100,13 @@ export function HierarchyTree({ buses, devices, points, diagnostics, telemetryAv
   if (buses.length === 0 && devices.length === 0) {
     return (
       <p className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-4 text-sm text-[var(--c-text-dim)]">
-        Chưa cấu hình bus hoặc thiết bị Modbus RTU nào.
+        {pick('Chưa cấu hình bus hoặc thiết bị Modbus RTU nào.', 'No Modbus RTU bus or device configured yet.')}
       </p>
     )
   }
 
   return (
-    <div className="space-y-2" role="tree" aria-label="Cây Bus → Thiết bị → Point">
+    <div className="space-y-2" role="tree" aria-label={pick('Cây Bus → Thiết bị → Point', 'Bus → Device → Point tree')}>
       {buses.map((bus) => {
         const busDevices = grouped.map.get(bus.bus_id) ?? []
         const busOpen = expanded[`bus:${bus.bus_id}`] ?? true
@@ -126,21 +128,21 @@ export function HierarchyTree({ buses, devices, points, diagnostics, telemetryAv
                 {bus.port || NO_DATA} · {bus.baud || NO_DATA} {bus.parity || '?'}{bus.data_bits || '?'}{bus.stop_bits || '?'}
               </span>
               <span className="ml-auto text-xs text-[var(--c-text-dim)]">
-                {bus.online_devices}/{bus.total_devices} thiết bị trực tuyến
+                {pick(`${bus.online_devices}/${bus.total_devices} thiết bị trực tuyến`, `${bus.online_devices}/${bus.total_devices} devices online`)}
               </span>
               <Link
                 to={`/eng/modbus-rtu/ports?bus=${encodeURIComponent(bus.bus_id)}`}
                 onClick={(event) => event.stopPropagation()}
                 className="shrink-0 text-xs font-semibold text-[var(--c-accent)]"
               >
-                Cấu hình bus →
+                {pick('Cấu hình bus →', 'Configure bus →')}
               </Link>
             </button>
 
             {busOpen && (
               <div className="divide-y divide-[var(--c-border)]">
                 {busDevices.length === 0 && (
-                  <p className="px-9 py-3 text-xs text-[var(--c-text-dim)]">Chưa có thiết bị nào trên bus này.</p>
+                  <p className="px-9 py-3 text-xs text-[var(--c-text-dim)]">{pick('Chưa có thiết bị nào trên bus này.', 'No devices on this bus yet.')}</p>
                 )}
                 {busDevices.map((device) => {
                   const diag = diagByDevice.get(device.device_id)
@@ -160,24 +162,24 @@ export function HierarchyTree({ buses, devices, points, diagnostics, telemetryAv
                         <span className="font-semibold">{device.display_name || device.device_id}</span>
                         <span className="mono text-xs text-[var(--c-text-dim)]">Slave {device.slave_id}</span>
                         <HealthChip state={deviceState(device, diag, telemetryAvailable)} />
-                        {!device.enabled && <span className="text-xs text-[var(--c-text-dim)]">đã tắt</span>}
+                        {!device.enabled && <span className="text-xs text-[var(--c-text-dim)]">{pick('đã tắt', 'disabled')}</span>}
                         <span className="ml-auto text-xs text-[var(--c-text-dim)]">
                           {devicePoints.length} point · poll {device.poll_ms} ms
-                          {diag ? ` · lỗi ${diag.total_errors}/${diag.total_polls}` : ''}
+                          {diag ? pick(` · lỗi ${diag.total_errors}/${diag.total_polls}`, ` · errors ${diag.total_errors}/${diag.total_polls}`) : ''}
                         </span>
                         <Link
                           to={`/eng/modbus-rtu/devices?q=${encodeURIComponent(device.device_id)}`}
                           onClick={(event) => event.stopPropagation()}
                           className="shrink-0 text-xs font-semibold text-[var(--c-accent)]"
                         >
-                          Chi tiết →
+                          {pick('Chi tiết →', 'Details →')}
                         </Link>
                       </button>
 
                       {deviceOpen && (
                         <ul className="bg-[var(--c-bg)] py-1">
                           {devicePoints.length === 0 && (
-                            <li className="px-3 py-2 pl-16 text-xs text-[var(--c-text-dim)]">Thiết bị chưa khai báo point nào.</li>
+                            <li className="px-3 py-2 pl-16 text-xs text-[var(--c-text-dim)]">{pick('Thiết bị chưa khai báo point nào.', 'The device has no declared points yet.')}</li>
                           )}
                           {devicePoints.map((point) => (
                             <li key={point.point_id} className="flex flex-wrap items-center gap-3 px-3 py-1.5 pl-16 text-xs">
@@ -188,13 +190,13 @@ export function HierarchyTree({ buses, devices, points, diagnostics, telemetryAv
                                 {point.register_type} @{point.address} · {point.data_type}
                                 {point.unit ? ` · ${point.unit}` : ''}
                               </span>
-                              {point.read_write === 'read_write' && <span className="text-[var(--c-accent)]">ghi được</span>}
-                              {!point.enabled && <span className="text-[var(--c-text-dim)]">đã tắt</span>}
+                              {point.read_write === 'read_write' && <span className="text-[var(--c-accent)]">{pick('ghi được', 'writable')}</span>}
+                              {!point.enabled && <span className="text-[var(--c-text-dim)]">{pick('đã tắt', 'disabled')}</span>}
                               {/* Point Modbus đi chung không gian giám sát với
                                   point cục bộ — cùng một Monitor, không phải
                                   một bảng riêng (PA3-401). */}
                               <Link to={`/monitor?point=${encodeURIComponent(point.point_id)}`} className="ml-auto shrink-0 font-semibold text-[var(--c-accent)]">
-                                Giám sát →
+                                {pick('Giám sát →', 'Monitor →')}
                               </Link>
                             </li>
                           ))}
@@ -211,9 +213,9 @@ export function HierarchyTree({ buses, devices, points, diagnostics, telemetryAv
 
       {grouped.orphans.length > 0 && (
         <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-xs text-[var(--c-warn-fg)]">
-          <div className="font-semibold">{grouped.orphans.length} thiết bị chưa gán được vào bus nào</div>
+          <div className="font-semibold">{pick(`${grouped.orphans.length} thiết bị chưa gán được vào bus nào`, `${grouped.orphans.length} device(s) not assigned to any bus`)}</div>
           <div className="mt-1">
-            {grouped.orphans.map((device) => `${device.display_name || device.device_id} (cổng ${device.rs485_port || NO_DATA})`).join(', ')}
+            {grouped.orphans.map((device) => pick(`${device.display_name || device.device_id} (cổng ${device.rs485_port || NO_DATA})`, `${device.display_name || device.device_id} (port ${device.rs485_port || NO_DATA})`)).join(', ')}
           </div>
         </div>
       )}

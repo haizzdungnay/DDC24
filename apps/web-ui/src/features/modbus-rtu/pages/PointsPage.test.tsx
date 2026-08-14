@@ -4,6 +4,11 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UserRole } from '../../../shared/types'
 import { PointsPage } from './PointsPage'
+import { I18nProvider } from '../../../shared/i18n'
+
+function renderPage() {
+  return render(<I18nProvider><PointsPage /></I18nProvider>)
+}
 
 const api = vi.hoisted(() => ({
   getModbusDevices: vi.fn(), getModbusPoints: vi.fn(), getPoints: vi.fn(),
@@ -36,6 +41,8 @@ vi.mock('../../auth', async (importOriginal) => {
 
 describe('PointsPage', () => {
   beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('mkddc-lang', 'vi')
     auth.role = 'admin'
     api.getModbusDevices.mockResolvedValue([
       { device_id: 'ahu-1', display_name: 'AHU 1', enabled: true, rs485_port: '/dev/rs485-1', baud: 19200, parity: 'E', stop_bits: 1, slave_id: 7, poll_ms: 1000, timeout_ms: 300, retry: 2 }
@@ -59,7 +66,7 @@ describe('PointsPage', () => {
 
   it('hiển thị nút Ghi thử cho Point read_write và thực thi lệnh ghi sau xác nhận', async () => {
     const user = userEvent.setup()
-    render(<PointsPage />)
+    renderPage()
     expect(await screen.findByText('MB-AHU-SP')).toBeInTheDocument()
     const writeBtn = screen.getByRole('button', { name: 'Ghi thử' })
     expect(writeBtn).toBeInTheDocument()
@@ -73,7 +80,7 @@ describe('PointsPage', () => {
   })
 
   it('hiển thị cấu hình và quality runtime từ authority', async () => {
-    render(<PointsPage />)
+    renderPage()
     expect(await screen.findByText('MB-AHU-SAT')).toBeInTheDocument()
     /* Quality của Point lấy từ /points (authority), không suy diễn. */
     expect(screen.getByText('OFFLINE')).toBeInTheDocument()
@@ -85,7 +92,7 @@ describe('PointsPage', () => {
    * dữ liệu — báo động giả làm mất niềm tin vào cả bảng. */
   it('thiếu telemetry hiển thị — chứ không phải BAD', async () => {
     api.getPoints.mockRejectedValue(new Error('mạng lỗi'))
-    render(<PointsPage />)
+    renderPage()
     expect(await screen.findByText('MB-AHU-SAT')).toBeInTheDocument()
     expect(screen.queryByText('BAD')).not.toBeInTheDocument()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
@@ -94,7 +101,7 @@ describe('PointsPage', () => {
   /* D-08: xoá phải qua xác nhận; huỷ thì không gọi API. */
   it('xoá Point yêu cầu xác nhận', async () => {
     const user = userEvent.setup()
-    render(<PointsPage />)
+    renderPage()
     await screen.findByText('MB-AHU-SAT')
 
     await user.click(screen.getAllByRole('button', { name: 'Xoá' })[0])
@@ -112,7 +119,7 @@ describe('PointsPage', () => {
   /* Đ-04: Viewer xem được nhưng không sửa được; ghi thử cần Operator trở lên. */
   it('viewer xem được nhưng mọi control thay đổi bị khoá', async () => {
     auth.role = 'viewer'
-    render(<PointsPage />)
+    renderPage()
     expect(await screen.findByText('MB-AHU-SAT')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Thêm Point' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Ghi thử' })).toBeDisabled()
@@ -123,7 +130,7 @@ describe('PointsPage', () => {
 
   it('operator ghi thử được nhưng không sửa cấu hình', async () => {
     auth.role = 'operator'
-    render(<PointsPage />)
+    renderPage()
     expect(await screen.findByText('MB-AHU-SAT')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Ghi thử' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Thêm Point' })).toBeDisabled()
@@ -133,7 +140,7 @@ describe('PointsPage', () => {
    * ngay khi ô có giá trị, mà các ô số đều có sẵn mặc định — người dùng chỉ
    * thấy `0 · uint16 · 1 · 0 · 0` và không biết ô nào là gì. */
   it('mọi ô trong form Point đều có nhãn hiển thị', async () => {
-    render(<PointsPage />)
+    renderPage()
     await screen.findByText('MB-AHU-SAT')
     for (const caption of ['Point ID', 'Thiết bị', 'Tag name', 'Tên hiển thị',
                            'Loại thanh ghi', 'Địa chỉ thanh ghi', 'Kiểu dữ liệu',

@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
+import { useI18n } from '../../../shared/i18n'
 import type { ModbusBusConfigInput, ModbusBusInfo, ModbusPortCapability } from '../../../shared/types'
-import { NO_DATA, READ_ONLY_HINT, buttonClass, describeApiError, inputClass } from '../shared'
+import { NO_DATA, buttonClass, describeApiError, inputClass, readOnlyHint } from '../shared'
 
 /**
  * Tab "Cổng RS-485" — cấu hình TỪNG cổng, áp riêng từng cổng.
@@ -45,6 +46,7 @@ function formFromBus(bus: ModbusBusInfo | undefined, fallbackName: string): Port
 
 export function PortsPage() {
   const { session } = useAuth()
+  const { lang, pick } = useI18n()
   const canEdit = roleAtLeast(session?.role, 'admin')
   const [buses, setBuses] = useState<ModbusBusInfo[]>([])
   const [ports, setPorts] = useState<ModbusPortCapability[]>([])
@@ -72,7 +74,7 @@ export function PortsPage() {
       }
       setForms(next)
     } catch (error) {
-      setLoadError(describeApiError(error, 'không đọc được danh sách cổng'))
+      setLoadError(describeApiError(error, pick('không đọc được danh sách cổng', 'could not read the port list'), lang))
     }
   }
 
@@ -85,7 +87,7 @@ export function PortsPage() {
     const form = forms[busID]
     if (!form) return
     setSaving(busID)
-    setStatus((current) => ({ ...current, [busID]: 'Đang áp cấu hình xuống cổng…' }))
+    setStatus((current) => ({ ...current, [busID]: pick('Đang áp cấu hình xuống cổng…', 'Applying configuration to the port…') }))
     try {
       const payload: ModbusBusConfigInput = {
         display_name: form.display_name,
@@ -97,11 +99,11 @@ export function PortsPage() {
       }
       await apiClient.updateModbusBus(busID, payload)
       await reload()
-      setStatus((current) => ({ ...current, [busID]: 'Đã áp cấu hình xuống cổng.' }))
+      setStatus((current) => ({ ...current, [busID]: pick('Đã áp cấu hình xuống cổng.', 'Configuration applied to the port.') }))
     } catch (error) {
       setStatus((current) => ({
         ...current,
-        [busID]: describeApiError(error, 'Không áp được cấu hình cổng')
+        [busID]: describeApiError(error, pick('Không áp được cấu hình cổng', 'Could not apply the port configuration'), lang)
       }))
     } finally {
       setSaving(null)
@@ -115,16 +117,18 @@ export function PortsPage() {
   return (
     <div className="space-y-5">
       <header>
-        <h2 className="text-xl font-bold text-[var(--c-text)]">Modbus RTU · Cổng RS-485</h2>
+        <h2 className="text-xl font-bold text-[var(--c-text)]">{pick('Modbus RTU · Cổng RS-485', 'Modbus RTU · RS-485 Ports')}</h2>
         <p className="mt-1 text-xs text-[var(--c-text-dim)]">
-          Khung truyền thuộc về sợi dây, không thuộc thiết bị. Mỗi cổng cấu hình và áp
-          riêng; mọi thiết bị trên cổng tự động dùng theo.
+          {pick(
+            'Khung truyền thuộc về sợi dây, không thuộc thiết bị. Mỗi cổng cấu hình và áp riêng; mọi thiết bị trên cổng tự động dùng theo.',
+            'The serial framing belongs to the wire, not the device. Each port is configured and applied independently; every device on that port picks it up automatically.'
+          )}
         </p>
       </header>
 
       {!canEdit && (
         <div role="note" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-xs">
-          {READ_ONLY_HINT}
+          {readOnlyHint(lang)}
         </div>
       )}
 
@@ -136,7 +140,7 @@ export function PortsPage() {
       )}
 
       {ports.length === 0 && !loadError && (
-        <p className="text-sm text-[var(--c-text-dim)]">Board không khai báo cổng RS-485 nào.</p>
+        <p className="text-sm text-[var(--c-text-dim)]">{pick('Board không khai báo cổng RS-485 nào.', 'The board declares no RS-485 ports.')}</p>
       )}
 
       {ports.map((capability) => {
@@ -164,26 +168,26 @@ export function PortsPage() {
                 phải 0 — D-07. */}
             <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-[var(--c-text-dim)]">
               <div>
-                <dt className="inline">Trạng thái cổng: </dt>
+                <dt className="inline">{pick('Trạng thái cổng', 'Port state')}: </dt>
                 <dd className="inline font-semibold" data-testid={`port-state-${busID}`}>
                   {bus?.open_state || NO_DATA}
                 </dd>
               </div>
               <div>
-                <dt className="inline">Thiết bị: </dt>
+                <dt className="inline">{pick('Thiết bị', 'Devices')}: </dt>
                 <dd className="inline">{bus ? `${bus.online_devices}/${bus.total_devices} online` : NO_DATA}</dd>
               </div>
               <div>
-                <dt className="inline">Điều hướng: </dt>
-                <dd className="inline">auto (phần cứng không có DE/RE)</dd>
+                <dt className="inline">{pick('Điều hướng', 'Direction control')}: </dt>
+                <dd className="inline">{pick('auto (phần cứng không có DE/RE)', 'auto (hardware has no DE/RE)')}</dd>
               </div>
             </dl>
 
             <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" onSubmit={(e) => savePort(busID, e)}>
               <input
                 className={inputClass}
-                aria-label={`Tên hiển thị ${busID}`}
-                placeholder="Tên hiển thị"
+                aria-label={pick(`Tên hiển thị ${busID}`, `Display name ${busID}`)}
+                placeholder={pick('Tên hiển thị', 'Display name')}
                 maxLength={32}
                 value={form.display_name}
                 disabled={!canEdit}
@@ -207,9 +211,9 @@ export function PortsPage() {
                 disabled={!canEdit}
                 onChange={(e) => update(busID, { parity: e.target.value as PortForm['parity'] })}
               >
-                <option value="N">N — không parity</option>
-                <option value="E">E — chẵn</option>
-                <option value="O">O — lẻ</option>
+                <option value="N">{pick('N — không parity', 'N — no parity')}</option>
+                <option value="E">{pick('E — chẵn', 'E — even')}</option>
+                <option value="O">{pick('O — lẻ', 'O — odd')}</option>
               </select>
               <select
                 className={inputClass}
@@ -227,7 +231,7 @@ export function PortsPage() {
                 max={60000}
                 step={500}
                 className={inputClass}
-                aria-label={`Chu kỳ dò lại thiết bị offline ${busID}`}
+                aria-label={pick(`Chu kỳ dò lại thiết bị offline ${busID}`, `Offline device re-probe interval ${busID}`)}
                 value={form.offline_probe_ms}
                 disabled={!canEdit}
                 onChange={(e) => update(busID, { offline_probe_ms: Number(e.target.value) })}
@@ -240,18 +244,21 @@ export function PortsPage() {
                   disabled={!canEdit}
                   onChange={(e) => update(busID, { enabled: e.target.checked })}
                 />
-                Kích hoạt cổng
+                {pick('Kích hoạt cổng', 'Enable port')}
               </label>
 
               {/* Data bits là 8 cố định: iobus mở cổng bằng modbus_new_rtu(…, 8,
                   stop). Hiện ra để người dùng thấy khung truyền đầy đủ, nhưng
                   không cho sửa — một ô nhập không có tác dụng còn tệ hơn không có. */}
               <p className="flex items-center text-xs text-[var(--c-text-dim)] sm:col-span-2">
-                Khung truyền: {form.baud} {form.parity}8{form.stop_bits} · data bits cố định 8 (Modbus RTU)
+                {pick(
+                  `Khung truyền: ${form.baud} ${form.parity}8${form.stop_bits} · data bits cố định 8 (Modbus RTU)`,
+                  `Framing: ${form.baud} ${form.parity}8${form.stop_bits} · data bits fixed at 8 (Modbus RTU)`
+                )}
               </p>
 
               <button className={buttonClass} type="submit" disabled={!canEdit || saving === busID}>
-                {saving === busID ? 'Đang áp…' : 'Áp dụng cho cổng này'}
+                {saving === busID ? pick('Đang áp…', 'Applying…') : pick('Áp dụng cho cổng này', 'Apply to this port')}
               </button>
             </form>
 
@@ -259,8 +266,10 @@ export function PortsPage() {
                 trước, không để người vận hành phát hiện bằng cách mất liên lạc. */}
             {bus && bus.total_devices > 0 && (
               <p className="text-xs text-amber-600 dark:text-amber-400" data-testid={`port-warning-${busID}`}>
-                Cổng đang có {bus.total_devices} thiết bị. Đổi khung truyền sẽ áp cho tất cả —
-                thiết bị nào không chạy khung mới sẽ mất liên lạc.
+                {pick(
+                  `Cổng đang có ${bus.total_devices} thiết bị. Đổi khung truyền sẽ áp cho tất cả — thiết bị nào không chạy khung mới sẽ mất liên lạc.`,
+                  `This port has ${bus.total_devices} device(s). Changing the framing applies to all of them — any device that does not run the new framing will lose communication.`
+                )}
               </p>
             )}
 

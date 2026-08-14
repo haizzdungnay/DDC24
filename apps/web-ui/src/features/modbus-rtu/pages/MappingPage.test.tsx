@@ -2,12 +2,19 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MappingPage } from './MappingPage'
+import { I18nProvider } from '../../../shared/i18n'
+
+function renderPage() {
+  return render(<I18nProvider><MappingPage /></I18nProvider>)
+}
 
 const api = vi.hoisted(() => ({ getModbusMapping: vi.fn() }))
 vi.mock('../../../shared/api/client', () => ({ apiClient: api }))
 
 describe('MappingPage', () => {
   beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('mkddc-lang', 'vi')
     api.getModbusMapping.mockResolvedValue({
       rows: [
         {
@@ -35,7 +42,7 @@ describe('MappingPage', () => {
   })
 
   it('hiện vùng register của từng Point kèm số register chiếm dụng', async () => {
-    render(<MappingPage />)
+    renderPage()
     expect(await screen.findByText('MB-KWH')).toBeInTheDocument()
     // uint32 chiếm hai register nên phải hiện dải, không phải một địa chỉ đơn.
     expect(screen.getByText('holding_register 0–1')).toBeInTheDocument()
@@ -52,7 +59,7 @@ describe('MappingPage', () => {
       ],
       load: []
     })
-    render(<MappingPage />)
+    renderPage()
     const box = await screen.findByTestId('mapping-errors')
     expect(box).toHaveTextContent('ADDRESS_OVERLAP')
     expect(box).toHaveTextContent('points[1].address')
@@ -70,7 +77,7 @@ describe('MappingPage', () => {
           estimated_percent: 183.6, warn_percent: 50, reject_percent: 70 }
       ]
     })
-    render(<MappingPage />)
+    renderPage()
     const card = await screen.findByTestId('load-rs485-1')
     expect(card).toHaveTextContent('183.6%')
     expect(card).toHaveTextContent('Vượt ngưỡng')
@@ -78,7 +85,7 @@ describe('MappingPage', () => {
 
   it('hiện thông báo rỗng khi bản nháp chưa có Point nào', async () => {
     api.getModbusMapping.mockResolvedValue({ rows: [], errors: [], load: [] })
-    render(<MappingPage />)
+    renderPage()
     expect(await screen.findByText('Chưa có Point nào trong bản nháp.')).toBeInTheDocument()
   })
 
@@ -87,7 +94,7 @@ describe('MappingPage', () => {
     api.getModbusMapping.mockResolvedValue({
       rows: null, errors: null, load: null
     } as never)
-    render(<MappingPage />)
+    renderPage()
     expect(await screen.findByText('Chưa có Point nào trong bản nháp.')).toBeInTheDocument()
   })
 })

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiClient } from '../../../shared/api/client'
+import { useI18n } from '../../../shared/i18n'
 import type { ModbusMappingResponse } from '../../../shared/types'
 import { NO_DATA, buttonClass } from '../shared'
 
@@ -16,6 +17,7 @@ import { NO_DATA, buttonClass } from '../shared'
  * lỗi validate đưa chuyện đó lên màn hình TRƯỚC khi apply.
  */
 export function MappingPage() {
+  const { pick } = useI18n()
   const [mapping, setMapping] = useState<ModbusMappingResponse | null>(null)
   const [errorStatus, setErrorStatus] = useState('')
   const [busFilter, setBusFilter] = useState('')
@@ -25,7 +27,7 @@ export function MappingPage() {
       setMapping(await apiClient.getModbusMapping())
       setErrorStatus('')
     } catch (error) {
-      setErrorStatus(error instanceof Error ? error.message : 'Không đọc được bảng mapping')
+      setErrorStatus(error instanceof Error ? error.message : pick('Không đọc được bảng mapping', 'Could not read the mapping table'))
     }
   }
 
@@ -56,22 +58,23 @@ export function MappingPage() {
         <div>
           <h2 className="text-xl font-bold text-[var(--c-text)]">Modbus RTU · Mapping</h2>
           <p className="mt-1 text-xs text-[var(--c-text-dim)]">
-            Bảng ánh xạ Point → register của <strong>bản nháp</strong>, kèm lỗi chặn apply và
-            ước lượng tải từng bus.
+            {pick('Bảng ánh xạ Point → register của', 'The Point → register mapping table for the')}{' '}
+            <strong>{pick('bản nháp', 'draft')}</strong>
+            {pick(', kèm lỗi chặn apply và ước lượng tải từng bus.', ', including apply-blocking errors and per-bus load estimates.')}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <select
             className="h-9 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-xs"
-            aria-label="Lọc theo bus"
+            aria-label={pick('Lọc theo bus', 'Filter by bus')}
             value={busFilter}
             onChange={(event) => setBusFilter(event.target.value)}
           >
-            <option value="">Tất cả bus</option>
+            <option value="">{pick('Tất cả bus', 'All buses')}</option>
             {buses.map((bus) => <option key={bus} value={bus}>{bus}</option>)}
           </select>
           <button type="button" className={buttonClass + ' h-9 text-xs'} onClick={() => void loadData()}>
-            Làm mới
+            {pick('Làm mới', 'Refresh')}
           </button>
         </div>
       </header>
@@ -89,7 +92,7 @@ export function MappingPage() {
           className="rounded-[var(--radius)] border border-[var(--c-danger,#c00)]/40 bg-red-500/5 p-4"
         >
           <h3 className="text-base font-semibold text-[var(--c-danger,#c00)]">
-            {blockingErrors.length} lỗi chặn việc áp dụng
+            {pick(`${blockingErrors.length} lỗi chặn việc áp dụng`, `${blockingErrors.length} error(s) blocking apply`)}
           </h3>
           <ul className="mt-2 space-y-1 text-xs">
             {blockingErrors.map((issue, index) => (
@@ -100,7 +103,7 @@ export function MappingPage() {
             ))}
           </ul>
           <p className="mt-2 text-xs text-[var(--c-text-dim)]">
-            Nút “Áp dụng” sẽ bị server từ chối cho tới khi các lỗi trên được sửa.
+            {pick('Nút "Áp dụng" sẽ bị server từ chối cho tới khi các lỗi trên được sửa.', 'The "Apply" button will be rejected by the server until the errors above are fixed.')}
           </p>
         </section>
       )}
@@ -125,14 +128,14 @@ export function MappingPage() {
                   <span className="font-mono">{load.estimated_percent.toFixed(1)}%</span>
                 </div>
                 <p className="mt-1 text-[var(--c-text-dim)]">
-                  {load.device_count} thiết bị · {load.point_count} Point · {load.baud} baud
+                  {pick(`${load.device_count} thiết bị · ${load.point_count} Point · ${load.baud} baud`, `${load.device_count} device(s) · ${load.point_count} Point(s) · ${load.baud} baud`)}
                 </p>
                 <p className="mt-1 text-[var(--c-text-dim)]">
-                  Ngưỡng cảnh báo {load.warn_percent}% · từ chối {load.reject_percent}%
+                  {pick(`Ngưỡng cảnh báo ${load.warn_percent}% · từ chối ${load.reject_percent}%`, `Warning threshold ${load.warn_percent}% · reject ${load.reject_percent}%`)}
                 </p>
                 {over && (
                   <p className="mt-1 font-semibold text-[var(--c-danger,#c00)]">
-                    Vượt ngưỡng — giảm số Point hoặc tăng poll_ms.
+                    {pick('Vượt ngưỡng — giảm số Point hoặc tăng poll_ms.', 'Over threshold — reduce the Point count or increase poll_ms.')}
                   </p>
                 )}
               </div>
@@ -142,7 +145,7 @@ export function MappingPage() {
       )}
 
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
-        <h3 className="text-base font-semibold text-[var(--c-text)]">Bảng ánh xạ register</h3>
+        <h3 className="text-base font-semibold text-[var(--c-text)]">{pick('Bảng ánh xạ register', 'Register mapping table')}</h3>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
@@ -150,10 +153,10 @@ export function MappingPage() {
                 <th className="py-2">Point ID</th>
                 <th className="py-2">Tag</th>
                 <th className="py-2">Bus / Slave</th>
-                <th className="py-2">Vùng register</th>
-                <th className="py-2">Kiểu</th>
+                <th className="py-2">{pick('Vùng register', 'Register range')}</th>
+                <th className="py-2">{pick('Kiểu', 'Type')}</th>
                 <th className="py-2">R/W</th>
-                <th className="py-2">Trạng thái</th>
+                <th className="py-2">{pick('Trạng thái', 'Status')}</th>
               </tr>
             </thead>
             <tbody>
@@ -174,7 +177,7 @@ export function MappingPage() {
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-4 text-center text-[var(--c-text-dim)]">
-                    Chưa có Point nào trong bản nháp.
+                    {pick('Chưa có Point nào trong bản nháp.', 'No Points in the draft yet.')}
                   </td>
                 </tr>
               )}

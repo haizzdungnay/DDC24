@@ -27,7 +27,16 @@ export const buttonClass = 'h-10 rounded-[var(--radius)] border border-[var(--c-
 /** Ký hiệu "không có dữ liệu". Dùng thay cho 0/BAD khi authority chưa trả gì. */
 export const NO_DATA = '—'
 
-export const READ_ONLY_HINT = 'Chỉ vai trò Admin được thay đổi cấu hình Modbus RTU.'
+/** BUG-014 (TR-MKDDC24-P1-20260814-01): toàn feature Modbus RTU trước đây
+ *  không qua `useI18n`, nên chọn EN không đổi được chữ nào ở đây. Các hằng
+ *  số/hàm ở module này KHÔNG phải component nên không gọi được hook — mỗi cái
+ *  nay nhận `lang` (mặc định 'vi') từ nơi gọi, cùng quy ước với
+ *  `healthReasonLabel` ở `shared/components/pa3/StateAtoms.tsx`. */
+export function readOnlyHint(lang: 'vi' | 'en' = 'vi'): string {
+  return lang === 'en'
+    ? 'Only the Admin role can change Modbus RTU configuration.'
+    : 'Chỉ vai trò Admin được thay đổi cấu hình Modbus RTU.'
+}
 
 /** Mô tả lỗi API kèm TỪNG trường sai, thay vì chỉ câu tóm tắt.
  *
@@ -43,14 +52,16 @@ export const READ_ONLY_HINT = 'Chỉ vai trò Admin được thay đổi cấu h
  * Từ chối mà không nói vì sao thì tệ hơn từ chối: người dùng không còn đường
  * tự sửa, kể cả khi lỗi rất nhỏ.
  */
-export function describeApiError(error: unknown, fallback: string): string {
+export function describeApiError(error: unknown, fallback: string, lang: 'vi' | 'en' = 'vi'): string {
   if (!(error instanceof ApiError)) {
     return error instanceof Error ? error.message : fallback
   }
   if (error.details.length === 0) return error.message || fallback
+  const unknownField = lang === 'en' ? '(unknown field)' : '(không rõ trường)'
+  const invalidReason = lang === 'en' ? 'invalid' : 'không hợp lệ'
   const parts = error.details.map((detail) => {
-    const field = detail.path || '(không rõ trường)'
-    const reason = detail.message || detail.reason || 'không hợp lệ'
+    const field = detail.path || unknownField
+    const reason = detail.message || detail.reason || invalidReason
     return `${field}: ${reason}`
   })
   return `${error.message} — ${parts.join('; ')}`
@@ -67,10 +78,10 @@ export function describeApiError(error: unknown, fallback: string): string {
  * Hàm này KHÔNG gọi ra quality của Point (quality thuộc về Point và do authority
  * cấp); nó chỉ mô tả tình trạng liên lạc với thiết bị. Track B thay bằng
  * `connection_status` từ BE (MBR-B210). */
-export function deviceLinkLabel(row?: ModbusRTUDiagnostics): string {
+export function deviceLinkLabel(row?: ModbusRTUDiagnostics, lang: 'vi' | 'en' = 'vi'): string {
   if (!row) return NO_DATA
-  if (row.online) return 'Đang liên lạc'
-  if (row.total_polls === 0) return 'Chưa liên lạc lần nào'
-  if (row.consecutive_errors > 0) return 'Mất liên lạc'
+  if (row.online) return lang === 'en' ? 'Communicating' : 'Đang liên lạc'
+  if (row.total_polls === 0) return lang === 'en' ? 'Never communicated' : 'Chưa liên lạc lần nào'
+  if (row.consecutive_errors > 0) return lang === 'en' ? 'Communication lost' : 'Mất liên lạc'
   return NO_DATA
 }

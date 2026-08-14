@@ -2,9 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
+import { useI18n } from '../../../shared/i18n'
 import type { ModbusBusInfo, ModbusProbeResult, ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../../shared/types'
 import { Field } from '../components/Field'
-import { NO_DATA, READ_ONLY_HINT, buttonClass, describeApiError, deviceLinkLabel, emptyDevice, inputClass } from '../shared'
+import { NO_DATA, buttonClass, describeApiError, deviceLinkLabel, emptyDevice, inputClass, readOnlyHint } from '../shared'
 
 type PendingDelete = { id: string; label: string; extra?: number }
 
@@ -39,6 +40,7 @@ export function DevicesPage() {
   const [telemetryError, setTelemetryError] = useState('')
   const [probing, setProbing] = useState<string | null>(null)
   const [probeResults, setProbeResults] = useState<Record<string, ModbusProbeResult>>({})
+  const { lang, pick } = useI18n()
 
   async function testConnection(deviceId: string) {
     setProbing(deviceId)
@@ -50,7 +52,7 @@ export function DevicesPage() {
         ...current,
         [deviceId]: {
           result: 'fail',
-          reason: error instanceof Error ? error.message : 'không gọi được commissioning'
+          reason: error instanceof Error ? error.message : pick('không gọi được commissioning', 'could not call commissioning')
         }
       }))
     } finally {
@@ -63,7 +65,7 @@ export function DevicesPage() {
   /* Đ-04: chạm thiết bị hiện trường là quyền Operator trở lên; đổi cấu hình vẫn
    * là Admin. Hai quyền khác nhau vì hai hậu quả khác nhau. */
   const canCommission = roleAtLeast(session?.role, 'operator')
-  const readOnlyHint = canEdit ? undefined : READ_ONLY_HINT
+  const readOnlyHintText = canEdit ? undefined : readOnlyHint(lang)
 
   const filterStatus = searchParams.get('status') ?? ''
   const filterPort = searchParams.get('port') ?? ''
@@ -93,7 +95,7 @@ export function DevicesPage() {
       setTelemetryError('')
     } catch (error) {
       setDiagnostics([])
-      setTelemetryError(error instanceof Error ? error.message : 'không đọc được telemetry')
+      setTelemetryError(error instanceof Error ? error.message : pick('không đọc được telemetry', 'could not read telemetry'))
     }
   }
 
@@ -103,16 +105,16 @@ export function DevicesPage() {
 
   async function saveDevice(event: FormEvent) {
     event.preventDefault()
-    setStatus('Đang áp dụng cấu hình thiết bị…')
+    setStatus(pick('Đang áp dụng cấu hình thiết bị…', 'Applying device configuration…'))
     try {
       if (editingDevice) await apiClient.updateModbusDevice(device)
       else await apiClient.createModbusDevice(device)
       setDevice(emptyDevice)
       setEditingDevice(false)
       await reload()
-      setStatus('Đã áp dụng Device Manager vào iobus.')
+      setStatus(pick('Đã áp dụng Device Manager vào iobus.', 'Device Manager applied to iobus.'))
     } catch (error) {
-      setStatus(describeApiError(error, 'Không thể lưu thiết bị'))
+      setStatus(describeApiError(error, pick('Không thể lưu thiết bị', 'Could not save the device'), lang))
     }
   }
 
@@ -123,9 +125,9 @@ export function DevicesPage() {
       await apiClient.deleteModbusDevice(pendingDelete.id)
       setPendingDelete(null)
       await reload()
-      setStatus(`Đã xoá ${pendingDelete.label}.`)
+      setStatus(pick(`Đã xoá ${pendingDelete.label}.`, `Deleted ${pendingDelete.label}.`))
     } catch (error) {
-      setStatus(describeApiError(error, 'Không thể xoá'))
+      setStatus(describeApiError(error, pick('Không thể xoá', 'Could not delete'), lang))
     } finally {
       setDeleting(false)
     }
@@ -160,9 +162,12 @@ export function DevicesPage() {
     <div className="space-y-5">
       <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-[var(--c-text)]">Modbus RTU · Quản lý Thiết bị (Devices)</h2>
+          <h2 className="text-xl font-bold text-[var(--c-text)]">{pick('Modbus RTU · Quản lý Thiết bị (Devices)', 'Modbus RTU · Device Management')}</h2>
           <p className="mt-1 text-xs text-[var(--c-text-dim)]">
-            Quản lý vòng đời thiết bị trường Modbus RTU, thông số bus/serial và chu kỳ poll.
+            {pick(
+              'Quản lý vòng đời thiết bị trường Modbus RTU, thông số bus/serial và chu kỳ poll.',
+              'Manage the lifecycle of Modbus RTU field devices, bus/serial parameters and poll interval.'
+            )}
           </p>
         </div>
       </header>
@@ -176,38 +181,41 @@ export function DevicesPage() {
       {telemetryError && (
         <div role="note" data-testid="telemetry-warning"
           className="rounded-[var(--radius)] border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-[var(--c-text)]">
-          Cột “Liên lạc” hiện “—” vì không đọc được telemetry: {telemetryError}. Đó là
-          <strong> chưa biết</strong>, không phải thiết bị đang offline.
+          {pick(`Cột "Liên lạc" hiện "—" vì không đọc được telemetry: ${telemetryError}. Đó là`, `The "Communication" column shows "—" because telemetry could not be read: ${telemetryError}. That means`)}
+          <strong>{pick(' chưa biết', ' unknown')}</strong>
+          {pick(', không phải thiết bị đang offline.', ', not that the device is offline.')}
         </div>
       )}
 
       {/* Device Form */}
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4 shadow-sm space-y-3">
         <h3 className="text-base font-semibold text-[var(--c-text)]">
-          {editingDevice ? `Sửa thiết bị: ${device.display_name} (${device.device_id})` : 'Thêm thiết bị mới'}
+          {editingDevice
+            ? pick(`Sửa thiết bị: ${device.display_name} (${device.device_id})`, `Edit device: ${device.display_name} (${device.device_id})`)
+            : pick('Thêm thiết bị mới', 'Add new device')}
         </h3>
         <form className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6" onSubmit={saveDevice}>
-          <Field label="Device ID" hint="Bắt đầu bằng chữ, 1–23 ký tự ASCII. Để trống thì hệ thống tự sinh.">
+          <Field label="Device ID" hint={pick('Bắt đầu bằng chữ, 1–23 ký tự ASCII. Để trống thì hệ thống tự sinh.', 'Must start with a letter, 1–23 ASCII characters. Leave empty to auto-generate.')}>
             <input
               className={inputClass}
               aria-label="Device ID"
-              placeholder="tự sinh nếu trống"
+              placeholder={pick('tự sinh nếu trống', 'auto-generated if empty')}
               value={device.device_id}
               disabled={editingDevice}
               onChange={(e) => setDevice({ ...device, device_id: e.target.value })}
             />
           </Field>
-          <Field label="Tên thiết bị" hint="Tên hiển thị cho người vận hành, tối đa 64 ký tự.">
+          <Field label={pick('Tên thiết bị', 'Device name')} hint={pick('Tên hiển thị cho người vận hành, tối đa 64 ký tự.', 'Display name for the operator, up to 64 characters.')}>
             <input
               required
               className={inputClass}
-              aria-label="Tên thiết bị"
-              placeholder="VD: Đồng hồ điện tầng 1"
+              aria-label={pick('Tên thiết bị', 'Device name')}
+              placeholder={pick('VD: Đồng hồ điện tầng 1', 'e.g.: Floor 1 power meter')}
               value={device.display_name}
               onChange={(e) => setDevice({ ...device, display_name: e.target.value })}
             />
           </Field>
-          <Field label="Cổng RS-485" hint="Sợi dây vật lý mà thiết bị đấu vào. Khung truyền kế thừa từ cổng này.">
+          <Field label={pick('Cổng RS-485', 'RS-485 port')} hint={pick('Sợi dây vật lý mà thiết bị đấu vào. Khung truyền kế thừa từ cổng này.', 'The physical wire the device connects to. Framing is inherited from this port.')}>
             <select
               className={inputClass}
               aria-label="RS485 port"
@@ -228,14 +236,17 @@ export function DevicesPage() {
             className="flex h-10 items-center rounded-[var(--radius)] border border-dashed border-[var(--c-border)] px-3 text-sm text-[var(--c-text-muted)] sm:col-span-3"
           >
             {selectedBus
-              ? `Khung truyền kế thừa từ ${selectedBus.display_name || selectedBus.bus_id}: ${selectedBus.baud} ${selectedBus.parity}${selectedBus.data_bits}${selectedBus.stop_bits}`
-              : 'Khung truyền kế thừa từ cổng đã chọn'}
+              ? pick(
+                  `Khung truyền kế thừa từ ${selectedBus.display_name || selectedBus.bus_id}: ${selectedBus.baud} ${selectedBus.parity}${selectedBus.data_bits}${selectedBus.stop_bits}`,
+                  `Framing inherited from ${selectedBus.display_name || selectedBus.bus_id}: ${selectedBus.baud} ${selectedBus.parity}${selectedBus.data_bits}${selectedBus.stop_bits}`
+                )
+              : pick('Khung truyền kế thừa từ cổng đã chọn', 'Framing inherited from the selected port')}
             {' · '}
             <Link className="ml-1 underline" to="/eng/modbus-rtu/ports">
-              Sửa ở trang Cổng RS-485
+              {pick('Sửa ở trang Cổng RS-485', 'Edit on the RS-485 Ports page')}
             </Link>
           </div>
-          <Field label="Slave ID" hint="Địa chỉ Modbus của thiết bị trên dây, 1–247. Chỉ cần duy nhất TRONG CÙNG một cổng.">
+          <Field label="Slave ID" hint={pick('Địa chỉ Modbus của thiết bị trên dây, 1–247. Chỉ cần duy nhất TRONG CÙNG một cổng.', 'The Modbus address of the device on the wire, 1–247. Only needs to be unique WITHIN the same port.')}>
             <input
               required
               type="number"
@@ -247,7 +258,7 @@ export function DevicesPage() {
               onChange={(e) => setDevice({ ...device, slave_id: Number(e.target.value) })}
             />
           </Field>
-          <Field label="Chu kỳ poll (ms)" hint="Bao lâu đọc thiết bị một lần khi nó đang online.">
+          <Field label={pick('Chu kỳ poll (ms)', 'Poll interval (ms)')} hint={pick('Bao lâu đọc thiết bị một lần khi nó đang online.', 'How often to read the device while it is online.')}>
             <input
               required
               type="number"
@@ -257,7 +268,7 @@ export function DevicesPage() {
               onChange={(e) => setDevice({ ...device, poll_ms: Number(e.target.value) })}
             />
           </Field>
-          <Field label="Timeout (ms)" hint="Thời gian chờ MỖI LẦN PHÁT, không phải mỗi lượt poll.">
+          <Field label="Timeout (ms)" hint={pick('Thời gian chờ MỖI LẦN PHÁT, không phải mỗi lượt poll.', 'Wait time PER TRANSMISSION, not per poll cycle.')}>
             <input
               required
               type="number"
@@ -268,8 +279,11 @@ export function DevicesPage() {
             />
           </Field>
           <Field
-            label="Số lần phát lại"
-            hint="Phát lại một giao dịch Modbus bị lỗi bao nhiêu lần trong CÙNG một lượt poll (0–5). Đây KHÔNG phải ngưỡng chuyển Offline. 0 là hợp lệ: báo lỗi ngay, không phát lại."
+            label={pick('Số lần phát lại', 'Retry count')}
+            hint={pick(
+              'Phát lại một giao dịch Modbus bị lỗi bao nhiêu lần trong CÙNG một lượt poll (0–5). Đây KHÔNG phải ngưỡng chuyển Offline. 0 là hợp lệ: báo lỗi ngay, không phát lại.',
+              'How many times to retry a failed Modbus transaction within the SAME poll cycle (0–5). This is NOT the Offline threshold. 0 is valid: fail immediately, no retry.'
+            )}
           >
             <input
               required
@@ -277,14 +291,17 @@ export function DevicesPage() {
               min={0}
               max={5}
               className={inputClass}
-              aria-label="Số lần phát lại"
+              aria-label={pick('Số lần phát lại', 'Retry count')}
               value={device.retry}
               onChange={(e) => setDevice({ ...device, retry: Number(e.target.value) })}
             />
           </Field>
           <Field
-            label="Lỗi liên tiếp ⇒ Offline"
-            hint="Bao nhiêu LƯỢT POLL hỏng liên tiếp thì coi thiết bị là Offline (1–10, mặc định 2). Mỗi lượt đã bao gồm đủ số lần phát lại ở trên."
+            label={pick('Lỗi liên tiếp ⇒ Offline', 'Consecutive errors ⇒ Offline')}
+            hint={pick(
+              'Bao nhiêu LƯỢT POLL hỏng liên tiếp thì coi thiết bị là Offline (1–10, mặc định 2). Mỗi lượt đã bao gồm đủ số lần phát lại ở trên.',
+              'How many consecutive failed POLL CYCLES before the device is considered Offline (1–10, default 2). Each cycle already includes the retries above.'
+            )}
           >
             <input
               required
@@ -292,7 +309,7 @@ export function DevicesPage() {
               min={1}
               max={10}
               className={inputClass}
-              aria-label="Lỗi chuyển Offline"
+              aria-label={pick('Lỗi chuyển Offline', 'Errors before Offline')}
               value={device.offline_after_errors ?? 2}
               onChange={(e) => setDevice({ ...device, offline_after_errors: Number(e.target.value) })}
             />
@@ -309,11 +326,11 @@ export function DevicesPage() {
               checked={device.enabled}
               onChange={(e) => setDevice({ ...device, enabled: e.target.checked })}
             />
-            Kích hoạt (Enabled)
+            {pick('Kích hoạt (Enabled)', 'Enabled')}
           </label>
           <div className="flex gap-2 sm:col-span-4 justify-end">
-            <button className={buttonClass} type="submit" disabled={!canEdit} title={readOnlyHint}>
-              {editingDevice ? 'Cập nhật thiết bị' : 'Thêm thiết bị mới'}
+            <button className={buttonClass} type="submit" disabled={!canEdit} title={readOnlyHintText}>
+              {editingDevice ? pick('Cập nhật thiết bị', 'Update device') : pick('Thêm thiết bị mới', 'Add new device')}
             </button>
             {editingDevice && (
               <button
@@ -324,7 +341,7 @@ export function DevicesPage() {
                   setEditingDevice(false)
                 }}
               >
-                Huỷ
+                {pick('Huỷ', 'Cancel')}
               </button>
             )}
           </div>
@@ -340,46 +357,46 @@ export function DevicesPage() {
           data-testid="device-filters"
           className="flex flex-wrap items-end gap-3 border-b border-[var(--c-border)] pb-3"
         >
-          <Field label="Tìm" className="min-w-[200px] flex-1">
+          <Field label={pick('Tìm', 'Search')} className="min-w-[200px] flex-1">
             <input
               className={inputClass}
               type="search"
-              aria-label="Tìm thiết bị"
-              placeholder="ID, tên hoặc slave ID"
+              aria-label={pick('Tìm thiết bị', 'Search devices')}
+              placeholder={pick('ID, tên hoặc slave ID', 'ID, name or slave ID')}
               value={filterText}
               onChange={(e) => setFilter('q', e.target.value)}
             />
           </Field>
-          <Field label="Cổng">
+          <Field label={pick('Cổng', 'Port')}>
             <select
               className={inputClass}
-              aria-label="Lọc theo cổng"
+              aria-label={pick('Lọc theo cổng', 'Filter by port')}
               value={filterPort}
               onChange={(e) => setFilter('port', e.target.value)}
             >
-              <option value="">Tất cả cổng</option>
+              <option value="">{pick('Tất cả cổng', 'All ports')}</option>
               <option value="/dev/rs485-1">RS485-1</option>
               <option value="/dev/rs485-2">RS485-2</option>
             </select>
           </Field>
-          <Field label="Liên lạc">
+          <Field label={pick('Liên lạc', 'Communication')}>
             <select
               className={inputClass}
-              aria-label="Lọc theo trạng thái"
+              aria-label={pick('Lọc theo trạng thái', 'Filter by status')}
               value={filterStatus}
               onChange={(e) => setFilter('status', e.target.value)}
             >
-              <option value="">Tất cả trạng thái</option>
-              <option value="ONLINE">Đang liên lạc</option>
-              <option value="OFFLINE">Mất liên lạc</option>
-              <option value="NEVER">Chưa liên lạc lần nào</option>
+              <option value="">{pick('Tất cả trạng thái', 'All statuses')}</option>
+              <option value="ONLINE">{pick('Đang liên lạc', 'Communicating')}</option>
+              <option value="OFFLINE">{pick('Mất liên lạc', 'Communication lost')}</option>
+              <option value="NEVER">{pick('Chưa liên lạc lần nào', 'Never communicated')}</option>
             </select>
           </Field>
           <div className="flex items-center gap-3 pb-0.5">
             <span className="text-xs text-[var(--c-text-dim)]" data-testid="device-count">
               {hasFilter
-                ? `${filteredDevices.length}/${devices.length} thiết bị`
-                : `${devices.length} thiết bị`}
+                ? pick(`${filteredDevices.length}/${devices.length} thiết bị`, `${filteredDevices.length}/${devices.length} devices`)
+                : pick(`${devices.length} thiết bị`, `${devices.length} devices`)}
             </span>
             {hasFilter && (
               <button
@@ -387,7 +404,7 @@ export function DevicesPage() {
                 className={buttonClass}
                 onClick={() => setSearchParams(new URLSearchParams(), { replace: true })}
               >
-                Bỏ lọc
+                {pick('Bỏ lọc', 'Clear filter')}
               </button>
             )}
           </div>
@@ -397,15 +414,15 @@ export function DevicesPage() {
             <thead>
               <tr className="border-b border-[var(--c-border)] text-xs text-[var(--c-text-dim)]">
                 <th className="py-2">ID</th>
-                <th className="py-2">Tên hiển thị</th>
+                <th className="py-2">{pick('Tên hiển thị', 'Display name')}</th>
                 <th className="py-2">RS485 Port</th>
                 <th className="py-2">Slave</th>
-                <th className="py-2">Poll / Timeout / Phát lại</th>
+                <th className="py-2">{pick('Poll / Timeout / Phát lại', 'Poll / Timeout / Retry')}</th>
                 <th className="py-2">Offline Params</th>
-                <th className="py-2">Liên lạc</th>
-                <th className="py-2">Thử kết nối</th>
-                <th className="py-2">Trạng thái</th>
-                <th className="py-2 text-right">Thao tác</th>
+                <th className="py-2">{pick('Liên lạc', 'Communication')}</th>
+                <th className="py-2">{pick('Thử kết nối', 'Test connection')}</th>
+                <th className="py-2">{pick('Trạng thái', 'Status')}</th>
+                <th className="py-2 text-right">{pick('Thao tác', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -428,7 +445,7 @@ export function DevicesPage() {
                         kể cấu hình thật. Nay lấy đúng từ cổng, và hiện "—" khi
                         chưa đọc được cổng thay vì bịa một con số. */}
                     <td className="py-3 text-xs text-[var(--c-text-dim)]">
-                      errs: {row.offline_after_errors ?? 2} / probe:{' '}
+                      {pick('lỗi', 'errs')}: {row.offline_after_errors ?? 2} / probe:{' '}
                       {buses.find((bus) => bus.port === row.rs485_port)?.offline_probe_ms
                         ? `${buses.find((bus) => bus.port === row.rs485_port)?.offline_probe_ms}ms`
                         : NO_DATA}
@@ -444,7 +461,7 @@ export function DevicesPage() {
                         <span
                           className={`h-1.5 w-1.5 rounded-full ${diag?.online ? 'bg-green-500' : 'bg-amber-500'}`}
                         />
-                        {deviceLinkLabel(diag)}
+                        {deviceLinkLabel(diag, lang)}
                       </span>
                     </td>
                     <td className="py-3 text-xs">
@@ -452,16 +469,16 @@ export function DevicesPage() {
                         className={buttonClass + ' text-xs h-8 px-3'}
                         type="button"
                         disabled={!canCommission || probing === row.device_id}
-                        title={canCommission ? undefined : 'Cần vai trò Operator hoặc Admin để chạm thiết bị'}
+                        title={canCommission ? undefined : pick('Cần vai trò Operator hoặc Admin để chạm thiết bị', 'Requires Operator or Admin role to touch the device')}
                         onClick={() => void testConnection(row.device_id)}
                       >
-                        {probing === row.device_id ? 'Đang thử…' : 'Thử kết nối'}
+                        {probing === row.device_id ? pick('Đang thử…', 'Testing…') : pick('Thử kết nối', 'Test connection')}
                       </button>
                       {probeResults[row.device_id] && (
                         <div className="mt-1 text-[11px]" data-testid={`probe-${row.device_id}`}>
                           {probeResults[row.device_id].result === 'ok'
-                            ? `Trả lời sau ${probeResults[row.device_id].elapsed_us ?? '—'} µs`
-                            : `Không trả lời: ${probeResults[row.device_id].reason ?? '—'}`}
+                            ? pick(`Trả lời sau ${probeResults[row.device_id].elapsed_us ?? '—'} µs`, `Replied in ${probeResults[row.device_id].elapsed_us ?? '—'} µs`)
+                            : pick(`Không trả lời: ${probeResults[row.device_id].reason ?? '—'}`, `No reply: ${probeResults[row.device_id].reason ?? '—'}`)}
                         </div>
                       )}
                     </td>
@@ -476,18 +493,18 @@ export function DevicesPage() {
                       <button
                         className={buttonClass + ' text-xs h-8 px-3'}
                         disabled={!canEdit}
-                        title={readOnlyHint}
+                        title={readOnlyHintText}
                         onClick={() => {
                           setDevice(row)
                           setEditingDevice(true)
                         }}
                       >
-                        Sửa
+                        {pick('Sửa', 'Edit')}
                       </button>
                       <button
                         className={buttonClass + ' text-xs h-8 px-3 text-red-600 dark:text-red-400'}
                         disabled={!canEdit}
-                        title={readOnlyHint}
+                        title={readOnlyHintText}
                         onClick={() =>
                           setPendingDelete({
                             id: row.device_id,
@@ -496,7 +513,7 @@ export function DevicesPage() {
                           })
                         }
                       >
-                        Xoá
+                        {pick('Xoá', 'Delete')}
                       </button>
                     </td>
                   </tr>
@@ -505,7 +522,7 @@ export function DevicesPage() {
             </tbody>
           </table>
           {filteredDevices.length === 0 && (
-            <p className="mt-4 text-center text-xs text-[var(--c-text-dim)]">Chưa có thiết bị Modbus RTU nào.</p>
+            <p className="mt-4 text-center text-xs text-[var(--c-text-dim)]">{pick('Chưa có thiết bị Modbus RTU nào.', 'No Modbus RTU devices yet.')}</p>
           )}
         </div>
       </section>
@@ -515,23 +532,26 @@ export function DevicesPage() {
         <div role="dialog" aria-modal="true" aria-labelledby="mb-dev-del" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-5 shadow-lg space-y-3">
             <h3 id="mb-dev-del" className="text-lg font-semibold text-[var(--c-text)]">
-              Xoá thiết bị Modbus RTU?
+              {pick('Xoá thiết bị Modbus RTU?', 'Delete Modbus RTU device?')}
             </h3>
             <p className="text-sm text-[var(--c-text)]">{pendingDelete.label}</p>
             {(pendingDelete.extra ?? 0) > 0 && (
               <p className="text-xs text-red-600 font-medium">
-                Thiết bị này hiện còn {pendingDelete.extra} Modbus Point. Hãy xoá các Point trước.
+                {pick(
+                  `Thiết bị này hiện còn ${pendingDelete.extra} Modbus Point. Hãy xoá các Point trước.`,
+                  `This device still has ${pendingDelete.extra} Modbus Point(s). Delete the Points first.`
+                )}
               </p>
             )}
             <p className="text-xs text-[var(--c-text-dim)]">
-              Cấu hình mới sẽ được cập nhật và tái khởi động iobus ngay lập tức.
+              {pick('Cấu hình mới sẽ được cập nhật và tái khởi động iobus ngay lập tức.', 'The new configuration will be applied and iobus restarted immediately.')}
             </p>
             <div className="flex justify-end gap-2 pt-2">
               <button className={buttonClass} type="button" onClick={() => setPendingDelete(null)} disabled={deleting}>
-                Huỷ
+                {pick('Huỷ', 'Cancel')}
               </button>
               <button className={buttonClass + ' bg-red-600 text-white hover:bg-red-700'} type="button" onClick={confirmDelete} disabled={deleting}>
-                {deleting ? 'Đang xoá…' : 'Xoá'}
+                {deleting ? pick('Đang xoá…', 'Deleting…') : pick('Xoá', 'Delete')}
               </button>
             </div>
           </div>

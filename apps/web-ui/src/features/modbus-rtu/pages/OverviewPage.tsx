@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../../../shared/api/client'
+import { useI18n } from '../../../shared/i18n'
 import type { ModbusBusInfo, ModbusEventItem, ModbusOverview, ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../../shared/types'
 import { HierarchyTree } from '../components/HierarchyTree'
 
@@ -29,6 +30,7 @@ function formatLocalTime(iso: string): string {
 
 export function OverviewPage() {
   const navigate = useNavigate()
+  const { pick } = useI18n()
   const [overview, setOverview] = useState<ModbusOverview | null>(null)
   const [buses, setBuses] = useState<ModbusBusInfo[]>([])
   const [events, setEvents] = useState<ModbusEventItem[]>([])
@@ -66,7 +68,7 @@ export function OverviewPage() {
       }
       setLastRefreshedAt(new Date().toLocaleTimeString())
     } catch (err) {
-      setErrorStatus(err instanceof Error ? err.message : 'Không tải được dữ liệu Modbus Overview')
+      setErrorStatus(err instanceof Error ? err.message : pick('Không tải được dữ liệu Modbus Overview', 'Could not load Modbus Overview data'))
     } finally {
       setLoading(false)
     }
@@ -90,10 +92,10 @@ export function OverviewPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-[var(--c-text)]">Modbus RTU · Tổng quan</h2>
+          <h2 className="text-xl font-bold text-[var(--c-text)]">{pick('Modbus RTU · Tổng quan', 'Modbus RTU · Overview')}</h2>
           <p className="text-xs text-[var(--c-text-dim)]">
-            Giám sát trạng thái các cổng RS485 và thiết bị trường Modbus RTU.
-            {lastRefreshedAt && ` (Cập nhật lúc ${lastRefreshedAt})`}
+            {pick('Giám sát trạng thái các cổng RS485 và thiết bị trường Modbus RTU.', 'Monitor the status of RS485 ports and Modbus RTU field devices.')}
+            {lastRefreshedAt && ` (${pick('Cập nhật lúc', 'Updated at')} ${lastRefreshedAt})`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -102,7 +104,7 @@ export function OverviewPage() {
             className="h-9 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-xs font-medium text-[var(--c-text)] hover:border-[var(--c-line-strong)]"
             onClick={() => void loadData()}
           >
-            Làm mới
+            {pick('Làm mới', 'Refresh')}
           </button>
           <button
             type="button"
@@ -113,7 +115,7 @@ export function OverviewPage() {
             }`}
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
-            Tự động ⟳ 5s {autoRefresh ? 'ON' : 'OFF'}
+            {pick('Tự động', 'Auto')} ⟳ 5s {autoRefresh ? 'ON' : 'OFF'}
           </button>
         </div>
       </div>
@@ -127,15 +129,15 @@ export function OverviewPage() {
       {telemetryMissing && (
         <div role="note" data-testid="telemetry-missing"
           className="rounded-[var(--radius)] border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-[var(--c-text)]">
-          iobus chưa publish telemetry lần nào. Các số đo runtime bên dưới hiện “{NO_DATA}” —
-          đó là <strong>chưa biết</strong>, không phải bằng 0.
+          {pick(`iobus chưa publish telemetry lần nào. Các số đo runtime bên dưới hiện "${NO_DATA}" — đó là`, `iobus has never published telemetry. The runtime figures below show "${NO_DATA}" — that means`)}
+          {' '}<strong>{pick('chưa biết', 'unknown')}</strong>{pick(', không phải bằng 0.', ', not zero.')}
         </div>
       )}
 
       {/* 4 KPI cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4 shadow-sm">
-          <div className="text-xs font-medium text-[var(--c-text-dim)]">Tổng Device</div>
+          <div className="text-xs font-medium text-[var(--c-text-dim)]">{pick('Tổng Device', 'Total Devices')}</div>
           <div className="mt-2 text-3xl font-extrabold text-[var(--c-text)]" data-testid="kpi-total">
             {loading || !overview ? NO_DATA : overview.total_devices}
           </div>
@@ -155,20 +157,20 @@ export function OverviewPage() {
         >
           <div className="text-xs font-medium text-amber-600 dark:text-amber-400 flex items-center justify-between">
             <span>Offline</span>
-            <span className="text-[10px] underline">Xem danh sách →</span>
+            <span className="text-[10px] underline">{pick('Xem danh sách →', 'View list →')}</span>
           </div>
           <div className="mt-2 text-3xl font-extrabold text-amber-600 dark:text-amber-400" data-testid="kpi-offline">
             {loading || !overview || !overview.telemetry_available ? NO_DATA : overview.offline}
           </div>
           {overview && overview.telemetry_available && (overview.initializing ?? 0) > 0 && (
             <div className="mt-1 text-[10px] text-[var(--c-text-dim)]">
-              + {overview.initializing} thiết bị chưa từng liên lạc (chưa khởi tạo)
+              {pick(`+ ${overview.initializing} thiết bị chưa từng liên lạc (chưa khởi tạo)`, `+ ${overview.initializing} device(s) never communicated (not yet initialized)`)}
             </div>
           )}
         </button>
 
         <div className="rounded-[var(--radius)] border border-red-500/30 bg-red-500/5 p-4 shadow-sm">
-          <div className="text-xs font-medium text-red-600 dark:text-red-400">Lỗi cấu hình</div>
+          <div className="text-xs font-medium text-red-600 dark:text-red-400">{pick('Lỗi cấu hình', 'Configuration errors')}</div>
           <div className="mt-2 text-3xl font-extrabold text-red-600 dark:text-red-400" data-testid="kpi-fault">
             {loading || !overview ? NO_DATA : overview.fault_config}
           </div>
@@ -209,13 +211,13 @@ export function OverviewPage() {
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <span className="text-[var(--c-text-dim)]">Số thiết bị:</span>{' '}
+                  <span className="text-[var(--c-text-dim)]">{pick('Số thiết bị', 'Device count')}:</span>{' '}
                   <span className="font-semibold text-[var(--c-text)]">
                     {bus.total_devices} ({bus.online_devices} online)
                   </span>
                 </div>
                 <div>
-                  <span className="text-[var(--c-text-dim)]">Lỗi Timeout / CRC:</span>{' '}
+                  <span className="text-[var(--c-text-dim)]">{pick('Lỗi Timeout / CRC', 'Timeout / CRC errors')}:</span>{' '}
                   <span className="font-semibold text-[var(--c-text)]">
                     {bus.timeout_errors} / {bus.crc_errors}
                   </span>
@@ -236,7 +238,7 @@ export function OverviewPage() {
 
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="text-[var(--c-text-dim)]">Chiếm dây (đo thật)</span>
+                  <span className="text-[var(--c-text-dim)]">{pick('Chiếm dây (đo thật)', 'Wire occupancy (measured)')}</span>
                   <span className="font-semibold text-[var(--c-text)]" data-testid={`util-${bus.bus_id}`}>
                     {bus.bus_utilization_percent === null || bus.bus_utilization_percent === undefined
                       ? NO_DATA
@@ -251,8 +253,8 @@ export function OverviewPage() {
                 </div>
                 {bus.estimated_load_percent !== undefined && (
                   <div className="text-[10px] text-[var(--c-text-dim)]">
-                    Ước lượng theo cấu hình: {bus.estimated_load_percent.toFixed(1)}%
-                    {' '}(khác số đo thật ở trên)
+                    {pick('Ước lượng theo cấu hình', 'Estimated from configuration')}: {bus.estimated_load_percent.toFixed(1)}%
+                    {' '}({pick('khác số đo thật ở trên', 'differs from the measured value above')})
                   </div>
                 )}
               </div>
@@ -263,14 +265,14 @@ export function OverviewPage() {
                   className="w-full h-9 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] text-xs font-semibold text-[var(--c-text)] hover:border-[var(--c-line-strong)]"
                   onClick={() => navigate('/eng/modbus-rtu/devices')}
                 >
-                  Xem thiết bị trên bus này →
+                  {pick('Xem thiết bị trên bus này →', 'View devices on this bus →')}
                 </button>
               </div>
             </div>
           ))
         ) : (
           <div className="col-span-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-6 text-center text-xs text-[var(--c-text-dim)]">
-            {loading ? 'Đang tải dữ liệu bus RS485…' : 'Chưa có bus RS485 nào được cấu hình.'}
+            {loading ? pick('Đang tải dữ liệu bus RS485…', 'Loading RS485 bus data…') : pick('Chưa có bus RS485 nào được cấu hình.', 'No RS485 buses configured yet.')}
           </div>
         )}
       </div>
@@ -278,23 +280,23 @@ export function OverviewPage() {
       {/* Sự kiện quan sát được */}
       <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4 shadow-sm">
         <div className="flex items-center justify-between border-b border-[var(--c-border)] pb-3">
-          <h3 className="text-base font-bold text-[var(--c-text)]">Sự kiện giao tiếp gần đây</h3>
+          <h3 className="text-base font-bold text-[var(--c-text)]">{pick('Sự kiện giao tiếp gần đây', 'Recent communication events')}</h3>
           <button
             type="button"
             className="text-xs text-[var(--c-primary,#2563eb)] hover:underline"
             onClick={() => navigate('/eng/modbus-rtu/diagnostics')}
           >
-            Xem tất cả diagnostics →
+            {pick('Xem tất cả diagnostics →', 'View all diagnostics →')}
           </button>
         </div>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-[var(--c-border)] text-[var(--c-text-dim)]">
-                <th className="py-2">Thời gian</th>
+                <th className="py-2">{pick('Thời gian', 'Time')}</th>
                 <th className="py-2">Bus</th>
                 <th className="py-2">Device ID</th>
-                <th className="py-2">Sự kiện</th>
+                <th className="py-2">{pick('Sự kiện', 'Event')}</th>
               </tr>
             </thead>
             <tbody>
@@ -318,7 +320,7 @@ export function OverviewPage() {
               ) : (
                 <tr>
                   <td colSpan={4} className="py-4 text-center text-[var(--c-text-dim)]">
-                    Chưa quan sát được lần chuyển trạng thái nào.
+                    {pick('Chưa quan sát được lần chuyển trạng thái nào.', 'No state transitions observed yet.')}
                   </td>
                 </tr>
               )}
@@ -333,9 +335,9 @@ export function OverviewPage() {
           sợi dây này có những thiết bị nào, thiết bị kia đọc thanh ghi nào. */}
       <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-[var(--c-text)]">Cấu trúc Bus → Thiết bị → Point</h3>
+          <h3 className="text-sm font-bold text-[var(--c-text)]">{pick('Cấu trúc Bus → Thiết bị → Point', 'Bus → Device → Point structure')}</h3>
           <span className="text-xs text-[var(--c-text-dim)]">
-            Tham số serial (baud/parity/stop bits) thuộc bus, không thuộc thiết bị.
+            {pick('Tham số serial (baud/parity/stop bits) thuộc bus, không thuộc thiết bị.', 'Serial parameters (baud/parity/stop bits) belong to the bus, not the device.')}
           </span>
         </div>
         <HierarchyTree

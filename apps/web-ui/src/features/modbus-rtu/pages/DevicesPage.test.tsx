@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type UserRole } from '../../../shared/types'
 import { DevicesPage } from './DevicesPage'
+import { I18nProvider } from '../../../shared/i18n'
 
 const api = vi.hoisted(() => ({
   getModbusDevices: vi.fn(), getModbusPoints: vi.fn(), getModbusDiagnostics: vi.fn(),
@@ -29,14 +30,18 @@ vi.mock('../../auth', async (importOriginal) => {
 
 function renderAt(search = '') {
   return render(
-    <MemoryRouter initialEntries={[`/eng/modbus-rtu/devices${search}`]}>
-      <DevicesPage />
-    </MemoryRouter>
+    <I18nProvider>
+      <MemoryRouter initialEntries={[`/eng/modbus-rtu/devices${search}`]}>
+        <DevicesPage />
+      </MemoryRouter>
+    </I18nProvider>
   )
 }
 
 describe('DevicesPage', () => {
   beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('mkddc-lang', 'vi')
     auth.role = 'admin'
     api.getModbusDevices.mockResolvedValue([
       { device_id: 'ahu-1', display_name: 'AHU 1', enabled: true, rs485_port: '/dev/rs485-1', baud: 19200, parity: 'E', stop_bits: 1, slave_id: 7, poll_ms: 1000, timeout_ms: 300, retry: 2 },

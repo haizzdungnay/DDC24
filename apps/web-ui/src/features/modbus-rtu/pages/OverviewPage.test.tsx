@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OverviewPage } from './OverviewPage'
+import { I18nProvider } from '../../../shared/i18n'
 
 const api = vi.hoisted(() => ({
   getModbusOverview: vi.fn(),
@@ -18,14 +19,18 @@ vi.mock('../../../shared/api/client', () => ({ apiClient: api }))
 
 function renderPage() {
   render(
-    <BrowserRouter>
-      <OverviewPage />
-    </BrowserRouter>
+    <I18nProvider>
+      <BrowserRouter>
+        <OverviewPage />
+      </BrowserRouter>
+    </I18nProvider>
   )
 }
 
 describe('OverviewPage', () => {
   beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('mkddc-lang', 'vi')
     api.getModbusDevices.mockResolvedValue([])
     api.getModbusPoints.mockResolvedValue([])
     api.getModbusDiagnostics.mockResolvedValue([])

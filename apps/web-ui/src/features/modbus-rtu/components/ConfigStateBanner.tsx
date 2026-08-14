@@ -1,4 +1,5 @@
 import { useAuth, roleAtLeast } from '../../auth'
+import { useI18n } from '../../../shared/i18n'
 import { useModbusConfig } from '../useModbusConfig'
 
 const NO_DATA = '—'
@@ -18,6 +19,7 @@ const NO_DATA = '—'
 export function ConfigStateBanner() {
   const { state, lifecycle, save, apply, discard, status, locked } = useModbusConfig()
   const { session } = useAuth()
+  const { pick } = useI18n()
   const canEdit = roleAtLeast(session?.role, 'admin')
 
   const running = state?.running_on_iobus
@@ -41,13 +43,13 @@ export function ConfigStateBanner() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono">
           <span data-testid="config-lifecycle" className="font-semibold">
-            {lifecycle === 'CLEAN' && 'Không có thay đổi chờ áp dụng'}
-            {lifecycle === 'DIRTY' && `Có ${changeCount} thay đổi chưa áp dụng`}
-            {lifecycle === 'APPLYING' && 'Đang áp dụng…'}
-            {lifecycle === 'FAILED' && 'Lần áp dụng gần nhất THẤT BẠI'}
+            {lifecycle === 'CLEAN' && pick('Không có thay đổi chờ áp dụng', 'No changes pending')}
+            {lifecycle === 'DIRTY' && pick(`Có ${changeCount} thay đổi chưa áp dụng`, `${changeCount} change(s) not applied yet`)}
+            {lifecycle === 'APPLYING' && pick('Đang áp dụng…', 'Applying…')}
+            {lifecycle === 'FAILED' && pick('Lần áp dụng gần nhất THẤT BẠI', 'The last apply FAILED')}
           </span>
           <span>
-            Revision đã lưu:{' '}
+            {pick('Revision đã lưu', 'Saved revision')}:{' '}
             <span data-testid="active-revision">
               {state ? state.active_revision : NO_DATA}
             </span>
@@ -55,10 +57,10 @@ export function ConfigStateBanner() {
           <span data-testid="iobus-sync">
             {/* Không liên lạc được iobus là KHÔNG BIẾT, không phải "đã đồng bộ". */}
             {!running || !running.reachable
-              ? `iobus đang chạy: ${NO_DATA} (không liên lạc được)`
+              ? pick(`iobus đang chạy: ${NO_DATA} (không liên lạc được)`, `iobus running: ${NO_DATA} (unreachable)`)
               : running.in_sync
-                ? `iobus đang chạy revision ${running.config_revision} · khớp`
-                : `iobus đang chạy revision ${running.config_revision} · LỆCH với bản đã lưu`}
+                ? pick(`iobus đang chạy revision ${running.config_revision} · khớp`, `iobus running revision ${running.config_revision} · in sync`)
+                : pick(`iobus đang chạy revision ${running.config_revision} · LỆCH với bản đã lưu`, `iobus running revision ${running.config_revision} · MISMATCHES the saved revision`)}
           </span>
           {state?.active_checksum && (
             <span className="opacity-70">checksum {state.active_checksum.slice(0, 12)}…</span>
@@ -73,7 +75,7 @@ export function ConfigStateBanner() {
               disabled={locked || !dirty}
               onClick={() => void discard()}
             >
-              Bỏ thay đổi
+              {pick('Bỏ thay đổi', 'Discard changes')}
             </button>
             <button
               type="button"
@@ -81,7 +83,7 @@ export function ConfigStateBanner() {
               disabled={locked}
               onClick={() => void save()}
             >
-              Lưu nháp
+              {pick('Lưu nháp', 'Save draft')}
             </button>
             <button
               type="button"
@@ -90,7 +92,7 @@ export function ConfigStateBanner() {
               disabled={locked || !dirty}
               onClick={() => void apply()}
             >
-              {locked ? 'Đang áp dụng…' : 'Áp dụng xuống thiết bị'}
+              {locked ? pick('Đang áp dụng…', 'Applying…') : pick('Áp dụng xuống thiết bị', 'Apply to device')}
             </button>
           </div>
         )}
@@ -107,7 +109,7 @@ export function ConfigStateBanner() {
       {dirty && changeCount > 0 && (
         <details className="mt-2">
           <summary className="cursor-pointer text-[var(--c-text-dim)]">
-            Xem {changeCount} thay đổi sẽ được phát xuống thiết bị
+            {pick(`Xem ${changeCount} thay đổi sẽ được phát xuống thiết bị`, `View ${changeCount} change(s) that will be pushed to the device`)}
           </summary>
           <ul className="mt-2 space-y-1 font-mono text-[11px]">
             {diff.map((entry, index) => (
@@ -115,7 +117,7 @@ export function ConfigStateBanner() {
                 [{entry.kind}] {entry.id}
                 {entry.action === 'modified' && entry.field
                   ? `: ${entry.field} ${entry.before || NO_DATA} → ${entry.after || NO_DATA}`
-                  : ` — ${entry.action === 'added' ? 'thêm mới' : 'xoá'}`}
+                  : ` — ${pick(entry.action === 'added' ? 'thêm mới' : 'xoá', entry.action === 'added' ? 'added' : 'removed')}`}
               </li>
             ))}
           </ul>
