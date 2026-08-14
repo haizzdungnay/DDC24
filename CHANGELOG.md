@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### Fixed — badge "1 Draft issues" thiếu số ít theo báo cáo ISO Phase 3 (TR-MKDDC24-P3-20260814-03, 2026-08-14)
+
+Bối cảnh: báo cáo `TR-MKDDC24-P3-20260814-03` test Programs Tab (ST Editor,
+FBD Editor, Check Validation) liệt kê 8 defect (BUG-005/006/007/011/012/013/
+019/020). Đối chiếu từng finding với source thật trước khi sửa (đúng cách rút
+ra từ báo cáo Phase 1/2 cùng ngày — báo cáo hay test nhầm bản board cũ):
+
+- **7/8 finding đã sửa từ trước, không tái hiện được với source hiện tại**:
+  BUG-005/006 (tên mặc định `pick()` đúng locale + `uniqueProgramName` chặn
+  trùng tên), BUG-007 (`ProblemsDrawer` đã có cột/dòng/biến trong
+  `locationText`), BUG-011 (Find bar đã có nút X + Escape + toggle),
+  BUG-012 (`translateFbdAnnouncement` dịch `announcement` lúc render, không
+  còn ghi cứng tiếng Việt trong reducer), BUG-013 (`formatStSource` đã tách
+  từ khoá khối/câu lệnh ra dòng riêng, `collectStSymbols` nhận VAR không cần
+  đứng đầu dòng), BUG-020 (mục PROBLEMS đã là `<button onClick={onSelect}>`,
+  `onSelect` đã nối ở cả `DesignWorkspacePage.tsx` và
+  `CheckCommissionPage.tsx`) — toàn bộ đã vào commit `fb242cb` (13 lỗi
+  BUG-001..013) và được deploy lên board Foxlinx cùng đợt sửa báo cáo Phase 2
+  hôm nay; kết luận: Phase 3 test chạy trên bản board trước lượt deploy đó.
+- **BUG-019 — thật, chưa sửa**: `StructuredFbdEditor.tsx` dòng 178 ghép cứng
+  `` `${issues.length} Draft issues` `` không phân biệt số ít/nhiều — khi có
+  đúng 1 issue, badge hiện "1 Draft issues" (sai ngữ pháp). Sửa thành
+  `` `${issues.length} Draft ${issues.length === 1 ? 'issue' : 'issues'}` ``;
+  bản tiếng Việt ("lỗi Draft") không có biến thể số ít/nhiều nên giữ nguyên.
+  Thêm test `StructuredFbdEditor.test.tsx` dựng document vi phạm
+  `FBD-SCHEMA-ROOT-001` (đúng 1 issue) và xác nhận badge hiện "1 Draft issue"
+  chứ không phải "1 Draft issues".
+
+**Kiểm chứng**: `npx vitest --run --environment jsdom src` → 546/546 pass (67
+file, +1 test mới); `npm run lint` sạch; `VITE_PROGRAMMING_REV_A=1 npm run
+build` qua, dist mới `index-CDzXG5-7.js` (`grep -c REVA_SCOPE_ROADMAP` = 0,
+bundle có `f.length===1?"issue":"issues"` xác nhận fix vào build); deploy
+board Foxlinx qua `scp` + swap atomic, `systemctl is-active mkddc-web-pi` =
+`active`.
+
+Refs: `TR-MKDDC24-P3-20260814-03`.
+
 ### Fixed — 3 lỗi Dashboard Programming theo báo cáo ISO Phase 2 (TR-MKDDC24-P2-20260814-02, 2026-08-14)
 
 Bối cảnh: báo cáo `TR-MKDDC24-P2-20260814-02` test lần đầu Dashboard của

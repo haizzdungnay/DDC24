@@ -175,7 +175,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
           {state.document.networks.reduce((sum, item) => sum + item.wires.length, 0)}/512 wire
         </span>
         <span className={issues.length ? 'rounded-full bg-[var(--c-warn-bg)] px-2 py-1 text-[var(--c-warn-fg)]' : 'rounded-full bg-[var(--c-good-bg)] px-2 py-1 text-[var(--c-good-fg)]'}>
-          {issues.length ? pick(`${issues.length} lỗi Draft`, `${issues.length} Draft issues`) : pick('Canonical hợp lệ', 'Canonical valid')}
+          {issues.length ? pick(`${issues.length} lỗi Draft`, `${issues.length} Draft ${issues.length === 1 ? 'issue' : 'issues'}`) : pick('Canonical hợp lệ', 'Canonical valid')}
         </span>
         {!canEdit && <span className="rounded-full bg-[var(--c-surface-2)] px-2 py-1">{pick('Chỉ đọc', 'Read only')}</span>}
       </div>
