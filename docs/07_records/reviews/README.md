@@ -30,6 +30,7 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 
 | Hồ sơ | Ngày | Trạng thái | Nội dung |
 |---|---|---|---|
+| [Gap Universal Input FE vs 12 UC đề xuất](UI_UNIVERSAL_INPUT_FE_GAP_REPORT_2026-08-14.md) | 2026-08-14 | Record (không phải bug) | `InputsPage.tsx` mirror thanh ghi firmware `u0..u7`; đáp ứng 1/12 UC đầy đủ, 8 một phần, 3 chưa có so với đề xuất phân lớp Electrical Mode/Sensor Profile/Fault Detection — gap nằm ở tầng dữ liệu Core, không chỉ FE |
 | [Rà soát BE + FE theo module](CODE_REVIEW_BE_FE_2026-08-06.md) | 2026-08-06 | **Đã đóng** 2026-08-08 (14 sửa · 1 hết hiệu lực) | 15 finding `REV-BE/FE/PLT-*`; xử lý theo [Plan 51](../../03_implementation/51_BE_FE_FINDINGS_REMEDIATION_PLAN.md) |
 | [Soi lỗi giao diện theo từng trang — board Foxlinx](FE_BOARD_PAGE_AUDIT_2026-08-06.md) | 2026-08-06 | Đã đóng | 23/23 trang render, 0 trang trắng sau khi vá; Chromium thật qua SSH tunnel |
 | [Review giao diện trên board thật](FE_BOARD_UI_REVIEW_2026-08-06.md) | 2026-08-06 | Đã đóng (PR #95) | `FE-DIAG-01` — ControllerDiagram bịa dữ liệu simulator ở chế độ live |
