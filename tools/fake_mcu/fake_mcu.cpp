@@ -5,14 +5,17 @@
  *
  * Hành vi:
  *   HANDSHAKE   → HANDSHAKE_RESP (version/status cấu hình được)
- *   GET_IO      → IO_RESP fake (UI ramp+sin, DI toggle, sample_cnt tăng)
- *   SET_DO/AO/AO_CFG → ACK; lưu state để IO_RESP feedback (DO_FB_MASK)
+ *   GET_IO      → IO_RESP fake — 16 kênh UI mô phỏng field device một AHU thật
+ *                 (xem docs/07_records/reviews/FAKE_MCU_AHU_WIRING_2026-08-14.md),
+ *                 phản hồi động theo lệnh AO/DO đã nhận (đóng vòng feedback)
+ *   SET_DO/AO/AO_CFG → ACK; lưu state để IO_RESP feedback (DO_FB_MASK, UI feedback)
  *   GET_DIAG    → DIAG_RESP fake + clear sticky WDG_RESET
  *   RESET_IO    → ACK + IO về safe
  * Inject: --crc-error RATE, --timeout N, --nack CMD ERR, --seq-wrong,
  *         --stuck-relay, --overtemp, --hs-status N, --vdd-fault,
  *         --adc-fault {1|2|3}, --dac-fault, --wdg-reset N, --stuck-ui CH RAW
  */
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -40,6 +43,7 @@ struct McuState {
     uint16_t rx_cnt = 0, crc_err = 0, seq_err = 0;
     uint64_t boot_ns = 0;
     uint64_t last_rx_ns = 0;          /* cho MCU safe timeout 200ms (lớp 1) */
+    double   do1_on_since_t = -1.0;   /* giây kể từ boot lúc DO-01 (Fan Enable) bật gần nhất; -1 = đang tắt */
 };
 
 struct Inject {
@@ -68,13 +72,21 @@ uint64_t now_ns()
     return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
 }
 
-/* Mirror Rev A analog front-end constants from apps/iobus/io/io_scaling.hpp.
- * fake_mcu emits ADC raw, so 0-10V/4-20mA simulation must pass through
- * divider/shunt instead of treating ADC full-scale as field full-scale. */
+/* Mirror Rev A analog front-end constants from apps/iobus/io/io_scaling.hpp/.cpp.
+ * fake_mcu emits ADC raw, so 0-10V/4-20mA/NTC simulation must pass through
+ * divider/shunt/thermistor network thay vì coi ADC full-scale là field full-scale. */
 constexpr double SIM_S24_FS = 8388607.0;
 constexpr double SIM_ADC_VREF_V = 2.44;
 constexpr double SIM_UI_DIV_GAIN = 9.2645;
 constexpr double SIM_UI_SHUNT_OHM = 49.9;
+/* NTC10K: mirror io_scaling.cpp (IO_NTC_VEXC_V, NTC_BETA_K, NTC_T0_K) — dùng
+ * chung một mạch kích áp cho mọi kênh nhiệt độ AHU (SAT/RAT/OAT/MAT/CHW). */
+constexpr double SIM_NTC_VEXC_V = 3.3;
+constexpr double SIM_NTC_BETA_K = 3950.0;
+constexpr double SIM_NTC_T0_K = 298.15;
+constexpr double SIM_NTC_R0_OHM = 10000.0;
+/* Trễ khởi động quạt trước khi tiếp điểm Proof-of-Flow (UI-12) báo "đang chạy". */
+constexpr double SIM_FAN_SPINUP_S = 2.0;
 
 int32_t clamp_s24(double raw)
 {
@@ -98,11 +110,6 @@ int32_t raw_from_milliamps(double ma)
     return raw_from_adc_volts((ma / 1000.0) * SIM_UI_SHUNT_OHM);
 }
 
-int32_t raw_from_analog_safe_frac(double frac)
-{
-    return raw_from_milliamps(4.0 + frac * 16.0);
-}
-
 double adc_volts_from_raw(int32_t raw)
 {
     return (static_cast<double>(raw) / SIM_S24_FS) * SIM_ADC_VREF_V;
@@ -123,58 +130,159 @@ int32_t raw_from_adc_ratio(double frac)
     return raw_from_adc_volts(frac * SIM_ADC_VREF_V);
 }
 
-int32_t simulated_ui_raw(int i, double t)
+/* raw ADC cho một nhiệt độ mục tiêu qua mạch NTC10K (nghịch đảo công thức
+ * Beta trong io_scaling.cpp::ntc_resolve_temp/ntc_resistance_from_adc).
+ * Lưu ý: với VEXC=3.3V > VREF=2.44V, mạch chia áp NTC-xuống-GND/pullup-lên-VEXC
+ * bão hòa ADC (v_adc >= VREF) ở nhiệt độ dưới ~+3 độ C — thấp hơn hẳn dải
+ * "hợp lệ" -30..70 độ C mà io_scaling.cpp khai báo. Đây là quan sát về mô hình
+ * hằng số hardware hiện có (Rev 2.5, "ready for schematic review"), không phải
+ * lỗi của fake_mcu — xem ghi chú trong báo cáo AHU wiring. Mọi baseline AHU
+ * dưới đây được chọn ở >=5 độ C để không rơi vào vùng bão hòa này. */
+int32_t raw_from_ntc10k_temp(double temp_c)
 {
-    double frac;
-    if (i < 8) {
-        frac = 0.5 + 0.45 * std::sin((i < 4 ? 0.015 : 0.018) * t + i * 0.7);
-        return raw_from_analog_safe_frac(frac);
+    const double t_k = temp_c + 273.15;
+    const double r = SIM_NTC_R0_OHM * std::exp(SIM_NTC_BETA_K * (1.0 / t_k - 1.0 / SIM_NTC_T0_K));
+    const double v_adc = SIM_NTC_VEXC_V * r / (r + SIM_NTC_R0_OHM);
+    return raw_from_adc_volts(v_adc);
+}
+
+/* Tiếp điểm khô: raw thấp (~0.05 x FS) => eng=0 (đóng/an toàn/không trip);
+ * raw cao (~0.9 x FS) => eng=1 (hở/trip/hoạt động) — đúng ngưỡng
+ * DRY_CONTACT_THRESHOLD=FS*0.5 trong io_scaling.cpp. */
+int32_t raw_dry_contact(bool active)
+{
+    return raw_from_adc_ratio(active ? 0.9 : 0.05);
+}
+
+/* Phân số 0..1 của lệnh AO kênh k (0-based) — mode-agnostic vì ao_eng_to_raw()
+ * dùng frac 0..1 cho cả V0_10 lẫn MA4_20 (io_scaling.cpp). */
+double ao_frac(const McuState& st, int k)
+{
+    return static_cast<double>(st.ao_raw[k]) / 65535.0;
+}
+
+double sim_oat_c(double t) { return 30.0 + 2.0 * std::sin(0.003 * t + 2.0); }   /* Outside Air Temp */
+double sim_rat_c(double t) { return 24.0 + 0.5 * std::sin(0.008 * t + 1.0); }   /* Return Air Temp */
+double sim_sat_c(double t) { return 14.0 + 0.5 * std::sin(0.010 * t); }         /* Supply Air Temp */
+
+/* Mixed Air Temp = trộn OAT/RAT theo tỉ lệ damper (AO-02) đang lệnh — mô
+ * phỏng vật lý economizer thật, dùng chung cho UI-04 và điều kiện Freeze Stat. */
+double sim_mat_c(double t, const McuState& st)
+{
+    const double damper_frac = ao_frac(st, 1);
+    return sim_oat_c(t) * damper_frac + sim_rat_c(t) * (1.0 - damper_frac);
+}
+
+bool fan_status_active(const McuState& st, double t)
+{
+    return st.do1_on_since_t >= 0.0 && (t - st.do1_on_since_t) > SIM_FAN_SPINUP_S;
+}
+
+/* 16 kênh UI mô phỏng field device của một AHU thật (xem
+ * docs/07_records/reviews/FAKE_MCU_AHU_WIRING_2026-08-14.md để biết cấu hình
+ * SensorType/scale cần đặt trong ứng dụng cho từng kênh). Các kênh feedback
+ * (damper/valve/VFD) và điều kiện an toàn Freeze Stat phản hồi động theo lệnh
+ * AO/DO Core đã gửi (st.ao_raw/st.do_state) — đóng vòng thật thay vì hằng số
+ * độc lập, để verify được đường binding→compiler→Core→field device. */
+int32_t simulated_ui_raw(int i, double t, const McuState& st)
+{
+    switch (i) {
+    case 0: /* UI-01 Supply Air Temperature (SAT) — NTC10K */
+        return raw_from_ntc10k_temp(sim_sat_c(t));
+    case 1: /* UI-02 Return Air Temperature (RAT) — NTC10K */
+        return raw_from_ntc10k_temp(sim_rat_c(t));
+    case 2: /* UI-03 Outside Air Temperature (OAT) — NTC10K */
+        return raw_from_ntc10k_temp(sim_oat_c(t));
+    case 3: /* UI-04 Mixed Air Temperature (MAT) — NTC10K, theo damper AO-02 */
+        return raw_from_ntc10k_temp(sim_mat_c(t, st));
+    case 4: { /* UI-05 Duct Static Pressure — 4-20mA, theo tốc độ quạt AO-01 (fan law bậc 2) */
+        const double fan_frac = ao_frac(st, 0);
+        const double dsp_frac = fan_frac * fan_frac;
+        return raw_from_milliamps(4.0 + dsp_frac * 15.0);
     }
-    if (i == 8) { /* UI-09 return air temp: NTC10k, about 22-30 C. */
-        frac = 0.475 + 0.075 * std::sin(0.006 * t + i * 1.1);
-        return raw_from_adc_ratio(frac);
+    case 5: { /* UI-06 Supply Air Humidity — 0-10V, 0-100 %RH */
+        const double rh_pct = 55.0 + 8.0 * std::sin(0.009 * t + 0.5);
+        return raw_from_field_volts((rh_pct / 100.0) * 10.0);
     }
-    if (i == 9) { /* UI-10 CO2: 0-10V scaled by io_config to ppm. */
-        const double volts = 3.0 + 2.0 * (0.5 + 0.5 * std::sin(0.011 * t + 0.4));
+    case 6: { /* UI-07 Return Air CO2 — 0-10V, Core scale sang ppm */
+        const double volts = 5.0 + 1.5 * std::sin(0.011 * t + 0.4);
         return raw_from_field_volts(volts);
     }
-    if (i == 10) { /* UI-11 chilled water temp: NTC10k, about 10-16 C. */
-        frac = 0.88 + 0.05 * std::sin(0.007 * t + i * 1.3);
-        return raw_from_adc_ratio(frac);
+    case 7: { /* UI-08 Economizer Damper Position Feedback — 0-10V, echo AO-02 */
+        const double frac = std::clamp(ao_frac(st, 1) + 0.01 * std::sin(2.0 * t), 0.0, 1.0);
+        return raw_from_field_volts(frac * 10.0);
     }
-    if (i == 11 || i == 12 || i == 14) { /* fan status, motion, water leak contacts. */
-        frac = (i == 14) ? 0.05 : ((std::sin(0.052 * t + i * 1.57) > 0.0) ? 0.9 : 0.05);
-        return raw_from_adc_ratio(frac);
+    case 8: /* UI-09 Filter Differential Pressure Switch — dry contact, mặc định sạch */
+        return raw_dry_contact(false);
+    case 9: /* UI-10 Freeze Stat (SAFETY) — dry contact, trip khi MAT < 3 độ C */
+        return raw_dry_contact(sim_mat_c(t, st) < 3.0);
+    case 10: /* UI-11 Duct Smoke Detector (SAFETY) — dry contact, mặc định không cháy */
+        return raw_dry_contact(false);
+    case 11: /* UI-12 Supply Fan Status/Proof of Flow — dry contact, theo DO-01 + trễ khởi động */
+        return raw_dry_contact(fan_status_active(st, t));
+    case 12: /* UI-13 High Duct Static Pressure Switch (SAFETY) — dry contact, mặc định không trip */
+        return raw_dry_contact(false);
+    case 13: { /* UI-14 Chilled Water Coil Leaving Temp — NTC10K, theo van AO-03 */
+        const double leaving_c = 7.0 + ao_frac(st, 2) * 6.0 + 0.2 * std::sin(0.02 * t);
+        return raw_from_ntc10k_temp(leaving_c);
     }
-    if (i == 13) { /* UI-14 light level: percent ratio. */
-        frac = 0.35 + 0.35 * (0.5 + 0.5 * std::sin(0.012 * t + 1.8));
-        return raw_from_adc_ratio(frac);
+    case 14: { /* UI-15 Heating Valve Position Feedback — 0-10V, echo AO-04 */
+        const double frac = std::clamp(ao_frac(st, 3) + 0.01 * std::sin(2.0 * t + 1.0), 0.0, 1.0);
+        return raw_from_field_volts(frac * 10.0);
     }
-
-    frac = 0.5 + 0.45 * std::sin(0.06 * t + i * 0.4);
-    return raw_from_analog_safe_frac(frac);
+    case 15: { /* UI-16 VFD Fan Speed Feedback — 0-10V, echo AO-01 */
+        const double frac = std::clamp(ao_frac(st, 0) + 0.01 * std::sin(2.0 * t + 2.0), 0.0, 1.0);
+        return raw_from_field_volts(frac * 10.0);
+    }
+    default:
+        return 0;
+    }
 }
 
 bool run_self_test()
 {
-    for (int sample = 0; sample <= 20000; sample++) {
-        const double t = static_cast<double>(sample) * 0.1;
-        for (int i = 0; i < 16; i++) {
-            const int32_t raw = simulated_ui_raw(i, t);
-            const bool analog_safe_channel = i < 8 || i == 9 || i == 15;
-            if (analog_safe_channel && field_volts_from_raw(raw) > 10.001) {
-                std::fprintf(stderr, "fake_mcu: self-test fail ui=%d volts=%.6f\n",
-                             i + 1, field_volts_from_raw(raw));
-                return false;
-            }
-            if (analog_safe_channel && milliamps_from_raw(raw) > 20.001) {
-                std::fprintf(stderr, "fake_mcu: self-test fail ui=%d ma=%.6f\n",
-                             i + 1, milliamps_from_raw(raw));
-                return false;
+    McuState idle_st;   /* AO=0, DO=0 — trạng thái nghỉ (chưa Commission) */
+    McuState max_st;    /* AO=max, DO=max, quạt đã bật từ đầu — trạng thái stress mọi kênh feedback */
+    max_st.ao_raw[0] = max_st.ao_raw[1] = max_st.ao_raw[2] = max_st.ao_raw[3] = 65535;
+    max_st.do_state = 0x0F;
+    max_st.do1_on_since_t = 0.0;
+
+    McuState* states[2] = { &idle_st, &max_st };
+    for (McuState* stp : states) {
+        for (int sample = 0; sample <= 20000; sample++) {
+            const double t = static_cast<double>(sample) * 0.1;
+            for (int i = 0; i < 16; i++) {
+                const int32_t raw = simulated_ui_raw(i, t, *stp);
+                /* Mỗi kênh AHU đã có SensorType dự kiến cố định (không còn là
+                 * placeholder chung chung như trước) — kiểm theo đúng dải vật
+                 * lý dự kiến cấu hình trong ứng dụng, xem báo cáo wiring. */
+                const bool ma_channel = (i == 4);                                      /* UI-05 DSP: 4-20mA */
+                const bool v_channel = (i == 5) || (i == 6) || (i == 7) ||
+                                       (i == 14) || (i == 15);                          /* SAH/CO2/DamperFB/HeatValveFB/VFDSpeedFB: 0-10V */
+                const bool ntc_channel = (i == 0) || (i == 1) || (i == 2) ||
+                                         (i == 3) || (i == 13);                          /* SAT/RAT/OAT/MAT/CHW: NTC10K */
+                if (ma_channel && milliamps_from_raw(raw) > 20.001) {
+                    std::fprintf(stderr, "fake_mcu: self-test fail ui=%d ma=%.6f\n",
+                                 i + 1, milliamps_from_raw(raw));
+                    return false;
+                }
+                if (v_channel && field_volts_from_raw(raw) > 10.001) {
+                    std::fprintf(stderr, "fake_mcu: self-test fail ui=%d volts=%.6f\n",
+                                 i + 1, field_volts_from_raw(raw));
+                    return false;
+                }
+                if (ntc_channel) {
+                    const double v_adc = adc_volts_from_raw(raw);
+                    if (v_adc <= 0.0 || v_adc >= SIM_ADC_VREF_V) {
+                        std::fprintf(stderr, "fake_mcu: self-test fail ui=%d ntc v_adc=%.6f out of range\n",
+                                     i + 1, v_adc);
+                        return false;
+                    }
+                }
             }
         }
     }
-    std::printf("fake_mcu: self-test ok (analog channels <= 10V and <= 20mA)\n");
+    std::printf("fake_mcu: self-test ok (16-channel AHU simulation trong dải phần cứng an toàn)\n");
     return true;
 }
 
@@ -207,15 +315,16 @@ void build_io_resp_payload(McuState& st, const Inject& inj, uint8_t* p)
 {
     /* IO_RESP v2 — 74 bytes (ADR-010) */
     const double t = static_cast<double>(now_ns() - st.boot_ns) / 1e9;
-    /* [0..63] UI_RAW[16] — 16 × int32 BE signed.
-     * UI1-8/UI16 are analog-safe; UI9/UI11 are NTC; UI10 is CO2 voltage;
-     * UI12/UI13/UI15 are dry contacts; UI14 is light percent. */
+    /* [0..63] UI_RAW[16] — 16 × int32 BE signed, mô phỏng field device AHU
+     * (SAT/RAT/OAT/MAT/DSP/SAH/CO2/DamperFB/FilterDP/FreezeStat/Smoke/
+     * FanStatus/HighStatic/CHW/HeatValveFB/VFDSpeedFB) — chi tiết từng kênh
+     * xem simulated_ui_raw() và docs/07_records/reviews/FAKE_MCU_AHU_WIRING_2026-08-14.md. */
     for (int i = 0; i < 16; i++) {
         /* --stuck-ui mô phỏng cảm biến "đơ": giá trị không đổi dù thời gian
          * trôi. Đây là hỏng hóc thực tế mà CRC/quality KHÔNG bắt được, nên
          * phải test được rằng logic phía trên phát hiện bằng cách khác. */
         const int32_t raw = (i == inj.stuck_ui_ch) ? inj.stuck_ui_raw
-                                                   : simulated_ui_raw(i, t);
+                                                   : simulated_ui_raw(i, t, st);
         put_be32s(p + 4 * i, raw);
     }
     /* [64] ADC1_STAT  [65] ADC2_STAT
@@ -493,7 +602,15 @@ int main(int argc, char** argv)
                         n = build_frame(CMD_NACK, echo_seq, resp_payload, IOP_NACK_LEN, out, corrupt);
                     } else {
                         const uint8_t mask = payload[0], value = payload[1];
+                        const uint8_t prev_do = st.do_state;
                         st.do_state = static_cast<uint8_t>((st.do_state & ~mask) | (value & mask));
+                        /* DO-01 = Supply Fan Enable: cạnh lên/xuống dùng để mô phỏng
+                         * trễ khởi động quạt cho UI-12 Fan Status (fan_status_active). */
+                        if ((mask & 0x01) && ((prev_do ^ st.do_state) & 0x01)) {
+                            st.do1_on_since_t = (st.do_state & 0x01)
+                                ? static_cast<double>(now_ns() - st.boot_ns) / 1e9
+                                : -1.0;
+                        }
                         resp_payload[0] = cmd;
                         n = build_frame(CMD_ACK, echo_seq, resp_payload, IOP_ACK_LEN, out, corrupt);
                         std::fprintf(stderr, "fake_mcu: SET_DO mask=0x%02X value=0x%02X -> do_state=0x%02X\n",
