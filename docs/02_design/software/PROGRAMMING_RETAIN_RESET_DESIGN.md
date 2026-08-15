@@ -1,149 +1,222 @@
 # RETAIN Reset — Design (WP-12)
 
 **Document ID:** DDD-RETAIN-RESET-PROG-001
-**Phiên bản:** 1.0
-**Trạng thái:** **Draft — chờ xác nhận Core + Safety trước khi implement**
-(đúng exit criteria `WP-12`: *"Handler thật tồn tại VÀ đã qua review Safety
-— không code trước khi có xác nhận semantics"*)
+**Phiên bản:** 2.1
+**Trạng thái:** **IMPLEMENTED** — Core C++ + BE Go + FE đã triển khai và
+kiểm chứng đầy đủ (§11); chờ commit/PR/merge/deploy board (Sprint D, WP-12)
 **Tác giả:** System Engineering, theo Lệnh CTO/Owner 2026-08-15 §VI (WP-12)
-**Phạm vi:** `POST /api/v1/programming/retain/reset` — hiện khai báo route
-(`router.go:55`, `RoleAdmin`, `idempotencyRequired`) nhưng rơi vào nhánh
-mặc định, luôn trả `503` (G-9, gap report 2026-08-15 §1 mục 5).
+**Phạm vi:** `POST /api/v1/programming/retain/reset` — route đã nối Core
+thật qua `RETAIN_RESET` IPC action (không còn rơi vào nhánh `503` mặc định
+mô tả ở Rev 2.0; xem §11 cho bằng chứng implement).
 
 ---
 
-## 0. Vì sao KHÔNG implement luôn — phát hiện quan trọng khi đọc source
+## 0. Đính chính Rev 1.0 — IPC layer THẬT SỰ đã nối runtime cho STAGE/ACTIVATE/RESTORE
 
-Ban đầu WP-12 tưởng là "viết một HTTP handler mỏng gọi `ActionRetainReset`
-đã có sẵn trong `coreipc` codec" (`codec.go` đã định nghĩa
-`ActionRetainReset`, `isMutation()` đã liệt kê nó — trông như chỉ thiếu
-phần nối dây). Đọc sâu hơn vào Core (C++) phát hiện việc này **không đơn
-giản như vậy**:
+Rev 1.0 tài liệu này (Draft) viết sai: *"IPC protocol layer chưa nối runtime
+thật cho bất kỳ action nào"*. Kết luận đó dựa trên một lượt grep không đủ
+sâu (`grep -rln "ProgramAction::Stage" apps/core/` chỉ khớp
+`program_ipc_server.cpp`, bỏ sót rằng dispatch thật nằm trong
+`ProgramIpcServer::HandleFrame` — cùng file, khác hàm — và endpoint chạy
+thật ở `apps/core/adapters/ipc/program_ipc_unix.cpp`, không phải một file
+tên gần giống). Đọc lại đầy đủ xác nhận:
 
-1. `apps/core/application/programming/program_ipc_server.cpp` (nơi định
-   nghĩa `ProgramAction::RetainReset`) **chỉ là tầng codec** (encode/decode
-   tên action) — không có dispatch/xử lý thật cho bất kỳ action nào, kể cả
-   `Stage`/`Activate`. Không có file nào khác trong `apps/core` tham chiếu
-   `ProgramAction::Stage`/`Activate` → nhánh IPC protocol này **chưa được
-   nối vào runtime thật**, bất kể `RetainReset` hay các action khác.
-2. RETAIN thật sự được quản lý bởi một subsystem riêng đã hoàn thiện:
-   `st_retain.hpp/.cpp` (RETAIN v2 — snapshot CRC, ghi atomic, cold-init
-   chẩn đoán được), sở hữu bởi `StScheduler` (`st_scheduler.hpp` dòng
-   146-155, 302-321: mỗi task có `retain_mailbox`/`retain_restore_state`/
-   `retain_generation` riêng, `StRetainService` bơm vào qua
-   `set_retain_service()`).
-3. `StRetainStore::erase()` **đã tồn tại** ("Reset idempotent; thành công
-   cả khi file chưa tồn tại") — tưởng như là primitive cần dùng. Nhưng đọc
-   kỹ vòng đời: `StRetainMailbox`/`StRetainService::worker_loop()` tự động
-   ghi lại snapshot mới nhất từ live memory mỗi tối thiểu 60 giây
-   (`kMinWriteIntervalNs`). **Nếu chỉ xoá file trong khi Program vẫn đang
-   chạy, autosave sẽ ghi đè giá trị RETAIN sống hiện tại trở lại trong
-   vòng 60 giây tiếp theo** — "reset" sẽ tự đảo ngược một cách âm thầm,
-   không có lỗi nào báo cho user biết việc reset "không dính".
-4. Do đó "RETAIN reset" đúng nghĩa (ảnh hưởng ngay giá trị đang chạy) đòi
-   hỏi một API mới ở tầng `StScheduler` (chưa tồn tại) để: (a) ghi giá trị
-   khởi tạo vào bộ nhớ sống của đúng các FB instance có `retained=true`
-   tại một điểm an toàn trong scan cycle (không phải xoá file), và (b)
-   đồng bộ với autosave để không bị ghi đè ngược. Đây là công việc runtime
-   engine thật, không phải một PATCH nhỏ ở Go.
+- `apps/core/bootstrap/main.cpp:319-330` dựng `ProgramIpcServer` thật, gắn
+  `ProgrammingRuntimeCoordinator*` thật, và chạy một thread
+  `ProgramIpcUnixEndpoint::run()` — `poll()`/`accept4()` thật trên
+  `/run/mkddc/programming-v1.sock`.
+- Go BE (`apps/web-api/internal/programming/application/operations.go`)
+  gọi đúng socket này qua `coreipc.Client.Call` cho `ActionStage`/
+  `ActionActivate`/`ActionRestore` — đây chính là luồng Commission đã xác
+  nhận chạy thật trên board Foxlinx nhiều lần trong phiên này.
+- `ProgramIpcServer::HandleFrame` (`program_ipc_server.cpp:564-672`)
+  dispatch `Stage`/`Restore`/`Activate` sang
+  `ProgrammingRuntimeCoordinator::stage/restore/activate(...)` — coordinator
+  thật, gắn `StScheduler` thật.
 
-**Kết luận của phát hiện này:** khoảng cách không chỉ là "thiếu HTTP
-handler" như gap report ban đầu mô tả — còn thiếu cả **API runtime cấp
-Core** để thực hiện reset một cách đúng đắn khi Program đang chạy. Đây
-chính xác là loại rủi ro mà exit criteria WP-12 muốn chặn trước khi code:
-nếu cứ viết một handler gọi thẳng `erase()` mà không giải quyết race với
-autosave, tính năng sẽ trông như hoạt động (Check trả OK, UI báo thành
-công) nhưng **không đáng tin** — một dạng "silent no-op" tệ hơn cả giữ
-nguyên 503 hiện tại (503 ít nhất trung thực là "chưa làm được").
+**Chỉ `RetainReset` (và `TraceStart`, ngoài phạm vi WP-12) rơi vào nhánh
+mặc định trả `ProgramResult::Unavailable`/`"IPC-ACTION-NOT-IMPLEMENTED"`**
+(`program_ipc_server.cpp:660-663`). Đây mới là khoảng thiếu thật — nhỏ và
+cụ thể hơn Rev 1.0 mô tả, nhưng cơ chế cần thêm (đồng bộ với RT scan thread)
+vẫn là công việc runtime engine thật, không phải một PATCH Go mỏng.
 
-## 1. Business semantics — 2 phương án, cần Product/Controls xác nhận
+## 1. Business semantics — QUYẾT ĐỊNH: Phương án B (runtime-coordinated)
 
-| | Phương án A — "Reset khi khởi động lại" | Phương án B — "Reset ngay lập tức" |
-|---|---|---|
-| Hành vi | Xoá snapshot đã lưu (`StRetainStore::erase()`, **đã có sẵn**); giá trị RETAIN sống hiện tại của Program đang chạy **không đổi** cho tới lần Stage/Activate/restart kế tiếp | Ghi giá trị khởi tạo vào bộ nhớ sống của FB retained NGAY trong khi Program đang chạy, tại một scan cycle boundary an toàn |
-| Cần code mới ở Core? | Không — dùng nguyên `erase()`, chỉ cần đấu Go↔C++ | **Có** — API mới ở `StScheduler`, phối hợp với autosave (xem §0.3-4) |
-| Rủi ro vận hành | Thấp — không đổi hành vi runtime đang chạy | Cao hơn — thay đổi tức thời giá trị (ví dụ `TON.ET` về 0) có thể làm logic hạ lưu phản ứng bất ngờ (một delay đang đếm dở bị reset giữa chừng) |
-| Khớp kỳ vọng UX "Reset" | **Lệch** — user bấm "Reset" nhưng giá trị hiển thị không đổi ngay, dễ hiểu nhầm là không hoạt động | Khớp đúng nghĩa "reset" |
-| Effort | Thấp (1-2 ngày, thuần Go + đấu IPC) | Cao (cần thiết kế + review runtime engine, có thể 1-2 tuần) |
+CTO/Owner chốt: **`Reset Retained State` là một runtime transaction, không
+phải filesystem command.** Flow bắt buộc:
 
-**Khuyến nghị:** Nếu mục tiêu ngắn hạn chỉ là "đóng G-9 cho baseline
-compliance/documentation" mà chưa cấp thiết về mặt vận hành thật (chưa có
-end-user report nào yêu cầu tính năng này hoạt động ngay), nên làm rõ với
-Product: có chấp nhận Phương án A làm Rev A baseline (đổi copy UI thành
-"Xoá RETAIN đã lưu — áp dụng từ lần khởi động lại kế tiếp" thay vì ngụ ý
-tức thời), và để Phương án B cho backlog Runtime Engine sau, hay bắt buộc
-phải B ngay từ đầu vì lý do compliance/an toàn cụ thể nào đó chưa ghi ở gap
-report gốc?
+```text
+Admin Request
+     ↓
+Validate Active Revision / Target
+     ↓
+Scheduler marks RESET_PENDING
+     ↓
+Controlled execution boundary (safe boundary — cùng điểm STAGE/ACTIVATE dùng)
+     ↓
+Reset in-memory retained values (slots + fb_states) cho instance đang chạy
+     ↓
+Force-flush persisted retain image (bỏ qua cửa sổ 60s autosave)
+     ↓
+Increment retain generation
+     ↓
+Resume Program (không dừng scan — chỉ 1 boundary bị chiếm dụng)
+     ↓
+Runtime read-back xác nhận giá trị đã reset
+     ↓
+Audit
+```
+
+**Mục tiêu bắt buộc:** sau khi API trả `SUCCEEDED`, autosave (worker 1s
+poll, `StRetainService::worker_loop()`) không bao giờ được phục hồi lại giá
+trị retained trước reset — đạt được bằng cách reset xảy ra ở tầng RT SLOTS
+trước, worker chỉ publish/ghi những gì slots đang có (tự nhiên phản ánh giá
+trị đã reset, không cần "chặn" worker).
 
 ## 2. Permission
 
-Đã đúng: `router.go:55` khai `role: auth.RoleAdmin`. Không cần thay đổi —
-khớp mức độ nhạy cảm của Commission (cũng `RoleAdmin`).
+Đã đúng: `router.go:55` khai `role: auth.RoleAdmin`. Không đổi.
 
-## 3. Audit
+## 3. Điểm mở rộng cụ thể (đọc trực tiếp source, không suy đoán)
 
-Phải ghi vào audit hash chain hiện có (cùng cơ chế `application/operations.go`
-dùng cho Stage/Activate/Restore) — bao gồm tối thiểu: actor, thời điểm,
-`projectId`/`revisionId` đang active, danh sách FB instance bị ảnh hưởng
-(§5), phương án semantics đã chọn (A/B, xem §1) để có thể truy vết đúng
-"reset đã xoá file" hay "reset đã đổi giá trị sống" khi điều tra sự cố sau
-này.
+| Lớp | File | Thay đổi |
+|---|---|---|
+| RT mutation (nơi thật sự ghi 0 vào slots) | `apps/core/application/st/st_scheduler.hpp/.cpp` | Thêm `pending_retain_reset` (atomic bool, mẫu giống `pending_commit_requested`) vào `StProgramInstance`; thêm `StScheduler::request_retain_reset(instance_id)` (non-RT, set cờ) và áp dụng trong `apply_pending_activations()` (hoặc hàm boundary riêng gọi cùng chỗ) — lặp `program.retain_entries` ghi `StCell` về 0, lặp `program.fb_instances` có `retained=true` ghi lại `StFbState` cold-init default. Cần `StLoadedProgram*` **mutable** (khác `StProgramRuntime::program()` hiện tại chỉ trả `const*`) — thêm accessor non-const dùng riêng cho đường boundary này, giữ nguyên bất biến "RT không cấp phát/không throw". |
+| Bridge non-RT → RT | `apps/core/application/programming/programming_runtime_coordinator.hpp/.cpp` | Thêm `reset_retain(const RetainResetCommand&, std::string* detail_code, std::string* error)` — gọi `scheduler_->request_retain_reset(...)`, đợi xác nhận đã áp dụng ở boundary kế tiếp (poll ngắn có timeout, cùng mẫu `flush_progress()` đã có), rồi gọi `scheduler_->retain_service()->flush(true)` (đã có sẵn, dùng ở shutdown — tái dùng, không viết mới) để bỏ qua cửa sổ 60s trước khi trả `Ok`. |
+| Dispatch IPC | `apps/core/application/programming/program_ipc_server.cpp` | Thêm nhánh `RetainReset` trong `HandleFrame` (cạnh `Stage`/`Activate`, dòng ~636-659) + hàm `parse_retain_reset_payload` (mẫu `parse_activate_payload`). |
+| Go caller (CHƯA có, phải tạo mới) | `apps/web-api/internal/programming/application/operations.go` (hoặc file mới `retain.go` cùng package) | Chưa có bất kỳ call site nào cho `ActionRetainReset` — phải viết luồng operation mới (không phải sửa luồng Stage/Activate có sẵn), gọi `coreipc.ActionRetainReset` qua `runtime.Call`. |
+| HTTP handler thật | `apps/web-api/internal/programming/transport/http/*.go` | Thay nhánh 503 mặc định bằng handler thật cho `POST /retain/reset` — tính impact list (§5), gọi operation ở trên, ghi audit. |
 
-## 4. Runtime behavior
+`StRetainStore`/`StRetainMailbox` (file `st_retain.hpp/.cpp`) **không cần
+sửa** — cơ chế generation/coalescing sẵn có tự nhiên phản ánh đúng giá trị
+mới nếu RT-side reset xảy ra trước lần publish kế tiếp (đúng nguyên tắc
+"reset ở slots trước, mailbox/worker chỉ đọc lại state hiện tại").
 
-Phụ thuộc §1. Tài liệu này **không tự chọn** — đây chính là câu hỏi cần Core
-+ Controls xác nhận trước khi thiết kế chi tiết API `StScheduler`.
+## 4. Business rules (CTO/Owner §9)
+
+- Chỉ `RoleAdmin`.
+- Xác nhận mạnh (§5).
+- Hiện target controller + Active Revision + Program/Retain scope trước khi
+  cho xác nhận.
+- Hiện số lượng retained variable bị ảnh hưởng (đếm `program.retain_entries`
+  + FB instance có `retained=true` từ artifact đang active).
+- Audit bắt buộc (§6).
+- Idempotency bắt buộc (`router.go` đã khai `idempotencyRequired: true`).
+- FE **không** tự nhận thành công lạc quan — chỉ hiện SUCCEEDED sau khi BE
+  xác nhận qua read-back.
+- Timeout ở bước chờ boundary/flush → `UNKNOWN`/cần reconcile, không giả
+  định thành công.
+- Runtime offline (Core không kết nối) → không giả success, trả lỗi rõ.
+- Không reset retained state của Revision **không còn active** — kiểm
+  `expected_active_revision_id` giống `ActivateCommand` đã làm.
+- Multi-Program tương lai: payload phải mang được `instance_id`/Program
+  Stable ID thay vì mặc định `"program-main"` — không chặn implementation
+  hiện tại (Rev A vẫn 1 Program), nhưng field phải có sẵn trong payload để
+  không phải đổi wire format khi Multi-Program tới.
 
 ## 5. Safety confirmation — tái dùng hạ tầng Impact/Acknowledgement đã có
 
-Phát hiện quan trọng: `transport/http/models.go` đã có sẵn
-`ImpactKey = "retain"` (`ImpactRetain`) như một phần của `Impact` struct
-dùng cho **Commission** (`AcknowledgementChecklist` ở PGM-03, UX §16.3) —
-tính năng "liệt kê ảnh hưởng RETAIN + bắt xác nhận" **đã tồn tại cho luồng
-Commission**, chỉ chưa có cho luồng Reset độc lập này.
+Không phát minh UX mới — tái dùng đúng pattern `ImpactRetain`/
+`AcknowledgementChecklist` (`transport/http/models.go`) đã dùng cho
+Commission:
+1. BE tính impact list: liệt kê FB instance có `retained=true` trong
+   Revision đang ACTIVE (đọc `parameters.retained` — field Inspector WP-07
+   cho gắn qua UI), kèm `typeRef`/`instance`, cộng số biến `RETAIN` (ST) từ
+   artifact.
+2. FE hiện danh sách trước khi cho bấm Reset.
+3. Xác nhận mạnh: gõ lại tên Project (mẫu `CommissionDialog`).
+4. Nút Reset chỉ enable khi impact list load thành công.
 
-**Khuyến nghị:** không phát minh UX mới — tái dùng đúng pattern:
-1. BE tính "impact list": liệt kê tất cả FB instance có `retained=true`
-   trong Revision đang ACTIVE (đọc từ `parameters.retained` — đúng field
-   Inspector WP-07 vừa cho user gắn được qua UI), kèm `typeRef`/`instance`.
-2. FE hiện danh sách này trước khi cho bấm Reset — không cho reset "mù"
-   khi chưa biết ảnh hưởng gì (đúng nguyên tắc đã áp dụng cho Commission).
-3. Xác nhận mạnh: yêu cầu gõ lại tên Project (giống pattern `CommissionDialog`
-   đã có ở PGM-03) trước khi gửi `POST /retain/reset` — không phải một nút
-   bấm đơn.
-4. Nút Reset **chỉ hiện enable** khi impact list load thành công; lỗi tải
-   impact thì chặn nút (đúng nguyên tắc "thiếu dữ liệu impact thì chặn
-   Commission" đã áp dụng ở PGM-03, §16.3 bảng `ImpactPanel`).
+## 6. Audit
 
-## 6. Error behavior
+Ghi vào audit hash chain hiện có (cùng cơ chế Stage/Activate/Restore) —
+tối thiểu: actor, thời điểm, `projectId`/`revisionId` active, danh sách FB
+instance bị ảnh hưởng, kết quả từng bước (boundary applied, force-flush
+outcome).
 
-Map `coreipc.Result` (khi đã đấu dây thật) sang HTTP:
+## 7. Error behavior
 
 | `coreipc.Result` | HTTP | Khi nào |
 |---|---|---|
-| `ResultOK` | 200 | Reset thành công |
-| `ResultRejected` | 409 | Program không ở trạng thái cho phép reset (ví dụ đang STAGE dở dang) |
-| `ResultBusy` | 503 + `Retry-After` | IPC queue đầy, thử lại sau |
-| `ResultUnavailable` | 503 | Core không kết nối được |
-| Không có Program đang active | 200 (idempotent) | Đúng tinh thần `StRetainStore::erase()`: "thành công cả khi file chưa tồn tại" — không có gì để reset không phải lỗi |
+| `ResultOK` | 200 | Reset áp dụng + force-flush thành công |
+| `ResultRejected` | 409 | Program không ở trạng thái cho phép (đang STAGE dở dang, hoặc `expected_active_revision_id` không khớp) |
+| `ResultBusy` | 503 + `Retry-After` | IPC queue đầy |
+| `ResultUnavailable` | 503 | Core không kết nối |
+| Chờ boundary/flush quá timeout | 200 với trạng thái `UNKNOWN`, không phải lỗi cứng | Đúng mẫu `OperationService.reconcile()` đã có cho Commission |
 
-`idempotencyRequired: true` đã khai đúng ở router — khớp bản chất
-idempotent tự nhiên của `erase()`.
+## 8. Test bắt buộc (CTO/Owner §10) — TC-RETAIN-01..05
 
-## 7. Việc CHƯA làm (chờ §1 trả lời)
+| ID | Kịch bản | Lớp |
+|---|---|---|
+| TC-RETAIN-01 | Runtime có retain value `X` → Reset → chờ qua mốc giả lập > 60s (dùng `set_wall_clock_for_test`/clock tiêm sẵn của `StScheduler` — **không sleep thật**) → value cũ không trở lại | C++ (`st_scheduler`) |
+| TC-RETAIN-02 | Reset → nạp lại instance (mô phỏng warm start qua `StRetainStore::restore()`) → retained state vẫn là state đã reset | C++ (`st_retain` + `st_scheduler`) |
+| TC-RETAIN-03 | Reset lỗi giữa transaction (ví dụ force-flush fail) → runtime có state xác định (không half-reset im lặng) — trả lỗi rõ, không đổi `retain_generation` | C++/Go |
+| TC-RETAIN-04 | Role khác Admin gọi → reject | Go (`transport/http`) |
+| TC-RETAIN-05 | Active Revision đổi giữa lúc gửi request → reject/reconcile theo `expected_active_revision_id` | Go (`application`) |
 
-- Thiết kế API `StScheduler` cho Phương án B (nếu được chọn).
-- Handler Go thật (`transport/http` + `application` + `coreipc` client
-  call) — cả hai phương án đều cần phần Go này, nhưng shape khác nhau
-  (A: gọi thẳng file-level erase qua Core; B: gọi API scheduler mới).
-- FE: màn hình impact list + xác nhận mạnh (§5) — UI hiện tại (Overview/
-  Design workspace) chưa có entry point cho RETAIN reset ở đâu cả, cũng
-  cần thiết kế UX vị trí đặt nút này (PGM-01 Overview? một tab riêng?).
-- Test: unit BE cho cả hai nhánh IPC result; nếu Phương án B, cần test
-  Core C++ cho race với autosave.
+Không dùng `sleep()` thật cho TC-RETAIN-01 — `StScheduler` đã có
+`set_wall_clock_for_test(std::function<uint64_t()>)` chính xác cho mục
+đích này (đã dùng ở test WCET/overrun hiện có).
 
-## 8. Lịch sử sửa đổi
+## 9. Việc CHƯA làm ở tài liệu này (chuyển sang implementation)
+
+Tài liệu này khoá đủ semantics để implement — phần còn lại (code C++/Go/FE
+thật, test TC-RETAIN-01..05) thực hiện trực tiếp trong Sprint D, không cần
+thêm vòng thiết kế.
+
+## 11. Bằng chứng implement (Rev 2.1)
+
+**Core C++** — `apps/core/application/st/{st_loader.hpp,.cpp,st_runtime.hpp,st_scheduler.hpp,.cpp}`:
+`StLoadedProgram::reset_retained_state()` (đặt lại VAR RETAIN + FB state về
+giá trị init từ IR), `StScheduler::request_retain_reset()`/
+`apply_pending_retain_resets_at_boundary()` (cờ pending/ack atomic, cùng mẫu
+`apply_pending_activations`). `apps/core/application/programming/
+programming_runtime_coordinator.{hpp,cpp}`: `reset_retain()` — guard state
+COMMITTED (`IPC-RETAIN-RESET-STATE`), guard `expected_active_revision_id`
+(`IPC-EXPECTED-ACTIVE`), arm qua scheduler, bounded-poll boundary (≤1500ms,
+`IPC-RETAIN-RESET-TIMEOUT` nếu quá hạn — không giả định thành công), rồi
+force-flush `StRetainService::flush(true)`. `program_ipc_server.cpp` map
+outcome APPLIED/REJECTED/TIMED_OUT → `ProgramResult::Ok/Rejected/Busy`.
+6 test: `TC_RETAIN_01/02` (`tests/test_st_retain.cpp`),
+`TC_RETAIN_03a/03b/03c` + happy-path end-to-end
+(`tests/test_programming_runtime_coordinator.cpp`) — `ctest` 1030/1030.
+
+**BE Go** — `apps/web-api/internal/programming/application/operations.go`:
+`OperationService.ResetRetain()` bỏ qua hoàn toàn `resolveArtifact`/staging
+(không có artifact cho RETAIN reset) — có luồng riêng
+`executeRetainReset`/`reconcileRetainReset`/`callRetainReset` tái dùng
+transition/audit/idempotency infra sẵn có. Quyết định quan trọng: BUSY
+(Core TIMED_OUT) → `UNKNOWN`, và lần `ProcessNext` kế tiếp **gọi lại chính
+`RETAIN_RESET`** (không dùng `Reconcile`/`OPERATION_STATUS` như
+Stage/Activate — Core không track operation_id theo journal cho hành động
+này, và reset vốn idempotent nên gọi lại an toàn). HTTP handler tại
+`transport/http/operations.go` (route đã có sẵn ở `router.go:55`). Impact
+list tái dùng nguyên `GET /revisions/none/changes/{activeRevisionId}`
+(`ProjectService.GetRevisionChanges`) — không có endpoint mới. 8 test Go:
+4 ở `application/operations_test.go` (apply/mismatch-no-half-reset/
+timeout-retry-idempotent/idempotency-replay-conflict) + 1 role-403 ở
+`app/programming_routes_test.go` (TC-RETAIN-04) — `go test ./...` xanh
+toàn bộ.
+
+**FE** — `apps/web-ui/src/features/programming/runtime/{useRetainResetWorkflow.ts,DangerZone.tsx}`:
+thay stub khoá cứng bằng flow thật (impact list PRESENT/NONE/UNAVAILABLE
+fail-closed, checkbox xác nhận, lý do, re-auth, poll operation, không tự
+POST lại khi `UNKNOWN_RECONCILING`) — cùng mẫu `useRestoreWorkflow.ts`.
+Error catalog: 4 detail code Core mới (`IPC-RETAIN-RESET-ARM/-INSTANCE/
+-STATE/-TIMEOUT`) đăng ký vào `contracts/programming/error_catalog_v1.json`
+→ regenerate Go/C++/TS qua `scripts/generate_programming_errors.py`.
+12 test RTL (`RuntimeServicePage.test.tsx`, thay test stub khoá cứng cũ) +
+E2E Playwright thật trong journey `UJ-PROG-08` (`e2e/programming.spec.ts`)
+— `npx vitest` 643/643, `npm run lint`/`build` sạch, `npx playwright test`
+10/10.
+
+Còn lại trước khi đóng WP-12 hoàn toàn: commit/PR/merge/deploy board Foxlinx
++ xác nhận board thật (ngoài phạm vi tài liệu thiết kế).
+
+## 10. Lịch sử sửa đổi
 
 | Revision | Ngày | Nội dung |
 |---|---|---|
-| 1.0 | 2026-08-15 | Tạo mới cho WP-12. Phát hiện quan trọng: IPC protocol layer (`program_ipc_server.cpp`) chưa nối runtime thật cho bất kỳ action nào; `StRetainStore::erase()` có sẵn nhưng dùng riêng lẻ sẽ bị autosave (60s) ghi đè ngược nếu Program đang chạy — nêu 2 phương án semantics, khuyến nghị tái dùng hạ tầng `ImpactRetain`/`AcknowledgementChecklist` đã có ở Commission cho UX xác nhận. Chưa implement — đúng gate tự đặt. |
+| 1.0 | 2026-08-15 | Tạo mới cho WP-12. Phát hiện `StRetainStore::erase()` có sẵn nhưng dùng riêng lẻ sẽ bị autosave (60s) ghi đè ngược nếu Program đang chạy — nêu 2 phương án semantics, khuyến nghị tái dùng hạ tầng `ImpactRetain`/`AcknowledgementChecklist` đã có ở Commission. Chưa implement — đúng gate tự đặt. **Có 1 kết luận sai** (§0 Rev 2.0 đính chính). |
+| 2.0 | 2026-08-15 | CTO/Owner chốt Phương án B. Đính chính kết luận sai của Rev 1.0 (IPC layer THẬT SỰ đã nối cho Stage/Activate/Restore, chỉ RetainReset/TraceStart chưa). Đọc sâu `st_scheduler.hpp/.cpp`, `programming_runtime_coordinator.hpp/.cpp`, `program_ipc_server.cpp` xác định chính xác điểm mở rộng (§3), business rules (§4), 5 test bắt buộc (§8). `APPROVED TO IMPLEMENT`. |
+| 2.1 | 2026-08-15 | Implement xong Core C++ + BE Go + FE (§11), 1030 ctest + toàn bộ Go test + 643 vitest + 10 Playwright xanh. `IMPLEMENTED`, chờ commit/PR/deploy board. |

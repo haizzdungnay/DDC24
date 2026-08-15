@@ -8,6 +8,92 @@
 
 ## [Unreleased]
 
+### Added — WP-12 RETAIN Reset (CTO/Product Owner approval 2026-08-15 §7-10, Phương án B)
+
+CTO/Product Owner chốt Phương án B (runtime-coordinated reset, cần
+Scheduler/Runtime phối hợp thay vì chỉ xoá file persisted) — implement đầy
+đủ Core C++ + BE Go + FE trong phiên này theo đúng flow đã duyệt: Admin
+Request → validate Active Revision → Scheduler đánh dấu pending → safe
+boundary → reset in-memory retained values → erase/replace persisted image
+→ tăng ack generation → resume Program.
+
+**Core (`apps/core/application/st/{st_loader,st_runtime,st_scheduler}.{hpp,cpp}`,
+`apps/core/application/programming/{programming_runtime_coordinator,program_ipc_server}`):**
+`StLoadedProgram::reset_retained_state()` đặt VAR RETAIN + FB state về giá
+trị init lấy từ IR (không phải zero cứng). `StScheduler` thêm cờ atomic
+`pending_retain_reset`/`retain_reset_ack_generation` mỗi `StProgramInstance`
+— cùng mẫu pending-flag đã dùng cho `apply_pending_activations` (không phát
+minh cơ chế đồng bộ mới). `ProgrammingRuntimeCoordinator::reset_retain()`
+guard state phải `COMMITTED` (`IPC-RETAIN-RESET-STATE`), guard
+`expected_active_revision_id` khớp Revision đang chạy
+(`IPC-EXPECTED-ACTIVE` — tái dùng detail code đã có), arm qua Scheduler rồi
+bounded-poll ack generation trên IPC worker thread (≤1500ms — tài liệu ghi
+rõ đây là đánh đổi Rev A có chủ đích vì `ProgramIpcUnixEndpoint::run()` đơn
+luồng, không chặn RT scan), timeout trả `TIMED_OUT` riêng
+(`IPC-RETAIN-RESET-TIMEOUT`) — không giả định thành công. Thành công thì
+force-flush `StRetainService::flush(true)` bỏ qua cửa sổ autosave 60s (tái
+dùng đúng API shutdown path đã có). 6 test mới: `TC_RETAIN_01`/`TC_RETAIN_02`
+(`test_st_retain.cpp` — reset sống sót qua autosave window + warm restart,
+không sleep thật nhờ `set_wall_clock_for_test`), `TC_RETAIN_03a/03b/03c` +
+1 test end-to-end (`test_programming_runtime_coordinator.cpp` — reject
+không half-reset khi Commission dở dang/Revision mismatch/instance lạ).
+
+**BE Go (`apps/web-api/internal/programming/application/operations.go`,
+`transport/http/{operations,models}.go`):** `OperationService.ResetRetain()`
+KHÔNG đi qua `begin()`/`resolveArtifact()` chung với Commission/Restore —
+RETAIN reset không có artifact/staging. Luồng riêng `executeRetainReset` →
+`callRetainReset`: preflight `STATUS` đối chiếu Active Revision (bắt sớm
+"Active Revision đổi giữa chừng"), rồi gọi thẳng `RETAIN_RESET` (một
+round-trip, không cần STAGE/ACTIVATE hai pha). Quyết định quan trọng: Core
+trả `BUSY` (TIMED_OUT) → map `UNKNOWN` (không phải `FAILED`, không phải
+`SUCCEEDED`) và `reconcileRetainReset()` ở lần `ProcessNext` kế tiếp **gọi
+lại chính hành động RETAIN_RESET** — khác hẳn Stage/Activate (dùng
+`Reconcile()`/`OPERATION_STATUS`, không bao giờ replay mutation) vì hai lý
+do: Core không track operation_id của RETAIN_RESET qua journal như
+Stage/Activate nên không có gì để "đọc lại", và reset vốn dĩ idempotent về
+tác dụng (đặt lại lần hai cho cùng kết quả) — đúng comment đã ghi sẵn ở
+`programming_runtime_coordinator.cpp`. Impact list (biến RETAIN bị ảnh
+hưởng) tái dùng nguyên `GET /revisions/none/changes/{activeRevisionId}`
+(`ProjectService.GetRevisionChanges`, đã có từ Commission) — không thêm
+endpoint mới. 5 test mới: 4 ở `operations_test.go` (apply đúng 1 lượt khi
+Active khớp; reject preflight mismatch không chạm Core — no half-reset;
+BUSY→UNKNOWN→retry idempotent hội tụ SUCCEEDED; idempotency key replay +
+conflict), 1 ở `programming_routes_test.go` (TC-RETAIN-04: role khác Admin
+→ 403).
+
+**FE (`apps/web-ui/src/features/programming/runtime/{useRetainResetWorkflow.ts,DangerZone.tsx}`):**
+thay `RetainResetSection` từ stub khoá cứng (nút disabled vĩnh viễn vì
+"backend chưa cung cấp danh sách biến RETAIN") bằng flow thật — cùng mẫu
+`useRestoreWorkflow.ts` (submit → poll `GET /operations/{id}` mỗi 1500ms,
+`UNKNOWN_RECONCILING` không tự POST lại, chỉ "Kiểm tra lại trạng thái").
+Dialog xác nhận hiển thị Active Revision, danh sách biến RETAIN (tái dùng
+`useProgrammingRevisionChanges('none', activeRevisionId)`), checkbox xác
+nhận đã xem danh sách khi có biến (fail-closed nếu impact `UNAVAILABLE`),
+lý do, re-auth mật khẩu — không nút xác nhận nào bật cho tới khi đủ điều
+kiện. Idempotency key theo `sessionStorage` scope theo Revision, giống hệt
+Restore.
+
+**Error catalog:** đăng ký 4 detail code Core mới
+(`IPC-RETAIN-RESET-ARM/-INSTANCE/-STATE/-TIMEOUT`) vào
+`contracts/programming/error_catalog_v1.json`, regenerate Go/C++/TS qua
+`scripts/generate_programming_errors.py` (`check:programming-errors` từng
+fail vì detail code chưa map — phát hiện và sửa trong cùng phiên).
+
+**Kiểm chứng:** `cmake --build build/fw --parallel` + `ctest --test-dir
+build/fw` 1030/1030 PASS (0 regression so với baseline 1024 trước phiên).
+`go build ./...`/`go vet ./...`/`go test ./... -count=1` xanh toàn bộ
+module `apps/web-api`. `npx vitest --run --environment jsdom src` 643/643
+PASS; `npm run lint` (`eslint --max-warnings=0`) sạch; `npm run build`
+(gồm 3 check hợp đồng Programming + `tsc --noEmit` + `vite build`) sạch;
+`npx playwright test e2e/programming.spec.ts` 10/10 PASS — journey
+`UJ-PROG-08` giờ thực sự click qua dialog RETAIN reset, tick checkbox,
+re-auth, submit, đọc ngược `SUCCEEDED` (trước đây chỉ assert nút bị khoá).
+
+Thiết kế: `docs/02_design/software/PROGRAMMING_RETAIN_RESET_DESIGN.md`
+(2.0→2.1, §11 bằng chứng implement). Tracker:
+`docs/03_implementation/PROGRAMMING_IMPLEMENTATION_TRACKER.md` (WP-12
+DESIGN→TESTING, chờ commit/PR/deploy board trước khi DONE).
+
 ### Fixed — ST Editor overlay lem chữ (đã deploy trước khi phát hiện, WP-10)
 
 User báo lỗi hiển thị thật kèm ảnh chụp ngay sau khi PR #183 deploy lên
