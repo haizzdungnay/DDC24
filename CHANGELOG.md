@@ -8,6 +8,14 @@
 
 ## [Unreleased]
 
+### Added — Lưu hồ sơ brief gốc "Yêu cầu thiết kế mới Programming Solution" (2026-08-14)
+
+`Yeucau_FE.md` — brief đầu vào gốc (nguyên tắc bắt buộc, 14 specification
+documents cần bàn giao, Definition of Done "READY FOR IMPLEMENTATION") đã
+dùng để dẫn dắt việc viết `docs/01_product/PROGRAMMING_PRODUCT_SPEC_V2.2_HYBRID.md`
+và các hồ sơ Programming liên quan (đã merge trước đó). Lưu lại làm tài liệu
+nguồn/tham chiếu, không có thay đổi hành vi sản phẩm.
+
 ### Added — Thiết kế lại UI/UX + plan implement cho trang cấu hình Universal Input (2026-08-14)
 
 Dựa trên `REV-UI-CFG-GAP-2026-08-14` (12 UC gap) và phát hiện bổ sung (backend
