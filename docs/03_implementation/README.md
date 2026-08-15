@@ -60,5 +60,6 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [52](52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) | Dashboard và Web UX PA3 — data truth, shell, 12 use case, kiểm chứng trình duyệt và deploy Foxlinx (7 pha · 50 task · 56 người-ngày · mục tiêu 9 tuần) | **DRAFT — chờ duyệt G0**; phân tích source/runtime xong, chưa triển khai PA3 |
 | [53](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Triển khai Programming theo vertical slice ST/FBD → Check → Commission → Runtime → HIL/release | **M3 — REVIEW READY; G0 RED** |
 | [54](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | Theo dõi tạo, hoàn thiện, review và phê duyệt baseline 22 hồ sơ Programming | **22/22 M3 — REVIEW READY; M4/M5 = 0, chờ người thật** |
+| [55](55_UI_UNIVERSAL_INPUT_REDESIGN_PLAN.md) | Thiết kế lại + triển khai trang cấu hình Universal Input `/eng/inputs` (3 phase: FE-only, mở rộng contract, fault detection per-channel) | **Phase 0+1 DONE** 2026-08-14 (13/13 task, deploy Foxlinx xong); Phase 2/3 NOT STARTED, chờ PM/CTO chốt phạm vi |
 
 **Archived:** [S7 Hardening Code Review](../review/2026-06-13-s7-hardening-review.md)

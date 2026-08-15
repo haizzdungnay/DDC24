@@ -579,7 +579,7 @@ function isApiValidationDetail(value: unknown): value is ApiValidationDetail {
   return typeof value === 'object' && value !== null && typeof (value as { path?: unknown }).path === 'string'
 }
 
-type IoUiConfig = {
+export type IoUiConfig = {
   ch?: number
   tag?: string
   type?: string
@@ -639,23 +639,47 @@ function aiNode(channel: number): string {
   return uiNode(channel)
 }
 
-function signalTypeFromIo(item: IoUiConfig): AiSignalType {
-  if (item.type === 'none') return 0
-  if (item.type === '0-10V') return 1
-  if (item.type === '2-10V' || item.type === '4-20mA') return 2
-  if (item.type === 'NTC10k' || item.type === 'NTC20k' || item.type === 'PT100' || item.type === 'PT1000') return 3
-  if (item.type === 'dry') return item.invert ? 5 : 4
-  if (item.type === 'potentiometer') return 6
-  if (item.type === 'light') return 7
-  if (item.type === 'pulse') return 8
+/* Nhóm "resistance" (`signalType === 3`) gộp 4 biến thể contract thật
+ * (`NTC10k`/`NTC20k`/`PT100`/`PT1000` — xem `configapi.go` `validateStringEnum`
+ * và `docs/02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md` §3) vào một mã
+ * FE duy nhất vì UI chưa có control chọn biến thể riêng (UC-UI-03, xem
+ * `REV-UI-CFG-GAP-2026-08-14`). `signalTypeToIoType` dùng danh sách này để biết
+ * biến thể nào được PHÉP giữ nguyên khi ghi lại — không tự ý coi mọi chuỗi lạ
+ * là cùng nhóm. */
+const resistanceIoTypes = ['NTC10k', 'NTC20k', 'PT100', 'PT1000']
+
+function signalTypeFromIoType(type: unknown, invert?: boolean): AiSignalType {
+  if (type === 'none') return 0
+  if (type === '0-10V') return 1
+  if (type === '2-10V' || type === '4-20mA') return 2
+  if (typeof type === 'string' && resistanceIoTypes.includes(type)) return 3
+  if (type === 'dry') return invert ? 5 : 4
+  if (type === 'potentiometer') return 6
+  if (type === 'light') return 7
+  if (type === 'pulse') return 8
   return 0
 }
 
-function signalTypeToIoType(config: Pick<AiInputConfig, 'signalType' | 'analogCurrent'>): IoUiConfig['type'] {
+function signalTypeFromIo(item: IoUiConfig): AiSignalType {
+  return signalTypeFromIoType(item.type, item.invert)
+}
+
+/* BUG (tìm thấy 2026-08-14 khi khảo sát cho REV-UI-CFG-GAP): trước đây hàm này
+ * luôn ghi cứng `'NTC10k'` cho signalType 3, bất kể kênh đó đang là
+ * `NTC20k`/`PT100`/`PT1000` trên board thật. Vì `putAiInputs` ghi lại TOÀN BỘ
+ * 16 kênh mỗi lần lưu, chỉ cần sửa một kênh bất kỳ trên trang Inputs là các
+ * kênh khác bị âm thầm hạ cấp biến thể — mất dữ liệu thật không cách nào phục
+ * hồi từ FE. Giữ nguyên chuỗi gốc (`ioType`) khi nó vẫn thuộc đúng nhóm
+ * signalType hiện tại; chỉ đổi sang mặc định `NTC10k` khi người dùng thật sự
+ * chuyển kênh sang nhóm resistance từ một loại khác. */
+function signalTypeToIoType(config: Pick<AiInputConfig, 'signalType' | 'analogCurrent' | 'ioType'>): IoUiConfig['type'] {
   const signalType = config.signalType
   if (signalType === 1) return '0-10V'
   if (signalType === 2) return config.analogCurrent ? '4-20mA' : '2-10V'
-  if (signalType === 3) return 'NTC10k'
+  if (signalType === 3) {
+    if (config.ioType && resistanceIoTypes.includes(config.ioType)) return config.ioType
+    return 'NTC10k'
+  }
   if (signalType === 4 || signalType === 5) return 'dry'
   if (signalType === 6) return 'potentiometer'
   if (signalType === 7) return 'light'
@@ -663,7 +687,7 @@ function signalTypeToIoType(config: Pick<AiInputConfig, 'signalType' | 'analogCu
   return 'none'
 }
 
-function unitFromIo(value: unknown): number {
+export function unitFromIo(value: unknown): number {
   const unit = String(value ?? '').toLowerCase()
   if (unit === 'percent' || unit === '%' || unit === '%rh') return 1
   if (unit === 'degc' || unit === 'degf' || unit === 'c' || unit === 'f') return 2
@@ -672,12 +696,24 @@ function unitFromIo(value: unknown): number {
   return 0
 }
 
-function unitToIo(unit: number): string {
+export function unitToIo(unit: number): string {
   if (unit === 1) return 'percent'
   if (unit === 2) return 'degC'
   if (unit === 3) return 'Pa'
   if (unit === 4) return 'ppm'
   return ''
+}
+
+/* Cùng lớp bug với `signalTypeToIoType`: nếu board đang có một chuỗi `unit`
+ * mà dropdown 5 lựa chọn của FE không biểu diễn được (vd `"RPM"`,
+ * `"pulses"`, `"%RH"` — Go chỉ validate là string, không giới hạn enum, xem
+ * `configapi.go:507`), việc chọn cùng nhóm enum (`unitFromIo` trả về cùng số)
+ * rồi lưu KHÔNG được phép xoá mất chuỗi gốc. Chỉ ghi đè bằng giá trị canonical
+ * khi enum thực sự đổi (người dùng chọn unit khác).
+ */
+function unitToIoRaw(unit: number, ioUnit?: string): string {
+  if (ioUnit !== undefined && unitFromIo(ioUnit) === unit) return ioUnit
+  return unitToIo(unit)
 }
 
 function defaultAiConfig(channel: number): AiInputConfig {
@@ -699,7 +735,7 @@ function defaultAiConfig(channel: number): AiInputConfig {
   }
 }
 
-function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
+export function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
   const channel = typeof item.ch === 'number' && Number.isFinite(item.ch) ? item.ch : index + 1
   const signalType = signalTypeFromIo(item)
   return {
@@ -716,11 +752,13 @@ function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
     sensorCal: numberFrom(item.sensor_cal) ?? 0,
     mathFunction: numberFrom(item.math_func) ?? 0,
     enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
-    note: stringFrom(item.note) ?? ''
+    note: stringFrom(item.note) ?? '',
+    ioType: stringFrom(item.type),
+    ioUnit: stringFrom(item.unit)
   }
 }
 
-function aiConfigToIo(config: AiInputConfig): IoUiConfig {
+export function aiConfigToIo(config: AiInputConfig): IoUiConfig {
   const item: IoUiConfig = {
     ch: config.channel,
     tag: config.tag,
@@ -728,7 +766,7 @@ function aiConfigToIo(config: AiInputConfig): IoUiConfig {
     name: config.label,
     note: config.note,
     enabled: config.enabled,
-    unit: unitToIo(config.unit),
+    unit: unitToIoRaw(config.unit, config.ioUnit),
     scale_lo: config.displayMin,
     scale_hi: config.displayMax,
     range_mult: config.rangeMultiplier,

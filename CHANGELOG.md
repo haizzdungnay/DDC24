@@ -8,6 +8,156 @@
 
 ## [Unreleased]
 
+### Added — Thiết kế lại UI/UX + plan implement cho trang cấu hình Universal Input (2026-08-14)
+
+Dựa trên `REV-UI-CFG-GAP-2026-08-14` (12 UC gap) và phát hiện bổ sung (backend
+`configapi.go` đã validate `type` 12 giá trị + `scale_lo/scale_hi` tuỳ ý —
+xem mục Fixed bên dưới), viết:
+
+- [`docs/04_uiux/UI_UNIVERSAL_INPUT_REDESIGN_2026-08-14.md`](docs/04_uiux/UI_UNIVERSAL_INPUT_REDESIGN_2026-08-14.md)
+  (`UX-INPUT-REDESIGN-002`) — thay 3 mode Summary/Wizard/Advanced bằng Header
+  cố định + 6 tab (Điện & Cảm biến, Scaling & Đơn vị, Xử lý tín hiệu, Hiệu
+  chuẩn, Cảnh báo & Lưu trữ, Chẩn đoán); tách Electrical Mode khỏi Sensor
+  Profile (NTC10k/NTC20k — **không** thêm PT100/PT1000 vì `ADR-010` loại RTD
+  khỏi Rev A UI); đổi nhãn tiếp điểm sang NO/NC + banner "không cách ly".
+  **Approved 2026-08-14 (PM/CTO)** — xem mục Added Phase 1 implement bên dưới.
+- [`docs/03_implementation/55_UI_UNIVERSAL_INPUT_REDESIGN_PLAN.md`](docs/03_implementation/55_UI_UNIVERSAL_INPUT_REDESIGN_PLAN.md)
+  (Plan 55) — 3 phase: Phase 1 FE-only (13 task, ~11 người-ngày, không đổi
+  API) sẵn sàng chạy sau khi duyệt thiết kế; Phase 2 (debounce riêng,
+  calibration gain/2-point, COV threshold — cần đổi Go/Core) và Phase 3 (fault
+  detection per-channel — chắc chắn cần đổi firmware MCU) chờ PM/CTO chốt
+  phạm vi, không ước lượng effort khi chưa có đánh giá HW.
+- Cập nhật addendum Rev 1.1 vào `REV-UI-CFG-GAP-2026-08-14` để sửa lại phần
+  đánh giá "cần đổi Core/firmware" — hoá ra phần lớn Sensor Profile/Scaling
+  đã có sẵn trong contract, chỉ bị FE làm mất.
+- Index cập nhật: `docs/04_uiux/README.md`, `docs/03_implementation/README.md`.
+
+### Added — Triển khai Phase 1 thiết kế lại `/eng/inputs` (13 task Plan 55) và deploy board Foxlinx (2026-08-14)
+
+Sau khi PM/CTO duyệt thiết kế (`UX-INPUT-REDESIGN-002`, 3 câu hỏi mở §7 đã
+chốt — xem doc), triển khai trọn Phase 1 trong cùng phiên, thay `InputsPage`
+3-mode (Summary/Wizard/Advanced) bằng Header trạng thái sống + 6 tab:
+
+- **Header cố định**: Tag/Channel/Label/Enable + dải trạng thái sống (quality
+  badge 5 màu qua `StatusBadge`, Value, Raw, "Cập nhật Ns trước" qua
+  `formatDataAge`) — không còn phải mở tab mới thấy giá trị kênh.
+- **Tab "Điện & Cảm biến"**: radio group Electrical Mode (7 lựa chọn, không
+  đánh số thanh ghi) thay dropdown `signalType` 9 giá trị; con Sensor Profile
+  NTC10k/NTC20k khi chọn Điện trở (đọc/ghi field `ioType` đã vá ở bug trên);
+  PT100/PT1000 **ẩn hẳn** theo `ADR-010` nhưng vẫn hiện minh bạch giá trị lạ
+  nếu thiết bị có sẵn; NO/NC cho tiếp điểm khô kèm banner "không cách ly".
+- **Tab "Scaling & Đơn vị"**: dải điện/tín hiệu vào read-only suy từ
+  Electrical Mode; `scale_lo/scale_hi` đổi nhãn theo điểm cuối vật lý thật
+  (`0 V =`/`10 V =`...); Range Multiplier gộp vào `<details>` thu gọn; dropdown
+  Đơn vị 5 lựa chọn kèm chip cảnh báo khi `ioUnit` gốc không khớp lựa chọn
+  (dùng `unitToIo()` mới export từ `client.ts` để so sánh đúng chuỗi canonical,
+  không chỉ so nhóm số — tránh bỏ sót trường hợp "RPM" trùng bucket "Không
+  hiển thị").
+- **Tab "Xử lý tín hiệu"**: relabel Filter Samples trung thực (không ngụ ý có
+  debounce riêng); danh sách "các kênh khác cùng hàm toán" tính trực tiếp từ
+  16 kênh đã tải, không gọi API mới.
+- **Tab "Hiệu chuẩn"**: helper tính offset 1 điểm từ giá trị đang đọc + giá
+  trị chuẩn nhập tay (`offset_mới = offset_cũ + (chuẩn − đang_đọc)`), chỉ điền
+  lại field chứ không tự lưu; ghi rõ giới hạn chưa có gain/2-point.
+- **Tab "Cảnh báo & Lưu trữ"**: liệt kê alarm có `source.kind==='UI'` khớp
+  kênh (gọi `apiClient.getAlarmSettings()` qua `useApi`, phân biệt loading/lỗi
+  thay vì hiện "chưa có alarm" giả khi API hỏng); nút "+ Thêm alarm cho kênh
+  này" điều hướng `/eng/alarm-settings?newSource=UI:<kênh>`; nút "Sửa" trên
+  từng alarm điều hướng `?edit=<id>`. `AlarmSettingsPage` đọc hai query param
+  này một lần khi mount (`apps/web-ui/src/features/operations/AlarmSettingsPage.tsx`)
+  để tạo alarm mới với source điền sẵn hoặc chọn sẵn dòng cần sửa — không đổi
+  luồng chọn/tạo thủ công hiện có. `PointLoggingSection` dời từ luôn-hiện sang
+  đúng tab này.
+- **Tab "Chẩn đoán"**: giữ chart/min-max-avg/note của `AiSummary` cũ (đổi tên
+  nội bộ, bỏ ô Value/Raw trùng với Header); thêm dòng `qualityReason` nguyên
+  văn khi quality khác `good` (D-07, không tự suy diễn "đứt dây/chập dây") và
+  banner cố định giải thích giới hạn chẩn đoán mức board hiện tại (trỏ sang
+  Phase 3).
+- **Wizard "Thiết lập nhanh"**: chỉ hiện khi `signalType===0 && !enabled`;
+  triển khai lại bằng cách điều khiển `activeTab` qua 6 bước (không nhân bản
+  component), có nút Thoát.
+- **`<details>` "Xem theo thanh ghi (u0-u7)"**: hạ cấp bảng Advanced cũ thành
+  tham khảo read-only ở cuối trang, bỏ badge "wired" vô nghĩa (mọi field đều
+  wired, badge cũ luôn hiện y hệt nhau).
+- **`InputsOverviewModal`**: cột Signal/Unit đổi sang nhãn sạch (không số thứ
+  tự thanh ghi), dùng chung hàm label với tab Điện & Cảm biến/Scaling.
+
+**Không đổi API/Go/Core** — đúng phạm vi Phase 1 đã duyệt.
+
+**FE:** `apps/web-ui/src/features/points/InputsPage.tsx` (viết lại),
+`apps/web-ui/src/features/operations/AlarmSettingsPage.tsx` (deep-link),
+`apps/web-ui/src/shared/i18n.tsx` (6 tên tab VI/EN), `apps/web-ui/src/shared/api/client.ts`
+(export thêm `unitToIo`). Test: `InputsPage.test.tsx` viết lại (13 test, bao
+gồm Electrical Mode ẩn PT100/PT1000, wizard 6 bước, deep-link alarm 2 chiều),
+`AlarmSettingsPage.loadstate.test.tsx` bọc `MemoryRouter`, test mới
+`AlarmSettingsPage.deepLink.test.tsx` (3 case).
+
+**Kiểm chứng (2026-08-14, đo lại thật):**
+
+| Bước | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **581/581 PASS** (71 file) |
+| `npm run lint` | sạch, 0 warning |
+| `npm run build` (`VITE_PROGRAMMING_REV_A=1`) | PASS, `grep -c REVA_SCOPE_ROADMAP dist/assets/*.js` = 0 |
+| `npx playwright test e2e/point-names.spec.ts` | 18/18 PASS |
+| `npx playwright test e2e-board/board-page-audit.spec.ts --config=playwright.board.config.ts` (board Foxlinx qua SSH tunnel) | 2/2 PASS, `/eng/inputs` 0 console/page/http error, hiện đúng nhãn kênh thật (`UI-01 - CAM BIEN NHIET LO HOI`) |
+
+**Deploy board Foxlinx (`SOM-DDC-24-foxlinx`):** build FE kèm
+`VITE_PROGRAMMING_REV_A=1`, `scp` `dist/` lên `/opt/mkddc-web/dist` (giữ bản cũ
+ở `dist.prev` để rollback — bo không có `rsync`), `systemctl restart
+mkddc-web-pi`. `mkddc-core`/`mkddc-iobus`/`mkddc-web-pi` đều `active`,
+`/api/v1/health` `status:ok`. Ảnh chụp bằng chứng 16 kênh dữ liệu thật (không
+rơi về demo) qua cả 6 tab + Overview modal tại
+`apps/web-ui/board-evidence/08..12-inputs-*.png`.
+
+### Fixed — `InputsPage` âm thầm hạ cấp biến thể sensor/unit của các kênh UI không hề bị sửa (2026-08-14)
+
+Phát hiện khi khảo sát để thiết kế lại UI/UX Universal Input
+(`REV-UI-CFG-GAP-2026-08-14`): `PUT /system/config/io` ghi lại **toàn bộ 16
+kênh UI** mỗi lần Save, nhưng `aiConfigToIo()`
+(`apps/web-ui/src/shared/api/client.ts`) luôn ghi cứng `type: 'NTC10k'` cho
+mọi kênh `signalType===3` và chuỗi `unit` canonical cho mọi kênh — bất kể
+backend đã validate và cho phép `NTC20k`/`PT100`/`PT1000`
+(`apps/web-api/internal/app/configapi.go:508`, `CONFIG_SCHEMA_MK-DDC-24_VI.md`
+§3) hay một chuỗi unit khác (`RPM`...). Triệu chứng: sửa Note của kênh `UI-01`
+rồi bấm Save có thể âm thầm đổi kênh `UI-05` từ `NTC20k` → `NTC10k` dù người
+dùng không hề chạm vào kênh đó — mất dữ liệu không phục hồi được từ FE.
+
+Sửa: `AiInputConfig` mang thêm `ioType?`/`ioUnit?` (chuỗi gốc từ
+`io_config.conf`); `aiConfigToIo()` chỉ ghi giá trị mặc định khi người dùng
+thật sự đổi sang nhóm signal type/unit khác, còn lại giữ nguyên chuỗi gốc.
+`PT100`/`PT1000` **không** được thêm control chọn riêng trong FE — theo đúng
+quyết định phần cứng đã chốt (`ADR-010`, `FR-011`: RTD không thuộc Rev A UI
+baseline, mạch chưa lắp) — chỉ đảm bảo round-trip không phá dữ liệu nếu giá
+trị đó tồn tại từ nguồn khác. `NTC10k`/`NTC20k` là hai biến thể thật trên Rev A
+(cùng mạch beta-NTC, khác điện trở pull-up).
+
+**FE:** `apps/web-ui/src/shared/{api/client.ts,types.ts}`, test mới
+`apps/web-ui/src/shared/api/client.aiInputs.test.ts` (7 case). `npx vitest
+--run --environment jsdom src/shared/api/client.aiInputs.test.ts
+src/features/points/InputsPage.test.tsx` → 13/13 PASS. Suite `src` đầy đủ:
+562/567 PASS, 5 fail còn lại ở `CheckCommissionPage.test.tsx`
+(`useDraftWorkspace.ts`/`getProgrammingProject`) — không liên quan, thuộc
+nhánh Programming đang sửa dở song song, không đụng tới bởi thay đổi này.
+
+### Added — Báo cáo gap giao diện Universal Input FE so với đề xuất 12 UC/5 lớp (2026-08-14)
+
+Đối chiếu trực tiếp `InputsPage.tsx` (cấu hình 16 kênh `UI-01..UI-16`) với
+đề xuất kiến trúc "Universal Input Configuration" (12 use case
+`UC-UI-01..12` + mô hình 5 lớp Hardware→Electrical Mode→Sensor/Conversion→
+Canonical Point→Application). Kết luận: FE hiện là bản mirror trực tiếp
+thanh ghi firmware (`u0..u7`, 9 `signalType` cố định, không tách Electrical
+Mode khỏi Sensor Profile, không có Fault Detection cấu hình được, scaling
+chỉ hệ số cố định không phải hai điểm tuỳ ý). Đáp ứng 1/12 UC đầy đủ, 8 một
+phần, 3 chưa có. Gap gốc nằm ở tầng dữ liệu dùng chung Core→Go
+(`ConfigIO.UI []map[string]any` không có schema riêng —
+`apps/web-api/internal/app/dto.go:22-28`), không chỉ ở FE — cùng lớp với
+`F-PROG-ASBUILT-015` đã ghi nhận (kênh `UI` "dry"/digital không bind được
+Programming vì Core hardcode mọi `UI` là `REAL`/analog). Không sửa code
+trong phiên này: đây là gap so với đề xuất chưa duyệt, không phải bug.
+Chi tiết:
+[`REV-UI-CFG-GAP-2026-08-14`](docs/07_records/reviews/UI_UNIVERSAL_INPUT_FE_GAP_REPORT_2026-08-14.md).
+
 ### Added — Binding Manifest (D-07): compiler ST giờ thật sự nhận Variable↔Point Binding, đóng `F-PROG-ASBUILT-013` cho category `LOCAL` (2026-08-14)
 
 Theo authority PM/CTO chốt cho `D-07` (không mở lại phân tích, chỉ implement):
@@ -149,6 +299,87 @@ danh sách bốn mục với bản mobile, không dựng deep-link giả khi ch�
 state qua `aria-current`).
 
 Refs: `F-PROG-ASBUILT-007`, `D-04`.
+
+### Changed — `tools/fake_mcu` mô phỏng đủ 16 kênh UI như một AHU thật, đóng vòng theo lệnh AO/DO (2026-08-14)
+
+Trước đây `simulated_ui_raw()` chỉ sinh giá trị chung chung (sin/ramp) cho hầu
+hết 16 kênh, một số kênh gợi ý tên cảm biến AHU (return air temp, CO2, chilled
+water temp, fan status...) nhưng không đủ, không nhất quán và không phản hồi
+theo lệnh Core gửi xuống — không đủ để test end-to-end một Program AHU thật
+qua UC-PROG-03/UC-05 (đặc biệt sau khi `F-PROG-ASBUILT-013` được sửa và
+binding thật sự tới được Core).
+
+Viết lại theo đề xuất đã duyệt với user, gán mỗi kênh một field device AHU cụ
+thể (bảng đầy đủ + hướng dẫn cấu hình SensorType trong ứng dụng ở
+`docs/07_records/reviews/FAKE_MCU_AHU_WIRING_2026-08-14.md`):
+
+- UI-01..04: Supply/Return/Outside/Mixed Air Temperature (NTC10K) — MAT tính
+  động theo tỉ lệ damper đang lệnh ở AO-02 (trộn OAT/RAT thật, không hằng số).
+- UI-05: Duct Static Pressure (4-20mA) theo bình phương tốc độ quạt AO-01
+  (fan law bậc 2).
+- UI-06/07: Supply Air Humidity, Return Air CO2 (0-10V).
+- UI-08/15/16: Damper/Heating Valve/VFD Speed Feedback (0-10V) — echo trực
+  tiếp lệnh AO-02/AO-04/AO-01 tương ứng, đóng vòng thật giữa lệnh và phản hồi.
+- UI-09/11/13: Filter DP Switch, Duct Smoke Detector, High Static Pressure
+  Switch (dry contact, safety) — mặc định an toàn, test bằng `--stuck-ui`.
+- UI-10: Freeze Stat (dry contact, safety) — trip động khi MAT tính toán < 3°C
+  (liên khóa kinh tế khí trời thật, không phải hằng số).
+- UI-12: Supply Fan Status/Proof of Flow (dry contact) — theo cạnh DO-01 (Fan
+  Enable) với trễ khởi động 2s, mô phỏng quạt cần thời gian lên vòng tua.
+- UI-14: Chilled Water Coil Leaving Temp (NTC10K) theo độ mở van AO-03.
+
+Thêm hàm nghịch đảo `raw_from_ntc10k_temp()` khớp đúng hằng số vật lý trong
+`apps/iobus/domain/io/io_scaling.cpp` (VEXC=3.3V, β=3950K, T0=298.15K,
+R0=10kΩ). **Quan sát phụ trong lúc làm** (không sửa, ghi vào báo cáo vì thuộc
+subsystem khác và cần quyết định phần cứng): với các hằng số này, mạch chia
+áp NTC bão hòa ADC (`v_adc ≥ VREF`) ở nhiệt độ dưới ~+3°C — thấp hơn hẳn dải
+"hợp lệ" -30..70°C mà `io_scaling.cpp` khai báo; mọi baseline mô phỏng AHU
+trong `fake_mcu` được chọn ≥5°C để tránh vùng bão hòa này.
+
+Xóa `raw_from_analog_safe_frac()` (không còn kênh nào dùng). Viết lại
+`run_self_test()`: kiểm biên theo đúng SensorType dự kiến của từng kênh (mA
+cho UI-05, V cho UI-06/07/08/14/15/16, điện áp ADC hợp lệ cho kênh NTC) thay
+vì kiểm "an toàn dù hiểu theo kiểu nào" như code cũ — cách cũ chỉ đúng khi mọi
+kênh dùng chung một công thức mA placeholder, nay mỗi kênh có SensorType cố
+định nên không còn phù hợp; giữ lại chạy ở cả trạng thái AO/DO nghỉ (0) và
+trạng thái stress (65535/tất cả DO bật) để phủ hai đầu dải lệnh.
+
+**Verification**: `--self-test` PASS; `iobus_tests` 275/275 PASS (không hồi
+quy tầng giao thức IOP); smoke-test thủ công qua PTY thật (HANDSHAKE → GET_IO
+idle → SET_AO fan=60%/damper=40%/chw=70%/heat=20% → SET_DO fan-enable=ON →
+GET_IO) xác nhận đúng: MAT lệch về OAT theo tỉ lệ damper, DSP=9.4mA khớp
+fan_frac², DamperFB/HeatValveFB/VFDSpeedFB khớp % lệnh AO, CHW=11.2°C khớp
+% van, Fan Status chuyển `false→TRUE` đúng sau >2s.
+
+**Deploy Foxlinx**: xác nhận trực tiếp qua SSH trước khi cài đè — board vẫn
+dùng `mkddc-fakemcu.service active` (chưa chuyển MCU thật), an toàn để thay
+binary. Build cross-compile aarch64, cài `/usr/sbin/mkddc-fake-mcu`, restart —
+cả 3 service `active`, journal khởi động sạch, `GET /api/v1/health` báo
+`io_shm/iobus/mcu_connection` đều `"ok"`.
+
+Refs: `docs/07_records/reviews/FAKE_MCU_AHU_WIRING_2026-08-14.md`.
+
+### Fixed — docs: runbook deploy fake MCU dùng alias SSH và đường dẫn binary đã lỗi thời (2026-08-14)
+
+Phát hiện khi deploy `fake_mcu` mới lên Foxlinx (mục trên): mục 7b/9 của
+`docs/03_implementation/27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md` còn dùng alias
+SSH `SOM-DDC-24` (di sản từ board Orange Pi trước khi đổi tên board chính
+sang `SOM-DDC-24-foxlinx`) và đường dẫn build/install từ trước
+`PLAN-ARCH-RESTRUCT-002` — `build/services/iobus/fake_mcu`,
+`packaging/systemd/...`, cài vào `/usr/local/bin/mkddc-fakemcu`. Không cái
+nào còn khớp board thật: binary/service file thật đang chạy trên Foxlinx là
+`/usr/sbin/mkddc-fake-mcu` (nguồn `platform/systemd/mkddc-fakemcu.service`).
+Ai làm theo bản cũ sẽ cài binary vào chỗ systemd không trỏ tới và tưởng deploy
+thành công (cùng dạng lỗi đã ghi nhận và đính chính trước đó ở
+`FOXLINX_DEPLOY_CHECKLIST.md` §4.2 cho `mkddc-core`/`mkddc-web`).
+
+Sửa mục 7b (Setup/Verify/log) và đoạn rollback fake MCU ở mục 9 khớp đúng
+thực tế đã xác nhận trực tiếp trên board. **Chưa rà các mục 2-6, 8 và phần
+còn lại của mục 9** (cùng dùng alias `SOM-DDC-24` cho các lệnh rsync/build/
+install/hostname không liên quan fake MCU) — nằm ngoài phạm vi lần sửa này,
+đã ghi chú rõ trong file để tránh ai tưởng cả runbook đã được rà lại.
+
+Refs: `docs/03_implementation/27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md` mục 7b/9.
 
 ### Docs — thêm finding Critical mới vào As-Built Gap Report: Binding Variable↔Point chưa nối vào compiler (2026-08-14)
 
