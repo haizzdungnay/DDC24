@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Added — WP-11 PGM-02 layout 3 cột + WP-10 Technical Selection Record ST editor (Master Plan 56)
+
+**WP-11 (G-7, `F-PROG-ASBUILT-008`):** `ProgramsTab.tsx` trước đây chỉ có 2
+cột (`grid md:grid-cols-[280px_1fr]` — cây 280px + editor), Inspector
+(thuộc tính Program) bị đặt NẰM DƯỚI editor thay vì làm cột thứ 3 riêng như
+`PROGRAMMING_UI_UX_DESIGN.md` §16.2 quy định (`Cây 280px ┬ Editor co giãn ┬
+Inspector 308px`). Sửa: thêm breakpoint `lg:grid-cols-[280px_1fr_308px]`,
+tách `ProgramInspector` ra `<aside aria-label="Thuộc tính">` độc lập, thêm
+trạng thái trống khi chưa chọn Program (đúng yêu cầu UX "Inspector: trống,
+có lỗi"). Dưới `lg` vẫn giữ layout 2 cột cũ (không phá responsive hiện có
+trên tablet/1024-1439px).
+
+**WP-10 (D-03 gap report gốc):** Master Plan tự đặt exit criteria khác các
+WP khác — "Technical Selection Record được duyệt trước khi viết code editor
+thật; không tự chọn thư viện rồi báo cáo sau". Viết
+[`docs/02_design/software/ST_EDITOR_TECHNICAL_SELECTION_RECORD.md`](docs/02_design/software/ST_EDITOR_TECHNICAL_SELECTION_RECORD.md)
+(mới) so sánh 3 phương án (mở rộng `<textarea>` tại chỗ/CodeMirror 6/Monaco)
+theo đúng đặc điểm ngôn ngữ ST thật (6 kiểu vô hướng, ~20 hàm + 5 FB có sẵn,
+không user-defined FUNCTION, không multi-file — phạm vi rất nhỏ so với use
+case Monaco/CodeMirror thường phục vụ) và ràng buộc vận hành thật (bundle
+`index-*.js` đã cảnh báo 853 KB, board Buildroot không CDN). Khuyến nghị
+Phương án A (mở rộng tại chỗ, 0 dependency mới) nhưng **chưa implement** —
+đúng gate tự đặt, chờ Product+UX trả lời 3 câu hỏi phạm vi ở §6 tài liệu.
+
+**FE:** `apps/web-ui/src/features/programming/design/editor/ProgramsTab.tsx`,
+`design/DesignWorkspacePage.test.tsx` (+1 test layout 3 cột).
+
+**Kiểm chứng:** `npx vitest --run --environment jsdom src` → 609/609 PASS;
+`tsc --noEmit` PASS; `eslint --max-warnings=0` PASS; `npm run build` PASS.
+
 ### Added — WP-08 xác nhận FBD→Mapping integration (Master Plan 56)
 
 Không cần đổi runtime code: `MappingTab.tsx` đã đọc `collectFbdInterfaceVariables()`

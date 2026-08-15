@@ -30,10 +30,14 @@ function emptyFbdDocument(name: string): FbdDocument {
 }
 
 /**
- * Tab "Chương trình" của PGM-02 (`UJ-PROG-02`) — `ApplicationTree` + editor.
- * FBD là lối vào ưu tiên (UX §16.2): `StructuredFbdEditor` sẵn có
- * (`TASK-PROG-201`, keyboard-first, undo/redo bounded) được mount thẳng ở
- * đây, không viết model/reducer/shortcut thứ hai (TASK-PROG-502).
+ * Tab "Chương trình" của PGM-02 (`UJ-PROG-02`) — `ApplicationTree` + editor +
+ * `Inspector`, bố cục 3 cột đúng `PROGRAMMING_UI_UX_DESIGN.md` §16.2
+ * (`Cây 280 px ┬ Editor FBD/ST co giãn ┬ Inspector 308 px`, WP-11 — trước đó
+ * `Inspector` (thuộc tính Program) bị đặt nằm DƯỚI editor thay vì làm cột
+ * riêng, đúng finding G-7 trong gap report 2026-08-15). FBD là lối vào ưu
+ * tiên (UX §16.2): `StructuredFbdEditor` sẵn có (`TASK-PROG-201`,
+ * keyboard-first, undo/redo bounded) được mount thẳng ở đây, không viết
+ * model/reducer/shortcut thứ hai (TASK-PROG-502).
  */
 export function ProgramsTab({
   document,
@@ -159,7 +163,7 @@ export function ProgramsTab({
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+    <div className="grid gap-4 md:grid-cols-[280px_1fr] lg:grid-cols-[280px_1fr_308px]">
       <nav aria-label={pick('Cây ứng dụng', 'Application tree')} className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
         <ProjectTagsEditor
           canEdit={canEdit}
@@ -269,7 +273,9 @@ export function ProgramsTab({
             onSave={onSave}
           />
         )}
-        {selected && (
+      </div>
+      <aside aria-label={pick('Thuộc tính', 'Inspector')}>
+        {selected ? (
           <ProgramInspector
             program={selected}
             programs={document.programs}
@@ -279,8 +285,15 @@ export function ProgramsTab({
             onChange={(draft) => setMetadataDrafts((current) => ({ ...current, [selected.programId]: draft }))}
             onSave={onSave}
           />
+        ) : (
+          <section className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
+            <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Thuộc tính', 'Inspector')}</h3>
+            <p className="mt-2 text-xs text-[var(--c-text-dim)]">
+              {pick('Chọn một chương trình để xem thuộc tính.', 'Select a program to see its properties.')}
+            </p>
+          </section>
         )}
-      </div>
+      </aside>
     </div>
   )
 }
@@ -587,7 +600,7 @@ function ProgramInspector({ program, programs, draft, canEdit, saving, onChange,
   const dirty = !sameMetadata(draft, metadataOf(program))
   const duplicateName = isDuplicateProgramName(programs, draft.name, program.programId)
   return (
-    <section className="mt-4 rounded-[var(--radius)] border border-[var(--c-border)] p-3" aria-label={pick('Thuộc tính chương trình', 'Program properties')}>
+    <section className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
       <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Thuộc tính', 'Inspector')}</h3>
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
         <label className="text-xs text-[var(--c-text-dim)]">
