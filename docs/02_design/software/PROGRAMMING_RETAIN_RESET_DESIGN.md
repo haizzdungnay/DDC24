@@ -2,8 +2,8 @@
 
 **Document ID:** DDD-RETAIN-RESET-PROG-001
 **Phiên bản:** 2.1
-**Trạng thái:** **IMPLEMENTED** — Core C++ + BE Go + FE đã triển khai và
-kiểm chứng đầy đủ (§11); chờ commit/PR/merge/deploy board (Sprint D, WP-12)
+**Trạng thái:** **DONE** — Core C++ + BE Go + FE đã triển khai, kiểm chứng
+đầy đủ và deploy board Foxlinx (§11, PR #185, `EV-PROG-WP12-001`)
 **Tác giả:** System Engineering, theo Lệnh CTO/Owner 2026-08-15 §VI (WP-12)
 **Phạm vi:** `POST /api/v1/programming/retain/reset` — route đã nối Core
 thật qua `RETAIN_RESET` IPC action (không còn rơi vào nhánh `503` mặc định
@@ -210,8 +210,9 @@ E2E Playwright thật trong journey `UJ-PROG-08` (`e2e/programming.spec.ts`)
 — `npx vitest` 643/643, `npm run lint`/`build` sạch, `npx playwright test`
 10/10.
 
-Còn lại trước khi đóng WP-12 hoàn toàn: commit/PR/merge/deploy board Foxlinx
-+ xác nhận board thật (ngoài phạm vi tài liệu thiết kế).
+Đã commit/PR (#185, merge `158ba8b`)/deploy board Foxlinx + xác nhận board
+thật — xem `docs/07_records/test-evidence/fw-som/2026-08-15-foxlinx-wp12-retain-reset-deploy.md`
+(`EV-PROG-WP12-001`). WP-12 `DONE`.
 
 ## 10. Lịch sử sửa đổi
 
