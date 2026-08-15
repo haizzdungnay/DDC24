@@ -47,15 +47,32 @@ Criteria chưa `READY`.**
 | 14 | Master roadmap/tracker được cập nhật | **Đạt** — file này + Master Plan, tạo trong phiên này |
 | 15 | Không còn finding High nào bị đóng mà thiếu E2E evidence | **Không vi phạm** — WP-01..04 đều mức Trung bình/Cao theo gap report nhưng đã đóng bằng vitest/go build thật, không tự nhận E2E; các gap Cao còn lại (G-2/G-3 FBD) **chưa đóng**, đúng thực tế |
 
-**Kết luận tổng thể 2026-08-15 (cập nhật đợt 2):** Phase 0+1 (WP-01..04) và
-Phase 2 mục FE (WP-05/06/07) đã `DONE`. DoD mục 1-6 và 11-12 đạt (một phần
-hoặc toàn phần). Còn mở: mục 7-10 (WP-08/09, cần backend/board thật), mục 13
-(traceability matrix chưa có dòng cho các WP mới), mục 3 dài hạn (registry
-sinh mã tự động, Document Gate #7 vẫn MISSING nhưng không chặn).
+**Kết luận tổng thể 2026-08-15 (cập nhật cuối phiên):** Phase 0+1
+(WP-01..04), Phase 2 FE (WP-05/06/07/08), Phase 3 (WP-10 design/WP-11 code)
+đã `DONE` hoặc ở đúng trạng thái gate của nó. Phase 4 (WP-12/13) dừng đúng
+ở `DESIGN` — cả hai đều phát hiện khoảng cách kỹ thuật sâu hơn giả định ban
+đầu khi đọc source thật (RETAIN: race với autosave 60s; Artifact Trust:
+crypto đã có sẵn, thiếu là quy trình/custody khoá) — và đều **cố ý chưa
+implement** đúng exit criteria WP đó tự đặt, chờ Core/Security/Product xác
+nhận. Phase 5 (`WP-MULTIPROGRAM-ARCH`) **chưa động tới** — đúng chỉ đạo
+"không trộn phase này vào patch UI hiện tại" (§VII) và vẫn chặn cứng bởi
+Document Gate #1 (PM/CTO chưa chọn Product Spec authority).
+
+DoD mục 1-9, 11-12, 14 đạt (một phần hoặc toàn phần). Còn mở thật sự: mục
+8-9 XONG PHẦN MAPPING (WP-08) nhưng Check/Commission FBD thật (WP-09) vẫn
+chưa — chặn bởi thiếu credential đăng nhập web-app board Foxlinx (khác SSH,
+không tự reset mật khẩu production); mục 10 (Runtime FBD, phụ thuộc WP-09);
+mục 13 (traceability matrix, Document Gate #13, chưa thêm dòng cho 13 WP
+mới — nợ kỹ thuật, không chặn DONE từng WP riêng lẻ theo đúng quy tắc Master
+Plan đã ghi); mục 3 dài hạn (registry sinh mã tự động, Document Gate #7 vẫn
+MISSING nhưng không chặn, WP-05..07 đã dùng đúng registry hiện có làm single
+source, không tạo bản vá tay thứ hai).
 
 ## 3. Iteration log
 
 | Ngày | Hoàn thành | Đang làm | Blocked | Evidence | Tài liệu đã đổi | PR/commit | Regression | Bước kế tiếp |
 |---|---|---|---|---|---|---|---|---|
 | 2026-08-15 | Phase 0 (Document Gate) + Phase 1 (WP-01..04) | — | Phase 2 (WP-05..09) chờ Document Gate #6; WP-13 chờ #12; WP-MULTIPROGRAM-ARCH chờ #1 | Vitest FE PASS (xem báo cáo A-F mục B); `go build`/`go vet` PASS; BE Go test cho WP-01 **còn nợ** | `PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` (mới), `56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md` (mới), file này (mới), `ST_SUBSET_SPEC_MK-DDC-24_VI.md` (1.0→1.1), `PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` (0.8→0.9), `openapi.yaml`, `model/types.ts`, `OverviewPage.tsx`(+test), `ProgramsTab.tsx`, `fbd/model.ts`, `checks.go`(store), `projects.go`(application), `projects.go`(http) | Chưa commit — chờ xác nhận theo quy trình "commit"/"merge" của dự án | Chưa chạy full `ctest`/`go test ./...`/Playwright toàn bộ trong phiên này — xem báo cáo A-F mục B để biết đúng phạm vi đã chạy | Viết BE Go test cho WP-01 (nợ kỹ thuật); UX Lead viết `FBD_EDITOR_DESIGN` để mở Document Gate #6; PM/CTO quyết Document Gate #1 (Product Spec authority) |
-| 2026-08-15 (đợt 2) | `FBD_EDITOR_DESIGN.md` (mở Gate #6) + WP-05/06/07 (palette 9 nhóm, tạo INPUT/OUTPUT/CONSTANT, Inspector đầy đủ theo node kind gồm cả `instance`/`retained` FB — phát hiện và sửa thiếu sót ở bản 1.0 tài liệu sau khi đọc `declare_function_blocks()`) | WP-08 (FBD→Mapping) | WP-09 chờ WP-08; WP-13 chờ #12; WP-MULTIPROGRAM-ARCH chờ #1 | Vitest FBD 43/43, FE toàn bộ 607/607 PASS; `tsc --noEmit` PASS; `eslint --max-warnings=0` PASS; `vite build` PASS (kèm 3 check hợp đồng Programming tự động: errors/api/fbd contract PASS); Playwright `programming.spec.ts` 10/10 PASS (mocked backend, real browser mount, WCAG A/AA) | `FBD_EDITOR_DESIGN.md` (mới, rev 1.0→1.1 tự sửa), `PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` (Gate #6 mở), file này, `fbd/palette.ts` (mới), `fbd/model.ts` (+`isFbdIdentifier`), `fbd/commands.ts` (+4 action `SET_NODE_*`), `fbd/StructuredFbdEditor.tsx` (palette + inspector UI), `fbd/palette.test.ts` (mới), `fbd/commands.test.ts` (+5 test), `fbd/StructuredFbdEditor.test.tsx` (+6 test) | Chưa push — commit/deploy đợt 2 thực hiện ngay sau bước này trong cùng phiên | Không phát hiện — toàn bộ 607 vitest + 10 Playwright + tsc + eslint + build đều PASS trước khi commit | WP-08 (FBD→Mapping integration), sau đó WP-09 (E2E board thật) |
+| 2026-08-15 (đợt 2) | `FBD_EDITOR_DESIGN.md` (mở Gate #6) + WP-05/06/07 (palette 9 nhóm, tạo INPUT/OUTPUT/CONSTANT, Inspector đầy đủ theo node kind gồm cả `instance`/`retained` FB — phát hiện và sửa thiếu sót ở bản 1.0 tài liệu sau khi đọc `declare_function_blocks()`) | WP-08 (FBD→Mapping) | WP-09 chờ WP-08; WP-13 chờ #12; WP-MULTIPROGRAM-ARCH chờ #1 | Vitest FBD 43/43, FE toàn bộ 607/607 PASS; `tsc --noEmit` PASS; `eslint --max-warnings=0` PASS; `vite build` PASS (kèm 3 check hợp đồng Programming tự động: errors/api/fbd contract PASS); Playwright `programming.spec.ts` 10/10 PASS (mocked backend, real browser mount, WCAG A/AA) | `FBD_EDITOR_DESIGN.md` (mới, rev 1.0→1.1 tự sửa), `PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` (Gate #6 mở), file này, `fbd/palette.ts` (mới), `fbd/model.ts` (+`isFbdIdentifier`), `fbd/commands.ts` (+4 action `SET_NODE_*`), `fbd/StructuredFbdEditor.tsx` (palette + inspector UI), `fbd/palette.test.ts` (mới), `fbd/commands.test.ts` (+5 test), `fbd/StructuredFbdEditor.test.tsx` (+6 test) | PR #176 merged `85f2ac8`, deploy Foxlinx OK | Không phát hiện — toàn bộ 607 vitest + 10 Playwright + tsc + eslint + build đều PASS trước khi commit | WP-08 (FBD→Mapping integration), sau đó WP-09 (E2E board thật) |
+| 2026-08-15 (đợt 3) | WP-08 (test tích hợp Mapping↔FBD palette) + WP-11 (layout 3 cột PGM-02) + WP-10 (Technical Selection Record ST editor, design-only) | — | WP-09 (thiếu credential web-app board); WP-10 implementation (chờ Product+UX duyệt); WP-MULTIPROGRAM-ARCH chờ #1 | Vitest 609/609 PASS; `tsc`/`eslint`/`build` PASS; deploy Foxlinx xác nhận qua `wget health` + `df -h` | `MappingTab.test.tsx` (+1), `ProgramsTab.tsx` (grid 3 cột), `DesignWorkspacePage.test.tsx` (+1), `ST_EDITOR_TECHNICAL_SELECTION_RECORD.md` (mới) | PR #177/#178 merged `d132f48`/`c6cd374`, deploy Foxlinx OK (2 lượt) | Không phát hiện | WP-12/WP-13 (design), rồi báo cáo tổng kết |
+| 2026-08-15 (đợt 4 — cuối phiên) | WP-12 (thiết kế RETAIN Reset — phát hiện race autosave 60s, 2 phương án semantics chưa chọn) + WP-13 (thiết kế Artifact Trust — phát hiện crypto Ed25519 đã có sẵn cả 2 chiều, khoảng thiếu là quy trình ký/custody khoá, mở Document Gate #12) | — | WP-09 (credential); WP-10/12/13 implementation (chờ duyệt tương ứng); WP-MULTIPROGRAM-ARCH (Document Gate #1, không động tới đúng chỉ đạo §VII) | Không có (doc-only, không đổi runtime code, không cần build/test) | `PROGRAMMING_RETAIN_RESET_DESIGN.md` (mới), `PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md` (mới), `PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` (Gate #12 mở), file này | PR #179/#180 merged `1ba9071`/`0035d24` | Không áp dụng (doc-only) | **Cần người thật:** (1) credential web-app board Foxlinx cho WP-09; (2) Product+UX duyệt `ST_EDITOR_TECHNICAL_SELECTION_RECORD.md` cho WP-10; (3) Core+Product chọn Phương án A/B cho `PROGRAMMING_RETAIN_RESET_DESIGN.md` WP-12; (4) Security Architecture duyệt `PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md` cho WP-13; (5) PM/CTO chọn Product Spec authority (Document Gate #1) để mở `WP-MULTIPROGRAM-ARCH` |
