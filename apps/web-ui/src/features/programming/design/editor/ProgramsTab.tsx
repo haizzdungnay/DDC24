@@ -588,7 +588,16 @@ export function SourceEditor({
             ref={textareaRef}
             id={`programming-st-source-${program.programId}`}
             aria-describedby={diagnostics.length > 0 ? `programming-st-diagnostics-${program.programId}` : undefined}
-            className="mono absolute inset-0 h-96 w-full resize-none border-0 bg-transparent p-3 text-sm leading-5 text-transparent caret-[var(--c-text)] outline-none"
+            className="mono absolute inset-0 h-96 w-full resize-none border-0 bg-transparent p-3 text-sm leading-5 outline-none"
+            /* `text-transparent`/`caret-[var(--c-text)]` (Tailwind) thua global
+             * reset `textarea { color: inherit }` ở styles.css: reset đó nằm
+             * NGOÀI mọi `@layer`, và CSS hiện đại cho rule không-layer luôn
+             * thắng rule có layer bất kể độ đặc hiệu — nên chữ thật của
+             * textarea vẫn hiện, chồng lên overlay tô màu bên dưới, gây hiển
+             * thị đôi/lem chữ (phát hiện qua ảnh chụp thật, không phải test
+             * jsdom vì jsdom không tính cascade CSS). inline style thắng mọi
+             * rule stylesheet nên dùng thẳng, không phụ thuộc thứ tự layer. */
+            style={{ color: 'transparent', caretColor: 'var(--c-text)' }}
             value={source}
             readOnly={!canEdit}
             spellCheck={false}
