@@ -8,6 +8,35 @@
 
 ## [Unreleased]
 
+### Added — WP-12 RETAIN Reset Design + xác nhận WP-09 bị chặn thật (Master Plan 56)
+
+**WP-12 (G-9, `POST /retain/reset` luôn 503):** Viết
+[`docs/02_design/software/PROGRAMMING_RETAIN_RESET_DESIGN.md`](docs/02_design/software/PROGRAMMING_RETAIN_RESET_DESIGN.md)
+(mới) theo đúng exit criteria WP-12 tự đặt ("không code trước khi có xác
+nhận semantics"). Đọc trực tiếp `apps/core/application/programming/program_ipc_server.cpp`
++ `apps/core/application/st/{st_retain,st_scheduler}.hpp/.cpp` phát hiện
+khoảng cách sâu hơn gap report ban đầu mô tả: IPC protocol layer chưa nối
+runtime thật cho **bất kỳ** action nào (không riêng RetainReset); và
+`StRetainStore::erase()` (đã có sẵn) nếu dùng đơn lẻ trong khi Program đang
+chạy sẽ bị worker autosave (chu kỳ tối thiểu 60s, `kMinWriteIntervalNs`) ghi
+đè giá trị RETAIN sống trở lại — "reset" sẽ tự đảo ngược âm thầm nếu không
+có API mới ở tầng `StScheduler` phối hợp. Tài liệu nêu 2 phương án semantics
+(A: reset file, hiệu lực từ lần khởi động lại kế — an toàn, effort thấp; B:
+reset giá trị sống ngay lập tức — đúng kỳ vọng UX nhưng cần runtime engine
+mới) và khuyến nghị tái dùng hạ tầng `ImpactRetain`/`AcknowledgementChecklist`
+đã có sẵn cho Commission (PGM-03) làm UX xác nhận thay vì phát minh mới.
+**Chưa implement** — chờ Core+Product chọn phương án.
+
+**WP-09:** Xác nhận đây là chặn THẬT, không phải chưa làm tới: SSH board
+Foxlinx hoạt động (`admin123`, đã dùng để deploy WP-05..11 thành công trong
+phiên này), nhưng đăng nhập **web-app** (JWT, khác kênh SSH) cần mật khẩu
+tài khoản `admin`/`CHUONG` trong `/data/config/users.conf` — chỉ có bcrypt
+hash, không phục hồi được plaintext; tự reset mật khẩu admin trên board
+production không hỏi là hành động ảnh hưởng ra ngoài, không tự làm.
+
+**Tài liệu:** `docs/02_design/software/PROGRAMMING_RETAIN_RESET_DESIGN.md`
+(mới), `docs/03_implementation/PROGRAMMING_IMPLEMENTATION_TRACKER.md`.
+
 ### Added — WP-11 PGM-02 layout 3 cột + WP-10 Technical Selection Record ST editor (Master Plan 56)
 
 **WP-11 (G-7, `F-PROG-ASBUILT-008`):** `ProgramsTab.tsx` trước đây chỉ có 2
