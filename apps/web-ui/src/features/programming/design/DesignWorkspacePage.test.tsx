@@ -113,6 +113,36 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /New program/ })).toBeInTheDocument())
   })
 
+  it('WP-11: bố cục 3 cột (Cây/Editor/Inspector) theo UX §16.2 — Inspector là cột riêng, không nằm dưới editor', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
+
+    // Chưa chọn chương trình nào: cột Inspector vẫn tồn tại, hiện trạng thái trống.
+    const tree = screen.getByRole('navigation', { name: 'Cây ứng dụng' })
+    const inspectorEmpty = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    expect(within(inspectorEmpty).getByText('Chọn một chương trình để xem thuộc tính.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Chương trình A'))
+    await screen.findByLabelText(/Mã nguồn ST/)
+
+    // Sau khi chọn: cây, editor và Inspector cùng có mặt đồng thời (3 cột),
+    // không phải Inspector thay thế editor hay nằm dưới nó.
+    expect(tree).toBeInTheDocument()
+    expect(screen.getByLabelText(/Mã nguồn ST/)).toBeInTheDocument()
+    const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    expect(within(inspector).getByLabelText('Tên')).toHaveValue('Chương trình A')
+    expect(within(inspector).getByLabelText('Loại')).toHaveValue('PROGRAM')
+  })
+
   it('409 giữ nguyên buffer đang gõ và hiện banner reload/merge (UX §9)', async () => {
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
