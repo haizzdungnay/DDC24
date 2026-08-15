@@ -459,6 +459,30 @@ func TestGetLatestCheckForRevision(t *testing.T) {
 	if err != nil || latest.CheckID != second.CheckID || latest.State != "QUEUED" {
 		t.Fatalf("Check thứ hai (mới hơn) phải thắng dù Check đầu đã terminal trước: latest=%+v err=%v", latest, err)
 	}
+
+	// CTO/Owner approval 2026-08-15 §1 WP-01: bổ sung nhánh "success" (PASSED)
+	// tường minh — trước đó test chỉ phủ QUEUED/FAILED, chưa từng thấy
+	// GetLatestCheckForRevision phản ánh đúng một Check PASSED kèm Artifact.
+	secondClaim, ok, err := store.ClaimCheck(context.Background(), "worker-b", fixedNow.Add(3*time.Second), time.Minute)
+	if err != nil || !ok || secondClaim.CheckID != second.CheckID {
+		t.Fatalf("claim Check thứ hai: claimed=%+v ok=%v err=%v", secondClaim, ok, err)
+	}
+	passArtifactBytes := []byte("latest-check-passed-artifact")
+	passArtifactDigest := sha256.Sum256(passArtifactBytes)
+	passResult := []byte(`{"schemaVersion":"1.0","diagnostics":[]}`)
+	if _, err := store.CompleteCheck(context.Background(), CompleteCheckParams{
+		CheckID: secondClaim.CheckID, LeaseOwner: "worker-b", State: "PASSED", ResultJSON: passResult,
+		Artifact: &Artifact{ArtifactID: "55555555-5555-4555-8555-555555555553", RevisionID: revisionID, CheckID: secondClaim.CheckID, SchemaVersion: 1,
+			Profile: "MKDDC24_REVA", TargetABI: 3841, CompilerVersion: "fwsom-st-1.1.0", LibraryVersion: "rev-a.1",
+			ByteSize: int64(len(passArtifactBytes)), SHA256: passArtifactDigest, RelativePath: "sha256/bb/b.mkir", IntegrityMode: "HASH_ONLY"},
+		AuditID: "cccccccc-cccc-4ccc-8ccc-ccccccccccc4", At: fixedNow.Add(3 * time.Second),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	latest, err = store.GetLatestCheckForRevision(context.Background(), revisionID)
+	if err != nil || latest.State != "PASSED" || latest.CompletedAtUTCMS == nil || latest.CheckID != second.CheckID {
+		t.Fatalf("phải thấy Check PASSED gần nhất kèm completedAt: latest=%+v err=%v", latest, err)
+	}
 }
 
 func TestBackupVerifyRestoreIsPointInTimeAndNoOverwrite(t *testing.T) {

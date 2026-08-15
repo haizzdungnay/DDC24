@@ -8,6 +8,38 @@
 
 ## [Unreleased]
 
+### Added — Sprint A: đóng nợ evidence WP-01/02/11 + cross-reference RTM (CTO/Owner approval 2026-08-15)
+
+Theo CTO/Owner approval "PROGRAMMING OVERVIEW / ST / FBD — IMPLEMENTATION
+CONTINUATION" §1, đóng các nợ nhỏ trước khi làm sprint lớn:
+
+**WP-01:** thêm nhánh PASSED tường minh vào `TestGetLatestCheckForRevision`
+(store) và test mới `TestGetProjectReflectsTerminalPassedCheckAndPropagatesRealErrors`
+(application) — phủ 2 nhánh trước đó chưa test: Check PASSED kèm Artifact
+phản ánh đúng qua `GetProject`/`ListProjects` với `CompletedAt`, và lỗi đọc
+DB thật (khác `ErrNotFound`) phải propagate ra ngoài `latestCheckView()`
+thay vì bị nuốt âm thầm. `go test ./... -count=1` PASS toàn module.
+
+**WP-02:** 2 test hồi quy mới ở `DesignWorkspacePage.test.tsx` — dropdown
+Loại chỉ đúng 1 option `PROGRAM` cho Program mới; Program có kind khác
+`PROGRAM` sẵn từ trước (giả lập import bundle) vẫn hiện đúng giá trị thật
+kèm cảnh báo, không ẩn dữ liệu.
+
+**WP-11:** phát hiện lệch Tracker/as-built thật — WP-11 đã implement+deploy
+ở PR #178 nhưng dòng Tracker chưa từng được cập nhật khỏi `DESIGN`/
+`NOT_STARTED`. Sửa thành `DONE` đúng thực tế.
+
+**Traceability Matrix:** thêm §12 (mới, Rev 3.21→3.22) cross-reference
+Master Plan 56 `WP-01..13` + `WP-MULTIPROGRAM-ARCH` vào
+`PROGRAMMING_TRACEABILITY_MATRIX.md` — bảng Requirement→Design→Source/PR→
+Test→Evidence→Status riêng, không đổi 60 dòng canonical §6/đếm `22/60 I=Y`
+gốc (WP-XX không dùng ID `SYS/SWR-REQ-PROG-*` hay `VS-PROG-0xx`).
+
+**Kiểm chứng:** `go vet ./...` + `go test ./... -count=1` PASS toàn
+`apps/web-api`; `npx vitest --run --environment jsdom src` → 611/611 PASS;
+`tsc --noEmit` PASS; `eslint --max-warnings=0` PASS; `npm run build` PASS
+(không đổi runtime code, không cần deploy lại board).
+
 ### Added — Tổng kết cuối phiên Master Plan 56 (2026-08-15)
 
 Cập nhật `PROGRAMMING_IMPLEMENTATION_TRACKER.md`: kết luận DoD tổng thể sau
