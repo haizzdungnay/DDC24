@@ -62,12 +62,23 @@ export interface FbdIssue {
   path: string
 }
 
+/* WP-03 (D-06, REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15 §8.4): registry này
+ * PHẢI khớp đúng những gì C++ compiler thật sự chấp nhận
+ * (`st_func_from_name`/`StFbType`, `apps/core/application/st/`), không phải
+ * một danh sách IEC 61131-3 "đầy đủ" viết tay độc lập. Trước đây có
+ * `SCALE`/`DEADBAND` (pure) và `CTU`/`PI` (stateful) — cả bốn KHÔNG tồn tại ở
+ * compiler; nếu một palette tương lai từng cho tạo node các loại này, Check
+ * sẽ fail `FBD-SEM-LIBRARY-UNSUPPORTED-001` không giải thích được lý do gốc.
+ * Đồng thời thiếu `SQRT`, thứ compiler đã hỗ trợ — đã bổ sung. Nguồn sự thật
+ * dài hạn nên là một registry sinh ra từ cùng một chỗ cho cả FE lẫn C++ (xem
+ * WP-03 exit criteria trong Master Plan), registry tay này chỉ là bản vá tạm
+ * cho tới khi có single source of truth đó. */
 const pureFunctions = new Set([
   'AND', 'OR', 'XOR', 'NOT', 'EQ', 'NE', 'LT', 'LE', 'GT', 'GE',
   'ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'ABS', 'MIN', 'MAX', 'LIMIT',
-  'SEL', 'SCALE', 'DEADBAND',
+  'SEL', 'SQRT',
 ])
-const statefulFunctions = new Set(['TON', 'TOF', 'R_TRIG', 'F_TRIG', 'CTU', 'PI', 'PID'])
+const statefulFunctions = new Set(['TON', 'TOF', 'R_TRIG', 'F_TRIG', 'PID'])
 const conversions = new Set([
   'INT_TO_DINT', 'INT_TO_UINT', 'DINT_TO_INT', 'DINT_TO_UINT',
   'UINT_TO_INT', 'UINT_TO_DINT', 'DINT_TO_REAL', 'UINT_TO_REAL',

@@ -120,6 +120,30 @@ func (s *Store) GetPassedCheckForRevision(ctx context.Context, revisionID string
 	return getCheckTx(ctx, s.db, checkID)
 }
 
+// GetLatestCheckForRevision — WP-01 (Overview state model, D-01): Check gần
+// nhất cho một Revision bất kể state (QUEUED/RUNNING/PASSED/FAILED/TIMED_OUT),
+// khác `GetPassedCheckForRevision` vốn chỉ tìm bản PASSED (dùng cho
+// Commission). `Overview` cần biết cả trạng thái đang chạy/vừa lỗi, không chỉ
+// bản đạt gần nhất. `created_at_utc_ms` luôn có giá trị (NOT NULL) nên dùng
+// làm khoá sắp xếp chính, khác `completed_at_utc_ms` vốn NULL khi
+// QUEUED/RUNNING.
+func (s *Store) GetLatestCheckForRevision(ctx context.Context, revisionID string) (Check, error) {
+	if err := validateUUIDs(revisionID); err != nil {
+		return Check{}, err
+	}
+	var checkID string
+	err := s.db.QueryRowContext(ctx, `SELECT check_id FROM checks
+		WHERE revision_id=?
+		ORDER BY created_at_utc_ms DESC,check_id DESC LIMIT 1`, revisionID).Scan(&checkID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Check{}, ErrNotFound
+	}
+	if err != nil {
+		return Check{}, err
+	}
+	return getCheckTx(ctx, s.db, checkID)
+}
+
 type queryRower interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }

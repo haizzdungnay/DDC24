@@ -8,6 +8,118 @@
 
 ## [Unreleased]
 
+### Added — Phase 0+1 Master Plan Programming (WP-01..04) theo Lệnh triển khai CTO/Owner 2026-08-15
+
+Sau khi PM/CTO/Owner đọc `PROGRAMMING_OVERVIEW_DESIGN_FEATURE_GAP_REPORT_2026-08-15.md`
+và ra 6 quyết định D-01..D-06, triển khai Document Gate (Phase 0) và 4 Work
+Package "Truthful UI/Low-risk corrective" (Phase 1) trong cùng phiên:
+
+- [`docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md`](docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md)
+  (mới) — kiểm kê 14 tài liệu CTO yêu cầu: 9/14 current/đã đồng bộ, 4/14
+  MISSING hẳn (`PROGRAMMING_BUSINESS_CORE_SPEC`, `PROGRAMMING_USE_CASE_SPEC`
+  độc lập, `FBD_EDITOR_DESIGN`, `FBD_LIBRARY_REGISTRY_SPEC`), 1/14 mâu thuẫn
+  thẩm quyền (Product Spec Rev A Active vs candidate V2.2 Hybrid chưa
+  duyệt). `DOC_READY=YES` cho Phase 1, `NO` cho Phase 2/WP-13/WP-MULTIPROGRAM-ARCH.
+- [`docs/03_implementation/56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md`](docs/03_implementation/56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md)
+  (mới) — roadmap Phase 0-5, WP-01..13 + `WP-MULTIPROGRAM-ARCH`, mỗi WP có
+  objective/dependency/documents/design/implementation/test/evidence/owner/
+  sequence/exit criteria theo đúng cấu trúc lệnh CTO/Owner.
+- [`docs/03_implementation/PROGRAMMING_IMPLEMENTATION_TRACKER.md`](docs/03_implementation/PROGRAMMING_IMPLEMENTATION_TRACKER.md)
+  (mới) — bảng theo dõi WP × Requirement/Design/FE/BE/FW/Test/Evidence/
+  Status/Owner/Blocker; tự kiểm 15 mục Definition of Done.
+
+**WP-01 — Overview State Model (D-01):** `DraftAttentionPanel` (`PGM-01`)
+trước đây chỉ có 2 trạng thái (no-draft/dirty), không phân biệt được Check
+đang chạy/vừa lỗi/vừa đạt. Thêm `ProjectView.LatestCheck` (BE, Check gần
+nhất cho `baseRevisionId` hiện hành, bất kể state) qua
+`Store.GetLatestCheckForRevision()` (mới, khác `GetPassedCheckForRevision`
+chỉ tìm bản PASSED dùng cho Commission). FE nay phân biệt 5/6 trạng thái
+thiết kế (`checking`/`failed`/`ready` mới, cộng `no-draft`/`dirty` cũ) với
+primary action đúng theo trạng thái (`FAILED`→"Xem lỗi",
+`PASSED`→"Mở Kiểm tra & Đưa vào vận hành"). **Không cài `conflict`** — quyết
+định kỹ thuật có lý do: 409 là phản hồi tức thời của một lần lưu tại
+`PGM-02`, không phải trạng thái server lưu lại để đọc ở phiên trình duyệt
+mới, đã xử lý sống từ trước (`F-PROG-ASBUILT-002`). Contract: thêm
+`ProgrammingProjectLatestCheck` vào `openapi.yaml`.
+
+**WP-02 — Unsupported POU Guard (D-03):** `compilerInput()` (BE) chỉ biên
+dịch đúng 1 object PROGRAM/Revision — Check luôn fail `ST-CLI-LIMIT` nếu có
+`FUNCTION`/`FUNCTION_BLOCK`, dù dropdown "Loại" ở `ProgramInspector` cho
+chọn cả ba. Ẩn hai lựa chọn chưa hỗ trợ khỏi UI; Program hiện có (từ import
+bundle) với kind khác vẫn hiển thị đúng giá trị thật kèm cảnh báo, không ẩn
+dữ liệu.
+
+**WP-03 — FBD Registry Alignment (một phần G-5):** `fbd/model.ts` (FE) từng
+khai `SCALE`/`DEADBAND` (pure) và `CTU`/`PI` (stateful) — cả bốn không tồn
+tại trong registry hàm/FB thật ở C++ (`st_program.cpp`); ngược lại thiếu
+`SQRT` dù backend có. Đã sửa khớp 1-1 với `st_func_from_name`/`StFbType`.
+Đây là bản vá tay tạm thời — nguồn sự thật dùng chung (generator) là scope
+riêng, chưa làm (Document Gate #7).
+
+**WP-04 — Language Documentation Alignment (D-06):** `ST_SUBSET_SPEC_MK-DDC-24_VI.md`
+(1.0→1.1) và `PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` (0.8→0.9) không khớp
+implementation thật, xác nhận trực tiếp `st_program.cpp`
+(`st_integer_min/max`, `kFuncTable`, `fb_spec`): `INT` là **int16** (spec cũ
+ghi sai int32); `DINT`(int32)/`UINT`(uint16) và 10 hàm chuyển đổi liên quan
+**có thật**, spec cũ khẳng định sai "không có"; `PID` (8 input/2 output) có
+thật trong compiler, design doc cũ ghi "block target" (ngụ ý chưa build).
+Đã sửa cả hai tài liệu, giữ nguyên blocker "Unit/conversion/PID semantic
+chưa khóa" (Controls+Safety review vẫn chưa xảy ra, chỉ sửa nhầm lẫn "chưa
+tồn tại" thành đúng "tồn tại nhưng chưa duyệt production").
+
+**FE:** `apps/web-ui/src/features/programming/{overview/OverviewPage.tsx(+test),
+design/editor/ProgramsTab.tsx, fbd/model.ts, model/types.ts}`.
+**BE:** `apps/web-api/internal/programming/{store/checks.go(+test),
+application/projects.go(+test), transport/http/projects.go}`.
+**Contract:** `contracts/openapi/openapi.yaml`.
+
+**Kiểm chứng (2026-08-15, đo lại thật):**
+
+| Bước | Kết quả |
+|---|---|
+| `go build ./...` + `go vet ./...` (`apps/web-api`) | PASS |
+| `go test ./... -count=1` (`apps/web-api`, toàn module) | **PASS** mọi package, gồm 2 test mới (`TestGetLatestCheckForRevision`, `TestGetProjectAndListProjectsExposeLatestCheck`) |
+| `npx vitest --run --environment jsdom src` | **585/585 PASS** (71 file), gồm 4 test mới `OverviewPage.test.tsx` |
+| `npm run lint` | sạch, 0 warning |
+| `npm run build` (`VITE_PROGRAMMING_REV_A=1`) | PASS — `check:programming-errors`/`check:programming-api`/`check:programming-fbd` đều PASS, không lệch contract |
+
+**Còn nợ (ghi ở Tracker, không giấu):** BE Go test cho WP-01 chỉ phủ luồng
+chính (đã viết trong phiên này, PASS), chưa có test 409/permission riêng
+cho `latestCheck`; Phase 2 (FBD end-to-end, WP-05..09) **chưa bắt đầu**,
+đúng roadmap — chặn hợp lệ bởi Document Gate #6 (`FBD_EDITOR_DESIGN` chưa
+tồn tại), không phải trì hoãn tuỳ tiện.
+
+### Added — Báo cáo hiện trạng & GAP Programming: Overview + ST/FBD editor trình PM/CTO/end-user (2026-08-15)
+
+[`docs/07_records/reviews/PROGRAMMING_OVERVIEW_DESIGN_FEATURE_GAP_REPORT_2026-08-15.md`](docs/07_records/reviews/PROGRAMMING_OVERVIEW_DESIGN_FEATURE_GAP_REPORT_2026-08-15.md)
+(`REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15`) — feature inventory đọc trực tiếp
+source FE (`overview/`, `design/`, `fbd/`), BE Go (`internal/programming/`) và
+FW-SOM C++ (`apps/core/application/st/`) cho đúng `PGM-01` Tổng quan và
+`PGM-02` Thiết kế (tab ST + FBD); không lặp nội dung hai báo cáo Programming
+2026-08-13/14 đã có, chỉ dẫn nguồn khi trùng. 10 gap tổng hợp (6 mới), nổi bật:
+
+- Rev A khoá **đúng một Program cho toàn controller** ở cả 3 tầng độc lập
+  (FE `projectsPerController=1`, BE, và FW-SOM `kMaxProgramsTotal=1` — dưới
+  lớp khoá này scheduler đã có khung cho tới 8 task).
+- FBD editor qua UI chỉ tạo được **một loại block (AND)**, không có palette
+  chọn trong ~29 loại đã có ở data model, và **không có cách tạo node
+  INPUT/OUTPUT** — nghĩa là một Program FBD dựng hoàn toàn qua web hiện
+  không có biến để map sang Point.
+- Check chỉ biên dịch đúng 1 Program/Revision; loại `FUNCTION`/`FUNCTION_BLOCK`
+  mà `ProgramInspector` cho phép chọn luôn fail `ST-CLI-LIMIT`.
+- `DraftAttentionPanel` (Overview) chỉ cài 2/6 trạng thái thiết kế yêu cầu
+  (thiếu checking/failed/ready/conflict).
+- FE/BE lệch registry hàm FBD (`SCALE/DEADBAND/CTU/PI` chỉ khai ở FE,
+  `SQRT` chỉ có ở BE) — chưa lộ ra UI vì chưa có palette, cần dọn trước khi
+  xây palette.
+- Ngôn ngữ ST đã cài **nhiều hơn** `ST_SUBSET_SPEC_MK-DDC-24_VI.md` mô tả
+  (DINT/UINT, khối PID có thật) — tài liệu ngôn ngữ đang lỗi thời so với
+  implementation.
+
+6 câu hỏi cần CTO/PM/end-user quyết định trước khi lên kế hoạch bước tiếp
+theo (§10); không tự đổi phán quyết `RELEASE_READY BLOCKED` đã có ở báo cáo
+As-Built 2026-08-14. Index cập nhật: `docs/07_records/reviews/README.md`.
+
 ### Added — `tools/fake_mcu` mô phỏng đầy đủ 16 kênh UI + 4 AO + 4 DO của một AHU thật, đóng vòng feedback theo lệnh (2026-08-14)
 
 Trước đây fake MCU sinh giá trị 16 kênh UI gần như ngẫu nhiên (sin/ramp độc

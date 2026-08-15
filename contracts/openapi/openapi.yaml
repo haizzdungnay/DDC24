@@ -2486,6 +2486,26 @@ components:
             `GET /projects` (danh sách) không có trường này — field optional
             nên bổ sung là thay đổi minor tương thích ngược (task-prog-501).
           $ref: "#/components/schemas/ProgrammingResource"
+        latestCheck:
+          description: >
+            Check gần nhất cho `baseRevisionId` hiện hành, bất kể state
+            (WP-01, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15` §5.2). `null`
+            khi Draft chưa từng niêm phong hoặc chưa từng Check — Overview
+            dùng trường này để phân biệt checking/failed/ready thay vì chỉ
+            có no-draft/dirty như trước.
+          oneOf:
+            - { $ref: "#/components/schemas/ProgrammingProjectLatestCheck" }
+            - { type: "null" }
+    ProgrammingProjectLatestCheck:
+      type: object
+      additionalProperties: false
+      required: [checkId, revisionId, state, createdAt]
+      properties:
+        checkId: { type: string, format: uuid }
+        revisionId: { type: string, format: uuid }
+        state: { type: string, enum: [QUEUED, RUNNING, PASSED, FAILED, TIMED_OUT] }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
     ProgrammingProjectPage:
       type: object
       additionalProperties: false
