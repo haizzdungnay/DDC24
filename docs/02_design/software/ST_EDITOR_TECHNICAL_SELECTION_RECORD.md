@@ -1,15 +1,62 @@
 # ST Editor — Technical Selection Record
 
 **Document ID:** TSR-ST-EDITOR-PROG-001
-**Phiên bản:** 1.0
-**Trạng thái:** **Draft — chờ Product + UX phê duyệt trước khi code** (đúng
-Exit Criteria của `WP-10` trong `56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md`:
-*"Technical Selection Record được duyệt trước khi viết code editor thật;
-không tự chọn thư viện rồi báo cáo sau"*)
+**Phiên bản:** 1.1
+**Trạng thái:** **APPROVED TO IMPLEMENT** — CTO/Product Owner phê duyệt
+Phương án A + phạm vi P0/P1 trong "CTO / PRODUCT OWNER APPROVAL — PROGRAMMING
+OVERVIEW / ST / FBD — IMPLEMENTATION CONTINUATION" §4-6 (2026-08-15). WP-10
+chuyển `READY_TO_IMPLEMENT → IMPLEMENTING`.
 **Tác giả:** System Engineering, theo Lệnh CTO/Owner 2026-08-15 §V (WP-10)
 **Phạm vi:** Chỉ đánh giá lựa chọn kỹ thuật cho editor ST (`SourceEditor` trong
 `apps/web-ui/src/features/programming/design/editor/ProgramsTab.tsx`). Không
 đổi FBD editor (đã có thiết kế riêng, `FBD_EDITOR_DESIGN.md`).
+
+## A. Quyết định CTO/Product Owner (2026-08-15) — chốt dứt điểm
+
+**Phương án được duyệt: A — mở rộng `SourceEditor` tại chỗ, không thêm
+Monaco/CodeMirror.** Lý do Product: editor hiện tại đã có line/cursor/find/
+save/format/source-map; chưa cần biến Web DDC thành desktop PLC IDE nặng;
+giảm migration risk; giữ bundle nhỏ; phù hợp Rev A. Nhưng Phương án A **không
+phải chỉ thêm màu chữ** — phạm vi P0/P1 dưới đây là bắt buộc.
+
+### Phạm vi P0 — bắt buộc implement
+
+- syntax highlighting
+- bracket/parenthesis matching
+- auto indentation
+- find + replace (nâng từ "find" hiện có)
+- diagnostic underline
+- click diagnostic → nhảy đúng line/column (đã có `selectRange`, mở rộng UI)
+- ST keyword completion
+- symbol completion từ Program hiện tại (đã có `collectStSymbols`, dùng làm nguồn)
+- datatype completion (6 kiểu, dùng chung nguồn `FBD_DATA_TYPES`)
+- standard function/FB completion (dùng chung registry `palette.ts`, không khai tay lần hai)
+- formatter (đã có `formatStSource`, giữ nguyên)
+- keyboard-first operation (bắt buộc cho mọi tính năng mới, không chỉ chuột)
+
+### Phạm vi P1 — implement nếu có authoritative metadata đủ
+
+type-aware completion; function signature help; hover type/symbol; reference
+search; go-to-definition.
+
+**Rule bắt buộc:** *"Không được viết một ST parser/compiler thứ hai trong
+FE."* Nếu một tính năng P1 cần semantic knowledge (kiểu suy ra, phạm vi biến
+chính xác...) mà FE chưa có contract dữ liệu đáng tin từ compiler, KHÔNG viết
+regex đoán rồi gọi là "semantic feature" — phải đi qua chuỗi
+`Compiler metadata/API contract → Design → Test → FE feature`. P0 dùng đúng
+registry tĩnh đã có (`palette.ts`, 6 kiểu, `kFuncs`/`st_fb_*` đối chiếu
+compiler C++ ở WP-05) nên không vi phạm rule này — không cần contract mới.
+
+### Quyết định UX (2026-08-15)
+
+Keyboard-first: YES. Desktop engineering là workflow chính; mobile không cần
+full parity. Nguồn vẫn là text ST canonical (không có AST ẩn thay thế
+`source` làm nguồn sự thật). Không auto-fix thay đổi logic mà không xác
+nhận người dùng. Không autocomplete construct compiler chưa hỗ trợ (không
+gợi ý `CASE`/`FOR`/`FUNCTION_BLOCK` tự định nghĩa...). Cú pháp không hỗ trợ
+phải thể hiện rõ theo đúng compiler profile đang active (không gợi ý mơ hồ).
+`PID` tiếp tục có cảnh báo "chưa Controls+Safety review" — không tự nâng
+badge khi thêm completion cho nó.
 
 ---
 
@@ -168,3 +215,4 @@ ST/IEC 61131-3 sẵn trên npm, phải tự viết grammar).
 | Revision | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-08-15 | Tạo mới cho WP-10 (Master Plan 56). So sánh 3 phương án, khuyến nghị Phương án A (mở rộng tại chỗ, 0 dependency mới). Chưa implement — chờ Product+UX phê duyệt đúng exit criteria WP-10. |
+| 1.1 | 2026-08-15 | CTO/Product Owner duyệt Phương án A + phạm vi P0/P1 (§A mới). `APPROVED TO IMPLEMENT`, WP-10 chuyển `IMPLEMENTING`. |

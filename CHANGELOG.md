@@ -8,6 +8,52 @@
 
 ## [Unreleased]
 
+### Added — WP-10 ST Editor P0 (CTO/Product Owner approval 2026-08-15 §4-6)
+
+CTO/Product Owner duyệt Phương án A (mở rộng `SourceEditor` tại chỗ, không
+Monaco/CodeMirror) + phạm vi P0 bắt buộc: syntax highlighting, bracket
+matching, auto indentation, find+replace, diagnostic underline + click→line/
+column, ST keyword/symbol/datatype/function completion, formatter (giữ
+nguyên), keyboard-first. Implement toàn bộ P0 trong phiên này.
+
+**`apps/web-ui/src/features/programming/design/editor/stEditorSupport.ts`
+(mới):** tokenizer 1-pass (`tokenizeStSource`) đối chiếu trực tiếp
+`ST_SUBSET_SPEC_MK-DDC-24_VI.md` §10 (Grammar EBNF) — không suy đoán, không
+tô màu/gợi ý `CASE`/`FOR`/`WHILE`/`REPEAT`/`FUNCTION_BLOCK` người dùng định
+nghĩa (compiler chưa hỗ trợ, đúng rule CTO "không autocomplete construct
+chưa support"). Danh sách hàm chuẩn/FB dùng lại đúng `FBD_PALETTE` (WP-05,
+`fbd/palette.ts`) — không khai tay registry lần hai (đúng rule "không viết
+ST parser/compiler thứ hai trong FE"): 20 hàm gọi kiểu `NAME(...)` (lọc bỏ
+toán tử trung tố AND/OR/MOD… — ST viết `a AND b` không phải `AND(a,b)`) + 5
+kiểu FB (TON/TOF/R_TRIG/F_TRIG/PID). Thêm `findMatchingBracket`,
+`computeAutoIndent` (2 khoảng trắng/mức, tăng sau từ khoá mở khối, giảm ở
+dòng đóng khối), `buildStCompletions` (keyword+type+function+FB+symbol đã
+khai báo, giới hạn 20 mục), `mergeDiagnosticRanges` (gộp ranh giới token +
+diagnostic thành một lớp overlay duy nhất, không chồng hai lớp `<pre>`).
+
+**`ProgramsTab.tsx` (`SourceEditor`, export mới để test trực tiếp):**
+overlay `<pre>` tô màu theo token/gạch chân diagnostic (click nhảy đúng
+line/column) nằm dưới `<textarea>` chữ trong suốt (kỹ thuật overlay chuẩn,
+0 dependency mới) — giữ nguyên kiến trúc `<textarea>` đã duyệt (Phương án
+A). Enter tự thụt lề (chặn `preventDefault`, tính lại indent, không dùng
+`execCommand` để giữ tương thích test/trình duyệt). Dropdown gợi ý theo bàn
+phím hoàn toàn (Arrow lên/xuống chọn, Enter/Tab chấp nhận, Escape đóng).
+Thanh Tìm mở rộng thêm Thay/Thay tất cả.
+
+**Test:** `stEditorSupport.test.ts` (21 test — tokenizer đối chiếu grammar
+thật, bracket matching lồng nhau + bỏ qua trong comment, auto-indent, merge
+diagnostic ranges cắt ngang token, completion). `SourceEditor.test.tsx`
+(9 test, mới — tô màu đúng kind, bracket match tô sáng cặp, Enter auto-
+indent, autocomplete mở/chấp nhận/gợi ý đúng symbol đã khai báo, diagnostic
+underline click nhảy đúng vị trí, Replace/Replace all, chế độ chỉ đọc ẩn
+nút sửa).
+
+**Kiểm chứng:** `npx vitest --run --environment jsdom src` → 641/641 PASS
+(+30); `tsc --noEmit` PASS; `eslint --max-warnings=0` PASS; `npm run build`
+PASS; `npx playwright test e2e/programming.spec.ts` → 10/10 PASS (real
+Chromium, không regression); deploy Foxlinx qua `scp` + `systemctl restart
+mkddc-web-pi`, health check PASS.
+
 ### Added — Sprint A: đóng nợ evidence WP-01/02/11 + cross-reference RTM (CTO/Owner approval 2026-08-15)
 
 Theo CTO/Owner approval "PROGRAMMING OVERVIEW / ST / FBD — IMPLEMENTATION
