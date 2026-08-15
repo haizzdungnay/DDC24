@@ -8,6 +8,77 @@
 
 ## [Unreleased]
 
+### Added — Phase 2 FE Master Plan Programming (WP-05/06/07, FBD Palette+Inspector) theo Lệnh triển khai CTO/Owner 2026-08-15
+
+Tiếp nối Phase 0+1 (mục dưới): viết
+[`docs/02_design/software/FBD_EDITOR_DESIGN.md`](docs/02_design/software/FBD_EDITOR_DESIGN.md)
+(mới, `DDD-FBD-EDITOR-PROG-001`) để mở Document Gate #6, rồi implement liền
+trong cùng phiên theo đúng chỉ đạo "làm đến đâu commit/deploy đến đó".
+
+**Phát hiện khi soạn tài liệu (tự sửa ngay, không chờ review riêng):** bản
+nháp đầu của `FBD_EDITOR_DESIGN.md` chỉ đọc `kFuncs[]` (`st_program.cpp`) nên
+kết luận sai "FUNCTION_BLOCK không có tham số sửa được". Đọc tiếp
+`declare_function_blocks()` (`st_fbd_compile.cpp`) phát hiện TON/TOF/R_TRIG/
+F_TRIG/PID thực ra nhận 2 tham số tuỳ chọn `instance` (tên tự đặt) và
+`retained` (bool) — liên quan trực tiếp `WP-12` (RETAIN reset) sắp tới. Sửa
+tài liệu lên Rev 1.1 trước khi code Inspector, không để sai sót lọt xuống
+implementation.
+
+**WP-05 — FBD Palette:** [`apps/web-ui/src/features/programming/fbd/palette.ts`](apps/web-ui/src/features/programming/fbd/palette.ts)
+(mới) — registry 33 khối (9 nhóm: Logic/Compare/Math/Conversion/Timer/
+Trigger/Control, cộng Interface+Constants xử lý riêng), mỗi entry đối chiếu
+trực tiếp `st_fbd_compile.cpp` (`binop_from_type_ref` cho AND/OR/XOR/EQ/NE/
+LT/LE/GT/GE/ADD/SUB/MUL/DIV/MOD — luôn 2in/1out; khối `type_ref=="NOT"` —
+unary) và `st_program.cpp` `kFuncs[]` (ABS/MIN/MAX/LIMIT/SEL/SQRT/14 hàm
+chuyển đổi, đúng arity từng hàm). Thay nút "Block AND" cứng bằng dropdown
+chọn khối theo nhóm + nút "Thêm khối" trong `StructuredFbdEditor.tsx`. PID có
+badge cảnh báo "chưa Controls+Safety review" lấy thẳng từ `ST_SUBSET_SPEC`
+§6.2 (đã sửa ở WP-04), không lặp lại sai sót "PID production-ready".
+
+**WP-06 — INPUT/OUTPUT/CONSTANT:** form tạo node giao diện (tên biến/kiểu/
+đơn vị cho INPUT-OUTPUT; kiểu/giá trị cho CONSTANT), validate theo đúng ràng
+buộc compiler thật đọc từ `declare_one_variable()`/case
+`FbdNodeKind::CONSTANT` (`node.parameters.size()==1`, `typeRef` phải khớp
+`st_type_name(port.dataType)`) — không suy đoán cú pháp, đối chiếu golden
+`ahu_fan_enable.json` để xác nhận quy ước tên port (`OUT` cho INPUT, `IN` cho
+OUTPUT).
+
+**WP-07 — FBD Inspector:** panel theo node kind, hiện khi chọn node — sửa
+biến/đơn vị/kiểu (INPUT/OUTPUT), giá trị/kiểu (CONSTANT), toán hạng T (hàm đa
+hình như ADD/SEL/EQ — giữ nguyên port id để không phá wire hiện có, chỉ ghi
+đè `dataType`), `instance`/`retained` (FUNCTION_BLOCK, phát hiện ở trên).
+Block cố định (NOT/AND/conversion...) hiện read-only, không thêm field
+tham số compiler sẽ từ chối (`FBD-SEM-PARAM-001`).
+
+Command mới trong `fbd/commands.ts`: `SET_NODE_VARIABLE`, `SET_NODE_VALUE`,
+`SET_NODE_TYPE`, `SET_NODE_FB_PARAMS` — mỗi lệnh validate trước khi mutate
+(regex identifier dùng lại từ `model.ts`, literal range đúng
+`st_integer_min/max`), reject kèm mã lỗi dịch song ngữ như các lệnh cũ.
+
+**FE:** `apps/web-ui/src/features/programming/fbd/{palette.ts(mới),
+model.ts(+isFbdIdentifier), commands.ts, StructuredFbdEditor.tsx}`.
+**Test:** `fbd/palette.test.ts` (mới, 14 test đối chiếu trực tiếp compiler
+source), `fbd/commands.test.ts` (+5 test reducer), `fbd/StructuredFbdEditor.test.tsx`
+(+6 test RTL — thêm khối từ palette, cảnh báo PID, tạo INPUT/CONSTANT, đổi
+toán hạng, sửa FB instance/RETAIN).
+
+**Kiểm chứng (2026-08-15, đo lại thật):**
+
+| Bước | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src/features/programming/fbd` | **43/43 PASS** (4 file) |
+| `npx vitest --run --environment jsdom src` | **607/607 PASS** (72 file) |
+| `npx tsc --noEmit -p .` | PASS |
+| `npm run lint` (`--max-warnings=0`) | PASS |
+| `npm run build` (gồm `check:programming-errors`/`-api`/`-fbd`) | PASS |
+| `npx playwright test e2e/programming.spec.ts` (mocked backend, real browser) | **10/10 PASS**, gồm WCAG A/AA 4 workspace |
+
+**Còn nợ (ghi ở Tracker, không giấu):** WP-08 (FBD→Mapping integration) và
+WP-09 (Check/Commission/Runtime E2E trên board Foxlinx thật) chưa làm — tiếp
+theo ngay trong phiên này. `FBD_LIBRARY_REGISTRY_SPEC` (Document Gate #7,
+generator sinh mã dùng chung FE↔C++) vẫn MISSING, không chặn WP-05..07 DONE
+nhưng vẫn là nợ kỹ thuật dài hạn đã ghi từ Phase 0.
+
 ### Added — Phase 0+1 Master Plan Programming (WP-01..04) theo Lệnh triển khai CTO/Owner 2026-08-15
 
 Sau khi PM/CTO/Owner đọc `PROGRAMMING_OVERVIEW_DESIGN_FEATURE_GAP_REPORT_2026-08-15.md`

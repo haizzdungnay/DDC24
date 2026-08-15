@@ -1,6 +1,7 @@
 import keyboardRegistryJson from '../../../../../../contracts/programming/fbd_keyboard_commands_v1.json'
 
 import {
+  FBD_DATA_TYPES,
   FBD_MAX_BLOCKS,
   FBD_MAX_NETWORKS,
   FBD_MAX_WIRES,
@@ -9,11 +10,15 @@ import {
   cloneFbdDocument,
   findFbdPort,
   isCanonicalFbdUuid,
+  isFbdIdentifier,
+  type FbdDataType,
   type FbdDocument,
   type FbdNetwork,
   type FbdNode,
+  type FbdParameterValue,
   type FbdWire,
 } from './model'
+import { fbdPaletteEntry, isValidConstantLiteral } from './palette'
 
 export type FbdKeyboardCommand =
   | 'ADD_NETWORK'
@@ -86,6 +91,10 @@ export type FbdEditorAction =
   | { type: 'CANCEL_CONNECTION' }
   | { type: 'DELETE_SELECTION' }
   | { type: 'MOVE_NODE'; delta: -1 | 1 }
+  | { type: 'SET_NODE_VARIABLE'; networkId: string; nodeId: string; variable: string; unit: string | null }
+  | { type: 'SET_NODE_VALUE'; networkId: string; nodeId: string; value: FbdParameterValue }
+  | { type: 'SET_NODE_TYPE'; networkId: string; nodeId: string; dataType: FbdDataType }
+  | { type: 'SET_NODE_FB_PARAMS'; networkId: string; nodeId: string; instance: string | null; retained: boolean }
   | { type: 'UNDO' }
   | { type: 'REDO' }
 
@@ -235,6 +244,25 @@ function connect(
   return commit(state, document, { code: 'wire-connected', params: { from: source.port.name, to: target.port.name } })
 }
 
+/* WP-05..07 (FBD_EDITOR_DESIGN.md §3.1): đổi kiểu toán hạng T cho node đa
+ * hình phải giữ nguyên id/order từng port (wire trỏ theo portId, không theo
+ * tên) — chỉ ghi đè `dataType` cho các port khớp tên với `entry.buildPorts`. */
+function applyOperandType(node: FbdNode, dataType: FbdDataType): void {
+  const entry = fbdPaletteEntry(node.typeRef)
+  if (!entry) return
+  const templates = entry.buildPorts(dataType)
+  node.ports = node.ports.map((port) => {
+    const template = templates.find((item) => item.name === port.name)
+    return template ? { ...port, dataType: template.dataType } : port
+  })
+}
+
+function findNode(document: FbdDocument, networkId: string, nodeId: string): { network: FbdNetwork; node: FbdNode } | null {
+  const network = document.networks.find((item) => item.id === networkId)
+  const node = network?.nodes.find((item) => item.id === nodeId)
+  return network && node ? { network, node } : null
+}
+
 export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction): FbdEditorState {
   switch (action.type) {
     case 'REPLACE_DOCUMENT':
@@ -322,6 +350,58 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       ordered[nextIndex].executionOrder = currentOrder
       return commit(state, document, { code: 'block-reordered' })
     }
+    case 'SET_NODE_VARIABLE': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const document = cloneFbdDocument(state.document)
+      const found = findNode(document, action.networkId, action.nodeId)
+      if (!found || (found.node.kind !== 'INPUT' && found.node.kind !== 'OUTPUT')) return reject(state, { code: 'node-not-found' })
+      if (!isFbdIdentifier(action.variable)) return reject(state, { code: 'invalid-variable-name' })
+      if (action.unit !== null && (action.unit.length < 1 || action.unit.length > 32)) return reject(state, { code: 'invalid-unit' })
+      found.node.parameters = { ...found.node.parameters, variable: action.variable }
+      found.node.ports[0].unit = action.unit
+      return commit(state, document, { code: 'node-variable-set', params: { variable: action.variable } })
+    }
+    case 'SET_NODE_VALUE': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const document = cloneFbdDocument(state.document)
+      const found = findNode(document, action.networkId, action.nodeId)
+      if (!found || found.node.kind !== 'CONSTANT') return reject(state, { code: 'node-not-found' })
+      if (!isValidConstantLiteral(found.node.typeRef as FbdDataType, action.value)) return reject(state, { code: 'invalid-constant-value' })
+      found.node.parameters = { ...found.node.parameters, value: action.value }
+      return commit(state, document, { code: 'node-value-set' })
+    }
+    case 'SET_NODE_TYPE': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const document = cloneFbdDocument(state.document)
+      const found = findNode(document, action.networkId, action.nodeId)
+      if (!found) return reject(state, { code: 'node-not-found' })
+      const { node } = found
+      if (!FBD_DATA_TYPES.includes(action.dataType)) return reject(state, { code: 'invalid-data-type' })
+      if (node.kind === 'INPUT' || node.kind === 'OUTPUT' || node.kind === 'CONSTANT') {
+        node.typeRef = action.dataType
+        node.ports = node.ports.map((port) => ({ ...port, dataType: action.dataType }))
+        if (node.kind === 'CONSTANT' && !isValidConstantLiteral(action.dataType, node.parameters.value)) {
+          node.parameters = { ...node.parameters, value: action.dataType === 'BOOL' ? false : action.dataType === 'TIME' ? 'T#0s' : 0 }
+        }
+      } else {
+        const entry = fbdPaletteEntry(node.typeRef)
+        if (!entry || !entry.polymorphic || !entry.allowedTypes.includes(action.dataType)) return reject(state, { code: 'invalid-data-type' })
+        applyOperandType(node, action.dataType)
+      }
+      return commit(state, document, { code: 'node-type-set', params: { type: action.dataType } })
+    }
+    case 'SET_NODE_FB_PARAMS': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const document = cloneFbdDocument(state.document)
+      const found = findNode(document, action.networkId, action.nodeId)
+      if (!found || found.node.kind !== 'FUNCTION_BLOCK') return reject(state, { code: 'node-not-found' })
+      if (action.instance !== null && !isFbdIdentifier(action.instance)) return reject(state, { code: 'invalid-instance-name' })
+      const parameters: Record<string, FbdParameterValue> = {}
+      if (action.instance !== null) parameters.instance = action.instance
+      if (action.retained) parameters.retained = true
+      found.node.parameters = parameters
+      return commit(state, document, { code: 'node-fb-params-set' })
+    }
     case 'UNDO': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
       const previous = state.past[state.past.length - 1]
@@ -383,6 +463,16 @@ export function translateFbdAnnouncement(pick: (vi: string, en: string) => strin
     case 'select-block-to-reorder': return pick('Hãy chọn block cần đổi thứ tự', 'Select a block to reorder')
     case 'reorder-at-boundary': return pick('Block đã ở biên thứ tự', 'Block is already at the order boundary')
     case 'block-reordered': return pick('Đã đổi thứ tự thực thi block', 'Block execution order changed')
+    case 'node-not-found': return pick('Không tìm thấy node đã chọn', 'Selected node not found')
+    case 'invalid-variable-name': return pick('Tên biến không hợp lệ', 'Invalid variable name')
+    case 'invalid-unit': return pick('Đơn vị không hợp lệ (1-32 ký tự)', 'Invalid unit (1-32 characters)')
+    case 'node-variable-set': return pick(`Đã đặt biến ${p.variable}`, `Set variable ${p.variable}`)
+    case 'invalid-constant-value': return pick('Giá trị hằng số không hợp lệ với kiểu đã chọn', 'Constant value is not valid for the selected type')
+    case 'node-value-set': return pick('Đã cập nhật giá trị hằng số', 'Constant value updated')
+    case 'invalid-data-type': return pick('Kiểu dữ liệu không hợp lệ cho node này', 'Data type is not valid for this node')
+    case 'node-type-set': return pick(`Đã đổi kiểu sang ${p.type}`, `Type changed to ${p.type}`)
+    case 'invalid-instance-name': return pick('Tên instance không hợp lệ', 'Invalid instance name')
+    case 'node-fb-params-set': return pick('Đã cập nhật tham số function block', 'Function block parameters updated')
     case 'nothing-to-undo': return pick('Không còn thay đổi để hoàn tác', 'No more changes to undo')
     case 'undone': return pick('Đã hoàn tác', 'Undone')
     case 'nothing-to-redo': return pick('Không còn thay đổi để làm lại', 'No more changes to redo')

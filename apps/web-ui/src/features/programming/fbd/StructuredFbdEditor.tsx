@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Plus, Redo2, RotateCcw, Trash2, Undo2 } from 'lucide-react'
-import { useEffect, useId, useReducer, useRef } from 'react'
+import { useEffect, useId, useReducer, useRef, useState } from 'react'
 
 import { Button } from '../../../shared/components/Button'
 import { useI18n } from '../../../shared/i18n'
@@ -12,7 +12,26 @@ import {
   type FbdEditorAction,
   type FbdKeyboardCommand,
 } from './commands'
-import { canonicalFbdJson, findFbdPort, validateFbdDocument, type FbdDocument, type FbdNetwork, type FbdNode, type FbdWire } from './model'
+import {
+  FBD_DATA_TYPES,
+  canonicalFbdJson,
+  findFbdPort,
+  isFbdIdentifier,
+  validateFbdDocument,
+  type FbdDataType,
+  type FbdDocument,
+  type FbdNetwork,
+  type FbdNode,
+  type FbdParameterValue,
+  type FbdWire,
+} from './model'
+import {
+  FBD_PALETTE,
+  FBD_PALETTE_CATEGORY_ORDER,
+  defaultConstantLiteral,
+  fbdPaletteEntry,
+  isValidConstantLiteral,
+} from './palette'
 
 export interface StructuredFbdEditorProps {
   document: FbdDocument
@@ -43,6 +62,240 @@ function newAndNode(executionOrder: number): FbdNode {
   }
 }
 
+/* WP-05 (FBD_EDITOR_DESIGN.md §1) — mọi block Logic/Compare/Math/Conversion/
+ * Timer/Trigger/Control tạo qua đúng 1 factory chung, executionOrder do
+ * reducer `ADD_NODE` gán lại (luôn nối cuối network) nên không cần tính ở đây. */
+function buildPaletteNode(entry: (typeof FBD_PALETTE)[number]): FbdNode {
+  const ports = entry.buildPorts(entry.defaultType)
+  return {
+    id: newUuid(),
+    kind: entry.kind,
+    typeRef: entry.typeRef,
+    executionOrder: 0,
+    parameters: {},
+    ports: ports.map((port, index) => ({
+      id: newUuid(), name: port.name, direction: port.direction, dataType: port.dataType, unit: null, order: index,
+    })),
+  }
+}
+
+/* WP-06 (FBD_EDITOR_DESIGN.md §2) — INPUT có 1 port OUTPUT (node "xuất" giá
+ * trị biến), OUTPUT có 1 port INPUT (node "nhận" giá trị để ghi ra biến);
+ * tên port "OUT"/"IN" khớp đúng golden `ahu_fan_enable.json`. */
+function buildInterfaceNode(kind: 'INPUT' | 'OUTPUT', variable: string, dataType: FbdDataType, unit: string | null): FbdNode {
+  return {
+    id: newUuid(),
+    kind,
+    typeRef: dataType,
+    executionOrder: 0,
+    parameters: { variable },
+    ports: [{
+      id: newUuid(),
+      name: kind === 'INPUT' ? 'OUT' : 'IN',
+      direction: kind === 'INPUT' ? 'OUTPUT' : 'INPUT',
+      dataType,
+      unit,
+      order: 0,
+    }],
+  }
+}
+
+function buildConstantNode(dataType: FbdDataType, value: FbdParameterValue): FbdNode {
+  return {
+    id: newUuid(),
+    kind: 'CONSTANT',
+    typeRef: dataType,
+    executionOrder: 0,
+    parameters: { value },
+    ports: [{ id: newUuid(), name: 'OUT', direction: 'OUTPUT', dataType, unit: null, order: 0 }],
+  }
+}
+
+const inputClass = 'rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-xs'
+
+function NodeInspector({
+  node, networkId, canEdit, dispatch, pick,
+}: {
+  node: FbdNode
+  networkId: string
+  canEdit: boolean
+  dispatch: (action: FbdEditorAction) => void
+  pick: (vi: string, en: string) => string
+}) {
+  const entry = fbdPaletteEntry(node.typeRef)
+  const [variableDraft, setVariableDraft] = useState('')
+  const [unitDraft, setUnitDraft] = useState('')
+  const [typeDraft, setTypeDraft] = useState<FbdDataType>('BOOL')
+  const [valueDraft, setValueDraft] = useState('')
+  const [instanceDraft, setInstanceDraft] = useState('')
+  const [retainedDraft, setRetainedDraft] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setError(null)
+    if (node.kind === 'INPUT' || node.kind === 'OUTPUT') {
+      setVariableDraft(typeof node.parameters.variable === 'string' ? node.parameters.variable : '')
+      setUnitDraft(node.ports[0]?.unit ?? '')
+      setTypeDraft(node.typeRef as FbdDataType)
+    } else if (node.kind === 'CONSTANT') {
+      setTypeDraft(node.typeRef as FbdDataType)
+      setValueDraft(String(node.parameters.value ?? ''))
+    } else if (node.kind === 'FUNCTION_BLOCK') {
+      setInstanceDraft(typeof node.parameters.instance === 'string' ? node.parameters.instance : '')
+      setRetainedDraft(node.parameters.retained === true)
+    } else if (entry?.polymorphic) {
+      const typedPort = node.ports.find((port) => entry.typedPortNames.includes(port.name))
+      setTypeDraft(typedPort?.dataType ?? entry.defaultType)
+    }
+  }, [node.id, node.kind, node.parameters, node.ports, node.typeRef, entry])
+
+  if (node.kind === 'INPUT' || node.kind === 'OUTPUT') {
+    return (
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (!isFbdIdentifier(variableDraft)) { setError(pick('Tên biến không hợp lệ', 'Invalid variable name')); return }
+          setError(null)
+          if (typeDraft !== node.typeRef) dispatch({ type: 'SET_NODE_TYPE', networkId, nodeId: node.id, dataType: typeDraft })
+          dispatch({
+            type: 'SET_NODE_VARIABLE', networkId, nodeId: node.id,
+            variable: variableDraft, unit: unitDraft.trim().length > 0 ? unitDraft.trim() : null,
+          })
+        }}
+      >
+        <label className="flex flex-col gap-1 text-xs">
+          {pick('Tên biến', 'Variable name')}
+          <input className={inputClass} value={variableDraft} disabled={!canEdit} onChange={(event) => setVariableDraft(event.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          {pick('Kiểu', 'Type')}
+          <select className={inputClass} value={typeDraft} disabled={!canEdit} onChange={(event) => setTypeDraft(event.target.value as FbdDataType)}>
+            {FBD_DATA_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          {pick('Đơn vị (tuỳ chọn)', 'Unit (optional)')}
+          <input className={inputClass} value={unitDraft} disabled={!canEdit} onChange={(event) => setUnitDraft(event.target.value)} />
+        </label>
+        <Button size="sm" type="submit" disabled={!canEdit}>{pick('Lưu', 'Save')}</Button>
+        {error && <span className="text-xs text-[var(--c-danger-fg)]">{error}</span>}
+      </form>
+    )
+  }
+
+  if (node.kind === 'CONSTANT') {
+    return (
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          const parsed: FbdParameterValue = typeDraft === 'BOOL' ? valueDraft === 'true'
+            : typeDraft === 'TIME' ? valueDraft
+            : Number(valueDraft)
+          if (!isValidConstantLiteral(typeDraft, parsed)) { setError(pick('Giá trị không hợp lệ với kiểu đã chọn', 'Value is not valid for the selected type')); return }
+          setError(null)
+          if (typeDraft !== node.typeRef) dispatch({ type: 'SET_NODE_TYPE', networkId, nodeId: node.id, dataType: typeDraft })
+          dispatch({ type: 'SET_NODE_VALUE', networkId, nodeId: node.id, value: parsed })
+        }}
+      >
+        <label className="flex flex-col gap-1 text-xs">
+          {pick('Kiểu', 'Type')}
+          <select
+            className={inputClass}
+            value={typeDraft}
+            disabled={!canEdit}
+            onChange={(event) => {
+              const next = event.target.value as FbdDataType
+              setTypeDraft(next)
+              setValueDraft(String(defaultConstantLiteral(next)))
+            }}
+          >
+            {FBD_DATA_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          {pick('Giá trị', 'Value')}
+          {typeDraft === 'BOOL' ? (
+            <select className={inputClass} value={valueDraft} disabled={!canEdit} onChange={(event) => setValueDraft(event.target.value)}>
+              <option value="true">TRUE</option>
+              <option value="false">FALSE</option>
+            </select>
+          ) : (
+            <input className={inputClass} value={valueDraft} disabled={!canEdit} onChange={(event) => setValueDraft(event.target.value)}
+              placeholder={typeDraft === 'TIME' ? 'T#30s' : undefined} />
+          )}
+        </label>
+        <Button size="sm" type="submit" disabled={!canEdit}>{pick('Lưu', 'Save')}</Button>
+        {error && <span className="text-xs text-[var(--c-danger-fg)]">{error}</span>}
+      </form>
+    )
+  }
+
+  if (node.kind === 'FUNCTION_BLOCK') {
+    return (
+      <div className="space-y-2">
+        {entry?.warning && (
+          <p className="rounded bg-[var(--c-warn-bg)] px-2 py-1 text-xs text-[var(--c-warn-fg)]">
+            {pick(entry.warning.vi, entry.warning.en)}
+          </p>
+        )}
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const trimmed = instanceDraft.trim()
+            if (trimmed.length > 0 && !isFbdIdentifier(trimmed)) { setError(pick('Tên instance không hợp lệ', 'Invalid instance name')); return }
+            setError(null)
+            dispatch({
+              type: 'SET_NODE_FB_PARAMS', networkId, nodeId: node.id,
+              instance: trimmed.length > 0 ? trimmed : null, retained: retainedDraft,
+            })
+          }}
+        >
+          <label className="flex flex-col gap-1 text-xs">
+            {pick('Tên instance (tuỳ chọn)', 'Instance name (optional)')}
+            <input className={inputClass} value={instanceDraft} disabled={!canEdit} onChange={(event) => setInstanceDraft(event.target.value)}
+              placeholder={pick('tự sinh nếu để trống', 'auto-generated if empty')} />
+          </label>
+          <label className="flex items-center gap-2 text-xs">
+            <input type="checkbox" checked={retainedDraft} disabled={!canEdit} onChange={(event) => setRetainedDraft(event.target.checked)} />
+            {pick('RETAIN (giữ trạng thái qua power-cycle)', 'RETAIN (persist across power-cycle)')}
+          </label>
+          <Button size="sm" type="submit" disabled={!canEdit}>{pick('Lưu', 'Save')}</Button>
+          {error && <span className="text-xs text-[var(--c-danger-fg)]">{error}</span>}
+        </form>
+      </div>
+    )
+  }
+
+  if (entry?.polymorphic) {
+    return (
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          dispatch({ type: 'SET_NODE_TYPE', networkId, nodeId: node.id, dataType: typeDraft })
+        }}
+      >
+        <label className="flex flex-col gap-1 text-xs">
+          {pick('Kiểu toán hạng', 'Operand type')}
+          <select className={inputClass} value={typeDraft} disabled={!canEdit} onChange={(event) => setTypeDraft(event.target.value as FbdDataType)}>
+            {entry.allowedTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
+        </label>
+        <Button size="sm" type="submit" disabled={!canEdit}>{pick('Lưu', 'Save')}</Button>
+      </form>
+    )
+  }
+
+  return (
+    <p className="text-xs text-[var(--c-text-dim)]">
+      {pick('Block cố định — không có tham số để sửa.', 'Fixed-shape block — no editable parameters.')}
+    </p>
+  )
+}
+
 export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
@@ -50,6 +303,14 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
   const portButtons = useRef(new Map<string, HTMLButtonElement>())
   const sectionRef = useRef<HTMLElement>(null)
   const keyboardHelpId = useId()
+  const [paletteTypeRef, setPaletteTypeRef] = useState(FBD_PALETTE[0]?.id ?? '')
+  const [creatingKind, setCreatingKind] = useState<'INPUT' | 'OUTPUT' | 'CONSTANT' | null>(null)
+  const [ioVariable, setIoVariable] = useState('')
+  const [ioType, setIoType] = useState<FbdDataType>('BOOL')
+  const [ioUnit, setIoUnit] = useState('')
+  const [constantType, setConstantType] = useState<FbdDataType>('BOOL')
+  const [constantValue, setConstantValue] = useState('false')
+  const [createError, setCreateError] = useState<string | null>(null)
 
   useEffect(() => {
     dispatch({ type: 'SET_CAN_EDIT', canEdit })
@@ -123,6 +384,39 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
     if (action) dispatch(action)
   }
 
+  function addPaletteNode() {
+    const entry = fbdPaletteEntry(paletteTypeRef)
+    const network = state.document.networks.find((item) => item.id === selectedNetworkId)
+    if (!entry || !network) return
+    dispatch({ type: 'ADD_NODE', networkId: network.id, node: buildPaletteNode(entry) })
+  }
+
+  function submitInterfaceNode(kind: 'INPUT' | 'OUTPUT') {
+    const network = state.document.networks.find((item) => item.id === selectedNetworkId)
+    if (!network) return
+    if (!isFbdIdentifier(ioVariable)) { setCreateError(pick('Tên biến không hợp lệ', 'Invalid variable name')); return }
+    setCreateError(null)
+    const unit = ioUnit.trim().length > 0 ? ioUnit.trim() : null
+    dispatch({ type: 'ADD_NODE', networkId: network.id, node: buildInterfaceNode(kind, ioVariable, ioType, unit) })
+    setCreatingKind(null)
+    setIoVariable('')
+    setIoUnit('')
+  }
+
+  function submitConstantNode() {
+    const network = state.document.networks.find((item) => item.id === selectedNetworkId)
+    if (!network) return
+    const parsed: FbdParameterValue = constantType === 'BOOL' ? constantValue === 'true'
+      : constantType === 'TIME' ? constantValue
+      : Number(constantValue)
+    if (!isValidConstantLiteral(constantType, parsed)) { setCreateError(pick('Giá trị không hợp lệ với kiểu đã chọn', 'Value is not valid for the selected type')); return }
+    setCreateError(null)
+    dispatch({ type: 'ADD_NODE', networkId: network.id, node: buildConstantNode(constantType, parsed) })
+    setCreatingKind(null)
+  }
+
+  const selectedPaletteEntry = fbdPaletteEntry(paletteTypeRef)
+
   const issues = validateFbdDocument(state.document)
   return (
     <section
@@ -143,17 +437,14 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
           <h2 className="text-lg font-semibold">FBD · {state.document.name}</h2>
           <p id={keyboardHelpId} className="text-xs text-[var(--c-text-dim)]">
             {pick(
-              'Insert thêm block · ↑/↓ chọn port · Enter nối · Alt+↑/↓ đổi thứ tự · Delete xóa · Ctrl+Z/Y hoàn tác/làm lại.',
-              'Insert block · arrows select port · Enter connects · Alt+arrows reorder · Delete removes · Ctrl+Z/Y undo/redo.',
+              'Insert thêm block AND · ↑/↓ chọn port · Enter nối · Alt+↑/↓ đổi thứ tự · Delete xóa · Ctrl+Z/Y hoàn tác/làm lại.',
+              'Insert adds an AND block · arrows select port · Enter connects · Alt+arrows reorder · Delete removes · Ctrl+Z/Y undo/redo.',
             )}
           </p>
         </div>
         <div className="flex flex-wrap gap-2" role="toolbar" aria-label={pick('Lệnh FBD', 'FBD commands')}>
           <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('ADD_NETWORK')}>
             {pick('Network', 'Network')}
-          </Button>
-          <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit || !selectedNetworkId} onClick={() => dispatchCommand('ADD_BLOCK')}>
-            {pick('Block AND', 'AND block')}
           </Button>
           <Button size="sm" icon={<ArrowUp className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('MOVE_NODE_UP')} aria-label={pick('Đưa block lên', 'Move block up')} />
           <Button size="sm" icon={<ArrowDown className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('MOVE_NODE_DOWN')} aria-label={pick('Đưa block xuống', 'Move block down')} />
@@ -165,6 +456,108 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
           </Button>
         </div>
       </div>
+
+      {/* WP-05/06 (FBD_EDITOR_DESIGN.md §1/§2) — palette 9 nhóm + tạo node giao diện */}
+      <div className="flex flex-wrap items-end gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3" aria-label={pick('Palette FBD', 'FBD palette')}>
+        <label className="flex flex-col gap-1 text-xs">
+          {pick('Khối', 'Block')}
+          <select
+            className={inputClass}
+            value={paletteTypeRef}
+            disabled={!canEdit || !selectedNetworkId}
+            onChange={(event) => setPaletteTypeRef(event.target.value)}
+          >
+            {FBD_PALETTE_CATEGORY_ORDER.filter((category) => category.id !== 'interface' && category.id !== 'constants').map((category) => (
+              <optgroup key={category.id} label={pick(category.labelVi, category.labelEn)}>
+                {FBD_PALETTE.filter((item) => item.category === category.id).map((item) => (
+                  <option key={item.id} value={item.id}>{pick(item.labelVi, item.labelEn)}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit || !selectedNetworkId} onClick={addPaletteNode}>
+          {pick('Thêm khối', 'Add block')}
+        </Button>
+        <Button size="sm" variant={creatingKind === 'INPUT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
+          onClick={() => { setCreatingKind(creatingKind === 'INPUT' ? null : 'INPUT'); setCreateError(null) }}>
+          {pick('Input', 'Input')}
+        </Button>
+        <Button size="sm" variant={creatingKind === 'OUTPUT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
+          onClick={() => { setCreatingKind(creatingKind === 'OUTPUT' ? null : 'OUTPUT'); setCreateError(null) }}>
+          {pick('Output', 'Output')}
+        </Button>
+        <Button size="sm" variant={creatingKind === 'CONSTANT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
+          onClick={() => {
+            setCreatingKind(creatingKind === 'CONSTANT' ? null : 'CONSTANT')
+            setCreateError(null)
+            setConstantValue(String(defaultConstantLiteral(constantType)))
+          }}>
+          {pick('Constant', 'Constant')}
+        </Button>
+        {selectedPaletteEntry?.warning && (
+          <p className="basis-full rounded bg-[var(--c-warn-bg)] px-2 py-1 text-xs text-[var(--c-warn-fg)]">
+            {pick(selectedPaletteEntry.warning.vi, selectedPaletteEntry.warning.en)}
+          </p>
+        )}
+      </div>
+
+      {(creatingKind === 'INPUT' || creatingKind === 'OUTPUT') && (
+        <form
+          className="flex flex-wrap items-end gap-2 rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] p-3"
+          onSubmit={(event) => { event.preventDefault(); submitInterfaceNode(creatingKind) }}
+        >
+          <label className="flex flex-col gap-1 text-xs">
+            {pick('Tên biến', 'Variable name')}
+            <input className={inputClass} value={ioVariable} onChange={(event) => setIoVariable(event.target.value)} autoFocus />
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            {pick('Kiểu', 'Type')}
+            <select className={inputClass} value={ioType} onChange={(event) => setIoType(event.target.value as FbdDataType)}>
+              {FBD_DATA_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            {pick('Đơn vị (tuỳ chọn)', 'Unit (optional)')}
+            <input className={inputClass} value={ioUnit} onChange={(event) => setIoUnit(event.target.value)} />
+          </label>
+          <Button size="sm" type="submit">{pick('Tạo', 'Create')}</Button>
+          <Button size="sm" variant="secondary" type="button" onClick={() => setCreatingKind(null)}>{pick('Hủy', 'Cancel')}</Button>
+          {createError && <span className="text-xs text-[var(--c-danger-fg)]">{createError}</span>}
+        </form>
+      )}
+      {creatingKind === 'CONSTANT' && (
+        <form
+          className="flex flex-wrap items-end gap-2 rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] p-3"
+          onSubmit={(event) => { event.preventDefault(); submitConstantNode() }}
+        >
+          <label className="flex flex-col gap-1 text-xs">
+            {pick('Kiểu', 'Type')}
+            <select
+              className={inputClass}
+              value={constantType}
+              onChange={(event) => { const next = event.target.value as FbdDataType; setConstantType(next); setConstantValue(String(defaultConstantLiteral(next))) }}
+            >
+              {FBD_DATA_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            {pick('Giá trị', 'Value')}
+            {constantType === 'BOOL' ? (
+              <select className={inputClass} value={constantValue} onChange={(event) => setConstantValue(event.target.value)}>
+                <option value="true">TRUE</option>
+                <option value="false">FALSE</option>
+              </select>
+            ) : (
+              <input className={inputClass} value={constantValue} onChange={(event) => setConstantValue(event.target.value)}
+                placeholder={constantType === 'TIME' ? 'T#30s' : undefined} autoFocus />
+            )}
+          </label>
+          <Button size="sm" type="submit">{pick('Tạo', 'Create')}</Button>
+          <Button size="sm" variant="secondary" type="button" onClick={() => setCreatingKind(null)}>{pick('Hủy', 'Cancel')}</Button>
+          {createError && <span className="text-xs text-[var(--c-danger-fg)]">{createError}</span>}
+        </form>
+      )}
 
       <div className="flex flex-wrap gap-2 text-xs" aria-label={pick('Trạng thái FBD', 'FBD status')}>
         <span className="rounded-full border border-[var(--c-border)] px-2 py-1">{state.document.networks.length}/256 network</span>
@@ -225,6 +618,11 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
                       )
                     })}
                   </div>
+                  {state.selection?.kind === 'node' && state.selection.nodeId === node.id && (
+                    <div className="mt-3 border-t border-[var(--c-border)] pt-3" aria-label={pick('Inspector node', 'Node inspector')}>
+                      <NodeInspector node={node} networkId={network.id} canEdit={canEdit} dispatch={dispatch} pick={pick} />
+                    </div>
+                  )}
                 </li>
               ))}
             </ol>

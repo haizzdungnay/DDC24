@@ -100,6 +100,10 @@ export function isCanonicalFbdUuid(value: string): boolean {
   return canonicalUuid.test(value)
 }
 
+export function isFbdIdentifier(value: string): boolean {
+  return identifier.test(value)
+}
+
 export function canonicalizeFbdDocument(document: FbdDocument): FbdDocument {
   const result = cloneFbdDocument(document)
   result.networks.sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
