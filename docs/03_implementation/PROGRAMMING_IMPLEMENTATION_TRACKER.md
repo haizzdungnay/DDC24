@@ -19,8 +19,8 @@ Criteria chưa `READY`.**
 | WP-05 FBD Palette | READY (`FBD_EDITOR_DESIGN.md` §1) | READY | DONE | N/A | N/A | DONE — `palette.test.ts` (14 test đối chiếu trực tiếp `kFuncs[]`/`binop_from_type_ref`/`st_fb_*`), `commands.test.ts` +5 test, `StructuredFbdEditor.test.tsx` +6 test RTL | Vitest 43/43 FBD PASS, 607/607 FE PASS; `tsc --noEmit` PASS; `eslint --max-warnings=0` PASS; `vite build` PASS; Playwright `programming.spec.ts` 10/10 PASS (mocked backend, mount thật trong browser, gồm WCAG A/AA) | `DONE` | UX + FE | Không |
 | WP-06 INPUT/OUTPUT/CONSTANT | READY (`FBD_EDITOR_DESIGN.md` §2) | READY | DONE | N/A | N/A | Phủ trong bộ test WP-05 (tạo INPUT/OUTPUT/CONSTANT qua form, từ chối tên biến sai) | Như WP-05 | `DONE` | UX + FE | Không |
 | WP-07 FBD Inspector | READY (`FBD_EDITOR_DESIGN.md` §3) | READY | DONE | N/A | N/A | Phủ trong bộ test WP-05 (đổi T toán hạng, sửa instance/RETAIN của FUNCTION_BLOCK, giữ port id khi đổi kiểu) | Như WP-05 | `DONE` | UX + FE | Không — riêng `FBD_LIBRARY_REGISTRY_SPEC` (Document Gate #7, registry sinh mã dùng chung) vẫn là nợ kỹ thuật đã biết trước, không chặn DONE của 3 WP này |
-| WP-08 FBD → Mapping Integration | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | — | `NOT_STARTED` | FE + BE | Không — WP-05/06/07 đã DONE, có thể bắt đầu |
-| WP-09 FBD Check/Commission/Runtime E2E | NOT_STARTED | N/A (verify, không build) | N/A | N/A | N/A | NOT_STARTED | — | `BLOCKED` | QA + FE + BE + Core | WP-08 chưa xong |
+| WP-08 FBD → Mapping Integration | READY | N/A (verify, không build — `MappingTab.tsx` đã đọc `collectFbdInterfaceVariables()` từ trước, D-07) | DONE (không đổi runtime code) | N/A | N/A | DONE — `MappingTab.test.tsx` +1 test tích hợp: dựng FBD document đúng shape `buildInterfaceNode()` sinh ra (WP-06), qua `JSON.stringify` round-trip thật, xác nhận dropdown Biến hiện đúng + map thành công | Vitest 608/608 FE PASS (+1); `tsc`/`eslint` PASS | `DONE` | FE + BE | Không |
+| WP-09 FBD Check/Commission/Runtime E2E | NOT_STARTED | N/A (verify, không build) | N/A | N/A | N/A | NOT_STARTED | — | `NOT_STARTED` | QA + FE + BE + Core | Không còn bị block — cần board Foxlinx thật + phiên trình duyệt (đã xác nhận SSH board hoạt động qua password `admin123`, deploy WP-05/06/07 thành công 2026-08-15; đăng nhập web-app thật cần credential riêng, chưa có sẵn — xem báo cáo cuối) |
 | WP-10 ST Editor Upgrade | DOC_REQUIRED | NOT_STARTED | NOT_STARTED | N/A | N/A | NOT_STARTED | — | `NOT_STARTED` | UX + FE | Cần Technical Selection Record trước Design |
 | WP-11 PGM-02 3-column Layout | READY (`PROGRAMMING_UI_UX_DESIGN.md` §16.2 đã đủ) | NOT_STARTED | NOT_STARTED | N/A | N/A | NOT_STARTED | — | `DESIGN` | UX + FE | Không — có thể bắt đầu Design ngay |
 | WP-12 RETAIN Reset | DOC_REQUIRED | NOT_STARTED | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | — | `DOC_REQUIRED` | Core + BE + FE + Safety | Cần xác nhận business semantics/permission/audit trước Design |
@@ -37,9 +37,9 @@ Criteria chưa `READY`.**
 | 4 | FBD tạo được INPUT/OUTPUT/CONSTANT | **Đạt** — WP-06 `DONE`, tạo qua form palette, validate tên biến/giá trị theo đúng kiểu |
 | 5 | FBD có block palette usable | **Đạt** — WP-05 `DONE`, 9 nhóm palette theo `FBD_EDITOR_DESIGN.md` §1, xác nhận sống trong browser (Playwright mocked) |
 | 6 | FBD có Inspector cần thiết | **Đạt** — WP-07 `DONE`, sửa biến/đơn vị/kiểu/giá trị/instance/RETAIN theo đúng node kind |
-| 7 | FBD interface map được Point thật | Chưa đạt — WP-08 `NOT_STARTED` (không còn bị block, sẵn sàng làm tiếp) |
-| 8 | FBD Check thật PASSED | Chưa đạt — WP-09 `BLOCKED` chờ WP-08 |
-| 9 | FBD Commission thật thành công | Chưa đạt — WP-09 `BLOCKED` chờ WP-08 |
+| 7 | FBD interface map được Point thật | **Đạt** — WP-08 `DONE`, xác nhận `MappingTab` đọc đúng node INPUT/OUTPUT do palette WP-06 sinh ra qua JSON round-trip thật (test tích hợp mới) |
+| 8 | FBD Check thật PASSED | Chưa đạt — WP-09 `NOT_STARTED`, cần phiên trình duyệt thật trên board (đăng nhập web-app) |
+| 9 | FBD Commission thật thành công | Chưa đạt — WP-09 `NOT_STARTED`, như trên |
 | 10 | Runtime quan sát được giá trị thật | Chưa đạt cho FBD (đã đạt cho ST theo D-07, ngoài phạm vi Master Plan này) |
 | 11 | ST spec khớp implementation | **Đạt** — WP-04 DONE |
 | 12 | PID có trạng thái approval rõ ràng | **Đạt về mặt tài liệu** — WP-04 ghi rõ "Implemented, chưa Controls+Safety review"; review thật **chưa xảy ra** |

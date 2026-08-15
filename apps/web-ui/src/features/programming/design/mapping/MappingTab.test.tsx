@@ -128,6 +128,56 @@ describe('MappingTab — chọn biến từ VAR_INPUT/VAR_OUTPUT, không gõ tay
     expect(within(dialog).getByRole('button', { name: 'Ánh xạ' })).toBeDisabled()
   })
 
+  it('WP-08: đọc đúng biến INPUT/OUTPUT từ Program FBD tạo qua palette (WP-05/06), qua đúng JSON.stringify round-trip thật', async () => {
+    // Tài liệu này KHÔNG viết tay tự do — có cùng shape hệt như
+    // buildInterfaceNode() trong StructuredFbdEditor.tsx sinh ra khi user bấm
+    // "Input"/"Output" ở palette (kind INPUT có port OUTPUT tên "OUT", kind
+    // OUTPUT có port INPUT tên "IN", variable ở parameters.variable) — xác
+    // nhận integration point collectFbdInterfaceVariables() vẫn đọc đúng dữ
+    // liệu do palette mới sinh ra, không chỉ đúng với golden JSON cũ.
+    const fbdDocument = {
+      $schema: '../../fbd_v1.schema.json', schemaVersion: 1, profileId: 'revA-1t-1-5-30',
+      graphId: '30000000-0000-4000-8000-000000000001', name: 'AHU_FAN_ENABLE_WP08',
+      networks: [{
+        id: '30000000-0000-4000-8000-000000000002', name: 'NETWORK_1', order: 0,
+        nodes: [
+          {
+            id: '30000000-0000-4000-8000-000000000003', kind: 'INPUT', typeRef: 'REAL', executionOrder: 0,
+            parameters: { variable: 'SETPOINT' },
+            ports: [{ id: '30000000-0000-4000-8000-000000000004', name: 'OUT', direction: 'OUTPUT', dataType: 'REAL', unit: 'degC', order: 0 }],
+          },
+          {
+            id: '30000000-0000-4000-8000-000000000005', kind: 'OUTPUT', typeRef: 'BOOL', executionOrder: 1,
+            parameters: { variable: 'FAN_CMD' },
+            ports: [{ id: '30000000-0000-4000-8000-000000000006', name: 'IN', direction: 'INPUT', dataType: 'BOOL', unit: null, order: 0 }],
+          },
+        ],
+        wires: [],
+      }],
+    }
+    catalogItems.length = 0
+    catalogItems.push({ category: 'VP', pointId: 'setpoint-src', deviceId: undefined, name: 'setpoint-src', dataType: 'REAL', direction: 'READ', writable: false, quality: 'GOOD', value: 21 })
+    const document = baseDocument()
+    document.programs.push({ programId: 'program-fbd-1', name: 'AHU_FBD', kind: 'PROGRAM', language: 'FBD', document: JSON.stringify(fbdDocument) })
+    const onSave = vi.fn().mockResolvedValue(true)
+
+    render(<I18nProvider><MappingTab document={document} saving={false} onSave={onSave} /></I18nProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
+    const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
+
+    const variableSelect = within(dialog).getByRole('combobox', { name: 'Biến' })
+    const options = within(variableSelect).getAllByRole('option').map((option) => option.textContent)
+    expect(options).toEqual(['SETPOINT (vào · REAL)', 'FAN_CMD (ra · BOOL)'])
+
+    fireEvent.click(within(dialog).getByText(/VP:setpoint-src/))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ánh xạ' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const operations = onSave.mock.calls[0][0]
+    expect(operations[0]).toMatchObject({ op: 'upsertVariable', variable: { programId: 'program-fbd-1', name: 'SETPOINT', type: 'REAL', class: 'INPUT' } })
+    expect(operations[1]).toMatchObject({ op: 'upsertBinding', binding: { point: { category: 'VP', pointId: 'setpoint-src' } } })
+  })
+
   it('ẩn biến đã ánh xạ rồi, hiện thông báo khi hết biến khả dụng', async () => {
     const document = baseDocument()
     document.programs.push({

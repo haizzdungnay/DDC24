@@ -8,6 +8,30 @@
 
 ## [Unreleased]
 
+### Added — WP-08 xác nhận FBD→Mapping integration (Master Plan 56)
+
+Không cần đổi runtime code: `MappingTab.tsx` đã đọc `collectFbdInterfaceVariables()`
+từ D-07 (Binding Manifest, PR trước), và node INPUT/OUTPUT do palette WP-06
+(mục trên) sinh ra dùng đúng shape hàm đó mong đợi (`parameters.variable` +
+`typeRef`, đối chiếu golden `ahu_fan_enable.json`). Nhưng bộ test
+`MappingTab.test.tsx` từ trước tới nay **chỉ dùng Program ST**, chưa có test
+nào chứng minh integration này hoạt động thật với Program FBD qua đúng
+`JSON.stringify` round-trip production dùng — đây là khoảng hở đáng lẽ chặn
+`DONE` của WP-08 nếu bỏ qua.
+
+Thêm 1 test tích hợp: dựng FBD document THEO ĐÚNG shape `buildInterfaceNode()`
+(mới ở WP-06) sinh ra khi user bấm "Input"/"Output" ở palette (không viết
+tay tự do theo ý), gán vào `program.document` dạng chuỗi JSON, render
+`MappingTab`, xác nhận dropdown "Biến" hiện đúng 2 biến với hướng/kiểu đúng
+và map thành công tới Point tương thích.
+
+**FE:** `apps/web-ui/src/features/programming/design/mapping/MappingTab.test.tsx` (+1 test).
+
+**Kiểm chứng:** `npx vitest --run --environment jsdom src` → 608/608 PASS;
+`tsc --noEmit` PASS; `eslint --max-warnings=0` PASS. Không deploy board —
+bundle production không đổi (chỉ thêm test), triển khai lần deploy tiếp theo
+sẽ gộp cùng thay đổi runtime kế tiếp.
+
 ### Added — Phase 2 FE Master Plan Programming (WP-05/06/07, FBD Palette+Inspector) theo Lệnh triển khai CTO/Owner 2026-08-15
 
 Tiếp nối Phase 0+1 (mục dưới): viết
