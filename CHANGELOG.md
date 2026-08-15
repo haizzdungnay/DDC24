@@ -8,6 +8,37 @@
 
 ## [Unreleased]
 
+### Fixed — ST Editor overlay lem chữ (đã deploy trước khi phát hiện, WP-10)
+
+User báo lỗi hiển thị thật kèm ảnh chụp ngay sau khi PR #183 deploy lên
+Foxlinx: overlay tô cú pháp và chữ thật của `<textarea>` cùng hiện chồng
+lên nhau, tạo hiệu ứng "chữ đôi/lem" khó đọc trên mọi Program ST nhiều
+dòng.
+
+**Nguyên nhân gốc:** `styles.css` có reset toàn cục
+`textarea { font: inherit; color: inherit; }` viết NGOÀI mọi `@layer`.
+Trong CSS hiện đại (Tailwind v4 dùng `@layer`), **rule không nằm trong bất
+kỳ layer nào luôn thắng rule có layer, bất kể độ đặc hiệu (specificity)** —
+nên `color: inherit` (type selector) của reset này thắng cả
+`.text-transparent { color: transparent }` (class selector, đặc hiệu cao
+hơn theo lý thuyết CSS thông thường) vì `text-transparent` do Tailwind
+sinh ra nằm trong `@layer utilities`. Kết quả: chữ thật của `<textarea>`
+vẫn hiển thị màu bình thường thay vì trong suốt, chồng lên overlay tô màu
+bên dưới nó.
+
+**Cách sửa:** đổi `text-transparent caret-[var(--c-text)]` (class Tailwind)
+thành `style={{ color: 'transparent', caretColor: 'var(--c-text)' }}`
+(inline style) trên `<textarea>` của `SourceEditor`
+(`design/editor/ProgramsTab.tsx`) — inline style luôn thắng mọi rule
+stylesheet bất kể layer/đặc hiệu, không phụ thuộc thứ tự cascade dễ vỡ.
+
+**Kiểm chứng:** không phát hiện được bằng RTL/jsdom (jsdom không tính
+cascade CSS thật) — phải xác nhận bằng ảnh chụp trình duyệt thật. Thêm
+tạm một test Playwright thủ công (không commit vào suite) render đúng
+Program `AHU_FanControl` từ ảnh lỗi user gửi, xác nhận chữ hiển thị sạch,
+không lem, sau đó gỡ bỏ. Vitest 641/641 PASS; `tsc`/`eslint`/`build` PASS
+sau khi sửa; deploy lại Foxlinx ngay để thay bản lỗi vừa lên trước đó.
+
 ### Added — WP-10 ST Editor P0 (CTO/Product Owner approval 2026-08-15 §4-6)
 
 CTO/Product Owner duyệt Phương án A (mở rộng `SourceEditor` tại chỗ, không
