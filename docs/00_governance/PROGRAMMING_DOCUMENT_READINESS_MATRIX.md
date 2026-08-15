@@ -33,7 +33,7 @@
 | 9 | `PROGRAMMING_LANGUAGE_COMPILER_DESIGN` | [`docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md`](../02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md) (`DDD-LANG-PROG-001`) | **Đã đồng bộ trong phiên này (WP-04, Rev 0.8→0.9)** | Khớp source sau khi sửa (PID "target"→"Implemented") | Compiler + Controls Lead | Đã xong phần đồng bộ tài liệu. Blocker "Unit/conversion/PID semantic chưa khóa" (Controls+Safety review) giữ nguyên, chưa đóng | Không chặn Phase 0/1. Chặn việc **công bố PID production-ready** |
 | 10 | `API_DATA_CONTRACT_SPEC` | [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml) + [`docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md`](../02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md) (`IFSPEC-PROG-001`, v1.9) | Current; OpenAPI cập nhật trong phiên này (thêm `ProgrammingProject.latestCheck`, WP-01) | Khớp | BE + Compiler Lead | Không cần sửa thêm trước Phase 1. Đồng bộ lại phần Monitor/Trace nếu có thay đổi tương lai | Không chặn |
 | 11 | `PROGRAMMING_RUNTIME_INTERFACE_SPEC` | Tên gần nhất trong repo: [`docs/02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md`](../02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md) (`DDD-RUNTIME-PROG-001`, Rev 0.6) | Tên khác CTO liệt kê nhưng nội dung tương ứng (lifecycle + interface Core↔BE) | Khớp phần lớn; target/HIL/power-cut còn mở (đã biết, ngoài phạm vi Document Gate) | Runtime Architect | Xác nhận với CTO đây đúng là tài liệu được nhắc tới trong lệnh (khác tên) — không tạo trùng lặp | Không chặn |
-| 12 | `SECURITY_RBAC_AUDIT_SPEC` | [`docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md`](../02_design/software/PROGRAMMING_SECURITY_DESIGN.md) (Rev 0.6, **M3 — Review Ready**) | Current nhưng **chưa APPROVED FOR IMPLEMENTATION** (chỉ Review Ready) | Khớp RBAC 2-mức (Viewer/Admin) xác nhận ở gap report §4; **KHÔNG có phần Artifact Trust/Signing** — đây chính là scope thiếu cho `WP-13` (D-05) | Security + Controls | **Bắt buộc mở rộng trước WP-13**: thêm threat model/signing/key provisioning theo D-05. TLS production cũng còn chặn mutation theo trạng thái hiện tại — cần xác nhận đã đóng hay còn mở trước Phase 4 | **Chặn WP-13** |
+| 12 | `SECURITY_RBAC_AUDIT_SPEC` | [`docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md`](../02_design/software/PROGRAMMING_SECURITY_DESIGN.md) (Rev 0.6, **M3 — Review Ready**) **+** [`PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md`](../02_design/software/PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md) (**mới, Rev 1.0, Draft**) | Current + phần Artifact Trust **đã tạo** | Khớp RBAC 2-mức (Viewer/Admin) xác nhận ở gap report §4; Artifact Trust mới đối chiếu trực tiếp `st_loader.cpp`/`st_ir.cpp`/`st_public_key.hpp` (C++) và `runner.go` (Go) — phát hiện crypto sign+verify Ed25519 đã có sẵn cả hai chiều, khoảng thiếu thật là quy trình ký/custody khoá, không phải code | Security + Controls | Đã viết Draft. **Còn cần:** Security Architecture review + duyệt trước khi bật `integrityMode=SIGNED` (exit criteria WP-13 tự đặt) — chưa APPROVED FOR IMPLEMENTATION. TLS production cũng còn chặn mutation theo trạng thái hiện tại — cần xác nhận đã đóng hay còn mở trước Phase 4 | Gate #12 **mở** (tài liệu tồn tại) — WP-13 vẫn `DESIGN`, chưa `IMPLEMENTING` (chờ duyệt) |
 | 13 | `REQUIREMENT_TRACEABILITY_MATRIX` | [`docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) (Rev 3.21, **APPROVED FOR IMPLEMENTATION**) | Current | Khớp tại thời điểm Rev 3.21; **chưa có dòng cho WP-01..13/`WP-MULTIPROGRAM-ARCH` mới** (bình thường, các WP này mới phát sinh hôm nay) | Verification Lead | Thêm dòng traceability cho từng WP khi WP đó chuyển `READY_TO_IMPLEMENT` — không làm ngay cho toàn bộ 14 WP cùng lúc, tránh mục rỗng vô nghĩa | Không chặn Phase 0/1; **chặn việc đóng bất kỳ WP nào thành DONE** (DoD yêu cầu truy vết được — xem Master Plan §IX) |
 | 14 | `V_AND_V_ACCEPTANCE_TEST_SPEC` | [`docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md`](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) (`VVP-PROG-001`, Rev 1.9, **APPROVED FOR IMPLEMENTATION**) | Current | Khớp 32 kịch bản baseline; **chưa có kịch bản riêng cho G-1..G-10** (Overview state, FBD palette, v.v. — tất cả là finding mới 2026-08-15) | Verification Lead | Thêm kịch bản V&V cho từng WP khi WP đó vào `TESTING` — cùng nhịp với REQUIREMENT_TRACEABILITY_MATRIX | Không chặn Phase 0/1; **chặn `RELEASE_READY`** (đã BLOCKED sẵn từ trước, không đổi) |
 
@@ -46,7 +46,8 @@
 | Current + khớp source, không cần sửa | #4, #5, #10 (3/14) |
 | Đã đồng bộ **trong phiên này** (WP-04) | #8, #9 (2/14) |
 | **Tạo mới trong phiên này** (mở Gate #6) | #6 (1/14) |
-| Current nhưng có ghi chú/khoảng hở nhỏ | #11, #12, #13, #14 (4/14) |
+| Current nhưng có ghi chú/khoảng hở nhỏ | #11, #13, #14 (3/14) |
+| **Mở rộng trong phiên này** (mở Gate #12) | #12 (1/14) |
 | MISSING hẳn | #2, #3, #7 (3/14) |
 | Mâu thuẫn thẩm quyền (2 bản) | #1 (1/14) |
 
@@ -64,8 +65,13 @@ tay hiện tại, đã đúng theo WP-03) — có thể làm registry chung song
 chặn. WP-08/WP-09 vẫn `BLOCKED` chờ WP-06/WP-05..08 hoàn tất theo đúng chuỗi
 phụ thuộc trong Tracker.
 
-**`DOC_READY` cho Phase 4 WP-13 (Artifact Trust): NO.** Chặn bởi #12 cần mở
-rộng phần signing/threat model.
+**`DOC_READY` cho Phase 4 WP-13 (Artifact Trust): Gate #12 đã mở** (đã viết
+`PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md`), nhưng WP-13 vẫn không
+được implement — exit criteria WP-13 tự đặt yêu cầu **Security Architecture
+review và duyệt** tài liệu này trước khi bật `integrityMode=SIGNED` cho bất
+kỳ target nào. Document Gate và Implementation Gate là hai cổng khác nhau ở
+đây; mở Gate #12 chỉ giải quyết "tài liệu có tồn tại", không thay thế bước
+duyệt bảo mật.
 
 **`DOC_READY` cho `WP-MULTIPROGRAM-ARCH`: NO.** Chặn bởi #1 (PM/CTO chưa
 chọn Product Spec authority — ảnh hưởng trực tiếp phạm vi kiến trúc đa
@@ -79,3 +85,4 @@ Program) và cần #2 nếu Product Owner quyết định tách file riêng.
 |---|---|---|
 | 1.0 | 2026-08-15 | Tạo mới theo lệnh CTO/Owner §III. Kiểm kê 14 tài liệu: 9 current/đã đồng bộ, 4 MISSING, 1 mâu thuẫn thẩm quyền. `DOC_READY=YES` cho Phase 1, `NO` cho Phase 2/WP-13/WP-MULTIPROGRAM-ARCH. |
 | 1.1 | 2026-08-15 | #6 `FBD_EDITOR_DESIGN` tạo mới (Rev 1.0) — Gate #6 mở. `DOC_READY=YES` cho WP-05/06/07. |
+| 1.2 | 2026-08-15 | #12 mở rộng: `PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md` tạo mới (Rev 1.0, Draft) — Document Gate #12 mở, nhưng Implementation Gate WP-13 vẫn đóng (chờ Security Architecture duyệt). |
