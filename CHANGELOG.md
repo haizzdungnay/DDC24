@@ -8,6 +8,59 @@
 
 ## [Unreleased]
 
+### Added — `tools/fake_mcu` mô phỏng đầy đủ 16 kênh UI + 4 AO + 4 DO của một AHU thật, đóng vòng feedback theo lệnh (2026-08-14)
+
+Trước đây fake MCU sinh giá trị 16 kênh UI gần như ngẫu nhiên (sin/ramp độc
+lập với AO/DO) — không đủ để test trọn vòng một Program AHU thật (tạo ST →
+map Point → Check → Commission → xem Runtime phản hồi đúng vật lý), phục vụ
+việc target-verify `F-PROG-ASBUILT-013` (Binding Manifest, D-07) trên board
+Foxlinx với Program `AHU_FanControl`.
+
+`tools/fake_mcu/fake_mcu.cpp`: 16 kênh UI nay mô phỏng đúng field device một
+AHU (SAT/RAT/OAT/MAT/Duct Static Pressure/Supply Humidity/Return CO2/Damper
+FB/Filter DP/Freeze Stat/Smoke Detector/Fan Status/High Static/CHW Leaving
+Temp/Heat Valve FB/VFD Speed FB — bảng đấu nối đầy đủ và cách cấu hình
+`/eng/inputs` tương ứng ở tài liệu dưới); các kênh feedback (damper/valve/
+VFD) và điều kiện an toàn Freeze Stat phản hồi ĐỘNG theo lệnh AO/DO Core đã
+gửi thay vì hằng số độc lập — đóng vòng vật lý thật (`AO-01 Fan Speed →
+UI-16 VFD FB` + `UI-05 DSP theo fan law bậc 2`; `AO-02 Damper → UI-08 FB` +
+`UI-04 MAT trộn OAT/RAT` + `UI-10 Freeze Stat trip khi MAT<3°C`; `AO-03 CHW
+Valve → UI-14`; `AO-04 Heat Valve → UI-15`; `DO-01 Fan Enable → UI-12 Fan
+Status, trễ 2s mô phỏng thời gian lên vòng tua`). Công thức NTC10K
+(`raw_from_ntc10k_temp()`) mirror đúng `ntc_resolve_temp()`/
+`ntc_resistance_from_adc()` (`apps/iobus/domain/io/io_scaling.cpp`).
+
+Quan sát phụ (không sửa trong phạm vi này, thuộc file/tầng khác): với hằng
+số hiện khai báo (`IO_NTC_VEXC_V=3.3V` > `IO_ADC_VREF_V=2.44V`), mạch NTC10K
+bão hòa ADC ở nhiệt độ dưới ~+3°C — thấp hơn dải "hợp lệ" `-30..70°C` mà
+`io_scaling.cpp` khai báo, nên một cảm biến NTC10K thật đọc dưới ~+3°C sẽ báo
+sai giá trị gần +3°C thay vì `BAD`/`OVER_RANGE`. Không phải lỗi của
+`fake_mcu` (chỉ mirror đúng công thức có sẵn); cách sửa đúng phụ thuộc giá
+trị `VEXC`/pull-up thật trên PCB (`IO_UI_CIRCUIT.md` Rev 2.5 hiện "ready for
+schematic review, chưa PCB layout") — cần hardware/firmware owner xác nhận
+khi PCB layout xong.
+
+`docs/03_implementation/27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md` mục 7b: đính
+chính alias SSH (`SOM-DDC-24` di sản Orange Pi → `SOM-DDC-24-foxlinx`) và
+đường dẫn build/install từ trước `PLAN-ARCH-RESTRUCT-002`
+(`build/services/...`, `packaging/...`, `/usr/local/bin/mkddc-fakemcu`) sang
+đúng thực tế board hiện tại (`build/fw(-aarch64)/...`, `platform/systemd/...`,
+`/usr/sbin/mkddc-fake-mcu`) — phát hiện khi deploy thật, không phải suy đoán.
+Mục 2-6/8/9 còn lại của file chưa được rà lại, vẫn còn alias/path cũ.
+
+Tài liệu đầy đủ (bảng đấu nối UI/AO/DO, cách cấu hình ứng dụng, cách ép kịch
+bản test bằng `--stuck-ui`):
+[`docs/07_records/reviews/FAKE_MCU_AHU_WIRING_2026-08-14.md`](docs/07_records/reviews/FAKE_MCU_AHU_WIRING_2026-08-14.md).
+
+**Kiểm chứng (2026-08-14, đo lại thật):**
+
+| Bước | Kết quả |
+|---|---|
+| `cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` + `cmake --build build/fw --parallel` | PASS |
+| `./build/fw/iobus/fake_mcu --self-test` | PASS (kiểm biên NTC/0-10V/4-20mA đúng SensorType từng kênh, cả trạng thái AO/DO nghỉ lẫn stress tối đa) |
+| `ctest --test-dir build/fw --output-on-failure` | **1024/1024 PASS** |
+| Deploy board Foxlinx (`SOM-DDC-24-foxlinx`, `mkddc-fake-mcu` tại `/usr/sbin/`) | `mkddc-fakemcu`/`mkddc-iobus`/`mkddc-core`/`mkddc-web-pi` active, `/api/v1/health` `status:ok` |
+
 ### Added — Lưu hồ sơ brief gốc "Yêu cầu thiết kế mới Programming Solution" (2026-08-14)
 
 `Yeucau_FE.md` — brief đầu vào gốc (nguyên tắc bắt buộc, 14 specification

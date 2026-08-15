@@ -793,25 +793,39 @@ mkddc-iobus    dùng /tmp/mkddc-iop-a (--uart) thay /dev/ttyS2
 mkddc-core     scan 1s, IPC tại /run/mkddc/core.sock
 ```
 
+> **ĐÍNH CHÍNH 2026-08-14**: các đường dẫn trong mục 7b này đã được đối chiếu
+> lại trực tiếp trên board Foxlinx thật (`SOM-DDC-24-foxlinx`) khi deploy lại
+> `fake_mcu` cho kịch bản mô phỏng AHU 16 kênh UI (xem
+> [FAKE_MCU_AHU_WIRING_2026-08-14.md](../07_records/reviews/FAKE_MCU_AHU_WIRING_2026-08-14.md)).
+> Bản trước dùng alias `SOM-DDC-24` (di sản từ thời Orange Pi, trước khi §2a
+> đổi tên thành `SOM-DDC-24-foxlinx`) và đường dẫn build/install từ trước
+> `PLAN-ARCH-RESTRUCT-002` (`build/services/iobus/...`,
+> `packaging/systemd/...`, `/usr/local/bin/mkddc-fakemcu`) — không còn khớp
+> binary/service file thật đang chạy trên board (`/usr/sbin/mkddc-fake-mcu`,
+> nguồn tại `platform/systemd/`). Đã sửa lại đúng theo mục 7b. **Các mục 2-6,
+> 8, 9 phía dưới/trên chưa được rà lại trong lần này** — vẫn còn alias/path cũ,
+> cần verify trước khi dùng.
+
 ### Setup (từ máy dev, sau khi đã rsync §4 + install §6)
 
 ```bash
-ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && \
+ssh SOM-DDC-24-foxlinx "cd ~/work/DDC-PROJECT && \
 
-  # 1. Install fake_mcu binary
-  sudo install -m 0755 build/services/iobus/fake_mcu /usr/local/bin/mkddc-fakemcu && \
+  # 1. Install fake_mcu binary (nguồn: build/fw/iobus/fake_mcu native, hoặc
+  #    build/fw-aarch64/iobus/fake_mcu nếu cross-compile từ máy dev)
+  sudo install -m 0755 build/fw-aarch64/iobus/fake_mcu /usr/sbin/mkddc-fake-mcu && \
 
   # 2. Install service file (KHÔNG cài mkddc-pty — xem đính chính ở trên)
-  sudo install -m 0644 packaging/systemd/mkddc-fakemcu.service /etc/systemd/system/ && \
+  sudo install -m 0644 platform/systemd/mkddc-fakemcu.service /etc/systemd/system/ && \
 
   # 3. Drop-in override: iobus dùng PTY thay UART thật
   sudo mkdir -p /etc/systemd/system/mkddc-iobus.service.d && \
-  sudo install -m 0644 packaging/systemd/mkddc-iobus-nomcu.conf \
+  sudo install -m 0644 platform/systemd/mkddc-iobus-nomcu.conf \
     /etc/systemd/system/mkddc-iobus.service.d/nomcu.conf && \
 
-  # 4. Drop-in override: tắt SCHED_FIFO (Orange Pi kernel không hỗ trợ)
+  # 4. Drop-in override: tắt SCHED_FIFO (nếu kernel board không hỗ trợ RT)
   sudo mkdir -p /etc/systemd/system/mkddc-core.service.d && \
-  sudo install -m 0644 packaging/systemd/mkddc-core-nofifo.conf \
+  sudo install -m 0644 platform/systemd/mkddc-core-nofifo.conf \
     /etc/systemd/system/mkddc-core.service.d/nofifo.conf && \
 
   # 5. Reload + enable tất cả
@@ -824,7 +838,7 @@ ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && \
 Validate tất cả unit file (không có output = OK):
 
 ```bash
-ssh SOM-DDC-24 "systemd-analyze verify \
+ssh SOM-DDC-24-foxlinx "systemd-analyze verify \
   /etc/systemd/system/mkddc-pty.service \
   /etc/systemd/system/mkddc-fakemcu.service \
   /etc/systemd/system/mkddc-iobus.service \
@@ -832,27 +846,27 @@ ssh SOM-DDC-24 "systemd-analyze verify \
 ```
 
 ```bash
-ssh SOM-DDC-24 "systemctl is-active mkddc-fakemcu mkddc-iobus mkddc-core"
-# active active active active
+ssh SOM-DDC-24-foxlinx "systemctl is-active mkddc-fakemcu mkddc-iobus mkddc-core"
+# active active active
 
-ssh SOM-DDC-24 "~/work/DDC-PROJECT/build/services/iobus/shm_dump_io | head -3"
+ssh SOM-DDC-24-foxlinx "/usr/sbin/shm_dump_io | head -3"
 # magic=0x4B584401 seq=XXXX ... iop_status=NORMAL
 ```
 
 ### Xem log real-time
 
 ```bash
-# Tất cả 4 service cùng lúc
-ssh SOM-DDC-24 "journalctl -u mkddc-fakemcu -u mkddc-iobus -u mkddc-core -f"
+# Tất cả 3 service cùng lúc
+ssh SOM-DDC-24-foxlinx "journalctl -u mkddc-fakemcu -u mkddc-iobus -u mkddc-core -f"
 
 # Một service cụ thể
-ssh SOM-DDC-24 "journalctl -u mkddc-core -f"
+ssh SOM-DDC-24-foxlinx "journalctl -u mkddc-core -f"
 
 # 50 dòng gần nhất
-ssh SOM-DDC-24 "journalctl -u mkddc-iobus -n 50 --no-pager"
+ssh SOM-DDC-24-foxlinx "journalctl -u mkddc-iobus -n 50 --no-pager"
 
 # Từ lần boot hiện tại
-ssh SOM-DDC-24 "journalctl -u mkddc-core -b --no-pager"
+ssh SOM-DDC-24-foxlinx "journalctl -u mkddc-core -b --no-pager"
 ```
 
 ### Những WARN bình thường (không phải lỗi)
@@ -932,11 +946,11 @@ ssh SOM-DDC-24 "sudo systemctl enable --now mkddc-iobus && \
 **Fake MCU systemd stack:**
 
 ```bash
-ssh SOM-DDC-24 "sudo systemctl disable --now mkddc-pty mkddc-fakemcu mkddc-iobus mkddc-core || true"
-ssh SOM-DDC-24 "sudo rm -f \
+ssh SOM-DDC-24-foxlinx "sudo systemctl disable --now mkddc-pty mkddc-fakemcu mkddc-iobus mkddc-core || true"
+ssh SOM-DDC-24-foxlinx "sudo rm -f \
   /etc/systemd/system/mkddc-iobus.service.d/nomcu.conf \
   /etc/systemd/system/mkddc-core.service.d/nofifo.conf \
-  /usr/local/bin/mkddc-fakemcu && \
+  /usr/sbin/mkddc-fake-mcu && \
   sudo systemctl daemon-reload"
 ```
 
