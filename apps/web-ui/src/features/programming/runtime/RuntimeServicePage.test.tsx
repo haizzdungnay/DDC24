@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
@@ -113,13 +113,87 @@ describe('RuntimeServicePage — S5-D (TASK-PROG-505)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('RETAIN fail-closed khi chưa có impact: nút khóa và không gửi UUID Active giả', async () => {
-    stubDefaultEndpoints()
+  it('RETAIN: impact UNAVAILABLE khoá xác nhận, không gửi lệnh', async () => {
+    stubDefaultEndpoints({
+      compareProgrammingRevisions: () =>
+        Promise.resolve({
+          fromRevisionId: 'none',
+          toRevisionId: ACTIVE_ID,
+          impact: {
+            impactRef: 'impact-1',
+            retain: { status: 'UNAVAILABLE', items: [] },
+            activeOverrides: { status: 'NONE', items: [] },
+            cutover: { status: 'NONE', items: [] },
+            outputMappingChanges: { status: 'NONE', items: [] }
+          },
+          changes: []
+        })
+    })
     renderPage()
     fireEvent.click(await screen.findByRole('tab', { name: /Phiên bản & Bảo trì/ }))
-    const retainButton = await screen.findByRole('button', { name: /Đặt lại RETAIN/ })
+    fireEvent.click(await screen.findByRole('button', { name: /Đặt lại RETAIN…/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/Không đọc được danh sách biến RETAIN/)).toBeInTheDocument()
+    fireEvent.change(within(dialog).getByLabelText('Lý do đặt lại RETAIN'), { target: { value: 'kiểm tra sau nghiệm thu I/O' } })
+    fireEvent.change(within(dialog).getByLabelText(/Xác thực lại/), { target: { value: 'secret' } })
+    expect(within(dialog).getByRole('button', { name: 'Đặt lại RETAIN' })).toBeDisabled()
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'resetProgrammingRetain')).toBe(false)
+  })
+
+  it('RETAIN: admin xem danh sách biến, tick xác nhận, POST một lần rồi đọc ngược SUCCEEDED', async () => {
+    stubDefaultEndpoints({
+      compareProgrammingRevisions: () =>
+        Promise.resolve({
+          fromRevisionId: 'none',
+          toRevisionId: ACTIVE_ID,
+          impact: {
+            impactRef: 'impact-1',
+            retain: { status: 'PRESENT', items: ['SupplySetpoint', 'FanRuntimeHours'] },
+            activeOverrides: { status: 'NONE', items: [] },
+            cutover: { status: 'NONE', items: [] },
+            outputMappingChanges: { status: 'NONE', items: [] }
+          },
+          changes: []
+        }),
+      resetProgrammingRetain: () => Promise.resolve({ operationId: OPERATION_ID, statusUrl: '', state: 'REQUESTED', requestHash: 'h', acceptedAt: '2026-08-13T00:00:01Z', correlationId: 'c1' }),
+      getProgrammingOperation: () =>
+        Promise.resolve({
+          operationId: OPERATION_ID, kind: 'RESET_RETAIN', state: 'SUCCEEDED', step: 'done',
+          requestedRevisionId: ACTIVE_ID, previousActiveRevisionId: ACTIVE_ID, actualActiveRevisionId: null,
+          keepsRunningRevision: true, startedAt: '2026-08-13T00:00:01Z', updatedAt: '2026-08-13T00:00:02Z'
+        })
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('tab', { name: /Phiên bản & Bảo trì/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Đặt lại RETAIN…/ }))
+
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText(/SupplySetpoint/)
+    expect(within(dialog).getByRole('button', { name: 'Đặt lại RETAIN' })).toBeDisabled()
+    fireEvent.click(within(dialog).getByRole('checkbox'))
+    fireEvent.change(within(dialog).getByLabelText('Lý do đặt lại RETAIN'), { target: { value: 'kiểm tra sau nghiệm thu I/O' } })
+    fireEvent.change(within(dialog).getByLabelText(/Xác thực lại/), { target: { value: 'secret' } })
+    expect(within(dialog).getByRole('button', { name: 'Đặt lại RETAIN' })).not.toBeDisabled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Đặt lại RETAIN' }))
+
+    await waitFor(() => expect(auth.login).toHaveBeenCalledWith('secret', 'admin'))
+    await waitFor(() => expect(screen.getByText(/Đặt lại RETAIN thành công/)).toBeInTheDocument())
+    expect(client.request.mock.calls.filter(([op]) => op === 'resetProgrammingRetain')).toHaveLength(1)
+    const [, options] = client.request.mock.calls.find(([op]) => op === 'resetProgrammingRetain')!
+    expect(options.body.expectedActiveRevisionId).toBe(ACTIVE_ID)
+    expect(options.body.reason).toBe('kiểm tra sau nghiệm thu I/O')
+  })
+
+  it('RETAIN: không có Active Revision thì khoá nút, không gọi API mutation', async () => {
+    stubDefaultEndpoints({
+      getProgrammingRuntime: () => Promise.resolve({ schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY', activeRevisionId: null, lkgRevisionId: null, taskState: 'IDLE', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('tab', { name: /Phiên bản & Bảo trì/ }))
+    const retainButton = await screen.findByRole('button', { name: /Đặt lại RETAIN…/ })
     expect(retainButton).toBeDisabled()
-    expect(screen.getByText(/backend chưa cung cấp danh sách biến RETAIN/)).toBeInTheDocument()
+    fireEvent.click(retainButton)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'resetProgrammingRetain')).toBe(false)
   })
 

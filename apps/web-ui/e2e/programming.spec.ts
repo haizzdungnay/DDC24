@@ -44,6 +44,7 @@ interface MockState {
   checkState: 'PASSED' | 'FAILED'
   commissionCount: number
   restoreCount: number
+  retainResetCount: number
   traceCount: number
   traceRunning: boolean
 }
@@ -150,6 +151,19 @@ async function installProgrammingMocks(page: Page, state: MockState) {
         }
       })
     }
+    if (method === 'GET' && path === `/revisions/none/changes/${ACTIVE_REVISION_ID}`) {
+      return json(route, {
+        fromRevisionId: 'none', toRevisionId: ACTIVE_REVISION_ID,
+        changes: [{ objectId: 'SupplySetpoint', kind: 'VARIABLE', changeType: 'ADDED', category: 'RETAIN' }],
+        impact: {
+          impactRef: 'impact-retain-e2e-0001',
+          retain: { status: 'PRESENT', items: ['SupplySetpoint', 'FanRuntimeHours'] },
+          activeOverrides: { status: 'NONE', items: [] },
+          cutover: { status: 'NONE', items: [] },
+          outputMappingChanges: { status: 'NONE', items: [] }
+        }
+      })
+    }
     if (method === 'GET' && path === '/overrides') {
       return json(route, { items: [] })
     }
@@ -210,6 +224,13 @@ async function installProgrammingMocks(page: Page, state: MockState) {
     if (method === 'GET' && path === '/operations/operation-restore-e2e') {
       return json(route, { operationId: 'operation-restore-e2e', state: 'SUCCEEDED', step: 'done', requestedRevisionId: ACTIVE_REVISION_ID, previousActiveRevisionId: ACTIVE_REVISION_ID, actualActiveRevisionId: ACTIVE_REVISION_ID, keepsRunningRevision: false, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
     }
+    if (method === 'POST' && path === '/retain/reset') {
+      state.retainResetCount += 1
+      return json(route, { operationId: 'operation-retain-reset-e2e', statusUrl: '', state: 'REQUESTED', requestHash: 'hash', acceptedAt: new Date().toISOString(), correlationId }, 202)
+    }
+    if (method === 'GET' && path === '/operations/operation-retain-reset-e2e') {
+      return json(route, { operationId: 'operation-retain-reset-e2e', kind: 'RESET_RETAIN', state: 'SUCCEEDED', step: 'done', requestedRevisionId: ACTIVE_REVISION_ID, previousActiveRevisionId: ACTIVE_REVISION_ID, actualActiveRevisionId: null, keepsRunningRevision: true, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    }
     if (method === 'POST' && path === '/bundles/export') {
       return json(route, { schemaVersion: '1.0', bundleSha256: 'a'.repeat(64), byteSize: 4, revisionIds: [ACTIVE_REVISION_ID], selectedRevisionId: ACTIVE_REVISION_ID, bundleBase64: 'UEsDBA==', auditId: 'audit-export-e2e', correlationId })
     }
@@ -222,9 +243,9 @@ async function installProgrammingMocks(page: Page, state: MockState) {
     if (method === 'POST' && path === '/auth/login') {
       return json(route, { token: 'e2e-token', role: 'admin' })
     }
-    // Mọi route chưa dùng còn lại (retain/reset...) — 503 thật,
-    // đúng hành vi backend hiện tại; KHÔNG được coi là request thất bại
-    // ngoài dự kiến (spec dưới lọc rõ các path này).
+    // Mọi route chưa dùng còn lại (runtime/monitor, runtime/traces GET theo
+    // id lạ...) — 503 thật, đúng hành vi backend hiện tại; KHÔNG được coi là
+    // request thất bại ngoài dự kiến (spec dưới lọc rõ các path này).
     await json(route, { error: { code: 'PRG-ERR-UNAVAILABLE-001', messageKey: 'programming.error.unavailable', retryable: true, keepsRunningRevision: true, correlationId } }, 503)
   })
 }
@@ -264,7 +285,7 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
   })
 
   test('F-PROG-LIVE-002: login giữ pathname, query và hash của deep link', async ({ page }) => {
-    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, traceCount: 0, traceRunning: false }
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     await page.goto('/eng/programming/runtime?tab=service#danger-zone')
     await expect(page).toHaveURL(/\/login$/)
@@ -276,7 +297,7 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
   })
 
   test('VS-PROG-032: ba route cũ chuyển hướng đúng đích và giữ projectId', async ({ page }) => {
-    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, traceCount: 0, traceRunning: false }
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     await login(page)
 
@@ -292,7 +313,7 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
   })
 
   test('UJ-PROG-01..08: Tổng quan → Thiết kế (ST+FBD+ánh xạ+thực thi) → Kiểm tra → Đưa vào vận hành → Runtime → Khôi phục', async ({ page }, testInfo) => {
-    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, traceCount: 0, traceRunning: false }
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
 
     const consoleErrors: string[] = []
@@ -422,7 +443,7 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await expect(page.getByText('Vùng thao tác nguy hiểm')).toBeVisible()
     await page.getByRole('button', { name: 'Xuất gói .zip' }).click()
     await expect(page.getByText(/Đã xuất 4 byte/)).toBeVisible()
-    await expect(page.getByRole('button', { name: /Đặt lại RETAIN/ })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Đặt lại RETAIN…/ })).toBeEnabled()
     await page.locator('#programming-bundle-import-input').setInputFiles({ name: 'replacement.zip', mimeType: 'application/zip', buffer: Buffer.from('PK\x03\x04') })
     await expect(page.getByText(/Nhập gói thành công/)).toBeVisible()
     await page.getByRole('button', { name: /Khôi phục bản trước…/ }).click()
@@ -433,15 +454,33 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await expect(page.getByText(/Khôi phục thành công/)).toBeVisible({ timeout: 10_000 })
     expect(state.restoreCount).toBe(1)
     await page.screenshot({ path: testInfo.outputPath('10-restore-succeeded.png'), fullPage: true })
+    // Modal Khôi phục KHÔNG tự đóng sau khi thành công (giữ nguyên kết quả cho
+    // người dùng đọc) — đóng thủ công trước khi mở dialog RETAIN reset kế tiếp.
+    await restoreDialog.getByRole('button', { name: 'Hủy' }).click()
+    await expect(page.getByRole('dialog')).not.toBeVisible()
 
-    // Console/Network — không có lỗi ngoài các 503 chủ động (contract-only:
-    // monitor/traces/retain-reset) đã được UI xử lý như trạng thái hợp lệ.
+    // WP-12 (RETAIN Reset) — danh sách biến RETAIN thật (dùng lại GET
+    // /revisions/none/changes/{active}), tick xác nhận, re-auth, đọc ngược SUCCEEDED.
+    await page.getByRole('button', { name: /Đặt lại RETAIN…/ }).click()
+    const retainDialog = page.getByRole('dialog')
+    await expect(retainDialog.getByText('SupplySetpoint')).toBeVisible()
+    await expect(retainDialog.getByText('FanRuntimeHours')).toBeVisible()
+    await retainDialog.getByRole('checkbox').check()
+    await retainDialog.getByLabel('Lý do đặt lại RETAIN').fill('Kiểm chứng E2E TASK-PROG-506')
+    await retainDialog.getByLabel(/Xác thực lại/).fill('admin')
+    await retainDialog.getByRole('button', { name: 'Đặt lại RETAIN' }).click()
+    await expect(page.getByText(/Đặt lại RETAIN thành công/)).toBeVisible({ timeout: 10_000 })
+    expect(state.retainResetCount).toBe(1)
+    await page.screenshot({ path: testInfo.outputPath('11-retain-reset-succeeded.png'), fullPage: true })
+
+    // Console/Network — không có lỗi ngoài các 503 chủ động (runtime/monitor
+    // GET, runtime/traces theo id lạ...) đã được UI xử lý như trạng thái hợp lệ.
     const unexpectedConsoleErrors = consoleErrors.filter((text) => !text.includes('503') && !text.includes('Failed to load resource'))
     expect(unexpectedConsoleErrors, `Console error ngoài dự kiến: ${unexpectedConsoleErrors.join(' | ')}`).toEqual([])
   })
 
   test('VS-PROG-028: bốn workspace không có vi phạm WCAG A/AA tự động phát hiện được', async ({ page }) => {
-    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, traceCount: 0, traceRunning: false }
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     state.draft.programs.push({
       programId: '44444444-4444-4444-8444-444444444444',
       name: 'Điều khiển AHU',
@@ -478,7 +517,7 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
 
   test('F-PROG-LIVE-008: mobile có điều hướng bốn workspace và lịch sử không bị cắt', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 })
-    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, traceCount: 0, traceRunning: false }
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     await login(page)
     await navigate(page, '/eng/programming/runtime?tab=service')
