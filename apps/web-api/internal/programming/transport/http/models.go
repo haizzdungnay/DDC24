@@ -65,6 +65,17 @@ type RestoreRequest struct {
 	Reason                   string  `json:"reason"`
 }
 
+// RetainResetRequest (WP-12). `ExpectedActiveRevisionID` bắt buộc (không như
+// Restore) — Core dùng chính giá trị này để từ chối reset một Revision không
+// còn Active (business rule §9 "không reset non-active Revision"). `Reason`
+// đóng vai trò xác nhận mạnh (strong confirmation) như Restore, vì đây cũng
+// là một hành động Admin-only không thể hoàn tác.
+type RetainResetRequest struct {
+	SchemaVersion            string `json:"schemaVersion"`
+	ExpectedActiveRevisionID string `json:"expectedActiveRevisionId"`
+	Reason                   string `json:"reason"`
+}
+
 func (i Impact) groups() map[ImpactKey]ImpactGroup {
 	return map[ImpactKey]ImpactGroup{
 		ImpactRetain:               i.Retain,

@@ -61,6 +61,22 @@ func handleOperationRequest(w http.ResponseWriter, r *http.Request, correlationI
 		}
 		writeOperationAccepted(w, correlationID, accepted)
 		return true
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/programming/retain/reset":
+		var request RetainResetRequest
+		if err := decodeStrictRequest(r, &request); err != nil {
+			writeMappedError(w, err, correlationID)
+			return true
+		}
+		accepted, err := service.ResetRetain(r.Context(), requestActor(r), programmingapplication.OperationCommand{
+			SchemaVersion: request.SchemaVersion, ExpectedActiveRevisionID: request.ExpectedActiveRevisionID,
+			Reason: request.Reason, IdempotencyKey: r.Header.Get("X-Idempotency-Key"), CorrelationID: correlationID,
+		})
+		if err != nil {
+			writeMappedError(w, err, correlationID)
+			return true
+		}
+		writeOperationAccepted(w, correlationID, accepted)
+		return true
 	case r.Method == http.MethodGet && r.PathValue("operationId") != "":
 		operation, err := service.GetOperation(r.Context(), r.PathValue("operationId"))
 		if err != nil {
