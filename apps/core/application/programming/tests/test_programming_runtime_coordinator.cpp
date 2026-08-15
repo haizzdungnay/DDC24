@@ -6,9 +6,12 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <sodium.h>
@@ -58,10 +61,28 @@ std::vector<uint8_t> artifact_with_value(int value)
     return bytes;
 }
 
-StageCommand write_candidate(const TempTree& tree, const std::string& operation,
-                             const std::string& revision, int value)
+/* WP-12 (RETAIN Reset). Biến RETAIN đếm lên mỗi chu kỳ — dùng để xác nhận
+ * `reset_retain()` thật sự đưa giá trị sống về 0 qua toàn bộ đường
+ * coordinator -> scheduler -> runtime, không chỉ ở tầng thấp nhất
+ * (`test_st_retain.cpp` đã phủ tầng đó). */
+std::vector<uint8_t> retained_counter_artifact()
 {
-    const std::vector<uint8_t> bytes = artifact_with_value(value);
+    StIrModule module;
+    StDiagnostic diagnostic;
+    EXPECT_TRUE(compile_st_source("PROGRAM p\nVAR RETAIN n : INT; END_VAR\nn := n + 1;\nEND_PROGRAM\n",
+                                  &module, &diagnostic))
+        << diagnostic.code << ": " << diagnostic.message;
+    std::vector<uint8_t> bytes;
+    std::string error;
+    EXPECT_TRUE(serialize_st_ir(module, &bytes, &error)) << error;
+    EXPECT_TRUE(sign_st_artifact(&bytes, st_test_secret_key()));
+    return bytes;
+}
+
+StageCommand write_candidate_bytes(const TempTree& tree, const std::string& operation,
+                                   const std::string& revision, const std::vector<uint8_t>& bytes,
+                                   char plan_hash_fill)
+{
     const std::filesystem::path directory =
         std::filesystem::path(tree.path) / "staging" / operation;
     std::filesystem::create_directories(directory);
@@ -79,8 +100,15 @@ StageCommand write_candidate(const TempTree& tree, const std::string& operation,
     command.locator = locator.string();
     command.byte_size = bytes.size();
     command.sha256.assign(digest.begin(), digest.end());
-    command.plan_hash = std::string(64, static_cast<char>('a' + value));
+    command.plan_hash = std::string(64, plan_hash_fill);
     return command;
+}
+
+StageCommand write_candidate(const TempTree& tree, const std::string& operation,
+                             const std::string& revision, int value)
+{
+    return write_candidate_bytes(tree, operation, revision, artifact_with_value(value),
+                                 static_cast<char>('a' + value));
 }
 
 ActivateCommand activation_for(const StageCommand& staged, const std::string& expected)
@@ -457,6 +485,165 @@ TEST(ProgrammingRuntimeCoordinator, PriorityImpactIsUnavailableUntilScanSnapshot
     ASSERT_EQ(snapshot.active_override_ids.size(), 2U);
     EXPECT_EQ(snapshot.active_override_ids[0], "AO-1:manual");
     EXPECT_EQ(snapshot.active_override_ids[1], "DO-1:bacnet");
+}
+
+/* ---- WP-12: RETAIN Reset (DDD-RETAIN-RESET-PROG-001) ---- */
+
+/* Stage+activate+commit một artifact có VAR RETAIN tới COMMITTED — tiền
+ * điều kiện bắt buộc để gọi `reset_retain()` (guard state ở §3 design). */
+void commission_retained_program(ProgrammingRuntimeCoordinator* coordinator, StScheduler* scheduler,
+                                 const TempTree& tree, const std::string& operation,
+                                 const std::string& revision)
+{
+    std::string detail, error;
+    const StageCommand staged =
+        write_candidate_bytes(tree, operation, revision, retained_counter_artifact(), 'c');
+    ASSERT_TRUE(coordinator->stage(staged, &detail, &error)) << detail << ": " << error;
+    ASSERT_TRUE(coordinator->activate(activation_for(staged, ""), &detail, &error))
+        << detail << ": " << error;
+    coordinator->on_safe_boundary();
+    ASSERT_TRUE(coordinator->flush_progress(&error)) << error;
+    ASSERT_TRUE(execute_and_commit(scheduler));
+    coordinator->on_output_commit(true);
+    ASSERT_TRUE(coordinator->flush_progress(&error)) << error;
+    ASSERT_EQ(coordinator->snapshot().state, LifecycleState::COMMITTED);
+}
+
+RetainResetCommand retain_reset_for(const std::string& operation, const std::string& expected_revision)
+{
+    RetainResetCommand command;
+    command.operation_id = operation;
+    command.instance_id = "program-main";
+    command.expected_active_revision_id = expected_revision;
+    return command;
+}
+
+TEST(ProgrammingRuntimeCoordinator, TC_RETAIN_03a_RejectsResetWhileCommissionInFlightNoHalfReset)
+{
+    /* "Reset lỗi giữa transaction -> state xác định, không half-reset" —
+     * phần dễ nhất để vi phạm là cho phép reset đè lên một Commission đang
+     * dở dang (STAGED, chưa COMMITTED). Coordinator phải từ chối THẲNG,
+     * không chạm scheduler/instance ở bất kỳ mức nào. */
+    TempTree tree;
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_runtime_topology(&scheduler);
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                              tree.path + "/staging");
+    std::string detail, error;
+    const StageCommand staged =
+        write_candidate_bytes(tree, kOp1, kRevision1, retained_counter_artifact(), 'c');
+    ASSERT_TRUE(coordinator.stage(staged, &detail, &error)) << detail << ": " << error;
+    ASSERT_EQ(coordinator.snapshot().state, LifecycleState::STAGED);
+
+    const StProgramInstance* before = scheduler.find_program("program-main");
+    ASSERT_NE(before, nullptr);
+    const uint64_t ack_before = before->retain_reset_ack_generation.load();
+
+    const RetainResetOutcome outcome =
+        coordinator.reset_retain(retain_reset_for(kOp2, ""), &detail, &error);
+    EXPECT_EQ(outcome, RetainResetOutcome::REJECTED);
+    EXPECT_EQ(detail, "IPC-RETAIN-RESET-STATE");
+    EXPECT_EQ(before->retain_reset_ack_generation.load(), ack_before)
+        << "reject phải KHÔNG chạm cờ pending/ack — no half-reset";
+    EXPECT_FALSE(before->pending_retain_reset.load());
+}
+
+TEST(ProgrammingRuntimeCoordinator, TC_RETAIN_03b_RejectsResetOnRevisionMismatchNoHalfReset)
+{
+    TempTree tree;
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_runtime_topology(&scheduler);
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                              tree.path + "/staging");
+    commission_retained_program(&coordinator, &scheduler, tree, kOp1, kRevision1);
+
+    const StProgramInstance* instance = scheduler.find_program("program-main");
+    ASSERT_NE(instance, nullptr);
+    const uint64_t ack_before = instance->retain_reset_ack_generation.load();
+
+    std::string detail, error;
+    /* Gửi đúng operation mới nhưng SAI expected_active_revision_id — đúng
+     * TC-RETAIN-05 ở tầng coordinator (Go test lặp lại kịch bản tương
+     * đương qua HTTP, xem BE test); ở đây xác nhận reject KHÔNG chạm state. */
+    const RetainResetOutcome outcome =
+        coordinator.reset_retain(retain_reset_for(kOp2, kRevision2), &detail, &error);
+    EXPECT_EQ(outcome, RetainResetOutcome::REJECTED);
+    EXPECT_EQ(detail, "IPC-EXPECTED-ACTIVE");
+    EXPECT_EQ(instance->retain_reset_ack_generation.load(), ack_before);
+    EXPECT_FALSE(instance->pending_retain_reset.load());
+}
+
+TEST(ProgrammingRuntimeCoordinator, TC_RETAIN_03c_RejectsUnknownInstanceNoHalfReset)
+{
+    TempTree tree;
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_runtime_topology(&scheduler);
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                              tree.path + "/staging");
+    commission_retained_program(&coordinator, &scheduler, tree, kOp1, kRevision1);
+
+    std::string detail, error;
+    RetainResetCommand bad = retain_reset_for(kOp2, kRevision1);
+    bad.instance_id = "no-such-instance";
+    const RetainResetOutcome outcome = coordinator.reset_retain(bad, &detail, &error);
+    EXPECT_EQ(outcome, RetainResetOutcome::REJECTED);
+    EXPECT_EQ(detail, "IPC-RETAIN-RESET-INSTANCE");
+}
+
+TEST(ProgrammingRuntimeCoordinator, AppliesRetainResetEndToEndAndForceFlushesPastAutosaveWindow)
+{
+    /* Đường hạnh phúc đầy đủ: coordinator arm -> scheduler áp dụng tại
+     * boundary kế tiếp -> coordinator force-flush -> giá trị RETAIN sống
+     * VỀ 0. Đúng luồng Phương án B trong design §1.
+     *
+     * `reset_retain()` chặn (bounded poll) chờ boundary — trong production
+     * một THREAD RIÊNG (scan loop) gọi `on_safe_boundary()` định kỳ trong
+     * lúc IPC worker thread đang chờ trong `reset_retain()`. Mô phỏng đúng
+     * mô hình luồng đó ở đây thay vì gọi boundary trên cùng thread gọi
+     * `reset_retain()` (sẽ không bao giờ chạy tới vì bị chặn) — nếu không
+     * test này luôn timeout, không phải vì code sai mà vì môi trường test
+     * đơn luồng không mô phỏng đúng RT scan thread thật. */
+    TempTree tree;
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_runtime_topology(&scheduler);
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                              tree.path + "/staging");
+    commission_retained_program(&coordinator, &scheduler, tree, kOp1, kRevision1);
+
+    /* Chạy thêm vài chu kỳ để giá trị RETAIN thật sự khác 0 trước khi reset. */
+    for (int i = 0; i < 4; ++i) ASSERT_TRUE(execute_and_commit(&scheduler));
+    StProgramInstance* instance = scheduler.find_program("program-main");
+    ASSERT_NE(instance, nullptr);
+    StValue before_value;
+    ASSERT_TRUE(instance->runtime.get_variable("n", &before_value));
+    ASSERT_GT(before_value.i, 0) << "tiền điều kiện: RETAIN phải khác 0 trước reset";
+
+    std::atomic<bool> stop_boundary_thread{false};
+    std::thread boundary_thread([&] {
+        while (!stop_boundary_thread.load(std::memory_order_acquire)) {
+            coordinator.on_safe_boundary();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    });
+
+    std::string detail, error;
+    const RetainResetOutcome outcome =
+        coordinator.reset_retain(retain_reset_for(kOp2, kRevision1), &detail, &error);
+
+    stop_boundary_thread.store(true, std::memory_order_release);
+    boundary_thread.join();
+
+    EXPECT_EQ(outcome, RetainResetOutcome::APPLIED) << detail << ": " << error;
+
+    StValue after_value;
+    ASSERT_TRUE(instance->runtime.get_variable("n", &after_value));
+    EXPECT_EQ(after_value.i, 0) << "reset_retain() phải đưa giá trị sống về 0";
+    EXPECT_GT(instance->retain_reset_ack_generation.load(), 0U);
+    EXPECT_FALSE(instance->pending_retain_reset.load()) << "cờ pending phải được tiêu thụ";
 }
 
 } // namespace core::programming

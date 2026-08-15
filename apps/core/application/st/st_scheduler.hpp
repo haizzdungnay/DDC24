@@ -154,6 +154,17 @@ struct StProgramInstance {
     const char* pending_retain_reject_code = nullptr;
     uint64_t pending_retain_generation = 0;
     uint64_t last_successful_now_ns = 0;
+
+    /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §3). Mẫu giống
+     * `has_pending`/`pending_commit_requested`: non-RT set `true` (release),
+     * RT tiêu thụ tại safe boundary rồi set lại `false` và tăng
+     * `retain_reset_ack_generation` (cùng thao tác, cùng boundary — không
+     * có cửa sổ race giữa "đã reset" và "đã ack"). Non-RT xác nhận đã áp
+     * dụng bằng cách so `retain_reset_ack_generation` với giá trị đọc được
+     * TRƯỚC khi set cờ — tăng lên nghĩa là đã qua đúng 1 boundary kể từ lúc
+     * yêu cầu, không suy đoán theo thời gian chờ. */
+    std::atomic<bool> pending_retain_reset{false};
+    std::atomic<uint64_t> retain_reset_ack_generation{0};
 };
 
 struct StTaskConfig {
@@ -278,10 +289,26 @@ public:
     bool reset_fault(const std::string& instance_id, std::string* error);
     bool rollback(const std::string& instance_id, std::string* error);
 
+    /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §3). Non-RT: đặt cờ
+     * pending, áp dụng thật tại boundary kế tiếp (không đồng bộ tại đây —
+     * xem `apply_pending_retain_resets_at_boundary()`). Trả false nếu
+     * instance không tồn tại hoặc chưa có program đang chạy (không có gì
+     * retained để reset). Caller (coordinator) đọc
+     * `find_program(id)->retain_reset_ack_generation` TRƯỚC khi gọi hàm
+     * này để có mốc so sánh xác nhận đã áp dụng. */
+    bool request_retain_reset(const std::string& instance_id, std::string* error);
+
     /* Safe-boundary phase tách riêng để process image chụp input của candidate
      * vừa activate, không chụp artifact cũ rồi execute artifact mới. Gọi lặp
      * lại trong cùng boundary là no-op. */
     void apply_pending_activations_at_boundary();
+
+    /* WP-12: áp dụng RETAIN reset đang chờ (nếu có) cho mọi instance, tại
+     * CÙNG safe boundary với activation — không cấp phát, không throw. Gọi
+     * cùng chỗ caller gọi `apply_pending_activations_at_boundary()` (xem
+     * `ProgrammingRuntimeCoordinator::on_safe_boundary()`). Tách riêng khỏi
+     * activation để không trộn hai luồng nghiệp vụ khác nhau vào một hàm. */
+    void apply_pending_retain_resets_at_boundary();
 
     /* Một base step. `now_ns` chụp MỘT LẦN bởi caller và dùng chung cho mọi
      * Task. Task period chỉ quyết định có dispatch hay không; tuyệt đối không
@@ -322,6 +349,7 @@ private:
 
     void run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out);
     void apply_pending_activations(StTask& task);
+    void apply_pending_retain_resets(StTask& task);
     void log_trace(StTraceEventKind kind, uint64_t now_ns, bool ok, const char* task_id,
                    const char* instance_id, const char* code);
 };

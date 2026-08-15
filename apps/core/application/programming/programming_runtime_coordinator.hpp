@@ -52,6 +52,22 @@ struct ActivateCommand {
     std::string plan_hash;
 };
 
+/* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001). `instance_id` có mặt từ
+ * Rev A (dù luôn "program-main") để không phải đổi wire format khi
+ * Multi-Program cho phép nhiều instance — đúng business rule §4 "field
+ * phải có sẵn, không chặn implementation hiện tại". */
+struct RetainResetCommand {
+    std::string operation_id;
+    std::string instance_id = "program-main";
+    std::string expected_active_revision_id;
+};
+
+enum class RetainResetOutcome : uint8_t {
+    APPLIED = 0,      /* Đã áp dụng ở boundary VÀ force-flush persisted image thành công. */
+    REJECTED,         /* Revision không khớp active, hoặc instance chưa có program loaded. */
+    TIMED_OUT,        /* Chờ boundary/flush quá hạn — KHÔNG được coi là thành công (§7). */
+};
+
 /* Coordinator duy nhất sở hữu thứ tự journal → arm → safe-boundary → first
  * output commit. Filesystem chỉ chạy trong method IPC/non-RT; hai hook scan
  * chỉ đọc/ghi atomic và gọi swap O(1) đã prepare. */
@@ -65,6 +81,15 @@ public:
     bool activate(const ActivateCommand& command, std::string* detail_code,
                   std::string* error);
     bool restore(const StageCommand& command, std::string* detail_code, std::string* error);
+
+    /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §3). Gọi non-RT
+     * (IPC worker thread) — arm request qua `scheduler_->request_retain_reset`
+     * rồi CHỜ CÓ GIỚI HẠN (bounded poll, không chặn RT) tới khi safe boundary
+     * áp dụng, sau đó force-flush persisted image (`retain_service()->flush(true)`,
+     * bỏ qua cửa sổ autosave 60s) trước khi trả về. Không giả định thành
+     * công khi timeout — trả `TIMED_OUT` riêng biệt (§7). */
+    RetainResetOutcome reset_retain(const RetainResetCommand& command, std::string* detail_code,
+                                    std::string* error);
 
     void on_safe_boundary() noexcept;
     void on_output_commit(bool committed) noexcept;

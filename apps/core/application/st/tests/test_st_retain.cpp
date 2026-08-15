@@ -624,4 +624,83 @@ TEST(StRetain, RestoredValueContinuesCountingFromRestoredPoint)
     ::unlink(path.c_str());
 }
 
+/* ---- WP-12: RETAIN Reset (DDD-RETAIN-RESET-PROG-001) ---- */
+
+TEST(StRetain, TC_RETAIN_01_ResetValueSurvivesPastAutosaveWindowWithoutForce)
+{
+    /* Đúng lo ngại gốc khiến thiết kế chọn Phương án B thay vì "xoá file
+     * đơn thuần": nếu reset chỉ xoá FILE mà giá trị sống trong bộ nhớ vẫn
+     * là 5, một autosave TỰ NHIÊN (không force) chạy sau khi qua giãn cách
+     * 60s sẽ ghi lại đúng 5 — "reset" tự đảo ngược âm thầm. Test này chứng
+     * minh thiết kế đã chọn (zero SLOTS trước, autosave chỉ đọc lại state
+     * hiện tại) không có đường đó: dùng `now_ns` tường minh > 60s, KHÔNG
+     * sleep thật (đúng yêu cầu design §8). */
+    const std::string path = temp_path();
+    const std::vector<uint8_t> art = build(kCounter);
+
+    StProgramRuntime rt;
+    ASSERT_TRUE(load(&rt, art));
+    for (int i = 0; i < 5; ++i) ASSERT_TRUE(rt.execute(i * 1000).ok);
+    ASSERT_EQ(counter(rt), 5);
+
+    StRetainStore store(path);
+    ASSERT_TRUE(store.save_if_needed(*rt.program(), 0, true)) << "ghi giá trị 5 xuống đĩa trước reset";
+
+    /* Reset — đúng hành vi `StScheduler::apply_pending_retain_resets` gọi ở
+     * safe boundary, test trực tiếp tầng StProgramRuntime (đơn vị nhỏ nhất). */
+    ASSERT_TRUE(rt.reset_retained_state());
+    ASSERT_EQ(counter(rt), 0) << "reset phải đưa giá trị sống về 0 ngay lập tức";
+
+    /* now_ns cách lần ghi trước > 60s — mô phỏng autosave TỰ NHIÊN (không
+     * force) chạy sau khi qua cửa sổ `kMinWriteIntervalNs`. Giá trị đã đổi
+     * (5 -> 0) nên điều kiện "có thay đổi" (`DoesNotWriteWhenValueUnchanged`)
+     * không chặn ghi — autosave này THẬT SỰ ghi, và phải ghi đúng 0. */
+    ASSERT_TRUE(store.save_if_needed(*rt.program(), kMin + kSec, false))
+        << "qua cửa sổ 60s với giá trị đã đổi (do reset) phải ghi lại";
+
+    StProgramRuntime fresh;
+    ASSERT_TRUE(load(&fresh, art));
+    StRetainStore reload(path);
+    ASSERT_TRUE(reload.restore(const_cast<StLoadedProgram*>(fresh.program())).restored);
+    EXPECT_EQ(counter(fresh), 0) << "giá trị cũ (5) không được phục hồi sau autosave hậu-reset";
+
+    ::unlink(path.c_str());
+}
+
+TEST(StRetain, TC_RETAIN_02_WarmRestartAfterResetKeepsResetValueNotOld)
+{
+    /* Reset -> lưu (force, mô phỏng ProgrammingRuntimeCoordinator::reset_retain
+     * gọi retain_service->flush(true)) -> nạp lại instance từ đầu (warm
+     * start) -> state khôi phục PHẢI là state đã reset, không phải state
+     * trước reset. */
+    const std::string path = temp_path();
+    const std::vector<uint8_t> art = build(kCounter);
+
+    StProgramRuntime rt;
+    ASSERT_TRUE(load(&rt, art));
+    for (int i = 0; i < 7; ++i) ASSERT_TRUE(rt.execute(i * 1000).ok);
+    ASSERT_EQ(counter(rt), 7);
+
+    StRetainStore store(path);
+    ASSERT_TRUE(store.save_if_needed(*rt.program(), 0, true));
+
+    ASSERT_TRUE(rt.reset_retained_state());
+    ASSERT_TRUE(store.save_if_needed(*rt.program(), 1000, true))
+        << "force-flush ngay sau reset — đúng hành vi coordinator thật";
+
+    StProgramRuntime restarted;
+    ASSERT_TRUE(load(&restarted, art));
+    StRetainStore reload(path);
+    const StRetainResult result = reload.restore(const_cast<StLoadedProgram*>(restarted.program()));
+    ASSERT_TRUE(result.restored);
+    EXPECT_EQ(counter(restarted), 0) << "warm start sau reset phải thấy 0, không phải 7";
+
+    /* Chạy tiếp sau restart phải đếm từ 0, không phải từ 7 — xác nhận reset
+     * không chỉ "đúng lúc restore" mà còn đúng làm điểm bắt đầu tính tiếp. */
+    ASSERT_TRUE(restarted.execute(2000).ok);
+    EXPECT_EQ(counter(restarted), 1);
+
+    ::unlink(path.c_str());
+}
+
 } // namespace core
