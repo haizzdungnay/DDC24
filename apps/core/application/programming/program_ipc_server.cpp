@@ -271,6 +271,27 @@ bool parse_activate_payload(const ProgramRequest& request, ActivateCommand* outp
     }
 }
 
+/* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §3). Payload 2 phần tử:
+ * `[expected_active_revision_id (string|null), instance_id (string)]` —
+ * `operation_id` lấy từ envelope chung (`request.operation_id`), cùng mẫu
+ * `parse_stage_payload`/`parse_activate_payload`. */
+bool parse_retain_reset_payload(const ProgramRequest& request, RetainResetCommand* output)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 2 ||
+            (!value[0].is_null() && !value[0].is_string()) ||
+            !value[1].is_string()) return false;
+        output->operation_id = uuid_text(request.operation_id);
+        output->expected_active_revision_id = value[0].is_null()
+            ? std::string() : value[0].get<std::string>();
+        output->instance_id = value[1].get<std::string>();
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
 ProgramResult result_for_state(LifecycleState state)
 {
     switch (state) {
@@ -657,6 +678,23 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
                                                             : ProgramResult::Rejected,
                                          activated ? nullptr : (detail.empty()
                                              ? "IPC-PAYLOAD" : detail.c_str()));
+            } else if (request.action == ProgramAction::RetainReset) {
+                RetainResetCommand command;
+                std::string detail;
+                std::string error;
+                ProgramResult result = ProgramResult::Rejected;
+                if (parse_retain_reset_payload(request, &command)) {
+                    switch (coordinator_->reset_retain(command, &detail, &error)) {
+                    case RetainResetOutcome::APPLIED: result = ProgramResult::Ok; break;
+                    case RetainResetOutcome::REJECTED: result = ProgramResult::Rejected; break;
+                    case RetainResetOutcome::TIMED_OUT: result = ProgramResult::Busy; break;
+                    }
+                } else {
+                    detail = "IPC-PAYLOAD";
+                }
+                response = make_response(request, result,
+                                         result == ProgramResult::Ok ? nullptr
+                                             : (detail.empty() ? "IPC-PAYLOAD" : detail.c_str()));
             } else {
                 response = make_response(request, ProgramResult::Unavailable,
                                          "IPC-ACTION-NOT-IMPLEMENTED");

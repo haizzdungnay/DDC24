@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -17,13 +18,15 @@ import (
 )
 
 type fakeOperationRuntime struct {
-	mu              sync.Mutex
-	calls           []coreipc.Action
-	reconciles      int
-	desiredRevision string
-	activeRevision  string
-	failActivate    bool
-	reconcileStaged bool
+	mu                 sync.Mutex
+	calls              []coreipc.Action
+	reconciles         int
+	desiredRevision    string
+	activeRevision     string
+	failActivate       bool
+	reconcileStaged    bool
+	retainResetResults []coreipc.Result
+	retainResetErrOnce bool
 }
 
 func (f *fakeOperationRuntime) Call(_ context.Context, request coreipc.Request) (coreipc.Response, error) {
@@ -35,6 +38,12 @@ func (f *fakeOperationRuntime) Call(_ context.Context, request coreipc.Request) 
 		// xác định lại bằng OPERATION_STATUS, tuyệt đối không gọi ACTIVATE lần hai.
 		f.activeRevision = f.desiredRevision
 		return coreipc.Response{}, errors.New("response bị mất sau ACTIVATE")
+	}
+	if request.Action == coreipc.ActionRetainReset && f.retainResetErrOnce {
+		// Mô phỏng lỗi transport (khác Core BUSY): op phải UNKNOWN, RETAIN_RESET
+		// idempotent nên lần retry sau được phép gọi lại (khác bất biến Activate).
+		f.retainResetErrOnce = false
+		return coreipc.Response{}, errors.New("retain reset response bị mất")
 	}
 	response := coreipc.ResponseFor(request, coreipc.ResultOK, "", "core.programming.ipc", coreipc.EmptyPayload())
 	switch request.Action {
@@ -50,6 +59,11 @@ func (f *fakeOperationRuntime) Call(_ context.Context, request coreipc.Request) 
 		response.Result = coreipc.ResultStaged
 	case coreipc.ActionActivate:
 		response.Result = coreipc.ResultAccepted
+	case coreipc.ActionRetainReset:
+		if len(f.retainResetResults) > 0 {
+			response.Result = f.retainResetResults[0]
+			f.retainResetResults = f.retainResetResults[1:]
+		}
 	}
 	return response, nil
 }
@@ -129,6 +143,79 @@ func (f operationFixture) service(t *testing.T, runtime *fakeOperationRuntime) *
 		t.Fatal(err)
 	}
 	return service
+}
+
+func (f *fakeOperationRuntime) resetCalls() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = nil
+}
+
+// commitCommission đưa fixture.revision thành Active/COMMITTED thật qua đúng
+// state machine Commission — tiền điều kiện của mọi test RESET_RETAIN, vì Core
+// (`programming_runtime_coordinator.cpp: reset_retain`) chỉ chấp nhận khi có
+// một Revision đang COMMITTED khớp `expected_active_revision_id`.
+func (f operationFixture) commitCommission(t *testing.T, service *OperationService, runtime *fakeOperationRuntime) {
+	t.Helper()
+	command := f.commissionCommand(t, runtime)
+	if _, err := service.Commission(context.Background(), Actor{ID: testActorID, Role: "admin"}, command); err != nil {
+		t.Fatal(err)
+	}
+	if processed, err := service.ProcessNext(context.Background()); err != nil || !processed {
+		t.Fatalf("execute Commission processed=%v err=%v", processed, err)
+	}
+	if processed, err := service.ProcessNext(context.Background()); err != nil || !processed {
+		t.Fatalf("reconcile Commission processed=%v err=%v", processed, err)
+	}
+}
+
+// createUnrelatedRevisionFixture dựng một Revision THẬT khác (Project khác)
+// trong cùng Store — cần cho TC-RETAIN-05: `requested_revision_id` có FOREIGN
+// KEY tới bảng revisions nên không thể dùng một UUID bịa cho ExpectedActiveRevisionID.
+// Kịch bản thật của "Active Revision đổi giữa chừng" luôn là một Revision có
+// thật (Commission trước đó), chỉ khác Revision đang Active NGAY BÂY GIỜ.
+//
+// Dùng một ProjectService RIÊNG (không phải `fixture.projects`) vì
+// `openProjectService` ghim `newID` thành một hàng đợi CỐ ĐỊNH 9 UUID đã bị
+// `createCheckRevisionFixture` dùng hết cho project đầu tiên — tái dùng sẽ
+// panic index-out-of-range. `now` vẫn ghim khớp mốc cố định của Store để
+// không dính bẫy lệch đồng hồ TTL idempotency đã biết trong dự án.
+func createUnrelatedRevisionFixture(t *testing.T, store *programmingstore.Store) string {
+	t.Helper()
+	service, err := NewProjectService(store, []byte("cursor-secret-retain-mismatch-fixture"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.now = func() time.Time { return time.Date(2026, 8, 11, 9, 0, 0, 0, time.UTC) }
+	actor := Actor{ID: testActorID, Role: "admin"}
+	created, err := service.CreateProject(context.Background(), actor, CreateProjectCommand{SchemaVersion: "1.0",
+		Name: "Retain mismatch fixture", IdempotencyKey: "40000000-0000-4000-8000-0000000000a1",
+		CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectID := created.Resource["projectId"].(string)
+	draftID := created.Resource["draftRevisionId"].(string)
+	programID := "55555555-5555-4555-8555-555555555556"
+	taskID := "66666666-6666-4666-8666-666666666667"
+	program, _ := json.Marshal(map[string]any{"op": "upsertProgram", "program": map[string]any{"programId": programID,
+		"name": "P2", "kind": "PROGRAM", "language": "ST",
+		"document": "PROGRAM P2\nVAR_OUTPUT X : BOOL; END_VAR\nX := TRUE;\nEND_PROGRAM\n"}})
+	task, _ := json.Marshal(map[string]any{"op": "setTask", "task": map[string]any{"taskId": taskID, "periodMs": 1000,
+		"programOrder": []string{programID}}})
+	saved, err := service.SaveDraft(context.Background(), actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0",
+		BaseRevisionID: draftID, Operations: []json.RawMessage{program, task}, IfMatch: created.ETag,
+		IdempotencyKey: "40000000-0000-4000-8000-0000000000a2", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := service.SealRevision(context.Background(), actor, SealRevisionCommand{ProjectID: projectID, SchemaVersion: "1.0",
+		BaseRevisionID: draftID, Label: "Retain mismatch", IfMatch: saved.ETag,
+		IdempotencyKey: "40000000-0000-4000-8000-0000000000a3", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sealed.Resource["revisionId"].(string)
 }
 
 func (f operationFixture) commissionCommand(t *testing.T, runtime *fakeOperationRuntime) OperationCommand {
@@ -322,5 +409,147 @@ func TestOperationRestartAfterStageContinuesOnlyFromAuthoritativeStagedReadback(
 	operation, _ = fixture.store.GetOperation(context.Background(), accepted.OperationID)
 	if operation.State != "SUCCEEDED" {
 		t.Fatalf("resume terminal=%+v", operation)
+	}
+}
+
+// TC-RETAIN (WP-12, DDD-RETAIN-RESET-PROG-001) — phần Go/Operation. C++ phía
+// Core đã xác nhận TC_RETAIN_01/02 (autosave/warm-restart) và
+// TC_RETAIN_03a/b/c (no-half-reset) ở `test_programming_runtime_coordinator.cpp`.
+// Bốn test dưới đây phủ đúng phần BE: single-pass apply, TC-RETAIN-05 (Active
+// Revision đổi giữa chừng bị reject, không half-reset), §7 "không giả định
+// thành công khi timeout" (BUSY -> UNKNOWN -> retry idempotent), và §9
+// "idempotency mandatory".
+
+func TestOperationResetRetainAppliesInSinglePassWhenActiveRevisionMatches(t *testing.T) {
+	fixture := newOperationFixture(t)
+	runtime := &fakeOperationRuntime{}
+	service := fixture.service(t, runtime)
+	fixture.commitCommission(t, service, runtime)
+	runtime.resetCalls()
+
+	accepted, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		OperationCommand{SchemaVersion: "1.0", ExpectedActiveRevisionID: fixture.revision,
+			Reason: "kiểm tra reset RETAIN sau nghiệm thu I/O",
+			IdempotencyKey: "40000000-0000-4000-8000-000000000010", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if processed, err := service.ProcessNext(context.Background()); err != nil || !processed {
+		t.Fatalf("execute ResetRetain processed=%v err=%v", processed, err)
+	}
+	operation, err := fixture.store.GetOperation(context.Background(), accepted.OperationID)
+	// RETAIN reset không đổi Active Revision — Core không trả ActiveRevisionID
+	// trong response RETAIN_RESET (`program_ipc_server.cpp: make_response`
+	// không set field này cho action này), nên `ActualActiveRevisionID` đúng
+	// ra PHẢI rỗng. Bằng chứng "đã reset đúng Revision nào" nằm ở
+	// `PreviousActiveRevisionID` (giá trị STATUS preflight xác nhận trước khi gọi).
+	if err != nil || operation.State != "SUCCEEDED" || operation.Kind != "RESET_RETAIN" ||
+		operation.PreviousActiveRevisionID != fixture.revision {
+		t.Fatalf("ResetRetain terminal=%+v err=%v", operation, err)
+	}
+	want := []coreipc.Action{coreipc.ActionStatus, coreipc.ActionRetainReset}
+	if len(runtime.calls) != len(want) {
+		t.Fatalf("ResetRetain calls=%v want=%v", runtime.calls, want)
+	}
+	for index := range want {
+		if runtime.calls[index] != want[index] {
+			t.Fatalf("ResetRetain calls=%v want=%v", runtime.calls, want)
+		}
+	}
+}
+
+func TestOperationResetRetainRejectsActiveRevisionMismatchNoHalfReset(t *testing.T) {
+	fixture := newOperationFixture(t)
+	runtime := &fakeOperationRuntime{}
+	service := fixture.service(t, runtime)
+	fixture.commitCommission(t, service, runtime)
+	runtime.resetCalls()
+
+	// Revision THẬT (khác Project) nhưng KHÔNG phải Active — mô phỏng đúng
+	// TC-RETAIN-05 "Active Revision đổi giữa chừng", không phải một UUID bịa.
+	staleExpected := createUnrelatedRevisionFixture(t, fixture.store)
+	accepted, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		OperationCommand{SchemaVersion: "1.0", ExpectedActiveRevisionID: staleExpected,
+			Reason: "kiểm tra reject khi Active Revision đổi giữa chừng",
+			IdempotencyKey: "40000000-0000-4000-8000-000000000011", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if processed, err := service.ProcessNext(context.Background()); err != nil || !processed {
+		t.Fatalf("execute processed=%v err=%v", processed, err)
+	}
+	operation, err := fixture.store.GetOperation(context.Background(), accepted.OperationID)
+	if err != nil || operation.State != "FAILED" || operation.ResultCode != "EXPECTED_ACTIVE_MISMATCH" {
+		t.Fatalf("mismatch phải FAILED/EXPECTED_ACTIVE_MISMATCH: %+v err=%v", operation, err)
+	}
+	for _, action := range runtime.calls {
+		if action == coreipc.ActionRetainReset {
+			t.Fatalf("preflight reject nhưng vẫn gọi RETAIN_RESET — half-reset: calls=%v", runtime.calls)
+		}
+	}
+}
+
+func TestOperationResetRetainTimeoutBecomesUnknownThenRetriesIdempotentlyToSuccess(t *testing.T) {
+	fixture := newOperationFixture(t)
+	runtime := &fakeOperationRuntime{}
+	service := fixture.service(t, runtime)
+	fixture.commitCommission(t, service, runtime)
+	runtime.resetCalls()
+	runtime.retainResetResults = []coreipc.Result{coreipc.ResultBusy}
+
+	accepted, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		OperationCommand{SchemaVersion: "1.0", ExpectedActiveRevisionID: fixture.revision,
+			Reason: "kiểm tra Core TIMED_OUT không phải false success",
+			IdempotencyKey: "40000000-0000-4000-8000-000000000012", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if processed, err := service.ProcessNext(context.Background()); err != nil || !processed {
+		t.Fatalf("execute processed=%v err=%v", processed, err)
+	}
+	operation, err := fixture.store.GetOperation(context.Background(), accepted.OperationID)
+	if err != nil || operation.State != "UNKNOWN" {
+		t.Fatalf("Core BUSY (TIMED_OUT) phải map UNKNOWN, không phải false success: %+v err=%v", operation, err)
+	}
+	if processed, err := service.ProcessNext(context.Background()); err != nil || !processed {
+		t.Fatalf("retry processed=%v err=%v", processed, err)
+	}
+	operation, err = fixture.store.GetOperation(context.Background(), accepted.OperationID)
+	if err != nil || operation.State != "SUCCEEDED" {
+		t.Fatalf("retry idempotent phải hội tụ SUCCEEDED: %+v err=%v", operation, err)
+	}
+	retainCalls := 0
+	for _, action := range runtime.calls {
+		if action == coreipc.ActionRetainReset {
+			retainCalls++
+		}
+	}
+	if retainCalls != 2 {
+		t.Fatalf("phải gọi lại RETAIN_RESET đúng 1 lần sau BUSY (tổng 2 lần): calls=%v", runtime.calls)
+	}
+}
+
+func TestOperationResetRetainIdempotencyReplaysSameKeyRejectsDifferentRequest(t *testing.T) {
+	fixture := newOperationFixture(t)
+	runtime := &fakeOperationRuntime{}
+	service := fixture.service(t, runtime)
+	fixture.commitCommission(t, service, runtime)
+
+	command := OperationCommand{SchemaVersion: "1.0", ExpectedActiveRevisionID: fixture.revision,
+		Reason: "reset RETAIN theo yêu cầu Admin", IdempotencyKey: "40000000-0000-4000-8000-000000000013",
+		CorrelationID: testCorrelationID}
+	first, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"}, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"}, command)
+	if err != nil || !replay.Replay || replay.OperationID != first.OperationID {
+		t.Fatalf("replay cùng idempotency key phải trả cùng operation: %+v err=%v", replay, err)
+	}
+
+	conflicting := command
+	conflicting.Reason = "lý do khác — request semantics đổi"
+	if _, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"}, conflicting); !errors.Is(err, programmingstore.ErrIdempotencyConflict) {
+		t.Fatalf("idempotency key trùng nhưng request khác phải conflict: err=%v", err)
 	}
 }

@@ -237,6 +237,18 @@ func TestProgrammingMutationRequiresAdminWhenFeatureFlagOn(t *testing.T) {
 	}
 }
 
+// TC-RETAIN-04 (WP-12, DDD-RETAIN-RESET-PROG-001 §10): reject role không
+// phải Admin ở đúng route retain/reset, tách riêng khỏi test 403 generic ở
+// trên vì CTO approval liệt kê đây là một test case bắt buộc có tên riêng.
+func TestRetainResetRequiresAdminWhenFeatureFlagOn(t *testing.T) {
+	app, token := newTestAppWithRole(t, RoleViewer, fakeCore{})
+	app.cfg.ProgrammingRevA = true
+	response := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/programming/retain/reset", `{}`, token)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("status = %d; want 403", response.Code)
+	}
+}
+
 func TestProgrammingCORSPreflightAllowsConcurrencyHeadersAndPatch(t *testing.T) {
 	app, _ := newTestAppWithRole(t, RoleViewer, fakeCore{})
 	app.cfg.CORSOrigin = "https://engineering.example"

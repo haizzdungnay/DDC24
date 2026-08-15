@@ -139,6 +139,26 @@ type runtimeImpactPayload struct {
 	ActiveOverrideIDs []string
 }
 
+// retainResetPayload là CBOR array 2 phần tử khớp `parse_retain_reset_payload`
+// phía Core (`program_ipc_server.cpp`): [expected_active_revision_id, instance_id].
+// `operation_id` đi theo envelope Request chung, không lặp lại trong payload.
+type retainResetPayload struct {
+	_              struct{} `cbor:",toarray"`
+	ExpectedActive *string
+	InstanceID     string
+}
+
+type retainResetContext struct {
+	SchemaVersion string `json:"schemaVersion"`
+	InstanceID    string `json:"instanceId"`
+	Reason        string `json:"reason"`
+	Role          string `json:"role"`
+}
+
+// Rev A chỉ có một Program instance; field vẫn đi qua wire (Core lẫn context
+// audit) để Multi-Program sau này không cần đổi shape API (WP-12 §9).
+const retainResetInstanceID = "program-main"
+
 func NewOperationService(options OperationServiceOptions) (*OperationService, error) {
 	if options.Store == nil || options.Projects == nil || options.Artifacts == nil || options.Runtime == nil ||
 		!validText(options.ControllerID, 1, 64) || options.StagingRoot == "" {
@@ -224,6 +244,53 @@ func (s *OperationService) Commission(ctx context.Context, actor Actor, command 
 
 func (s *OperationService) Restore(ctx context.Context, actor Actor, command OperationCommand) (OperationAccepted, error) {
 	return s.begin(ctx, actor, "RESTORE", command)
+}
+
+// ResetRetain (WP-12, DDD-RETAIN-RESET-PROG-001) không đi qua `begin()`:
+// Commission/Restore luôn gắn với một artifact PASSED phải stage trước khi
+// activate (`resolveArtifact`/`MaterializeStaging`), còn RETAIN reset không
+// có artifact — Core coi đây là một hành động vận hành trên Program ĐANG
+// COMMITTED, không phải một candidate mới. Idempotency/audit vẫn dùng chung
+// hạ tầng Operation (`store.BeginOperation`/`UpdateOperation`) để không lặp
+// lại logic đã kiểm chứng.
+func (s *OperationService) ResetRetain(ctx context.Context, actor Actor, command OperationCommand) (OperationAccepted, error) {
+	if command.SchemaVersion != "1.0" || !isUUID(command.ExpectedActiveRevisionID) ||
+		!validText(command.Reason, 1, 500) {
+		return OperationAccepted{}, ErrInvalidRequest
+	}
+	keyHash, err := idempotencyHash(command.IdempotencyKey)
+	if err != nil {
+		return OperationAccepted{}, err
+	}
+	requestHash, err := semanticHash(map[string]any{"kind": "RESET_RETAIN", "controllerId": s.controllerID,
+		"expectedActiveRevisionId": command.ExpectedActiveRevisionID, "instanceId": retainResetInstanceID,
+		"reason": command.Reason})
+	if err != nil {
+		return OperationAccepted{}, err
+	}
+	s.beginMu.Lock()
+	defer s.beginMu.Unlock()
+	if existing, found, lookupErr := s.store.LookupOperationByIdempotency(ctx, actor.ID,
+		"RESET_RETAIN", s.controllerID, keyHash, requestHash); lookupErr != nil {
+		return OperationAccepted{}, lookupErr
+	} else if found {
+		return acceptedOperation(existing, requestHash, command.CorrelationID, true), nil
+	}
+	contextValue := retainResetContext{SchemaVersion: "1.0", InstanceID: retainResetInstanceID,
+		Reason: command.Reason, Role: actor.Role}
+	contextJSON, _ := json.Marshal(contextValue)
+	operation, err := s.store.BeginOperation(ctx, programmingstore.BeginOperationParams{
+		OperationID: s.newID(), Kind: "RESET_RETAIN", ControllerID: s.controllerID,
+		RequestedRevisionID: command.ExpectedActiveRevisionID, ExpectedActiveRevisionID: command.ExpectedActiveRevisionID,
+		IdempotencyKeySHA256: keyHash, RequestSHA256: requestHash, ContextJSON: contextJSON,
+		CorrelationID: command.CorrelationID, ActorID: actor.ID, Role: actor.Role,
+		AuditID: s.newID(), At: s.now(),
+	})
+	if err != nil {
+		return OperationAccepted{}, err
+	}
+	signalWake(s.wake)
+	return acceptedOperation(operation, requestHash, command.CorrelationID, operation.Replay), nil
 }
 
 func (s *OperationService) begin(ctx context.Context, actor Actor, kind string, command OperationCommand) (OperationAccepted, error) {
@@ -357,6 +424,9 @@ func (s *OperationService) ProcessNext(ctx context.Context) (bool, error) {
 }
 
 func (s *OperationService) execute(ctx context.Context, operation programmingstore.Operation) error {
+	if operation.Kind == "RESET_RETAIN" {
+		return s.executeRetainReset(ctx, operation)
+	}
 	contextValue, err := decodeOperationContext(operation.ContextJSON)
 	if err != nil {
 		return s.fail(operation, "CONTEXT_INVALID", err.Error())
@@ -433,7 +503,99 @@ func (s *OperationService) activateStaged(ctx context.Context, operation program
 	return err
 }
 
+// executeRetainReset (WP-12). Không có STAGE/ACTIVATE hai pha thật sự — vẫn
+// đi qua state STAGING/ACTIVATING để tái dùng nguyên `validOperationTransition`
+// đã kiểm chứng (không thêm state mới vào store), chỉ khác tên `step` cho
+// đúng ngữ nghĩa. Preflight STATUS trước khi gọi RETAIN_RESET để bắt sớm
+// TC-RETAIN-05 (Active Revision đổi giữa chừng) mà không cần chạm Core.
+func (s *OperationService) executeRetainReset(ctx context.Context, operation programmingstore.Operation) error {
+	operation, err := s.transition(operation, "VALIDATING", "PREFLIGHT", "", "", nil, "", nil, false)
+	if err != nil {
+		return err
+	}
+	status, err := s.call(ctx, operation, coreipc.ActionStatus, coreipc.EmptyPayload())
+	if err != nil {
+		return s.markUnknown(operation, "PREFLIGHT_STATUS", err)
+	}
+	previous := responseRevision(status)
+	if operation.ExpectedActiveRevisionID != previous {
+		return s.fail(operation, "EXPECTED_ACTIVE_MISMATCH", "Core active revision đã đổi")
+	}
+	operation, err = s.transition(operation, "STAGING", "RETAIN_RESET_PREFLIGHT_OK", "", "", nil, previous, nil, false)
+	if err != nil {
+		return err
+	}
+	operation, err = s.transition(operation, "ACTIVATING", "RETAIN_RESET", "", "", nil, previous, nil, false)
+	if err != nil {
+		return err
+	}
+	return s.callRetainReset(ctx, operation, previous)
+}
+
+// reconcileRetainReset chạy khi một attempt trước đó rơi vào UNKNOWN (Core
+// TIMED_OUT hoặc lỗi transport). KHÔNG dùng `s.runtime.Reconcile` — hàm đó bị
+// khoá cứng chỉ gọi OPERATION_STATUS (`coreipc/client.go`) và Core cũng không
+// theo dõi operation_id của RETAIN_RESET qua cơ chế journal như Stage/Activate.
+// Gọi lại đúng RETAIN_RESET là an toàn vì bản chất idempotent (reset lần hai
+// cho cùng kết quả) — đúng quyết định đã ghi trong comment
+// `programming_runtime_coordinator.cpp: reset_retain()`.
+func (s *OperationService) reconcileRetainReset(ctx context.Context, operation programmingstore.Operation) error {
+	status, err := s.call(ctx, operation, coreipc.ActionStatus, coreipc.EmptyPayload())
+	if err != nil {
+		_, updateErr := s.transition(operation, "UNKNOWN", "RECONCILE_STATUS", "", "IPC_UNAVAILABLE", nil,
+			operation.PreviousActiveRevisionID, nil, true)
+		return updateErr
+	}
+	previous := responseRevision(status)
+	if operation.ExpectedActiveRevisionID != previous {
+		return s.fail(operation, "EXPECTED_ACTIVE_MISMATCH", "Core active revision đã đổi")
+	}
+	return s.callRetainReset(ctx, operation, previous)
+}
+
+// callRetainReset. Khác Stage/Activate: RETAIN_RESET là MỘT round-trip đã tự
+// chờ safe boundary bên trong Core (bounded ~1.5s,
+// `programming_runtime_coordinator.cpp: reset_retain`) — Result trả về đã là
+// câu trả lời chung cuộc, không cần bước read-back OPERATION_STATUS riêng như
+// Activate. Result BUSY nghĩa là Core tự thấy TIMED_OUT ở boundary/flush —
+// không phải lỗi transport — nên map sang UNKNOWN (không phải FAILED, không
+// phải SUCCEEDED) để lần ProcessNext kế tiếp gọi lại (§7 "không giả định
+// thành công khi timeout").
+func (s *OperationService) callRetainReset(ctx context.Context, operation programmingstore.Operation, previous string) error {
+	expected := nullableRevision(operation.ExpectedActiveRevisionID)
+	payload, err := coreipc.EncodePayload(retainResetPayload{ExpectedActive: expected, InstanceID: retainResetInstanceID})
+	if err != nil {
+		return s.fail(operation, "RETAIN_RESET_PAYLOAD", err.Error())
+	}
+	response, err := s.call(ctx, operation, coreipc.ActionRetainReset, payload)
+	if err != nil {
+		return s.markUnknown(operation, "RETAIN_RESET", err)
+	}
+	switch response.Result {
+	case coreipc.ResultOK:
+		operation, err = s.transition(operation, "VERIFYING", "RETAIN_RESET_APPLIED", "", "", nil, previous, &response, false)
+		if err != nil {
+			return err
+		}
+		keeps := true
+		_, err = s.transition(operation, "SUCCEEDED", "COMMITTED", "COMMITTED", "", &keeps, previous, &response, true)
+		return err
+	case coreipc.ResultBusy:
+		detail := "IPC-RETAIN-RESET-TIMEOUT"
+		if response.DetailCode != nil {
+			detail = *response.DetailCode
+		}
+		_, err = s.transition(operation, "UNKNOWN", "RETAIN_RESET_TIMEOUT", "", detail, nil, previous, &response, true)
+		return err
+	default:
+		return s.failResponse(operation, "RETAIN_RESET_REJECTED", response)
+	}
+}
+
 func (s *OperationService) reconcile(ctx context.Context, operation programmingstore.Operation) error {
+	if operation.Kind == "RESET_RETAIN" {
+		return s.reconcileRetainReset(ctx, operation)
+	}
 	response, err := s.reconcileCall(ctx, operation)
 	if err != nil {
 		_, updateErr := s.transition(operation, "UNKNOWN", "RECONCILE", "", "IPC_UNAVAILABLE", nil,
@@ -497,8 +659,20 @@ func (s *OperationService) transition(operation programmingstore.Operation, stat
 	var commissionRecord *programmingstore.CommissionRecordInput
 	if terminal {
 		auditID, action = s.newID(), "OPERATION_COMPLETE"
-		contextValue, contextErr := decodeOperationContext(operation.ContextJSON)
-		role = contextValue.Role
+		// RESET_RETAIN dùng `retainResetContext` (không có field artifact) —
+		// `decodeOperationContext` áp DisallowUnknownFields nên luôn lỗi trên
+		// context đó; phải đọc role đúng shape theo Kind, không suy luận từ giá
+		// trị zero của một decode thất bại (đó là bug: role rỗng làm audit fail).
+		var contextValue operationContext
+		var contextErr error
+		if operation.Kind == "RESET_RETAIN" {
+			var retainContext retainResetContext
+			contextErr = decodeStrict(operation.ContextJSON, &retainContext)
+			role = retainContext.Role
+		} else {
+			contextValue, contextErr = decodeOperationContext(operation.ContextJSON)
+			role = contextValue.Role
+		}
 		if operation.Kind == "COMMISSION" && contextErr == nil && contextValue.Impact != nil {
 			artifactSHA, artifactErr := decodeSHA256(contextValue.ArtifactSHA256)
 			overrideSHA, overrideErr := decodeSHA256(contextValue.OverrideInventorySHA256)

@@ -80,6 +80,17 @@ public:
 
     const StLoadedProgram* program() const { return active_ ? &active_->program : nullptr; }
 
+    /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §3): RT safe boundary
+     * only — noexcept, không cấp phát, mirror `activate_prepared()`. Trả
+     * false nếu chưa có program active (không có gì để reset — không phải
+     * lỗi, caller coi như no-op thành công). */
+    bool reset_retained_state() noexcept
+    {
+        if (!active_) return false;
+        active_->program.reset_retained_state();
+        return true;
+    }
+
     uint32_t activation_count() const { return activation_count_; }
     uint32_t activation_fail_count() const { return activation_fail_count_; }
     uint32_t fault_count() const { return fault_count_; }

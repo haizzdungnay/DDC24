@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
+#include <thread>
 #include <vector>
 
 #include <fcntl.h>
@@ -593,6 +595,79 @@ bool ProgrammingRuntimeCoordinator::activate(const ActivateCommand& command,
     return true;
 }
 
+RetainResetOutcome ProgrammingRuntimeCoordinator::reset_retain(
+    const RetainResetCommand& command, std::string* detail_code, std::string* error)
+{
+    if (!canonical_uuid(command.operation_id) ||
+        (!command.expected_active_revision_id.empty() &&
+         !canonical_uuid(command.expected_active_revision_id))) {
+        if (detail_code) *detail_code = "IPC-PAYLOAD";
+        if (error) *error = "retain reset identity invalid";
+        return RetainResetOutcome::REJECTED;
+    }
+    /* Chỉ cho reset khi instance đang ở trạng thái ổn định — không giữa một
+     * lượt Commission dở dang (STAGED/COMMIT_INTENT/ACTIVE_CANDIDATE/
+     * FIRST_CYCLE_OK/ROLLING_BACK): trộn hai luồng non-RT cùng lúc vào
+     * scheduler dễ tạo race giữa activation pending và retain-reset pending
+     * trên cùng StProgramInstance. */
+    if (state_.load(std::memory_order_acquire) != LifecycleState::COMMITTED) {
+        if (detail_code) *detail_code = "IPC-RETAIN-RESET-STATE";
+        if (error) *error = "instance is not in a stable COMMITTED state";
+        return RetainResetOutcome::REJECTED;
+    }
+    if (command.expected_active_revision_id != previous_revision_id_) {
+        if (detail_code) *detail_code = "IPC-EXPECTED-ACTIVE";
+        if (error) *error = "expected active revision mismatch";
+        return RetainResetOutcome::REJECTED;
+    }
+    StProgramInstance* instance = scheduler_->find_program(command.instance_id);
+    if (!instance) {
+        if (detail_code) *detail_code = "IPC-RETAIN-RESET-INSTANCE";
+        if (error) *error = "unknown instance";
+        return RetainResetOutcome::REJECTED;
+    }
+    const uint64_t baseline_ack =
+        instance->retain_reset_ack_generation.load(std::memory_order_acquire);
+    if (!scheduler_->request_retain_reset(command.instance_id, error)) {
+        if (detail_code) *detail_code = "IPC-RETAIN-RESET-ARM";
+        return RetainResetOutcome::REJECTED;
+    }
+    /* Chờ boundary áp dụng — bounded poll trên IPC WORKER thread (non-RT),
+     * không chặn scan RT (scan chỉ chạm cờ atomic, không chờ ai). QUAN
+     * TRỌNG: `ProgramIpcUnixEndpoint::run()` là một `poll()`/`accept4()`
+     * loop ĐƠN LUỒNG (`apps/core/adapters/ipc/program_ipc_unix.cpp`) — chờ
+     * ở đây thật sự CHIẾM DỤNG toàn bộ IPC endpoint (mọi Status/Check khác
+     * cũng phải đợi), không chỉ request này. Giữ mốc timeout NGẮN có chủ
+     * đích (~1 chu kỳ scan mặc định 1000ms + biên độ), không phải giá trị
+     * tuỳ tiện: đây là đánh đổi Rev A chấp nhận được cho một hành động admin
+     * hiếm khi gọi, KHÔNG áp dụng nếu action nào khác gọi thường xuyên hơn.
+     * Timeout ở đây không phải lỗi — trả `TIMED_OUT` riêng, Go BE có thể gọi
+     * lại (idempotent, `router.go` đã khai `idempotencyRequired`) thay vì
+     * cần một async reconcile state machine mới. Nếu tương lai instance có
+     * thể nằm trên Task chu kỳ rất dài (30s theo `taskPeriodsMs`
+     * capability) hoặc endpoint IPC trở thành đa luồng, nâng cấp lên async
+     * reconcile giống Stage/Activate (design §9) thay vì kéo dài mốc này. */
+    constexpr int kPollIntervalMs = 20;
+    constexpr int kMaxWaitMs = 1500;
+    int waited_ms = 0;
+    while (instance->retain_reset_ack_generation.load(std::memory_order_acquire) == baseline_ack) {
+        if (waited_ms >= kMaxWaitMs) {
+            if (detail_code) *detail_code = "IPC-RETAIN-RESET-TIMEOUT";
+            if (error) *error = "timed out waiting for safe boundary to apply retain reset";
+            return RetainResetOutcome::TIMED_OUT;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(kPollIntervalMs));
+        waited_ms += kPollIntervalMs;
+    }
+    /* Force-flush bỏ qua cửa sổ autosave 60s (`StRetainStore::save_snapshot_if_needed`)
+     * — tái dùng đúng API đã có cho shutdown (`main.cpp` gọi
+     * `shutdown_and_flush()`), không viết cơ chế mới. */
+    if (StRetainService* retain_service = scheduler_->retain_service(); retain_service != nullptr) {
+        retain_service->flush(true);
+    }
+    return RetainResetOutcome::APPLIED;
+}
+
 void ProgrammingRuntimeCoordinator::capture_priority_overrides(
     const PriorityResolver& resolver) noexcept
 {
@@ -617,6 +692,13 @@ void ProgrammingRuntimeCoordinator::capture_priority_overrides(
 
 void ProgrammingRuntimeCoordinator::on_safe_boundary() noexcept
 {
+    /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §1/§3). KHÔNG gated
+     * theo LifecycleState như activation — reset phải áp dụng được ở trạng
+     * thái ổn định COMMITTED (khi Program đang chạy bình thường), không chỉ
+     * trong lúc đang commission. Vô hại khi không có yêu cầu đang chờ (no-op
+     * per-instance, xem `StScheduler::apply_pending_retain_resets`). */
+    scheduler_->apply_pending_retain_resets_at_boundary();
+
     const LifecycleState current = state_.load(std::memory_order_acquire);
     if (current == LifecycleState::ROLLING_BACK) {
         scheduler_->apply_pending_activations_at_boundary();

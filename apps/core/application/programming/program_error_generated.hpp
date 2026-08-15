@@ -7,7 +7,7 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "0aa6e47a477e59e15564039e938faaec602e19aad24efc3b7f64f4de5d99d848";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "a2fc10a8d1e8e286057301df27774ce93c495fc16803e2c0e4edd0c72634ce01";
 inline constexpr std::string_view kProgramErrorCatalogVersion = "1.5.0";
 
 enum class ProgramPublicError : uint8_t {
@@ -73,7 +73,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 100> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 104> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -145,6 +145,10 @@ inline constexpr std::array<ComponentErrorMapping, 100> kComponentErrorMappings 
     {"core-ipc", "IPC-QUEUE-FULL", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-RECOVERY-REQUIRED", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-REQUEST-ID-CONFLICT", ProgramPublicError::Operation },
+    {"core-ipc", "IPC-RETAIN-RESET-ARM", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-RETAIN-RESET-INSTANCE", ProgramPublicError::Request },
+    {"core-ipc", "IPC-RETAIN-RESET-STATE", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-RETAIN-RESET-TIMEOUT", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-RUNTIME-CONFIG", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-RUNTIME-NOT-CONFIGURED", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-STAGE-REJECTED", ProgramPublicError::Artifact },

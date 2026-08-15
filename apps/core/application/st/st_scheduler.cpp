@@ -388,6 +388,22 @@ bool StScheduler::reset_fault(const std::string& instance_id, std::string* error
     return true;
 }
 
+bool StScheduler::request_retain_reset(const std::string& instance_id, std::string* error)
+{
+    StProgramInstance* p = find_program(instance_id);
+    if (!p) { if (error) *error = "unknown instance '" + instance_id + "'"; return false; }
+    if (!p->runtime.loaded()) {
+        if (error) *error = "no program loaded on '" + instance_id + "' — nothing retained to reset";
+        return false;
+    }
+    if (p->pending_retain_reset.load(std::memory_order_acquire)) {
+        if (error) *error = "a RETAIN reset is already pending for '" + instance_id + "'";
+        return false;
+    }
+    p->pending_retain_reset.store(true, std::memory_order_release);
+    return true;
+}
+
 bool StScheduler::rollback(const std::string& instance_id, std::string* error)
 {
     StProgramInstance* p = find_program(instance_id);
@@ -469,6 +485,30 @@ void StScheduler::apply_pending_activations(StTask& task)
 void StScheduler::apply_pending_activations_at_boundary()
 {
     for (auto& task : tasks_) apply_pending_activations(*task);
+}
+
+/* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §1/§3). Đặt lại slot/FB
+ * state retained NGAY tại boundary — publish snapshot kế tiếp
+ * (`publish_committed_retain_snapshots()`, gọi từ `st_process_image.cpp`
+ * sau cycle) tự nhiên phản ánh giá trị đã reset vì mailbox chỉ đọc lại
+ * `program.slots`/`fb_states` hiện tại, không có "giá trị cũ" nào để ghi
+ * đè lên — đúng nguyên tắc "reset ở slots trước, worker chỉ đọc state hiện
+ * tại" đã ghi trong design §1. Không cấp phát, không throw. */
+void StScheduler::apply_pending_retain_resets(StTask& task)
+{
+    for (auto& p : task.programs()) {
+        if (!p->pending_retain_reset.load(std::memory_order_acquire)) continue;
+        p->runtime.reset_retained_state();
+        p->pending_retain_reset.store(false, std::memory_order_relaxed);
+        /* release: non-RT polling generation này phải thấy đúng slots đã
+         * ghi ở dòng trên trước khi thấy generation tăng. */
+        p->retain_reset_ack_generation.fetch_add(1, std::memory_order_release);
+    }
+}
+
+void StScheduler::apply_pending_retain_resets_at_boundary()
+{
+    for (auto& task : tasks_) apply_pending_retain_resets(*task);
 }
 
 void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out)

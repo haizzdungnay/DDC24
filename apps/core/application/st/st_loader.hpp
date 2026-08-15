@@ -108,6 +108,14 @@ struct StLoadedProgram {
 
     /* Đặt mọi slot biến về giá trị khởi tạo và nạp hằng vào vùng hằng. */
     void reset_to_initial();
+    /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §3): CHỈ đặt lại các
+     * slot thuộc `retain_entries` và state của FB có `retained=true` — khác
+     * `reset_to_initial()` (đặt lại TOÀN BỘ biến, dùng cho cold boot). Cùng
+     * bất biến RT: không cấp phát, không throw, O(bounded) theo
+     * `st_limits::RevAProfileError` đã giới hạn `retain_variables`/
+     * `retained_fb_count`. Gọi tại safe boundary, cùng điểm
+     * `StScheduler::apply_pending_activations()` áp dụng activation. */
+    void reset_retained_state();
     /* Tra dòng/cột ST của một pc, 0 nếu không có source map. */
     void source_position(uint32_t pc, int* line, int* column) const;
 };

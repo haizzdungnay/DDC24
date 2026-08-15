@@ -779,6 +779,28 @@ void StLoadedProgram::reset_to_initial()
     for (StFbState& s : fb_states) s = StFbState{};
 }
 
+void StLoadedProgram::reset_retained_state()
+{
+    for (const StIrRetainEntry& entry : retain_entries) {
+        for (const StIrVariable& v : variables) {
+            if (v.slot != entry.slot) continue;
+            StCell& c = slots[entry.slot];
+            switch (v.type) {
+            case StType::BOOL: c.b = v.init.b; break;
+            case StType::DINT:
+            case StType::INT:  c.i = v.init.i; break;
+            case StType::UINT: c.i = v.init.i; break;
+            case StType::REAL: c.r = v.init.r; break;
+            case StType::TIME: c.t = v.init.t; break;
+            }
+            break;
+        }
+    }
+    for (const StIrFbInstance& fb : fb_instances) {
+        if (fb.retained) fb_states[fb.state_index] = StFbState{};
+    }
+}
+
 void StLoadedProgram::source_position(uint32_t pc, int* line, int* column) const
 {
     if (line) *line = 0;
