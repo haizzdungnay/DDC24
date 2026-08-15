@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"path/filepath"
@@ -229,4 +230,80 @@ func TestGetProjectIncludesDraftContentButListDoesNot(t *testing.T) {
 	if len(page.Items[0].DraftContentJSON) != 0 {
 		t.Fatal("ListProjects KHÔNG được nhân bản DraftContentJSON vào từng item")
 	}
+}
+
+// TestGetProjectAndListProjectsExposeLatestCheck — WP-01 (Overview state
+// model, D-01, REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15 §5.2). Trước khi
+// niêm phong, LatestCheck phải là nil (không có Revision nào để tra — không
+// phải lỗi). Sau khi niêm phong và có một Check (dù QUEUED hay terminal),
+// GetProject/ListProjects đều phải thấy đúng Check gần nhất cho
+// baseRevisionId hiện hành.
+func TestGetProjectAndListProjectsExposeLatestCheck(t *testing.T) {
+	service, store := openProjectService(t)
+	actor := Actor{ID: testActorID, Role: "admin"}
+	created, err := service.CreateProject(context.Background(), actor, CreateProjectCommand{
+		SchemaVersion: "1.0", Name: "AHU tầng 4", IdempotencyKey: "30000000-0000-4000-8000-000000000001",
+		CorrelationID: testCorrelationID,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	projectID := created.Resource["projectId"].(string)
+	draftID := created.Resource["draftRevisionId"].(string)
+
+	before, err := service.GetProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("GetProject trước seal: %v", err)
+	}
+	if before.LatestCheck != nil {
+		t.Fatalf("chưa seal thì LatestCheck phải nil, got %+v", before.LatestCheck)
+	}
+
+	sealed, err := service.SealRevision(context.Background(), actor, SealRevisionCommand{
+		ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID, Label: "v1",
+		IfMatch: created.ETag, IdempotencyKey: "30000000-0000-4000-8000-000000000002", CorrelationID: testCorrelationID,
+	})
+	if err != nil {
+		t.Fatalf("SealRevision: %v", err)
+	}
+	revisionID := sealed.Resource["revisionId"].(string)
+
+	afterSealNoCheck, err := service.GetProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("GetProject sau seal, trước Check: %v", err)
+	}
+	if afterSealNoCheck.LatestCheck != nil {
+		t.Fatalf("đã seal nhưng chưa Check thì LatestCheck vẫn phải nil, got %+v", afterSealNoCheck.LatestCheck)
+	}
+
+	input := [32]byte{1}
+	key, request := mutationIdentity("wp01-latest-check")
+	if _, err := store.EnqueueCheck(context.Background(), programmingstore.EnqueueCheckParams{
+		CheckID: "30000000-0000-4000-8000-000000000003", RevisionID: revisionID, TargetID: "controller-local",
+		InputSHA256: input, Profile: "MKDDC24_REVA", CompilerVersion: "fwsom-st-1.1.0", ActorID: testActorID, Role: "admin",
+		AuditID: "30000000-0000-4000-8000-000000000004", CorrelationID: testCorrelationID, At: time.Date(2026, 8, 11, 9, 0, 1, 0, time.UTC),
+		IdempotencyKeySHA256: key, RequestSHA256: request,
+	}); err != nil {
+		t.Fatalf("EnqueueCheck: %v", err)
+	}
+
+	afterCheck, err := service.GetProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("GetProject sau Check: %v", err)
+	}
+	if afterCheck.LatestCheck == nil || afterCheck.LatestCheck.State != "QUEUED" || afterCheck.LatestCheck.RevisionID != revisionID {
+		t.Fatalf("LatestCheck phải phản ánh Check vừa enqueue: %+v", afterCheck.LatestCheck)
+	}
+
+	page, err := service.ListProjects(context.Background(), "", 10)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].LatestCheck == nil || page.Items[0].LatestCheck.State != "QUEUED" {
+		t.Fatalf("ListProjects phải trả cùng LatestCheck cho item: %+v", page.Items)
+	}
+}
+
+func mutationIdentity(label string) ([32]byte, [32]byte) {
+	return sha256.Sum256([]byte("key:" + label)), sha256.Sum256([]byte("request:" + label))
 }

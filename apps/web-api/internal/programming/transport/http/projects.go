@@ -51,6 +51,17 @@ type projectResponse struct {
 	// ở item của `GET /projects` (danh sách) — xem lý do ở
 	// `application.ProjectView.DraftContentJSON`.
 	Draft json.RawMessage `json:"draft,omitempty"`
+	// LatestCheck — WP-01 (Overview state model). `nil` khi Draft chưa từng
+	// niêm phong hoặc chưa từng Check.
+	LatestCheck *projectLatestCheckResponse `json:"latestCheck,omitempty"`
+}
+
+type projectLatestCheckResponse struct {
+	CheckID     string  `json:"checkId"`
+	RevisionID  string  `json:"revisionId"`
+	State       string  `json:"state"`
+	CreatedAt   string  `json:"createdAt"`
+	CompletedAt *string `json:"completedAt,omitempty"`
 }
 
 type projectPageResponse struct {
@@ -262,6 +273,11 @@ func toProjectResponse(project programmingapplication.ProjectView) projectRespon
 		BaseRevisionID: project.BaseRevisionID, UpdatedAt: project.UpdatedAt}
 	if len(project.DraftContentJSON) > 0 {
 		response.Draft = json.RawMessage(project.DraftContentJSON)
+	}
+	if project.LatestCheck != nil {
+		response.LatestCheck = &projectLatestCheckResponse{CheckID: project.LatestCheck.CheckID,
+			RevisionID: project.LatestCheck.RevisionID, State: project.LatestCheck.State,
+			CreatedAt: project.LatestCheck.CreatedAt, CompletedAt: project.LatestCheck.CompletedAt}
 	}
 	return response
 }

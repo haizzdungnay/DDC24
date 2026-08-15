@@ -191,6 +191,18 @@ export interface ProgrammingDraftDocument {
   library: { profile: string; version: string }
 }
 
+export type ProgrammingCheckState = 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'TIMED_OUT'
+
+/** WP-01 (Overview state model, D-01, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15`
+ *  §5.2) — Check gần nhất cho `baseRevisionId` hiện hành, bất kể state. */
+export interface ProgrammingProjectLatestCheck {
+  checkId: string
+  revisionId: string
+  state: ProgrammingCheckState
+  createdAt: string
+  completedAt?: string | null
+}
+
 export interface ProgrammingProject {
   projectId: string
   name: string
@@ -202,6 +214,8 @@ export interface ProgrammingProject {
   updatedAt: string
   /** Chỉ có ở `GET /projects/{projectId}`, không có ở item của `GET /projects`. */
   draft?: ProgrammingDraftDocument
+  /** `null`/`undefined` khi Draft chưa từng niêm phong hoặc chưa từng Check. */
+  latestCheck?: ProgrammingProjectLatestCheck | null
 }
 
 /** Payload của từng phần tử `operations[]` trong `PATCH .../draft`

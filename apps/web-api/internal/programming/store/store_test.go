@@ -397,6 +397,70 @@ func TestCheckLeaseIdempotencyAtomicArtifactAndDeterministicDedup(t *testing.T) 
 	}
 }
 
+// TestGetLatestCheckForRevision — WP-01 (Overview state model, D-01,
+// REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15 §5.2). Khác
+// GetPassedCheckForRevision (chỉ tìm bản PASSED, dùng cho Commission), hàm
+// này phải trả Check gần nhất bất kể state — kể cả khi Check mới nhất đang
+// QUEUED/RUNNING hoặc vừa FAILED sau một lần PASSED trước đó (tái Check trên
+// cùng Revision).
+func TestGetLatestCheckForRevision(t *testing.T) {
+	store := openTestStore(t)
+	createProjectFixture(t, store)
+	createRevisionFixture(t, store, 1)
+
+	if _, err := store.GetLatestCheckForRevision(context.Background(), revisionID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("chưa Check lần nào phải trả ErrNotFound, got %v", err)
+	}
+	if _, err := store.GetLatestCheckForRevision(context.Background(), "not-a-uuid"); err == nil {
+		t.Fatal("revisionID không hợp lệ phải bị từ chối")
+	}
+
+	input := sha256.Sum256([]byte("latest-check-fixture"))
+	firstKey, firstRequest := mutationIdentity("latest-check-first")
+	queued, err := store.EnqueueCheck(context.Background(), EnqueueCheckParams{
+		CheckID: "55555555-5555-4555-8555-555555555551", RevisionID: revisionID, TargetID: "controller-local",
+		InputSHA256: input, Profile: "MKDDC24_REVA", CompilerVersion: "fwsom-st-1.1.0", ActorID: actorID, Role: role,
+		AuditID: "cccccccc-cccc-4ccc-8ccc-ccccccccccc1", CorrelationID: correlationID, At: fixedNow,
+		IdempotencyKeySHA256: firstKey, RequestSHA256: firstRequest,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := store.GetLatestCheckForRevision(context.Background(), revisionID)
+	if err != nil || latest.CheckID != queued.CheckID || latest.State != "QUEUED" {
+		t.Fatalf("phải thấy đúng Check vừa QUEUED: latest=%+v err=%v", latest, err)
+	}
+
+	claimed, ok, err := store.ClaimCheck(context.Background(), "worker-a", fixedNow, time.Minute)
+	if err != nil || !ok {
+		t.Fatalf("claim=%+v ok=%v err=%v", claimed, ok, err)
+	}
+	result := []byte(`{"schemaVersion":"1.0","diagnostics":[{"code":"ST-SEM-002","detailCode":"","severity":"ERROR","messageKey":"x","location":{}}]}`)
+	if _, err := store.CompleteCheck(context.Background(), CompleteCheckParams{CheckID: claimed.CheckID, LeaseOwner: "worker-a",
+		State: "FAILED", ResultJSON: result, AuditID: "cccccccc-cccc-4ccc-8ccc-ccccccccccc2", At: fixedNow.Add(time.Second)}); err != nil {
+		t.Fatal(err)
+	}
+	latest, err = store.GetLatestCheckForRevision(context.Background(), revisionID)
+	if err != nil || latest.State != "FAILED" || latest.CompletedAtUTCMS == nil {
+		t.Fatalf("phải thấy Check vừa FAILED với completedAt: latest=%+v err=%v", latest, err)
+	}
+
+	secondKey, secondRequest := mutationIdentity("latest-check-second")
+	second, err := store.EnqueueCheck(context.Background(), EnqueueCheckParams{
+		CheckID: "55555555-5555-4555-8555-555555555552", RevisionID: revisionID, TargetID: "controller-local",
+		InputSHA256: input, Profile: "MKDDC24_REVA", CompilerVersion: "fwsom-st-1.1.0", ActorID: actorID, Role: role,
+		AuditID: "cccccccc-cccc-4ccc-8ccc-ccccccccccc3", CorrelationID: correlationID, At: fixedNow.Add(2 * time.Second),
+		IdempotencyKeySHA256: secondKey, RequestSHA256: secondRequest,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err = store.GetLatestCheckForRevision(context.Background(), revisionID)
+	if err != nil || latest.CheckID != second.CheckID || latest.State != "QUEUED" {
+		t.Fatalf("Check thứ hai (mới hơn) phải thắng dù Check đầu đã terminal trước: latest=%+v err=%v", latest, err)
+	}
+}
+
 func TestBackupVerifyRestoreIsPointInTimeAndNoOverwrite(t *testing.T) {
 	store := openTestStore(t)
 	createProjectFixture(t, store)

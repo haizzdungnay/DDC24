@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, FolderPlus, PlayCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ClipboardCheck, FolderPlus, Loader2, PlayCircle, XCircle } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
 import { Panel } from '../../../shared/components/Panel'
@@ -10,7 +10,7 @@ import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import { useProgrammingProjects, useProgrammingRecentAudit } from '../api/queries'
 import { useCreateProgrammingProject } from '../api/mutations'
-import type { ProgrammingRuntime } from '../model/types'
+import type { ProgrammingProject, ProgrammingRuntime } from '../model/types'
 
 /**
  * `OverviewPage` (PGM-01) — `UJ-PROG-01`. Trong `≤5 giây` phải thấy: Core,
@@ -166,12 +166,106 @@ function DraftAttentionPanel({ projects }: { projects: ReturnType<typeof useProg
           <span className="text-[var(--c-text-dim)]">Project</span>
           <span className="text-[var(--c-text)]">{project.name}</span>
         </div>
-        <Button size="sm" onClick={() => navigate(`/eng/programming/projects/${project.projectId}/design`)}>
-          {pick('Tiếp tục chỉnh sửa', 'Continue editing')}
-        </Button>
+        <DraftCheckStatus project={project} />
+        <div className="flex flex-wrap gap-2">
+          <DraftPrimaryAction project={project} navigate={navigate} />
+        </div>
       </div>
     </Panel>
   )
+}
+
+/**
+ * WP-01 (Overview state model, D-01, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15`
+ * §5.2, quyết định CTO/Owner 2026-08-15): `DraftAttentionPanel` trước đây chỉ
+ * có 2 nhánh (no-draft/dirty), không phân biệt được Check đang chạy/vừa lỗi/
+ * vừa đạt — kỹ sư mở Tổng quan sau một lần Check FAILED chỉ thấy "Tiếp tục
+ * chỉnh sửa" giống hệt lúc chưa từng Check. Nay đọc `project.latestCheck`
+ * (mới, `GET /projects`) để phân biệt 4/6 trạng thái thiết kế yêu cầu:
+ * no-draft, dirty (chưa Check hoặc chưa có Draft nào được niêm phong),
+ * checking, failed, ready. Bảng thiết kế còn liệt kê `conflict` (409 khi
+ * lưu) — KHÔNG cài ở đây: 409 là phản hồi tức thời của một lần lưu đang diễn
+ * ra tại `PGM-02` (đã xử lý sống ở `DesignWorkspacePage`/`useDraftWorkspace`),
+ * không phải một trạng thái được server lưu lại — không có "conflict" nào để
+ * đọc lại khi mở Tổng quan ở một phiên trình duyệt mới. Xem
+ * `docs/03_implementation/56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md`
+ * WP-01 mục "Quyết định thiết kế" để có lý do đầy đủ.
+ */
+function draftAttentionState(project: ProgrammingProject): 'dirty' | 'checking' | 'failed' | 'ready' {
+  const state = project.latestCheck?.state
+  if (state === 'QUEUED' || state === 'RUNNING') return 'checking'
+  if (state === 'FAILED' || state === 'TIMED_OUT') return 'failed'
+  if (state === 'PASSED') return 'ready'
+  return 'dirty'
+}
+
+function DraftCheckStatus({ project }: { project: ProgrammingProject }) {
+  const { pick } = useI18n()
+  const state = draftAttentionState(project)
+  if (state === 'checking') {
+    return (
+      <div className="flex items-center gap-2 text-[var(--c-text-dim)]">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        {pick('Đang kiểm tra…', 'Checking…')}
+      </div>
+    )
+  }
+  if (state === 'failed') {
+    return (
+      <div className="flex items-center gap-2 text-[var(--c-fault-fg)]">
+        <XCircle className="h-4 w-4" aria-hidden="true" />
+        {pick('Kiểm tra gần nhất KHÔNG đạt.', 'Latest check FAILED.')}
+      </div>
+    )
+  }
+  if (state === 'ready') {
+    return (
+      <div className="flex items-center gap-2 text-[var(--c-good-fg)]">
+        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+        {pick('Kiểm tra gần nhất đạt — sẵn sàng Đưa vào vận hành.', 'Latest check PASSED — ready to commission.')}
+      </div>
+    )
+  }
+  return (
+    <div className="text-[var(--c-text-dim)]">
+      {pick('Đang chỉnh sửa — chưa Kiểm tra lần nào cho bản này.', 'Editing — this draft has not been checked yet.')}
+    </div>
+  )
+}
+
+function DraftPrimaryAction({ project, navigate }: { project: ProgrammingProject; navigate: (path: string) => void }) {
+  const { pick } = useI18n()
+  const state = draftAttentionState(project)
+  const designPath = `/eng/programming/projects/${project.projectId}/design`
+  const commissionPath = `/eng/programming/projects/${project.projectId}/commission`
+  if (state === 'checking') {
+    return (
+      <Button size="sm" onClick={() => navigate(commissionPath)}>
+        {pick('Xem tiến trình', 'View progress')}
+      </Button>
+    )
+  }
+  if (state === 'failed') {
+    return (
+      <>
+        <Button size="sm" variant="primary" icon={<XCircle className="h-4 w-4" aria-hidden="true" />} onClick={() => navigate(commissionPath)}>
+          {pick('Xem lỗi', 'View errors')}
+        </Button>
+        <Button size="sm" onClick={() => navigate(designPath)}>{pick('Tiếp tục chỉnh sửa', 'Continue editing')}</Button>
+      </>
+    )
+  }
+  if (state === 'ready') {
+    return (
+      <>
+        <Button size="sm" variant="primary" icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />} onClick={() => navigate(commissionPath)}>
+          {pick('Mở Kiểm tra & Đưa vào vận hành', 'Open Check & Commission')}
+        </Button>
+        <Button size="sm" onClick={() => navigate(designPath)}>{pick('Tiếp tục chỉnh sửa', 'Continue editing')}</Button>
+      </>
+    )
+  }
+  return <Button size="sm" onClick={() => navigate(designPath)}>{pick('Tiếp tục chỉnh sửa', 'Continue editing')}</Button>
 }
 
 function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | null }) {

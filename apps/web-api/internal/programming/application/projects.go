@@ -60,6 +60,20 @@ type ProjectView struct {
 	// có thể tới 2 MiB (DM-PROG-001 §6.1) nên không nhân bản vào mỗi item
 	// của một trang danh sách.
 	DraftContentJSON []byte
+	// LatestCheck — WP-01 (Overview state model, D-01, REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15
+	// §5.2): Check gần nhất cho `BaseRevisionID` hiện hành, bất kể state. `nil`
+	// khi Draft chưa từng được niêm phong+Check (chưa có Revision nào để tra).
+	// Cho phép Overview phân biệt checking/failed/ready thay vì chỉ có
+	// no-draft/dirty như trước.
+	LatestCheck *ProjectLatestCheck
+}
+
+type ProjectLatestCheck struct {
+	CheckID     string
+	RevisionID  string
+	State       string
+	CreatedAt   string
+	CompletedAt *string
 }
 
 type ProjectPage struct {
@@ -290,7 +304,37 @@ func (s *ProjectService) GetProject(ctx context.Context, projectID string) (Proj
 	}
 	view := projectView(snapshot)
 	view.DraftContentJSON = snapshot.Draft.ContentJSON
+	latestCheck, err := s.latestCheckView(ctx, snapshot.Draft.BaseRevisionID)
+	if err != nil {
+		return ProjectView{}, err
+	}
+	view.LatestCheck = latestCheck
 	return view, nil
+}
+
+// latestCheckView — WP-01: `revisionID` rỗng nghĩa là Draft chưa từng niêm
+// phong (chưa có Revision), trả `nil` thẳng không cần truy vấn.
+// `programmingstore.ErrNotFound` nghĩa là đã có Revision nhưng chưa từng bấm
+// Check — cũng là `nil`, không phải lỗi. Lỗi đọc DB thật thì trả lỗi thay vì
+// nuốt âm thầm rồi để Overview hiện sai trạng thái.
+func (s *ProjectService) latestCheckView(ctx context.Context, revisionID string) (*ProjectLatestCheck, error) {
+	if revisionID == "" {
+		return nil, nil
+	}
+	check, err := s.store.GetLatestCheckForRevision(ctx, revisionID)
+	if errors.Is(err, programmingstore.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	view := ProjectLatestCheck{CheckID: check.CheckID, RevisionID: check.RevisionID, State: check.State,
+		CreatedAt: formatTime(check.CreatedAtUTCMS)}
+	if check.CompletedAtUTCMS != nil {
+		value := formatTime(*check.CompletedAtUTCMS)
+		view.CompletedAt = &value
+	}
+	return &view, nil
 }
 
 func (s *ProjectService) ListProjects(ctx context.Context, encodedCursor string, limit int) (ProjectPage, error) {
@@ -315,7 +359,13 @@ func (s *ProjectService) ListProjects(ctx context.Context, encodedCursor string,
 	}
 	page := ProjectPage{Items: make([]ProjectView, 0, min(limit, len(items)))}
 	for _, item := range items[:min(limit, len(items))] {
-		page.Items = append(page.Items, projectView(item))
+		view := projectView(item)
+		latestCheck, err := s.latestCheckView(ctx, item.Draft.BaseRevisionID)
+		if err != nil {
+			return ProjectPage{}, err
+		}
+		view.LatestCheck = latestCheck
+		page.Items = append(page.Items, view)
 	}
 	if len(items) > limit {
 		last := items[limit-1]

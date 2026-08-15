@@ -106,3 +106,49 @@ describe('OverviewPage — Việc cần chú ý (TR-MKDDC24-P2-20260814-02)', ()
     expect(item).not.toHaveTextContent(/Giữ Commission\/Restore bị khóa/)
   })
 })
+
+/* WP-01 (Overview state model, D-01, REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15
+ * §5.2, quyết định CTO/Owner 2026-08-15): DraftAttentionPanel trước đây chỉ
+ * có 2 nhánh (no-draft/dirty) — không phân biệt được Check đang chạy/vừa
+ * lỗi/vừa đạt. */
+describe('OverviewPage — DraftAttentionPanel theo latestCheck (WP-01)', () => {
+  function stubProjectWithCheck(latestCheck: Record<string, unknown> | null) {
+    stubDefaultEndpoints({
+      listProgrammingProjects: () => Promise.resolve({
+        items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: ACTIVE_ID, latestCheck }]
+      })
+    })
+  }
+
+  it('dirty: chưa Check lần nào — chỉ có "Tiếp tục chỉnh sửa"', async () => {
+    stubProjectWithCheck(null)
+    renderOverview('vi')
+    await screen.findByText('Đang chỉnh sửa — chưa Kiểm tra lần nào cho bản này.')
+    expect(screen.getByRole('button', { name: 'Tiếp tục chỉnh sửa' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Xem lỗi' })).not.toBeInTheDocument()
+  })
+
+  it('checking: Check đang QUEUED/RUNNING — hiện đang xử lý, không giả thành trạng thái sửa bình thường', async () => {
+    stubProjectWithCheck({ checkId: 'check-1', revisionId: ACTIVE_ID, state: 'RUNNING', createdAt: '2026-08-15T00:00:00Z' })
+    renderOverview('vi')
+    await screen.findByText('Đang kiểm tra…')
+    expect(screen.getByRole('button', { name: 'Xem tiến trình' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Tiếp tục chỉnh sửa' })).not.toBeInTheDocument()
+  })
+
+  it('failed: Check FAILED — primary action "Xem lỗi", vẫn giữ lối "Tiếp tục chỉnh sửa"', async () => {
+    stubProjectWithCheck({ checkId: 'check-1', revisionId: ACTIVE_ID, state: 'FAILED', createdAt: '2026-08-15T00:00:00Z', completedAt: '2026-08-15T00:01:00Z' })
+    renderOverview('vi')
+    await screen.findByText('Kiểm tra gần nhất KHÔNG đạt.')
+    expect(screen.getByRole('button', { name: 'Xem lỗi' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tiếp tục chỉnh sửa' })).toBeInTheDocument()
+  })
+
+  it('ready: Check PASSED — primary action mở Kiểm tra & Đưa vào vận hành', async () => {
+    stubProjectWithCheck({ checkId: 'check-1', revisionId: ACTIVE_ID, state: 'PASSED', createdAt: '2026-08-15T00:00:00Z', completedAt: '2026-08-15T00:01:00Z' })
+    renderOverview('vi')
+    await screen.findByText('Kiểm tra gần nhất đạt — sẵn sàng Đưa vào vận hành.')
+    expect(screen.getByRole('button', { name: 'Mở Kiểm tra & Đưa vào vận hành' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tiếp tục chỉnh sửa' })).toBeInTheDocument()
+  })
+})
