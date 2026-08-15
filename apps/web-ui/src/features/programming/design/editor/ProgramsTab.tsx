@@ -8,6 +8,16 @@ import { Modal } from '../../../../shared/components/Modal'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import { canonicalFbdJson, FBD_PROFILE_ID, FBD_SCHEMA_VERSION, type FbdDocument } from '../../fbd/model'
 import type { ProgrammingDiagnostic, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingProgram } from '../../model/types'
+import {
+  buildStCompletions,
+  computeAutoIndent,
+  currentWordPrefix,
+  findMatchingBracket,
+  mergeDiagnosticRanges,
+  tokenizeStSource,
+  type StCompletionItem,
+  type StDiagnosticRange,
+} from './stEditorSupport'
 
 /** F-PROG-ASBUILT-001/D-02: Program ST mới không được bắt đầu ở `document: ''`
  * — compiler luôn Check FAILED ngay khi tạo. Định danh `PROGRAM` cố định
@@ -298,7 +308,7 @@ export function ProgramsTab({
   )
 }
 
-function SourceEditor({
+export function SourceEditor({
   program,
   source,
   canEdit,
@@ -326,12 +336,31 @@ function SourceEditor({
   const canSave = dirty && !isEmptySource
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const lineGutterRef = useRef<HTMLPreElement>(null)
+  const overlayRef = useRef<HTMLPreElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
+  const [replaceText, setReplaceText] = useState('')
   const [cursor, setCursor] = useState({ line: 1, column: 1 })
+  const [completion, setCompletion] = useState<{ open: boolean; items: StCompletionItem[]; selected: number; anchor: number }>(
+    { open: false, items: [], selected: 0, anchor: 0 },
+  )
   const symbols = useMemo(() => collectStSymbols(source), [source])
   const matches = useMemo(() => findTextMatches(source, searchText), [searchText, source])
+  const tokens = useMemo(() => tokenizeStSource(source), [source])
+  const diagnosticRanges = useMemo<StDiagnosticRange[]>(() => diagnostics
+    .map((diagnostic, index): StDiagnosticRange | null => {
+      if (!diagnostic.location) return null
+      const line = typeof diagnostic.location.line === 'number' ? diagnostic.location.line : undefined
+      const column = typeof diagnostic.location.column === 'number' ? diagnostic.location.column : undefined
+      if (line === undefined || column === undefined) return null
+      const length = typeof diagnostic.location.length === 'number' ? diagnostic.location.length : 1
+      const start = lineColumnToOffset(source, line, column)
+      return { start, end: Math.min(source.length, start + Math.max(1, length)), index }
+    })
+    .filter((range): range is StDiagnosticRange => range !== null), [diagnostics, source])
+  const segments = useMemo(() => mergeDiagnosticRanges(tokens, diagnosticRanges), [tokens, diagnosticRanges])
+  const bracketMatch = useMemo(() => findMatchingBracket(source, textareaRef.current?.selectionStart ?? -1), [source, cursor])
 
   function updateCursor() {
     const offset = textareaRef.current?.selectionStart ?? 0
@@ -353,6 +382,87 @@ function SourceEditor({
     const length = typeof focusDiagnostic.location.length === 'number' ? focusDiagnostic.location.length : 1
     selectRange(lineColumnToOffset(source, line, column), length)
   }, [focusDiagnostic])
+
+  function closeCompletion() {
+    setCompletion({ open: false, items: [], selected: 0, anchor: 0 })
+  }
+
+  /* WP-10 P0 (CTO/Owner approval §5): gợi ý sau MỖI keystroke dựa trên
+   * `nextSource`/`offset` truyền trực tiếp từ sự kiện — không đọc `source`
+   * (state cũ, chưa kịp cập nhật khi hàm này chạy trong cùng handler). */
+  function refreshCompletion(nextSource: string, offset: number) {
+    const info = currentWordPrefix(nextSource, offset)
+    if (!info) { closeCompletion(); return }
+    const items = buildStCompletions(info.prefix, collectStSymbols(nextSource))
+    if (items.length === 0) { closeCompletion(); return }
+    setCompletion({ open: true, items, selected: 0, anchor: info.start })
+  }
+
+  function acceptCompletion(item: StCompletionItem) {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const cursorOffset = textarea.selectionStart
+    const next = source.slice(0, completion.anchor) + item.label + source.slice(cursorOffset)
+    onChange(next)
+    const newCursor = completion.anchor + item.label.length
+    window.requestAnimationFrame(() => {
+      textarea.selectionStart = textarea.selectionEnd = newCursor
+      textarea.focus()
+      updateCursor()
+    })
+    closeCompletion()
+  }
+
+  /* Enter tự thụt lề theo độ sâu khối hiện tại (`computeAutoIndent`) — chỉ
+   * áp dụng khi KHÔNG có dropdown gợi ý đang mở (Enter lúc đó dùng để chấp
+   * nhận gợi ý, xử lý ở `onKeyDown`). */
+  function handleAutoIndentEnter() {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const insertion = `\n${computeAutoIndent(source, start)}`
+    const next = source.slice(0, start) + insertion + source.slice(end)
+    onChange(next)
+    const newCursor = start + insertion.length
+    window.requestAnimationFrame(() => {
+      textarea.selectionStart = textarea.selectionEnd = newCursor
+      updateCursor()
+    })
+  }
+
+  function replaceAllMatches() {
+    if (!searchText || matches.length === 0) return
+    const next = source.split(searchText).join(replaceText)
+    onChange(next)
+  }
+
+  function replaceNextMatch() {
+    const textarea = textareaRef.current
+    if (!searchText || matches.length === 0 || !textarea) return
+    const at = nextMatch(matches, textarea.selectionEnd ?? 0)
+    const next = source.slice(0, at) + replaceText + source.slice(at + searchText.length)
+    onChange(next)
+    const newCursor = at + replaceText.length
+    window.requestAnimationFrame(() => {
+      textarea.selectionStart = textarea.selectionEnd = newCursor
+      updateCursor()
+    })
+  }
+
+  const segmentClass: Record<string, string> = {
+    keyword: 'text-[var(--c-accent)] font-semibold',
+    type: 'text-[var(--c-info)]',
+    function: 'text-[var(--c-good-fg)]',
+    'fb-type': 'text-[var(--c-good-fg)] font-semibold',
+    number: 'text-[var(--c-warn-fg)]',
+    time: 'text-[var(--c-warn-fg)]',
+    comment: 'text-[var(--c-text-dim)] italic',
+    operator: 'text-[var(--c-text)]',
+    punctuation: 'text-[var(--c-text)]',
+    identifier: 'text-[var(--c-text)]',
+    whitespace: '',
+  }
 
   return (
     <div className="space-y-2">
@@ -408,6 +518,20 @@ function SourceEditor({
           />
           <span className="text-xs text-[var(--c-text-dim)]">{matches.length} {pick('kết quả', 'matches')}</span>
           <Button size="sm" variant="ghost" disabled={matches.length === 0} onClick={() => matches.length > 0 && selectRange(nextMatch(matches, textareaRef.current?.selectionEnd ?? 0), searchText.length)}>{pick('Tiếp', 'Next')}</Button>
+          {canEdit && (
+            <>
+              <label className="sr-only" htmlFor={`programming-st-replace-${program.programId}`}>{pick('Thay bằng', 'Replace with')}</label>
+              <input
+                id={`programming-st-replace-${program.programId}`}
+                value={replaceText}
+                onChange={(event) => setReplaceText(event.target.value)}
+                placeholder={pick('Thay bằng…', 'Replace with…')}
+                className="min-w-40 flex-1 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]"
+              />
+              <Button size="sm" variant="ghost" disabled={matches.length === 0} onClick={replaceNextMatch}>{pick('Thay', 'Replace')}</Button>
+              <Button size="sm" variant="ghost" disabled={matches.length === 0} onClick={replaceAllMatches}>{pick('Thay tất cả', 'Replace all')}</Button>
+            </>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -420,35 +544,111 @@ function SourceEditor({
       <label className="sr-only" htmlFor={`programming-st-source-${program.programId}`}>
         {pick(`Mã nguồn ST của ${program.name}`, `ST source for ${program.name}`)}
       </label>
-      <div className="grid h-96 grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]">
+      <div className="relative grid h-96 grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]">
         <pre ref={lineGutterRef} aria-hidden="true" className="mono m-0 overflow-hidden border-r border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 py-3 text-right text-sm leading-5 text-[var(--c-text-dim)]">
           {Array.from({ length: Math.max(1, source.split('\n').length) }, (_, index) => index + 1).join('\n')}
         </pre>
-        <textarea
-          ref={textareaRef}
-          id={`programming-st-source-${program.programId}`}
-          aria-describedby={diagnostics.length > 0 ? `programming-st-diagnostics-${program.programId}` : undefined}
-          className="mono h-96 w-full resize-none border-0 bg-transparent p-3 text-sm leading-5 text-[var(--c-text)] outline-none"
-          value={source}
-          readOnly={!canEdit}
-          spellCheck={false}
-          onChange={(event) => onChange(event.target.value)}
-          onClick={updateCursor}
-          onKeyUp={updateCursor}
-          onSelect={updateCursor}
-          onScroll={(event) => { if (lineGutterRef.current) lineGutterRef.current.scrollTop = event.currentTarget.scrollTop }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape' && searchOpen) {
-              event.preventDefault(); setSearchOpen(false); return
-            }
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
-              event.preventDefault(); setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0)
-            }
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && canEdit && canSave) {
-              event.preventDefault(); void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'ST', source }])
-            }
-          }}
-        />
+        <div className="relative h-96 overflow-hidden">
+          {/* WP-10 P0: overlay tô cú pháp + gạch chân diagnostic, nằm DƯỚI
+           * textarea (chữ trong suốt, chỉ hiện con trỏ) — cùng font/padding/
+           * line-height nên khớp pixel-cho-pixel với textarea phía trên. */}
+          <pre
+            ref={overlayRef}
+            aria-hidden="true"
+            className="mono pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre-wrap break-words p-3 text-sm leading-5"
+          >
+            {segments.map((segment, index) => {
+              const isBracket = bracketMatch !== null && (segment.start === bracketMatch.open || segment.start === bracketMatch.close) && segment.kind === 'punctuation'
+              const classes = [segmentClass[segment.kind] ?? '']
+              if (isBracket) classes.push('rounded bg-[var(--c-accent-bg)]')
+              if (segment.diagnosticIndex !== null) classes.push('underline decoration-wavy decoration-2 [text-decoration-color:var(--c-fault)]')
+              const shared = segment.text === '' ? '​' : segment.text
+              if (segment.diagnosticIndex !== null) {
+                const diagnostic = diagnostics[segment.diagnosticIndex]
+                return (
+                  <span
+                    key={index}
+                    className={`${classes.join(' ')} pointer-events-auto cursor-pointer`}
+                    title={diagnostic ? `${diagnostic.code}${diagnostic.detailCode ? ` (${diagnostic.detailCode})` : ''}` : undefined}
+                    onClick={() => {
+                      const line = typeof diagnostic?.location?.line === 'number' ? diagnostic.location.line : 1
+                      const column = typeof diagnostic?.location?.column === 'number' ? diagnostic.location.column : 1
+                      const length = typeof diagnostic?.location?.length === 'number' ? diagnostic.location.length : 1
+                      selectRange(lineColumnToOffset(source, line, column), length)
+                    }}
+                  >
+                    {shared}
+                  </span>
+                )
+              }
+              return <span key={index} className={classes.join(' ')}>{shared}</span>
+            })}
+          </pre>
+          <textarea
+            ref={textareaRef}
+            id={`programming-st-source-${program.programId}`}
+            aria-describedby={diagnostics.length > 0 ? `programming-st-diagnostics-${program.programId}` : undefined}
+            className="mono absolute inset-0 h-96 w-full resize-none border-0 bg-transparent p-3 text-sm leading-5 text-transparent caret-[var(--c-text)] outline-none"
+            value={source}
+            readOnly={!canEdit}
+            spellCheck={false}
+            onChange={(event) => {
+              const next = event.target.value
+              onChange(next)
+              refreshCompletion(next, event.target.selectionStart)
+            }}
+            onClick={() => { updateCursor(); closeCompletion() }}
+            onKeyUp={updateCursor}
+            onSelect={updateCursor}
+            onScroll={(event) => {
+              if (lineGutterRef.current) lineGutterRef.current.scrollTop = event.currentTarget.scrollTop
+              if (overlayRef.current) overlayRef.current.scrollTop = event.currentTarget.scrollTop
+            }}
+            onKeyDown={(event) => {
+              if (completion.open) {
+                if (event.key === 'ArrowDown') { event.preventDefault(); setCompletion((c) => ({ ...c, selected: (c.selected + 1) % c.items.length })); return }
+                if (event.key === 'ArrowUp') { event.preventDefault(); setCompletion((c) => ({ ...c, selected: (c.selected - 1 + c.items.length) % c.items.length })); return }
+                if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); acceptCompletion(completion.items[completion.selected]); return }
+                if (event.key === 'Escape') { event.preventDefault(); closeCompletion(); return }
+              }
+              if (event.key === 'Escape' && searchOpen) {
+                event.preventDefault(); setSearchOpen(false); return
+              }
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+                event.preventDefault(); setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0); return
+              }
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && canEdit && canSave) {
+                event.preventDefault(); void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'ST', source }]); return
+              }
+              if (event.key === 'Enter' && canEdit && !event.ctrlKey && !event.metaKey) {
+                event.preventDefault(); handleAutoIndentEnter()
+              }
+            }}
+          />
+          {completion.open && (
+            <ul
+              role="listbox"
+              aria-label={pick('Gợi ý', 'Suggestions')}
+              className="absolute z-10 max-h-48 w-56 overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] text-sm shadow-lg"
+              style={{ top: `${cursor.line * 20}px`, left: `${Math.min(220, (cursor.column - 1) * 8.4 + 12)}px` }}
+            >
+              {completion.items.map((item, index) => (
+                <li key={`${item.kind}-${item.label}`}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={index === completion.selected}
+                    className={`flex w-full items-center justify-between px-2 py-1 text-left ${index === completion.selected ? 'bg-[var(--c-accent-bg)]' : 'hover:bg-[var(--c-surface-2)]'}`}
+                    onMouseDown={(event) => { event.preventDefault(); acceptCompletion(item) }}
+                  >
+                    <span className="mono">{item.label}</span>
+                    <span className="text-xs text-[var(--c-text-dim)]">{item.detail}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--c-text-dim)]">
         <span>{pick('Dòng', 'Line')} {cursor.line}, {pick('cột', 'column')} {cursor.column}</span>
