@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.21 |
-| Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
-| Cập nhật | 2026-08-13 |
+| Phiên bản | 3.22 |
+| Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32`. §12 (mới) thêm cross-reference cho Master Plan 56 `WP-01..13` + `WP-MULTIPROGRAM-ARCH` — không đổi 60 dòng canonical §6 |
+| Cập nhật | 2026-08-15 |
 | Chủ quản | Verification Lead |
 | Người review | Document Control, Product, Architect và tất cả discipline lead |
 | Người phê duyệt | Verification Lead + Document Control |
@@ -280,6 +280,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 3.19 | 2026-08-13 | Audit `REV-PROG-FE-UX-2026-08-13` sửa overclaim P5 và mở 508..510. Cập nhật FE-101/103/106/107/109/114 theo context/editor/dirty/deep-link/readiness/Watch/Trace/Danger Zone; ghi source cụ thể cho BE-109/CORE-110/NFR-104. Vì corrective source chưa merge, tổng `I=Y` **giữ 22/60** đúng §8; target mới NOT_RUN, mọi `T/P/R=N`, 0/32 PASS. |
 | 3.20 | 2026-08-13 | Ghi `EV-PROG-P5-510`: full gate host và deploy/read-back/rollback Foxlinx PASS; Runtime/Monitor/safe-state target đúng, Chrome desktop/mobile sạch, axe 8/8 scan không violation. Cập nhật FE-107/109/111, BE-109, CORE-110, NFR-104 và tám journey. Vì source chưa merge và evidence chưa có reviewer/Test Result độc lập, tổng `I=Y` giữ 22/60, mọi `T/P/R=N`, 0/32 PASS. |
 | 3.21 | 2026-08-13 | Nối `EV-PROG-P5-510` rev 1.1 và audit rev 1.3 vào FE-101/103/107/111/114/115 cùng journey 01/02/04/07/08: HTTP không có Web Crypto vẫn hoạt động, auth giữ query/hash, ST save/restore, export `200`, import fault `422`, Restore/RETAIN fail-closed, mobile không tràn và axe 6/6 scan sạch. Đây vẫn là supporting evidence do implementer chạy; source chưa merge nên `I=Y` giữ 22/60, mọi `T/P/R=N`, 0/32 PASS. |
+| 3.22 | 2026-08-15 | CTO/Owner approval §1: thêm §12 cross-reference Master Plan 56 (`56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md`, `WP-01..13` + `WP-MULTIPROGRAM-ARCH`) — bảng Requirement→Design→Source/PR→Test→Evidence→Status riêng, tách khỏi 60 dòng canonical §6 (WP-XX không dùng ID `SYS/SWR-REQ-PROG-*` hay `VS-PROG-0xx`, không đổi đếm/invariant §5/§8.1 của matrix gốc). Không đổi `I/T/P/R` của 60 dòng §6. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -356,3 +357,36 @@ qua journey hoặc qua kịch bản xuyên suốt tương ứng.
 | Quyền implementation | **PASS** | §9: baseline approved, 17/17 decision `DECIDED`, chữ ký còn thiếu được miễn cho implementation. Source/Test Result chưa có là công việc cần thực hiện, không phải blocker quyền viết code |
 
 Ma trận này theo dõi trạng thái; nó **không** tạo ra bằng chứng.
+
+## 12. Cross-reference — Master Plan 56 Work Package (`WP-01..13`, `WP-MULTIPROGRAM-ARCH`)
+
+Master Plan 56 ([`56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md`](../03_implementation/56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md))
+là một effort triển khai tiếp nối, phát sinh sau khi matrix này đã
+`APPROVED FOR IMPLEMENTATION` ở rev 3.21. Các Work Package `WP-XX` của nó
+**không** dùng ID `SYS-REQ-PROG-*`/`SWR-REQ-PROG-*` hay kịch bản
+`VS-PROG-0xx` — bảng dưới đây là cross-reference độc lập, không đổi 60 dòng
+canonical §6, không đổi đếm `22/60 I=Y`/`0/32 PASS`, không kích hoạt lại
+`scripts/trace_bidirectional_check.py` (script đó chỉ kiểm §6/VVP, không
+biết về `WP-XX`). Theo dõi chi tiết/số đo thật nằm ở
+[`PROGRAMMING_IMPLEMENTATION_TRACKER.md`](../03_implementation/PROGRAMMING_IMPLEMENTATION_TRACKER.md)
+— bảng này chỉ là điểm nối để không mồ côi.
+
+| WP | Requirement gốc | Design | Source/PR | Test | Evidence | Status |
+|---|---|---|---|---|---|---|
+| WP-01 Overview State Model | Gap report `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15` §5.2; gần nhất với `SWR-REQ-PROG-FE-113..115` (UX §16.2–16.3) | Master Plan 56 §4 | PR #175 (`733e1cb`) + PR mới Sprint A (Go test) | `TestGetLatestCheckForRevision` (store), `TestGetProjectReflectsTerminalPassedCheckAndPropagatesRealErrors` (application), 4 test FE `OverviewPage.test.tsx` | `go test ./... -count=1` PASS toàn module; Vitest PASS | `DONE` |
+| WP-02 Unsupported POU Guard | Gap report §7.4 | Master Plan 56 §4 | PR #175 (`75a9127`) + PR mới Sprint A (test) | 2 test hồi quy `DesignWorkspacePage.test.tsx` | Vitest 611/611 PASS | `DONE` |
+| WP-03 FBD Registry Alignment | Gap report §8.4 | Master Plan 56 §4 | PR #175 (`75a9127`) | Vitest FBD suite | PASS | `DONE` |
+| WP-04 Language Documentation Alignment | D-06 | Master Plan 56 §4 (chính tài liệu) | PR #175 (`f943a94`) | N/A (đổi tài liệu) | Diff đối chiếu source trực tiếp | `DONE` |
+| WP-05/06/07 FBD Palette/IO/Inspector | Gap report G-2/G-3 | `FBD_EDITOR_DESIGN.md` Rev 1.1 | PR #176 | `palette.test.ts`, `commands.test.ts` (+5), `StructuredFbdEditor.test.tsx` (+6) | Vitest 43/43 FBD; Playwright 10/10 (mocked); deploy Foxlinx `wget health` | `DONE` |
+| WP-08 FBD→Mapping Integration | Gap report §1 mục liên quan D-07 | N/A (verify, không build) | PR #177 | `MappingTab.test.tsx` (+1, round-trip JSON thật) | Vitest PASS | `DONE` |
+| WP-09 FBD Check/Commission/Runtime E2E | G-2/G-3 (đóng thật cần board) | N/A (verify) | Đang thực hiện Sprint B (CTO/Owner approval §2/§3) | Đang thực hiện | Đang thực hiện | `IN_PROGRESS` — xem Tracker cho trạng thái mới nhất |
+| WP-10 ST Editor Upgrade | D-03 gap report gốc | `ST_EDITOR_TECHNICAL_SELECTION_RECORD.md` Rev 1.0 (PR #178); CTO/Owner approval §4-6 duyệt Phương án A + scope P0/P1 | Đang thực hiện Sprint C | Đang thực hiện | Đang thực hiện | `IN_PROGRESS` — xem Tracker |
+| WP-11 PGM-02 3-column Layout | `PROGRAMMING_UI_UX_DESIGN.md` §16.2 | Master Plan 56 §4 | PR #178 (grid `lg:grid-cols-[280px_1fr_308px]`) | `DesignWorkspacePage.test.tsx` test bố cục 3 cột | Vitest PASS; deploy Foxlinx | `DONE` |
+| WP-12 RETAIN Reset | G-9, D-05/§VI | `PROGRAMMING_RETAIN_RESET_DESIGN.md` Rev 1.0 (PR #179); CTO/Owner approval §7-10 chọn Phương án B (runtime-coordinated) | Đang thực hiện Sprint D | TC-RETAIN-01..05 (chưa chạy) | Đang thực hiện | `IN_PROGRESS` — xem Tracker |
+| WP-13 Artifact Trust | D-05, G-10 | `PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md` Rev 1.0 (PR #180); CTO/Owner approval §11-14 chốt SIGNED production target + key policy + lab profile | Đang thực hiện Sprint E | Đang thực hiện | Đang thực hiện | `IN_PROGRESS` — xem Tracker |
+| `WP-MULTIPROGRAM-ARCH` | Product Spec `V2.2 Hybrid candidate.2` — CTO/Owner approval §15 duyệt làm Product Target Authority | 14 tài liệu Architecture Package (§20 approval) — đang viết | N/A (study, không code) | N/A | N/A | `DESIGN` — Document Gate #1 đã mở theo approval §19, không tự implement `kMaxProgramsTotal` trước khi Architecture Gate đạt |
+
+Bảng trên là **snapshot tại thời điểm ghi** — với các dòng `IN_PROGRESS`,
+tra `PROGRAMMING_IMPLEMENTATION_TRACKER.md` §1 để biết trạng thái mới nhất;
+không suy luận trạng thái final từ bảng này một khi Sprint B-E đã kết
+thúc.

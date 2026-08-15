@@ -304,6 +304,93 @@ func TestGetProjectAndListProjectsExposeLatestCheck(t *testing.T) {
 	}
 }
 
+// TestGetProjectReflectsTerminalPassedCheckAndPropagatesRealErrors — CTO/Owner
+// approval 2026-08-15 §1 WP-01. Bổ sung 2 nhánh chưa từng test ở tầng
+// application: (a) Check PASSED (kèm Artifact) phải phản ánh đúng qua
+// GetProject/ListProjects với CompletedAt khác nil — trước đó test chỉ dừng
+// ở QUEUED; (b) lỗi đọc DB thật (khác ErrNotFound) từ
+// GetLatestCheckForRevision phải propagate ra ngoài GetProject thay vì bị
+// latestCheckView() nuốt âm thầm thành nil — chỉ ErrNotFound mới được nuốt.
+func TestGetProjectReflectsTerminalPassedCheckAndPropagatesRealErrors(t *testing.T) {
+	service, store := openProjectService(t)
+	actor := Actor{ID: testActorID, Role: "admin"}
+	fixedNow := time.Date(2026, 8, 11, 9, 0, 0, 0, time.UTC)
+
+	created, err := service.CreateProject(context.Background(), actor, CreateProjectCommand{
+		SchemaVersion: "1.0", Name: "AHU tầng 5", IdempotencyKey: "31000000-0000-4000-8000-000000000001",
+		CorrelationID: testCorrelationID,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	projectID := created.Resource["projectId"].(string)
+	draftID := created.Resource["draftRevisionId"].(string)
+
+	sealed, err := service.SealRevision(context.Background(), actor, SealRevisionCommand{
+		ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID, Label: "v1",
+		IfMatch: created.ETag, IdempotencyKey: "31000000-0000-4000-8000-000000000002", CorrelationID: testCorrelationID,
+	})
+	if err != nil {
+		t.Fatalf("SealRevision: %v", err)
+	}
+	revisionID := sealed.Resource["revisionId"].(string)
+
+	input := [32]byte{2}
+	key, request := mutationIdentity("wp01-terminal-check")
+	if _, err := store.EnqueueCheck(context.Background(), programmingstore.EnqueueCheckParams{
+		CheckID: "31000000-0000-4000-8000-000000000003", RevisionID: revisionID, TargetID: "controller-local",
+		InputSHA256: input, Profile: "MKDDC24_REVA", CompilerVersion: "fwsom-st-1.1.0", ActorID: testActorID, Role: "admin",
+		AuditID: "31000000-0000-4000-8000-000000000004", CorrelationID: testCorrelationID, At: fixedNow.Add(time.Second),
+		IdempotencyKeySHA256: key, RequestSHA256: request,
+	}); err != nil {
+		t.Fatalf("EnqueueCheck: %v", err)
+	}
+	claimed, ok, err := store.ClaimCheck(context.Background(), "worker-wp01", fixedNow.Add(2*time.Second), time.Minute)
+	if err != nil || !ok {
+		t.Fatalf("ClaimCheck: claimed=%+v ok=%v err=%v", claimed, ok, err)
+	}
+	artifactBytes := []byte("wp01-terminal-check-artifact")
+	digest := sha256.Sum256(artifactBytes)
+	if _, err := store.CompleteCheck(context.Background(), programmingstore.CompleteCheckParams{
+		CheckID: claimed.CheckID, LeaseOwner: "worker-wp01", State: "PASSED",
+		ResultJSON: []byte(`{"schemaVersion":"1.0","diagnostics":[]}`),
+		Artifact: &programmingstore.Artifact{
+			ArtifactID: "31000000-0000-4000-8000-000000000005", RevisionID: revisionID, CheckID: claimed.CheckID,
+			SchemaVersion: 1, Profile: "MKDDC24_REVA", TargetABI: 3841, CompilerVersion: "fwsom-st-1.1.0",
+			LibraryVersion: "rev-a.1", ByteSize: int64(len(artifactBytes)), SHA256: digest,
+			RelativePath: "sha256/cc/c.mkir", IntegrityMode: "HASH_ONLY",
+		},
+		AuditID: "31000000-0000-4000-8000-000000000006", At: fixedNow.Add(3 * time.Second),
+	}); err != nil {
+		t.Fatalf("CompleteCheck PASSED: %v", err)
+	}
+
+	// (a) GetProject/ListProjects phải phản ánh đúng PASSED + CompletedAt.
+	afterPass, err := service.GetProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("GetProject sau Check PASSED: %v", err)
+	}
+	if afterPass.LatestCheck == nil || afterPass.LatestCheck.State != "PASSED" || afterPass.LatestCheck.CompletedAt == nil {
+		t.Fatalf("LatestCheck phải là PASSED kèm CompletedAt: %+v", afterPass.LatestCheck)
+	}
+	page, err := service.ListProjects(context.Background(), "", 10)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].LatestCheck == nil || page.Items[0].LatestCheck.State != "PASSED" ||
+		page.Items[0].LatestCheck.CompletedAt == nil {
+		t.Fatalf("ListProjects phải phản ánh cùng Check PASSED: %+v", page.Items)
+	}
+
+	// (b) Lỗi đọc DB thật (revisionID không hợp lệ, khác ErrNotFound) phải
+	// propagate ra ngoài latestCheckView(), không bị nuốt thành nil.
+	if _, err := service.latestCheckView(context.Background(), "not-a-canonical-uuid"); err == nil {
+		t.Fatal("revisionID không hợp lệ phải trả lỗi thật, không phải nil im lặng")
+	} else if errors.Is(err, programmingstore.ErrNotFound) {
+		t.Fatalf("lỗi UUID không hợp lệ không được là ErrNotFound (đó là nhánh 'chưa Check', khác nhánh lỗi thật): %v", err)
+	}
+}
+
 func mutationIdentity(label string) ([32]byte, [32]byte) {
 	return sha256.Sum256([]byte("key:" + label)), sha256.Sum256([]byte("request:" + label))
 }

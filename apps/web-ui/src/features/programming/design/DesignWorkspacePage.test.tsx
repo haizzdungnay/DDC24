@@ -143,6 +143,60 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(within(inspector).getByLabelText('Loại')).toHaveValue('PROGRAM')
   })
 
+  it('WP-02 (CTO/Owner approval 2026-08-15 §1): dropdown Loại chỉ expose PROGRAM, không tự hiện lại FUNCTION/FUNCTION_BLOCK', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Chương trình A'))
+    await screen.findByLabelText(/Mã nguồn ST/)
+
+    const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    const kindSelect = within(inspector).getByLabelText('Loại') as HTMLSelectElement
+    const options = within(kindSelect).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)
+    expect(options).toEqual(['PROGRAM'])
+    expect(options).not.toContain('FUNCTION')
+    expect(options).not.toContain('FUNCTION_BLOCK')
+    expect(kindSelect).toHaveValue('PROGRAM')
+    expect(within(inspector).queryByText(/chưa được Kiểm tra hỗ trợ biên dịch/)).not.toBeInTheDocument()
+  })
+
+  it('WP-02: Program có kind khác PROGRAM sẵn từ trước (import bundle) vẫn hiện đúng giá trị thật kèm cảnh báo, không bị ẩn/mất dữ liệu', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'FB cũ từ bundle', kind: 'FUNCTION_BLOCK', language: 'ST', document: 'FUNCTION_BLOCK X\nEND_FUNCTION_BLOCK' })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('FB cũ từ bundle')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('FB cũ từ bundle'))
+    await screen.findByLabelText(/Mã nguồn ST/)
+
+    const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    // Accessible name của <select> nuốt luôn text cảnh báo trong cùng <label>
+    // khi kind khác PROGRAM (span warning render bên trong label bao ngoài) —
+    // dùng regex bắt đầu bằng "Loại" thay vì so khớp tuyệt đối.
+    const kindSelect = within(inspector).getByLabelText(/^Loại/) as HTMLSelectElement
+    const options = within(kindSelect).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)
+    // Chỉ đúng 2 lựa chọn: PROGRAM (luôn có) + giá trị thật hiện tại của Program
+    // (FUNCTION_BLOCK) — không tự thêm lựa chọn thứ ba (FUNCTION) chưa từng
+    // được backend hỗ trợ.
+    expect(options.sort()).toEqual(['FUNCTION_BLOCK', 'PROGRAM'].sort())
+    expect(kindSelect).toHaveValue('FUNCTION_BLOCK')
+    expect(within(inspector).getByText(/chưa được Kiểm tra hỗ trợ biên dịch/)).toBeInTheDocument()
+  })
+
   it('409 giữ nguyên buffer đang gõ và hiện banner reload/merge (UX §9)', async () => {
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
