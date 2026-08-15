@@ -69,3 +69,94 @@ describe('StructuredFbdEditor', () => {
     expect(screen.queryByText('1 Draft issues')).toBeNull()
   })
 })
+
+describe('StructuredFbdEditor — Palette (WP-05)', () => {
+  it('thêm block từ palette (không chỉ AND) và Inspector cho phép đổi kiểu toán hạng', async () => {
+    const { onChange } = renderEditor(golden())
+    fireEvent.change(screen.getByLabelText(/^Block$|^Khối$/), { target: { value: 'OR' } })
+    fireEvent.click(screen.getByRole('button', { name: /Add block|Thêm khối/ }))
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
+    let changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+    expect(changed.networks[0].nodes.some((node) => node.typeRef === 'OR')).toBe(true)
+
+    fireEvent.change(screen.getByLabelText(/^Block$|^Khối$/), { target: { value: 'ADD' } })
+    fireEvent.click(screen.getByRole('button', { name: /Add block|Thêm khối/ }))
+    await waitFor(() => expect(onChange.mock.calls.length).toBeGreaterThanOrEqual(2))
+    changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+    const addNode = changed.networks[0].nodes.find((node) => node.typeRef === 'ADD')
+    expect(addNode?.ports.every((port) => port.dataType === 'REAL')).toBe(true)
+
+    fireEvent.click(screen.getByText(`#${addNode!.executionOrder} · ADD`))
+    fireEvent.change(screen.getByLabelText(/Operand type|Kiểu toán hạng/), { target: { value: 'DINT' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Save$|^Lưu$/ }))
+    await waitFor(() => {
+      const last = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+      expect(last.networks[0].nodes.find((node) => node.id === addNode!.id)?.ports.every((port) => port.dataType === 'DINT')).toBe(true)
+    })
+  })
+
+  it('cảnh báo PID chưa Controls+Safety review hiện trong palette', () => {
+    renderEditor(golden())
+    fireEvent.change(screen.getByLabelText(/^Block$|^Khối$/), { target: { value: 'PID' } })
+    expect(screen.getByText(/Controls\+Safety review/)).toBeTruthy()
+  })
+
+  it('tạo INPUT mới qua form và đổi được biến/đơn vị qua Inspector', async () => {
+    const { onChange } = renderEditor(golden())
+    fireEvent.click(screen.getByRole('button', { name: /^Input$/ }))
+    fireEvent.change(screen.getByLabelText(/Variable name|Tên biến/), { target: { value: 'SETPOINT' } })
+    fireEvent.change(screen.getByLabelText(/^Type$|^Kiểu$/), { target: { value: 'REAL' } })
+    fireEvent.change(screen.getByLabelText(/Unit \(optional\)|Đơn vị \(tuỳ chọn\)/), { target: { value: 'degC' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Create$|^Tạo$/ }))
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
+    const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+    const created = changed.networks[0].nodes.find((node) => node.parameters.variable === 'SETPOINT')
+    expect(created?.kind).toBe('INPUT')
+    expect(created?.typeRef).toBe('REAL')
+    expect(created?.ports[0].unit).toBe('degC')
+  })
+
+  it('từ chối tên biến INPUT không hợp lệ, không tạo node', () => {
+    const { onChange } = renderEditor(golden())
+    fireEvent.click(screen.getByRole('button', { name: /^Input$/ }))
+    fireEvent.change(screen.getByLabelText(/Variable name|Tên biến/), { target: { value: '1-bad' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Create$|^Tạo$/ }))
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByText(/Invalid variable name|Tên biến không hợp lệ/)).toBeTruthy()
+  })
+
+  it('tạo CONSTANT REAL mới qua form', async () => {
+    const { onChange } = renderEditor(golden())
+    fireEvent.click(screen.getByRole('button', { name: /^Constant$/ }))
+    fireEvent.change(screen.getAllByLabelText(/^Type$|^Kiểu$/)[0], { target: { value: 'REAL' } })
+    fireEvent.change(screen.getByLabelText(/^Value$|^Giá trị$/), { target: { value: '21.5' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Create$|^Tạo$/ }))
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
+    const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+    const created = changed.networks[0].nodes.find((node) => node.kind === 'CONSTANT')
+    expect(created?.typeRef).toBe('REAL')
+    expect(created?.parameters.value).toBe(21.5)
+  })
+
+  it('Inspector FUNCTION_BLOCK cho sửa instance + RETAIN', async () => {
+    const document = golden()
+    document.networks[0].nodes.push({
+      id: '20000000-0000-4000-8000-0000000000f9', kind: 'FUNCTION_BLOCK', typeRef: 'TON', executionOrder: 4, parameters: {},
+      ports: [
+        { id: '20000000-0000-4000-8000-0000000000fa', name: 'IN', direction: 'INPUT', dataType: 'BOOL', unit: null, order: 0 },
+        { id: '20000000-0000-4000-8000-0000000000fb', name: 'PT', direction: 'INPUT', dataType: 'TIME', unit: null, order: 1 },
+        { id: '20000000-0000-4000-8000-0000000000fc', name: 'Q', direction: 'OUTPUT', dataType: 'BOOL', unit: null, order: 2 },
+        { id: '20000000-0000-4000-8000-0000000000fd', name: 'ET', direction: 'OUTPUT', dataType: 'TIME', unit: null, order: 3 },
+      ],
+    })
+    const { onChange } = renderEditor(document)
+    fireEvent.click(screen.getByText('#4 · TON'))
+    fireEvent.change(screen.getByLabelText(/Instance name|Tên instance/), { target: { value: 'FanDelay' } })
+    fireEvent.click(screen.getByLabelText(/RETAIN/))
+    fireEvent.click(screen.getByRole('button', { name: /^Save$|^Lưu$/ }))
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
+    const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+    const fb = changed.networks[0].nodes.find((node) => node.typeRef === 'TON')
+    expect(fb?.parameters).toEqual({ instance: 'FanDelay', retained: true })
+  })
+})

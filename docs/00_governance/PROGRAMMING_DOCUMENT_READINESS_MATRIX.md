@@ -27,7 +27,7 @@
 | 3 | `PROGRAMMING_USE_CASE_SPEC` | Không có file độc lập; 17 use case (`UC-PROG-01..17`) nằm trong [`PROGRAMMING_UI_UX_DESIGN.md`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) §17 | **MISSING như tài liệu riêng, nhưng nội dung đã có nơi khác** | Khớp — UC-PROG-01..17 đã dùng xuyên suốt các báo cáo audit | UX + Product | Xác nhận với Product Owner: giữ UC trong UI/UX Design (hiện trạng) hay tách file riêng theo đúng tên CTO liệt kê. Không có tác động kỹ thuật nếu giữ nguyên | Không chặn |
 | 4 | `PROGRAMMING_UI_UX_DESIGN` | [`docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) (`UX-WEB-PROG-001`) | Current, dùng làm authority cho WP-01/WP-02/WP-11 | Khớp phần lớn; §16.2 layout 3 cột vẫn chưa khớp as-built (G-7, biết trước, WP-11 xử lý) | UX Lead | Không cần sửa trước Phase 1; WP-11 (Phase 3) sẽ đối chiếu lại khi làm layout | Không chặn WP-01..04; WP-11 cần đọc kỹ trước khi code |
 | 5 | `PROGRAMMING_FE_DESIGN` | [`docs/02_design/software/PROGRAMMING_FE_DESIGN.md`](../02_design/software/PROGRAMMING_FE_DESIGN.md) (`DDD-FE-PROG-001`) | Current | Khớp — đã dùng làm authority cho gap report gốc | FE Lead | Không cần sửa trước Phase 1 | Không chặn |
-| 6 | `FBD_EDITOR_DESIGN` | Không có file riêng; nội dung nằm trong `PROGRAMMING_FE_DESIGN.md` §5 "Structured FBD Rev A" | **MISSING như tài liệu riêng** | §5 khớp phần "canvas cố ý không có"; **không đặc tả palette/INPUT-OUTPUT/Inspector đủ chi tiết để code WP-05..07** | UX + FE | **Bắt buộc trước WP-05/06/07** (Phase 2): viết đặc tả palette (nhóm block nào, ở đâu trong UI), Inspector (field nào sửa được cho mỗi node kind), luồng tạo INPUT/OUTPUT/CONSTANT | **Chặn WP-05, WP-06, WP-07** |
+| 6 | `FBD_EDITOR_DESIGN` | [`docs/02_design/software/FBD_EDITOR_DESIGN.md`](../02_design/software/FBD_EDITOR_DESIGN.md) (`DDD-FBD-EDITOR-PROG-001`, Rev 1.0) | **Tạo mới 2026-08-15** | Khớp — palette 9 nhóm + node giao diện + Inspector đối chiếu trực tiếp `kFuncs[]`/`binop_from_type_ref` trong `st_fbd_compile.cpp`, `st_program.cpp` | UX + FE | Đã xong. Gate #6 **mở** | Không còn chặn WP-05, WP-06, WP-07 |
 | 7 | `FBD_LIBRARY_REGISTRY_SPEC` | **Không tồn tại — đây chính là gap kỹ thuật đã tìm thấy ở G-5** (registry hàm khai tay hai nơi độc lập, FE `model.ts` và C++ `st_program.cpp`, từng lệch nhau) | **MISSING**, xác nhận đúng như gap report dự đoán | WP-03 đã vá lệch bằng tay (bỏ SCALE/DEADBAND/CTU/PI, thêm SQRT) nhưng đây là **bản vá tạm**, không phải nguồn sự thật chung | Compiler + FE Lead | Thiết kế một registry sinh mã dùng chung (generator đọc từ một nguồn, xuất cả TS lẫn C++ constant, tương tự cách `contracts/programming/error_catalog_v1.json` đã làm cho error code) | **Chặn WP-05 nếu muốn tránh vá tay lần hai khi thêm block palette** — có thể làm WP-05 trước với danh sách hiện tại (đã đúng) rồi làm registry chung song song, không bắt buộc phải xong trước |
 | 8 | `ST_SUBSET_SPEC` | [`docs/02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md`](../02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md) | **Đã đồng bộ trong phiên này (WP-04, Rev 1.0→1.1)** | Khớp source sau khi sửa (DINT/UINT/PID, INT=int16) | Compiler Lead | Đã xong. Cần Test Result/V&V chính thức cho DINT/UINT (không chặn Phase 1) | Không chặn |
 | 9 | `PROGRAMMING_LANGUAGE_COMPILER_DESIGN` | [`docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md`](../02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md) (`DDD-LANG-PROG-001`) | **Đã đồng bộ trong phiên này (WP-04, Rev 0.8→0.9)** | Khớp source sau khi sửa (PID "target"→"Implemented") | Compiler + Controls Lead | Đã xong phần đồng bộ tài liệu. Blocker "Unit/conversion/PID semantic chưa khóa" (Controls+Safety review) giữ nguyên, chưa đóng | Không chặn Phase 0/1. Chặn việc **công bố PID production-ready** |
@@ -45,8 +45,9 @@
 |---|---|
 | Current + khớp source, không cần sửa | #4, #5, #10 (3/14) |
 | Đã đồng bộ **trong phiên này** (WP-04) | #8, #9 (2/14) |
+| **Tạo mới trong phiên này** (mở Gate #6) | #6 (1/14) |
 | Current nhưng có ghi chú/khoảng hở nhỏ | #11, #12, #13, #14 (4/14) |
-| MISSING hẳn | #2, #3, #6, #7 (4/14) |
+| MISSING hẳn | #2, #3, #7 (3/14) |
 | Mâu thuẫn thẩm quyền (2 bản) | #1 (1/14) |
 
 **`DOC_READY` cho Phase 1 (WP-01..04): YES.** Không mục nào trong 4 WP đã triển khai
@@ -55,10 +56,13 @@ hai tài liệu đã đồng bộ (#8, #9) làm authority, đúng nguyên tắc 
 có đủ requirement/design thì tự tạo/cập nhật tài liệu đó trước" (đã làm ở
 WP-04) trước khi code (đã làm ở WP-01..03).
 
-**`DOC_READY` cho Phase 2 (WP-05..09, FBD end-to-end): NO.** Chặn bởi #6
-(`FBD_EDITOR_DESIGN` — palette/Inspector chưa có đặc tả) và một phần #7
-(`FBD_LIBRARY_REGISTRY_SPEC`). Không code Phase 2 tới khi UX + FE Lead viết
-đặc tả tối thiểu cho #6.
+**`DOC_READY` cho Phase 2 (WP-05..09, FBD end-to-end): YES cho WP-05/06/07.**
+#6 (`FBD_EDITOR_DESIGN`) đã tạo và đối chiếu source — Gate mở. #7
+(`FBD_LIBRARY_REGISTRY_SPEC`, registry sinh mã dùng chung) vẫn MISSING nhưng
+Master Plan đã ghi rõ không bắt buộc xong trước WP-05 (palette dùng danh sách
+tay hiện tại, đã đúng theo WP-03) — có thể làm registry chung song song, không
+chặn. WP-08/WP-09 vẫn `BLOCKED` chờ WP-06/WP-05..08 hoàn tất theo đúng chuỗi
+phụ thuộc trong Tracker.
 
 **`DOC_READY` cho Phase 4 WP-13 (Artifact Trust): NO.** Chặn bởi #12 cần mở
 rộng phần signing/threat model.
@@ -74,3 +78,4 @@ Program) và cần #2 nếu Product Owner quyết định tách file riêng.
 | Revision | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-08-15 | Tạo mới theo lệnh CTO/Owner §III. Kiểm kê 14 tài liệu: 9 current/đã đồng bộ, 4 MISSING, 1 mâu thuẫn thẩm quyền. `DOC_READY=YES` cho Phase 1, `NO` cho Phase 2/WP-13/WP-MULTIPROGRAM-ARCH. |
+| 1.1 | 2026-08-15 | #6 `FBD_EDITOR_DESIGN` tạo mới (Rev 1.0) — Gate #6 mở. `DOC_READY=YES` cho WP-05/06/07. |

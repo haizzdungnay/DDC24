@@ -134,6 +134,128 @@ describe('command reducer FBD', () => {
   })
 })
 
+describe('SET_NODE_* (WP-05/06/07, FBD_EDITOR_DESIGN.md §3)', () => {
+  const networkId = '20000000-0000-4000-8000-000000000001'
+
+  it('SET_NODE_VARIABLE đổi tên + đơn vị của INPUT/OUTPUT, từ chối tên không hợp lệ', () => {
+    const document = golden()
+    let state = createFbdEditorState(document)
+    const inputNode = document.networks[0].nodes[0]
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_VARIABLE', networkId, nodeId: inputNode.id, variable: 'ZONE_OCCUPIED', unit: 'bool',
+    })
+    const updated = state.document.networks[0].nodes.find((node) => node.id === inputNode.id)
+    expect(updated?.parameters.variable).toBe('ZONE_OCCUPIED')
+    expect(updated?.ports[0].unit).toBe('bool')
+
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_VARIABLE', networkId, nodeId: inputNode.id, variable: '1-bad-name', unit: null,
+    })
+    expect(state.announcement.code).toBe('invalid-variable-name')
+
+    const andNode = document.networks[0].nodes[2]
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_VARIABLE', networkId, nodeId: andNode.id, variable: 'X', unit: null,
+    })
+    expect(state.announcement.code).toBe('node-not-found')
+  })
+
+  it('SET_NODE_VALUE đổi giá trị CONSTANT, từ chối giá trị sai kiểu', () => {
+    const document = golden()
+    document.networks[0].nodes.push({
+      id: '20000000-0000-4000-8000-0000000000c1',
+      kind: 'CONSTANT', typeRef: 'REAL', executionOrder: 4, parameters: { value: 0 },
+      ports: [{ id: '20000000-0000-4000-8000-0000000000c2', name: 'OUT', direction: 'OUTPUT', dataType: 'REAL', unit: null, order: 0 }],
+    })
+    let state = createFbdEditorState(document)
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_VALUE', networkId, nodeId: '20000000-0000-4000-8000-0000000000c1', value: 21.5,
+    })
+    expect(state.document.networks[0].nodes.find((node) => node.typeRef === 'REAL' && node.kind === 'CONSTANT')?.parameters.value).toBe(21.5)
+
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_VALUE', networkId, nodeId: '20000000-0000-4000-8000-0000000000c1', value: 'not-a-number',
+    })
+    expect(state.announcement.code).toBe('invalid-constant-value')
+  })
+
+  it('SET_NODE_TYPE đổi kiểu INPUT/OUTPUT và toán hạng T của FUNCTION đa hình, giữ port id', () => {
+    const document = golden()
+    let state = createFbdEditorState(document)
+    const inputNode = document.networks[0].nodes[0]
+    const originalPortId = inputNode.ports[0].id
+    state = fbdEditorReducer(state, { type: 'SET_NODE_TYPE', networkId, nodeId: inputNode.id, dataType: 'REAL' })
+    const updatedInput = state.document.networks[0].nodes.find((node) => node.id === inputNode.id)
+    expect(updatedInput?.typeRef).toBe('REAL')
+    expect(updatedInput?.ports[0].dataType).toBe('REAL')
+    expect(updatedInput?.ports[0].id).toBe(originalPortId)
+
+    document.networks[0].nodes.push({
+      id: '20000000-0000-4000-8000-0000000000d1', kind: 'FUNCTION', typeRef: 'ADD', executionOrder: 4, parameters: {},
+      ports: [
+        { id: '20000000-0000-4000-8000-0000000000d2', name: 'IN1', direction: 'INPUT', dataType: 'REAL', unit: null, order: 0 },
+        { id: '20000000-0000-4000-8000-0000000000d3', name: 'IN2', direction: 'INPUT', dataType: 'REAL', unit: null, order: 1 },
+        { id: '20000000-0000-4000-8000-0000000000d4', name: 'OUT', direction: 'OUTPUT', dataType: 'REAL', unit: null, order: 2 },
+      ],
+    })
+    state = createFbdEditorState(document)
+    state = fbdEditorReducer(state, { type: 'SET_NODE_TYPE', networkId, nodeId: '20000000-0000-4000-8000-0000000000d1', dataType: 'DINT' })
+    const addNode = state.document.networks[0].nodes.find((node) => node.id === '20000000-0000-4000-8000-0000000000d1')
+    expect(addNode?.ports.every((port) => port.dataType === 'DINT')).toBe(true)
+    expect(addNode?.ports.map((port) => port.id)).toEqual(['20000000-0000-4000-8000-0000000000d2', '20000000-0000-4000-8000-0000000000d3', '20000000-0000-4000-8000-0000000000d4'])
+
+    state = fbdEditorReducer(state, { type: 'SET_NODE_TYPE', networkId, nodeId: '20000000-0000-4000-8000-0000000000d1', dataType: 'BOOL' })
+    expect(state.announcement.code).toBe('invalid-data-type')
+  })
+
+  it('SET_NODE_TYPE trên MOD chỉ cho phép kiểu nguyên (giữ OUT:BOOL cố định cho compare)', () => {
+    const document = golden()
+    document.networks[0].nodes.push({
+      id: '20000000-0000-4000-8000-0000000000e1', kind: 'FUNCTION', typeRef: 'EQ', executionOrder: 4, parameters: {},
+      ports: [
+        { id: '20000000-0000-4000-8000-0000000000e2', name: 'IN1', direction: 'INPUT', dataType: 'REAL', unit: null, order: 0 },
+        { id: '20000000-0000-4000-8000-0000000000e3', name: 'IN2', direction: 'INPUT', dataType: 'REAL', unit: null, order: 1 },
+        { id: '20000000-0000-4000-8000-0000000000e4', name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL', unit: null, order: 2 },
+      ],
+    })
+    let state = createFbdEditorState(document)
+    state = fbdEditorReducer(state, { type: 'SET_NODE_TYPE', networkId, nodeId: '20000000-0000-4000-8000-0000000000e1', dataType: 'DINT' })
+    const eqNode = state.document.networks[0].nodes.find((node) => node.id === '20000000-0000-4000-8000-0000000000e1')
+    expect(eqNode?.ports.find((port) => port.name === 'IN1')?.dataType).toBe('DINT')
+    expect(eqNode?.ports.find((port) => port.name === 'OUT')?.dataType).toBe('BOOL')
+  })
+
+  it('SET_NODE_FB_PARAMS gán instance/retained cho FUNCTION_BLOCK, từ chối tên instance sai và node không phải FB', () => {
+    const document = golden()
+    document.networks[0].nodes.push({
+      id: '20000000-0000-4000-8000-0000000000f1', kind: 'FUNCTION_BLOCK', typeRef: 'TON', executionOrder: 4, parameters: {},
+      ports: [
+        { id: '20000000-0000-4000-8000-0000000000f2', name: 'IN', direction: 'INPUT', dataType: 'BOOL', unit: null, order: 0 },
+        { id: '20000000-0000-4000-8000-0000000000f3', name: 'PT', direction: 'INPUT', dataType: 'TIME', unit: null, order: 1 },
+        { id: '20000000-0000-4000-8000-0000000000f4', name: 'Q', direction: 'OUTPUT', dataType: 'BOOL', unit: null, order: 2 },
+        { id: '20000000-0000-4000-8000-0000000000f5', name: 'ET', direction: 'OUTPUT', dataType: 'TIME', unit: null, order: 3 },
+      ],
+    })
+    let state = createFbdEditorState(document)
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_FB_PARAMS', networkId, nodeId: '20000000-0000-4000-8000-0000000000f1', instance: 'FanDelay', retained: true,
+    })
+    const fb = state.document.networks[0].nodes.find((node) => node.id === '20000000-0000-4000-8000-0000000000f1')
+    expect(fb?.parameters).toEqual({ instance: 'FanDelay', retained: true })
+
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_FB_PARAMS', networkId, nodeId: '20000000-0000-4000-8000-0000000000f1', instance: '1-bad', retained: false,
+    })
+    expect(state.announcement.code).toBe('invalid-instance-name')
+
+    const andNode = document.networks[0].nodes[2]
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_FB_PARAMS', networkId, nodeId: andNode.id, instance: null, retained: false,
+    })
+    expect(state.announcement.code).toBe('node-not-found')
+  })
+})
+
 describe('translateFbdAnnouncement (BUG-012)', () => {
   const pick = (vi: string, _en: string) => vi
   const pickEn = (_vi: string, en: string) => en

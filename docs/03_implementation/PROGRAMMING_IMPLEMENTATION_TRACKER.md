@@ -16,11 +16,11 @@ Criteria chưa `READY`.**
 | WP-02 Unsupported POU Guard | READY (gap report §7.4) | READY (Master Plan §4) | DONE | N/A | N/A | **Chưa có** — `ProgramInspector` không có test file từ trước | `tsc --noEmit`/lint PASS; đọc code xác nhận dropdown 1 lựa chọn | `EVIDENCE_REQUIRED` | FE | Thiếu test hồi quy — không có gì ngăn ai đó vô tình thêm lại option cũ |
 | WP-03 FBD Registry Alignment | READY (gap report §8.4) | READY (Master Plan §4) | DONE | N/A (BE không đổi, FW là nguồn đối chiếu) | N/A | Phủ bởi test model/commands hiện có, không có test riêng cho việc bỏ 4 identifier | Vitest FBD suite PASS | `DONE` | FE + Compiler | Không — nhưng registry vẫn là bản vá tay, xem WP tương lai gắn với Document Gate #7 |
 | WP-04 Language Documentation Alignment | READY | N/A (chính là design) | N/A | N/A | N/A | N/A (thay đổi tài liệu) | Diff 2 file + đối chiếu source trực tiếp | `DONE` | Compiler Lead | Không |
-| WP-05 FBD Palette | DOC_REQUIRED | NOT_STARTED | NOT_STARTED | N/A | N/A | NOT_STARTED | — | `BLOCKED` | UX + FE | Document Gate #6 (`FBD_EDITOR_DESIGN` chưa tồn tại) |
-| WP-06 INPUT/OUTPUT/CONSTANT | DOC_REQUIRED | NOT_STARTED | NOT_STARTED | N/A | N/A | NOT_STARTED | — | `BLOCKED` | UX + FE | Document Gate #6 |
-| WP-07 FBD Inspector | DOC_REQUIRED | NOT_STARTED | NOT_STARTED | N/A | N/A | NOT_STARTED | — | `BLOCKED` | UX + FE | Document Gate #6 |
-| WP-08 FBD → Mapping Integration | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | — | `BLOCKED` | FE + BE | WP-06 chưa xong |
-| WP-09 FBD Check/Commission/Runtime E2E | NOT_STARTED | N/A (verify, không build) | N/A | N/A | N/A | NOT_STARTED | — | `BLOCKED` | QA + FE + BE + Core | WP-05..08 chưa xong |
+| WP-05 FBD Palette | READY (`FBD_EDITOR_DESIGN.md` §1) | READY | DONE | N/A | N/A | DONE — `palette.test.ts` (14 test đối chiếu trực tiếp `kFuncs[]`/`binop_from_type_ref`/`st_fb_*`), `commands.test.ts` +5 test, `StructuredFbdEditor.test.tsx` +6 test RTL | Vitest 43/43 FBD PASS, 607/607 FE PASS; `tsc --noEmit` PASS; `eslint --max-warnings=0` PASS; `vite build` PASS; Playwright `programming.spec.ts` 10/10 PASS (mocked backend, mount thật trong browser, gồm WCAG A/AA) | `DONE` | UX + FE | Không |
+| WP-06 INPUT/OUTPUT/CONSTANT | READY (`FBD_EDITOR_DESIGN.md` §2) | READY | DONE | N/A | N/A | Phủ trong bộ test WP-05 (tạo INPUT/OUTPUT/CONSTANT qua form, từ chối tên biến sai) | Như WP-05 | `DONE` | UX + FE | Không |
+| WP-07 FBD Inspector | READY (`FBD_EDITOR_DESIGN.md` §3) | READY | DONE | N/A | N/A | Phủ trong bộ test WP-05 (đổi T toán hạng, sửa instance/RETAIN của FUNCTION_BLOCK, giữ port id khi đổi kiểu) | Như WP-05 | `DONE` | UX + FE | Không — riêng `FBD_LIBRARY_REGISTRY_SPEC` (Document Gate #7, registry sinh mã dùng chung) vẫn là nợ kỹ thuật đã biết trước, không chặn DONE của 3 WP này |
+| WP-08 FBD → Mapping Integration | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | — | `NOT_STARTED` | FE + BE | Không — WP-05/06/07 đã DONE, có thể bắt đầu |
+| WP-09 FBD Check/Commission/Runtime E2E | NOT_STARTED | N/A (verify, không build) | N/A | N/A | N/A | NOT_STARTED | — | `BLOCKED` | QA + FE + BE + Core | WP-08 chưa xong |
 | WP-10 ST Editor Upgrade | DOC_REQUIRED | NOT_STARTED | NOT_STARTED | N/A | N/A | NOT_STARTED | — | `NOT_STARTED` | UX + FE | Cần Technical Selection Record trước Design |
 | WP-11 PGM-02 3-column Layout | READY (`PROGRAMMING_UI_UX_DESIGN.md` §16.2 đã đủ) | NOT_STARTED | NOT_STARTED | N/A | N/A | NOT_STARTED | — | `DESIGN` | UX + FE | Không — có thể bắt đầu Design ngay |
 | WP-12 RETAIN Reset | DOC_REQUIRED | NOT_STARTED | NOT_STARTED | NOT_STARTED | N/A | NOT_STARTED | — | `DOC_REQUIRED` | Core + BE + FE + Safety | Cần xác nhận business semantics/permission/audit trước Design |
@@ -32,14 +32,14 @@ Criteria chưa `READY`.**
 | # | Tiêu chí | Trạng thái |
 |---|---|---|
 | 1 | Overview phản ánh đúng lifecycle state | **Đạt một phần** — 4/5 trạng thái khả thi đã cài (dirty/checking/failed/ready); `conflict` cố ý không cài, có lý do kỹ thuật ghi ở WP-01 |
-| 2 | UI không expose capability backend không hỗ trợ | **Đạt một phần** — WP-02 đóng cho Program Kind; FBD palette (chưa tồn tại) nên chưa có gì để "expose sai" ở đó |
-| 3 | FE/compiler FBD registry thống nhất | **Đạt tạm thời** — WP-03 vá tay khớp 1-1 tại thời điểm 2026-08-15; chưa có cơ chế tự động giữ đồng bộ (Document Gate #7) |
-| 4 | FBD tạo được INPUT/OUTPUT/CONSTANT | Chưa đạt — WP-06 `BLOCKED` |
-| 5 | FBD có block palette usable | Chưa đạt — WP-05 `BLOCKED` |
-| 6 | FBD có Inspector cần thiết | Chưa đạt — WP-07 `BLOCKED` |
-| 7 | FBD interface map được Point thật | Chưa đạt — WP-08 `BLOCKED` |
-| 8 | FBD Check thật PASSED | Chưa đạt — WP-09 `BLOCKED` |
-| 9 | FBD Commission thật thành công | Chưa đạt — WP-09 `BLOCKED` |
+| 2 | UI không expose capability backend không hỗ trợ | **Đạt một phần** — WP-02 đóng cho Program Kind; palette WP-05 chỉ liệt kê đúng typeRef compiler hỗ trợ (đối chiếu `kFuncs[]`/`binop_from_type_ref`/`st_fb_*`, xem `palette.test.ts`), PID có badge cảnh báo chưa review |
+| 3 | FE/compiler FBD registry thống nhất | **Đạt tạm thời** — WP-03 vá tay khớp 1-1; WP-05 dùng lại đúng registry đó (`palette.ts` là single source cho cả node factory lẫn Inspector, không tạo bản khai tay thứ 2); chưa có cơ chế sinh mã tự động giữ đồng bộ với C++ (Document Gate #7 vẫn mở) |
+| 4 | FBD tạo được INPUT/OUTPUT/CONSTANT | **Đạt** — WP-06 `DONE`, tạo qua form palette, validate tên biến/giá trị theo đúng kiểu |
+| 5 | FBD có block palette usable | **Đạt** — WP-05 `DONE`, 9 nhóm palette theo `FBD_EDITOR_DESIGN.md` §1, xác nhận sống trong browser (Playwright mocked) |
+| 6 | FBD có Inspector cần thiết | **Đạt** — WP-07 `DONE`, sửa biến/đơn vị/kiểu/giá trị/instance/RETAIN theo đúng node kind |
+| 7 | FBD interface map được Point thật | Chưa đạt — WP-08 `NOT_STARTED` (không còn bị block, sẵn sàng làm tiếp) |
+| 8 | FBD Check thật PASSED | Chưa đạt — WP-09 `BLOCKED` chờ WP-08 |
+| 9 | FBD Commission thật thành công | Chưa đạt — WP-09 `BLOCKED` chờ WP-08 |
 | 10 | Runtime quan sát được giá trị thật | Chưa đạt cho FBD (đã đạt cho ST theo D-07, ngoài phạm vi Master Plan này) |
 | 11 | ST spec khớp implementation | **Đạt** — WP-04 DONE |
 | 12 | PID có trạng thái approval rõ ràng | **Đạt về mặt tài liệu** — WP-04 ghi rõ "Implemented, chưa Controls+Safety review"; review thật **chưa xảy ra** |
@@ -47,13 +47,15 @@ Criteria chưa `READY`.**
 | 14 | Master roadmap/tracker được cập nhật | **Đạt** — file này + Master Plan, tạo trong phiên này |
 | 15 | Không còn finding High nào bị đóng mà thiếu E2E evidence | **Không vi phạm** — WP-01..04 đều mức Trung bình/Cao theo gap report nhưng đã đóng bằng vitest/go build thật, không tự nhận E2E; các gap Cao còn lại (G-2/G-3 FBD) **chưa đóng**, đúng thực tế |
 
-**Kết luận tổng thể 2026-08-15:** Programming Overview/ST/FBD **CHƯA** đạt DoD
-đầy đủ — đúng như kỳ vọng sau một phiên chỉ chạy hết Phase 0+1. Phase 2 (FBD
-end-to-end, mục 4-10 DoD) là khối lượng công việc lớn nhất còn lại và bị
-chặn Document Gate #6 một cách hợp lệ, không phải bị trì hoãn tuỳ tiện.
+**Kết luận tổng thể 2026-08-15 (cập nhật đợt 2):** Phase 0+1 (WP-01..04) và
+Phase 2 mục FE (WP-05/06/07) đã `DONE`. DoD mục 1-6 và 11-12 đạt (một phần
+hoặc toàn phần). Còn mở: mục 7-10 (WP-08/09, cần backend/board thật), mục 13
+(traceability matrix chưa có dòng cho các WP mới), mục 3 dài hạn (registry
+sinh mã tự động, Document Gate #7 vẫn MISSING nhưng không chặn).
 
 ## 3. Iteration log
 
 | Ngày | Hoàn thành | Đang làm | Blocked | Evidence | Tài liệu đã đổi | PR/commit | Regression | Bước kế tiếp |
 |---|---|---|---|---|---|---|---|---|
 | 2026-08-15 | Phase 0 (Document Gate) + Phase 1 (WP-01..04) | — | Phase 2 (WP-05..09) chờ Document Gate #6; WP-13 chờ #12; WP-MULTIPROGRAM-ARCH chờ #1 | Vitest FE PASS (xem báo cáo A-F mục B); `go build`/`go vet` PASS; BE Go test cho WP-01 **còn nợ** | `PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` (mới), `56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md` (mới), file này (mới), `ST_SUBSET_SPEC_MK-DDC-24_VI.md` (1.0→1.1), `PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` (0.8→0.9), `openapi.yaml`, `model/types.ts`, `OverviewPage.tsx`(+test), `ProgramsTab.tsx`, `fbd/model.ts`, `checks.go`(store), `projects.go`(application), `projects.go`(http) | Chưa commit — chờ xác nhận theo quy trình "commit"/"merge" của dự án | Chưa chạy full `ctest`/`go test ./...`/Playwright toàn bộ trong phiên này — xem báo cáo A-F mục B để biết đúng phạm vi đã chạy | Viết BE Go test cho WP-01 (nợ kỹ thuật); UX Lead viết `FBD_EDITOR_DESIGN` để mở Document Gate #6; PM/CTO quyết Document Gate #1 (Product Spec authority) |
+| 2026-08-15 (đợt 2) | `FBD_EDITOR_DESIGN.md` (mở Gate #6) + WP-05/06/07 (palette 9 nhóm, tạo INPUT/OUTPUT/CONSTANT, Inspector đầy đủ theo node kind gồm cả `instance`/`retained` FB — phát hiện và sửa thiếu sót ở bản 1.0 tài liệu sau khi đọc `declare_function_blocks()`) | WP-08 (FBD→Mapping) | WP-09 chờ WP-08; WP-13 chờ #12; WP-MULTIPROGRAM-ARCH chờ #1 | Vitest FBD 43/43, FE toàn bộ 607/607 PASS; `tsc --noEmit` PASS; `eslint --max-warnings=0` PASS; `vite build` PASS (kèm 3 check hợp đồng Programming tự động: errors/api/fbd contract PASS); Playwright `programming.spec.ts` 10/10 PASS (mocked backend, real browser mount, WCAG A/AA) | `FBD_EDITOR_DESIGN.md` (mới, rev 1.0→1.1 tự sửa), `PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` (Gate #6 mở), file này, `fbd/palette.ts` (mới), `fbd/model.ts` (+`isFbdIdentifier`), `fbd/commands.ts` (+4 action `SET_NODE_*`), `fbd/StructuredFbdEditor.tsx` (palette + inspector UI), `fbd/palette.test.ts` (mới), `fbd/commands.test.ts` (+5 test), `fbd/StructuredFbdEditor.test.tsx` (+6 test) | Chưa push — commit/deploy đợt 2 thực hiện ngay sau bước này trong cùng phiên | Không phát hiện — toàn bộ 607 vitest + 10 Playwright + tsc + eslint + build đều PASS trước khi commit | WP-08 (FBD→Mapping integration), sau đó WP-09 (E2E board thật) |
