@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LANG-PROG-001` |
-| Phiên bản | 0.8 |
+| Phiên bản | 0.9 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; ST/FBD common typed IR, provenance và BE compiler worker có source/host; user POU/target còn mở** |
 | Ngày | 2026-08-13 |
 | Chủ quản | Compiler Lead + Controls Lead |
@@ -168,7 +168,7 @@ tổ hợp bị `ST-SEM-FBD-CYCLE`. Compiler sinh source map từ instruction t�
 | Numeric | `ABS`, `MIN`, `MAX`, `LIMIT`, `SQRT` | type overload hữu hạn; domain error fault |
 | Selection | `SEL` | branches cùng type |
 | Conversion | `INT_TO_DINT`, `INT_TO_UINT`, `DINT_TO_INT`, `DINT_TO_UINT`, `UINT_TO_INT`, `UINT_TO_DINT`, `DINT_TO_REAL`, `UINT_TO_REAL`, `REAL_TO_DINT`, `REAL_TO_UINT` | conversion ngoài miền/non-finite fault; không implicit conversion |
-| Control | PID block target | anti-windup, manual/auto, bumpless theo `DDD-CTRL-PROG-001` |
+| Control | `PID` — **Implemented** (`StFbType::PID`, `st_program.cpp`), chưa "target" | 8 input (`SP,PV,KP,KI,KD,OUT_MIN,OUT_MAX,ACTUAL`)/2 output (`OUT,TRACKING`); anti-windup back-calculation, `ACTUAL` là read-back thật qua Point Table (không tự đọc `PriorityResolver`); xem `DDD-CTRL-PROG-001` §7. Code chạy được nhưng semantics **chưa qua Controls+Safety review chính thức** — xem blocker §14 "Unit/conversion/PID semantic chưa khóa"; không dùng cho logic sản xuất tới khi review đóng |
 
 Library manifest có `libraryId`, semantic version, block ID, pin schema, state
 layout version, WCET class. Artifact ghi đúng library version; loader reject
@@ -332,6 +332,7 @@ không có semantic riêng ở FE.
 | 0.6 | 2026-08-11 | Đồng bộ `TASK-PROG-202` tại `4819901`: lowerer FBD→`StProgram` typed→IR chung, 20 cặp ST↔FBD, trace TON, fail-closed unit/library/graph lỗi và fuzz 100.000 input; chuyển artifact/source-map production sang Task 203 | Compiler + Core Lead |
 | 0.7 | 2026-08-11 | Đồng bộ `TASK-PROG-203` tại `2c2bfb4`: SHA-256 canonical, manifest/build key deterministic, source map ST/FBD giữ UUID/unit, CLI ST/FBD và verifier fail-closed; chuyển Project/Revision store sang Task 204 | Compiler + Core Lead |
 | 0.8 | 2026-08-13 | Đồng bộ As-Built tới P4: compiler worker sandbox Task 205 đã gọi CLI bounded; P3/P4 nạp artifact verified qua loader/coordinator nhưng `st_compiler_lib` vẫn không link vào `mkddc-core`. Giữ local POU và target WCET/HIL/Test Result còn mở. | Compiler + Core + BE |
+| 0.9 | 2026-08-15 | **WP-04 (D-06, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15` §7.3/§7.4).** §6: sửa `PID` từ "block target" (ngụ ý chưa build) thành **Implemented** — xác nhận trực tiếp `StFbType::PID` có thật trong `st_program.cpp` với port shape đầy đủ; giữ nguyên blocker "Unit/conversion/PID semantic chưa khóa" §14 (semantics vẫn chưa qua Controls+Safety review, chỉ sửa nhầm lẫn "chưa tồn tại" thành đúng "tồn tại nhưng chưa duyệt"). Không sửa §4.2 (type/conversion table) — đã khớp source từ trước, chỉ `ST_SUBSET_SPEC_MK-DDC-24_VI.md` (tài liệu As-Built khác) từng sai. | System Engineering |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

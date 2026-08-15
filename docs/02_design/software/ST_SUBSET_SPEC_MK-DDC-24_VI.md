@@ -1,7 +1,7 @@
 # ST Subset Specification — MK-DDC-24 FW SOM Program Runtime
 
 > **Document ID:** SW-ST-SUBSET-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-07-28
+> **Phiên bản:** 1.1 | 2026-08-15 (đính chính §3.1/§3.5/§6.2 theo D-06, xem §14)
 > **Workstream:** Supporting As-Built của compiler ST; plan C0.4 lịch sử đã bị
 > [Plan 53](../../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) thay
 > thế và phục hồi được tại commit `b69fdf1`.
@@ -85,14 +85,25 @@ Quy tắc:
 
 ### 3.1 Kiểu cơ sở
 
-| Kiểu | Biểu diễn | Miền giá trị | Giá trị khởi tạo |
-|---|---|---|---|
-| `BOOL` | 1 byte | `FALSE`, `TRUE` | `FALSE` |
-| `INT` | int32 (bù 2) | −2 147 483 648 … 2 147 483 647 | `0` |
-| `REAL` | IEEE-754 binary32 | hữu hạn (NaN/Inf **bị từ chối**, §6.3) | `0.0` |
-| `TIME` | int64, đơn vị **nanosecond** | 0 … ~292 năm; **không âm** | `T#0s` |
+> **Đính chính 2026-08-15 (WP-04, D-06, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15`
+> §7.3):** bản 1.0 (2026-07-28) của bảng dưới đây sai hai chỗ, xác nhận lại trực
+> tiếp từ `apps/core/application/st/st_program.cpp` (`st_integer_min/max`)
+> — không phải suy đoán: (1) `INT` là **int16**, không phải int32 như bản cũ ghi;
+> (2) `DINT`/`UINT` **đã tồn tại và hoạt động** trong compiler/runtime, không
+> phải "không có" như bản cũ khẳng định. Trạng thái phê duyệt: **Implemented —
+> cần bổ sung Test Result/V&V chính thức** (chưa có nghĩa là "chưa tồn tại");
+> xem `56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md` WP-04.
 
-Rev A.0 **không có**: `SINT`/`DINT`/`LINT`/`UINT`/`USINT`/`UDINT`/`ULINT`, `LREAL`,
+| Kiểu | Biểu diễn | Miền giá trị | Giá trị khởi tạo | Trạng thái |
+|---|---|---|---|---|
+| `BOOL` | 1 byte | `FALSE`, `TRUE` | `FALSE` | Implemented |
+| `INT` | **int16** (bù 2) | −32 768 … 32 767 | `0` | Implemented |
+| `DINT` | int32 (bù 2) | −2 147 483 648 … 2 147 483 647 | `0` | Implemented — cần Test Result/V&V bổ sung |
+| `UINT` | uint16 | 0 … 65 535 | `0` | Implemented — cần Test Result/V&V bổ sung |
+| `REAL` | IEEE-754 binary32 | hữu hạn (NaN/Inf **bị từ chối**, §6.3) | `0.0` | Implemented |
+| `TIME` | int64, đơn vị **nanosecond** | 0 … ~292 năm; **không âm** | `T#0s` | Implemented |
+
+Rev A.0 **không có**: `SINT`/`LINT`/`USINT`/`UDINT`/`ULINT`, `LREAL`,
 `BYTE`/`WORD`/`DWORD`, `STRING`/`WSTRING`, `DATE`/`TIME_OF_DAY`/`DATE_AND_TIME`,
 `ARRAY`, `STRUCT`, kiểu người dùng định nghĩa, con trỏ, `ANY`.
 
@@ -143,10 +154,28 @@ việc chọn kiểu là quyết định tĩnh, kiểm tra được. Literal ngu
 
 | Hàm | Chữ ký | Ngữ nghĩa |
 |---|---|---|
-| `INT_TO_REAL` | `(INT) : REAL` | Chính xác (int32 luôn biểu diễn được trong binary32 với sai số ≤ 1 ULP) |
+| `INT_TO_REAL` | `(INT) : REAL` | Chính xác (int16 luôn biểu diễn được trong binary32 không mất bit) |
 | `REAL_TO_INT` | `(REAL) : INT` | Làm tròn **về số nguyên gần nhất, .5 làm tròn ra xa 0**. Ngoài miền `INT` hoặc không hữu hạn → runtime fault `ST-RT-003` |
 | `TIME_TO_REAL` | `(TIME) : REAL` | Trả về **số giây** dạng `REAL` |
 | `REAL_TO_TIME` | `(REAL) : TIME` | Nhận **số giây**; âm hoặc không hữu hạn → `ST-RT-003` |
+
+**Đính chính 2026-08-15 (WP-04, D-06):** 10 hàm dưới đây có thật trong compiler
+(`st_program.cpp`, `st_semantic.cpp`, `st_compile.cpp`) nhưng thiếu ở bản 1.0 —
+đi cùng `DINT`/`UINT` ở §3.1. Trạng thái: **Implemented — cần Test Result/V&V
+bổ sung**, cùng nhóm với hai kiểu trên, chưa phải một tính năng mới độc lập.
+
+| Hàm | Chữ ký | Ngữ nghĩa |
+|---|---|---|
+| `INT_TO_DINT` | `(INT) : DINT` | Chính xác, mở rộng dấu |
+| `INT_TO_UINT` | `(INT) : UINT` | Giá trị âm hoặc ngoài miền `UINT` → runtime fault `ST-RT-003` |
+| `DINT_TO_INT` | `(DINT) : INT` | Ngoài miền `INT` → runtime fault `ST-RT-003` |
+| `DINT_TO_UINT` | `(DINT) : UINT` | Âm hoặc ngoài miền `UINT` → runtime fault `ST-RT-003` |
+| `UINT_TO_INT` | `(UINT) : INT` | Ngoài miền `INT` → runtime fault `ST-RT-003` |
+| `UINT_TO_DINT` | `(UINT) : DINT` | Chính xác, luôn trong miền `DINT` |
+| `DINT_TO_REAL` | `(DINT) : REAL` | Có thể mất chính xác ở biên (int32 → binary32, giống IEC 61131-3 chuẩn) |
+| `UINT_TO_REAL` | `(UINT) : REAL` | Chính xác (uint16 luôn biểu diễn được trong binary32) |
+| `REAL_TO_DINT` | `(REAL) : DINT` | Làm tròn như `REAL_TO_INT`. Ngoài miền `DINT` hoặc không hữu hạn → `ST-RT-003` |
+| `REAL_TO_UINT` | `(REAL) : UINT` | Làm tròn như `REAL_TO_INT`. Âm, ngoài miền `UINT` hoặc không hữu hạn → `ST-RT-003` |
 
 ---
 
@@ -281,6 +310,17 @@ thao tác chuỗi.
 | `TOF` | `IN:BOOL`, `PT:TIME` | `Q:BOOL`, `ET:TIME` | Trễ khi tắt: `IN` đúng → `Q` đúng ngay. `IN` xuống sai, `Q` giữ đúng thêm `PT` |
 | `R_TRIG` | `CLK:BOOL` | `Q:BOOL` | `Q` đúng đúng **một chu kỳ** khi `CLK` chuyển sai→đúng |
 | `F_TRIG` | `CLK:BOOL` | `Q:BOOL` | `Q` đúng đúng **một chu kỳ** khi `CLK` chuyển đúng→sai |
+| `PID` | `SP,PV,KP,KI,KD,OUT_MIN,OUT_MAX,ACTUAL:REAL` | `OUT:REAL`, `TRACKING:BOOL` | PID vòng đơn (`st_program.cpp`, `TASK-PROG-303`, `DDD-CTRL-PROG-001` §7). `ACTUAL` là giá trị output THẬT SỰ đang được áp (đọc ngược qua Point Table, kể cả khi bị override ưu tiên cao hơn) — chương trình phải tự wire binding riêng cho `ACTUAL`, FB không tự đọc `PriorityResolver`. Dùng để phát hiện override và đóng băng bộ tích phân (anti-windup back-calculation); `TRACKING=TRUE` khi đang đóng băng |
+
+> **Đính chính 2026-08-15 (WP-04, D-06):** `PID` có thật trong compiler/runtime
+> (`StFbType::PID`) nhưng thiếu ở bản 1.0 của bảng này. **Trạng thái phê duyệt
+> khác hẳn `DINT`/`UINT` ở §3.1**: `PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md`
+> tự ghi rõ "Unit/conversion/PID semantic chưa khóa" — cần **Controls +
+> Safety review chính thức** ngữ nghĩa (anti-windup, giới hạn `OUT_MIN/MAX`,
+> hành vi khi `ACTUAL` mất nguồn) trước khi công bố sẵn sàng dùng cho end
+> user, dù code đã chạy được. Không dùng `PID` cho logic điều khiển sản xuất
+> cho tới khi review này đóng — xem
+> `56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md` WP-04.
 
 Ngữ nghĩa thời gian của `TON`/`TOF`:
 
@@ -610,3 +650,4 @@ Hành vi mong đợi (chu kỳ Task 1 s):
 | Rev | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-07-28 | Tạo mới. Đóng workstream C0.4 (MS-02). Chốt phạm vi: `BOOL`/`INT`/`REAL`/`TIME`, số học đầy đủ, `XOR`, `ELSIF`, chú thích, Function Block chuẩn `TON`/`TOF`/`R_TRIG`/`F_TRIG`, `VAR`/`VAR RETAIN`, 11 hàm chuẩn. Grammar EBNF đầy đủ, bảng đối chiếu với parser hiện tại (phủ ~40%), 8 khác biệt cố ý so với IEC, danh mục diagnostic code đầy đủ, chương trình tham chiếu normative. |
+| 1.1 | 2026-08-15 | **WP-04 (D-06, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15` §7.3/§7.4).** Đính chính §3.1: `INT` là int16 (không phải int32 như 1.0 ghi sai); thêm `DINT`(int32)/`UINT`(uint16) — có thật trong `st_program.cpp`, 1.0 từng khẳng định sai là "không có". §3.5: thêm 10 hàm chuyển đổi `INT/DINT/UINT/REAL` có thật trong compiler nhưng thiếu ở 1.0. §6.2: thêm Function Block `PID` (8 input/2 output, có thật trong `st_program.cpp`) kèm ghi chú trạng thái phê duyệt — semantics PID **chưa được Controls+Safety review chính thức**, khác `DINT`/`UINT` (chỉ cần Test Result/V&V bổ sung, không cần review riêng). Xác nhận trực tiếp từ source, không suy đoán từ tài liệu khác. |
