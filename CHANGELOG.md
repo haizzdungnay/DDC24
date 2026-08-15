@@ -8,6 +8,45 @@
 
 ## [Unreleased]
 
+### Added — WP-13 Artifact Trust Security Design, mở Document Gate #12 (Master Plan 56)
+
+`POST /retain/reset` không phải finding an ninh duy nhất bỏ ngỏ — D-05 ghi
+`HASH_ONLY` tạm chấp nhận dev/lab, production cần
+`PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN` (chưa tồn tại, Document Gate
+#12 chặn WP-13). Viết
+[`docs/02_design/software/PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md`](docs/02_design/software/PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md)
+(mới) đúng exit criteria WP-13 tự đặt ("Security Architecture review và
+duyệt trước khi bật `integrityMode=SIGNED`").
+
+**Phát hiện quan trọng khi đọc source** (thay đổi giả định ban đầu của
+Master Plan): crypto ký/verify Ed25519 **đã tồn tại đầy đủ cả hai chiều**
+— `st_loader.cpp` verify bằng `crypto_sign_verify_detached`,
+`st_ir.cpp::sign_st_artifact()` ký bằng `crypto_sign_detached`,
+`st_public_key.hpp` đã có sẵn nguyên tắc khoá TEST (nhúng, cam kết repo)
+vs khoá RELEASE (`-DMKDDC_ST_PUBLIC_KEY_HEX`) kèm hàm
+`st_public_key_is_test_key()` để gate. Nhưng `apps/web-api/internal/programming/compiler/runner.go`
+(Go BE) hiện **hard-code từ chối** bất cứ `IntegrityMode` nào khác
+`HASH_ONLY` — đây chính xác là as-built D-05 mô tả. Khoảng thiếu thật của
+WP-13 không phải "viết crypto mới" mà là **quy trình ký + custody khoá +
+chính sách bật SIGNED mode** — nhỏ hơn giả định ban đầu nhưng không giảm
+mức cần Security Architecture review (ai giữ private key, key có thể lộ,
+downgrade attack ép dùng HASH_ONLY).
+
+Tài liệu nêu threat model bổ sung (khoá test dùng nhầm production — có hàm
+sẵn nhưng chưa nơi nào gọi; downgrade attack; key compromise), 2 mô hình
+ký (build-time vs on-demand sau Check PASSED, chưa chọn), 3 câu hỏi
+provisioning (nơi lưu private key, ai được yêu cầu ký, ai audit khoá nhúng
+đúng là khoá release), key rotation (tái dùng pattern overlap trust window
+đã có cho TLS certificate), rollback protection, secure commissioning,
+audit, failure policy — theo đúng danh sách 9 mục Master Plan yêu cầu.
+**Chưa implement** — không sửa `runner.go`, không thêm cờ ký vào compiler
+CLI nào.
+
+**Tài liệu:** `docs/02_design/software/PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md`
+(mới), `docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` (Gate
+#12 mở — nhưng Implementation Gate WP-13 vẫn đóng, hai cổng khác nhau),
+`docs/03_implementation/PROGRAMMING_IMPLEMENTATION_TRACKER.md`.
+
 ### Added — WP-12 RETAIN Reset Design + xác nhận WP-09 bị chặn thật (Master Plan 56)
 
 **WP-12 (G-9, `POST /retain/reset` luôn 503):** Viết
