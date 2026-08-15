@@ -595,7 +595,27 @@ function ProgramInspector({ program, programs, draft, canEdit, saving, onChange,
           <input className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.name} readOnly={!canEdit} onChange={(event) => onChange({ ...draft, name: event.target.value })} />
           {duplicateName && <span className="mt-1 block text-xs font-normal normal-case text-[var(--c-fault-fg)]">{pick('Tên đã được dùng bởi chương trình khác.', 'This name is already used by another program.')}</span>}
         </label>
-        <label className="text-xs text-[var(--c-text-dim)]">{pick('Loại', 'Kind')}<select className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.kind} disabled={!canEdit} onChange={(event) => onChange({ ...draft, kind: event.target.value as ProgrammingProgram['kind'] })}><option value="PROGRAM">PROGRAM</option><option value="FUNCTION_BLOCK">FUNCTION_BLOCK</option><option value="FUNCTION">FUNCTION</option></select></label>
+        <label className="text-xs text-[var(--c-text-dim)]">
+          {pick('Loại', 'Kind')}
+          {/* WP-02 (D-03, REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15 §7.4): Check
+           * (`compilerInput()`, BE) chỉ biên dịch đúng 1 object PROGRAM/Revision
+           * — bất kỳ object FUNCTION/FUNCTION_BLOCK nào cũng làm Check fail cứng
+           * `ST-CLI-LIMIT` không giải thích lý do. Trước đây dropdown này cho
+           * chọn cả ba loại dù backend chỉ làm được PROGRAM — ẩn hai lựa chọn
+           * chưa hỗ trợ khỏi UI thay vì để người dùng tự khám phá sau một vòng
+           * Check thất bại khó hiểu. Program hiện có (nếu có, từ import bundle)
+           * mang sẵn kind khác PROGRAM vẫn hiển thị đúng giá trị thật kèm cảnh
+           * báo, không bị ẩn/mất dữ liệu. */}
+          <select className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.kind} disabled={!canEdit} onChange={(event) => onChange({ ...draft, kind: event.target.value as ProgrammingProgram['kind'] })}>
+            <option value="PROGRAM">PROGRAM</option>
+            {draft.kind !== 'PROGRAM' && <option value={draft.kind}>{draft.kind}</option>}
+          </select>
+          {draft.kind !== 'PROGRAM' && (
+            <span className="mt-1 block text-xs font-normal normal-case text-[var(--c-warn-fg)]">
+              {pick('Loại này chưa được Kiểm tra hỗ trợ biên dịch — đổi về PROGRAM trước khi Kiểm tra.', 'This kind is not supported by Check yet — switch to PROGRAM before running Check.')}
+            </span>
+          )}
+        </label>
         <label className="text-xs text-[var(--c-text-dim)]">{pick('Tag chức năng', 'Functional tags')}<input className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.functionalTags} readOnly={!canEdit} onChange={(event) => onChange({ ...draft, functionalTags: event.target.value })} /></label>
       </div>
       {canEdit && <Button className="mt-2" size="sm" loading={saving} disabled={!dirty || draft.name.trim().length === 0 || duplicateName} onClick={() => void onSave([{ op: 'upsertProgram', program: { ...program, name: draft.name.trim(), kind: draft.kind, functionalTags: parseTags(draft.functionalTags) } }])}>{pick('Lưu thuộc tính', 'Save properties')}</Button>}
