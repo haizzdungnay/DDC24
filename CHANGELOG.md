@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Added — `AHU_MasterSequence`: setpoint sưởi vận hành được (HeatingSetpoint) thay ngưỡng cứng, rà soát toàn bộ kiến trúc setpoint (2026-08-17)
+
+User yêu cầu rà lại: "Quạt cũng có setpoint... Coil heat/cool cũng có setpoint
+chứ" — đưa ra bảng + sơ đồ để duyệt trước khi sửa (artifact "AHU Setpoint
+Architecture"). Kết quả rà soát: Fan (`DspSetpoint`) và Cooling
+(`ZoneSetpoint` cascade) đã có setpoint vận hành được từ các đợt vá trước;
+riêng **Heating coil hoàn toàn không có setpoint** — `HeatValve` dùng ngưỡng
+bật cứng `SAT < 10.0` viết thẳng trong ST source, không operator nào chỉnh
+được. User duyệt phương án bổ sung.
+
+**Đã triển khai (sau khi duyệt)**:
+- Tạo VP4 `SETPOINT_HEAT` (bind `AV-03`, `degC`, mặc định 10.0, hiển thị
+  -10..30) — operator chỉnh trực tiếp từ web-app.
+- Thêm `VAR_INPUT HeatingSetpoint`, bind READ vào VP `AV-03`.
+- Viết lại logic `HeatValve`: `ClampedHeatSetpoint := LIMIT(5.0,
+  MIN(HeatingSetpoint, SatSetpoint - 2.0), 12.0)` — tự động kẹp dưới Cooling
+  SP trừ 2°C, chống trường hợp operator vô tình đặt Heating SP chồng lên
+  Cooling SP khiến 2 coil tranh nhau cùng lúc (kinh điển trong lỗi sequencing
+  AHU). Sau đó P-loop gain 4 %/°C + rate-limit ±8%/chu kỳ, cùng khuôn mẫu đã
+  verify ổn định với `ChwValve`/`FanSpeed`.
+- **Tinh chỉnh phát hiện lúc code, không có trong bản vẽ sơ bộ**: nhánh an
+  toàn cứng `SafetyTrip AND FreezeStat → 100%` **giữ nguyên tức thời, KHÔNG
+  đi qua rate-limit** — nếu rate-limit cả nhánh này, bảo vệ đóng băng sẽ mất
+  ~13 chu kỳ (~13s) mới lên được 100%, một khoảng trễ không chấp nhận được
+  cho một interlock an toàn. Chỉ nhánh điều tiết comfort bình thường mới qua
+  rate-limit.
+
+**Giới hạn đã ghi nhận minh bạch, không phải thiếu sót**: gain 4 %/°C cho
+vòng sưởi là giá trị khởi tạo thận trọng (mượn hình dạng từ `ChwValve`),
+**chưa thể kiểm chứng qua `fake_mcu`** — mô phỏng hiện chỉ mô hình hoá
+`SAT = MAT − ChwValve×14°C`, chưa có số hạng `HeatValve→SAT`; cần tinh chỉnh
+tại hiện trường khi lắp coil nóng thật. Cũng không thể ép `SAT` xuống thấp để
+test vòng kín trên board hiện tại vì kênh `UI` (cảm biến vật lý) đúng thiết
+kế là read-only, `write` bị `web_ipc` từ chối `readonly_point` — đúng hành
+vi mong muốn, không phải hạn chế cần vá.
+
+**Kiểm chứng**: Check `AHU_MasterSequence` v5 PASSED, Commission SUCCEEDED
+(`activeRevisionId` khớp revision mới). `GET .../programming/runtime/monitor`
+xác nhận `HeatingSetpoint` `quality=GOOD` giá trị 10; `HeatValve` giữ 0V khi
+`SAT≈23°C` (cao hơn nhiều setpoint sưởi) — đúng logic "không có nhu cầu
+sưởi", không dao động giả.
+
+Refs: artifact "AHU Setpoint Architecture" (2026-08-17, đã duyệt), entry
+"AO nhấp nháy on/off..." bên dưới (khuôn mẫu P-loop + rate-limit tái dùng)
+
 ### Fixed — Monitor Program báo "UNKNOWN · UNAVAILABLE" cho mọi biến bind Virtual Point dù giá trị Core hợp lệ (2026-08-17)
 
 Phát hiện ngay sau khi verify bản vá bang-bang phía trên: user chụp màn hình
