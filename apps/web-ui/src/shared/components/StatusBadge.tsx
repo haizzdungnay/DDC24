@@ -68,17 +68,36 @@ function badgeBackground(state: BadgeState): string {
   return 'var(--c-surface)'
 }
 
-export function StatusBadge({ state, label, className }: { state: BadgeState; label?: string; className?: string }) {
+export function StatusBadge({ state, label, title, className }: { state: BadgeState; label?: string; title?: string; className?: string }) {
   const color = state === 'demo' ? 'var(--c-accent)' : statusColor(state)
   const fill = state === 'demo' ? 'var(--c-accent)' : statusFill(state)
   return (
     <span
       className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold leading-none', className)}
       style={{ color, borderColor: fill, backgroundColor: badgeBackground(state) }}
+      title={title}
     >
       <span style={{ color: fill }}><Icon state={state} /></span>
       {label ?? labelMap[state]}
     </span>
+  )
+}
+
+/**
+ * Chấm trạng thái gọn cho danh sách nhiều kênh (FE-002) — không có icon/chữ
+ * đầy đủ như `StatusBadge`, chỉ một chấm màu + `title` để hover xem quality
+ * mà không cần mở từng kênh.
+ */
+export function QualityDot({ state, title }: { state: BadgeState; title?: string }) {
+  const fill = state === 'demo' ? 'var(--c-accent)' : statusFill(state)
+  return (
+    <span
+      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+      style={{ backgroundColor: fill }}
+      role="img"
+      aria-label={title ?? labelMap[String(state).toLowerCase()] ?? String(state)}
+      title={title ?? labelMap[String(state).toLowerCase()] ?? String(state)}
+    />
   )
 }
 

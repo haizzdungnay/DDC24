@@ -61,14 +61,16 @@ function AlarmSettingsRouteProbe() {
   return <div data-testid="alarm-settings-route">{location.pathname}{location.search}</div>
 }
 
-function renderPage() {
+function renderPage(options?: { extraLink?: string }) {
   return render(
     <I18nProvider>
       <ToastProvider>
         <MemoryRouter initialEntries={['/eng/inputs']}>
+          {options?.extraLink && <a href={options.extraLink} data-testid="nav-away-link">Elsewhere</a>}
           <Routes>
             <Route path="/eng/inputs" element={<InputsPage />} />
             <Route path="/eng/alarm-settings" element={<AlarmSettingsRouteProbe />} />
+            <Route path="/eng/network" element={<div data-testid="network-route">network</div>} />
           </Routes>
         </MemoryRouter>
       </ToastProvider>
@@ -366,5 +368,134 @@ describe('InputsPage — tab Cảnh báo & Lưu trữ (deep link sang AlarmSetti
     const probe = await screen.findByTestId('alarm-settings-route')
     expect(probe).toHaveTextContent('/eng/alarm-settings')
     expect(probe).toHaveTextContent('newSource=UI:1')
+  })
+})
+
+/* Review UI/UX theo bảng đấu nối AHU (FAKE-MCU-AHU-WIRING-2026-08-14,
+ * 2026-08-17): FE-001/002/006/008/010 xác nhận thật, sửa trong cùng phiên. */
+describe('InputsPage — cải tiến sau review AHU wiring 2026-08-17', () => {
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+    hookState.points = []
+  })
+
+  it('FE-002: channel list hiện chấm trạng thái theo quality của từng kênh', async () => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.alarms = []
+    api.getAiInputs.mockResolvedValue([
+      { ...baseInput, channel: 1, tag: 'UI-01', label: 'Supply Air Temperature' },
+      { ...baseInput, channel: 2, tag: 'UI-02', label: 'Unconfigured Channel' }
+    ])
+    hookState.points = [
+      { id: 'UI-01', tag: 'UI-01', name: 'Supply Air Temperature', kind: 'UI', value: 13.9, quality: 'good', source: 'core', updatedAt: new Date().toISOString() },
+      { id: 'UI-02', tag: 'UI-02', name: 'Unconfigured Channel', kind: 'UI', value: 0, quality: 'bad', qualityReason: 'CONFIGURATION_ERROR', source: 'core', updatedAt: new Date().toISOString() }
+    ]
+    renderPage()
+
+    await screen.findByText('UI Channels')
+    expect(screen.getByTitle('UI-01: good')).toBeInTheDocument()
+    expect(screen.getByTitle('UI-02: bad')).toBeInTheDocument()
+  })
+
+  it('FE-008: ô tìm kiếm lọc đúng kênh theo tag/label', async () => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.alarms = []
+    hookState.points = []
+    api.getAiInputs.mockResolvedValue([
+      { ...baseInput, channel: 1, tag: 'UI-01', label: 'Supply Air Temperature' },
+      { ...baseInput, channel: 2, tag: 'UI-02', label: 'Return Air Humidity' }
+    ])
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('UI Channels')
+    expect(screen.getByText('Supply Air Temperature')).toBeInTheDocument()
+    expect(screen.getByText('Return Air Humidity')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('Search channels…'), 'humidity')
+    expect(screen.queryByText('Supply Air Temperature')).not.toBeInTheDocument()
+    expect(screen.getByText('Return Air Humidity')).toBeInTheDocument()
+  })
+
+  it('FE-001: badge quality khác GOOD hiện tooltip qualityReason', async () => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.alarms = []
+    api.getAiInputs.mockResolvedValue([{ ...baseInput }])
+    hookState.points = [{
+      id: 'UI-01', tag: 'UI-01', name: 'Shared Display', kind: 'UI', value: 0,
+      quality: 'bad', qualityReason: 'OVER_RANGE', source: 'core', updatedAt: new Date().toISOString()
+    }]
+    renderPage()
+
+    await screen.findByText('UI Channels')
+    expect(screen.getByTitle('OVER_RANGE')).toBeInTheDocument()
+  })
+
+  it('MAP-001: tab Điện & Cảm biến hiện gợi ý mapping SensorType → Electrical Mode', async () => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.alarms = []
+    hookState.points = []
+    api.getAiInputs.mockResolvedValue([{ ...baseInput }])
+    renderPage()
+
+    expect(await screen.findByText(/Wiring-table hint/)).toBeInTheDocument()
+  })
+
+  it('FE-006: có nút Save cố định (nổi) ngoài nút Save ở đầu trang', async () => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.alarms = []
+    hookState.points = []
+    api.getAiInputs.mockResolvedValue([{ ...baseInput }])
+    renderPage()
+
+    await screen.findByText('UI Channels')
+    expect(screen.getAllByRole('button', { name: 'Save' }).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('FE-010: rời trang lúc có thay đổi chưa lưu → cảnh báo; "Discard" phục hồi bản đã lưu rồi điều hướng', async () => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.alarms = []
+    hookState.points = [{
+      id: 'UI-01', tag: 'UI-01', name: 'Shared Display', kind: 'UI', value: 0,
+      quality: 'good', source: 'core', updatedAt: new Date().toISOString()
+    }]
+    api.getAiInputs.mockResolvedValue([{ ...baseInput }])
+    const user = userEvent.setup()
+    renderPage({ extraLink: '/eng/network' })
+
+    const name = await screen.findByDisplayValue('Shared Display')
+    await user.clear(name)
+    await user.type(name, 'Changed Name')
+
+    await user.click(screen.getByTestId('nav-away-link'))
+    expect(await screen.findByRole('dialog', { name: 'Unsaved input configuration' })).toBeInTheDocument()
+    expect(screen.queryByTestId('network-route')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Discard changes and leave' }))
+    expect(await screen.findByTestId('network-route')).toBeInTheDocument()
+  })
+
+  it('FE-010: "Save and leave" gọi API lưu trước rồi mới điều hướng', async () => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.alarms = []
+    hookState.points = [{
+      id: 'UI-01', tag: 'UI-01', name: 'Shared Display', kind: 'UI', value: 0,
+      quality: 'good', source: 'core', updatedAt: new Date().toISOString()
+    }]
+    api.getAiInputs.mockResolvedValue([{ ...baseInput }])
+    api.putAiInputs.mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderPage({ extraLink: '/eng/network' })
+
+    const name = await screen.findByDisplayValue('Shared Display')
+    await user.clear(name)
+    await user.type(name, 'Changed Name')
+
+    await user.click(screen.getByTestId('nav-away-link'))
+    await user.click(await screen.findByRole('button', { name: 'Save and leave' }))
+
+    await waitFor(() => expect(api.putAiInputs).toHaveBeenCalled())
+    expect(await screen.findByTestId('network-route')).toBeInTheDocument()
   })
 })
