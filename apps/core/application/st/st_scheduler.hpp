@@ -268,15 +268,18 @@ public:
     StTask* find_task(const std::string& id);
     StProgramInstance* find_program(const std::string& instance_id);
 
-    /* Xếp hàng artifact; áp dụng tại RANH GIỚI tick kế tiếp (SPEC §7.2). */
+    /* Xếp hàng artifact; áp dụng tại RANH GIỚI tick kế tiếp (SPEC §7.2).
+     * `is_rollback=true` bỏ qua guard "candidate hiện tại chưa qua clean
+     * tick" ở stage_activation() — xem ghi chú tại đó, đây là lối thoát BẮT
+     * BUỘC cho chính candidate đang kẹt đó. */
     bool request_activation(const std::string& instance_id, const std::vector<uint8_t>& artifact,
-                            std::string* error);
+                            std::string* error, bool is_rollback = false);
 
     /* Hai pha cho Commission: stage verify/preallocate ngoài RT nhưng CHƯA
      * cho safe boundary swap; activate chỉ arming O(1). API cũ phía trên giữ
      * hành vi một bước cho unit/supporting callers. */
     bool stage_activation(const std::string& instance_id, const std::vector<uint8_t>& artifact,
-                          std::string* error);
+                          std::string* error, bool is_rollback = false);
     bool commit_staged_activation(const std::string& instance_id, bool rollback,
                                   std::string* error);
     bool abort_staged_activation(const std::string& instance_id, std::string* error);
