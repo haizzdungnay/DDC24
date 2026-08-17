@@ -150,8 +150,16 @@ func (adapter programmingPointCatalogAdapter) ListActiveOverrides(ctx context.Co
 func toPointCatalogEntry(point PointDTO) programmingapplication.PointCatalogEntry {
 	category, deviceID := pointCatalogCategory(point)
 	direction, writable := pointCatalogDirection(point)
+	// F-PROG-ASBUILT-014: category VP chỉ resolve được ở Core khi pointId là
+	// slot AV-n/BV-n thật đã đồng bộ (`BoundPointID`), không phải id thân
+	// thiện "VP1" (id đó vẫn đúng cho mọi API điểm khác, chỉ riêng Point
+	// Catalog của Programming cần định danh Core thật để binding có hiệu lực).
+	pointID := point.ID
+	if category == "VP" && point.BoundPointID != "" {
+		pointID = point.BoundPointID
+	}
 	return programmingapplication.PointCatalogEntry{
-		Category: category, PointID: point.ID, DeviceID: deviceID, Name: pointCatalogName(point),
+		Category: category, PointID: pointID, DeviceID: deviceID, Name: pointCatalogName(point),
 		DataType: pointCatalogDataType(point), Unit: point.Unit, Direction: direction, Writable: writable,
 		Quality: pointCatalogQuality(point), Value: point.Value, ObservedAt: point.UpdatedAt,
 	}
@@ -179,7 +187,15 @@ func pointCatalogDirection(point PointDTO) (direction string, writable bool) {
 	switch point.Kind {
 	case "AO", "DO":
 		return "READ_WRITE", true
-	case "virtual", "modbus_rtu":
+	case "virtual":
+		// `Writable` ở đây là "operator có sửa được giá trị VP từ dashboard
+		// không" — một trục hoàn toàn khác với "ST Program bind VAR_OUTPUT
+		// ghi được VP không". Trục sau CHƯA có (resolve_io_bindings() chặn
+		// tường minh mọi VAR_OUTPUT category VP, F-PROG-ASBUILT-016) nên
+		// Point Catalog phải báo READ bất kể `Writable`, tránh Design/Mapping
+		// tab cho chọn một hướng binding sẽ luôn fail Check.
+		return "READ", false
+	case "modbus_rtu":
 		if point.Writable {
 			return "READ_WRITE", true
 		}
