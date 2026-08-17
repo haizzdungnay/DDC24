@@ -359,11 +359,12 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 		if item.RetentionS < 0 {
 			addConfigErr(&errs, base+".retentionS", "must be >= 0")
 		}
-		if item.DisplayMin < -50 || item.DisplayMin > 205 {
-			addConfigErr(&errs, base+".displayMin", "must be between -50 and 205")
+		rangeMin, rangeMax := virtualPointDisplayRangeLimits(item.Unit)
+		if item.DisplayMin < rangeMin || item.DisplayMin > rangeMax {
+			addConfigErr(&errs, base+".displayMin", fmt.Sprintf("must be between %g and %g", rangeMin, rangeMax))
 		}
-		if item.DisplayMax < -50 || item.DisplayMax > 205 {
-			addConfigErr(&errs, base+".displayMax", "must be between -50 and 205")
+		if item.DisplayMax < rangeMin || item.DisplayMax > rangeMax {
+			addConfigErr(&errs, base+".displayMax", fmt.Sprintf("must be between %g and %g", rangeMin, rangeMax))
 		}
 		if item.DisplayMin > item.DisplayMax {
 			addConfigErr(&errs, base+".displayMax", "must be >= displayMin")
@@ -513,6 +514,22 @@ func validVirtualPointUnit(unit string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// virtualPointDisplayRangeLimits trả biên hợp lệ cho displayMin/displayMax
+// theo unit — trước đây dùng chung [-50,205] (khớp dải cảm biến nhiệt độ
+// PT1000/NTC) cho MỌI unit kể cả Pa/ppm đã được validVirtualPointUnit cho
+// phép, khiến không thể khai báo setpoint áp suất tĩnh (vd 250 Pa cho quạt
+// AHU) hay CO2 (vd 1000+ ppm cho DCV) đúng thang hiển thị thật.
+func virtualPointDisplayRangeLimits(unit string) (min float64, max float64) {
+	switch unit {
+	case "Pa":
+		return -50, 2000
+	case "ppm":
+		return 0, 5000
+	default:
+		return -50, 205
 	}
 }
 
