@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Added — Deploy ST Editor Quick Control + sửa cursor lệch dòng lên Foxlinx (2026-08-17)
+
+Deploy PR #187 (`80e0e3c`) lên board `SOM-DDC-24-foxlinx` — chỉ FE static
+(`VITE_PROGRAMMING_REV_A=1 npm run build`, PR không đổi Core/Go nên không
+rebuild/restart hai thành phần đó). Backup trước deploy
+(`/tmp/backup-20260817T045618.tar.gz` + `dist.prev` giữ trên board để
+rollback một lệnh). Smoke test 10 mục PASS: health tổng `ok`, SHM magic
+đúng, bundle board đang phục vụ (`index-BBe1fIlL.js`) trùng khớp bundle vừa
+build cục bộ và chứa đúng chuỗi "Bảng lệnh nhanh"/"Chèn Point", disk 30%,
+nhiệt độ 42.55°C. Không có credential web-app (JWT) trong phiên nên không
+xác nhận thao tác UI thật qua đăng nhập trên board — bằng chứng hành vi đầy
+đủ đã có ở tầng test tự động thật trước deploy (xem PR #187).
+
+Chi tiết: `docs/07_records/test-evidence/fw-som/2026-08-17-foxlinx-st-editor-quick-control-deploy.md`.
+
 ### Added — ST Editor Quick Control: thanh lệnh nhanh vùng chọn, Bảng lệnh Ctrl+P, panel chèn Point/Variable (2026-08-17)
 
 Triển khai ba đề xuất UX cho ST Editor (`ProgramsTab.tsx`, workspace PGM-02)
