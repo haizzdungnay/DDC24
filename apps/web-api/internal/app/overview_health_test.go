@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+	"time"
+)
 
 // F-DASH-LOCALIO-01 — Dashboard hiện FAULT đỏ cho domain "Local I/O" chỉ vì
 // người dùng đã đặt Signal Type = "none" ("Không hoạt động") cho các kênh UI
@@ -66,6 +70,51 @@ func TestOverviewHealthLocalIOIgnoresDisabledChannels(t *testing.T) {
 		}
 		if localIO.ReasonCode != "no_local_points" {
 			t.Fatalf("reasonCode = %q, want no_local_points", localIO.ReasonCode)
+		}
+	})
+}
+
+// Bug 2026-08-17: domain "historian" ở /api/v1/overview báo DEGRADED vĩnh
+// viễn ("N điểm ghi lỗi") dù writer legacy đang ghi dữ liệu hoàn toàn bình
+// thường, vì historian.writerActive (wire ở main.go) trước đây chỉ xét
+// WriterV2 — luôn false ở trạng thái mặc định "legacy" (chưa cutover sang
+// historian v2). Test này dựng lại đúng công thức wiring của main.go
+// (WriterV2 || LegacyHistorianWritersRunning()) để hồi quy này không tái
+// diễn im lặng.
+func TestOverviewHealthHistorianLegacyWriterCountsAsActive(t *testing.T) {
+	svc, err := OpenHistorianPolicyService(filepath.Join(t.TempDir(), "historian.conf"), time.Now, func() (uint64, error) { return 8 << 30, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.identities = func() (map[string]uint64, string, error) {
+		return map[string]uint64{"UI-01": 1}, "valid", nil
+	}
+	svc.file.Points = []HistorianPolicy{{
+		PointID: "UI-01", Generation: 1, DBLoggingEnabled: true, DBInterval: "15s",
+		RetentionDays: 30, StartAtUTC: time.Now().Add(-time.Hour).Format(time.RFC3339),
+	}}
+
+	a := &App{historian: svc}
+	svc.writerActive = a.historianWriterActive
+
+	core := CoreStatus{CoreAvailable: true, IOP: IOPStatus{Status: "normal"}}
+	modbus := modbusHealthInput{}
+
+	t.Run("WriterV2 false nhưng legacy writer đang running -> historian GOOD, không DEGRADED", func(t *testing.T) {
+		a.legacyState = "running"
+		health := a.overviewHealth("2026-08-17T00:00:00Z", core, nil, nil, nil, modbus, true, "192.168.1.10")
+		historian := findDomainHealth(t, health, "historian")
+		if historian.State != HealthGood {
+			t.Fatalf("state = %q, want %q (reasonCode=%s, detail=%s) — legacy writer đang ghi thật không được báo degraded", historian.State, HealthGood, historian.ReasonCode, historian.Detail)
+		}
+	})
+
+	t.Run("legacy writer không running và WriterV2 false -> historian DEGRADED đúng", func(t *testing.T) {
+		a.legacyState = "stopped"
+		health := a.overviewHealth("2026-08-17T00:00:00Z", core, nil, nil, nil, modbus, true, "192.168.1.10")
+		historian := findDomainHealth(t, health, "historian")
+		if historian.State != HealthDegraded {
+			t.Fatalf("state = %q, want %q — không writer nào ghi thì phải báo degraded thật", historian.State, HealthDegraded)
 		}
 	})
 }

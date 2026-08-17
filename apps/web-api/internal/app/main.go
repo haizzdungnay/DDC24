@@ -187,7 +187,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		return authority.Revision, err
 	}
 	app.historian = historian
-	historian.writerActive = func() bool { return app.historianAuthority.WriterV2 }
+	historian.writerActive = app.historianWriterActive
 	if cfg.HistorianV2DBPath != "" {
 		recovery, recoveryErr := HistorianRecoveryPreflight(cfg.HistorianV2DBPath)
 		if recoveryErr != nil {

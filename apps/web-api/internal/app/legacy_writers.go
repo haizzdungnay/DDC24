@@ -143,6 +143,31 @@ func (a *App) LegacyHistorianWritersQuiesced() bool {
 	return a.legacyState == "quiesced"
 }
 
+// LegacyHistorianWritersRunning báo writer legacy (sampler + trends) có đang
+// ghi dữ liệu thật hay không — dùng làm vế OR với WriterV2 trong
+// historianWriterActive(), vì trong trạng thái "legacy" (mặc định trước khi
+// cutover sang historian v2) chính writer này mới là nơi ghi dữ liệu thật,
+// không phải WriterV2.
+func (a *App) LegacyHistorianWritersRunning() bool {
+	if a == nil {
+		return false
+	}
+	a.legacyMu.Lock()
+	defer a.legacyMu.Unlock()
+	return a.legacyState == "running"
+}
+
+// historianWriterActive quyết định historian.HistorianPolicy.Health của MỌI
+// điểm đang bật ghi lịch sử (snapshotLocked trong historian_policy.go) —
+// dùng chung một hàm cho cả wiring thật (main.go) lẫn test hồi quy để tránh
+// tái diễn bug 2026-08-17: bản cũ chỉ xét WriterV2, luôn false ở trạng thái
+// mặc định "legacy" (chưa cutover sang historian v2) dù writer legacy đang
+// ghi dữ liệu hoàn toàn bình thường — khiến domain "historian" ở
+// /api/v1/overview báo DEGRADED ("N điểm ghi lỗi") sai vĩnh viễn.
+func (a *App) historianWriterActive() bool {
+	return a.historianAuthority.WriterV2 || a.LegacyHistorianWritersRunning()
+}
+
 func (a *App) stopLegacyHistorianWriters(ctx context.Context) error {
 	if a == nil {
 		return nil

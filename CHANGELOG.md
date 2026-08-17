@@ -8,6 +8,52 @@
 
 ## [Unreleased]
 
+### Fixed — Health Strip báo domain "historian" DEGRADED ("N điểm ghi lỗi") sai vĩnh viễn khi chưa cutover historian v2 (2026-08-17)
+
+User báo dashboard hiện `historian` = DEGRADED, "Có điểm ghi lịch sử lỗi",
+detail "2 điểm ghi lỗi", nguồn `historian_policy`.
+
+**Nguyên nhân gốc**: `overviewHealth()` (`overview.go:497-535`) đếm số điểm có
+`HistorianPolicy.Health != "ok"/"healthy"` để quyết định domain DEGRADED.
+`Health` của MỌI điểm đang bật ghi lịch sử được set đồng loạt (all-or-nothing,
+không phải counter lỗi từng lần ghi) trong `snapshotLocked()`
+(`historian_policy.go:353-358`) dựa vào `writerActive()`. Closure này ở
+`main.go:190` trước đây chỉ kiểm `app.historianAuthority.WriterV2` — cờ này
+**luôn `false`** ở trạng thái mặc định `"legacy"` (chưa cutover sang historian
+v2, xem `historian_activation.go`), bất kể writer legacy
+(`StartLegacyHistorianWriters`, gate bởi `LegacyWriterAllowed`) — writer thật
+sự đang ghi dữ liệu trong trạng thái này — có đang chạy hay không. Kết quả:
+mọi điểm bật `dbLoggingEnabled` bị gắn `Health="degraded"` vĩnh viễn dù ghi
+hoàn toàn bình thường. Xác nhận trực tiếp trên board Foxlinx:
+`/data/config/historian.conf` có đúng 2 điểm `dbLoggingEnabled=true`
+(`UI-01`, `UI-09`) — khớp chính xác "2 điểm ghi lỗi" user thấy.
+
+**Cách sửa**: thêm `App.LegacyHistorianWritersRunning()` (đọc `legacyState`
+có khoá `legacyMu`, cùng khuôn mẫu `LegacyHistorianWritersQuiesced()` đã có)
+và `App.historianWriterActive()` = `WriterV2 || LegacyHistorianWritersRunning()`
+— dùng đúng MỘT hàm cho cả wiring thật (`main.go`: `historian.writerActive =
+app.historianWriterActive`) lẫn test hồi quy, để tránh tái diễn kiểu bug này
+lần nữa nếu công thức bị sửa sai.
+
+**Kiểm chứng**:
+- Test mới `TestOverviewHealthHistorianLegacyWriterCountsAsActive`
+  (`overview_health_test.go`) — verify bằng cách tạm revert `historianWriterActive()`
+  về công thức cũ: test FAIL đúng như kỳ vọng (`state = "degraded", want
+  "good"`), sau khi khôi phục fix: PASS. Xác nhận test bắt được đúng lớp bug
+  này, không phải test giả.
+- `go vet ./...` sạch, `go test ./... -count=1` toàn bộ 18 package **PASS**
+  (không chỉ package `internal/app`).
+- Build cross-compile `GOOS=linux GOARCH=arm64 CGO_ENABLED=0`, deploy board
+  Foxlinx (`mkddc-web-pi.service`) qua `scp`+`install`+`systemctl restart`,
+  MD5 khớp trước/sau, service `active`, journal khởi động sạch — xác nhận
+  trực tiếp trong lúc user đang mở dashboard (log ghi nhận các request
+  `GET /api/v1/overview` liên tục trả `200` ngay sau restart).
+
+Refs: `apps/web-api/internal/app/overview.go`,
+`apps/web-api/internal/app/historian_policy.go`,
+`apps/web-api/internal/app/legacy_writers.go`,
+`apps/web-api/internal/app/main.go`
+
 ### Fixed — F-OUT-001: trang Cấu hình Outputs — "Manual output (%)" gửi thẳng % làm giá trị RAW, Force AO thực chất bị hỏng (2026-08-17)
 
 User xem trang Cấu hình Outputs (AO-03 Chilled Water Valve, MODE 0-10V) thấy
