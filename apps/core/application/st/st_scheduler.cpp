@@ -220,14 +220,16 @@ StProgramInstance* StScheduler::find_program(const std::string& instance_id)
 /* ---- Vòng đời ---- */
 
 bool StScheduler::request_activation(const std::string& instance_id,
-                                     const std::vector<uint8_t>& artifact, std::string* error)
+                                     const std::vector<uint8_t>& artifact, std::string* error,
+                                     bool is_rollback)
 {
-    if (!stage_activation(instance_id, artifact, error)) return false;
+    if (!stage_activation(instance_id, artifact, error, is_rollback)) return false;
     return commit_staged_activation(instance_id, false, error);
 }
 
 bool StScheduler::stage_activation(const std::string& instance_id,
-                                   const std::vector<uint8_t>& artifact, std::string* error)
+                                   const std::vector<uint8_t>& artifact, std::string* error,
+                                   bool is_rollback)
 {
     StProgramInstance* p = find_program(instance_id);
     if (!p) { if (error) *error = "unknown instance '" + instance_id + "'"; return false; }
@@ -236,7 +238,17 @@ bool StScheduler::stage_activation(const std::string& instance_id,
         return false;
     }
 
-    if (!p->activated_artifact.empty()) {
+    /* Guard "candidate hiện tại chưa qua clean tick" tồn tại để không xếp
+     * chồng một candidate CHƯA được xác nhận lên trên một candidate khác
+     * cũng chưa được xác nhận (forward path). Nhưng rollback tồn tại CHÍNH
+     * XÁC để thoát khỏi trạng thái "candidate kẹt, chưa clean tick" đó — áp
+     * guard này cho cả rollback biến nó thành deadlock: candidate lỗi chặn
+     * cả stage mới LẪN đường an toàn duy nhất để thoát khỏi chính nó, buộc
+     * phải restart Core thủ công (phát hiện thật, board Foxlinx 2026-08-17,
+     * commission AHU_MasterSequence — activated_artifact còn nguyên vì
+     * output-commit chu kỳ đầu fail, on_output_commit() gọi rollback() nhưng
+     * rollback() tự gọi lại đúng hàm này nên cũng bị chính guard trên chặn). */
+    if (!is_rollback && !p->activated_artifact.empty()) {
         if (error) *error = "current package has not completed a clean tick";
         return false;
     }

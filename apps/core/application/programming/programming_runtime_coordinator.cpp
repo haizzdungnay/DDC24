@@ -823,6 +823,23 @@ RuntimeOperationSnapshot ProgrammingRuntimeCoordinator::snapshot() const
     output.lkg_revision_id = lkg_revision_id_;
     output.artifact_sha256 = artifact_hash_;
     output.detail_code = detail_code_;
+    /* detail_code_ chỉ được IPC worker gán ở các nhánh lỗi TRƯỚC safe
+     * boundary (stage/activate payload/token) — mọi lỗi PHÁT SINH TRONG scan
+     * RT (input quality, fault thực thi ST, output preflight/commit) chỉ
+     * được StScheduler ghi vào StProgramInstance::last_fault_code (đã có sẵn,
+     * dùng cho Runtime Monitor), coordinator trước đây không bao giờ đọc lại
+     * nên Commission FAILED/ROLLED_BACK luôn "câm" — API trả về
+     * RECONCILE_REJECTED/STAGE_REJECTED không kèm lý do thật (phát hiện thật
+     * khi debug AHU_MasterSequence 2026-08-17, board Foxlinx). Bù trực tiếp ở
+     * đây (non-RT, chỉ đọc con trỏ) thay vì sửa RT path. */
+    if (output.detail_code.empty() && scheduler_ &&
+        (output.state == LifecycleState::FAILED || output.state == LifecycleState::ROLLED_BACK ||
+         output.state == LifecycleState::ROLLING_BACK)) {
+        if (const StProgramInstance* instance = scheduler_->find_program(instance_id_);
+            instance && instance->last_fault_code) {
+            output.detail_code = std::string("RUNTIME_FAULT:") + instance->last_fault_code;
+        }
+    }
     output.producer_mode = cutover_->current();
     output.keeps_running = output.producer_mode == CutoverMode::GRAPH_ONLY ||
                            output.state == LifecycleState::COMMITTED ||

@@ -8,6 +8,78 @@
 
 ## [Unreleased]
 
+### Fixed — Commission Program luôn `RECONCILE_REJECTED` không rõ lý do: AO ghi theo % thay vì V + resolve_io_bindings không dò được nguyên nhân + rollback-sau-fail có thể kẹt (2026-08-17)
+
+Triệu chứng do user báo cáo trực tiếp: Check `AHU_MasterSequence` PASSED
+nhưng Commission lên Core thật luôn FAILED ở bước ACTIVATE/boundary-commit
+(`RECONCILE_REJECTED`/`STAGE_REJECTED`), API không kèm lý do
+(`detailCode:null`), mỗi lần thất bại làm Task đang chạy chuyển `STOPPED`
+phải `systemctl restart mkddc-core` mới khôi phục — "lỗi lớn" theo đúng nhận
+định của user.
+
+**Nguyên nhân gốc thật (xác nhận trực tiếp qua socket `/run/mkddc/core.sock`,
+op `write`/`query`, không suy đoán)**: `PriorityResolver::can_set_ao()`
+(`apps/core/domain/priority/priority_resolver.cpp:44-50`) kiểm giá trị ghi AO
+nằm trong dải **điện áp/dòng điện vật lý thật** của mode đã cấu hình (0–10V
+hoặc 4–20mA) — **không** quy đổi theo engineering unit (%, Pa, °C) như chiều
+đọc UI đã được `io_scaling.cpp` quy đổi sẵn. Chương trình `AHU_MasterSequence`
+tính `FanSpeed`/`DamperPos`/`ChwValve`/`HeatValve` theo thang 0–100% rồi ghi
+thẳng vào AO-01..04 (đều cấu hình `0-10V`) — mọi giá trị >10 bị
+`can_set_ao()` từ chối **ngay chu kỳ đầu tiên**, `st_apply_all_outputs()`
+trả `false`, `on_output_commit(false)` tự động rollback về LKG và chuyển
+cutover `GRAPH_ONLY` (an toàn, nhưng luôn thất bại bất kể binding/quality đầu
+vào đã đúng cỡ nào). Xác nhận thực nghiệm: `write AO1 65.0` → `rejected`;
+`write AO1 6.5` → `accepted`.
+
+**Sửa `AHU_MasterSequence`**: giữ nguyên toàn bộ logic/hệ số tính theo %
+(dễ đọc/tune), thêm bước quy đổi `/10.0` trước khi gán `VAR_OUTPUT` cho 4
+kênh AO (`FanSpeedPct`/`DamperPosPct`/`ChwValvePct`/`HeatValvePct` là biến
+nội bộ mới, `FanSpeed := FanSpeedPct / 10.0` v.v.). DO (`FanEnable`/
+`CommonAlarm`) không cần quy đổi (`can_set_do()` không kiểm dải giá trị).
+
+**Hai phát hiện phụ trong lúc debug — đã vá vì ảnh hưởng trực tiếp khả năng
+chẩn đoán mọi lỗi Commission tương lai, không riêng lỗi này**:
+
+1. **Commission FAILED luôn "câm" (`detailCode:null`)** dù Core biết chính
+   xác lý do — `StProgramInstance::last_fault_code` (đã có sẵn, dùng cho
+   Runtime Monitor) chưa từng được `ProgrammingRuntimeCoordinator` đọc lại.
+   Sửa `snapshot()` (`programming_runtime_coordinator.cpp`): khi state
+   FAILED/ROLLED_BACK/ROLLING_BACK và `detail_code_` rỗng, đọc
+   `scheduler_->find_program(instance_id_)->last_fault_code` (non-RT, chỉ đọc
+   con trỏ) và gộp vào `output.detail_code` dạng `RUNTIME_FAULT:<code>` —
+   giờ đây propagate qua `program_ipc_server.cpp` → `coreipc.Response.DetailCode`
+   → `core_result_json` trong DB, xem được qua SQL/API thay vì phải mò qua
+   log rỗng.
+2. **`stage_activation()` guard "candidate chưa qua clean tick" áp cho cả
+   rollback** (`apps/core/application/st/st_scheduler.cpp`) — về lý thuyết có
+   thể biến rollback tự động thành deadlock (candidate lỗi chặn cả stage mới
+   lẫn chính đường rollback dùng để thoát khỏi nó). `rollback()` hiện đã tự
+   swap `activated_artifact` ra tạm trước khi gọi nên guard không thực sự kẹt
+   trong trường hợp đã test, nhưng thêm tham số `is_rollback` tường minh
+   (mặc định `false`, không đổi hành vi cũ) để `stage_activation()`/
+   `request_activation()` bỏ qua guard này khi được gọi từ rollback — phòng
+   thủ cho các đường gọi rollback khác trong tương lai, tài liệu hoá rõ ý
+   định thay vì để guard áp dụng ngầm định cho mọi trường hợp.
+
+**Kiểm chứng**: `ctest --test-dir build/fw` **1031/1031 PASS** (đủ 3 flag,
+không hồi quy). Deploy `mkddc-core` bản vá lên board Foxlinx thật (backup bản
+cũ). Trên board: đồng bộ lại `VP1→AV-01`/`VP2→BV-01`, Check
+`AHU_MasterSequence` v2 PASSED, **Commission SUCCEEDED** (`state:SUCCEEDED`,
+`step:COMMITTED`, `activeRevisionId` khớp revision mới) — lần đầu tiên
+Program tự viết chạy thật trên board, thay thế cho `AHU_FanControl` mẫu.
+Xác nhận output vật lý phản hồi đúng: `DO-01=true` (fan enable theo Occupied
+từ VP thật), `AO-01`/`AO-02` trong dải 0–10V hợp lệ, `DO-02` alarm relay
+đúng logic. **Quan sát phụ, không phải lỗi Commission**: `ChwValve` dao động
+giữa gần 0 và gần tối đa giữa các chu kỳ — do bộ điều khiển P-only
+(§6 báo cáo `AHU-MASTER-SEQUENCE-PROPOSAL-2026-08-17`, không dùng `PID` vì
+chưa qua Controls+Safety review) kết hợp mô phỏng `fake_mcu` không có quán
+tính nhiệt (SAT là hàm đại số tức thời của lệnh van chu kỳ trước, không tích
+phân) — dải nhiệt/coil thật có quán tính sẽ giảm dao động này tự nhiên; ghi
+nhận minh bạch, không sửa trong phạm vi lần này (đúng scope: sửa lỗi
+Commission, không tinh chỉnh vòng điều khiển).
+
+Refs: PR #194 (F-PROG-ASBUILT-014), `AHU-MASTER-SEQUENCE-PROPOSAL-2026-08-17`
+
 ### Fixed — F-PROG-ASBUILT-014 (phần READ): category `VP` bind được vào ST Program qua slot Core AV/BV thật (2026-08-17)
 
 Kỹ sư Automation viết chương trình ST thật `AHU_MasterSequence` (điều khiển
