@@ -101,13 +101,19 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../build/fw-aarch64/web-api
 > TẮT ở `.env.production` vì production build thường KHÔNG bật — xem
 > `apps/web-ui/src/shared/config.ts`). Build FE cho board này mà **quên** biến
 > này sẽ âm thầm tắt route `/eng/programming` và render lại trang "Graphical
-> programming is not available" dù không đổi code gì — đúng regression đã xảy
-> ra ngày 2026-08-14 khi một phiên chỉ sửa i18n Modbus RTU rồi build/deploy
-> theo đúng lệnh cũ của mục này. **Luôn** export biến khi build cho Foxlinx:
+> programming is not available" dù không đổi code gì.
+>
+> **Đã tái diễn 2 lần** dù mục này đã cảnh báo từ trước: 2026-08-14 (phiên
+> sửa i18n Modbus RTU) và 2026-08-17 (phiên sửa F-OUT-001, chạy đúng
+> `npm run build` theo checklist FE tổng quát của CLAUDE.md — checklist đó
+> không biết gì về cờ riêng của board này). Ghi nhớ checklist không đủ khi
+> lệnh build "mặc định đúng" (`npm run build` trần) vẫn chạy được và có vẻ
+> thành công. Từ 2026-08-17: dùng script `build:foxlinx` bake sẵn cờ, không
+> còn phải nhớ export biến thủ công:
 
 ```bash
 cd apps/web-ui
-VITE_PROGRAMMING_REV_A=1 npm run build
+npm run build:foxlinx
 # Output: ../../build/web-ui/dist/ → sẽ copy lên board
 # Kiểm nhanh trước khi copy: bundle KHÔNG được chứa "REVA_SCOPE_ROADMAP"
 # (chuỗi đó chỉ còn trong code khi cờ tắt/bị tree-shake sai):
