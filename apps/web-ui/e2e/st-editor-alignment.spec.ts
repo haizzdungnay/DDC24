@@ -280,3 +280,125 @@ test.describe('ST Editor — căn chỉnh pixel gutter/overlay/textarea (FE-ST-0
     expect(wide.overlay).toEqual(wide.textarea)
   })
 })
+
+/**
+ * Báo lỗi trực tiếp 2026-08-17: "chọn dòng A thì nó lại hiện dòng B" — bấm
+ * "Định dạng"/"Thay tất cả" gọi thẳng `onChange(next)` không qua
+ * `applyEditRange`/`pendingCursorRef`, nên khay Dòng/cột đứng yên ở vị trí
+ * CŨ trong khi con trỏ DOM thật của textarea bị React đặt lại (quan sát
+ * được: về offset 0) khi `.value` đổi toàn bộ mà không ai ghi đè selection.
+ * Sửa bằng `mapOffsetByNonWhitespaceCount`/`mapOffsetAcrossReplaceAll`
+ * (`ProgramsTab.tsx`) đi qua `applyEditRange` như mọi đường sửa nội dung
+ * khác. Test bằng Chrome thật vì đây là hành vi tương tác con trỏ DOM thật,
+ * không phải điều jsdom mô phỏng chính xác được.
+ */
+test.describe('ST Editor — khay Dòng/cột không đứng yên sai lệch sau Định dạng/Thay tất cả', () => {
+  test('bấm "Định dạng" xong, khay Dòng/cột phải khớp con trỏ thật (không đứng yên ở dòng cũ)', async ({ page }) => {
+    const source = ['PROGRAM t', 'VAR RETAIN', '  StartCount : INT;', 'END_VAR', 'END_PROGRAM'].join('\n') + '\n'
+    await installMocks(page, source)
+    await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'vi'))
+    await login(page)
+    await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
+    await page.getByRole('button', { name: /Điều khiển AHU/ }).click()
+    const textarea = await page.waitForSelector('textarea[id^="programming-st-source-"]')
+
+    // Đặt con trỏ ở cuối tài liệu (Ctrl+End) — một thao tác click/điều hướng
+    // thật của người dùng, không phải setSelectionRange giả lập.
+    await textarea.click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('Control+End')
+    await page.waitForTimeout(50)
+
+    const beforeIndicator = await page.locator('text=/Dòng \\d+, cột \\d+/').first().innerText()
+    // Nguồn kết thúc bằng `\n` (quy ước `stProgramTemplate` thật) — Ctrl+End
+    // đưa con trỏ tới dòng trống SAU dấu `\n` cuối, tức dòng 6 (5 dòng nội
+    // dung + 1 dòng trống cuối), khớp cách đếm dòng nhất quán toàn bộ file.
+    expect(beforeIndicator).toMatch(/Dòng 6,/)
+
+    await page.getByRole('button', { name: /Định dạng|Format/ }).click()
+    await page.waitForTimeout(100)
+
+    const afterIndicator = await page.locator('text=/Dòng \\d+, cột \\d+/').first().innerText()
+    const reportedLine = Number(afterIndicator.match(/Dòng (\d+)/)?.[1])
+
+    const real = await page.evaluate(() => {
+      const ta = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
+      const before = ta.value.slice(0, ta.selectionStart)
+      return { line: before.split('\n').length, value: ta.value, selectionStart: ta.selectionStart }
+    })
+
+    // Format thêm thụt lề (source gốc chưa thụt lề) nên số dòng/độ dài đổi —
+    // đúng kịch bản gây lệch trong báo lỗi gốc. Khay Dòng/cột PHẢI khớp con
+    // trỏ DOM thật sau khi Format chạy xong, không được đứng yên ở vị trí cũ.
+    expect(reportedLine).toBe(real.line)
+  })
+
+  test('bấm "Định dạng" khi source cần thêm dòng (VAR/RETAIN tách rời) — khay Dòng/cột đi theo đúng con trỏ thật, không đứng yên ở vị trí cũ', async ({ page }) => {
+    // Nguồn CHƯA đúng định dạng — Format sẽ chèn thêm dòng, đúng kịch bản
+    // gây lệch trong báo lỗi gốc (Format thay đổi tổng số dòng phía trước
+    // con trỏ).
+    const source = [
+      'PROGRAM t', 'VAR', '  A : BOOL;', 'END_VAR',
+      'VAR RETAIN', '  StartCount : INT;', 'END_VAR',
+      'A := TRUE;', 'END_PROGRAM'
+    ].join('\n') + '\n'
+    await installMocks(page, source)
+    await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'vi'))
+    await login(page)
+    await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
+    await page.getByRole('button', { name: /Điều khiển AHU/ }).click()
+    const textarea = await page.waitForSelector('textarea[id^="programming-st-source-"]')
+
+    await textarea.click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('Control+End')
+    await page.waitForTimeout(50)
+
+    await page.getByRole('button', { name: /Định dạng|Format/ }).click()
+    await page.waitForTimeout(100)
+
+    const afterIndicator = await page.locator('text=/Dòng \\d+, cột \\d+/').first().innerText()
+    const reportedLine = Number(afterIndicator.match(/Dòng (\d+)/)?.[1])
+
+    const real = await page.evaluate(() => {
+      const ta = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
+      const before = ta.value.slice(0, ta.selectionStart)
+      return { line: before.split('\n').length, lastLine: ta.value.split('\n').filter(Boolean).slice(-1)[0] }
+    })
+
+    expect(reportedLine).toBe(real.line)
+    // Con trỏ phải rơi vào cuối tài liệu (END_PROGRAM), không bị đẩy về đầu.
+    expect(real.lastLine).toBe('END_PROGRAM')
+  })
+
+  test('bấm "Thay tất cả" xong, khay Dòng/cột phải khớp con trỏ thật', async ({ page }) => {
+    const source = ['PROGRAM t', 'VAR', '  Old1 : BOOL;', '  Old2 : BOOL;', 'END_VAR', 'END_PROGRAM'].join('\n') + '\n'
+    await installMocks(page, source)
+    await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'vi'))
+    await login(page)
+    await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
+    await page.getByRole('button', { name: /Điều khiển AHU/ }).click()
+    const textarea = await page.waitForSelector('textarea[id^="programming-st-source-"]')
+
+    await textarea.click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('Control+End')
+    await page.waitForTimeout(50)
+
+    await page.getByRole('button', { name: /^Tìm$|^Find$/ }).click()
+    await page.getByLabel(/Tìm trong mã nguồn|Find in source/i).fill('Old')
+    await page.getByPlaceholder(/Thay bằng|Replace with/i).fill('Renamed')
+    await page.getByRole('button', { name: /Thay tất cả|Replace all/i }).click()
+    await page.waitForTimeout(100)
+
+    const afterIndicator = await page.locator('text=/Dòng \\d+, cột \\d+/').first().innerText()
+    const reportedLine = Number(afterIndicator.match(/Dòng (\d+)/)?.[1])
+
+    const real = await page.evaluate(() => {
+      const ta = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
+      const before = ta.value.slice(0, ta.selectionStart)
+      return { line: before.split('\n').length, value: ta.value }
+    })
+
+    expect(real.value).toContain('Renamed1')
+    expect(real.value).toContain('Renamed2')
+    expect(reportedLine).toBe(real.line)
+  })
+})
