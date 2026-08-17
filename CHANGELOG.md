@@ -8,6 +8,70 @@
 
 ## [Unreleased]
 
+### Fixed — `AHU_MasterSequence`: AO nhấp nháy on/off (bang-bang) thay vì bám setpoint mượt + thiếu setpoint áp suất tĩnh vận hành được (2026-08-17)
+
+User quan sát Monitor Program trên board thật thấy AO dao động on/off rõ rệt
+và hỏi thẳng: do DDC thiếu PID hay do kỹ sư automation lập trình ST sai.
+
+**Kết luận sau khi vào Monitor + số liệu sống + tính toán vòng kín**: lỗi
+của kỹ sư automation (tôi), **không phải DDC thiếu năng lực**. `PID` đã có
+thật trong compiler (`StFbType::PID`, `st_exec.cpp:418`) nhưng bị khoá không
+cho dùng ở production theo đúng chủ đích governance đã chốt trước
+(`ST_SUBSET_SPEC_MK-DDC-24_VI.md` §6.2, WP-04/D-06 — chưa qua Controls+Safety
+review) — nên tôi chọn P-only khi viết chương trình, và chọn gain sai. Đo 12
+mẫu liên tiếp cách nhau 1s: `ChwValve` khoá cứng `0.00V↔10.00V`, `FanSpeed`
+khoá cứng `3.21V↔8.50V` mỗi chu kỳ quét (1000ms) — dao động chu kỳ-2 hoàn
+hảo, đúng dấu hiệu limit-cycle của vòng kín có độ trễ một chu kỳ và độ lợi
+vòng hở `|gain_controller × gain_plant| > 1`:
+- `ChwValve`: gain cũ 15 %/°C × độ nhạy plant mô phỏng `fake_mcu`
+  (`dSAT/dChwValve% = -0.14`, tuyến tính tức thời không quán tính nhiệt) =
+  **2.1 > 1** → phát tán, tự kẹp ở 2 biên `LIMIT`.
+- `FanSpeed`: `DSP(Pa) ≈ FanSpeed%² × 0.0938` trong `fake_mcu` nên
+  `dDSP/dFanSpeed%` tăng theo FanSpeed% — tại vùng vận hành cao (70–85%) gain
+  vòng kín cũ (0.2 %/Pa) đạt **≈1.3 > 1** → cũng mất ổn định.
+
+**Sửa** (toàn bộ nằm trong ST subset hiện có, không cần chờ PID được duyệt):
+giảm gain vào vùng ổn định có biên an toàn ~2x (`ChwValve` 15→4 %/°C, loop
+gain còn ≈0.56; `FanSpeed` 0.2→0.06 %/Pa, loop gain còn ≈0.48 tại biên trên)
+**+** thêm rate-limit mô phỏng quán tính actuator thật (`ChwValve` ±8%/chu kỳ,
+`FanSpeed` ±5%/chu kỳ) qua biến `*PrevPct`/`*TargetPct` mới và
+`LIMIT(-step, target-prev, step)`.
+
+**Phát hiện thêm khi user hỏi "phải tạo viable cho người dùng thao tác
+setpoint chứ?"**: rà lại binding thì `ZoneSetpoint`(T)→VP `AV-01` và
+`Occupied`→VP `BV-01` đã là biến ảo vận hành được thật (từ đợt vá
+F-PROG-ASBUILT-014), nhưng **setpoint áp suất tĩnh quạt (PA-FANSA, 250 Pa)
+vẫn là hằng số cứng trong ST source** — kỹ sư vận hành không chỉnh được. Khi
+tạo VP mới cho nó thì lộ thêm một lỗ hổng thật ở `web-api`:
+`validateConfigVirtualPoints` (`virtualpoint.go:362-366`) khoá cứng
+`displayMin`/`displayMax` trong `[-50,205]` cho **mọi** unit — dải này khớp
+cảm biến nhiệt độ PT1000/NTC nhưng `validVirtualPointUnit()` đã cho phép cả
+`Pa`/`ppm`, khiến không thể khai đúng thang hiển thị cho setpoint áp suất
+(hàng trăm Pa) hay CO2 (hàng nghìn ppm) dù giá trị vận hành thật (`item.Value`)
+không hề bị chặn bởi range này — chỉ mỗi metadata hiển thị bị sai, đủ để làm
+gauge trên UI trông "tràn thang" và gây hiểu lầm cho kỹ sư vận hành. Sửa:
+thêm `virtualPointDisplayRangeLimits(unit)` trả biên theo unit (`Pa`:
+`0..2000`, `ppm`: `0..5000`, còn lại giữ nguyên `-50..205`), dùng trong
+validator; tạo VP3 (`SETPOINT_PA_FANSA`, bind `AV-02`, `0..500 Pa`); thêm
+`VAR_INPUT DspSetpoint` bind READ vào VP `AV-02`, thay lệnh gọi hằng số
+`250.0` trong `AHU_MasterSequence`.
+
+**Kiểm chứng**: `go vet ./...` sạch, `go test ./... -count=1` **17/17 package
+PASS** (không hồi quy, không có thay đổi C++/FE trong phạm vi lần này). Deploy
+`mkddc-web` bản vá lên board Foxlinx (`mkddc-web-pi.service`, backup bản cũ).
+Check `AHU_MasterSequence` v3 (gain+rate-limit) PASSED, gộp tiếp v4
+(+`DspSetpoint`) PASSED, **Commission SUCCEEDED**
+(`activeRevisionId` khớp revision mới). Poll 20 mẫu/1s sau Commission: `AO-01`
+(FanSpeed) hội tụ quanh 5.60–5.62V (trước đó khoá cứng 3.21↔8.50V), `AO-03`
+(ChwValve) dao động nhẹ 2.46–2.78V quanh điểm cân bằng (trước đó khoá cứng
+0.00↔10.00V) — hết bang-bang, dao động dư còn lại là gợn nhỏ tự nhiên của
+P-only không có khâu tích phân, không phải limit-cycle. `UI-05` (DSP đo
+được) leo dần từ ~147 Pa hướng tới setpoint 250 Pa đúng tốc độ rate-limit đã
+đặt (ramp có chủ đích, không phải lỗi).
+
+Refs: `AHU-MASTER-SEQUENCE-PROPOSAL-2026-08-17`, entry `RECONCILE_REJECTED`
+bên dưới (nơi dao động này lần đầu được ghi nhận là "quan sát phụ")
+
 ### Fixed — Commission Program luôn `RECONCILE_REJECTED` không rõ lý do: AO ghi theo % thay vì V + resolve_io_bindings không dò được nguyên nhân + rollback-sau-fail có thể kẹt (2026-08-17)
 
 Triệu chứng do user báo cáo trực tiếp: Check `AHU_MasterSequence` PASSED
