@@ -1,0 +1,282 @@
+import { expect, test, type Page, type Route } from '@playwright/test'
+
+/**
+ * FE-ST-001..006/010 — báo cáo trực tiếp 2026-08-17 kèm ảnh chụp cho thấy
+ * lưới kẻ dòng CẮT XUYÊN chữ, không phải lệch nhẹ. Gốc lỗi thật (xem
+ * `ProgramsTab.tsx`, chỗ khai báo `EDITOR_TEXT_METRICS`): `styles.css` có
+ * rule `button, input, select, textarea { font: inherit }` KHÔNG nằm trong
+ * `@layer` nào — luôn thắng `text-sm`/`leading-5` (Tailwind, có layer) CHỈ
+ * trên `<textarea>`, khiến textarea render chữ theo font-size/line-height
+ * KẾ THỪA, không phải 14px/20px như gutter/overlay `<pre>`. jsdom (mọi test
+ * component hiện có) KHÔNG tính cascade CSS/font metrics nên không bao giờ
+ * bắt được lớp lỗi này — file này kiểm bằng Chrome thật, đọc
+ * `getComputedStyle`/`getBoundingClientRect` thật.
+ *
+ * Không lặp lại toàn bộ mock 8-journey của `programming.spec.ts` — chỉ cần
+ * đủ để mở PGM-02 tab Chương trình với một Program ST nhiều dòng.
+ */
+
+const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
+const PROGRAM_ID = '44444444-4444-4444-8444-444444444444'
+
+/** Khai báo VAR thật (không phải câu lệnh gán) để `collectStSymbols` nhận
+ *  diện được — cần cho test FE-ST-007 click vào Symbols & types. Trả về
+ *  ĐÚNG `lineCount` dòng nội dung (không tính dòng trống cuối cùng do `\n`
+ *  kết thúc — xem `EXTRA_TRAILING_LINE` ở test scrollHeight). */
+function stSourceWithLines(lineCount: number): string {
+  const declCount = Math.max(1, lineCount - 4) // PROGRAM/VAR/END_VAR/END_PROGRAM chiếm 4 dòng
+  const decls = Array.from({ length: declCount }, (_, index) => `  Counter${index} : INT; (* dòng ${index + 3} *)`)
+  return ['PROGRAM P', 'VAR', ...decls, 'END_VAR', 'END_PROGRAM'].join('\n') + '\n'
+}
+
+async function json(route: Route, body: unknown, status = 200) {
+  await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
+}
+
+async function installMocks(page: Page, source: string) {
+  await page.routeWebSocket('**/api/v1/ws/monitor', (ws) => {
+    ws.onMessage(() => undefined)
+  })
+  await page.route('**/api/v1/programming/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const path = url.pathname.replace(/^\/api\/v1\/programming/, '')
+    const method = request.method()
+
+    if (method === 'GET' && path === '/capabilities') {
+      return json(route, {
+        schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY',
+        languages: ['ST', 'FBD'], types: ['BOOL', 'INT', 'DINT', 'UINT', 'REAL', 'TIME'], taskPeriodsMs: [1000, 5000, 30000],
+        limits: { projectsPerController: 1, tasks: 1, stSourceBytes: 65536, variables: 512, statements: 4096, fbdBlocks: 256, fbdConnections: 512, artifactBytes: 1048576, bindings: 256 }
+      })
+    }
+    if (method === 'GET' && path === '/runtime') {
+      return json(route, {
+        schemaVersion: '1.0', controllerId: 'foxlinx-lab', producerState: 'READY', activeRevisionId: null, lkgRevisionId: null,
+        taskState: 'RUNNING', safeState: false, observedAt: new Date().toISOString()
+      })
+    }
+    if (method === 'GET' && path === '/point-catalog') return json(route, { items: [] })
+    if (method === 'GET' && path === '/projects') {
+      return json(route, { items: [{ projectId: PROJECT_ID, name: 'AHU-01', etag: '"draft:1"', activeRevisionId: null, draftRevisionId: 'draft-1', updatedAt: new Date().toISOString() }] })
+    }
+    if (method === 'GET' && path === `/projects/${PROJECT_ID}`) {
+      return json(route, {
+        projectId: PROJECT_ID, name: 'AHU-01', etag: '"draft:1"', activeRevisionId: null, draftRevisionId: 'draft-1', updatedAt: new Date().toISOString(),
+        draft: {
+          schemaVersion: 1,
+          project: { projectId: PROJECT_ID, name: 'AHU-01', functionalTags: [] },
+          programs: [{ programId: PROGRAM_ID, name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source, executionOrder: 0, functionalTags: [] }],
+          variables: [], bindings: [],
+          task: { taskId: 'task-1', periodMs: 1000, programOrder: [PROGRAM_ID] },
+          library: { profile: 'CORE_REVA', version: '1' }
+        }
+      })
+    }
+    await json(route, { error: { code: 'PRG-ERR-UNAVAILABLE-001', messageKey: 'programming.error.unavailable', retryable: true, keepsRunningRevision: true, correlationId: 'e2e' } }, 503)
+  })
+}
+
+async function login(page: Page) {
+  await page.goto('/login')
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin')
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 })
+}
+
+async function navigate(page: Page, path: string) {
+  await page.evaluate((target) => {
+    window.history.pushState({}, '', target)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }, path)
+  await page.waitForLoadState('networkidle').catch(() => undefined)
+}
+
+async function openEditor(page: Page, lineCount: number) {
+  await installMocks(page, stSourceWithLines(lineCount))
+  await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'vi'))
+  await login(page)
+  await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
+  await page.getByRole('button', { name: /Điều khiển AHU/ }).click()
+  const textarea = await page.waitForSelector('textarea[id^="programming-st-source-"]')
+  return textarea
+}
+
+interface Metrics { fontSize: string; lineHeight: string; paddingTop: string; backgroundImage: string }
+
+async function readMetrics(page: Page): Promise<{ textarea: Metrics; overlay: Metrics; gutter: Metrics }> {
+  return page.evaluate(() => {
+    const textarea = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
+    const editorBox = textarea.closest('.grid') as HTMLElement
+    const gutter = editorBox.firstElementChild as HTMLElement
+    const overlay = textarea.previousElementSibling as HTMLElement
+    const read = (element: Element): Metrics => {
+      const style = getComputedStyle(element)
+      return { fontSize: style.fontSize, lineHeight: style.lineHeight, paddingTop: style.paddingTop, backgroundImage: style.backgroundImage }
+    }
+    return { textarea: read(textarea), overlay: read(overlay), gutter: read(gutter) }
+  })
+}
+
+test.describe('ST Editor — căn chỉnh pixel gutter/overlay/textarea (FE-ST-001..006/010)', () => {
+  test('FE-ST-006: font-size/line-height/padding-top của textarea/overlay/gutter BẰNG NHAU và đúng 14px/20px — rule `font: inherit` không còn thắng được', async ({ page }) => {
+    await openEditor(page, 12)
+    const metrics = await readMetrics(page)
+
+    expect(metrics.textarea.fontSize).toBe('14px')
+    expect(metrics.textarea.lineHeight).toBe('20px')
+    expect(metrics.textarea.paddingTop).toBe('12px')
+    expect(metrics.overlay).toEqual(metrics.textarea)
+    expect(metrics.gutter.fontSize).toBe(metrics.textarea.fontSize)
+    expect(metrics.gutter.lineHeight).toBe(metrics.textarea.lineHeight)
+    expect(metrics.gutter.paddingTop).toBe(metrics.textarea.paddingTop)
+  })
+
+  test('FE-ST-001: KHÔNG còn lưới kẻ từng dòng (backgroundImage = none) trên cả overlay và gutter', async ({ page }) => {
+    await openEditor(page, 12)
+    const metrics = await readMetrics(page)
+    expect(metrics.overlay.backgroundImage).toBe('none')
+    expect(metrics.gutter.backgroundImage).toBe('none')
+  })
+
+  test('FE-ST-004: scrollHeight của textarea khớp công thức 20px/dòng + 24px đệm — xác nhận line-height RENDER thật, không chỉ computed style', async ({ page }) => {
+    const lineCount = 40
+    const textarea = await openEditor(page, lineCount)
+    const scrollHeight = await textarea.evaluate((element: HTMLTextAreaElement) => element.scrollHeight)
+    // `stSourceWithLines` kết thúc bằng `\n` (đúng quy ước `stProgramTemplate`
+    // sản phẩm thật) — một dòng trống cuối tính thêm 1 hàng cho mục đích
+    // cuộn/scrollHeight trong mọi trình duyệt.
+    const expected = (lineCount + 1) * 20 + 2 * 12
+    expect(Math.abs(scrollHeight - expected)).toBeLessThanOrEqual(2)
+  })
+
+  test('FE-ST-004: hàng gutter N thẳng hàng theo công thức pixel (đệm 12px + (N-1)×20px) ở nhiều dòng khác nhau', async ({ page }) => {
+    await openEditor(page, 60)
+    for (const lineNumber of [1, 10, 59]) {
+      const rowBox = await page.evaluate((n) => {
+        const textarea = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
+        const editorBox = textarea.closest('.grid') as HTMLElement
+        const gutter = editorBox.firstElementChild as HTMLElement
+        const containerTop = gutter.getBoundingClientRect().top
+        const row = [...gutter.children].find((child) => child.textContent === String(n)) as HTMLElement
+        return { rowTop: row.getBoundingClientRect().top - containerTop, containerTop }
+      }, lineNumber)
+      const expectedTop = 12 + (lineNumber - 1) * 20
+      expect(Math.abs(rowBox.rowTop - expectedTop)).toBeLessThanOrEqual(1)
+    }
+  })
+
+  test('FE-ST-007: dòng hiện hành được highlight ở CẢ gutter (nền khác) lẫn overlay (dải nền đúng vị trí)', async ({ page }) => {
+    const textarea = await openEditor(page, 20)
+    // Nhảy символ trong Symbols & types để chọn một biến ở dòng giữa file.
+    await page.getByRole('button', { name: /Counter5:/ }).click()
+    await expect(page.getByText(/Dòng \d+, cột \d+/)).toBeVisible()
+
+    const state = await page.evaluate(() => {
+      const textarea = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
+      const editorBox = textarea.closest('.grid') as HTMLElement
+      const gutter = editorBox.firstElementChild as HTMLElement
+      const activeRow = [...gutter.children].find((child) => (child as HTMLElement).className.includes('bg-'))
+      const overlayBand = (textarea.previousElementSibling as HTMLElement).firstElementChild as HTMLElement
+      return {
+        activeRowText: activeRow?.textContent ?? null,
+        bandTop: overlayBand.style.top,
+      }
+    })
+    expect(state.activeRowText).not.toBeNull()
+    const activeLine = Number(state.activeRowText)
+    expect(state.bandTop).toBe(`${12 + (activeLine - 1) * 20}px`)
+    void textarea
+  })
+
+  test('FE-ST-005: cuộn dọc tài liệu 1200 dòng vẫn giữ scrollTop đồng bộ tuyệt đối giữa textarea/overlay/gutter', async ({ page }) => {
+    const textarea = await openEditor(page, 1200)
+    await textarea.evaluate((element: HTMLTextAreaElement) => { element.scrollTop = 8000 })
+    await textarea.dispatchEvent('scroll')
+    await page.waitForTimeout(50)
+    const scrollState = await page.evaluate(() => {
+      const textarea = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
+      const editorBox = textarea.closest('.grid') as HTMLElement
+      const gutter = editorBox.firstElementChild as HTMLElement
+      const overlay = textarea.previousElementSibling as HTMLElement
+      return { textareaTop: textarea.scrollTop, gutterTop: gutter.scrollTop, overlayTop: overlay.scrollTop }
+    })
+    expect(scrollState.gutterTop).toBe(scrollState.textareaTop)
+    expect(scrollState.overlayTop).toBe(scrollState.textareaTop)
+    expect(scrollState.textareaTop).toBeGreaterThan(0)
+  })
+
+  test('FE-ST-005: cuộn ngang (dòng dài, wrap=off) đồng bộ overlay.scrollLeft với textarea.scrollLeft', async ({ page }) => {
+    await installMocks(page, `PROGRAM P\n  VeryLongVariableNameThatForcesHorizontalScrolling := AnotherVeryLongVariableNameHere + YetAnotherLongOne * 2 - SomeMoreCharactersToExceedTheEditorWidthForSure;\nEND_PROGRAM\n`)
+    await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'vi'))
+    await login(page)
+    await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
+    await page.getByRole('button', { name: /Điều khiển AHU/ }).click()
+    const textarea = await page.waitForSelector('textarea[id^="programming-st-source-"]')
+
+    await textarea.evaluate((element: HTMLTextAreaElement) => { element.scrollLeft = 200 })
+    await textarea.dispatchEvent('scroll')
+    await page.waitForTimeout(50)
+    const scrollState = await page.evaluate(() => {
+      const textarea = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
+      const overlay = textarea.previousElementSibling as HTMLElement
+      return { textareaLeft: textarea.scrollLeft, overlayLeft: overlay.scrollLeft }
+    })
+    expect(scrollState.overlayLeft).toBe(scrollState.textareaLeft)
+    expect(scrollState.textareaLeft).toBeGreaterThan(0)
+  })
+
+  test('FE-ST-006: metrics không đổi khi thu phóng trình duyệt 125%/150% — cả ba lớp vẫn khớp nhau', async ({ page }) => {
+    await openEditor(page, 12)
+    for (const zoom of [1.25, 1.5]) {
+      await page.evaluate((factor) => { (document.documentElement.style as unknown as { zoom: string }).zoom = String(factor) }, zoom)
+      await page.waitForTimeout(50)
+      const metrics = await readMetrics(page)
+      expect(metrics.overlay.lineHeight).toBe(metrics.textarea.lineHeight)
+      expect(metrics.gutter.lineHeight).toBe(metrics.textarea.lineHeight)
+      expect(metrics.overlay.fontSize).toBe(metrics.textarea.fontSize)
+      expect(metrics.gutter.fontSize).toBe(metrics.textarea.fontSize)
+    }
+  })
+
+  test('FE-ST-010: mở/đóng Ctrl+F rồi Ctrl+P không làm hỏng metrics editor (vẫn 14px/20px, không lưới)', async ({ page }) => {
+    const textarea = await openEditor(page, 12)
+    await textarea.click()
+    await textarea.press('Control+f')
+    await expect(page.getByRole('search')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('search')).not.toBeVisible()
+
+    await textarea.press('Control+p')
+    await expect(page.getByRole('dialog', { name: 'Bảng lệnh nhanh' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog', { name: 'Bảng lệnh nhanh' })).not.toBeVisible()
+
+    const metrics = await readMetrics(page)
+    expect(metrics.textarea.fontSize).toBe('14px')
+    expect(metrics.textarea.lineHeight).toBe('20px')
+    expect(metrics.overlay).toEqual(metrics.textarea)
+    expect(metrics.overlay.backgroundImage).toBe('none')
+  })
+
+  test('FE-ST-010: resize trình duyệt (thu hẹp rồi mở rộng) không đổi font-size/line-height của editor', async ({ page }) => {
+    await openEditor(page, 12)
+    const before = await readMetrics(page)
+
+    await page.setViewportSize({ width: 900, height: 650 })
+    await page.waitForTimeout(50)
+    const narrow = await readMetrics(page)
+    expect(narrow.textarea.fontSize).toBe(before.textarea.fontSize)
+    expect(narrow.textarea.lineHeight).toBe(before.textarea.lineHeight)
+    expect(narrow.overlay).toEqual(narrow.textarea)
+    expect(narrow.gutter.fontSize).toBe(narrow.textarea.fontSize)
+
+    await page.setViewportSize({ width: 1600, height: 900 })
+    await page.waitForTimeout(50)
+    const wide = await readMetrics(page)
+    expect(wide.textarea.fontSize).toBe(before.textarea.fontSize)
+    expect(wide.textarea.lineHeight).toBe(before.textarea.lineHeight)
+    expect(wide.overlay).toEqual(wide.textarea)
+  })
+})
