@@ -8,6 +8,50 @@
 
 ## [Unreleased]
 
+### Fixed — Review cấu hình UI theo bảng đấu nối AHU: bác bỏ SIG-001/002, vá 6 lỗi FE thật, dọn dữ liệu board (2026-08-17)
+
+Nhận báo cáo QA "cấu hình UI theo bảng đấu nối AHU" (17 issue, đứng đầu là
+SIG-001 P0: NTC10K báo quality BAD dù giá trị hợp lệ). Verify trực tiếp trên
+board Foxlinx thật (`GET /api/v1/points` nhiều lần) trước khi sửa bất cứ
+gì — **SIG-001 và SIG-002 (UI-05 dao động liên tục) đều sai**: quality thực
+tế là `good` ở cả 4 kênh NTC10K, giá trị khớp chính xác công thức
+`sim_sat_c/sim_rat_c/sim_oat_c/sim_mat_c` (`fake_mcu.cpp`); UI-05 đứng yên
+tuyệt đối qua 5 lần đo/8s. FE-003/FE-004/FE-009 cũng sai (sensor-profile
+hint, đơn vị Pa/ppm, validate Label đều đã có sẵn — báo cáo không khớp build
+đang chạy). Không sửa `io_scaling.cpp` theo hướng SIG-001.
+
+Bug THẬT đã sửa trong `apps/web-ui/src/features/points/InputsPage.tsx` +
+`apps/web-ui/src/shared/components/StatusBadge.tsx`: FE-001 (tooltip
+`qualityReason` cho badge BAD), FE-002 (chấm trạng thái `QualityDot` trong
+channel list), FE-005 (Value lớn tách khỏi Raw/Updated), FE-006 (Save nổi cố
+định), FE-008 (search/filter channel list), FE-010 (dirty-guard rời trang,
+theo pattern `DesignWorkspacePage.tsx` D-01), MAP-001 (gợi ý mapping
+SensorType → Electrical Mode). FE-007 (6 tab) xác nhận thật nhưng không sửa —
+là thiết kế vừa duyệt 3 ngày trước, cần hỏi lại người duyệt.
+
+Dữ liệu board thật (`PUT /api/v1/system/config/io-bundle`, revision 16→17,
+không cần deploy code): `DO-01.name` là chuỗi rác `"dsdaasd"` → sửa
+`"Supply Fan Enable"`; hoàn tất tên/type cho UI-08/09/10-16 + tên AO-01..04/
+DO-02 theo bảng đấu nối AHU. Sau PUT: 16 UI + 4 AO + 4 DO đều quality `good`.
+
+Chi tiết đầy đủ (bảng đối chiếu SIG-001/002, danh sách fix, dữ liệu board):
+`docs/07_records/reviews/AHU_WIRING_UI_CONFIG_REVIEW_2026-08-17.md`.
+
+**Kiểm chứng (2026-08-17, đo lại thật):**
+
+| Bước | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **677/677 PASS** (75 file; +7 test mới) |
+| `npm run lint` | sạch, 0 warning |
+| `npm run build` (`VITE_PROGRAMMING_REV_A=1`) | PASS, `grep -c REVA_SCOPE_ROADMAP dist/assets/*.js` = 0 |
+| `npx playwright test e2e-board/board-page-audit.spec.ts --config=playwright.board.config.ts` (board Foxlinx thật, `BOARD_URL` trực tiếp — cổng 8082 public, không cần SSH tunnel) | 2/2 PASS, `/eng/inputs` 0 console/page/http error cả deeplink lẫn in-app. Phát hiện phụ ngoài phạm vi: 2 lỗi 503 ở `/monitor`/`/trends` (`/api/v1/history`, không liên quan thay đổi này) |
+
+**Deploy board Foxlinx:** `scp dist/` → `/opt/mkddc-web/dist` (giữ
+`dist.prev`), `systemctl restart mkddc-web-pi`. MD5 bundle board khớp bundle
+build cục bộ; health tất cả `ok`. SSH board dùng password lab đã tài liệu hoá
+ở runbook `27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md` §33 (không phải key
+`mkddc24_som` — đó là key cho board `SOM-DDC-24` orangepi cũ, khác Foxlinx).
+
 ### Added — Deploy sửa gốc ST Editor lệch grid/caret lên Foxlinx (2026-08-17)
 
 Deploy PR #189 (`951c7d0`) lên board `SOM-DDC-24-foxlinx` — chỉ FE static
