@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../shared/components/Toast'
@@ -12,7 +12,8 @@ const api = vi.hoisted(() => ({
   getPoints: vi.fn(),
   getVirtualPoints: vi.fn(),
   updatePointName: vi.fn(),
-  putOutputs: vi.fn()
+  putOutputs: vi.fn(),
+  forceOutput: vi.fn()
 }))
 const hookState = vi.hoisted(() => ({ points: [] as Point[], virtualPoints: [] as VirtualPoint[] }))
 
@@ -130,5 +131,70 @@ describe('OutputsPage — authority không trả lời', () => {
     api.getOutputs.mockResolvedValue(outputConfig)
     await user.click(screen.getByRole('button', { name: /retry/i }))
     expect(await screen.findByText('Output Channels')).toBeInTheDocument()
+  })
+})
+
+/* F-OUT-001 (2026-08-17): "Manual output (%)" gửi thẳng số 0-100 làm giá trị
+ * RAW xuống Core — can_set_ao() chỉ nhận volt/mA thật nên mọi lần Force với
+ * % thật sự (>10 cho 0-10V, hoặc bất kỳ giá trị nào cho 4-20mA vì dải bắt
+ * đầu từ 4) đều gửi sai đơn vị. Khoá lại đúng công thức Core dùng cho node
+ * AO_OUTPUT (graph_runtime.cpp): pct/100*10 cho 0-10V, 4+pct/100*16 cho
+ * 4-20mA — không sửa ở tầng apiClient/Go/Core dùng chung vì VirtualIoPage
+ * và MonitorPage gọi cùng API này với giá trị RAW (đúng), nên quy đổi phải
+ * nằm ở FE, đúng lúc "Manual output (%)" build request. */
+describe('OutputsPage manual output (%) — quy đổi sang raw trước khi Force (F-OUT-001)', () => {
+  const ao010v: AoConfig = { ...ao, id: 'AO-01', mode: '0-10V', manualValue: 65 }
+  const ao420ma: AoConfig = { ...ao, id: 'AO-02', mode: '4-20mA', manualValue: 50 }
+
+  beforeEach(() => {
+    localStorage.setItem('mkddc-lang', 'en')
+    api.getPoints.mockResolvedValue([])
+    api.getVirtualPoints.mockResolvedValue([])
+    api.forceOutput.mockResolvedValue(undefined)
+    hookState.virtualPoints = []
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it('Force với 0-10V: 65% phải thành 6.5V, không phải 65 (F-OUT-001)', async () => {
+    const user = userEvent.setup()
+    api.getOutputs.mockResolvedValue({ ao: [ao010v], do: [] })
+    hookState.points = [{ id: 'AO-01', tag: 'AO-01', name: 'Shared Output', kind: 'AO', value: 6.5, raw: 6.5, unit: 'V', rawUnit: 'V', quality: 'good', source: 'core', updatedAt: new Date().toISOString() }]
+
+    renderPage()
+    const manualSection = (await screen.findByText('Manual Output')).closest('section') as HTMLElement
+    const input = within(manualSection).getByRole('spinbutton')
+    fireEvent.change(input, { target: { value: '65' } })
+    await user.click(within(manualSection).getByRole('button', { name: 'Force' }))
+
+    await waitFor(() => expect(api.forceOutput).toHaveBeenCalledWith('AO-01', 6.5, false))
+  })
+
+  it('Force với 4-20mA: 50% phải thành 12mA (4 + 50%*16), không phải 50 (F-OUT-001)', async () => {
+    const user = userEvent.setup()
+    api.getOutputs.mockResolvedValue({ ao: [ao420ma], do: [] })
+    hookState.points = [{ id: 'AO-02', tag: 'AO-02', name: 'Shared Output', kind: 'AO', value: 12, raw: 12, unit: 'mA', rawUnit: 'mA', quality: 'good', source: 'core', updatedAt: new Date().toISOString() }]
+
+    renderPage()
+    const manualSection = (await screen.findByText('Manual Output')).closest('section') as HTMLElement
+    const input = within(manualSection).getByRole('spinbutton')
+    fireEvent.change(input, { target: { value: '50' } })
+    await user.click(within(manualSection).getByRole('button', { name: 'Force' }))
+
+    await waitFor(() => expect(api.forceOutput).toHaveBeenCalledWith('AO-02', 12, false))
+  })
+
+  it('hiện "% open" tính từ raw song song với Volt thô, không thay thế', async () => {
+    api.getOutputs.mockResolvedValue({ ao: [ao010v], do: [] })
+    hookState.points = [{ id: 'AO-01', tag: 'AO-01', name: 'Shared Output', kind: 'AO', value: 6.5, raw: 6.5, unit: 'V', rawUnit: 'V', quality: 'good', source: 'core', updatedAt: new Date().toISOString() }]
+
+    renderPage()
+    await screen.findByText('Manual Output')
+    expect(screen.getByText('% open')).toBeInTheDocument()
+    expect(screen.getByText('65.0 %')).toBeInTheDocument()
+    expect(screen.getByText('Raw output')).toBeInTheDocument()
   })
 })
