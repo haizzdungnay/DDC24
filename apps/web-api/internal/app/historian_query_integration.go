@@ -28,7 +28,7 @@ func (a *App) handleUnifiedHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) newHistorianQueryEngine() (*HistorianQueryEngine, error) {
-	if a == nil || a.historianV2 == nil || !a.historianV2Ready || !a.historianAuthority.QueryV2 {
+	if a == nil || a.historianV2 == nil || !a.historianV2Ready || !a.getHistorianAuthority().QueryV2 {
 		return nil, fmt.Errorf("historian v2 query unavailable")
 	}
 	a.historianShadowMu.RLock()

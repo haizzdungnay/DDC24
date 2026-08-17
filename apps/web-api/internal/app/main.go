@@ -37,6 +37,7 @@ type App struct {
 	historianTrendCache    *HistorianTrendCache
 	historianV2Ready       bool
 	historianActivation    *HistorianActivationCoordinator
+	historianAuthorityMu   sync.RWMutex
 	historianAuthority     HistorianRuntimeAuthority
 	historianShadow        *HistorianShadowScheduler
 	historianRestartReady  bool
@@ -207,7 +208,15 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 				if reconcileErr := app.historianActivation.Reconcile(context.Background()); reconcileErr != nil && !errors.Is(reconcileErr, ErrHistorianActivationPending) {
 					logger.Printf("WARN historian_v2 activation reconciliation failed err=%v", reconcileErr)
 				}
-				if authority, authorityErr := app.historianActivation.Authority(context.Background()); authorityErr == nil && authority.State == "legacy" {
+				// "degraded" (không chỉ "legacy") cũng phải thử tự bootstrap: đây
+				// đúng là trạng thái sau khi historian_activation lệch revision
+				// so với historian.conf sống (bug 2026-08-17, xem ghi chú ở
+				// mirrorCommitted phía dưới) — nếu chỉ xử lý "legacy" thì một
+				// board đã kẹt degraded từ trước sẽ KHÔNG tự hồi phục được dù
+				// restart service, phải đợi tới lần sửa policy tiếp theo mới
+				// kích hoạt lại qua mirrorCommitted. AutoBootstrapSingleNode tự
+				// no-op an toàn nếu lineage hiện tại là một cutover thật.
+				if authority, authorityErr := app.historianActivation.Authority(context.Background()); authorityErr == nil && (authority.State == "legacy" || authority.State == "degraded") {
 					policyBytes, _ := historian.committedMirrorSnapshot()
 					if bootstrapErr := app.historianActivation.AutoBootstrapSingleNode(context.Background(), policyBytes); bootstrapErr != nil {
 						logger.Printf("WARN historian_v2 auto-bootstrap failed err=%v", bootstrapErr)
@@ -216,9 +225,34 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 				if authority, authorityErr := app.historianActivation.Authority(context.Background()); authorityErr != nil {
 					logger.Printf("WARN historian_v2 activation authority unavailable err=%v", authorityErr)
 				} else {
-					app.historianAuthority = authority
+					app.setHistorianAuthority(authority)
 				}
-				historian.mirrorCommitted = store.MirrorPolicy
+				// Bug 2026-08-17: AutoBootstrapSingleNode chỉ chạy MỘT LẦN lúc
+				// boot (nhánh authority.State=="legacy" phía trên). Trên board
+				// single-node đã tự kích hoạt v2 xong, MỌI lần sửa historian
+				// policy sau đó (vd bật "ghi lịch sử" cho một điểm ở /trends)
+				// đều làm revision trong historian.conf tăng lên mà không đi
+				// qua lại Prepare/Commit — historian_activation trong SQLite
+				// kẹt ở revision cũ, Authority() phát hiện lệch → tự degrade
+				// VĨNH VIỄN cả WriterV2 lẫn QueryV2 (xem historian_activation.go)
+				// dù dữ liệu ghi hoàn toàn bình thường. Gọi lại
+				// AutoBootstrapSingleNode sau MỖI lần commit policy để tự đồng
+				// bộ lại — hàm này tự bỏ qua (no-op) nếu hệ thống đang ở một
+				// lineage cutover thật (không phải bootstrap đơn-node) nên
+				// không đụng tới luồng migration đa-node nghiêm ngặt.
+				historian.mirrorCommitted = func(ctx context.Context, data []byte, namespaceRevision, observedAtUTCMS uint64) error {
+					if err := store.MirrorPolicy(ctx, data, namespaceRevision, observedAtUTCMS); err != nil {
+						return err
+					}
+					if err := app.historianActivation.AutoBootstrapSingleNode(ctx, data); err != nil {
+						logger.Printf("WARN historian_v2 auto-reconcile after policy update failed err=%v", err)
+						return nil
+					}
+					if authority, authorityErr := app.historianActivation.Authority(ctx); authorityErr == nil {
+						app.setHistorianAuthority(authority)
+					}
+					return nil
+				}
 				data, _ := historian.committedMirrorSnapshot()
 				namespaceRevision, revisionErr := historian.namespaceRevision()
 				if revisionErr != nil || store.MirrorPolicy(context.Background(), data, namespaceRevision, uint64(time.Now().UTC().UnixMilli())) != nil {
@@ -236,7 +270,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 							if shadowErr == nil {
 								shadow.AttachTrendCache(app.historianTrendCache)
 								app.historianShadow = shadow
-								app.historianRestartReady = !app.historianAuthority.WriterV2
+								app.historianRestartReady = !app.getHistorianAuthority().WriterV2
 								app.historianShadowMono = snapshot.CapturedMonotonicNs
 								app.historianShadowStart = time.Now()
 							} else {

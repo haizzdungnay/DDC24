@@ -114,7 +114,7 @@ func (a *App) RunHistorianMaintenanceCutover(ctx context.Context, request Histor
 	if !authority.WriterV2 || !authority.QueryV2 {
 		return result, fmt.Errorf("historian v2 authority did not activate")
 	}
-	a.historianAuthority = authority
+	a.setHistorianAuthority(authority)
 	result.Manifest = manifest
 	result.Activated = true
 	activated = true

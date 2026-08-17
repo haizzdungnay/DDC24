@@ -71,7 +71,7 @@ func (a *App) ensureHistorianRestartGaps(ctx context.Context, atUTCMS int64) boo
 	shadow := a.historianShadow
 	ready := a.historianRestartReady
 	a.historianShadowMu.RUnlock()
-	if ready || !a.historianAuthority.WriterV2 || shadow == nil || a.historianV2 == nil {
+	if ready || !a.getHistorianAuthority().WriterV2 || shadow == nil || a.historianV2 == nil {
 		return true
 	}
 	if err := shadow.PrepareRestartGaps(ctx, a.historianV2, atUTCMS); err != nil {

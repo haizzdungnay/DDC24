@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -70,13 +71,31 @@ func NewHistorianActivationCoordinator(policyPath string, store *HistorianStore)
 	}
 }
 
+// historianBootstrapSingleNodeMigrationIDPrefix đánh dấu record migration/
+// evidence là do AutoBootstrapSingleNode tự sinh (không phải cutover thật
+// qua CLI historian-maintenance). Dùng làm "lineage guard": chỉ tự ghi đè
+// evidence khi migration_id hiện tại mang đúng tiền tố này — bảo toàn bằng
+// chứng của một cutover đa-node thật nếu có, không bao giờ tự ý đè lên.
+// Mỗi revision dùng một migration_id RIÊNG (không cố định) vì
+// historian_cutover_evidence.migration_id có FK ON DELETE RESTRICT tới
+// migration_runs — REPLACE một migration_id không đổi sẽ tự chặn chính nó
+// (DELETE dòng migration_runs cũ trong lúc cutover_evidence còn tham chiếu).
+const historianBootstrapSingleNodeMigrationIDPrefix = "bootstrap-single-node-rev-"
+
+// historianBootstrapSingleNodeMigrationIDLegacy là migration_id CỐ ĐỊNH mà
+// bản code trước 2026-08-17 dùng cho MỌI lần bootstrap (không phân biệt
+// revision) — board nào đã tự kích hoạt v2 trước bản vá này vẫn còn mang
+// đúng giá trị này. Lineage guard phải nhận diện cả hai dạng, nếu không các
+// board cũ sẽ bị coi là "lineage lạ" và không bao giờ tự đồng bộ lại được.
+const historianBootstrapSingleNodeMigrationIDLegacy = "bootstrap-single-node"
+
+func isHistorianBootstrapSingleNodeLineage(migrationID string) bool {
+	return migrationID == historianBootstrapSingleNodeMigrationIDLegacy || strings.HasPrefix(migrationID, historianBootstrapSingleNodeMigrationIDPrefix)
+}
+
 func (c *HistorianActivationCoordinator) AutoBootstrapSingleNode(ctx context.Context, policyBytes []byte) error {
 	if c == nil || c.store == nil {
 		return fmt.Errorf("nil coordinator or store")
-	}
-	authority, err := c.store.historianRuntimeAuthority(ctx)
-	if err == nil && authority.WriterV2 && authority.QueryV2 {
-		return nil
 	}
 	if len(policyBytes) == 0 {
 		policyBytes = []byte(`{"_schema_version":1,"revision":1,"historian_budget_bytes":2147483648,"wal_reserve_bytes":134217728,"migration_reserve_bytes":268435456,"required_free_space_bytes":536870912,"points":[]}`)
@@ -99,6 +118,23 @@ func (c *HistorianActivationCoordinator) AutoBootstrapSingleNode(ctx context.Con
 		payload.Revision = 1
 	}
 	rev := payload.Revision
+
+	authority, authorityErr := c.store.historianRuntimeAuthority(ctx)
+	if authorityErr == nil && authority.WriterV2 && authority.QueryV2 {
+		if authority.PolicyRevision == rev {
+			return nil // đã kích hoạt đúng revision hiện hành, không có gì để đồng bộ lại
+		}
+		// Bug 2026-08-17: policy đã đổi (rev mới) sau lần bootstrap/cutover
+		// trước. Chỉ tự đồng bộ lại nếu record hiện tại chính là do
+		// AutoBootstrapSingleNode tự sinh trước đó (single-node, không có
+		// migration thật) — nếu là cutover thật qua CLI thì để nguyên, không
+		// tự ý đè bằng chứng.
+		var lineage string
+		if err := c.store.db.QueryRowContext(ctx, `SELECT migration_id FROM historian_cutover_evidence WHERE singleton=1`).Scan(&lineage); err != nil || !isHistorianBootstrapSingleNodeLineage(lineage) {
+			return nil
+		}
+	}
+
 	nowMS := uint64(time.Now().UTC().UnixMilli())
 	if err := c.store.MirrorPolicy(ctx, policyBytes, rev, nowMS); err != nil {
 		return fmt.Errorf("bootstrap mirror policy: %w", err)
@@ -108,15 +144,31 @@ func (c *HistorianActivationCoordinator) AutoBootstrapSingleNode(ctx context.Con
 		return fmt.Errorf("read bootstrap policy digest: %w", err)
 	}
 	manifest := MigrationManifest{
-		MigrationID: "bootstrap-single-node", SourceIdentity: "fresh-install",
+		MigrationID: fmt.Sprintf("%s%d", historianBootstrapSingleNodeMigrationIDPrefix, rev), SourceIdentity: "fresh-install",
 		SourceSHA256: fmt.Sprintf("%064x", 1), PolicyRevision: rev,
 		SchemaID: "hist-v1", SourceRowCount: 0, TimestampRuleVersion: 1, AliasRuleVersion: 1,
 	}
 	manifestJSON, _ := json.Marshal(manifest)
 	manifestDigest := sha256.Sum256(manifestJSON)
-	_, _ = c.store.db.ExecContext(ctx, `INSERT OR IGNORE INTO migration_runs(migration_id,source_identity,source_sha256,namespace_revision,manifest_json,manifest_sha256,phase,cursor_json,backup_path,created_at_utc_ms,updated_at_utc_ms) VALUES(?,?,zeroblob(32),0,?,?,'verified',NULL,'fresh-install',1,1)`, manifest.MigrationID, manifest.SourceIdentity, manifestJSON, manifestDigest[:])
-	_, _ = c.store.db.ExecContext(ctx, `INSERT OR IGNORE INTO historian_legacy_quiesce(singleton,epoch,token_sha256,state,trend_db_path,stopped_at_utc_ms,migration_id,updated_at_utc_ms) VALUES(1,1,zeroblob(32),'consumed','fresh-install',1,?,1)`, manifest.MigrationID)
-	_, _ = c.store.db.ExecContext(ctx, `INSERT OR IGNORE INTO historian_cutover_evidence(singleton,migration_id,policy_revision,policy_sha256,manifest_sha256,backup_path,backup_source_identity,backup_sha256,backup_schema_sha256,backup_byte_size,backup_quick_check,source_row_count,accepted_row_count,rejected_row_count,source_keyspace_sha256,outcome_sha256,quiesce_epoch,quiesce_token_sha256,verified_at_utc_ms) VALUES(1,?,?,?,?,?,?,zeroblob(32),zeroblob(32),1,'ok',0,0,0,zeroblob(32),zeroblob(32),1,zeroblob(32),1)`, manifest.MigrationID, rev, policyDigest, manifestDigest[:], "fresh-install", manifest.SourceIdentity)
+	// migration_id giờ mang số revision (xem hằng số phía trên) nên mỗi lần
+	// policy đổi luôn là một migration_id MỚI — INSERT OR IGNORE ở đây chỉ
+	// nhằm chống gọi trùng chính xác cùng revision (đã được chặn sớm hơn ở
+	// early-return phía trên), không phải cơ chế đồng bộ chính.
+	if _, err := c.store.db.ExecContext(ctx, `INSERT OR IGNORE INTO migration_runs(migration_id,source_identity,source_sha256,namespace_revision,manifest_json,manifest_sha256,phase,cursor_json,backup_path,created_at_utc_ms,updated_at_utc_ms) VALUES(?,?,zeroblob(32),0,?,?,'verified',NULL,'fresh-install',1,1)`, manifest.MigrationID, manifest.SourceIdentity, manifestJSON, manifestDigest[:]); err != nil {
+		return fmt.Errorf("bootstrap insert migration_runs: %w", err)
+	}
+	// historian_legacy_quiesce/historian_cutover_evidence dùng singleton=1:
+	// REPLACE để luôn phản ánh migration_id/revision MỚI NHẤT. Không có FK
+	// nào trỏ VÀO 2 bảng này nên xoá-rồi-chèn lại (ngữ nghĩa của REPLACE) an
+	// toàn — khác với migration_runs ở trên, nơi REPLACE cùng migration_id
+	// cố định sẽ tự đụng FK ON DELETE RESTRICT từ chính historian_cutover_evidence
+	// (đây là lý do migration_id phải đổi theo revision thay vì giữ cố định).
+	if _, err := c.store.db.ExecContext(ctx, `INSERT OR REPLACE INTO historian_legacy_quiesce(singleton,epoch,token_sha256,state,trend_db_path,stopped_at_utc_ms,migration_id,updated_at_utc_ms) VALUES(1,1,zeroblob(32),'consumed','fresh-install',1,?,1)`, manifest.MigrationID); err != nil {
+		return fmt.Errorf("bootstrap refresh historian_legacy_quiesce: %w", err)
+	}
+	if _, err := c.store.db.ExecContext(ctx, `INSERT OR REPLACE INTO historian_cutover_evidence(singleton,migration_id,policy_revision,policy_sha256,manifest_sha256,backup_path,backup_source_identity,backup_sha256,backup_schema_sha256,backup_byte_size,backup_quick_check,source_row_count,accepted_row_count,rejected_row_count,source_keyspace_sha256,outcome_sha256,quiesce_epoch,quiesce_token_sha256,verified_at_utc_ms) VALUES(1,?,?,?,?,?,?,zeroblob(32),zeroblob(32),1,'ok',0,0,0,zeroblob(32),zeroblob(32),1,zeroblob(32),1)`, manifest.MigrationID, rev, policyDigest, manifestDigest[:], "fresh-install", manifest.SourceIdentity); err != nil {
+		return fmt.Errorf("bootstrap refresh historian_cutover_evidence: %w", err)
+	}
 
 	plan := HistorianActivationPlan{PolicyRevision: rev, Config: policyBytes, StableUTCMS: int64(nowMS), LegacyQuiesced: true, MigrationVerified: true, PruneEnabled: true}
 	if err := c.Prepare(ctx, plan); err != nil {

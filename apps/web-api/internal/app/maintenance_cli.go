@@ -89,7 +89,8 @@ func runHistorianMaintenanceCommand(args []string, stdout, stderr io.Writer) err
 		return err
 	}
 	defer app.Close()
-	if app.historianAuthority.State != "legacy" || !app.historianAuthority.LegacyWriterAllowed || app.historianAuthority.WriterV2 {
+	authority := app.getHistorianAuthority()
+	if authority.State != "legacy" || !authority.LegacyWriterAllowed || authority.WriterV2 {
 		return fmt.Errorf("historian authority is not in a fresh legacy state; use forward recovery instead of a new cutover")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), opts.Timeout)

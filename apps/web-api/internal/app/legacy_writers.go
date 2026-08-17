@@ -7,13 +7,31 @@ import (
 	"time"
 )
 
+// getHistorianAuthority/setHistorianAuthority — historianAuthority được ghi
+// lại NGOÀI lúc boot từ 2026-08-17 (main.go: mirrorCommitted tự reconcile
+// sau mỗi lần sửa historian policy; historian_maintenance.go: sau cutover
+// CLI), trong khi nhiều goroutine HTTP handler đọc nó đồng thời — cần khoá
+// để tránh data race, plain struct field trước đây chỉ an toàn vì chỉ được
+// gán một lần lúc boot đơn luồng.
+func (a *App) getHistorianAuthority() HistorianRuntimeAuthority {
+	a.historianAuthorityMu.RLock()
+	defer a.historianAuthorityMu.RUnlock()
+	return a.historianAuthority
+}
+
+func (a *App) setHistorianAuthority(authority HistorianRuntimeAuthority) {
+	a.historianAuthorityMu.Lock()
+	a.historianAuthority = authority
+	a.historianAuthorityMu.Unlock()
+}
+
 func (a *App) StartLegacyHistorianWriters(ctx context.Context) error {
 	if a == nil {
 		return nil
 	}
 	a.legacyMu.Lock()
 	defer a.legacyMu.Unlock()
-	if !a.historianAuthority.LegacyWriterAllowed {
+	if !a.getHistorianAuthority().LegacyWriterAllowed {
 		a.legacyState = "stopped"
 		return nil
 	}
@@ -98,7 +116,7 @@ func (a *App) ResumeLegacyHistorianWriters(ctx context.Context, proof LegacyQuie
 		a.legacyMu.Unlock()
 		return ErrHistorianQuiesceConflict
 	}
-	if !a.historianAuthority.LegacyWriterAllowed {
+	if !a.getHistorianAuthority().LegacyWriterAllowed {
 		a.legacyMu.Unlock()
 		return fmt.Errorf("legacy writer resume forbidden after v2 activation")
 	}
@@ -165,7 +183,7 @@ func (a *App) LegacyHistorianWritersRunning() bool {
 // ghi dữ liệu hoàn toàn bình thường — khiến domain "historian" ở
 // /api/v1/overview báo DEGRADED ("N điểm ghi lỗi") sai vĩnh viễn.
 func (a *App) historianWriterActive() bool {
-	return a.historianAuthority.WriterV2 || a.LegacyHistorianWritersRunning()
+	return a.getHistorianAuthority().WriterV2 || a.LegacyHistorianWritersRunning()
 }
 
 func (a *App) stopLegacyHistorianWriters(ctx context.Context) error {

@@ -8,6 +8,84 @@
 
 ## [Unreleased]
 
+### Fixed — Historian vẫn DEGRADED sau bản vá `writerActive` trước đó: authority v2 lệch revision vĩnh viễn trên board single-node (2026-08-17)
+
+User xác nhận bản vá "historian.writerActive bỏ sót writer legacy" (PR #200,
+entry bên dưới) **không giải quyết được triệu chứng thật** — dashboard vẫn
+DEGRADED y hệt, Trends còn thêm lỗi mới "History unavailable — historian v2
+query unavailable" ("??? mày nói láo ah"). Điều tra tiếp trực tiếp trên board
+Foxlinx (SQLite `historian-v2.sqlite`) phát hiện nguyên nhân SÂU HƠN, che
+khuất hoàn toàn bản vá trước.
+
+**Nguyên nhân gốc thật**: board single-node tự kích hoạt historian v2 lúc
+boot đầu tiên qua `AutoBootstrapSingleNode()` (chỉ chạy khi
+`authority.State=="legacy"`), ghi `historian_activation.policy_revision=1`
+khớp `historian.conf` lúc đó. Sau này user bật "ghi lịch sử" cho các điểm
+UI-01/UI-09 qua UI — `HistorianPolicyService.Update()` bump
+`historian.conf` lên **revision 4** nhưng KHÔNG có cơ chế nào đồng bộ lại
+`historian_activation` trong SQLite, vẫn kẹt ở **revision 1**.
+`HistorianActivationCoordinator.Authority()` (an toàn đúng thiết kế) phát
+hiện `payload.Revision(4) != authority.PolicyRevision(1)` và **tự degrade
+vĩnh viễn cả `WriterV2` lẫn `QueryV2`** — đây chính là lý do `writerActive()`
+(bản vá PR #200) không bao giờ thấy `WriterV2=true` VÀ đồng thời
+`LegacyWriterAllowed` cũng bị degrade theo (`false`) nên vế OR còn lại cũng
+không cứu được: `legacyState` bị set "stopped" ngay lúc boot, không có gì
+kích lại. `QueryV2=false` làm `/api/v1/history` trả 503 → Trends báo "history
+unavailable" — lỗi độc lập với dashboard nhưng cùng gốc.
+
+**Cách sửa** (`historian_activation.go`, `main.go`, +5 file đọc/ghi
+`historianAuthority`):
+- `AutoBootstrapSingleNode()` giờ **tự đồng bộ lại** mỗi khi được gọi với
+  revision mới hơn `historian_activation` đang lưu — refresh 3 bảng bằng
+  chứng (`migration_runs`/`historian_legacy_quiesce`/`historian_cutover_evidence`)
+  rồi Prepare+Commit lại. Có **lineage guard**: chỉ tự đồng bộ khi
+  `migration_id` hiện tại thuộc lineage bootstrap đơn-node (tiền tố
+  `bootstrap-single-node-rev-N`, hoặc giá trị cố định `bootstrap-single-node`
+  từ code cũ trước bản vá này) — một cutover đa-node THẬT qua CLI
+  `historian-maintenance` không bao giờ bị đụng vào.
+- `main.go`: `historian.mirrorCommitted` giờ gọi `AutoBootstrapSingleNode`
+  sau MỖI lần commit policy (không chỉ lúc boot) — user bật "ghi lịch sử"
+  cho một điểm sẽ tự đồng bộ lại ngay, không cần restart service.
+- Nhánh boot cũng mở rộng từ chỉ `state=="legacy"` sang cả `"degraded"` —
+  board ĐÃ kẹt degraded từ trước (như board Foxlinx) tự hồi phục được chỉ
+  bằng restart service, không bắt buộc phải có một lần sửa policy mới.
+- `App.historianAuthority` trước đây là plain struct field, chỉ gán một lần
+  lúc boot (an toàn vì đơn luồng) — giờ bị ghi lại NGOÀI lúc boot
+  (`mirrorCommitted`) trong khi nhiều goroutine HTTP đọc đồng thời → thêm
+  `historianAuthorityMu sync.RWMutex` + `getHistorianAuthority()`/
+  `setHistorianAuthority()`, cập nhật toàn bộ 9 điểm đọc/ghi cũ sang
+  accessor để hết data race.
+
+**FK constraint bug tự phát hiện khi viết test** (chưa từng deploy ra
+ngoài): thử đầu tiên dùng `migration_id` cố định + `INSERT OR REPLACE` cho
+cả 3 bảng bằng chứng — `historian_cutover_evidence.migration_id` có
+`FOREIGN KEY ... ON DELETE RESTRICT` tới `migration_runs`, nên REPLACE cùng
+migration_id tự chặn chính nó (SQLite xoá-rồi-chèn nội bộ, xoá bị RESTRICT
+chặn vì cutover_evidence còn tham chiếu). Sửa bằng cách đặt `migration_id`
+theo từng revision (`bootstrap-single-node-rev-N`), giữ `migration_runs` là
+`INSERT OR IGNORE` (luôn là dòng mới), chỉ 2 bảng singleton còn lại dùng
+REPLACE.
+
+**Kiểm chứng**:
+- 3 test mới (`historian_activation_singlenode_test.go`):
+  `TestAutoBootstrapSingleNodeReconcilesAfterOrdinaryPolicyEdit` (kịch bản
+  chính, rev1→rev2 tự đồng bộ), `TestAutoBootstrapSingleNodeRecognizesPreFixLegacyLineage`
+  (dựng lại đúng dấu vết `migration_id` cố định mà board Foxlinx thật đang
+  mang — test này FAIL ở lần sửa đầu tiên do bug FK ở trên, xác nhận không
+  phải test giả), `TestAutoBootstrapSingleNodeDoesNotTouchForeignCutoverLineage`
+  (cutover thật không bị đụng vào).
+- `go vet ./...` sạch; `go test ./... -count=1` 18 package PASS;
+  `go test ./internal/app/... -race -count=1` PASS (~98s, xác nhận hết data
+  race sau khi thêm `historianAuthorityMu`).
+- Deploy board Foxlinx 2 lần (lần 1 thiếu tương thích ngược lineage cũ →
+  vẫn kẹt DEGRADED, phát hiện + sửa + deploy lại lần 2): sau lần 2,
+  `historian_activation.policy_revision` trên board chuyển từ **1 → 4** khớp
+  `historian.conf` sống, `GET /api/v1/history` chuyển từ **503 → 200** trong
+  journal thật.
+
+Refs: entry "historian.writerActive bỏ sót writer legacy..." bên dưới (bản
+vá đầu, đúng nhưng không đủ), PR #200
+
 ### Fixed — Deploy web-ui quên cờ `VITE_PROGRAMMING_REV_A`, tự tay khoá mất route Programming trên board Foxlinx (2026-08-17)
 
 User phát hiện ngay và hỏi thẳng "mày khóa chức năng programming ah???"
