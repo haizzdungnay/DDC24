@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { FilePlus, Save, Search, Trash2, X } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Command, FilePlus, Save, Search, Trash2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { createUuid } from '../../../../shared/crypto'
 import { useAuth, roleAtLeast } from '../../../auth'
@@ -7,7 +7,8 @@ import { Button } from '../../../../shared/components/Button'
 import { Modal } from '../../../../shared/components/Modal'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import { canonicalFbdJson, FBD_PROFILE_ID, FBD_SCHEMA_VERSION, type FbdDocument } from '../../fbd/model'
-import type { ProgrammingDiagnostic, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingProgram } from '../../model/types'
+import { useLazyProgrammingPointCatalog } from '../../api/queries'
+import type { ProgrammingDiagnostic, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
 import {
   buildStCompletions,
   computeAutoIndent,
@@ -18,6 +19,10 @@ import {
   type StCompletionItem,
   type StDiagnosticRange,
 } from './stEditorSupport'
+import { CommandPalette } from './CommandPalette'
+import { InsertPointVariablePanel } from './InsertPointVariablePanel'
+import { SelectionQuickActions } from './SelectionQuickActions'
+import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
 
 /** F-PROG-ASBUILT-001/D-02: Program ST mới không được bắt đầu ở `document: ''`
  * — compiler luôn Check FAILED ngay khi tạo. Định danh `PROGRAM` cố định
@@ -27,6 +32,15 @@ import {
 function stProgramTemplate(): string {
   return 'PROGRAM NewProgram\nEND_PROGRAM\n'
 }
+
+/** `leading-5` (Tailwind) = 20px chiều cao mỗi hàng — hằng số đã được dùng
+ *  sẵn ở nơi khác trong file này (vị trí dropdown gợi ý, `cursor.line * 20`).
+ *  `py-3`/`p-3` = 12px đệm trên cùng trước hàng đầu tiên. Dùng chung một cặp
+ *  hằng số cho gutter số dòng + overlay tô màu để đường kẻ hàng và điểm neo
+ *  dropdown không bao giờ lệch nhau khi chỉnh sửa CSS sau này. */
+const EDITOR_ROW_HEIGHT_PX = 20
+const EDITOR_PAD_TOP_PX = 12
+const EDITOR_ROW_GRID = `repeating-linear-gradient(to bottom, transparent, transparent ${EDITOR_ROW_HEIGHT_PX - 1}px, var(--c-border) ${EDITOR_ROW_HEIGHT_PX - 1}px, var(--c-border) ${EDITOR_ROW_HEIGHT_PX}px)`
 
 function emptyFbdDocument(name: string): FbdDocument {
   return {
@@ -58,7 +72,8 @@ export function ProgramsTab({
   diagnostics,
   focusDiagnostic,
   onPendingOperationsChange,
-  discardVersion
+  discardVersion,
+  onRunCheck
 }: {
   document: ProgrammingDraftDocument
   saving: boolean
@@ -69,6 +84,11 @@ export function ProgramsTab({
   focusDiagnostic: ProgrammingDiagnostic | null
   onPendingOperationsChange: (operations: ProgrammingDraftOperation[]) => void
   discardVersion: number
+  /** ST Editor Quick Control đề xuất #2 (Bảng lệnh nhanh), mục "Kiểm tra": PGM-02
+   *  không tự chạy Check nữa từ D-01 — chỉ điều hướng sang PGM-03 giống hệt nút
+   *  "Kiểm tra" ở `DesignWorkspacePage`, nên nhận callback thay vì tự `useNavigate`
+   *  (giữ `ProgramsTab` không phụ thuộc router, đúng ranh giới hiện có). */
+  onRunCheck: () => void
 }) {
   const { pick } = useI18n()
   const { session } = useAuth()
@@ -79,6 +99,34 @@ export function ProgramsTab({
   const [metadataDrafts, setMetadataDrafts] = useState<Record<string, ProgramMetadataDraft>>({})
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const pendingDeleteProgram = document.programs.find((program) => program.programId === pendingDeleteId)
+
+  /* ST Editor Quick Control (đã duyệt) — quyết định #02: hook LAZY, không
+   * fetch `GET /point-catalog` khi mở tab Chương trình; sống ở đây (cha của
+   * `SourceEditor`) để cache còn nguyên khi đổi Program đang chọn. */
+  const pointCatalog = useLazyProgrammingPointCatalog()
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  /* Điều hướng chéo Program khi chọn một biến ở Bảng lệnh nhanh: đổi
+   * `selectedProgramId` rồi TÁI DÙNG đúng cơ chế `focusDiagnostic` đã có
+   * (D-01) — không viết thêm một prop/hiệu ứng thứ hai cho cùng việc "chọn
+   * vùng theo line/column sau khi Program mới mount". */
+  const [paletteJumpTarget, setPaletteJumpTarget] = useState<ProgrammingDiagnostic | null>(null)
+
+  /* Quyết định #04: chỉ mục Bảng lệnh nhanh tính lại theo `buffers`/
+   * `document.programs` — KHÔNG theo chuỗi tìm kiếm (đó là việc lọc rẻ ở
+   * `CommandPalette`, xem `quickControl.ts`). */
+  const symbolsByProgramId = useMemo(() => {
+    const index: Record<string, ProgramSymbolLike[]> = {}
+    for (const program of document.programs) {
+      if (program.language !== 'ST') continue
+      index[program.programId] = collectStSymbols(buffers[program.programId] ?? programSource(program))
+    }
+    return index
+  }, [buffers, document.programs])
+
+  const paletteEntries = useMemo<PaletteEntry[]>(
+    () => buildCommandPaletteEntries(document.programs, symbolsByProgramId, pick),
+    [document.programs, symbolsByProgramId, pick],
+  )
 
   useEffect(() => {
     setBuffers((current) => {
@@ -172,8 +220,46 @@ export function ProgramsTab({
     })
   }
 
+  /** Chỉ transform TEXT buffer local qua `setBuffers` — không tự Lưu, không
+   *  tự Kiểm tra (đúng ranh giới ST Editor Quick Control đã duyệt). */
+  function handlePaletteSelect(entry: PaletteEntry) {
+    if (entry.kind === 'program') {
+      onSelectProgram(entry.programId)
+      return
+    }
+    if (entry.kind === 'variable') {
+      onSelectProgram(entry.programId)
+      const source = buffers[entry.programId] ?? ''
+      const { line, column } = offsetToLineColumn(source, entry.offset)
+      setPaletteJumpTarget({
+        code: '', severity: 'ERROR', messageKey: '',
+        location: { programId: entry.programId, line, column, length: entry.length },
+      })
+      return
+    }
+    if (entry.commandId === 'format') {
+      if (!selectedProgramId) return
+      setBuffers((current) => ({ ...current, [selectedProgramId]: formatStSource(current[selectedProgramId] ?? '') }))
+      return
+    }
+    if (entry.commandId === 'save') {
+      void onSave(pendingOperations)
+      return
+    }
+    onRunCheck()
+  }
+
   return (
-    <div className="grid gap-4 md:grid-cols-[280px_1fr] lg:grid-cols-[280px_1fr_308px]">
+    <div
+      className="grid gap-4 md:grid-cols-[280px_1fr] lg:grid-cols-[280px_1fr_308px]"
+      onKeyDown={(event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
+          event.preventDefault()
+          setPaletteOpen(true)
+        }
+      }}
+    >
+      <CommandPalette open={paletteOpen} entries={paletteEntries} onClose={() => setPaletteOpen(false)} onSelect={handlePaletteSelect} />
       <nav aria-label={pick('Cây ứng dụng', 'Application tree')} className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
         <ProjectTagsEditor
           canEdit={canEdit}
@@ -184,27 +270,38 @@ export function ProgramsTab({
         />
         <div className="mb-2 flex items-center justify-between px-1">
           <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Chương trình', 'Programs')}</h3>
-          {canEdit && (
-            <span className="flex gap-1">
-              <button
-                type="button"
-                className="rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-                title={pick('Thêm chương trình FBD', 'Add FBD program')}
-                onClick={() => addProgram('FBD')}
-              >
-                <FilePlus className="h-4 w-4" aria-hidden="true" />
-                <span className="sr-only">{pick('FBD', 'FBD')}</span>
-              </button>
-              <button
-                type="button"
-                className="rounded p-1 text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-                title={pick('Thêm chương trình ST', 'Add ST program')}
-                onClick={() => addProgram('ST')}
-              >
-                ST+
-              </button>
-            </span>
-          )}
+          <span className="flex gap-1">
+            <button
+              type="button"
+              className="rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+              title={pick('Bảng lệnh nhanh (Ctrl+P)', 'Command palette (Ctrl+P)')}
+              onClick={() => setPaletteOpen(true)}
+            >
+              <Command className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only">{pick('Bảng lệnh nhanh', 'Command palette')}</span>
+            </button>
+            {canEdit && (
+              <>
+                <button
+                  type="button"
+                  className="rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+                  title={pick('Thêm chương trình FBD', 'Add FBD program')}
+                  onClick={() => addProgram('FBD')}
+                >
+                  <FilePlus className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">{pick('FBD', 'FBD')}</span>
+                </button>
+                <button
+                  type="button"
+                  className="rounded p-1 text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+                  title={pick('Thêm chương trình ST', 'Add ST program')}
+                  onClick={() => addProgram('ST')}
+                >
+                  ST+
+                </button>
+              </>
+            )}
+          </span>
         </div>
         {document.programs.length === 0 ? (
           <p className="px-1 text-sm text-[var(--c-text-dim)]">
@@ -269,9 +366,17 @@ export function ProgramsTab({
             canEdit={canEdit}
             saving={saving}
             diagnostics={diagnostics.filter((item) => item.location?.programId === selected.programId)}
-            focusDiagnostic={focusDiagnostic?.location?.programId === selected.programId ? focusDiagnostic : null}
+            focusDiagnostic={
+              paletteJumpTarget?.location?.programId === selected.programId ? paletteJumpTarget
+              : focusDiagnostic?.location?.programId === selected.programId ? focusDiagnostic
+              : null
+            }
             onChange={(source) => setBuffers((current) => ({ ...current, [selected.programId]: source }))}
             onSave={onSave}
+            pointCatalogStatus={pointCatalog.status}
+            pointCatalogItems={pointCatalog.data?.items ?? []}
+            pointCatalogError={pointCatalog.error}
+            onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
           />
         ) : (
           <FbdEditorPane
@@ -316,7 +421,11 @@ export function SourceEditor({
   diagnostics,
   focusDiagnostic,
   onChange,
-  onSave
+  onSave,
+  pointCatalogStatus,
+  pointCatalogItems,
+  pointCatalogError,
+  onEnsurePointCatalogLoaded
 }: {
   program: ProgrammingProgram
   source: string
@@ -326,6 +435,13 @@ export function SourceEditor({
   focusDiagnostic: ProgrammingDiagnostic | null
   onChange: (source: string) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
+  /** ST Editor Quick Control đề xuất #3 (Panel chèn nhanh Point/Variable) —
+   *  trạng thái/cache của `useLazyProgrammingPointCatalog`, sống ở
+   *  `ProgramsTab` (cha) để không refetch khi đổi Program đang mở. */
+  pointCatalogStatus: 'idle' | 'loading' | 'ready' | 'error'
+  pointCatalogItems: readonly ProgrammingPointCatalogEntry[]
+  pointCatalogError: string | null
+  onEnsurePointCatalogLoaded: () => void
 }) {
   const { pick } = useI18n()
   const committed = typeof program.document === 'string' ? program.document : ''
@@ -345,6 +461,10 @@ export function SourceEditor({
   const [completion, setCompletion] = useState<{ open: boolean; items: StCompletionItem[]; selected: number; anchor: number }>(
     { open: false, items: [], selected: 0, anchor: 0 },
   )
+  /* ST Editor Quick Control #1 (Thanh lệnh nhanh nổi): vùng chọn KHÔNG rỗng
+   * hiện tại — `null` khi con trỏ chỉ là một điểm (không hiện thanh lệnh). */
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null)
+  const [insertPanelOpen, setInsertPanelOpen] = useState(false)
   const symbols = useMemo(() => collectStSymbols(source), [source])
   const matches = useMemo(() => findTextMatches(source, searchText), [searchText, source])
   const tokens = useMemo(() => tokenizeStSource(source), [source])
@@ -363,8 +483,12 @@ export function SourceEditor({
   const bracketMatch = useMemo(() => findMatchingBracket(source, textareaRef.current?.selectionStart ?? -1), [source, cursor])
 
   function updateCursor() {
-    const offset = textareaRef.current?.selectionStart ?? 0
+    const textarea = textareaRef.current
+    const offset = textarea?.selectionStart ?? 0
     setCursor(offsetToLineColumn(source, offset))
+    const start = textarea?.selectionStart ?? 0
+    const end = textarea?.selectionEnd ?? 0
+    setSelectionRange(start === end ? null : { start, end })
   }
 
   function selectRange(offset: number, length: number) {
@@ -398,18 +522,56 @@ export function SourceEditor({
     setCompletion({ open: true, items, selected: 0, anchor: info.start })
   }
 
+  /* `<textarea value={source}>` là controlled component — React tự đồng bộ
+   * `.value` từ prop `source` mỗi lần render lại. Bản trước ghi tay
+   * `textarea.value = next` NGAY TRONG `applyEdit()` rồi mới gọi
+   * `setCursor(...)`: `setCursor` là state cục bộ nên kích hoạt một lần
+   * render lại ngay lập tức, và ở lần render đó React thấy prop `source`
+   * VẪN CHƯA đổi (nó đổi qua `onChange` → state component cha, một nhịp
+   * khác) nên reconciliation ghi `.value` VỀ LẠI giá trị `source` cũ —
+   * xoá mất chữ vừa gõ ngay trước mắt (lộ rõ khi `onChange` không thật sự
+   * cập nhật lại prop `source` đồng bộ, ví dụ test cô lập dùng `vi.fn()`
+   * làm `onChange`, nhưng vẫn là rủi ro thật trong app nếu component cha
+   * re-render bởi nguồn khác xen giữa). Sửa bằng `pendingCursorRef` +
+   * `useLayoutEffect` không phụ thuộc gì (chạy lại sau MỌI lần commit):
+   * ghi `.value`/selection SAU KHI React đã tự xử lý xong prop `source` ở
+   * lần render đó — không còn ai ghi đè lại nữa, và không cần đợi
+   * `requestAnimationFrame` (~16ms) như bản gốc trước ngày 2026-08-15. */
+  const pendingCursorRef = useRef<{ value: string; selectionStart: number; selectionEnd: number } | null>(null)
+
+  useLayoutEffect(() => {
+    const pending = pendingCursorRef.current
+    const textarea = textareaRef.current
+    if (!pending || !textarea) return
+    pendingCursorRef.current = null
+    textarea.value = pending.value
+    textarea.selectionStart = pending.selectionStart
+    textarea.selectionEnd = pending.selectionEnd
+  })
+
+  /** Ghi đè bằng một VÙNG chọn (không chỉ một điểm) — dùng cho "Bọc IF"/"Ghi
+   *  chú" (ST Editor Quick Control #1) để người dùng thấy ngay phần vừa đổi,
+   *  thay vì con trỏ rơi về một điểm không rõ ràng. `applyEdit` (một điểm,
+   *  dùng cho Enter/autocomplete/Find-Replace có sẵn) chỉ còn là trường hợp
+   *  riêng của hàm này. */
+  function applyEditRange(next: string, selectionStart: number, selectionEnd: number) {
+    pendingCursorRef.current = { value: next, selectionStart, selectionEnd }
+    onChange(next)
+    setCursor(offsetToLineColumn(next, selectionEnd))
+    setSelectionRange(selectionStart === selectionEnd ? null : { start: selectionStart, end: selectionEnd })
+  }
+
+  function applyEdit(next: string, newCursor: number) {
+    applyEditRange(next, newCursor, newCursor)
+  }
+
   function acceptCompletion(item: StCompletionItem) {
     const textarea = textareaRef.current
     if (!textarea) return
     const cursorOffset = textarea.selectionStart
     const next = source.slice(0, completion.anchor) + item.label + source.slice(cursorOffset)
-    onChange(next)
-    const newCursor = completion.anchor + item.label.length
-    window.requestAnimationFrame(() => {
-      textarea.selectionStart = textarea.selectionEnd = newCursor
-      textarea.focus()
-      updateCursor()
-    })
+    applyEdit(next, completion.anchor + item.label.length)
+    textarea.focus()
     closeCompletion()
   }
 
@@ -423,12 +585,7 @@ export function SourceEditor({
     const end = textarea.selectionEnd
     const insertion = `\n${computeAutoIndent(source, start)}`
     const next = source.slice(0, start) + insertion + source.slice(end)
-    onChange(next)
-    const newCursor = start + insertion.length
-    window.requestAnimationFrame(() => {
-      textarea.selectionStart = textarea.selectionEnd = newCursor
-      updateCursor()
-    })
+    applyEdit(next, start + insertion.length)
   }
 
   function replaceAllMatches() {
@@ -442,12 +599,39 @@ export function SourceEditor({
     if (!searchText || matches.length === 0 || !textarea) return
     const at = nextMatch(matches, textarea.selectionEnd ?? 0)
     const next = source.slice(0, at) + replaceText + source.slice(at + searchText.length)
-    onChange(next)
-    const newCursor = at + replaceText.length
-    window.requestAnimationFrame(() => {
-      textarea.selectionStart = textarea.selectionEnd = newCursor
-      updateCursor()
-    })
+    applyEdit(next, at + replaceText.length)
+  }
+
+  /* ST Editor Quick Control #1 (đã duyệt) — cả ba chỉ transform buffer local
+   * qua `applyEditRange`, không tự Lưu/Kiểm tra. Chỉ tác động khi có vùng
+   * chọn không rỗng (thanh lệnh chỉ hiện trong trường hợp đó). */
+  function handleToggleComment() {
+    if (!canEdit || !selectionRange) return
+    const result = toggleComment(source, selectionRange.start, selectionRange.end)
+    applyEditRange(result.text, result.selectionStart, result.selectionEnd)
+  }
+
+  function handleWrapIf() {
+    if (!canEdit || !selectionRange) return
+    const result = wrapInBlock(source, selectionRange.start, selectionRange.end, 'IF')
+    applyEditRange(result.text, result.selectionStart, result.selectionEnd)
+  }
+
+  function handleJumpBracket() {
+    if (!bracketMatch) return
+    const textarea = textareaRef.current
+    const current = textarea?.selectionStart ?? -1
+    const target = current === bracketMatch.open ? bracketMatch.close : bracketMatch.open
+    selectRange(target, 1)
+  }
+
+  function handleInsertAtCursor(text: string) {
+    const textarea = textareaRef.current
+    const offset = textarea?.selectionStart ?? source.length
+    const next = source.slice(0, offset) + text + source.slice(offset)
+    applyEdit(next, offset + text.length)
+    setInsertPanelOpen(false)
+    textarea?.focus()
   }
 
   const segmentClass: Record<string, string> = {
@@ -487,6 +671,14 @@ export function SourceEditor({
           </Button>
           {canEdit && (
             <>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-pressed={insertPanelOpen}
+                onClick={() => setInsertPanelOpen((open) => !open)}
+              >
+                {pick('Chèn Point/Variable', 'Insert Point/Variable')}
+              </Button>
               <Button size="sm" variant="secondary" onClick={() => onChange(formatStSource(source))}>{pick('Định dạng', 'Format')}</Button>
               <Button
                 size="sm"
@@ -545,7 +737,25 @@ export function SourceEditor({
         {pick(`Mã nguồn ST của ${program.name}`, `ST source for ${program.name}`)}
       </label>
       <div className="relative grid h-96 grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]">
-        <pre ref={lineGutterRef} aria-hidden="true" className="mono m-0 overflow-hidden border-r border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 py-3 text-right text-sm leading-5 text-[var(--c-text-dim)]">
+        {/* Con trỏ lệch dòng (báo trực tiếp trên board, 2026-08-15): gutter số
+         * dòng sinh MỘT số/dòng LOGIC (`source.split('\n')`), nhưng overlay
+         * dùng `whitespace-pre-wrap break-words` còn textarea dùng wrap mềm
+         * mặc định của trình duyệt — khi một dòng dài đủ để NGẮT DÒNG HIỂN
+         * THỊ, số dòng logic không còn khớp 1:1 với hàng hiển thị, và điểm
+         * ngắt của hai lớp (overlay tô màu vs textarea trong suốt giữ con
+         * trỏ) không đảm bảo trùng nhau tuyệt đối (khác biệt do textarea có
+         * scrollbar dọc chiếm ~15px bề rộng còn overlay thì không) — mọi
+         * dòng SAU điểm ngắt bị trôi dọc, con trỏ thật (trong textarea)
+         * không còn nằm đúng hàng chữ overlay hiển thị bên dưới nó. Sửa tận
+         * gốc: tắt hẳn word-wrap (`whitespace-pre` + `wrap="off"`), một dòng
+         * logic LUÔN là đúng một hàng hiển thị — khớp đúng giả định gutter đã
+         * có sẵn — dòng dài cuộn ngang thay vì xuống dòng. */}
+        <pre
+          ref={lineGutterRef}
+          aria-hidden="true"
+          className="mono m-0 overflow-hidden border-r border-[var(--c-border)] bg-[var(--c-surface-2)] bg-repeat-y px-2 py-3 text-right text-sm leading-5 text-[var(--c-text-dim)]"
+          style={{ backgroundImage: EDITOR_ROW_GRID, backgroundPosition: `0 ${EDITOR_PAD_TOP_PX}px` }}
+        >
           {Array.from({ length: Math.max(1, source.split('\n').length) }, (_, index) => index + 1).join('\n')}
         </pre>
         <div className="relative h-96 overflow-hidden">
@@ -555,7 +765,8 @@ export function SourceEditor({
           <pre
             ref={overlayRef}
             aria-hidden="true"
-            className="mono pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre-wrap break-words p-3 text-sm leading-5"
+            className="mono pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre bg-repeat-y p-3 text-sm leading-5"
+            style={{ backgroundImage: EDITOR_ROW_GRID, backgroundPosition: `0 ${EDITOR_PAD_TOP_PX}px` }}
           >
             {segments.map((segment, index) => {
               const isBracket = bracketMatch !== null && (segment.start === bracketMatch.open || segment.start === bracketMatch.close) && segment.kind === 'punctuation'
@@ -588,7 +799,8 @@ export function SourceEditor({
             ref={textareaRef}
             id={`programming-st-source-${program.programId}`}
             aria-describedby={diagnostics.length > 0 ? `programming-st-diagnostics-${program.programId}` : undefined}
-            className="mono absolute inset-0 h-96 w-full resize-none border-0 bg-transparent p-3 text-sm leading-5 outline-none"
+            wrap="off"
+            className="mono absolute inset-0 h-96 w-full resize-none whitespace-pre border-0 bg-transparent p-3 text-sm leading-5 outline-none"
             /* `text-transparent`/`caret-[var(--c-text)]` (Tailwind) thua global
              * reset `textarea { color: inherit }` ở styles.css: reset đó nằm
              * NGOÀI mọi `@layer`, và CSS hiện đại cho rule không-layer luôn
@@ -603,15 +815,27 @@ export function SourceEditor({
             spellCheck={false}
             onChange={(event) => {
               const next = event.target.value
+              const offset = event.target.selectionStart
+              /* Tính lại Dòng/cột ngay từ `next`/`offset` tươi của chính sự
+               * kiện này — không dựa vào `onKeyUp`/`onSelect` đọc lại closure
+               * `source` có thể còn là giá trị của lần render trước, đúng
+               * nguyên nhân khay "Dòng/cột" từng hiện lệch dòng thật (lỗi
+               * người dùng báo). Bàn phím thường (không qua `applyEdit`) vẫn
+               * cần đường riêng này vì trình duyệt tự chèn ký tự, không đi
+               * qua `handleAutoIndentEnter`/`acceptCompletion`. */
               onChange(next)
-              refreshCompletion(next, event.target.selectionStart)
+              setCursor(offsetToLineColumn(next, offset))
+              refreshCompletion(next, offset)
             }}
             onClick={() => { updateCursor(); closeCompletion() }}
             onKeyUp={updateCursor}
             onSelect={updateCursor}
             onScroll={(event) => {
               if (lineGutterRef.current) lineGutterRef.current.scrollTop = event.currentTarget.scrollTop
-              if (overlayRef.current) overlayRef.current.scrollTop = event.currentTarget.scrollTop
+              if (overlayRef.current) {
+                overlayRef.current.scrollTop = event.currentTarget.scrollTop
+                overlayRef.current.scrollLeft = event.currentTarget.scrollLeft
+              }
             }}
             onKeyDown={(event) => {
               if (completion.open) {
@@ -629,6 +853,17 @@ export function SourceEditor({
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && canEdit && canSave) {
                 event.preventDefault(); void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'ST', source }]); return
               }
+              /* ST Editor Quick Control (đã duyệt) — phím tắt cho thanh lệnh
+               * nhanh vùng chọn (#1) và panel chèn nhanh (#3). */
+              if ((event.ctrlKey || event.metaKey) && event.key === '/') {
+                event.preventDefault(); handleToggleComment(); return
+              }
+              if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === '\\') {
+                event.preventDefault(); handleJumpBracket(); return
+              }
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'i' && canEdit) {
+                event.preventDefault(); setInsertPanelOpen((open) => !open); return
+              }
               if (event.key === 'Enter' && canEdit && !event.ctrlKey && !event.metaKey) {
                 event.preventDefault(); handleAutoIndentEnter()
               }
@@ -639,7 +874,7 @@ export function SourceEditor({
               role="listbox"
               aria-label={pick('Gợi ý', 'Suggestions')}
               className="absolute z-10 max-h-48 w-56 overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] text-sm shadow-lg"
-              style={{ top: `${cursor.line * 20}px`, left: `${Math.min(220, (cursor.column - 1) * 8.4 + 12)}px` }}
+              style={{ top: `${cursor.line * EDITOR_ROW_HEIGHT_PX}px`, left: `${Math.min(220, (cursor.column - 1) * 8.4 + EDITOR_PAD_TOP_PX)}px` }}
             >
               {completion.items.map((item, index) => (
                 <li key={`${item.kind}-${item.label}`}>
@@ -657,7 +892,31 @@ export function SourceEditor({
               ))}
             </ul>
           )}
+          {canEdit && selectionRange && (() => {
+            const { line, column } = offsetToLineColumn(source, selectionRange.start)
+            return (
+              <SelectionQuickActions
+                top={Math.max(0, (line - 1) * EDITOR_ROW_HEIGHT_PX - 32)}
+                left={Math.min(220, (column - 1) * 8.4 + EDITOR_PAD_TOP_PX)}
+                onComment={handleToggleComment}
+                onWrapIf={handleWrapIf}
+                onJumpBracket={handleJumpBracket}
+                canJumpBracket={bracketMatch !== null}
+              />
+            )
+          })()}
         </div>
+        {insertPanelOpen && canEdit && (
+          <InsertPointVariablePanel
+            variables={symbols}
+            pointCatalogStatus={pointCatalogStatus}
+            pointCatalogItems={pointCatalogItems}
+            pointCatalogError={pointCatalogError}
+            onEnsureLoaded={onEnsurePointCatalogLoaded}
+            onInsert={handleInsertAtCursor}
+            onClose={() => setInsertPanelOpen(false)}
+          />
+        )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--c-text-dim)]">
         <span>{pick('Dòng', 'Line')} {cursor.line}, {pick('cột', 'column')} {cursor.column}</span>
