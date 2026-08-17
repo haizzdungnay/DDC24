@@ -8,6 +8,59 @@
 
 ## [Unreleased]
 
+### Fixed — ST Editor: "Định dạng" xé `VAR RETAIN`/`IF...THEN` sai dòng + khay Dòng/cột đứng yên sau Định dạng/Thay tất cả (2026-08-17)
+
+Người dùng báo trực tiếp hai lỗi qua ảnh chụp `ProgramsTab` (tab Chương
+trình, editor ST): (1) "mày thấy editor program đang lỗi gì không" kèm ảnh
+cho thấy `VAR`/`RETAIN` và `IF`/`<điều kiện> THEN` bị tách thành hai dòng
+lệch thụt lề; (2) "tao đang nói phần FE hiển thị đang bị lỗi select dòng A
+thì nó lại hiện dòng B" — khay Dòng/cột không khớp con trỏ thật sau khi bấm
+"Định dạng".
+
+**Lỗi 1 — `formatStSource` xé đôi cặp từ khoá bắt buộc chung dòng.**
+`ST_KEYWORD_SPLIT` chèn xuống dòng vô điều kiện quanh MỌI từ khoá khối, kể
+cả `VAR`/`IF`/`ELSIF` — trong khi văn phạm EBNF (`ST_SUBSET_SPEC_MK-DDC-24_VI.md`
+§10: `var_block = ... "VAR" "RETAIN"`) và cú pháp `IF <điều kiện> THEN` đòi
+hai vế PHẢI cùng một dòng. Kết quả: bấm "Định dạng" biến `VAR RETAIN` thành
+`VAR` / `RETAIN` hai dòng riêng, và `IF HighTrig.Q THEN` thành `IF` / `HighTrig.Q
+THEN` — thân khối và mệnh đề điều kiện cùng thụt lề, nhìn như hai câu lệnh
+độc lập. Sửa bằng bước ghép lại (`ST_TRAILING_CLAUSE_TERMINATOR`) sau khi
+tách dòng, trước khi thụt lề — `apps/web-ui/src/features/programming/design/editor/ProgramsTab.tsx`.
+
+**Lỗi 2 — nút "Định dạng"/"Thay tất cả" làm khay Dòng/cột đứng yên sai lệch.**
+Root cause kép, xác nhận bằng Playwright (Chrome thật):
+- (a) Cả hai nút gọi thẳng `onChange(next)`, không qua `applyEditRange`/
+  `pendingCursorRef`, nên `cursor` (React state — khay Dòng/cột + dải
+  active-line + hàng gutter tô đậm) đứng yên ở vị trí CŨ trong khi `.value`
+  của textarea đã đổi toàn bộ.
+- (b) Con trỏ DOM THẬT của textarea còn lệch nặng hơn: cả hai nút nằm NGOÀI
+  textarea nên lúc bấm, textarea đã mất focus — Chrome âm thầm đặt lại
+  `selectionStart`/`selectionEnd` của một textarea không có focus về 0 ngay
+  sau khi script gán `.value` (đo trực tiếp: gán 66/66 xong đọc lại đúng
+  66/66, nhưng sample liên tiếp qua `requestAnimationFrame` ngay sau đó đều
+  về 0). Khay từng "đúng nhờ trùng hợp" (state cũ) trong khi con trỏ thật đã
+  nhảy về đầu file — đúng hiện tượng "chọn dòng A thì hiện dòng B".
+
+  Sửa: `mapOffsetByNonWhitespaceCount`/`mapOffsetAcrossReplaceAll` ánh xạ vị
+  trí con trỏ cũ sang bản mới (whitespace-insensitive cho Format vì
+  `formatStSource` chỉ đổi khoảng trắng; cộng dồn chênh lệch độ dài thật cho
+  Thay tất cả), đi qua `applyEditRange` như mọi đường sửa nội dung khác;
+  cộng `textarea.focus()` ngay sau `applyEditRange` trong `handleFormat`/
+  `replaceAllMatches` (cùng vị trí tương đối `acceptCompletion` đã dùng —
+  KHÔNG đặt trong `useLayoutEffect` dùng chung cho mọi đường sửa, vì gọi
+  `focus()` ở đó ảnh hưởng cả đường gõ phím thường và gây lệch `cursor`
+  React state trong môi trường test jsdom, dù không tái hiện được ở Chrome
+  thật).
+
+**Kiểm chứng:** `tsc --noEmit` sạch; `eslint --max-warnings=0` sạch;
+`npx vitest --run --environment jsdom src` → 75 file / 689 test PASS (25
+test mới trong `ProgramsTab.test.ts`: 5 cho `formatStSource` giữ `VAR
+RETAIN`/`IF...THEN` chung dòng + idempotent, 8 cho hai hàm ánh xạ offset);
+`npm run build` PASS; `npx playwright test e2e/st-editor-alignment.spec.ts
+e2e/programming.spec.ts e2e/network-qa.spec.ts --project=desktop-chrome` →
+20/20 PASS (3 test mới bằng Chrome thật xác nhận khay Dòng/cột khớp con trỏ
+DOM thật sau Định dạng và sau Thay tất cả).
+
 ### Fixed — Review cấu hình UI theo bảng đấu nối AHU: bác bỏ SIG-001/002, vá 6 lỗi FE thật, dọn dữ liệu board (2026-08-17)
 
 Nhận báo cáo QA "cấu hình UI theo bảng đấu nối AHU" (17 issue, đứng đầu là

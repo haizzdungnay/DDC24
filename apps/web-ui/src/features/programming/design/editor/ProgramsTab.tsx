@@ -606,6 +606,35 @@ export function SourceEditor({
     applyEditRange(next, newCursor, newCursor)
   }
 
+  /** Định dạng lại (nút "Định dạng") và "Thay tất cả" (Find & Replace) từng
+   *  gọi thẳng `onChange(next)` — không qua `applyEditRange`/`pendingCursorRef`
+   *  — nên sau khi bấm, `cursor` (khay Dòng/cột + dải active-line + hàng
+   *  gutter tô đậm) ĐỨNG YÊN ở vị trí CŨ trong khi con trỏ DOM thật của
+   *  textarea bị React/trình duyệt đặt lại (thường về offset 0) khi `.value`
+   *  bị thay toàn bộ mà không có `pendingCursorRef` ghi đè — lộ đúng lỗi
+   *  "chọn dòng A lại hiện dòng B" báo trực tiếp 2026-08-17: khay hiện Dòng
+   *  30 trong khi con trỏ thật đã nhảy về Dòng 1. Hai hàm bên dưới ánh xạ vị
+   *  trí con trỏ CŨ sang bản MỚI rồi đi qua `applyEditRange` như mọi đường
+   *  sửa nội dung khác — giữ khay/høghlight luôn khớp con trỏ thật.
+   *
+   *  Cả hai đều gọi từ NÚT BẤM ngoài textarea nên focus lúc đó KHÔNG ở
+   *  textarea — Chrome âm thầm đặt lại `selectionStart`/`selectionEnd` của
+   *  MỘT textarea đang không có focus về 0 ngay sau khi script gán `.value`
+   *  (xác nhận bằng log trực tiếp qua Playwright — không tái hiện được bằng
+   *  jsdom). `textarea.focus()` NGAY SAU `applyEditRange` — cùng vị trí
+   *  tương đối `acceptCompletion` đã dùng từ trước (focus sau khi áp edit,
+   *  không phải trong `useLayoutEffect` dùng chung cho MỌI đường sửa nội
+   *  dung: gọi `focus()` ở đó ảnh hưởng cả đường gõ phím thường, không cần
+   *  thiết và từng gây lệch `cursor` React state trong môi trường test). */
+  function handleFormat() {
+    const textarea = textareaRef.current
+    const rawStart = textarea?.selectionStart ?? 0
+    const rawEnd = textarea?.selectionEnd ?? 0
+    const next = formatStSource(source)
+    applyEditRange(next, mapOffsetByNonWhitespaceCount(source, next, rawStart), mapOffsetByNonWhitespaceCount(source, next, rawEnd))
+    textarea?.focus()
+  }
+
   /** FE-ST-008: một hàm lưu DUY NHẤT cho cả nút Lưu và `Ctrl+S` — ghi lại kết
    *  quả (`saved`/`failed`) neo vào đúng buffer vừa thử, để trạng thái hiển
    *  thị không nói dối khi người dùng gõ tiếp sau một lần lưu thất bại. */
@@ -642,8 +671,16 @@ export function SourceEditor({
 
   function replaceAllMatches() {
     if (!searchText || matches.length === 0) return
+    const textarea = textareaRef.current
+    const rawStart = textarea?.selectionStart ?? 0
+    const rawEnd = textarea?.selectionEnd ?? 0
     const next = source.split(searchText).join(replaceText)
-    onChange(next)
+    applyEditRange(
+      next,
+      mapOffsetAcrossReplaceAll(source, searchText, replaceText, rawStart),
+      mapOffsetAcrossReplaceAll(source, searchText, replaceText, rawEnd),
+    )
+    textarea?.focus()
   }
 
   function replaceNextMatch() {
@@ -742,7 +779,7 @@ export function SourceEditor({
                 variant="secondary"
                 icon={<AlignLeft className="h-4 w-4" aria-hidden="true" />}
                 title={pick('Định dạng lại thụt lề', 'Reformat indentation')}
-                onClick={() => onChange(formatStSource(source))}
+                onClick={handleFormat}
               >
                 {pick('Định dạng', 'Format')}
               </Button>
@@ -1286,6 +1323,41 @@ function lineColumnToOffset(source: string, line: number, column: number): numbe
   for (let index = 0; index < lineIndex; index += 1) offset += lines[index].length + 1
   return offset + Math.max(0, Math.min(lines[lineIndex]?.length ?? 0, column - 1))
 }
+
+/** `formatStSource` chỉ thêm/bớt khoảng trắng (thụt lề, xuống dòng) — KHÔNG
+ *  bao giờ đổi thứ tự hay nội dung ký tự không-trắng (đúng theo cách cài
+ *  đặt: tách dòng + trim + thêm indent, không đụng ký tự thật). Giữ đúng vị
+ *  trí con trỏ qua Format bằng cách đếm số ký tự không-trắng trước con trỏ ở
+ *  bản cũ rồi tìm lại đúng vị trí đó ở bản mới — không dùng offset thô (offset
+ *  thô sai ngay khi số dòng đổi). */
+export function mapOffsetByNonWhitespaceCount(before: string, after: string, offset: number): number {
+  const target = before.slice(0, offset).replace(/\s/g, '').length
+  if (target === 0) return 0
+  let count = 0
+  for (let index = 0; index < after.length; index += 1) {
+    if (!/\s/.test(after[index])) {
+      count += 1
+      if (count === target) return index + 1
+    }
+  }
+  return after.length
+}
+
+/** "Thay tất cả" đổi cả nội dung (không chỉ khoảng trắng) nên không dùng
+ *  được cách đếm ký tự không-trắng ở trên — cộng dồn đúng chênh lệch độ dài
+ *  của từng lần thay THẬT SỰ xảy ra trước vị trí con trỏ cũ. */
+export function mapOffsetAcrossReplaceAll(before: string, searchText: string, replaceText: string, offset: number): number {
+  if (!searchText) return offset
+  let delta = 0
+  let cursor = 0
+  while (true) {
+    const index = before.indexOf(searchText, cursor)
+    if (index === -1 || index >= offset) break
+    delta += replaceText.length - searchText.length
+    cursor = index + searchText.length
+  }
+  return Math.max(0, offset + delta)
+}
 const ST_BLOCK_KEYWORDS = [
   'END_PROGRAM', 'PROGRAM', 'END_FUNCTION_BLOCK', 'FUNCTION_BLOCK', 'END_FUNCTION', 'FUNCTION',
   'END_VAR', 'VAR_IN_OUT', 'VAR_TEMP', 'VAR_INPUT', 'VAR_OUTPUT', 'VAR',
@@ -1298,6 +1370,21 @@ const ST_MID_LINE = /^(ELSIF|ELSE)\b/
 /** PROGRAM/FUNCTION_BLOCK/FUNCTION giữ tên định danh trên cùng dòng (`PROGRAM
  *  test`) — mọi từ khoá khối khác xuống dòng cả trước lẫn sau. */
 const ST_NAMED_BLOCK_OPENERS = new Set(['PROGRAM', 'FUNCTION_BLOCK', 'FUNCTION'])
+
+/** Từ khoá PHẢI giữ cùng dòng với "vế đính kèm" bắt buộc theo văn phạm EBNF
+ *  (`ST_SUBSET_SPEC_MK-DDC-24_VI.md` §10: `var_block = ... "VAR" "RETAIN"`;
+ *  IF/ELSIF luôn đóng bằng THEN cùng mệnh đề) — báo lỗi trực tiếp kèm ảnh
+ *  chụp 2026-08-17 cho thấy bấm "Định dạng" tách rời `VAR`/`RETAIN` và
+ *  `IF`/`<điều kiện> THEN` thành hai dòng lệch thụt lề, dù cả hai đều PHẢI ở
+ *  chung một dòng. `ST_KEYWORD_SPLIT` phía trên tách vô điều kiện quanh MỌI
+ *  từ khoá khối nên xé đôi các cặp này; bù lại bằng bước ghép ở dưới thay vì
+ *  làm `ST_KEYWORD_SPLIT` phức tạp hơn (regex một từ khoá đơn giản, dễ kiểm
+ *  chứng hơn logic "biết trước cặp nào đi với cặp nào" ngay trong regex). */
+const ST_TRAILING_CLAUSE_TERMINATOR: Record<string, RegExp> = {
+  VAR: /^RETAIN$/,
+  IF: /\bTHEN$/,
+  ELSIF: /\bTHEN$/,
+}
 
 /**
  * BUG-013 — bản cũ chỉ thêm indent cho dòng đã có sẵn `\n`, nên code dán một
@@ -1312,9 +1399,25 @@ export function formatStSource(source: string): string {
     .replace(ST_KEYWORD_SPLIT, (keyword) => ST_NAMED_BLOCK_OPENERS.has(keyword) ? `\n${keyword}` : `\n${keyword}\n`)
     .replace(/;/g, ';\n')
   const rawLines = withBreaks.split('\n').map((line) => line.trim()).filter((line) => line.length > 0)
+
+  // Ghép lại các cặp bị ST_KEYWORD_SPLIT xé đôi phía trên (`VAR`+`RETAIN`,
+  // `IF`/`ELSIF`+`<điều kiện> THEN`) — hai vế PHẢI cùng một dòng theo EBNF.
+  const mergedLines: string[] = []
+  for (let index = 0; index < rawLines.length; index += 1) {
+    const line = rawLines[index]
+    const terminator = ST_TRAILING_CLAUSE_TERMINATOR[line]
+    const next = rawLines[index + 1]
+    if (terminator && next !== undefined && terminator.test(next)) {
+      mergedLines.push(`${line} ${next}`)
+      index += 1
+    } else {
+      mergedLines.push(line)
+    }
+  }
+
   let depth = 0
   const indented: string[] = []
-  for (const line of rawLines) {
+  for (const line of mergedLines) {
     const closing = ST_CLOSE_LINE.test(line) || ST_MID_LINE.test(line)
     if (closing) depth = Math.max(0, depth - 1)
     indented.push(`${'  '.repeat(depth)}${line}`)
