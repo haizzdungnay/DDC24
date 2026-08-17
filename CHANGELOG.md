@@ -8,6 +8,57 @@
 
 ## [Unreleased]
 
+### Fixed — F-OUT-001: trang Cấu hình Outputs — "Manual output (%)" gửi thẳng % làm giá trị RAW, Force AO thực chất bị hỏng (2026-08-17)
+
+User xem trang Cấu hình Outputs (AO-03 Chilled Water Valve, MODE 0-10V) thấy
+mọi ô live data (GIÁ TRỊ, RAW OUTPUT, NHỎ NHẤT, LỚN NHẤT, TRUNG BÌNH) đều
+hiện Volt, hỏi thẳng: "sao lại Volt, DDC sai hay kỹ sư dùng sai?".
+
+**Xác nhận qua code, không suy đoán**: không phải chỉ là vấn đề hiển thị —
+đào sâu phát hiện ô "Manual output (%)" (dùng để Force tay một kênh AO)
+**thực sự hỏng chức năng**, không riêng hiển thị. `forceSelected()`
+(`OutputsPage.tsx`) gửi thẳng số 0-100 người dùng nhập làm giá trị `value`
+xuống `PUT /api/v1/points/{id}` → `CoreClient.CommandPoint`
+(`core_client.go:347-357`, pass-through nguyên vẹn, không quy đổi) →
+`web_ipc.cpp` parse thành float thẳng → `can_set_ao()`
+(`priority_resolver.cpp`) — hàm này chỉ nhận dải điện áp/dòng điện RAW thật
+(0-10V hoặc 4-20mA), **cùng lớp bug đã tìm thấy và sửa cho ST compiler tuần
+này** (entry "Commission RECONCILE_REJECTED..." bên dưới), lần này ở đường
+Force tay của operator: nhập "65" (nghĩ là 65%) gửi thẳng 65.0V — ngoài dải
+[0,10]V, Core từ chối; nhập "6" (nghĩ là 6%) gửi 6.0V — được chấp nhận
+nhưng thực chất là 60% mở, sai 10 lần so với ý định. Với 4-20mA còn tệ hơn
+(dải bắt đầu từ 4, mọi giá trị dưới 4 luôn bị từ chối).
+
+**Đối chiếu**: Core đã có đúng công thức quy đổi %→raw cho node `AO_OUTPUT`
+trong graph runtime (`graph_runtime.cpp:592-601`,
+`pct/100*10`/`4+pct/100*16`) — chỉ chưa được áp dụng cho đường Force tay từ
+web UI.
+
+**Sửa ở tầng FE, không sửa `apiClient`/Go/Core dùng chung**: `VirtualIoPage`
+và `MonitorPage` gọi cùng `apiClient.forcePoint`/`forceOutput` nhưng với
+giá trị RAW đúng (Monitor hiện "Force value" không nhãn %, nhập đúng đơn vị
+điện thật) — sửa ở tầng chung sẽ làm hỏng 2 đường đó. Thêm
+`aoPercentToRaw()`/`aoRawToPercent()` cục bộ trong `OutputsPage.tsx`
+(đúng công thức Core), quy đổi ngay trước khi gọi `apiClient.forceOutput`.
+
+**Nhân tiện sửa luôn phần hiển thị** (đúng câu hỏi gốc của user): thêm ô
+"% mở" trong "Dữ liệu live", tính từ `point.raw`/`point.value` qua
+`aoRawToPercent(mode, raw)`, hiện **song song** với Volt/mA thô (không thay
+thế — giá trị thô vẫn cần cho việc đấu nối/hiệu chuẩn, đối chiếu đồng hồ đo
+thật, đây vẫn là trang kỹ thuật commissioning).
+
+**Kiểm chứng**: `npx tsc --noEmit` sạch, `npx vitest --run --environment
+jsdom src` **692/692 PASS** (thêm 3 test mới F-OUT-001: quy đổi 0-10V,
+quy đổi 4-20mA, hiện đúng "% open"), `npm run lint` sạch, `npm run build`
+OK. Deploy dist lên board (`/opt/mkddc-web/dist`, backup bản cũ). Verify
+trực tiếp trên Core thật: `PUT /api/v1/points/AO-03 {"value":6.5}` (giá trị
+mà FE đã sửa sẽ gửi cho "Manual 65%") → accepted, readback `value=6.5
+raw=6.5 rawUnit=V` khớp chính xác; release trả quyền điều khiển lại đúng
+cho program (`priority:"logic"`) ngay sau đó.
+
+Refs: entry "Commission RECONCILE_REJECTED..." bên dưới (cùng lớp bug %
+vs raw, phía ST compiler thay vì Force tay)
+
 ### Added — `AHU_MasterSequence`: setpoint sưởi vận hành được (HeatingSetpoint) thay ngưỡng cứng, rà soát toàn bộ kiến trúc setpoint (2026-08-17)
 
 User yêu cầu rà lại: "Quạt cũng có setpoint... Coil heat/cool cũng có setpoint

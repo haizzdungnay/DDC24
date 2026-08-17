@@ -173,7 +173,12 @@ export function OutputsPage() {
     if (!selected) return
     setSaving(true)
     try {
-      const value = selected.kind === 'AO' ? clampNumber(selected.manualValue, 0, 100, true) : selected.manualValue
+      // Manual output (%) nhập theo phần trăm full-scale, nhưng Core
+      // (can_set_ao) chỉ nhận giá trị RAW volt/mA thật — phải quy đổi ở đây
+      // trước khi gửi, không phải gửi thẳng số 0-100 (F-OUT-001, 2026-08-17).
+      const value = selected.kind === 'AO'
+        ? aoPercentToRaw(selected.mode, clampNumber(selected.manualValue, 0, 100, true))
+        : selected.manualValue
       await apiClient.forceOutput(selected.id, value, release)
       toast.push('success', release ? pick('Đã gỡ manual output', 'Manual output released') : pick('Đã gửi manual output', 'Manual output forced'))
     } catch (error) {
@@ -444,6 +449,16 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
   const rawOutput = output.kind === 'AO' && typeof point?.raw === 'number'
     ? { value: point.raw, unit: point.rawUnit ?? modeRawUnit ?? '' }
     : undefined
+  // % mở full-scale — Core chỉ lưu/đọc AO theo volt/mA thô (không tự quy đổi
+  // engineering unit như chiều UI qua io_scaling.cpp), nên trang này trước
+  // đây chỉ hiện được Volt, dễ gây hiểu lầm với ai quen quy ước % của tự
+  // động hoá (F-OUT-001, 2026-08-17). Tính thêm % ở FE dựa trên MODE, hiện
+  // song song với Volt/mA thô — không thay thế, vì giá trị thô vẫn cần thiết
+  // để đấu nối/hiệu chuẩn thực tế (đối chiếu đồng hồ đo).
+  const rawForPercent = typeof point?.raw === 'number' ? point.raw : point?.value
+  const openPercent = output.kind === 'AO' && typeof rawForPercent === 'number'
+    ? aoRawToPercent(output.mode, rawForPercent)
+    : undefined
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -455,6 +470,7 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
           </div>
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <LiveDataItem label={t('currentvalue')} value={point ? formatValue(point.value, unit) : '--'} />
+            {output.kind === 'AO' && <LiveDataItem label={pick('% mở', '% open')} value={openPercent !== undefined ? formatStat(openPercent, '%') : '--'} />}
             {output.kind === 'AO' && <LiveDataItem label="Raw output" value={rawOutput ? formatStat(rawOutput.value, rawOutput.unit) : '--'} />}
             <LiveDataItem label={pick('Nhỏ nhất', 'Min')} value={stats ? formatStat(stats.min, unit) : '--'} />
             <LiveDataItem label={pick('Lớn nhất', 'Max')} value={stats ? formatStat(stats.max, unit) : '--'} />
@@ -717,6 +733,26 @@ function aoSafeUnit(mode: AoSignalMode): string {
 
 function aoSafeMax(mode: AoSignalMode): number {
   return mode === '4-20mA' ? 20 : 10
+}
+
+// aoPercentToRaw/aoRawToPercent — cùng công thức Core đã dùng cho node
+// AO_OUTPUT trong graph runtime (`apps/core/domain/graph/graph_runtime.cpp`,
+// `pct/100*10` cho 0-10V, `4+pct/100*16` cho 4-20mA). Trước bản vá này,
+// "Manual output (%)" trên trang Outputs gửi thẳng số 0-100 làm giá trị RAW
+// xuống Core — `can_set_ao()` (Core) chỉ nhận dải điện áp/dòng điện thật nên
+// mọi giá trị %>10 (0-10V) hoặc bất kỳ giá trị nào (4-20mA, dải bắt đầu từ
+// 4) đều bị Core từ chối hoặc hiểu sai đơn vị. Không sửa ở tầng
+// `apiClient.forcePoint`/Go/Core dùng chung vì VirtualIoPage và MonitorPage
+// gọi cùng API này với giá trị RAW (đúng), sửa ở tầng chung sẽ làm hỏng 2
+// đường đó.
+function aoPercentToRaw(mode: AoSignalMode, pct: number): number {
+  const clamped = Math.min(100, Math.max(0, pct))
+  return mode === '4-20mA' ? 4 + (clamped / 100) * 16 : (clamped / 100) * 10
+}
+
+function aoRawToPercent(mode: AoSignalMode, raw: number): number {
+  const pct = mode === '4-20mA' ? ((raw - 4) / 16) * 100 : (raw / 10) * 100
+  return Math.min(100, Math.max(0, pct))
 }
 
 function clampNumber(value: number, min: number, max: number, integer = false): number {
