@@ -146,7 +146,7 @@ bool valid_st_point_id(const std::string& point_id)
 namespace {
 
 /* LOCAL prefix (đã qua split_numbered_id/validate_point_contract, nên luôn
- * là một trong bốn giá trị này) -> StPointKind IR. Không dùng cho VP/MB_RTU
+ * là một trong bốn giá trị này) -> StPointKind IR. Không dùng cho MB_RTU
  * (resolve_io_bindings từ chối trước khi tới đây). */
 bool local_prefix_to_point_kind(const std::string& prefix, StPointKind* out)
 {
@@ -154,6 +154,21 @@ bool local_prefix_to_point_kind(const std::string& prefix, StPointKind* out)
     if (prefix == "DI") { *out = StPointKind::DI; return true; }
     if (prefix == "AO") { *out = StPointKind::AO; return true; }
     if (prefix == "DO") { *out = StPointKind::DO; return true; }
+    return false;
+}
+
+/* VP prefix -> StPointKind IR (F-PROG-ASBUILT-014). Chỉ dùng cho chiều READ
+ * (VAR_INPUT) — Web API đồng bộ giá trị Virtual Point đã "bound" vào
+ * av_[]/bv_[]/msv_[] của Core qua WebIpc `write` (nguồn PointSource::WEB,
+ * xem `apps/web-api/internal/app/virtualpoint.go`); chưa có đường đồng bộ
+ * NGƯỢC Core->Web API nên VAR_OUTPUT bind VP bị chặn tường minh ở
+ * resolve_io_bindings() thay vì âm thầm ghi Core mà Web API/UI không bao
+ * giờ thấy lại — xem F-PROG-ASBUILT-016 (theo dõi phần WRITE). */
+bool vp_prefix_to_point_kind(const std::string& prefix, StPointKind* out)
+{
+    if (prefix == "AV")  { *out = StPointKind::AV;  return true; }
+    if (prefix == "BV")  { *out = StPointKind::BV;  return true; }
+    if (prefix == "MSV") { *out = StPointKind::MSV; return true; }
     return false;
 }
 
@@ -217,11 +232,18 @@ bool resolve_io_bindings(StIrModule* module, const std::vector<StIoMapEntry>& en
             return false;
         }
 
-        if (e.category != "LOCAL") {
+        if (e.category != "LOCAL" && e.category != "VP") {
             push_diag(diagnostics, st_diag_code::kIoMapUnsupportedCategory,
                      "io_map entry for '" + e.variable + "' targets category '" + e.category +
-                         "' — chỉ 'LOCAL' được resolve_io_bindings() hỗ trợ trong bản này "
-                         "(xem F-PROG-ASBUILT-013/014, REV-PROG-ASBUILT-GAP-2026-08-14)");
+                         "' — chỉ 'LOCAL'/'VP' được resolve_io_bindings() hỗ trợ trong bản này "
+                         "(xem F-PROG-ASBUILT-013/014/016)");
+            return false;
+        }
+        if (e.category == "VP" && expect_output) {
+            push_diag(diagnostics, st_diag_code::kIoMapUnsupportedCategory,
+                     "io_map entry for '" + e.variable + "' — category 'VP' hiện chỉ hỗ trợ chiều "
+                         "READ (VAR_INPUT); chưa có đường đồng bộ ngược Core->Web API cho "
+                         "VAR_OUTPUT (xem F-PROG-ASBUILT-016)");
             return false;
         }
 
@@ -237,9 +259,12 @@ bool resolve_io_bindings(StIrModule* module, const std::vector<StIoMapEntry>& en
         {
             std::string parsed_prefix;
             split_numbered_id(e.point_id, &parsed_prefix);
-            if (!local_prefix_to_point_kind(parsed_prefix, &kind)) {
+            const bool mapped = (e.category == "LOCAL")
+                ? local_prefix_to_point_kind(parsed_prefix, &kind)
+                : vp_prefix_to_point_kind(parsed_prefix, &kind);
+            if (!mapped) {
                 push_diag(diagnostics, st_diag_code::kIoMapBadPointId,
-                         "io_map entry for '" + e.variable + "' has unrecognised LOCAL prefix");
+                         "io_map entry for '" + e.variable + "' has unrecognised " + e.category + " prefix");
                 return false;
             }
             /* digits đã được split_numbered_id/validate_point_contract xác nhận

@@ -266,8 +266,12 @@ TEST(StCompileCli, IoMapInRejectsBindingBoolOutputToReadOnlyPoint)
     EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-IOMAP-002");
 }
 
-TEST(StCompileCli, IoMapInRejectsUnsupportedVirtualPointCategory)
+TEST(StCompileCli, IoMapInRejectsVirtualPointCategoryForOutputDirection)
 {
+    /* F-PROG-ASBUILT-014: chiều READ (VAR_INPUT) đã được nối tới Core
+     * av_[]/bv_[]/msv_[] (xem StResolveIoBindings.AcceptsVpCategoryForInputDirection),
+     * nhưng chiều WRITE (VAR_OUTPUT) vẫn chưa có đường đồng bộ ngược Core->Web
+     * API nên còn bị từ chối tường minh — xem F-PROG-ASBUILT-016. */
     const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
     const std::string io_map_path = temporary_path("/tmp/mkddc-cli-iomap-vp-XXXXXX");
     ASSERT_FALSE(io_map_path.empty());
