@@ -1,4 +1,4 @@
-import { Activity, ChevronLeft, ChevronRight, LayoutGrid, Pencil, Plus, Save, Wand2 } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, LayoutGrid, Pencil, Plus, Save, Search, Wand2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, unitToIo } from '../../shared/api/client'
@@ -9,7 +9,7 @@ import { Panel } from '../../shared/components/Panel'
 import { PointNameConflictNotice } from '../../shared/components/PointNameConflictNotice'
 import { PointLoggingSection } from '../../shared/components/PointLoggingSection'
 import { StateBlock } from '../../shared/components/StateBlock'
-import { StatusBadge } from '../../shared/components/StatusBadge'
+import { QualityDot, StatusBadge } from '../../shared/components/StatusBadge'
 import { useToast } from '../../shared/components/Toast'
 import { TrendChart } from '../../shared/components/TrendChart'
 import { IS_DEMO } from '../../shared/config'
@@ -36,6 +36,12 @@ export function InputsPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const [configs, setConfigs] = useState<AiInputConfig[]>([])
+  /* FE-010 (review UI/UX AHU wiring 2026-08-17): bản chụp lần cuối đã lưu/tải
+   * từ backend, dùng làm mốc so sánh "có thay đổi chưa lưu" — không suy ra từ
+   * `configs` một mình vì `configs` chính là bản đang gõ dở. */
+  const [savedConfigs, setSavedConfigs] = useState<AiInputConfig[]>([])
+  const [channelFilter, setChannelFilter] = useState('')
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [selectedChannel, setSelectedChannel] = useState(1)
   const [activeTab, setActiveTab] = useState<TabKey>('electrical')
   const [wizardActive, setWizardActive] = useState(false)
@@ -63,6 +69,12 @@ export function InputsPage() {
     ...configs.map((config) => ({ id: aiNode(config.channel), name: config.label, kind: 'UI' }))
   ], [configs, pointsState.data, virtualPointsState.data])
   const nameConflicts = useMemo(() => pointNameConflicts(namespaceEntries), [namespaceEntries])
+  const dirty = useMemo(() => JSON.stringify(configs) !== JSON.stringify(savedConfigs), [configs, savedConfigs])
+  const filteredConfigs = useMemo(() => {
+    const q = channelFilter.trim().toLowerCase()
+    if (!q) return configs
+    return configs.filter((config) => aiNode(config.channel).toLowerCase().includes(q) || config.label.toLowerCase().includes(q))
+  }, [configs, channelFilter])
 
   useEffect(() => {
     let active = true
@@ -71,6 +83,7 @@ export function InputsPage() {
       .then((items) => {
         if (!active) return
         setConfigs(items)
+        setSavedConfigs(items)
         setLoadError(null)
       })
       .catch((error) => {
@@ -94,6 +107,31 @@ export function InputsPage() {
     const frame = window.requestAnimationFrame(() => focusPointField(Object.keys(tagErrors)))
     return () => window.cancelAnimationFrame(frame)
   }, [configs, errorFocusPath, tagErrors])
+
+  /* FE-010: cảnh báo khi rời trang (đóng tab/reload hoặc click link nội bộ)
+   * lúc còn thay đổi UI config chưa lưu — cùng pattern dirty-guard đã dùng ở
+   * `features/programming/design/DesignWorkspacePage.tsx` (D-01). */
+  useEffect(() => {
+    if (!dirty) return undefined
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault()
+    const interceptInternalLink = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const target = event.target
+      const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null
+      if (!anchor || anchor.target || anchor.download) return
+      const url = new URL(anchor.href, window.location.href)
+      if (url.origin !== window.location.origin || url.href === window.location.href) return
+      event.preventDefault()
+      event.stopPropagation()
+      setPendingNavigation(`${url.pathname}${url.search}${url.hash}`)
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    globalThis.document.addEventListener('click', interceptInternalLink, true)
+    return () => {
+      window.removeEventListener('beforeunload', warnBeforeUnload)
+      globalThis.document.removeEventListener('click', interceptInternalLink, true)
+    }
+  }, [dirty])
 
   const selected = configs.find((config) => config.channel === selectedChannel) ?? configs[0]
   const wizardEligible = Boolean(selected && selected.signalType === 0 && !selected.enabled)
@@ -138,7 +176,7 @@ export function InputsPage() {
     return Object.keys(errors).length === 0
   }
 
-  async function persistConfigs(nextConfigs: AiInputConfig[], closeConfirm = false) {
+  async function persistConfigs(nextConfigs: AiInputConfig[], closeConfirm = false): Promise<boolean> {
     const recoveryIndex = nextConfigs.findIndex((config) => config.channel === selectedChannel)
     const recoveryConfig = recoveryIndex >= 0 ? nextConfigs[recoveryIndex] : undefined
     const recoveryId = recoveryConfig ? aiNode(recoveryConfig.channel) : undefined
@@ -148,19 +186,22 @@ export function InputsPage() {
       const errors = nameError ? { [`ui[${recoveryIndex}].name`]: nameError } : {}
       setTagErrors(errors)
       setErrorFocusPath(Object.keys(errors)[0])
-      if (nameError) return
-    } else if (!validateTags(nextConfigs)) return
+      if (nameError) return false
+    } else if (!validateTags(nextConfigs)) return false
     setSaving(true)
     try {
       if (recoveringName && recoveryConfig && recoveryId) {
         const name = normalizePointName(recoveryConfig.label)
         await apiClient.updatePointName(recoveryId, name)
-        setConfigs(nextConfigs.map((config) => config.channel === recoveryConfig.channel ? { ...config, label: name } : config))
+        const updated = nextConfigs.map((config) => config.channel === recoveryConfig.channel ? { ...config, label: name } : config)
+        setConfigs(updated)
+        setSavedConfigs(updated)
         void pointsState.refetch()
       } else {
         const normalized = nextConfigs.map((config) => ({ ...config, tag: aiNode(config.channel), label: displayPointName(normalizePointName(config.label), aiNode(config.channel)) }))
         await apiClient.putAiInputs(normalized)
         setConfigs(normalized)
+        setSavedConfigs(normalized)
       }
       setTagErrors({})
       setErrorFocusPath(undefined)
@@ -169,11 +210,13 @@ export function InputsPage() {
         setConfirmOpen(false)
         setWizardActive(false)
       }
+      return true
     } catch (error) {
       const errors = pointTagFieldErrors(error)
       setTagErrors(errors)
       setErrorFocusPath(pointFieldFocusPath(error, recoveryId ?? aiNode(selectedChannel), ['ui']) ?? Object.keys(errors)[0])
       toast.push('error', `${t('saveError')}: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     } finally {
       setSaving(false)
     }
@@ -224,30 +267,50 @@ export function InputsPage() {
 
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         <Panel className="min-w-0" title="UI Channels">
-          <div className="flex flex-col gap-1 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
-            {configs.map((config) => (
-              <button
-                key={config.channel}
-                type="button"
-                onClick={() => {
-                  setSelectedChannel(config.channel)
-                  setWizardActive(false)
-                }}
-                className={cn(
-                  'flex min-h-12 items-center gap-3 rounded-[var(--radius)] border px-3 py-2 text-left text-sm transition',
-                  selectedChannel === config.channel
-                    ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]'
-                    : 'border-transparent text-[var(--c-text-dim)] hover:border-[var(--c-border)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'
-                )}
-              >
-                <Activity className="h-4 w-4 shrink-0 text-[var(--c-accent)]" aria-hidden="true" />
-                <span className="min-w-0">
-                  <span className="block font-semibold">{aiNode(config.channel)}</span>
-                  <span className="block truncate text-xs">{config.label}</span>
-                </span>
-              </button>
-            ))}
+          <div className="mb-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--c-text-dim)]" aria-hidden="true" />
+              <input
+                type="search"
+                value={channelFilter}
+                onChange={(event) => setChannelFilter(event.target.value)}
+                placeholder={pick('Tìm kênh…', 'Search channels…')}
+                aria-label={pick('Tìm kênh', 'Search channels')}
+                className="h-9 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] pl-8 pr-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1 max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
+            {filteredConfigs.map((config) => {
+              const listPoint = findAiPoint(pointsState.data ?? [], config.channel)
+              return (
+                <button
+                  key={config.channel}
+                  type="button"
+                  onClick={() => {
+                    setSelectedChannel(config.channel)
+                    setWizardActive(false)
+                  }}
+                  className={cn(
+                    'flex min-h-12 items-center gap-3 rounded-[var(--radius)] border px-3 py-2 text-left text-sm transition',
+                    selectedChannel === config.channel
+                      ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]'
+                      : 'border-transparent text-[var(--c-text-dim)] hover:border-[var(--c-border)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'
+                  )}
+                >
+                  <Activity className="h-4 w-4 shrink-0 text-[var(--c-accent)]" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold">{aiNode(config.channel)}</span>
+                    <span className="block truncate text-xs">{config.label}</span>
+                  </span>
+                  <QualityDot state={listPoint?.quality ?? 'unknown'} title={listPoint?.quality ? `${aiNode(config.channel)}: ${listPoint.quality}` : undefined} />
+                </button>
+              )
+            })}
             {loading && <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{t('loading')}</div>}
+            {!loading && filteredConfigs.length === 0 && (
+              <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{pick('Không tìm thấy kênh phù hợp.', 'No channel matches.')}</div>
+            )}
           </div>
         </Panel>
 
@@ -336,6 +399,53 @@ export function InputsPage() {
         }}
         onClose={() => setOverviewOpen(false)}
       />
+      {/* FE-006: bản sao nút Save nổi cố định — tránh phải scroll lên đầu
+       * trang sau khi sửa Scaling/Alarms ở cuối trang dài. */}
+      {!loading && configs.length > 0 && (
+        <Button
+          variant="primary"
+          icon={<Save className="h-4 w-4" />}
+          loading={saving}
+          onClick={requestSave}
+          className="fixed bottom-6 right-6 z-20 shadow-lg"
+        >
+          {t('save')}
+        </Button>
+      )}
+      <Modal
+        open={pendingNavigation !== null}
+        title={pick('Cấu hình ngõ vào chưa lưu', 'Unsaved input configuration')}
+        cancelLabel={pick('Ở lại', 'Stay')}
+        confirmLabel={pick('Lưu rồi rời đi', 'Save and leave')}
+        confirmLoading={saving}
+        onClose={() => setPendingNavigation(null)}
+        onConfirm={() => {
+          const destination = pendingNavigation
+          if (!destination) return
+          void persistConfigs(configs).then((ok) => {
+            if (!ok) return
+            setPendingNavigation(null)
+            navigate(destination)
+          })
+        }}
+      >
+        <p>{pick('Bạn có thay đổi cấu hình ngõ vào chưa lưu. Rời trang sẽ mất các thay đổi này trừ khi lưu trước.', 'You have unsaved input configuration changes. Leaving this page will discard them unless you save first.')}</p>
+        <Button
+          className="mt-3"
+          variant="danger"
+          disabled={saving}
+          onClick={() => {
+            const destination = pendingNavigation
+            setConfigs(savedConfigs)
+            setTagErrors({})
+            setErrorFocusPath(undefined)
+            setPendingNavigation(null)
+            if (destination) navigate(destination)
+          }}
+        >
+          {pick('Bỏ thay đổi, rời đi', 'Discard changes and leave')}
+        </Button>
+      </Modal>
     </div>
   )
 }
@@ -437,16 +547,18 @@ function ChannelHeader({ config, point, tagError, nameError, onChange }: { confi
           {t('enableChannel')}
         </label>
       </div>
-      <div className="flex flex-wrap items-center gap-4 border-t border-[var(--c-border)] pt-3 text-sm">
-        {point ? <StatusBadge state={point.quality} /> : <span className="text-xs font-semibold text-[var(--c-text-dim)]">{NO_DATA}</span>}
+      <div className="flex flex-wrap items-end gap-4 border-t border-[var(--c-border)] pt-3">
+        {point
+          ? <StatusBadge state={point.quality} title={point.quality !== 'good' ? (point.qualityReason ?? undefined) : undefined} />
+          : <span className="text-xs font-semibold text-[var(--c-text-dim)]">{NO_DATA}</span>}
         <span>
-          <span className="text-xs uppercase text-[var(--c-text-dim)]">{pick('Giá trị', 'Value')}: </span>
-          <span className="font-mono font-semibold text-[var(--c-text)]">{point ? formatLiveValue(point, unit, booleanInput) : NO_DATA}</span>
+          <span className="block text-xs uppercase text-[var(--c-text-dim)]">{pick('Giá trị', 'Value')}</span>
+          <span className="font-mono text-xl font-semibold leading-none text-[var(--c-text)]">{point ? formatLiveValue(point, unit, booleanInput) : NO_DATA}</span>
         </span>
         {rawCell && (
           <span>
-            <span className="text-xs uppercase text-[var(--c-text-dim)]">{t('rawValue')}: </span>
-            <span className="font-mono text-[var(--c-text)]">{formatStat(rawCell.value, rawCell.unit)}</span>
+            <span className="block text-xs uppercase text-[var(--c-text-dim)]">{t('rawValue')}</span>
+            <span className="font-mono text-xs text-[var(--c-text-dim)]">{formatStat(rawCell.value, rawCell.unit)}</span>
           </span>
         )}
         <span className="text-xs text-[var(--c-text-dim)]">{pick('Cập nhật', 'Updated')}: {updatedAgoLabel(point, pick)}</span>
@@ -530,6 +642,12 @@ function ElectricalModeTab({ config, onChange }: { config: AiInputConfig; onChan
             </label>
           ))}
         </div>
+        <p className="text-xs text-[var(--c-text-dim)]">
+          {pick(
+            'Gợi ý theo bảng đấu nối field device: NTC10K/NTC20K → Điện trở · 4-20mA hoặc 2-10V → Điện áp/dòng · 0-10V → Điện áp 0-10V · dry-contact → Tiếp điểm khô.',
+            'Wiring-table hint: NTC10K/NTC20K → Resistance · 4-20mA or 2-10V → Voltage/current · 0-10V → Voltage 0-10V · dry-contact → Dry contact.'
+          )}
+        </p>
       </fieldset>
 
       {mode === 'voltCurrent' && (
