@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Fixed — Deploy web-ui quên cờ `VITE_PROGRAMMING_REV_A`, tự tay khoá mất route Programming trên board Foxlinx (2026-08-17)
+
+User phát hiện ngay và hỏi thẳng "mày khóa chức năng programming ah???"
+sau khi tôi deploy bản vá F-OUT-001 (entry ngay bên dưới) lên board.
+
+**Xác nhận đúng, tôi gây ra thật**: bước build FE cho bản vá F-OUT-001 chạy
+`npm run build` trần (theo đúng checklist FE tổng quát trong CLAUDE.md/quy
+trình commit) — **quên** cờ build-time `VITE_PROGRAMMING_REV_A=1` mà board
+Foxlinx cần (đã bật vĩnh viễn từ `TASK-PROG-507`). `.env.production` mặc
+định TẮT cờ này (đúng chủ đích, vì codebase FE này còn phục vụ target khác
+không cần Programming) nên build trần → bundle tắt hẳn route
+`/eng/programming`, `NavRail` ẩn luôn mục "Lập trình" — không đổi code
+Programming gì cả, chỉ vì thiếu một biến môi trường lúc build.
+
+**Đây là lần THỨ HAI xảy ra đúng lỗi này** — lần đầu 2026-08-14
+(`docs/08_hardware/foxlinx-som-ddc24/FOXLINX_DEPLOY_CHECKLIST.md` §3.3 đã
+ghi cảnh báo + lệnh đúng từ đó). Chỉ ghi vào checklist là không đủ: lệnh
+build "mặc định" (`npm run build` trần) vẫn chạy thành công, không báo lỗi
+gì, nên checklist chỉ có tác dụng nếu người/agent build **nhớ** đọc đúng
+mục đó trước khi build cho riêng board này — không có gì chặn được việc quên.
+
+**Khôi phục ngay**: `VITE_PROGRAMMING_REV_A=1 npm run build`, kiểm
+`grep -c REVA_SCOPE_ROADMAP dist/assets/index-*.js` = 0 (đúng theo checklist),
+deploy lại lên board, xác nhận qua `curl` bundle đang chạy thật trên board
+chứa route `eng/programming` và không còn marker "đã tắt".
+
+**Sửa gốc quy trình, không chỉ vá lần này**: thêm script
+`npm run build:foxlinx` (`apps/web-ui/package.json`, bake sẵn
+`VITE_PROGRAMMING_REV_A=1`) — build cho board này giờ chỉ cần nhớ TÊN script
+đúng thay vì nhớ MỘT BIẾN MÔI TRƯỜNG cụ thể phải export thủ công, giảm hẳn
+bề mặt để quên. Cập nhật checklist §3.3 dùng script mới, ghi rõ đây là lần
+tái diễn thứ 2.
+
+**Kiểm chứng**: bundle mới `grep -c REVA_SCOPE_ROADMAP` = 0 (cả bản build
+cục bộ lẫn bản đã copy lên board); `curl` bundle đang phục vụ thật trên
+`mekong-fac.ddns.net:8082` chứa chuỗi `eng/programming` — route đã hoạt
+động lại.
+
+Refs: `docs/08_hardware/foxlinx-som-ddc24/FOXLINX_DEPLOY_CHECKLIST.md` §3.3,
+entry F-OUT-001 bên dưới (bản deploy gây ra sự cố này)
+
 ### Fixed — Health Strip báo domain "historian" DEGRADED ("N điểm ghi lỗi") sai vĩnh viễn khi chưa cutover historian v2 (2026-08-17)
 
 User báo dashboard hiện `historian` = DEGRADED, "Có điểm ghi lịch sử lỗi",
