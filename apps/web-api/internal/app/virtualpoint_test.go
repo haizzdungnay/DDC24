@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -336,4 +338,153 @@ func hasValidationPath(t *testing.T, body []byte, path string) bool {
 		t.Fatalf("decode validation body: %v", err)
 	}
 	return hasConfigErrorPath(resp.Details, path)
+}
+
+func hasConfigErrorPathContaining(errs []configValidationError, needle string) bool {
+	for _, err := range errs {
+		if strings.Contains(err.Path, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// F-PROG-ASBUILT-014: validateConfigVirtualPoints phải chặn boundPointId sai
+// định dạng/capacity/kiểu tín hiệu, và không cho hai VP đang enabled cùng
+// chiếm một slot Core AV/BV — nếu không, syncVirtualPointToCore sẽ ghi đè
+// lẫn nhau âm thầm mà không ai biết.
+func TestValidateConfigVirtualPointsBoundPointId(t *testing.T) {
+	cases := []struct {
+		name    string
+		items   []VirtualPoint
+		wantErr bool
+	}{
+		{"valid AV binding", []VirtualPoint{{ID: "VP1", SignalType: "float", BoundPointID: "AV-01"}}, false},
+		{"valid AV integer binding", []VirtualPoint{{ID: "VP1", SignalType: "integer", BoundPointID: "AV-01"}}, false},
+		{"valid BV binding", []VirtualPoint{{ID: "VP1", SignalType: "boolean", BoundPointID: "BV-01"}}, false},
+		{"unbound VP unaffected", []VirtualPoint{{ID: "VP1", SignalType: "string"}}, false},
+		{"bad prefix", []VirtualPoint{{ID: "VP1", SignalType: "float", BoundPointID: "MSV-01"}}, true},
+		{"AV out of range", []VirtualPoint{{ID: "VP1", SignalType: "float", BoundPointID: "AV-33"}}, true},
+		{"BV out of range", []VirtualPoint{{ID: "VP1", SignalType: "boolean", BoundPointID: "BV-17"}}, true},
+		{"AV requires numeric signal", []VirtualPoint{{ID: "VP1", SignalType: "boolean", BoundPointID: "AV-01"}}, true},
+		{"BV requires boolean signal", []VirtualPoint{{ID: "VP1", SignalType: "float", BoundPointID: "BV-01"}}, true},
+		{"string signal cannot bind", []VirtualPoint{{ID: "VP1", SignalType: "string", BoundPointID: "AV-01"}}, true},
+		{"duplicate slot rejected", []VirtualPoint{
+			{ID: "VP1", SignalType: "float", Enabled: true, BoundPointID: "AV-01"},
+			{ID: "VP2", SignalType: "float", Enabled: true, BoundPointID: "AV-01"},
+		}, true},
+		{"disabled VP does not conflict", []VirtualPoint{
+			{ID: "VP1", SignalType: "float", Enabled: true, BoundPointID: "AV-01"},
+			{ID: "VP2", SignalType: "float", Enabled: false, BoundPointID: "AV-01"},
+		}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := validateConfigVirtualPoints(ConfigVirtualPoints{Items: tc.items})
+			got := hasConfigErrorPathContaining(errs, "boundPointId")
+			if got != tc.wantErr {
+				t.Fatalf("%s: boundPointId error = %v, want %v (errs=%+v)", tc.name, got, tc.wantErr, errs)
+			}
+		})
+	}
+}
+
+// syncRecorderCore là core giả tối giản chỉ để ghi lại lệnh ForcePointTTL đã
+// nhận — dùng riêng cho test đồng bộ VP->Core, không tái dùng pa3Core (PA3)
+// vì pa3Core không lưu lại value/id đã ghi để assert.
+type syncRecorderCore struct {
+	mu    sync.Mutex
+	calls []struct {
+		id    string
+		value any
+	}
+}
+
+func (c *syncRecorderCore) ReadStatus(context.Context) (CoreStatus, error) {
+	return CoreStatus{CoreAvailable: true}, nil
+}
+
+func (c *syncRecorderCore) ForcePointTTL(_ context.Context, id string, value any, _ bool, _ uint32, _ string) (PointDTO, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls = append(c.calls, struct {
+		id    string
+		value any
+	}{id, value})
+	return PointDTO{ID: id, Value: value, Quality: "good", Source: "core"}, nil
+}
+
+func (c *syncRecorderCore) lastCall() (string, any, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.calls) == 0 {
+		return "", nil, false
+	}
+	last := c.calls[len(c.calls)-1]
+	return last.id, last.value, true
+}
+
+// F-PROG-ASBUILT-014 (phần READ): tạo một VP có boundPointId phải đẩy giá
+// trị sang Core ngay qua ForcePointTTL — nếu không, slot AV/BV vẫn BAD/0 cho
+// tới lần ghi giá trị kế tiếp và ST Program bind VP sẽ fail-closed vô cớ.
+func TestVirtualPointCreateWithBoundPointIdSyncsToCore(t *testing.T) {
+	users := writeTestUsers(t, "admin123", RoleAdmin)
+	cfg := testConfig(t, users)
+	core := &syncRecorderCore{}
+	app, err := NewApp(cfg, nil, core, fakeOS{})
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	token, _, err := app.auth.Authenticate("admin", "admin123", "test")
+	if err != nil {
+		t.Fatalf("Authenticate: %v", err)
+	}
+	req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points",
+		`{"tag":"zone setpoint","signalType":"float","enabled":true,"writable":true,"value":28,"boundPointId":"AV-01"}`, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
+	}
+	id, value, called := core.lastCall()
+	if !called || id != "AV-01" || value != float64(28) {
+		t.Fatalf("ForcePointTTL call = id=%q value=%v called=%v, want AV-01/28", id, value, called)
+	}
+}
+
+// Ghi giá trị runtime của một VP đã bound (PUT .../virtual-points/{id}) cũng
+// phải đồng bộ lại Core — đây là đường vận hành thường xuyên nhất (operator
+// đổi setpoint), khác với lúc tạo mới.
+func TestWriteVirtualPointValueWithBoundPointIdSyncsToCore(t *testing.T) {
+	users := writeTestUsers(t, "admin123", RoleAdmin)
+	cfg := testConfig(t, users)
+	core := &syncRecorderCore{}
+	app, err := NewApp(cfg, nil, core, fakeOS{})
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	token, _, err := app.auth.Authenticate("admin", "admin123", "test")
+	if err != nil {
+		t.Fatalf("Authenticate: %v", err)
+	}
+	createReq := newAuthRequest(http.MethodPost, "/api/v1/virtual-points",
+		`{"tag":"occupied","signalType":"boolean","enabled":true,"writable":true,"value":false,"boundPointId":"BV-01"}`, token)
+	createW := httptest.NewRecorder()
+	app.Router().ServeHTTP(createW, createReq)
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", createW.Code, createW.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/points/VP1", strings.NewReader(`{"value":true}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("write status = %d body=%s", w.Code, w.Body.String())
+	}
+	id, value, called := core.lastCall()
+	if !called || id != "BV-01" || value != true {
+		t.Fatalf("ForcePointTTL call = id=%q value=%v called=%v, want BV-01/true", id, value, called)
+	}
 }

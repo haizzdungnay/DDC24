@@ -109,6 +109,12 @@ type VirtualPoint struct {
 	MathFunction    int     `json:"mathFunction,omitempty"`
 	Note            string  `json:"note,omitempty"`
 	UpdatedAt       string  `json:"updatedAt,omitempty"`
+	// BoundPointID nối VP này tới một slot AV/BV thật của Core ("AV-1".."AV-32",
+	// "BV-1".."BV-16"), rỗng = chỉ là overlay cấu hình như trước (F-PROG-ASBUILT-014).
+	// Khi đặt, giá trị VP được đồng bộ sang Core qua WebIpc mỗi lần ghi
+	// (xem syncVirtualPointToCore ở virtualpoint.go) để ST Program bind được
+	// category VP hướng READ (resolve_io_bindings chấp nhận từ 2026-08-17).
+	BoundPointID string `json:"boundPointId,omitempty"`
 }
 
 type SystemConfig struct {
@@ -353,6 +359,10 @@ type PointDTO struct {
 	Writable           bool     `json:"writable,omitempty"`
 	LogEnabled         bool     `json:"logEnabled,omitempty"`
 	LogIntervalMs      *int     `json:"logIntervalMs,omitempty"`
+	// BoundPointID — chỉ đặt cho Kind=="virtual" khi VP đã bind vào slot Core
+	// AV/BV thật (F-PROG-ASBUILT-014); Programming Point Catalog dùng field
+	// này thay cho ID thân thiện ("VP1") khi build binding cho ST Program.
+	BoundPointID       string   `json:"boundPointId,omitempty"`
 	PointID            string   `json:"point_id"`
 	TagName            string   `json:"tag_name"`
 	DisplayName        string   `json:"display_name"`

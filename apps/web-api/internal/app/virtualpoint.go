@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -66,6 +67,45 @@ func (item *VirtualPoint) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// syncVirtualPointToCore đẩy giá trị VP đã "bound" (BoundPointID != "") sang
+// slot AV/BV thật của Core qua đường WebIpc `write` sẵn có (F-PROG-ASBUILT-014
+// phần READ) — tái dùng pointTTLForcer.ForcePointTTL với ttlS=0 (không tự
+// nhả, giữ tới lần sync kế tiếp) thay vì dựng message IPC mới. Không lỗi khi
+// Core tạm không sẵn sàng (ForcePointTTL tự trả degraded, err=nil) — VP vẫn
+// là nguồn sự thật ở virtual_points.conf, đồng bộ Core chỉ là bản sao cho ST
+// Program đọc, không phải ngược lại.
+func (a *App) syncVirtualPointToCore(ctx context.Context, item VirtualPoint) {
+	if item.BoundPointID == "" {
+		return
+	}
+	forcer, ok := a.core.(pointTTLForcer)
+	if !ok {
+		return
+	}
+	value := item.Value
+	if value == nil {
+		value = defaultVirtualPointValue(item.SignalType)
+	}
+	if _, err := forcer.ForcePointTTL(ctx, item.BoundPointID, value, false, 0, "virtual-point-sync"); err != nil {
+		a.logger.Printf("virtual-point-sync: %s -> %s failed: %v", item.ID, item.BoundPointID, err)
+	}
+}
+
+// syncBoundVirtualPointsToCore đẩy lại toàn bộ VP đã "bound" sang Core một
+// lần — gọi lúc web-api khởi động (xem main.go NewApp) để tự phục hồi sau khi
+// Core hoặc web-api restart, không đợi người vận hành vô tình ghi lại VP.
+func (a *App) syncBoundVirtualPointsToCore(ctx context.Context) {
+	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		return
+	}
+	for _, item := range normalizeVirtualPointsConfig(cfg).Items {
+		if item.Enabled && item.BoundPointID != "" {
+			a.syncVirtualPointToCore(ctx, item)
+		}
+	}
+}
+
 func (a *App) handleListVirtualPoints(w http.ResponseWriter, r *http.Request) {
 	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
 	if err != nil {
@@ -120,6 +160,7 @@ func (a *App) handleCreateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 	if authority, err := a.readPointNamespaceAuthority(); err == nil {
 		item.Generation = authority.Generations[item.ID]
 	}
+	a.syncVirtualPointToCore(r.Context(), item)
 	writeJSON(w, http.StatusCreated, item)
 }
 
@@ -170,6 +211,7 @@ func (a *App) handleUpdateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	a.syncVirtualPointToCore(r.Context(), item)
 	writeJSON(w, http.StatusOK, item)
 }
 
@@ -346,6 +388,32 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 				addConfigErr(&errs, base+".value", "must match signalType")
 			}
 		}
+		if item.BoundPointID != "" {
+			prefix, channel, ok := parsePointID(item.BoundPointID)
+			switch {
+			case !ok || (prefix != "AV" && prefix != "BV"):
+				addConfigErr(&errs, base+".boundPointId", "must be AV-1..AV-32 or BV-1..BV-16")
+			case prefix == "AV" && (channel < 1 || channel > kxNAV):
+				addConfigErr(&errs, base+".boundPointId", fmt.Sprintf("AV channel must be 1..%d", kxNAV))
+			case prefix == "BV" && (channel < 1 || channel > kxNBV):
+				addConfigErr(&errs, base+".boundPointId", fmt.Sprintf("BV channel must be 1..%d", kxNBV))
+			case prefix == "AV" && !virtualPointNumericSignalType(item.SignalType):
+				addConfigErr(&errs, base+".boundPointId", "AV binding requires signalType integer or float")
+			case prefix == "BV" && item.SignalType != virtualPointSignalBoolean:
+				addConfigErr(&errs, base+".boundPointId", "BV binding requires signalType boolean")
+			}
+		}
+	}
+	boundOwner := make(map[string]string, len(cfg.Items))
+	for i, item := range cfg.Items {
+		if item.BoundPointID == "" || !item.Enabled {
+			continue
+		}
+		key := canonicalBoundPointID(item.BoundPointID)
+		if owner, taken := boundOwner[key]; taken && owner != item.ID {
+			addConfigErr(&errs, fmt.Sprintf("items[%d].boundPointId", i), fmt.Sprintf("already bound to %s", owner))
+		}
+		boundOwner[key] = item.ID
 	}
 	if noLogCount > virtualPointNoLogCapacity {
 		addConfigErr(&errs, "items", fmt.Sprintf("non-logged VP count must be <= %d", virtualPointNoLogCapacity))
@@ -406,7 +474,22 @@ func normalizeVirtualPoint(item VirtualPoint) VirtualPoint {
 			item.Value = value
 		}
 	}
+	if item.BoundPointID != "" {
+		item.BoundPointID = canonicalBoundPointID(item.BoundPointID)
+	}
 	return item
+}
+
+// canonicalBoundPointID chuẩn hoá "av1"/"AV-1"/"av-01" về đúng một dạng
+// "AV-01" để so khớp trùng lặp (boundOwner) ổn định bất kể người dùng gõ
+// kiểu nào; đầu vào không hợp lệ trả nguyên bản (đã validate riêng ở
+// validateConfigVirtualPoints, không cần chặn ở đây).
+func canonicalBoundPointID(id string) string {
+	prefix, channel, ok := parsePointID(id)
+	if !ok {
+		return strings.ToUpper(strings.TrimSpace(id))
+	}
+	return formatPointID(prefix, channel)
 }
 
 func normalizeVirtualPointUnit(unit string) string {
@@ -635,6 +718,7 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 		Writable:      item.Writable,
 		LogEnabled:    item.LogEnabled,
 		LogIntervalMs: item.LogIntervalMs,
+		BoundPointID:  item.BoundPointID,
 		PointID:       item.ID,
 		TagName:       tag,
 		DisplayName:   tag,

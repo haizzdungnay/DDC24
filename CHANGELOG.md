@@ -8,6 +8,79 @@
 
 ## [Unreleased]
 
+### Fixed — F-PROG-ASBUILT-014 (phần READ): category `VP` bind được vào ST Program qua slot Core AV/BV thật (2026-08-17)
+
+Kỹ sư Automation viết chương trình ST thật `AHU_MasterSequence` (điều khiển
+AHU đầy đủ: quạt/damper/van lạnh/van nóng/liên khóa an toàn) và cần đọc
+setpoint/lịch vận hành từ hai Virtual Point có sẵn (`VP1 SETPOINT_T`, `VP2
+Occupied`). Check báo `ST-IOMAP-008`: `resolve_io_bindings()`
+(`apps/core/application/st/st_io_map.cpp`) từ chối tường minh mọi binding
+`category=="VP"` — đúng như `F-PROG-ASBUILT-014`
+(`PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md` §4.6) đã ghi nhận: VP chỉ là
+overlay cấu hình ở Web API (`virtual_points.conf`), không map tới slot Core
+`AV`/`BV`/`MSV` thật.
+
+**Quyết định phạm vi** (do CEO/user chốt trực tiếp trong phiên, thay cho
+PM/CTO theo đúng nguyên tắc D-07 — quyết định kiến trúc cần duyệt trước khi
+code): chọn hướng (a) nối VP→Core AV/BV thật, chỉ chiều **READ** (VAR_INPUT).
+Chiều WRITE (VAR_OUTPUT ghi VP) vẫn bị chặn tường minh — chưa có đường đồng
+bộ ngược Core→Web API, để theo dõi riêng ở `F-PROG-ASBUILT-016`.
+
+**Compiler (`apps/core/application/st/st_io_map.cpp`)**: thêm
+`vp_prefix_to_point_kind()` (song song `local_prefix_to_point_kind()`), nới
+guard category từ `LOCAL`-only sang `LOCAL`/`VP`, chặn riêng
+`category=="VP" && expect_output`. `validate_point_contract()` đã có sẵn
+nhánh VP đúng (không đổi) — chỉ thiếu đường dispatch tới đây. Test mới:
+`StResolveIoBindings.AcceptsVpCategoryForInputDirection`,
+`RejectsVpCategoryForOutputDirection`; cập nhật
+`StCompileCli.IoMapInRejectsVirtualPointCategoryForOutputDirection`.
+
+**Web API — nối giá trị VP thật vào Core** (`apps/web-api/internal/app/`):
+thêm `VirtualPoint.BoundPointID`/`PointDTO.BoundPointID` (vd. `"AV-01"`,
+`"BV-01"`, rỗng = chưa bound, giữ nguyên hành vi cũ). `validateConfigVirtualPoints`
+kiểm định dạng/capacity (`KX_N_AV=32`/`KX_N_BV=16`)/khớp kiểu tín hiệu
+(AV↔integer|float, BV↔boolean)/không trùng slot giữa các VP đang enabled.
+`syncVirtualPointToCore()` đẩy giá trị VP đã bound sang Core qua
+`pointTTLForcer.ForcePointTTL` (tái dùng đúng đường WebIpc `write` sẵn có cho
+AO/DO, `ttlS=0` = không tự nhả) — gọi khi tạo/sửa VP và khi ghi giá trị runtime
+(`writeVirtualPointValue`); đồng bộ lại toàn bộ VP đã bound một lần lúc
+web-api khởi động (`syncBoundVirtualPointsToCore`, phòng Core restart mất
+state). `toPointCatalogEntry()` phát `BoundPointID` (không phải id thân
+thiện `VP1`) cho Programming Point Catalog khi đã bound — khớp định dạng
+`resolve_io_bindings()` yêu cầu. `pointCatalogDirection()` sửa: VP luôn báo
+`READ` cho Programming bất kể `Writable` (operator-writable ≠ Program-writable
+— hai trục khác nhau, gộp chung trước đây sẽ để Mapping tab cho chọn hướng
+WRITE luôn fail Check). Test mới: `TestValidateConfigVirtualPointsBoundPointId`,
+`TestVirtualPointCreateWithBoundPointIdSyncsToCore`,
+`TestWriteVirtualPointValueWithBoundPointIdSyncsToCore`,
+`TestPointCatalogDirectionVirtualAlwaysReadRegardlessOfOperatorWritable`,
+`TestToPointCatalogEntryUsesBoundPointIdForVirtualWhenBound`.
+
+**Kiểm chứng trên board Foxlinx thật** (`mekong-fac.ddns.net:8082`):
+`ctest --test-dir build/fw` 1031/1031 PASS (đủ 3 flag MODBUS/BACNET/HMI);
+`go vet ./...` sạch + `go test ./... -count=1` toàn bộ 18 package PASS. Bind
+`VP1→AV-01`, `VP2→BV-01` qua `PUT /api/v1/virtual-points/{id}` (đã đồng bộ
+sang Core), Point Catalog xác nhận trả đúng `pointId:"AV-01"/"BV-01"`. Check
+`AHU_MasterSequence` (12 input/6 output, bind `Occupied`/`ZoneSetpoint` vào
+VP thật) **PASSED** nhiều lần liên tiếp, không còn `ST-IOMAP-008`. Deploy
+`mkddc-st-compile` bản vá lên board (`/usr/sbin/mkddc-st-compile`, backup bản
+cũ) — `mkddc-core` không cần đổi vì `resolve_io_bindings()` chỉ chạy trong
+tiến trình compiler CLI, không nằm trong runtime `mkddc-core`.
+
+**Chưa xong — chặn thật, cần phiên riêng**: Commission revision đã Check
+PASSED lên Core thật liên tục bị `RECONCILE_REJECTED`/`STAGE_REJECTED` ở
+bước ACTIVATE/boundary-commit (không phải do VP — artifact đã STAGE thành
+công, nghĩa là binding VP đã resolve đúng). Core không ghi log gì ở bước
+này (`journalctl -u mkddc-core` rỗng đúng khung giờ lỗi) nên không xác định
+được nguyên nhân gốc. **Hệ quả vận hành**: mỗi lần Commission thất bại làm
+Task đang chạy chuyển `STOPPED`, phải `systemctl restart mkddc-core` để khôi
+phục (đã làm 2 lần, board hiện `RUNNING` bình thường trên revision cũ
+`e5653fdc`, không bị ảnh hưởng lâu dài). Không tiếp tục thử Commission thêm
+trong phiên này để tránh làm gián đoạn task đang chạy thật nhiều lần không
+kiểm soát được nguyên nhân. Cần: thêm log tường minh ở
+`ProgrammingRuntimeCoordinator::activate()`/`commit_staged_activation()`
+rồi thử lại có quan sát, hoặc audit riêng luồng first-cycle/boundary-commit.
+
 ### Deploy — sửa ST Editor Format/khay Dòng/cột lên Foxlinx (2026-08-17)
 
 PR #192 (`d5e0e66`) đã deploy lên `SOM-DDC-24-foxlinx`. Chỉ FE static (PR

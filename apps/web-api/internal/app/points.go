@@ -561,6 +561,7 @@ func (a *App) writeVirtualPointValue(r *http.Request, id string, value any, rele
 		return PointDTO{}, err
 	}
 	a.virtualPointRuntime.Update(RuntimePoint{ID: item.ID, Kind: "VP", Value: item.Value, Quality: "GOOD", Source: "web", Role: "runtime_value", Unit: item.Unit, SignalType: item.SignalType, Generation: item.Generation})
+	a.syncVirtualPointToCore(r.Context(), item)
 	return virtualPointDTO(item), nil
 }
 

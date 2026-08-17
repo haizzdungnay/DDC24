@@ -213,14 +213,33 @@ TEST(StResolveIoBindings, RejectsTwoVariablesClaimingSamePhysicalOutput)
     EXPECT_EQ(diags[0].code, st_diag_code::kIoMapDuplicateBinding);
 }
 
-TEST(StResolveIoBindings, RejectsUnsupportedCategoryVp)
+TEST(StResolveIoBindings, AcceptsVpCategoryForInputDirection)
 {
-    /* F-PROG-ASBUILT-014: VP không có đường dẫn runtime thật tới Core trong
-     * Rev A hiện hành (overlay cấu hình phía Web API, không ghi được SHM
-     * AV/BV mà Core đọc) — compiler phải từ chối rõ ràng, không âm thầm ghi
-     * vào raw AV/BV slot mà VP catalog không hề đọc. */
+    /* F-PROG-ASBUILT-014 (phần READ đã đóng): Web API giờ đồng bộ giá trị
+     * Virtual Point đã "bound" vào av_[]/bv_[]/msv_[] của Core qua WebIpc
+     * `write` trước mỗi chu kỳ scan (xem apps/web-api/internal/app/virtualpoint.go),
+     * nên VAR_INPUT bind category VP với point id dạng AV-n/BV-n/MSV-n phải
+     * resolve được y hệt LOCAL, không còn bị từ chối tường minh. */
     StIrModule module = compile_ok(kAhuFanControl);
-    StIoMapEntry entry = local_entry("SupplyTemp", "input", "AV1", StType::REAL);
+    StIoMapEntry entry = local_entry("SupplyTemp", "input", "AV-01", StType::REAL);
+    entry.category = "VP";
+    entry.writable = false;
+    std::vector<StDiagnostic> diags;
+    ASSERT_TRUE(resolve_io_bindings(&module, {entry}, &diags)) << (diags.empty() ? "" : diags[0].message);
+    ASSERT_EQ(module.io_bindings.size(), 1u);
+    EXPECT_EQ(module.io_bindings[0].point_kind, StPointKind::AV);
+    EXPECT_EQ(module.io_bindings[0].point_index, 1);
+    EXPECT_FALSE(module.io_bindings[0].is_output);
+}
+
+TEST(StResolveIoBindings, RejectsVpCategoryForOutputDirection)
+{
+    /* F-PROG-ASBUILT-014 (phần WRITE vẫn mở, xem F-PROG-ASBUILT-016): chưa có
+     * đường đồng bộ NGƯỢC Core->Web API cho Virtual Point, nên VAR_OUTPUT bind
+     * VP phải bị chặn tường minh — không được âm thầm ghi vào av_[]/bv_[] mà
+     * Web API/UI không bao giờ đọc lại được. */
+    StIrModule module = compile_ok(kAhuFanControl);
+    StIoMapEntry entry = local_entry("FanEnable", "output", "BV-01", StType::BOOL);
     entry.category = "VP";
     std::vector<StDiagnostic> diags;
     EXPECT_FALSE(resolve_io_bindings(&module, {entry}, &diags));

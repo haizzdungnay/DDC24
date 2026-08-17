@@ -65,6 +65,34 @@ func TestPointCatalogDirectionOutputsAreReadWrite(t *testing.T) {
 	}
 }
 
+// F-PROG-ASBUILT-014 (phần WRITE vẫn mở, F-PROG-ASBUILT-016): dù VP cho phép
+// operator sửa từ dashboard (`Writable=true`), Point Catalog phải báo READ
+// cho ST Program — chưa có đường đồng bộ ngược Core->Web API cho VAR_OUTPUT.
+func TestPointCatalogDirectionVirtualAlwaysReadRegardlessOfOperatorWritable(t *testing.T) {
+	if direction, writable := pointCatalogDirection(PointDTO{Kind: "virtual", Writable: true}); direction != "READ" || writable {
+		t.Fatalf("virtual writable=true direction=%q writable=%v, want READ/false", direction, writable)
+	}
+	if direction, writable := pointCatalogDirection(PointDTO{Kind: "virtual", Writable: false}); direction != "READ" || writable {
+		t.Fatalf("virtual writable=false direction=%q writable=%v, want READ/false", direction, writable)
+	}
+}
+
+// F-PROG-ASBUILT-014: một khi VP đã "bound" vào slot Core thật (BoundPointID),
+// Point Catalog phải phát định danh Core (vd. "AV-01") thay vì id thân thiện
+// "VP1" — đúng định dạng mà resolve_io_bindings() (Core) chấp nhận cho
+// category VP; VP chưa bound vẫn giữ nguyên id cũ (sẽ tự fail Check với lỗi
+// định danh rõ ràng thay vì bị Point Catalog giả vờ bindable).
+func TestToPointCatalogEntryUsesBoundPointIdForVirtualWhenBound(t *testing.T) {
+	bound := toPointCatalogEntry(PointDTO{ID: "VP1", Kind: "virtual", BoundPointID: "AV-01"})
+	if bound.Category != "VP" || bound.PointID != "AV-01" {
+		t.Fatalf("bound entry category=%q pointId=%q, want VP/AV-01", bound.Category, bound.PointID)
+	}
+	unbound := toPointCatalogEntry(PointDTO{ID: "VP2", Kind: "virtual"})
+	if unbound.Category != "VP" || unbound.PointID != "VP2" {
+		t.Fatalf("unbound entry category=%q pointId=%q, want VP/VP2", unbound.Category, unbound.PointID)
+	}
+}
+
 func TestPointCatalogDataTypeDigitalVsAnalog(t *testing.T) {
 	if got := pointCatalogDataType(PointDTO{Kind: "DO"}); got != "BOOL" {
 		t.Fatalf("DO dataType=%q, want BOOL", got)
