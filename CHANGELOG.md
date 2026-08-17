@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Fixed — Monitor Program báo "UNKNOWN · UNAVAILABLE" cho mọi biến bind Virtual Point dù giá trị Core hợp lệ (2026-08-17)
+
+Phát hiện ngay sau khi verify bản vá bang-bang phía trên: user chụp màn hình
+Monitor Program cho thấy `Occupied`(VP:BV-01), `ZoneSetpoint`(VP:AV-01),
+`DspSetpoint`(VP:AV-02) đều "UNKNOWN · UNAVAILABLE" trong khi các biến LOCAL
+(UI-xx) cùng bảng báo "GOOD · LIVE" bình thường.
+
+**Xác nhận trực tiếp qua socket `/run/mkddc/core.sock` (op `query`,
+`point=AV1`/`BV1`/`AV2`)**: `applied_value` đúng 100% (22, true/1, 250,
+`active_source:manual`) — Core hoàn toàn có giá trị hợp lệ, không phải lỗi
+đồng bộ VP→Core (đợt vá trước đó vẫn đúng).
+
+**Nguyên nhân gốc thật (khác lớp lỗi với các đợt vá VP trước)**: `GetMonitor`
+(`monitor.go:162`) tra "truth" của từng Binding bằng khoá
+`monitorPointKey(category, deviceId, binding.Point.PointID)` — trong đó
+`binding.Point.PointID` lấy từ Binding lưu trong Revision, luôn là id slot
+Core thật (vd `"AV-01"`, đúng định dạng `resolve_io_bindings()` yêu cầu).
+Nhưng `ReadProgrammingMonitorSnapshot` (`programming_pointcatalog.go`) khi
+dựng `MonitorPointTruth` cho category VP lại phát `PointID: point.ID` — id
+thân thiện của chính VP (`"VP1"`), **không** áp cùng phép quy đổi
+`BoundPointID` mà `toPointCatalogEntry()` (dùng cho tab Point Catalog/
+Mapping) đã có từ đợt vá F-PROG-ASBUILT-014. Hai khoá tra cứu không bao giờ
+khớp (`"VP\x00\x00AV-01"` ở Binding vs `"VP\x00\x00VP1"` ở truth) nên
+`present=false` luôn đúng, rơi vào default cứng `Quality:"UNKNOWN",
+Freshness:"UNAVAILABLE"` (`monitor.go:166`) — cùng một loại bug (thiếu quy
+đổi id VP↔Core) lộ ra ở một đường đọc khác mà đợt vá trước chưa chạm tới.
+
+**Sửa**: tách logic quy đổi thành `pointCatalogPointID(category, point)`
+dùng chung cho cả `toPointCatalogEntry()` lẫn `ReadProgrammingMonitorSnapshot()`
+— tránh lặp lại đúng bug này lần thứ ba ở một đường đọc khác trong tương lai.
+
+**Kiểm chứng**: thêm `TestReadProgrammingMonitorSnapshotUsesBoundPointIdForVirtual`
+(tạo VP thật qua handler HTTP, không inject tay — `overlayVirtualPoints()`
+chỉ đọc từ config đã lưu). `go vet ./...` sạch, `go test ./... -count=1`
+17/17 package PASS. Deploy `mkddc-web` lên board (`mkddc-web-pi.service`).
+Gọi thật `GET /api/v1/programming/runtime/monitor`: `Occupied`/`ZoneSetpoint`/
+`DspSetpoint` nay `quality=GOOD` (đúng, khớp giá trị Core xác nhận qua
+socket). `freshness=STALE` cho cả ba — **đúng hành vi, không phải lỗi**: VP
+lấy `ObservedAt` từ thời điểm ghi cuối (operator/API), không phải mỗi chu kỳ
+quét như điểm LOCAL — một setpoint đứng yên hàng giờ hợp lý là "stale" theo
+đúng nghĩa "chưa được chạm tới", không phải "mất kết nối".
+
+Refs: entry "AHU_MasterSequence: AO nhấp nháy..." ngay bên dưới (nơi phát
+hiện ra khi verify), F-PROG-ASBUILT-014 (PR #194, cùng lớp bug quy đổi id VP)
+
 ### Fixed — `AHU_MasterSequence`: AO nhấp nháy on/off (bang-bang) thay vì bám setpoint mượt + thiếu setpoint áp suất tĩnh vận hành được (2026-08-17)
 
 User quan sát Monitor Program trên board thật thấy AO dao động on/off rõ rệt
