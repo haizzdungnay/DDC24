@@ -8,6 +8,19 @@
 
 ## [Unreleased]
 
+### Added — Deploy sửa gốc ST Editor lệch grid/caret lên Foxlinx (2026-08-17)
+
+Deploy PR #189 (`951c7d0`) lên board `SOM-DDC-24-foxlinx` — chỉ FE static
+(PR không đổi Core/Go). Backup `dist.prev` giữ trên board. Smoke test PASS:
+health tổng `ok`, bundle board đang phục vụ (`index-BBstMrjO.js`) trùng
+khớp bundle vừa build cục bộ và chứa đúng chuỗi trạng thái Lưu mới, disk
+31%, nhiệt 43.2°C. Không có credential web-app trong phiên nên không tự
+xác nhận trực quan trên board — bằng chứng đầy đủ đã có ở tầng test tự
+động thật trước deploy (`e2e/st-editor-alignment.spec.ts` 10/10 PASS đọc
+`getComputedStyle`/`getBoundingClientRect` thật).
+
+Chi tiết: `docs/07_records/test-evidence/fw-som/2026-08-17-foxlinx-st-editor-alignment-fix-deploy.md`.
+
 ### Fixed — ST Editor: sửa tận gốc lỗi grid/caret/nhoè chữ (FE-ST-001..010) (2026-08-17)
 
 Người dùng báo trực tiếp kèm ảnh chụp: lưới kẻ dòng CẮT XUYÊN chữ, chữ có
