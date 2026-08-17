@@ -87,6 +87,14 @@ export function DesignWorkspacePage() {
   const updateProgramOperations = useCallback((operations: ProgrammingDraftOperation[]) => setProgramOperations(operations), [])
   const updateExecutionOperations = useCallback((operations: ProgrammingDraftOperation[]) => setExecutionOperations(operations), [])
 
+  /* Dùng chung cho nút "Kiểm tra" ở đây VÀ mục lệnh "Kiểm tra" của Bảng lệnh
+   * nhanh (ST Editor Quick Control #2, đã duyệt) — cùng một "dirty guard"
+   * D-01: không điều hướng sang Commission khi Draft còn thay đổi chưa lưu. */
+  const goToCommission = useCallback(() => {
+    if (draftDirty) return
+    navigate(`/eng/programming/projects/${projectId}/commission`)
+  }, [draftDirty, navigate, projectId])
+
   /* D-01: PGM-02 không còn tự chạy Check nên không có `checkState` thật để
    * báo — Check/Commission (PGM-03) là nơi duy nhất cập nhật giá trị này giờ
    * (`CheckCommissionPage`). Giữ nguyên `idle` ở đây thay vì suy đoán. */
@@ -171,7 +179,7 @@ export function DesignWorkspacePage() {
               variant="secondary"
               icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
               disabled={draftDirty}
-              onClick={() => navigate(`/eng/programming/projects/${projectId}/commission`)}
+              onClick={goToCommission}
             >
               {pick('Kiểm tra', 'Check')}
             </Button>
@@ -215,6 +223,7 @@ export function DesignWorkspacePage() {
           focusDiagnostic={focusDiagnostic}
           onPendingOperationsChange={updateProgramOperations}
           discardVersion={discardVersion}
+          onRunCheck={goToCommission}
         />
       </div>
       <div hidden={tab !== 'mapping'}>
