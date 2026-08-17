@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Command, FilePlus, Save, Search, Trash2, X } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { AlignLeft, Command, FilePlus, PlusSquare, Save, Search, Trash2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { createUuid } from '../../../../shared/crypto'
 import { useAuth, roleAtLeast } from '../../../auth'
@@ -33,14 +33,48 @@ function stProgramTemplate(): string {
   return 'PROGRAM NewProgram\nEND_PROGRAM\n'
 }
 
-/** `leading-5` (Tailwind) = 20px chiều cao mỗi hàng — hằng số đã được dùng
- *  sẵn ở nơi khác trong file này (vị trí dropdown gợi ý, `cursor.line * 20`).
- *  `py-3`/`p-3` = 12px đệm trên cùng trước hàng đầu tiên. Dùng chung một cặp
- *  hằng số cho gutter số dòng + overlay tô màu để đường kẻ hàng và điểm neo
- *  dropdown không bao giờ lệch nhau khi chỉnh sửa CSS sau này. */
+/** Nguồn chân lý DUY NHẤT cho số đo ST editor — gutter số dòng, overlay tô
+ *  cú pháp, textarea, dải highlight active-line và điểm neo dropdown gợi ý
+ *  ĐỀU phải dùng đúng các hằng số này, áp bằng INLINE STYLE (không qua class
+ *  Tailwind `text-sm`/`leading-5`/`p-3`).
+ *
+ *  Lý do bắt buộc inline style — đây là nguyên nhân gốc thật của lỗi lệch
+ *  dòng/nhoè chữ báo qua ảnh chụp 2026-08-17 (FE-ST-001..006), KHÔNG phải
+ *  do tính sai `background-position` như bản vá trước đó tưởng: `styles.css`
+ *  có rule `button, input, select, textarea { font: inherit }` nằm NGOÀI mọi
+ *  `@layer` (chỉ có `@import "tailwindcss"` ở đầu file, còn lại là CSS trần).
+ *  Theo CSS Cascade Layers, rule không-layer LUÔN thắng rule có layer bất kể
+ *  độ đặc hiệu — nên nó âm thầm đè `text-sm`/`leading-5` của Tailwind CHỈ
+ *  trên `<textarea>` (không đè `<pre>` gutter/overlay vì chúng không khớp
+ *  selector đó), khiến textarea render chữ theo font-size/line-height KẾ
+ *  THỪA từ phần tử cha — không phải 14px/20px như gutter/overlay giả định.
+ *  Caret và vùng chọn thật của trình duyệt (do chính textarea vẽ) vì vậy
+ *  lệch khỏi lưới 20px, và độ lệch CỘNG DỒN theo từng dòng — khớp chính xác
+ *  hiện tượng "dòng đầu gần đúng, dòng 9-10 lệch hẳn" trong ảnh chụp. Textarea
+ *  đã phải dùng inline style cho `color`/`caretColor` vì đúng lý do này (xem
+ *  comment tại chỗ khai báo `style` của textarea) — nay áp dụng nhất quán
+ *  cho CẢ BA lớp thay vì chỉ hai thuộc tính màu.
+ *
+ *  Theo khuyến nghị người dùng: KHÔNG kẻ lưới từng dòng nữa (mọi code editor
+ *  chuẩn — VS Code, Sublime — chỉ highlight active-line, không kẻ toàn bộ
+ *  hàng). Lưới cũ (`EDITOR_ROW_GRID`) đã bỏ hẳn. */
+const EDITOR_FONT_SIZE_PX = 14
 const EDITOR_ROW_HEIGHT_PX = 20
 const EDITOR_PAD_TOP_PX = 12
-const EDITOR_ROW_GRID = `repeating-linear-gradient(to bottom, transparent, transparent ${EDITOR_ROW_HEIGHT_PX - 1}px, var(--c-border) ${EDITOR_ROW_HEIGHT_PX - 1}px, var(--c-border) ${EDITOR_ROW_HEIGHT_PX}px)`
+const EDITOR_PAD_X_PX = 12
+const EDITOR_GUTTER_PAD_X_PX = 8
+const EDITOR_TAB_SIZE = 2
+
+/** Áp cho CẢ BA lớp (gutter/overlay/textarea) — chỉ khác `paddingLeft`/
+ *  `paddingRight` giữa gutter (căn phải, đệm hẹp hơn) và overlay/textarea. */
+const EDITOR_TEXT_METRICS: CSSProperties = {
+  fontFamily: '"JetBrains Mono", "Roboto Mono", Consolas, ui-monospace, SFMono-Regular, monospace',
+  fontSize: `${EDITOR_FONT_SIZE_PX}px`,
+  lineHeight: `${EDITOR_ROW_HEIGHT_PX}px`,
+  paddingTop: `${EDITOR_PAD_TOP_PX}px`,
+  paddingBottom: `${EDITOR_PAD_TOP_PX}px`,
+  tabSize: EDITOR_TAB_SIZE,
+}
 
 function emptyFbdDocument(name: string): FbdDocument {
   return {
@@ -450,8 +484,15 @@ export function SourceEditor({
    * người dùng tự khám phá điều đó sau một vòng round-trip mạng. */
   const isEmptySource = source.trim().length === 0
   const canSave = dirty && !isEmptySource
+  /* FE-ST-008: phân biệt rõ Saved/Saving/Failed thay vì chỉ disable nút Save
+   * không giải thích. `lastAttemptedSourceRef` neo trạng thái 'saved'/'failed'
+   * vào ĐÚNG giá trị buffer đã thử lưu — gõ tiếp sau một lần lưu thất bại
+   * phải rơi về "Chưa lưu" (ưu tiên hơn), không giữ mãi "Lưu thất bại" cho một
+   * buffer đã khác. */
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'failed'>('idle')
+  const lastAttemptedSourceRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const lineGutterRef = useRef<HTMLPreElement>(null)
+  const lineGutterRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLPreElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -565,6 +606,17 @@ export function SourceEditor({
     applyEditRange(next, newCursor, newCursor)
   }
 
+  /** FE-ST-008: một hàm lưu DUY NHẤT cho cả nút Lưu và `Ctrl+S` — ghi lại kết
+   *  quả (`saved`/`failed`) neo vào đúng buffer vừa thử, để trạng thái hiển
+   *  thị không nói dối khi người dùng gõ tiếp sau một lần lưu thất bại. */
+  function handleSaveSource() {
+    const attempted = source
+    lastAttemptedSourceRef.current = attempted
+    void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'ST', source: attempted }]).then((ok) => {
+      setSaveStatus(ok ? 'saved' : 'failed')
+    })
+  }
+
   function acceptCompletion(item: StCompletionItem) {
     const textarea = textareaRef.current
     if (!textarea) return
@@ -653,11 +705,15 @@ export function SourceEditor({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-[var(--c-text)]">{program.name}</h3>
         <div className="flex flex-wrap items-center gap-2">
+          {/* FE-ST-009: chuẩn hoá Find/Insert/Format/Save cùng một hàng, đều
+           * có icon + tooltip nêu rõ phím tắt — trước đây Định dạng/Chèn
+           * Point-Variable không có icon, rời rạc hơn Tìm/Lưu. */}
           <Button
             size="sm"
             variant="ghost"
             icon={<Search className="h-4 w-4" aria-hidden="true" />}
             aria-pressed={searchOpen}
+            title={pick('Tìm/Thay (Ctrl+F)', 'Find/Replace (Ctrl+F)')}
             onClick={() => {
               setSearchOpen((open) => {
                 const next = !open
@@ -674,19 +730,33 @@ export function SourceEditor({
               <Button
                 size="sm"
                 variant="ghost"
+                icon={<PlusSquare className="h-4 w-4" aria-hidden="true" />}
                 aria-pressed={insertPanelOpen}
+                title={pick('Chèn nhanh Point/Variable (Ctrl+I)', 'Quick insert Point/Variable (Ctrl+I)')}
                 onClick={() => setInsertPanelOpen((open) => !open)}
               >
                 {pick('Chèn Point/Variable', 'Insert Point/Variable')}
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => onChange(formatStSource(source))}>{pick('Định dạng', 'Format')}</Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<AlignLeft className="h-4 w-4" aria-hidden="true" />}
+                title={pick('Định dạng lại thụt lề', 'Reformat indentation')}
+                onClick={() => onChange(formatStSource(source))}
+              >
+                {pick('Định dạng', 'Format')}
+              </Button>
               <Button
                 size="sm"
                 icon={<Save className="h-4 w-4" aria-hidden="true" />}
                 loading={saving}
                 disabled={!canSave}
-                title={isEmptySource ? pick('Mã nguồn ST không được để trống', 'ST source cannot be empty') : undefined}
-                onClick={() => void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'ST', source }])}
+                title={
+                  isEmptySource ? pick('Mã nguồn ST không được để trống', 'ST source cannot be empty')
+                  : !dirty ? pick('Không có thay đổi để lưu', 'No changes to save')
+                  : pick('Lưu (Ctrl+S)', 'Save (Ctrl+S)')
+                }
+                onClick={handleSaveSource}
               >
                 {pick('Lưu', 'Save')}
               </Button>
@@ -737,37 +807,56 @@ export function SourceEditor({
         {pick(`Mã nguồn ST của ${program.name}`, `ST source for ${program.name}`)}
       </label>
       <div className="relative grid h-96 grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]">
-        {/* Con trỏ lệch dòng (báo trực tiếp trên board, 2026-08-15): gutter số
-         * dòng sinh MỘT số/dòng LOGIC (`source.split('\n')`), nhưng overlay
-         * dùng `whitespace-pre-wrap break-words` còn textarea dùng wrap mềm
-         * mặc định của trình duyệt — khi một dòng dài đủ để NGẮT DÒNG HIỂN
-         * THỊ, số dòng logic không còn khớp 1:1 với hàng hiển thị, và điểm
-         * ngắt của hai lớp (overlay tô màu vs textarea trong suốt giữ con
-         * trỏ) không đảm bảo trùng nhau tuyệt đối (khác biệt do textarea có
-         * scrollbar dọc chiếm ~15px bề rộng còn overlay thì không) — mọi
-         * dòng SAU điểm ngắt bị trôi dọc, con trỏ thật (trong textarea)
-         * không còn nằm đúng hàng chữ overlay hiển thị bên dưới nó. Sửa tận
-         * gốc: tắt hẳn word-wrap (`whitespace-pre` + `wrap="off"`), một dòng
-         * logic LUÔN là đúng một hàng hiển thị — khớp đúng giả định gutter đã
-         * có sẵn — dòng dài cuộn ngang thay vì xuống dòng. */}
-        <pre
+        {/* Con trỏ lệch dòng (báo trực tiếp trên board, 2026-08-15 và
+         * 2026-08-17 — ảnh chụp cho thấy lưới kẻ cắt xuyên chữ, không phải
+         * chỉ lệch nhẹ): tắt word-wrap (`whitespace-pre` + `wrap="off"`) đã
+         * đúng hướng (một dòng logic = đúng một hàng hiển thị), nhưng gốc
+         * lệch THẬT là `styles.css` có rule `button, input, select, textarea
+         * { font: inherit }` KHÔNG nằm trong `@layer` nào — theo CSS Cascade
+         * Layers, rule không-layer luôn thắng rule có layer bất kể độ đặc
+         * hiệu, nên nó âm thầm đè `text-sm`/`leading-5` (Tailwind, có layer)
+         * CHỈ trên `<textarea>` (không đè `<pre>` gutter/overlay) — ba lớp
+         * vì vậy KHÔNG cùng font-size/line-height thật, dù số liệu tính lưới
+         * đúng. Sửa tận gốc bằng `EDITOR_TEXT_METRICS` (inline style, luôn
+         * thắng mọi rule stylesheet bất kể layer) áp thống nhất cho cả ba
+         * lớp — xem chỗ khai báo hằng số phía trên. Bỏ hẳn lưới kẻ từng dòng
+         * theo khuyến nghị: chỉ highlight active-line, khớp mọi code editor
+         * chuẩn (VS Code/Sublime không kẻ lưới toàn bộ hàng). */}
+        <div
           ref={lineGutterRef}
           aria-hidden="true"
-          className="mono m-0 overflow-hidden border-r border-[var(--c-border)] bg-[var(--c-surface-2)] bg-repeat-y px-2 py-3 text-right text-sm leading-5 text-[var(--c-text-dim)]"
-          style={{ backgroundImage: EDITOR_ROW_GRID, backgroundPosition: `0 ${EDITOR_PAD_TOP_PX}px` }}
+          className="mono m-0 overflow-hidden border-r border-[var(--c-border)] bg-[var(--c-surface-2)] text-right text-[var(--c-text-dim)]"
+          style={{ ...EDITOR_TEXT_METRICS, paddingLeft: `${EDITOR_GUTTER_PAD_X_PX}px`, paddingRight: `${EDITOR_GUTTER_PAD_X_PX}px` }}
         >
-          {Array.from({ length: Math.max(1, source.split('\n').length) }, (_, index) => index + 1).join('\n')}
-        </pre>
+          {Array.from({ length: Math.max(1, source.split('\n').length) }, (_, index) => index + 1).map((lineNumber) => (
+            <div
+              key={lineNumber}
+              style={{ height: `${EDITOR_ROW_HEIGHT_PX}px` }}
+              className={lineNumber === cursor.line ? 'bg-[var(--c-surface)] font-semibold text-[var(--c-text)]' : undefined}
+            >
+              {lineNumber}
+            </div>
+          ))}
+        </div>
         <div className="relative h-96 overflow-hidden">
           {/* WP-10 P0: overlay tô cú pháp + gạch chân diagnostic, nằm DƯỚI
-           * textarea (chữ trong suốt, chỉ hiện con trỏ) — cùng font/padding/
-           * line-height nên khớp pixel-cho-pixel với textarea phía trên. */}
+           * textarea (chữ trong suốt, chỉ hiện con trỏ) — `EDITOR_TEXT_METRICS`
+           * (inline) khớp pixel-cho-pixel với textarea phía trên, xem lý do ở
+           * comment phía trên container. */}
           <pre
             ref={overlayRef}
             aria-hidden="true"
-            className="mono pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre bg-repeat-y p-3 text-sm leading-5"
-            style={{ backgroundImage: EDITOR_ROW_GRID, backgroundPosition: `0 ${EDITOR_PAD_TOP_PX}px` }}
+            className="mono pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre"
+            style={{ ...EDITOR_TEXT_METRICS, paddingLeft: `${EDITOR_PAD_X_PX}px`, paddingRight: `${EDITOR_PAD_X_PX}px` }}
           >
+            {/* Dải highlight active-line — con ĐẦU TIÊN của chính `<pre>` đang
+             * cuộn (không phải phần tử ngoài) nên tự cuộn theo `scrollTop`
+             * đồng bộ sẵn có, không cần state/effect riêng. */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute left-0 right-0 bg-[var(--c-surface-2)]"
+              style={{ top: `${(cursor.line - 1) * EDITOR_ROW_HEIGHT_PX + EDITOR_PAD_TOP_PX}px`, height: `${EDITOR_ROW_HEIGHT_PX}px`, opacity: 0.55 }}
+            />
             {segments.map((segment, index) => {
               const isBracket = bracketMatch !== null && (segment.start === bracketMatch.open || segment.start === bracketMatch.close) && segment.kind === 'punctuation'
               const classes = [segmentClass[segment.kind] ?? '']
@@ -800,16 +889,14 @@ export function SourceEditor({
             id={`programming-st-source-${program.programId}`}
             aria-describedby={diagnostics.length > 0 ? `programming-st-diagnostics-${program.programId}` : undefined}
             wrap="off"
-            className="mono absolute inset-0 h-96 w-full resize-none whitespace-pre border-0 bg-transparent p-3 text-sm leading-5 outline-none"
-            /* `text-transparent`/`caret-[var(--c-text)]` (Tailwind) thua global
-             * reset `textarea { color: inherit }` ở styles.css: reset đó nằm
-             * NGOÀI mọi `@layer`, và CSS hiện đại cho rule không-layer luôn
-             * thắng rule có layer bất kể độ đặc hiệu — nên chữ thật của
-             * textarea vẫn hiện, chồng lên overlay tô màu bên dưới, gây hiển
-             * thị đôi/lem chữ (phát hiện qua ảnh chụp thật, không phải test
-             * jsdom vì jsdom không tính cascade CSS). inline style thắng mọi
-             * rule stylesheet nên dùng thẳng, không phụ thuộc thứ tự layer. */
-            style={{ color: 'transparent', caretColor: 'var(--c-text)' }}
+            className="absolute inset-0 h-96 w-full resize-none whitespace-pre border-0 bg-transparent outline-none"
+            /* `color`/`caretColor` VÀ toàn bộ `EDITOR_TEXT_METRICS` (font-size/
+             * line-height/padding/tab-size) đều phải là inline style — lý do
+             * đầy đủ ở comment tại chỗ khai báo `EDITOR_TEXT_METRICS` phía
+             * trên (rule `textarea { font: inherit }` không-layer trong
+             * `styles.css` đè bất kỳ class Tailwind nào, kể cả `text-sm`/
+             * `leading-5`/`p-3`, không chỉ `text-transparent`/`caret-*`). */
+            style={{ ...EDITOR_TEXT_METRICS, paddingLeft: `${EDITOR_PAD_X_PX}px`, paddingRight: `${EDITOR_PAD_X_PX}px`, color: 'transparent', caretColor: 'var(--c-text)' }}
             value={source}
             readOnly={!canEdit}
             spellCheck={false}
@@ -822,7 +909,20 @@ export function SourceEditor({
                * nguyên nhân khay "Dòng/cột" từng hiện lệch dòng thật (lỗi
                * người dùng báo). Bàn phím thường (không qua `applyEdit`) vẫn
                * cần đường riêng này vì trình duyệt tự chèn ký tự, không đi
-               * qua `handleAutoIndentEnter`/`acceptCompletion`. */
+               * qua `handleAutoIndentEnter`/`acceptCompletion`.
+               *
+               * Đặt `pendingCursorRef` NGAY Ở ĐÂY (giống hệt `applyEditRange`)
+               * dù trình duyệt đã tự ghi `.value` này rồi: `setCursor`/
+               * `refreshCompletion` bên dưới có thể kích hoạt render lại
+               * TRƯỚC KHI prop `source` (đổi qua `onChange` → state cha) kịp
+               * cập nhật, và React reconciliation của controlled input khi đó
+               * ghi `.value` VỀ LẠI prop `source` cũ — y hệt lỗi đã sửa ở
+               * `applyEdit()`, chỉ khác đường vào (gõ tay thường, không qua
+               * Enter/autocomplete/Find-Replace). Trong app thật, cha luôn
+               * batch kịp nên hiếm khi lộ ra — nhưng không nên dựa vào đúng
+               * thời điểm batch của React để đúng, `useLayoutEffect` đảm bảo
+               * đúng bất kể cha cập nhật nhanh hay chậm. */
+              pendingCursorRef.current = { value: next, selectionStart: offset, selectionEnd: offset }
               onChange(next)
               setCursor(offsetToLineColumn(next, offset))
               refreshCompletion(next, offset)
@@ -851,7 +951,7 @@ export function SourceEditor({
                 event.preventDefault(); setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0); return
               }
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && canEdit && canSave) {
-                event.preventDefault(); void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'ST', source }]); return
+                event.preventDefault(); handleSaveSource(); return
               }
               /* ST Editor Quick Control (đã duyệt) — phím tắt cho thanh lệnh
                * nhanh vùng chọn (#1) và panel chèn nhanh (#3). */
@@ -948,7 +1048,20 @@ export function SourceEditor({
           {pick('Mã nguồn ST không được để trống — cần ít nhất khung PROGRAM/END_PROGRAM để lưu.', 'ST source cannot be empty — needs at least a PROGRAM/END_PROGRAM skeleton to save.')}
         </p>
       )}
-      {dirty && !isEmptySource && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
+      {/* FE-ST-008: bốn trạng thái tách biệt, ưu tiên "Lưu thất bại" trước
+       * "Chưa lưu" chung chung — `lastAttemptedSourceRef` bảo đảm chỉ hiện
+       * đúng khi buffer hiện tại CHÍNH LÀ buffer vừa thử lưu (gõ tiếp sau khi
+       * thất bại phải rơi về "Chưa lưu", không giữ mãi thông báo lỗi cũ). */}
+      {saving && <p className="text-xs text-[var(--c-text-dim)]">{pick('Đang lưu…', 'Saving…')}</p>}
+      {!saving && saveStatus === 'failed' && source === lastAttemptedSourceRef.current && (
+        <p className="text-xs text-[var(--c-fault-fg)]">{pick('Lưu thất bại — thử lại.', 'Save failed — try again.')}</p>
+      )}
+      {!saving && !(saveStatus === 'failed' && source === lastAttemptedSourceRef.current) && dirty && !isEmptySource && (
+        <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>
+      )}
+      {!saving && !dirty && saveStatus === 'saved' && source === lastAttemptedSourceRef.current && (
+        <p className="text-xs text-[var(--c-good-fg)]">{pick('Đã lưu.', 'Saved.')}</p>
+      )}
     </div>
   )
 }

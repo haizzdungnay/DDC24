@@ -1,10 +1,11 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
 import { SourceEditor } from './ProgramsTab'
-import type { ProgrammingDiagnostic, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
+import type { ProgrammingDiagnostic, ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
 
 function program(document: string): ProgrammingProgram {
   return { programId: 'program-1', name: 'AHU_FanControl', kind: 'PROGRAM', language: 'ST', document }
@@ -17,9 +18,10 @@ function renderEditor(source: string, options?: {
   pointCatalogStatus?: 'idle' | 'loading' | 'ready' | 'error'
   pointCatalogItems?: ProgrammingPointCatalogEntry[]
   onEnsurePointCatalogLoaded?: () => void
+  onSave?: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
 }) {
   const onChange = options?.onChange ?? vi.fn()
-  const onSave = vi.fn().mockResolvedValue(true)
+  const onSave = options?.onSave ?? vi.fn().mockResolvedValue(true)
   const onEnsurePointCatalogLoaded = options?.onEnsurePointCatalogLoaded ?? vi.fn()
   const utils = render(
     <I18nProvider>
@@ -220,5 +222,98 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { canEdit: false })
     expect(textarea).toHaveAttribute('readonly')
     expect(screen.queryByRole('button', { name: /Định dạng|Format/ })).not.toBeInTheDocument()
+  })
+
+  describe('FE-ST-008: trạng thái Lưu rõ ràng (Saving/Failed/Chưa lưu) thay vì chỉ disable nút không giải thích', () => {
+    /** `renderEditor` (dùng cho phần lớn file này) cố ý KHÔNG có state thật
+     *  đằng sau `source`/`program.document` — `onChange` mock không phản hồi
+     *  lại prop mới, đúng cho các test chỉ đọc DOM trực tiếp
+     *  (`textarea.value`/`.selectionStart` do `pendingCursorRef` ghi tay).
+     *  Nhưng `dirty`/`canSave`/trạng thái Lưu tính từ PROP `source` thật —
+     *  cần một harness có state thật, mô phỏng đúng cách `ProgramsTab` (cha
+     *  thật) cập nhật `buffers`/`program.document` sau khi gõ và sau khi Lưu
+     *  thành công, nếu không nút Lưu sẽ luôn bị coi là "không dirty". */
+    function renderStatefulEditor(initialSource: string, onSaveImpl: (operations: ProgrammingDraftOperation[]) => Promise<boolean>) {
+      function Harness() {
+        const [source, setSource] = useState(initialSource)
+        const [committed, setCommitted] = useState(initialSource)
+        const handleSave = async (operations: ProgrammingDraftOperation[]) => {
+          const ok = await onSaveImpl(operations)
+          if (ok) {
+            const op = operations.find((item): item is Extract<ProgrammingDraftOperation, { op: 'replaceProgramSource' }> => item.op === 'replaceProgramSource')
+            if (op) setCommitted(op.source)
+          }
+          return ok
+        }
+        return (
+          <SourceEditor
+            program={program(committed)}
+            source={source}
+            canEdit
+            saving={false}
+            diagnostics={[]}
+            focusDiagnostic={null}
+            onChange={setSource}
+            onSave={handleSave}
+            pointCatalogStatus="idle"
+            pointCatalogItems={[]}
+            pointCatalogError={null}
+            onEnsurePointCatalogLoaded={vi.fn()}
+          />
+        )
+      }
+      const utils = render(<I18nProvider><Harness /></I18nProvider>)
+      return { ...utils, textarea: screen.getByLabelText(/Mã nguồn ST/) as HTMLTextAreaElement }
+    }
+
+    it('Lưu thành công: "Đã lưu." hiện ra, nút Lưu quay lại disabled vì không còn gì để lưu', async () => {
+      const onSave = vi.fn().mockResolvedValue(true)
+      const { textarea } = renderStatefulEditor('PROGRAM P\nEND_PROGRAM\n', onSave)
+      fireEvent.change(textarea, { target: { value: 'PROGRAM P\nX := 1;\nEND_PROGRAM\n' } })
+      expect(screen.getByText('Chưa lưu.')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu' }))
+      await waitFor(() => expect(screen.getByText('Đã lưu.')).toBeInTheDocument())
+      expect(screen.queryByText('Chưa lưu.')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Lưu' })).toBeDisabled()
+    })
+
+    it('Lưu thất bại: hiện "Lưu thất bại — thử lại." thay vì im lặng hoặc "Chưa lưu" chung chung', async () => {
+      const onSave = vi.fn().mockResolvedValue(false)
+      const { textarea } = renderStatefulEditor('PROGRAM P\nEND_PROGRAM\n', onSave)
+      fireEvent.change(textarea, { target: { value: 'PROGRAM P\nX := 1;\nEND_PROGRAM\n' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu' }))
+
+      await waitFor(() => expect(onSave).toHaveBeenCalled())
+      await waitFor(() => expect(screen.getByText('Lưu thất bại — thử lại.')).toBeInTheDocument())
+      expect(screen.queryByText('Chưa lưu.')).not.toBeInTheDocument()
+    })
+
+    it('gõ tiếp sau khi lưu thất bại: thông báo lỗi cũ biến mất, quay về "Chưa lưu." — không giữ mãi lỗi của buffer đã khác', async () => {
+      const onSave = vi.fn().mockResolvedValue(false)
+      const { textarea } = renderStatefulEditor('PROGRAM P\nEND_PROGRAM\n', onSave)
+      fireEvent.change(textarea, { target: { value: 'PROGRAM P\nX := 1;\nEND_PROGRAM\n' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu' }))
+      await waitFor(() => expect(screen.getByText('Lưu thất bại — thử lại.')).toBeInTheDocument())
+
+      fireEvent.change(textarea, { target: { value: 'PROGRAM P\nX := 2;\nEND_PROGRAM\n' } })
+      expect(screen.queryByText('Lưu thất bại — thử lại.')).not.toBeInTheDocument()
+      expect(screen.getByText('Chưa lưu.')).toBeInTheDocument()
+    })
+
+    it('nút Lưu bị disable vì KHÔNG có gì để lưu (không dirty) có tooltip giải thích, không im lặng', () => {
+      const source = 'PROGRAM P\nEND_PROGRAM\n'
+      renderEditor(source)
+      const saveButton = screen.getByRole('button', { name: 'Lưu' })
+      expect(saveButton).toBeDisabled()
+      expect(saveButton).toHaveAttribute('title', 'Không có thay đổi để lưu')
+    })
+
+    it('nút Lưu bị disable vì nguồn rỗng có tooltip giải thích khác (đã có từ trước, không bị đè bởi finding mới)', () => {
+      renderEditor('   ')
+      const saveButton = screen.getByRole('button', { name: 'Lưu' })
+      expect(saveButton).toBeDisabled()
+      expect(saveButton).toHaveAttribute('title', 'Mã nguồn ST không được để trống')
+    })
   })
 })

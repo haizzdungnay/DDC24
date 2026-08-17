@@ -8,6 +8,73 @@
 
 ## [Unreleased]
 
+### Fixed — ST Editor: sửa tận gốc lỗi grid/caret/nhoè chữ (FE-ST-001..010) (2026-08-17)
+
+Người dùng báo trực tiếp kèm ảnh chụp: lưới kẻ dòng CẮT XUYÊN chữ, chữ có
+dấu hiệu nhoè/double-render, caret gần như không xác định được vị trí —
+đánh giá bản vá `wrap="off"`+lưới kẻ trước đó (cùng ngày) CHƯA đủ, ra
+blocker FE-ST-001..006 trước khi làm tiếp Quick Control.
+
+**Nguyên nhân gốc thật** (không phải background-position tính sai như tưởng
+lúc đầu): `styles.css` có rule `button, input, select, textarea { font:
+inherit }` KHÔNG nằm trong `@layer` nào (chỉ `@import "tailwindcss"` ở đầu
+file). Theo CSS Cascade Layers, rule không-layer LUÔN thắng rule có layer
+bất kể độ đặc hiệu — nên nó âm thầm đè `text-sm`/`leading-5` (Tailwind, có
+layer) CHỈ trên `<textarea>` (không đè `<pre>` gutter/overlay), khiến
+textarea render chữ theo font-size/line-height KẾ THỪA từ phần tử cha,
+không phải 14px/20px như gutter/overlay giả định. Caret/vùng chọn thật (do
+chính textarea vẽ) vì vậy lệch khỏi lưới, và độ lệch CỘNG DỒN theo từng
+dòng — khớp chính xác hiện tượng "dòng đầu gần đúng, dòng 9-10 lệch hẳn"
+trong ảnh chụp. **jsdom (mọi test component hiện có) không tính cascade
+CSS/font metrics nên không bao giờ bắt được lớp lỗi này** — chỉ phát hiện
+được qua Chrome thật.
+
+**Cách sửa** (`EDITOR_TEXT_METRICS`, một hằng số CSS-in-JS duy nhất áp bằng
+inline style cho cả ba lớp — inline style luôn thắng mọi rule stylesheet
+bất kể layer):
+- Gutter/overlay/textarea giờ CÙNG font-size 14px, line-height 20px,
+  padding, tab-size từ một nguồn duy nhất — không còn ba nơi khai riêng dễ
+  lệch.
+- **Bỏ hẳn lưới kẻ từng dòng** theo khuyến nghị người dùng (VS Code/Sublime
+  không kẻ lưới toàn bộ hàng) — thay bằng **active-line highlight** (FE-ST-007):
+  dải nền overlay + số dòng gutter đậm cho đúng dòng con trỏ đang đứng, tự
+  cuộn theo vì là con của chính `<pre>` đang cuộn.
+- Gutter đổi từ một khối `<pre>` text nối `\n` sang từng `<div>` một dòng —
+  cho phép highlight đúng dòng mà không đụng logic tô cú pháp phức tạp của
+  overlay.
+- **FE-ST-008** — trạng thái Lưu tách bạch: "Đang lưu…"/"Lưu thất bại — thử
+  lại."/"Chưa lưu."/"Đã lưu." thay vì chỉ disable nút không giải thích; nút
+  Lưu disabled có tooltip nêu lý do (rỗng vs không có gì đổi). Gõ tiếp sau
+  một lần lưu thất bại tự quay về "Chưa lưu" (neo theo đúng buffer vừa thử,
+  không giữ mãi lỗi cũ của bản đã khác).
+- **FE-ST-009** — chuẩn hoá toolbar: Tìm/Chèn Point-Variable/Định dạng/Lưu
+  đều có icon + tooltip nêu phím tắt (trước đây Định dạng/Chèn Point-Variable
+  không có icon).
+- Sửa kèm một khoảng hở phát hiện khi viết test cho phần trên: đường gõ
+  phím THƯỜNG (không qua Enter tự thụt lề/autocomplete/Find-Replace) chưa
+  được bọc bằng cơ chế `pendingCursorRef`+`useLayoutEffect` đã sửa hồi
+  17/8 sớm hơn cùng ngày — về lý thuyết có thể bị React ghi đè `.value`
+  ngược lại nếu component cha re-render không kịp trong cùng nhịp (không
+  lộ trong app thật vì cha luôn batch kịp, nhưng không nên dựa vào đúng
+  thời điểm batch để đúng). Áp cùng cơ chế cho cả đường gõ phím thường.
+
+**Bằng chứng — không chỉ jsdom.** File e2e mới `st-editor-alignment.spec.ts`
+(FE-ST-010, Chrome thật, đọc `getComputedStyle`/`getBoundingClientRect`
+thật): computed font-size/line-height BẰNG NHAU giữa 3 lớp; không còn
+`backgroundImage`; hàng gutter N đúng công thức pixel ở dòng 1/10/59;
+active-line highlight đúng vị trí; đồng bộ scrollTop ở tài liệu 1200 dòng;
+đồng bộ scrollLeft cuộn ngang; metrics ổn định qua zoom 125%/150%, qua
+Ctrl+F/Ctrl+P mở-đóng, qua resize viewport — **10/10 PASS**.
+
+Test: `SourceEditor.test.tsx` thêm 5 test FE-ST-008 (thành công/thất bại/gõ
+tiếp sau lỗi/hai lý do disabled) — 17/17 PASS; FE toàn bộ 75 file/670 test
+PASS; `npx playwright test e2e/programming.spec.ts e2e/st-editor-alignment.spec.ts`
+16/16 PASS bao gồm quét WCAG A/AA.
+
+Refs: báo cáo trực tiếp kèm ảnh chụp 2026-08-17 (FE-ST-001..010, blocker),
+`styles.css` rule `font: inherit`, `ProgramsTab.tsx` chỗ khai báo
+`EDITOR_TEXT_METRICS`.
+
 ### Added — Deploy ST Editor Quick Control + sửa cursor lệch dòng lên Foxlinx (2026-08-17)
 
 Deploy PR #187 (`80e0e3c`) lên board `SOM-DDC-24-foxlinx` — chỉ FE static
