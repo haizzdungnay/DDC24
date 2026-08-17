@@ -8,6 +8,108 @@
 
 ## [Unreleased]
 
+### Added — ST Editor Quick Control: thanh lệnh nhanh vùng chọn, Bảng lệnh Ctrl+P, panel chèn Point/Variable (2026-08-17)
+
+Triển khai ba đề xuất UX cho ST Editor (`ProgramsTab.tsx`, workspace PGM-02)
+sau khi duyệt spec review (artifact "ST Editor Quick Control") kèm 4 quyết
+định cụ thể. Bối cảnh: người dùng báo trực tiếp con nháy chọn lệch dòng
+grid — sửa gốc (đã ghi ở mục dưới) rồi mới thêm ba cơ chế thao tác nhanh.
+
+- **Thanh lệnh nhanh nổi theo vùng chọn** (`SelectionQuickActions.tsx`):
+  hiện khi bôi đen ST không rỗng — Ghi chú (`Ctrl+/`, toggle `(* … *)` đối
+  xứng), Bọc IF (chèn khung `IF TRUE THEN…END_IF;` quanh trọn dòng, điều
+  kiện `TRUE` được chọn sẵn để gõ đè), Nhảy ngoặc khớp (`Ctrl+Shift+\`).
+  **Quyết định #03**: CHỈ có `IF` — bỏ `FOR`/`WHILE` khỏi spec ban đầu vì
+  `ST_SUBSET_SPEC_MK-DDC-24_VI.md` §5.5 loại hẳn hai từ khoá này khỏi Rev
+  A.0 (P1 an toàn thời gian thực: "Không có WHILE/REPEAT/FOR với biên
+  động" — vòng lặp không biên tĩnh có thể khiến một scan không kết thúc
+  trong thời gian chặn trên). Cung cấp nút bọc FOR/WHILE sẽ tạo mã LUÔN bị
+  Check từ chối 100%, đánh lừa người dùng nghĩ dialect này hỗ trợ vòng lặp
+  — phát hiện khi đọc lại `stEditorSupport.ts`/`st_parser.cpp`, sửa scope
+  ngay trước khi cắm dây thay vì lặng lẽ implement sai.
+- **Bảng lệnh nhanh** (`CommandPalette.tsx`, `Ctrl+P`): tìm xuyên suốt
+  Draft — mọi Program, biến ST đã khai báo, ba lệnh Định dạng/Lưu/Kiểm
+  tra. **Quyết định #01**: `Ctrl+P`, `preventDefault()` trong toàn
+  `ProgramsTab` (thay lệnh In trình duyệt, cùng tiền lệ `Ctrl+F`/`Ctrl+S`
+  đã có). **Quyết định #04**: chỉ mục tính qua `useMemo` phụ thuộc
+  `buffers`/`document.programs` — gõ trong ô tìm chỉ lọc mảng đã dựng sẵn
+  (`filterPaletteEntries`), không tokenize lại ST mỗi phím gõ. Nhảy tới
+  biến ở Program KHÁC tái dùng đúng cơ chế `focusDiagnostic` sẵn có (D-01),
+  không viết thêm prop/hiệu ứng thứ hai cho cùng việc "chọn vùng sau khi
+  Program mới mount". **Không có mục "diagnostic"**: `DesignWorkspacePage`
+  (D-01) không còn truyền diagnostic thật nào vào `ProgramsTab` nữa (Check/
+  Problems đã chuyển hẳn sang PGM-03) — một mục Bảng lệnh chỉ để hiển thị
+  danh sách LUÔN RỖNG là tính năng giả, bỏ khỏi scope thay vì cắm dây chết.
+- **Panel chèn nhanh Point & Variable** (`InsertPointVariablePanel.tsx`,
+  `Ctrl+I`): duyệt biến đã khai báo (`collectStSymbols`, có sẵn, không
+  fetch thêm) + Point đã ánh xạ (LOCAL/VP/MB_RTU), chèn tên thô tại con
+  trỏ — không tạo Binding, không tự Lưu/Kiểm tra. **Quyết định #02**: hook
+  mới `useLazyProgrammingPointCatalog` (`api/queries.ts`) — KHÔNG fetch
+  `GET /point-catalog` khi mở tab Chương trình; chỉ fetch lần đầu mở panel,
+  cache sống ở `ProgramsTab` (cha) nên các lần mở tiếp theo/đổi Program
+  không tạo thêm request. Đây là hook riêng, không tái dùng
+  `useProgrammingPointCatalog` (eager+poll 10 s, đã dùng ở `MappingTab`)
+  vì hợp đồng lazy/one-shot khác hẳn.
+
+Đổi kèm: `applyEdit`/`pendingCursorRef` trong `SourceEditor` tổng quát hoá
+thành `applyEditRange` (vùng chọn, không chỉ một điểm) để Ghi chú/Bọc IF
+chọn sẵn phần vừa đổi; `ProgramsTab` nhận `onRunCheck` (callback điều
+hướng sang PGM-03, tái dùng handler có sẵn của nút "Kiểm tra" ở
+`DesignWorkspacePage` — không tự `useNavigate` để giữ `ProgramsTab` không
+phụ thuộc router).
+
+Test: `quickControl.test.ts` (13 test — toggle comment round-trip, wrap-IF
+đúng thụt lề/điều kiện chọn sẵn, build/filter palette entries, xác nhận
+KHÔNG có mục diagnostic); 6 test tích hợp mới ở `DesignWorkspacePage.test.tsx`
+(Ctrl+P mở/Escape đóng không tự Lưu; điều hướng chéo Program qua biến; lệnh
+"Kiểm tra" điều hướng đúng PGM-03; Ghi chú/Bọc IF transform buffer đúng,
+không nút FOR/WHILE; lazy-load point-catalog đúng 1 request khi mở panel
+lần đầu, 0 request thêm khi mở lại — đếm theo DELTA vì `MappingTab` tự poll
+nền độc lập, đếm tuyệt đối sẽ sai). Toàn bộ: `tsc --noEmit` sạch, `eslint
+--max-warnings=0` sạch, `npx vitest --run --environment jsdom src` → 75
+file/665 test PASS (không giảm), `npm run build` PASS (kèm gate contract
+error-catalog/API-client/FBD), `npx playwright test e2e/programming.spec.ts`
+→ 5/5 PASS bao gồm quét WCAG A/AA tự động.
+
+Refs: ST Editor Quick Control (artifact review), quyết định #01-04,
+`ST_SUBSET_SPEC_MK-DDC-24_VI.md` §5.5, DDD-FE-PROG-001.
+
+### Fixed — ST editor: con nháy/vùng chọn lệch grid dòng khi soft-wrap (2026-08-17)
+
+Phát hiện qua báo cáo trực tiếp: con nháy chọn trong `SourceEditor` (ST)
+không khớp hàng khi vùng chọn hiển thị. Nguyên nhân gốc: gutter đánh số
+dòng đếm theo `\n` (dòng LOGIC), nhưng textarea/overlay trước đó tự xuống
+dòng mềm (soft-wrap) khi một dòng ST dài hơn bề rộng khung — dòng đó chiếm
+2+ hàng hiển thị nhưng gutter chỉ tính 1, khiến mọi số dòng SAU điểm ngắt
+trôi lệch khỏi hàng thật.
+
+Sửa tận gốc (không phải patch triệu chứng): tắt hẳn soft-wrap
+(`wrap="off"` + `whitespace-pre` trên cả textarea/overlay/gutter), dòng dài
+cuộn ngang thay vì xuống dòng — một dòng nguồn LUÔN là đúng một hàng hiển
+thị, khớp giả định gutter đã có sẵn, đúng hành vi Notepad/mọi code editor
+chuẩn. Thêm lưới kẻ mỗi hàng 20px (`EDITOR_ROW_GRID`, `repeating-linear-
+gradient` neo `background-origin: content-box` đúng mép chữ, không phải
+mép padding) để người dùng tự kiểm tra được bằng mắt.
+
+Bản vá đầu (từ một phiên khác, để lại local uncommitted) đã đúng hướng
+nhưng có một regression: `applyEdit()` ghi tay `textarea.value` NGAY trong
+lúc gọi `setCursor()` — vì `<textarea value={source}>` là controlled
+component, `setCursor` (state cục bộ) kích hoạt render lại ngay lập tức,
+và ở lần render đó React thấy prop `source` CHƯA kịp đổi (đổi qua `onChange`
+→ state cha, một nhịp khác) nên reconciliation ghi `.value` VỀ LẠI giá trị
+cũ — xoá mất chữ vừa gõ. Lộ ra qua 3 test mới (`SourceEditor.test.tsx`)
+tự chính phiên đó viết nhưng chưa từng chạy xanh. Sửa bằng
+`pendingCursorRef` + `useLayoutEffect` không phụ thuộc gì (chạy lại sau
+MỌI lần commit): ghi `.value`/selection SAU KHI React đã tự xử lý xong prop
+`source` — không còn ai ghi đè lại. Sửa thêm 1 lỗi off-by-one trong chính
+test mới (`'A := NEW;'.length` lẫn dấu `;` không thuộc phần vừa Replace).
+
+Test: `SourceEditor.test.tsx` 12/12 PASS (từ 3 lỗi → 0); FE toàn bộ
+502/502 PASS lúc phát hiện, không giảm.
+
+Refs: báo cáo người dùng trực tiếp 2026-08-17, `DesignWorkspacePage.tsx`
+comment gốc "Con trỏ lệch dòng".
+
 ### Added — WP-12 RETAIN Reset (CTO/Product Owner approval 2026-08-15 §7-10, Phương án B)
 
 CTO/Product Owner chốt Phương án B (runtime-coordinated reset, cần

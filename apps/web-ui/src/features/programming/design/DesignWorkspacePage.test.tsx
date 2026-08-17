@@ -367,3 +367,183 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument())
   })
 })
+
+describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisions #01-04)', () => {
+  it('Ctrl+P mở Bảng lệnh nhanh, Escape đóng — không tự Lưu/Kiểm tra', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM P\nVAR\n  Supply : REAL;\nEND_VAR\nEND_PROGRAM\n' })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    const textarea = await screen.findByLabelText(/Mã nguồn ST/)
+
+    fireEvent.keyDown(textarea, { key: 'p', ctrlKey: true })
+    expect(screen.getByRole('dialog', { name: 'Bảng lệnh nhanh' })).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Bảng lệnh nhanh' })).not.toBeInTheDocument())
+
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+  })
+
+  it('Bảng lệnh nhanh: chọn biến ở Program KHÁC — đổi Program đang mở và chọn đúng vùng, không tự Lưu (tìm xuyên Draft, quyết định #04)', async () => {
+    const sourceA = 'PROGRAM A\nVAR\n  Supply : REAL;\nEND_VAR\nEND_PROGRAM\n'
+    const sourceB = 'PROGRAM B\nVAR\n  Backup : REAL;\nEND_VAR\nEND_PROGRAM\n'
+    const project = baseProject()
+    project.draft!.programs.push(
+      { programId: 'program-a', name: 'Program A', kind: 'PROGRAM', language: 'ST', document: sourceA },
+      { programId: 'program-b', name: 'Program B', kind: 'PROGRAM', language: 'ST', document: sourceB },
+    )
+    project.draft!.task.programOrder = ['program-a', 'program-b']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Program A')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Program A'))
+    const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+    expect(textarea).toHaveValue(sourceA)
+
+    fireEvent.keyDown(textarea, { key: 'p', ctrlKey: true })
+    const input = screen.getByPlaceholderText(/Nhảy tới Program, biến/)
+    fireEvent.change(input, { target: { value: 'Backup' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => expect(screen.getByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)).toHaveValue(sourceB))
+    const nextTextarea = screen.getByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+    const expectedOffset = sourceB.indexOf('Backup')
+    await waitFor(() => expect(nextTextarea.selectionStart).toBe(expectedOffset))
+    expect(nextTextarea.selectionEnd).toBe(expectedOffset + 'Backup'.length)
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+  })
+
+  it('Bảng lệnh nhanh: mục "Kiểm tra" điều hướng sang PGM-03 giống hệt nút Kiểm tra (D-01) — chỉ khi người dùng chủ động chọn', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM P\nEND_PROGRAM\n' })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    const textarea = await screen.findByLabelText(/Mã nguồn ST/)
+
+    fireEvent.keyDown(textarea, { key: 'p', ctrlKey: true })
+    const input = screen.getByPlaceholderText(/Nhảy tới Program, biến/)
+    fireEvent.change(input, { target: { value: 'Kiểm tra' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => expect(screen.getByText('Check & Commission page')).toBeInTheDocument())
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingCheck')).toBe(false)
+  })
+
+  it('Thanh lệnh nhanh vùng chọn: Ghi chú bọc (* … *) quanh đúng vùng chọn — chỉ đổi buffer, không tự Lưu/Kiểm tra', async () => {
+    const source = 'PROGRAM P\n  X := 1;\nEND_PROGRAM\n'
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+
+    const start = source.indexOf('X := 1;')
+    const end = start + 'X := 1;'.length
+    textarea.setSelectionRange(start, end)
+    fireEvent.select(textarea)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Ghi chú/ }))
+    expect(textarea.value).toBe('PROGRAM P\n  (* X := 1; *)\nEND_PROGRAM\n')
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+  })
+
+  it('Thanh lệnh nhanh vùng chọn: Bọc IF chèn khung IF TRUE THEN…END_IF quanh dòng đã chọn, điều kiện TRUE được chọn sẵn — chỉ FOR/WHILE bị loại vì compiler chưa hỗ trợ (ST_SUBSET_SPEC §5.5), KHÔNG có trong danh sách nút', async () => {
+    const source = 'PROGRAM P\n  X := 1;\nEND_PROGRAM\n'
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+
+    const start = source.indexOf('X := 1;')
+    const end = start + 'X := 1;'.length
+    textarea.setSelectionRange(start, end)
+    fireEvent.select(textarea)
+
+    const toolbar = await screen.findByRole('toolbar', { name: 'Lệnh nhanh vùng chọn' })
+    expect(within(toolbar).queryByText(/FOR|WHILE/)).not.toBeInTheDocument()
+    fireEvent.click(within(toolbar).getByRole('button', { name: /Bọc IF/ }))
+
+    expect(textarea.value).toBe('PROGRAM P\n  IF TRUE THEN\n    X := 1;\n  END_IF;\nEND_PROGRAM\n')
+    expect(textarea.value.slice(textarea.selectionStart, textarea.selectionEnd)).toBe('TRUE')
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+  })
+
+  it('Panel chèn nhanh Point/Variable: mở panel gọi GET /point-catalog đúng một lần thêm, đóng-mở lại KHÔNG gọi lại (cache, quyết định #02)', async () => {
+    // Lưu ý: `MappingTab` (luôn mount nền theo TASK-PROG-506) tự poll
+    // point-catalog độc lập, đếm TUYỆT ĐỐI ("chưa từng gọi") sẽ sai — đếm
+    // theo DELTA quanh việc mở panel mới đúng là điều quyết định #02 cần.
+    const source = 'PROGRAM P\nEND_PROGRAM\n'
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') {
+        return Promise.resolve({ items: [{ category: 'LOCAL', pointId: 'AO-01', name: 'AO-01', dataType: 'REAL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: 1 }] })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    await screen.findByLabelText(/Mã nguồn ST/)
+
+    const countCatalogCalls = () => client.request.mock.calls.filter(([operationId]) => operationId === 'getProgrammingPointCatalog').length
+    const before = countCatalogCalls()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chèn Point/Variable' }))
+    await waitFor(() => expect(countCatalogCalls()).toBe(before + 1))
+    await waitFor(() => expect(screen.getByText('AO-01')).toBeInTheDocument())
+
+    // Đóng rồi mở lại — dùng cache, không thêm request nào nữa.
+    fireEvent.click(screen.getByRole('button', { name: 'Chèn Point/Variable' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Chèn Point/Variable' }))
+    await waitFor(() => expect(screen.getByText('AO-01')).toBeInTheDocument())
+    expect(countCatalogCalls()).toBe(before + 1)
+
+    const textarea = screen.getByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+    fireEvent.click(screen.getByText('AO-01'))
+    expect(textarea.value).toContain('AO-01')
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+  })
+})

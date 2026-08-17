@@ -105,6 +105,57 @@ export function useProgrammingPointCatalog(): RemoteState<ProgrammingPointCatalo
   return useProgrammingResource(load, 10000)
 }
 
+export interface LazyPointCatalogState {
+  status: 'idle' | 'loading' | 'ready' | 'error'
+  data: ProgrammingPointCatalogPage | null
+  error: string | null
+  /** Gọi mỗi lần panel "Chèn nhanh Point/Variable" mở — CHỈ fetch thật ở lần
+   *  gọi đầu (status `idle`); các lần mở tiếp theo dùng cache đã có, không
+   *  tạo thêm request. An toàn gọi lại nhiều lần (idempotent theo status). */
+  ensureLoaded: () => void
+}
+
+/** Biến thể LAZY của `useProgrammingPointCatalog` cho ST Editor
+ *  (`design/editor/InsertPointVariablePanel.tsx`, ST Editor Quick Control
+ *  quyết định #02): không fetch khi mount như `useProgrammingResource`, và
+ *  không tự poll lại — mở ST Editor không được tạo traffic `GET
+ *  /point-catalog` nếu người dùng chưa từng mở panel chèn nhanh. Đây là hook
+ *  riêng (không tái dùng `useProgrammingResource`) vì hành vi lazy/one-shot
+ *  khác hẳn hợp đồng eager-fetch-plus-poll của hook đó. */
+export function useLazyProgrammingPointCatalog(): LazyPointCatalogState {
+  const { pick } = useI18n()
+  const client = useProgrammingApiClient()
+  const [status, setStatus] = useState<LazyPointCatalogState['status']>('idle')
+  const [data, setData] = useState<ProgrammingPointCatalogPage | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const statusRef = useRef(status)
+  statusRef.current = status
+
+  const ensureLoaded = useCallback(() => {
+    if (statusRef.current === 'loading' || statusRef.current === 'ready') return
+    setStatus('loading')
+    client.request<ProgrammingPointCatalogPage>('getProgrammingPointCatalog').then(
+      (value) => {
+        setData(value)
+        setError(null)
+        setStatus('ready')
+      },
+      (reason: unknown) => {
+        const message =
+          reason instanceof ProgrammingApiError
+            ? programmingErrorCopy(pick, reason.envelope.error.code)
+            : reason instanceof Error
+              ? reason.message
+              : pick('Lỗi không xác định.', 'Unknown error.')
+        setError(message)
+        setStatus('error')
+      }
+    )
+  }, [client, pick])
+
+  return { status, data, error, ensureLoaded }
+}
+
 /** `GET /checks/{checkId}` — dùng lại độc lập với `useCheckWorkflow` để
  * PGM-03 luôn đọc trạng thái mới nhất kể cả khi vào thẳng bằng navigation
  * state (không phải vừa chạy Check trong cùng phiên). */
