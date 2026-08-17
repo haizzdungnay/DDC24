@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Deploy — sửa ST Editor Format/khay Dòng/cột lên Foxlinx (2026-08-17)
+
+PR #192 (`d5e0e66`) đã deploy lên `SOM-DDC-24-foxlinx`. Chỉ FE static (PR
+không đổi `apps/core`/`apps/web-api`) — không rebuild/restart binary Core/Go.
+Smoke test: 4 service `active`, health `ok`, bundle served khớp tên file vừa
+build (`assets/index-CqwGz-Qs.js`), không log lỗi mới, disk 31%, temp 43.5°C.
+Chi tiết đầy đủ ở
+`docs/07_records/test-evidence/fw-som/2026-08-17-foxlinx-st-editor-format-cursor-sync-deploy.md`.
+
 ### Fixed — ST Editor: "Định dạng" xé `VAR RETAIN`/`IF...THEN` sai dòng + khay Dòng/cột đứng yên sau Định dạng/Thay tất cả (2026-08-17)
 
 Người dùng báo trực tiếp hai lỗi qua ảnh chụp `ProgramsTab` (tab Chương
