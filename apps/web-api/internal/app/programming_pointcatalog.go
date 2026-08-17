@@ -80,8 +80,14 @@ func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx
 	}
 	for _, point := range points {
 		category, deviceID := pointCatalogCategory(point)
+		// Cùng bug F-PROG-ASBUILT-014 lộ lại ở Monitor: Binding trong Revision
+		// lưu Point.PointID là slot Core thật (vd "AV-02"), nếu truth ở đây vẫn
+		// đánh chỉ mục bằng id thân thiện "VP3" thì monitorPointKey() không bao
+		// giờ khớp — Monitor Program báo "UNKNOWN · UNAVAILABLE" cho MỌI biến
+		// bind VP dù giá trị Core thật hoàn toàn hợp lệ (xác nhận qua socket
+		// debug: applied_value đúng, chỉ có việc tra cứu quality bị lệch key).
 		truth := programmingapplication.MonitorPointTruth{
-			Category: category, PointID: point.ID, DeviceID: deviceID,
+			Category: category, PointID: pointCatalogPointID(category, point), DeviceID: deviceID,
 			ObservedAt: point.UpdatedAt, ActualValue: point.Value, Source: point.Source,
 			Quality: pointCatalogQuality(point), Unit: point.Unit,
 		}
@@ -147,17 +153,22 @@ func (adapter programmingPointCatalogAdapter) ListActiveOverrides(ctx context.Co
 	return entries, nil
 }
 
+// pointCatalogPointID — F-PROG-ASBUILT-014: category VP chỉ resolve được ở
+// Core khi pointId là slot AV-n/BV-n thật đã đồng bộ (`BoundPointID`), không
+// phải id thân thiện "VP1" (id đó vẫn đúng cho mọi API điểm khác, chỉ riêng
+// các chỗ Programming cần đối chiếu với Binding.Point.PointID trong Revision
+// — vốn luôn lưu id Core thật — mới cần định danh này).
+func pointCatalogPointID(category string, point PointDTO) string {
+	if category == "VP" && point.BoundPointID != "" {
+		return point.BoundPointID
+	}
+	return point.ID
+}
+
 func toPointCatalogEntry(point PointDTO) programmingapplication.PointCatalogEntry {
 	category, deviceID := pointCatalogCategory(point)
 	direction, writable := pointCatalogDirection(point)
-	// F-PROG-ASBUILT-014: category VP chỉ resolve được ở Core khi pointId là
-	// slot AV-n/BV-n thật đã đồng bộ (`BoundPointID`), không phải id thân
-	// thiện "VP1" (id đó vẫn đúng cho mọi API điểm khác, chỉ riêng Point
-	// Catalog của Programming cần định danh Core thật để binding có hiệu lực).
-	pointID := point.ID
-	if category == "VP" && point.BoundPointID != "" {
-		pointID = point.BoundPointID
-	}
+	pointID := pointCatalogPointID(category, point)
 	return programmingapplication.PointCatalogEntry{
 		Category: category, PointID: pointID, DeviceID: deviceID, Name: pointCatalogName(point),
 		DataType: pointCatalogDataType(point), Unit: point.Unit, Direction: direction, Writable: writable,

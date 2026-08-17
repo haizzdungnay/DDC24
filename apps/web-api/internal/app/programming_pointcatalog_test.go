@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -165,6 +167,62 @@ func TestProgrammingMonitorUsesEndScanTruthOnlyForLocalPoints(t *testing.T) {
 	external := truth.Points[1]
 	if external.Category != "MB_RTU" || external.ActualValue != 99.0 || external.ProgramValue != nil || external.ObservedAt != "2026-08-13T00:00:01Z" || external.Quality != "STALE" {
 		t.Fatalf("MB_RTU bị overlay nhầm theo ID vật lý: %+v", external)
+	}
+}
+
+// Bug thật báo qua Monitor Program trên board: VP đã bound (ZoneSetpoint->
+// AV-01, Occupied->BV-01, DspSetpoint->AV-02) hiện "UNKNOWN · UNAVAILABLE"
+// dù giá trị Core hoàn toàn hợp lệ. Nguyên nhân: GetMonitor (monitor.go) tra
+// truth bằng monitorPointKey(category, deviceId, binding.Point.PointID) —
+// Binding trong Revision lưu id Core thật ("AV-01"), nhưng
+// ReadProgrammingMonitorSnapshot trước bản vá này phát PointID=point.ID
+// ("VP1", id thân thiện) cho category VP ⇒ hai bên không bao giờ khớp. Test
+// này khoá pointCatalogPointID() dùng đúng cho MonitorPointTruth, không chỉ
+// cho toPointCatalogEntry() (đã test ở TestToPointCatalogEntryUsesBoundPointIdForVirtualWhenBound).
+//
+// overlayVirtualPoints() chỉ lấy VP từ config đã lưu (virtual_points.conf),
+// bỏ qua mọi PointDTO Kind=="virtual" bơm thẳng vào core giả — nên phải tạo
+// VP thật qua chính handler HTTP như operator thật làm, không inject tay.
+func TestReadProgrammingMonitorSnapshotUsesBoundPointIdForVirtual(t *testing.T) {
+	users := writeTestUsers(t, "admin123", RoleAdmin)
+	cfg := testConfig(t, users)
+	core := &programmingMonitorCore{
+		pointsCore: &pointsCore{},
+		snapshot:   RuntimePointSnapshot{SnapshotObservedAtUTC: "2026-08-17T00:00:00Z"},
+	}
+	app, err := NewApp(cfg, nil, core, fakeOS{})
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	token, _, err := app.auth.Authenticate("admin", "admin123", "test")
+	if err != nil {
+		t.Fatalf("Authenticate: %v", err)
+	}
+	create := func(body string) {
+		req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", body, token)
+		w := httptest.NewRecorder()
+		app.Router().ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("create %s status = %d body=%s", body, w.Code, w.Body.String())
+		}
+	}
+	create(`{"tag":"zone setpoint","signalType":"float","enabled":true,"writable":true,"value":22,"boundPointId":"AV-01"}`)
+	create(`{"tag":"unbound flag","signalType":"boolean","enabled":true,"writable":true,"value":true}`)
+
+	truth, err := app.programmingPointCatalog().ReadProgrammingMonitorSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("ReadProgrammingMonitorSnapshot: %v", err)
+	}
+	if len(truth.Points) != 2 {
+		t.Fatalf("points = %+v; want 2", truth.Points)
+	}
+	bound := truth.Points[0]
+	if bound.Category != "VP" || bound.PointID != "AV-01" {
+		t.Fatalf("bound point = %+v; want category=VP pointId=AV-01 (khớp Binding.Point.PointID trong Revision)", bound)
+	}
+	unbound := truth.Points[1]
+	if unbound.Category != "VP" || unbound.PointID != "VP2" {
+		t.Fatalf("unbound point = %+v; want category=VP pointId=VP2 (giữ nguyên id thân thiện, chưa bind)", unbound)
 	}
 }
 
