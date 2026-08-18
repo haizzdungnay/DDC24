@@ -613,6 +613,63 @@ function AdvancedPanel({ output, onChange }: { output: OutputConfig; onChange: (
           </span>
         </div>
       ))}
+      {output.kind === 'AO' && <AoCurvePreview config={output} />}
+    </div>
+  )
+}
+
+/**
+ * Xem trước đường cong kỹ thuật → tín hiệu ra — `T57-2.12`.
+ *
+ * Cùng mẫu với xem trước quy đổi ở trang Inputs (`BB-7`), nhưng ở đây hậu quả
+ * nặng hơn một bậc: số sai không chỉ hiển thị sai mà **ra tới van hoặc biến
+ * tần**. Bảng ba mốc (đầu dải, giữa, cuối dải) đủ để thấy ngay chiều và biên
+ * của đường cong mà không cần vẽ đồ thị.
+ *
+ * Không gọi API, không ghi gì — tính trên cấu hình đang soạn.
+ */
+function AoCurvePreview({ config }: { config: AoConfig }) {
+  const { pick } = useI18n()
+  const range = aoSignalRange(config.mode)
+  const invalid = config.maxPv === config.minPv
+  const midPv = (config.minPv + config.maxPv) / 2
+  const rows = invalid ? [] : [config.minPv, midPv, config.maxPv].map((pv) => ({ pv, signal: previewAoSignal(config, pv) }))
+
+  return (
+    <div className="border-t border-[var(--c-border)] px-3 py-3">
+      <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">
+        {pick('Xem trước tín hiệu ra', 'Output signal preview')}
+      </span>
+      {invalid ? (
+        <p className="mt-2 text-xs text-[var(--c-fault-fg)]">
+          {pick(
+            'Dải kỹ thuật suy biến (đầu dải bằng cuối dải) — không quy đổi được. Đây là cấu hình chưa hợp lệ, không phải thiếu dữ liệu.',
+            'Degenerate engineering range (low equals high) — conversion is undefined. This is an invalid configuration, not missing data.'
+          )}
+        </p>
+      ) : (
+        <>
+          <table className="mt-2 w-full max-w-md text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase text-[var(--c-text-dim)]">
+                <th className="py-1">{pick('Giá trị kỹ thuật', 'Engineering')} ({engineeringUnitLabel(config.units)})</th>
+                <th className="py-1">{pick('Tín hiệu ra', 'Output signal')} ({range.unit})</th>
+              </tr>
+            </thead>
+            <tbody className="mono">
+              {rows.map((row) => (
+                <tr key={row.pv} className="border-t border-[var(--c-border)]">
+                  <td className="py-1">{row.pv.toFixed(2)}</td>
+                  <td className="py-1 font-semibold text-[var(--c-accent)]">{row.signal === null ? '—' : row.signal.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs text-[var(--c-text-dim)]">
+            {pick('Tính theo cấu hình đang soạn, chưa lưu. Không gửi gì xuống thiết bị.', 'Computed from the draft configuration, not saved. Nothing is sent to the device.')}
+          </p>
+        </>
+      )}
     </div>
   )
 }
@@ -785,6 +842,30 @@ function aoSafeUnit(mode: AoSignalMode): string {
 
 function aoSafeMax(mode: AoSignalMode): number {
   return mode === '4-20mA' ? 20 : 10
+}
+
+/** Dải tín hiệu ra của một chế độ AO. */
+export function aoSignalRange(mode: AoSignalMode): { low: number; high: number; unit: string } {
+  return mode === '4-20mA' ? { low: 4, high: 20, unit: 'mA' } : { low: 0, high: 10, unit: 'V' }
+}
+
+/**
+ * Quy đổi giá trị kỹ thuật → tín hiệu ra theo cấu hình ĐANG SOẠN — `T57-2.12`.
+ *
+ * Cùng lý do với xem trước quy đổi ở trang Inputs: đặt nhầm `minPv`/`maxPv`
+ * chỉ lộ ra khi cơ cấu đã chạy sai một quãng. Khác một điểm quan trọng — ở đây
+ * số sai không chỉ hiển thị sai, nó **ra tới van hoặc biến tần**.
+ *
+ * `null` khi dải kỹ thuật suy biến (`minPv === maxPv`): chia cho 0 không phải
+ * lỗi của người dùng cần một con số, mà là một cấu hình chưa hợp lệ cần nói ra.
+ */
+export function previewAoSignal(config: AoConfig, engineeringValue: number): number | null {
+  if (!Number.isFinite(engineeringValue)) return null
+  const span = config.maxPv - config.minPv
+  if (span === 0) return null
+  const range = aoSignalRange(config.mode)
+  const ratio = (engineeringValue - config.minPv) / span
+  return range.low + ratio * (range.high - range.low)
 }
 
 // aoPercentToRaw/aoRawToPercent — cùng công thức Core đã dùng cho node
