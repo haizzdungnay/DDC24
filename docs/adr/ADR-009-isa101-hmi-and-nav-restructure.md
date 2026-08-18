@@ -2,7 +2,10 @@
 
 - Date: 2026-06-16
 - Owner: Product Owner / FE Lead
-- Status: Accepted
+- Status: Accepted — **Decision #2 (navigation 3 nhóm) `SUPERSEDED` 2026-08-18 bởi
+  `ADR-032`** ([Architecture Decision Log](../00_governance/DECISIONS.md)). Mọi phần
+  khác, đặc biệt là Decision #1 (Level B hybrid palette) và Decision #3..#7, **vẫn
+  còn hiệu lực**.
 - Accepted: 2026-06-16 (owner)
 - Builds on: [ADR-004](ADR-004-component-based-runtime.md) (component-based runtime;
   **superseded 2026-07-23 by [ADR-020](ADR-020-mekong-owned-iec-aligned-program-runtime.md)**
@@ -55,7 +58,9 @@ Unreleased changelog, fits under this broader information-architecture decision.
    backgrounds (chip/dot/bar) with bold text. When colored text or thin lines are needed on the
    light-gray background, use darker `*-fg` variables to meet WCAG AA contrast.
 
-2. **Restructure navigation into three groups.**
+2. **Restructure navigation into three groups.** — **`SUPERSEDED` 2026-08-18 bởi `ADR-032`
+   (điều hướng 4 nhóm `Tổng quan / Vận hành / Kỹ thuật / Hệ thống`). Giữ lại đoạn dưới
+   làm bối cảnh lịch sử; không dùng làm nguồn-chuẩn.**
    - **Overview:** Dashboard with embedded System Health CPU/RAM/IOP, Monitoring `/monitor`,
      Alarm log `/alarms`, Trends `/trends`, User info `/me`.
    - **Settings:** Display `/settings/display`, Users `/settings/users`, Network
@@ -108,6 +113,15 @@ UX-SYSTEM owns exact token names and contrast validation. This ADR requires UX-S
 (`statusColor`, badges, PointCard, Dashboard metrics and charts) to implement the Level B hybrid
 palette, keep non-color cues, and avoid saturated decorative glow.
 
+> [!WARNING]
+> **Giá trị hex trong bảng trên là bản 2026-06-16 và KHÔNG còn là giá trị đang chạy.**
+> Chúng chỉ ghi *hướng* màu. Bộ token hiện hành (tên có tiền tố `--c-`, hai theme
+> sáng/tối, đã siết để đạt WCAG AA) nằm ở
+> [`KX-DDC24-UX-SYSTEM-001` §2](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) và nguồn chân
+> lý là `apps/web-ui/src/shared/theme/tokens.ts`. Dùng lại hex trong bảng này sẽ dựng
+> lại đúng bộ màu trượt AA — bản thân ADR đã dự liệu điều đó ở dòng "may be darkened
+> in code if contrast check requires".
+
 ## Rejected alternatives
 
 1. **Level A pure: no green for normal status.** Superseded by owner amendment on 2026-06-16.
@@ -132,6 +146,8 @@ palette, keep non-color cues, and avoid saturated decorative glow.
   bar, or another non-color cue.
 - 08_MKDDC_WEB section 1 must keep the three-group page tree: `/me`, `/settings/time`,
   `/eng/alarm-settings`; removal of `/health`; split Settings routes.
+  *(Phần "three-group page tree" của gạch đầu dòng này `SUPERSEDED` bởi `ADR-032`;
+  các hệ quả còn lại — bỏ `/health`, tách route Settings — vẫn giữ.)*
 - Rev A remains demo UI scope. This decision does not change REST or WebSocket contracts.
 - The vivid original handoff theme and the old UX-SYSTEM color tokens are superseded for the web
   UI. The on-device TFT HMI is a separate surface and is outside this ADR's scope.
@@ -141,3 +157,16 @@ palette, keep non-color cues, and avoid saturated decorative glow.
 Lý do: vàng/đường mảnh làm CHỮ trên nền sáng không đạt tương phản; và owner chọn convention SCADA
 (green=normal). Giữ cấu trúc HMI + nav 3 nhóm của bản gốc; chỉ đổi triết lý màu trạng thái sang
 Level B hybrid. Supersedes điểm "Level A pure / no green" ở bản gốc.
+
+## Superseded (2026-08-18) — navigation 3 nhóm → 4 nhóm
+
+`ADR-032` ([Architecture Decision Log](../00_governance/DECISIONS.md)) thay thế
+**Decision #2** của ADR này: điều hướng web Rev A dùng bốn nhóm
+`Tổng quan / Vận hành / Kỹ thuật / Hệ thống`. Lý do: nhóm `Settings` cũ trộn tác vụ
+vận hành hằng ngày (lịch, chạy thử) với quản trị nền tảng (mạng, thiết bị, thời gian,
+người dùng), và `/diagnostics` — trang chưa tồn tại lúc viết ADR này — cần một lối vào
+riêng. Phạm vi thay thế **chỉ** là cách gom mục: không đổi route, không đổi
+`ROUTE_MIN_ROLE`, không đổi REST/WebSocket contract. Mọi Decision khác của ADR-009 giữ
+nguyên hiệu lực. Nguồn: finding `F-DOC-04` của
+[`REV-FE-UIUX-UC-2026-08-18`](../07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md),
+task `T57-0.13`.

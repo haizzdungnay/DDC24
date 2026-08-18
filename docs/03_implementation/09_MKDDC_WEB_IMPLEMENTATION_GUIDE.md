@@ -2,8 +2,8 @@
 ## MK-DDC-24 — REST API + Web UI + Config + Validator
 
 > **Document ID:** IMPL-WEB-MK-DDC-24-VI
-> **Phiên bản:** 1.36 | 2026-07-28 (ADR-017 strict Network v1 + DNS/capability/management) · 1.35 | 2026-07-25 (đồng bộ network authority, validation và FE RBAC) · 1.34 | 2026-07-24 (Web BE/FE dùng ADR-017 network transaction authority)
-> **Cập nhật hiện hành:** Rev 1.36 khóa Network GET status cho session xác thực, POST mutation Admin-only, optional DNS theo capability và management hostname read-only. Adapter/FE migration code-local đã hoàn tất; physical IP handoff, target mDNS/DNS và overall Network gate vẫn RED.
+> **Phiên bản:** 1.37 | 2026-08-18 (cây trang §1 đồng bộ 4 nhóm ADR-032 + 2 route cách ly ADR-033) · 1.36 | 2026-07-28 (ADR-017 strict Network v1 + DNS/capability/management) · 1.35 | 2026-07-25 (đồng bộ network authority, validation và FE RBAC) · 1.34 | 2026-07-24 (Web BE/FE dùng ADR-017 network transaction authority)
+> **Cập nhật hiện hành:** Rev 1.37 đồng bộ cây trang §1 với mã: đường dẫn `apps/web-ui/src`, điều hướng **4 nhóm** theo `ADR-032`, bổ sung `/activity` · `/diagnostics` · `/eng/outputs` · `/eng/virtual-points` · `/eng/modbus-rtu` · 4 workspace Programming, và ghi rõ hai route cách ly theo `ADR-033`. Đóng finding `F-DOC-09`. Rev 1.36 khóa Network GET status cho session xác thực, POST mutation Admin-only, optional DNS theo capability và management hostname read-only. Adapter/FE migration code-local đã hoàn tất; physical IP handoff, target mDNS/DNS và overall Network gate vẫn RED.
 > **Owner:** Dev 3 (Web/BE)
 > **Nguồn-chuẩn:** [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) ·
 > [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
@@ -59,31 +59,60 @@ web/backend/
   "Lệnh bị ghi đè bởi <nguồn>" nếu overridden.
 ```
 
+> [!IMPORTANT]
+> **Cây trang dưới đây là hiện trạng, đo lại 2026-08-18** (finding `F-DOC-09`).
+> Bản trước dựng theo `src/frontend/` — đường dẫn đã biến mất sau
+> [`ADR-025`](../00_governance/DECISIONS.md)/`PLAN-ARCH-RESTRUCT-002` — và liệt
+> kê **3 nhóm** theo ADR-009 Decision #2, vốn đã `SUPERSEDED` bởi `ADR-032`.
+> Nó cũng thiếu hẳn `/activity`, `/diagnostics`, `/eng/outputs`,
+> `/eng/virtual-points`, `/eng/modbus-rtu` và bốn workspace Programming.
+> **Nguồn-chuẩn của bảng nhóm là**
+> [`UX-SYSTEM-001` §6](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md); mục này chỉ chép
+> lại, và `apps/web-ui/src/app/route-menu-contract.test.ts` giữ cho bản chép
+> không trôi khỏi mã.
+
 ```
-src/frontend/ (React 18 + TS + Vite + Tailwind v4) — app thực tế Rev A, IA theo ADR-009
-├── Login `/login` — auth mock/JWT, lưu token in-memory
-├── Overview
-│   ├── Dashboard `/` — KPI, health services + IOP/scan metrics, trạng thái truyền thông, I/O, sự kiện, trend
-│   ├── Monitoring `/monitor` — bảng 24 IO realtime + chi tiết point + DO toggle (commissioning)
-│   ├── Alarm log `/alarms` — list + ack
-│   ├── Trends `/trends` — object-list + time-range 30m/1h/6h/24h; chart dùng đủ samples + bảng 5 timestamp gần nhất
-│   └── User info `/me` — danh tính, role/permission, session demo, đổi mật khẩu demo, đăng xuất
-├── Settings
-│   ├── Display `/settings/display` — ngôn ngữ vi/en, ghi chú theme ISA-101 Level A, mật độ hiển thị demo
-│   ├── Users `/settings/users` — danh sách tài khoản + role
-│   ├── Network `/settings/network` — Northbound BACnet/IP + Southbound Modbus RTU master
-│   ├── Time/Date `/settings/time` — NTP, server, timezone, đặt giờ thủ công demo
-│   └── Device `/settings/device` — tên thiết bị, vị trí, chu kỳ update/scan, About
-├── Engineering
-│   ├── Scheduler `/eng/scheduler` — BACnet Weekly_Schedule demo
-│   ├── Commissioning `/eng/commissioning` — test DO/AO thật (operator+)
-│   ├── Programming `/eng/programming` — legacy graph local simulation; hidden unless demo mode + explicit feature flag
-│   └── Alarm settings `/eng/alarm-settings` — bảng ngưỡng HH/H/L/LL, delay, priority, enable
-├── Redirect tương thích: `/users`, `/network`, `/settings`, `/scheduler`, `/commissioning`, `/validator`
-└── `/health` — đã gộp vào Dashboard, không còn route riêng
+apps/web-ui/src/ (React 18 + TS + Vite + Tailwind v4) — app Rev A, IA 4 nhóm theo ADR-032
+├── Login `/login` — auth mock/JWT
+├── Tổng quan (`overview`)
+│   ├── Bảng điều khiển `/` — Landing PA3: health strip, cần xử lý, tổng hợp điểm, trend xem nhanh
+│   ├── Giám sát `/monitor` — bảng điểm realtime, lọc kind/quality/state/group, chi tiết + ép tay
+│   ├── Cảnh báo `/alarms` — active + ack/shelve · `/alarms/history` — nhật ký lọc đa tiêu chí
+│   ├── Xu hướng `/trends` — historian thật, đa series, khoảng thời gian
+│   └── Nhật ký hoạt động `/activity` — audit, lọc kind/objectId/action, phân trang cursor
+├── Vận hành (`operation`)
+│   ├── Lịch vận hành `/eng/scheduler` — lưới lịch · `/runtime` · `/:id` (editor 6 tab)
+│   └── Chạy thử `/eng/commissioning` — test DO/AO thật, release thật (operator+)
+├── Kỹ thuật (`engineering`)
+│   ├── Cấu hình Inputs `/eng/inputs` — Universal Input, có dirty-guard (admin)
+│   ├── Cấu hình Outputs `/eng/outputs` — AO/DO, safe state (operator+)
+│   ├── Virtual Points `/eng/virtual-points` — điểm ảo (admin)
+│   ├── Modbus RTU `/eng/modbus-rtu` — 6 tab: overview/ports/devices/points/mapping/diagnostics (viewer)
+│   ├── Cấu hình cảnh báo `/eng/alarm-settings` — ngưỡng, delay, severity, notification class (admin)
+│   ├── Chẩn đoán `/diagnostics` — CPU/RAM/nhiệt, service, truyền thông (viewer)
+│   └── Lập trình `/eng/programming/*` — 4 workspace Rev A; CHỈ khi `VITE_PROGRAMMING_REV_A=1`
+├── Hệ thống (`system`)
+│   ├── Mạng `/settings/network` — validate/stage/apply/confirm/rollback (xem mục ADR-017)
+│   ├── Thiết bị `/settings/device` (admin) · Thời gian `/settings/time` (admin)
+│   ├── Người dùng `/settings/users` (admin) · Hiển thị `/settings/display` (viewer)
+├── Không có mục menu, có lối vào riêng
+│   ├── `/me` · `/help` — nút trên `TopBar`
+│   ├── `/alarms/history` — liên kết trong `/alarms`
+│   └── `/eng/diagram` — nút "Mở rộng" của khối sơ đồ trong `/diagnostics`
+├── CÁCH LY — có route, cố ý KHÔNG có mục menu (`ADR-033`)
+│   ├── `/eng/user-parameters` — `apiClient.getUserParams/putUserParams` là mock demo,
+│   │     không có endpoint backend; trên board sẽ hiện tham số bịa và báo lưu thành công
+│   │     cho một lệnh lưu không tới thiết bị
+│   └── `/eng/aux` — sinh cụm component graph 28-node, runtime legacy theo ADR-020/ADR-023,
+│         không có đường nạp xuống thiết bị
+├── Redirect tương thích: `/users`, `/network`, `/settings`, `/scheduler`, `/commissioning`,
+│     `/validator`, `/eng/diagnostics`, `/eng/virtual-io`
+└── `/health` — đã gộp vào `/diagnostics` và Landing, không còn route riêng
 
 web/validator/    — Go library (KHÔNG service): kiểm graph.json trước deploy
 web/storage/      — schema SQLite, migration
+                    (hai đường dẫn `web/*` là tên CŨ trước ADR-025; backend Go
+                     hiện nằm ở `apps/web-api/`)
 ```
 
 > **Trạng thái Rev A (demo UI): ĐÃ làm 2026-06-16** — 4 trang Trends/Scheduler/Network/Validator
@@ -119,6 +148,13 @@ Redirect giữ tương thích:
 `/users` → `/settings/users`; `/network` → `/settings/network`; `/settings` → `/settings/device`; `/scheduler` → `/eng/scheduler`; `/commissioning` → `/eng/commissioning`; `/validator` → `/eng/programming`.
 
 Trạng thái: ĐÃ làm 2026-06-16 — NavRail 3 nhóm thu gọn được + routing mới P2; typecheck là verification bắt buộc.
+
+> [!NOTE]
+> **Mục này là ghi chép lịch sử của đợt 2026-06-16, không phải hiện trạng.**
+> `ADR-009` Decision #2 (3 nhóm) đã `SUPERSEDED` bởi `ADR-032` ngày 2026-08-18: điều hướng
+> hiện hành là **4 nhóm** `Tổng quan/Vận hành/Kỹ thuật/Hệ thống`. Xem cây trang ở §1 và
+> [`UX-SYSTEM-001` §6](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md).
+
 
 ## 1.5 ISA-101 P3/3 — real pages + health fold + Programming (Approved 2026-06-16)
 
@@ -413,6 +449,7 @@ Done khi : 4 check chạy đúng; deploy chỉ khi pass.
 - 1.7 (2026-06-16): owner adjustment cho dashboard dynamic metrics: normal/in-range xanh lá, warn cam, fault đỏ; giữ nguyên REST/WS contract.
 - 1.6 (2026-06-16): owner adjustment cho compact indicator dots/icons: OK/ONLINE xanh lá, OFF/OFFLINE xám; giữ nguyên REST/WS contract.
 - 1.5 (2026-06-16): hoàn tất ISA-101 P3/3: trang thật thay stub, gộp System Health vào Dashboard, Programming + Alarm settings demo; giữ nguyên REST/WS contract.
+- 1.37 (2026-08-18): đóng `F-DOC-09` của [`REV-FE-UIUX-UC-2026-08-18`](../07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md) — cây trang §1 chuyển từ `src/frontend/` 3 nhóm (ADR-009 Decision #2, đã `SUPERSEDED`) sang `apps/web-ui/src` 4 nhóm theo `ADR-032`; bổ sung các trang bị thiếu; thêm mục CÁCH LY cho `/eng/user-parameters` và `/eng/aux` theo `ADR-033`; đánh dấu §1.4 là ghi chép lịch sử.
 - 1.4 (2026-06-16): áp ISA-101 P2/3, cập nhật cây trang 3 nhóm + routing mới; giữ nguyên REST/WS contract.
 - 1.3 (2026-06-16): áp ISA-101 Level A P1/3 cho frontend theme/status; giữ nguyên REST/WS contract.
 - 1.2 (2026-06-16): bổ sung danh sách trang frontend Rev A thực tế (§1) + ghi chú trạng thái demo 4 trang Trends/Scheduler/Network/Validator khớp spec; làm rõ KHÔNG đổi REST/WS contract §2.
