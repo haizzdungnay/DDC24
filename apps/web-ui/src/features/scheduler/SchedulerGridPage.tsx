@@ -26,6 +26,22 @@ import {
  * Cột `Hiện tại`/`Kế tiếp` đến từ khối `runtime` của controller. Chưa publish
  * thì hiện gạch ngang — KHÔNG tính giá trị ở trình duyệt (nguyên tắc S2/S3).
  */
+/** Tiêu đề trang — dùng chung cho cả trạng thái bình thường lẫn hai nhánh lỗi,
+ *  để `<h1>` không biến mất khi trang không dựng được nội dung (`T57-0.4`). */
+function SchedulerHeading() {
+  const { pick } = useI18n()
+  return (
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-bold text-[var(--c-text)]">{pick('Lịch vận hành', 'Scheduler')}</h1>
+        <p className="mt-1 text-sm text-[var(--c-text-dim)]">
+          {pick('Lịch tuần · ngoại lệ · publish có kiểm chứng', 'Weekly schedule · exceptions · verified publish')}
+        </p>
+      </div>
+    </header>
+  )
+}
+
 export function SchedulerGridPage() {
   const { pick } = useI18n()
   const { schedules, loading, error, legacyFormat, reload, upsert } = useScheduler()
@@ -57,9 +73,18 @@ export function SchedulerGridPage() {
     })
   }, [schedules, query, statusFilter, onlyOutOfSync])
 
+  /* Hai nhánh trả về sớm dưới đây GIỮ tiêu đề trang — `T57-0.4` (`F-UX-15`).
+   *
+   * Trả về một `StateBlock` trần làm trang mất `<h1>`: người dùng trình đọc màn
+   * hình nghe thấy một thông báo lỗi mà không biết mình đang ở màn hình nào,
+   * và cây heading của tài liệu rỗng (WCAG 2.2 §2.4.6). `MonitorPage` và
+   * `AlarmsPage` đã sửa đúng lỗi này từ PA3-603; trang Lịch vận hành bị bỏ sót
+   * vì nhánh lỗi của nó nằm TRƯỚC chỗ dựng tiêu đề, không phải sau. */
   // Tệp còn định dạng cũ là một bước quản trị chưa chạy, không phải hỏng hóc.
   if (legacyFormat) {
     return (
+      <div className="space-y-4">
+      <SchedulerHeading />
       <StateBlock
         state="error"
         title={pick('Cấu hình lịch còn ở định dạng cũ', 'Schedule config is still in the legacy format')}
@@ -73,16 +98,20 @@ export function SchedulerGridPage() {
         )}
         onRetry={() => { void reload() }}
       />
+      </div>
     )
   }
   if (error && schedules.length === 0) {
     return (
-      <StateBlock
-        state="error"
-        title={pick('Không tải được danh sách lịch', 'Could not load the schedule list')}
-        detail={error.message}
-        onRetry={() => { void reload() }}
-      />
+      <div className="space-y-4">
+        <SchedulerHeading />
+        <StateBlock
+          state="error"
+          title={pick('Không tải được danh sách lịch', 'Could not load the schedule list')}
+          detail={error.message}
+          onRetry={() => { void reload() }}
+        />
+      </div>
     )
   }
 

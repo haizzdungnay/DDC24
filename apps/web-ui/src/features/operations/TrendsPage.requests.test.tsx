@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 
 const realtimeState = vi.hoisted(() => ({ allPoints: [], lastPointEventAt: null }))
 const fetchMock = vi.hoisted(() => vi.fn<typeof fetch>())
@@ -84,7 +85,7 @@ afterEach(() => {
 
 describe('Trends history request routing', () => {
   it('renders a preset through the cache query without sending a legacy range', async () => {
-    render(<TrendsPage />)
+    render(<MemoryRouter><TrendsPage /></MemoryRouter>)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     const initial = latestHistoryUrl()
@@ -100,7 +101,7 @@ describe('Trends history request routing', () => {
   })
 
   it('renders Custom through explicit database bounds without a legacy range', async () => {
-    render(<TrendsPage />)
+    render(<MemoryRouter><TrendsPage /></MemoryRouter>)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     const from = screen.getByLabelText(fromLabel())
@@ -131,7 +132,7 @@ describe('Trends history request routing', () => {
       })
     })
 
-    render(<TrendsPage />)
+    render(<MemoryRouter><TrendsPage /></MemoryRouter>)
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     fireEvent.change(screen.getByLabelText(fromLabel()), { target: { value: '2026-07-22T03:10' } })
     fireEvent.change(screen.getByLabelText(toLabel()), { target: { value: '2026-07-23T03:40' } })
@@ -144,7 +145,7 @@ describe('Trends history request routing', () => {
 
   it('migrates a stale AO-19 preference before applying Custom', async () => {
     window.localStorage.setItem('mkddc:trends:v1', JSON.stringify({ selectedIds: ['AO-19'], rangeMinutes: 1440 }))
-    render(<TrendsPage />)
+    render(<MemoryRouter><TrendsPage /></MemoryRouter>)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     expect(latestHistoryUrl().searchParams.get('point')).toBe('AO-03')
