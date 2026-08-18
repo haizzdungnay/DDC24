@@ -482,6 +482,11 @@ export interface ActivityQuery {
   kind?: ActivityKind
   action?: string
   objectId?: string
+  /** Mốc ISO-8601 UTC. Backend lọc theo khoảng; FE không tự cắt sau khi tải,
+   *  vì cắt ở FE chỉ giấu bớt dòng chứ không đưa người dùng tới đúng thời điểm
+   *  cần xem khi kho sự kiện dài hơn một trang. */
+  from?: string
+  to?: string
 }
 
 export interface Envelope<TPayload = unknown> {

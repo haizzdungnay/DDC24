@@ -13,12 +13,17 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { SeverityBadge } from '../../shared/components/pa3/StateAtoms'
 import { useToast } from '../../shared/components/Toast'
 import { useApi } from '../../shared/hooks/useApi'
+import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import { useI18n } from '../../shared/i18n'
 import { roleAtLeast, useAuth } from '../auth'
 import type { Alarm, AlarmHistoryEntry, AlarmHistoryQuery, AlarmSetting } from '../../shared/types'
 import { formatDateTime } from '../../shared/utils'
 
 type AlarmFilter = 'all' | Alarm['status']
+
+/** Khoá bộ lọc trên URL. `status` thay vì `filter` để đọc được khi nhìn thanh
+ *  địa chỉ: `/alarms?status=unack&q=AHU` tự nói ra nó lọc gì. */
+const ALARM_FILTER_DEFAULTS = { status: 'all', q: '' }
 
 const alarmFilters: AlarmFilter[] = ['all', 'active', 'unack', 'acked', 'cleared', 'shelved']
 const historyEvents = ['started', 'acked', 'returned', 'ended', 'setting_created', 'setting_changed', 'setting_deleted']
@@ -37,8 +42,12 @@ export function AlarmsPage() {
      đây chỉ là để giao diện nói ra điều đó trước khi người dùng bấm. */
   const { session } = useAuth()
   const canActOnAlarms = roleAtLeast(session?.role, 'operator')
-  const [filter, setFilter] = useState<AlarmFilter>('all')
-  const [query, setQuery] = useState('')
+  /* `T57-2.2` — bộ lọc vào URL. Trước đây chúng là `useState`, nên không gửi
+     được cho ca sau một đường dẫn tới "các cảnh báo High chưa ack trong 24 h";
+     mọi trao đổi phải mô tả bằng lời cách bấm lại bộ lọc. */
+  const filters = useUrlFilters(ALARM_FILTER_DEFAULTS)
+  const filter = filters.values.status as AlarmFilter
+  const query = filters.values.q
   const [dialog, setDialog] = useState<AlarmActionDialog>(null)
   const [actionLoading, setActionLoading] = useState(false)
   /* T57-1.6 — lựa chọn cho xác nhận hàng loạt. Giữ id chứ không giữ đối tượng
@@ -166,14 +175,14 @@ export function AlarmsPage() {
       <Panel>
         <div className="mb-4 flex flex-wrap items-center gap-3">
           {alarmFilters.map((item) => (
-            <Button key={item} size="sm" variant={filter === item ? 'primary' : 'secondary'} onClick={() => setFilter(item)}>
+            <Button key={item} size="sm" variant={filter === item ? 'primary' : 'secondary'} onClick={() => filters.set('status', item)}>
               {filterLabels[item]} {counts[item]}
             </Button>
           ))}
           <label className="ml-auto flex h-9 min-w-[260px] items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3">
-            <Search className="h-4 w-4 text-[var(--c-text-dim)]" /><input className="w-full bg-transparent text-sm outline-none" placeholder={pick('Tìm cảnh báo...', 'Search alarms...')} value={query} onChange={(event) => setQuery(event.target.value)} />
+            <Search className="h-4 w-4 text-[var(--c-text-dim)]" /><input className="w-full bg-transparent text-sm outline-none" placeholder={pick('Tìm cảnh báo...', 'Search alarms...')} value={query} onChange={(event) => filters.set('q', event.target.value)} />
           </label>
-          <Button size="sm" icon={<Filter className="h-4 w-4" />} onClick={() => { setFilter('all'); setQuery('') }}>{pick('Xoá lọc', 'Clear')}</Button>
+          <Button size="sm" icon={<Filter className="h-4 w-4" />} onClick={filters.clear}>{pick('Xoá lọc', 'Clear')}</Button>
         </div>
         {canActOnAlarms && bulkSelection.size > 0 && (
           <div role="region" aria-label={pick('Thao tác hàng loạt', 'Bulk actions')} className="mb-3 flex flex-wrap items-center gap-3 rounded-[var(--radius)] border-2 border-[var(--c-accent)] bg-[var(--c-accent-bg)] px-3 py-2">

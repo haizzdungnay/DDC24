@@ -49,6 +49,8 @@ export async function fetchActivity(query: ActivityQuery = {}): Promise<Activity
   if (query.kind) params.set('kind', query.kind)
   if (query.action) params.set('action', query.action)
   if (query.objectId) params.set('objectId', query.objectId)
+  if (query.from) params.set('from', query.from)
+  if (query.to) params.set('to', query.to)
   const suffix = params.toString() ? `?${params}` : ''
   const payload = await requestJson<ActivityPage>(`/activity${suffix}`, { cache: 'no-store', suppressAuthExpired: true })
   return { ...payload, items: payload.items ?? [], nextCursor: payload.nextCursor ?? null }

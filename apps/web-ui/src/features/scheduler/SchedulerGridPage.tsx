@@ -7,6 +7,7 @@ import { Panel } from '../../shared/components/Panel'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { useI18n } from '../../shared/i18n'
+import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import type { ScheduleObject, ScheduleStatus } from '../../shared/types'
 import { cn } from '../../shared/utils'
 import { useAuth, roleAtLeast } from '../auth'
@@ -42,6 +43,8 @@ function SchedulerHeading() {
   )
 }
 
+const SCHEDULER_FILTER_DEFAULTS = { q: '', status: 'all', outOfSync: '' }
+
 export function SchedulerGridPage() {
   const { pick } = useI18n()
   const { schedules, loading, error, legacyFormat, reload, upsert } = useScheduler()
@@ -51,9 +54,13 @@ export function SchedulerGridPage() {
   const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | ScheduleStatus>('all')
-  const [onlyOutOfSync, setOnlyOutOfSync] = useState(false)
+  /* `T57-2.2` — bộ lọc vào URL, cùng lý do với trang Cảnh báo: grid 64 lịch mà
+     không chia sẻ được "đang xem cái nào" thì mọi trao đổi giữa hai người trực
+     phải mô tả bằng lời cách bấm lại. */
+  const filters = useUrlFilters(SCHEDULER_FILTER_DEFAULTS)
+  const query = filters.values.q
+  const statusFilter = filters.values.status as 'all' | ScheduleStatus
+  const onlyOutOfSync = filters.values.outOfSync === '1'
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
 
@@ -240,13 +247,13 @@ export function SchedulerGridPage() {
           className="h-9 w-56 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
           placeholder={pick('Tìm theo mã hoặc tên…', 'Search by ID or name…')}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => filters.set('q', e.target.value)}
           aria-label={pick('Tìm lịch', 'Search schedules')}
         />
         <select
           className="h-9 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)]"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as 'all' | ScheduleStatus)}
+          onChange={(e) => filters.set('status', e.target.value)}
           aria-label={pick('Lọc theo trạng thái', 'Filter by status')}
         >
           <option value="all">{pick('Mọi trạng thái', 'All statuses')}</option>
@@ -259,7 +266,7 @@ export function SchedulerGridPage() {
             type="checkbox"
             className="h-4 w-4 accent-[var(--c-accent)]"
             checked={onlyOutOfSync}
-            onChange={(e) => setOnlyOutOfSync(e.target.checked)}
+            onChange={(e) => filters.set('outOfSync', e.target.checked ? '1' : '')}
           />
           {pick('Chỉ lịch lệch revision', 'Only out-of-sync revisions')}
         </label>
