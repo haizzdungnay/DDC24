@@ -122,7 +122,14 @@ describe('UsersPage create', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
 
     expect(mocks.createUser).not.toHaveBeenCalled()
-    expect(await screen.findByText(/at least 6 characters/)).toBeInTheDocument()
+    /* Khớp TOÀN VĂN chuỗi của toast, không dùng regex bộ phận.
+     *
+     * Từ `T57-1.9`, luật thiết bị được công bố thường trực ngay dưới ô nhập
+     * ("Rule enforced by the device: at least 6 characters…"), nên một regex
+     * `/at least 6 characters/` khớp CẢ hai phần tử và test hỏng vì mơ hồ —
+     * tệ hơn: nó có thể xanh nhờ đoạn văn tĩnh ngay cả khi guard bị gỡ mất.
+     * Khớp toàn văn chỉ trúng đúng thông báo từ chối. */
+    expect(await screen.findByText('Password must be at least 6 characters')).toBeInTheDocument()
   })
 
   it('reports a rejected creation rather than claiming success', async () => {

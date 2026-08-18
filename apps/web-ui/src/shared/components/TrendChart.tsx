@@ -21,6 +21,12 @@ interface TrendChartProps {
   showTable?: boolean
   /** Vẽ dải min–max của mẫu aggregate (PA3-502 / UX-DES §13). */
   showBand?: boolean
+  /** Vẽ chấm cho từng mẫu. Cần cho khối xem nhanh trên Landing: ở đó mỗi chuỗi
+   *  có nhịp lấy mẫu riêng nên một mẫu đơn lẻ không có hàng xóm để nối thành
+   *  đoạn thẳng — với `dot={false}` nó BIẾN MẤT hoàn toàn thay vì hiện ra như
+   *  một điểm dữ liệu đứt quãng (N-02). Trang Trends đầy đủ giữ mặc định tắt vì
+   *  ở đó mật độ mẫu cao, chấm chỉ làm rối. */
+  showDots?: boolean
 }
 
 /** Hậu tố khoá của dải min–max trong `TrendSample`. Một chỗ duy nhất định
@@ -82,7 +88,7 @@ function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: {
   )
 }
 
-export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true, showBand = false }: TrendChartProps) {
+export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true, showBand = false, showDots = false }: TrendChartProps) {
   const hasTimeAxis = data.every((sample) => typeof sample.__ts === 'number' && Number.isFinite(sample.__ts))
   const bandVisible = showBand && hasMinMaxBand(data, series)
   const formatAxisTime = (value: number) => new Date(value).toLocaleTimeString('vi-VN', {
@@ -118,7 +124,7 @@ export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'lo
                 connectNulls={false}
               />
             ))}
-            {series.map((item) => <Line key={item.key} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls={false} />)}
+            {series.map((item) => <Line key={item.key} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={showDots ? { r: 2 } : false} activeDot={{ r: 4 }} connectNulls={false} />)}
           </ComposedChart>
         </ResponsiveContainer>
       </div>

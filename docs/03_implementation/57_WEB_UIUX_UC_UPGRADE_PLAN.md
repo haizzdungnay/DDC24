@@ -1,0 +1,484 @@
+# Plan 57 — Nâng cấp UC/UI/UX Web HMI + đóng finding `REV-FE-UIUX-UC-2026-08-18`
+
+**Trạng thái:** **Wave 0 + Wave 1 — APPROVED, đã triển khai.**
+Wave 0 mở bằng `AUTH-WEBUX-2026-08-18-01`; **Wave 1 và phần FE thuần của Wave 2
+mở bằng `AUTH-WEBUX-2026-08-18-02`** (2026-08-18, `docs/00_governance/DECISIONS.md`),
+sau khi **cả tám câu hỏi §12 đã có quyết định** (`ADR-034`…`ADR-039`) và asset
+trực quan cho hai màn hình mới đã phát hành.
+**Wave 3–4 vẫn `IMPLEMENT_READY BLOCKED`** — không viết code production cho các
+Wave đó trước khi có phê duyệt riêng, theo `DOC_GOVERNANCE.md` §4 và quy tắc
+"DOC TRƯỚC CODE SAU" của dự án.
+**Ngày:** 2026-08-18
+**Tác giả:** Agent kỹ thuật
+**Người cần duyệt:** PM/CTO (phạm vi + thứ tự Wave) · UX Lead (Wave 0 Track D — tài liệu authority) · Tech Lead (Wave 3 — đổi contract)
+**Tham chiếu:**
+[Review nguồn](../07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md) (`REV-FE-UIUX-UC-2026-08-18`) ·
+[Design system](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) (`KX-DDC24-UX-SYSTEM-001`) ·
+[Yêu cầu UX PA3](../02_requirements/UX_REQ_PA3_WEB.md) (`UX-REQ-PA3-WEB-001`) ·
+[Quy tắc kiểm soát tài liệu](../00_governance/DOC_GOVERNANCE.md) ·
+[Plan 45](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) · [Plan 52](52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) · [Plan 55](55_UI_UNIVERSAL_INPUT_REDESIGN_PLAN.md)
+
+---
+
+## 0. Cổng quyền hạn — đọc trước
+
+| Cổng | Trạng thái | Ghi chú |
+|---|---|---|
+| `PLAN_READY` | **PASS** (2026-08-18) | Mở bằng `AUTH-WEBUX-2026-08-18-01` |
+| `IMPLEMENT_READY[Wave 0 Track A/B/C/D]` | **PASS** (2026-08-18) | Mở bằng cùng record; ba track A/B/C không đổi contract, Track D là tài liệu authority |
+| `IMPLEMENT_READY[Wave 1]` | **PASS** (2026-08-18) | Mở bằng `AUTH-WEBUX-2026-08-18-02`. Hai điều kiện chặn đã gỡ: asset trực quan phát hành tại `docs/04_uiux/assets/operations/` và nhúng trong `KX-DDC24-UX-WEB-OPERATIONS-001`; Q2 (`ADR-034`) và Q6 (`ADR-037`) đã trả lời |
+| `IMPLEMENT_READY[Wave 2]` | **PASS** cho phần FE thuần (2026-08-18) | Wave 0 Track C xong + Q4 trả lời (`ADR-035`). **Trừ `T57-2.13`**, đã chuyển sang Wave 3 |
+| `IMPLEMENT_READY[Wave 3]` | **BLOCKED** | Q5/Q7/Q8 đã trả lời (`ADR-036`/`ADR-038`/`ADR-039`) nhưng còn thiếu **9 ADR theo từng task** + chữ ký Tech Lead. `T57-3.8` chặn thêm bởi điều kiện Track B Modbus RTU |
+| `IMPLEMENT_READY[Wave 4]` | **BLOCKED** | Quyết định sản phẩm Rev A/Rev B chưa có |
+| `RELEASE_READY` | **N/A** | Cổng độc lập, **không** được suy ra từ hai record `AUTH-WEBUX-*` |
+
+> [!IMPORTANT]
+> **Cả tám câu hỏi §12 đã có quyết định có ghi chép.** Q1/Q3 đóng bằng
+> `AUTH-WEBUX-2026-08-18-01`; sáu câu còn lại đóng bằng `AUTH-WEBUX-2026-08-18-02`
+> và `ADR-034`…`ADR-039`.
+>
+> Riêng **Q8 là câu hỏi an toàn** — quét bus Modbus là ghi ra bus thật. `ADR-039`
+> là **đặc tả, không phải giấy phép thi hành**: `T57-3.8` vẫn `BLOCKED`, và
+> trong phiên 2026-08-18 **không dòng code ghi ra bus RS-485 nào được viết**.
+>
+> Mọi quyết định trong `ADR-034`…`ADR-039` do **agent** thực hiện dưới vai trò
+> được giao; ô chữ ký ghi `WAIVED FOR IMPLEMENTATION` theo `DOC_GOVERNANCE` §6
+> quy tắc 4. Chúng đủ tư cách làm **đầu vào implementation**, chưa đủ tư cách
+> baseline `M5 — APPROVED`.
+
+---
+
+## 1. Phạm vi
+
+### 1.1 Trong phạm vi
+
+- **67 đề xuất UC/UI/UX** ở §6 của `REV-FE-UIUX-UC-2026-08-18` (19 nhóm PAGE), **trừ §6.8**.
+- **10 finding còn mở** ở §7 của cùng review: `F-UX-12..16` (code) và `F-DOC-01..05` (tài liệu).
+- **Hạ tầng chống tái diễn** cho 11 finding đã sửa ở phiên review (hiện chưa có test khoá riêng).
+- Cập nhật tài liệu thiết kế, tài liệu yêu cầu, ADR và traceability đi kèm.
+
+### 1.2 Ngoài phạm vi — có chỉ thị rõ
+
+| Mục | Lý do |
+|---|---|
+| **§6.8 `/eng/commissioning`** (3 đề xuất: kịch bản nghiệm thu nhiều bước, thời gian đáp ứng cơ cấu, chạy thử tuần tự) | **Chỉ thị của user ngày 2026-08-18: không làm.** Ghi lại ở đây để không ai coi là bỏ sót; nếu sau này cần thì mở plan riêng |
+| Bốn đề xuất Programming §6.14 | **Đã có plan riêng** — [Plan 53](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) và [Master Plan 56](56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md). Plan 57 **không lập lại**, chỉ dẫn chiếu ở §8 (Track P) để giữ bức tranh đầy đủ |
+| Thay đổi firmware MCU | Không đề xuất nào trong §6 đụng tới MCU |
+
+---
+
+## 2. Nguyên tắc thực hiện
+
+1. **Tài liệu trước, code sau.** Mọi task tạo màn hình mới hoặc đổi hành vi an
+   toàn phải có mục trong hồ sơ UI/UX chủ quản **kèm asset render được**
+   (`DOC_GOVERNANCE.md` §2.2 — wireframe ASCII **không đủ**) trước khi mở nhánh code.
+2. **Không đề xuất nào được âm thầm biến mất.** §10 là ma trận truy vết 1-1 giữa
+   67 đề xuất và task; task nào bị loại phải ghi lý do tại đúng ô đó.
+3. **Mỗi task có: file chạm tới · acceptance criteria kiểm được · test phải
+   thêm/sửa.** Không nhận task chỉ có mô tả.
+4. **Không nới quyền route.** Mọi màn hình mới phải khai `ROUTE_MIN_ROLE` suy từ
+   endpoint backend thật, đúng mẫu `auth/roles.ts` hiện có.
+5. **Không bịa dữ liệu** — luật nền của sản phẩm. Màn hình mới thiếu nguồn thật
+   thì hiện `—` và nói ra vì sao, không dựng số minh hoạ.
+6. **Đo lại thật, không dẫn số cũ** ở mọi mốc kiểm chứng (CLAUDE.md §"Quy trình commit").
+7. **Build cho board dùng `npm run build:foxlinx`**, không phải `npm run build` trần
+   (cờ `VITE_PROGRAMMING_REV_A` là build-time; đã tái diễn 3 lần).
+
+---
+
+## 3. Tám khối hạ tầng dùng chung
+
+Nhiều đề xuất ở các trang khác nhau thật ra cần **cùng một khối**. Làm khối
+trước, trang sau — nếu làm theo thứ tự trang sẽ viết lại cùng một thứ 3–4 lần.
+
+| Khối | Nội dung | Phục vụ đề xuất |
+|---|---|---|
+| `BB-1` **`useUrlFilters` + Saved View** | Hook đưa bộ lọc vào URL (đã có sẵn mẫu ở `MonitorPage`) + lớp đặt tên/lưu khung nhìn | §6.2-P2a, §6.3-P2a, §6.4-P2b, §6.5-P2b, §6.7-P2b |
+| `BB-2` **`useDirtyGuard`** | `beforeunload` + chặn điều hướng trong app + modal Lưu/Bỏ/Ở lại (đã có sẵn mẫu ở `InputsPage`) | `F-UX-12`, §6.10-P1a, §6.11-P1, §6.13-P1a |
+| `BB-3` **Equipment tag** | Trường "điểm thuộc thiết bị công nghệ nào" trong contract cấu hình điểm | §6.2-P2b, và là **đường đi tối thiểu** tới ISA-101 Level 2 (§4.1 review) |
+| `BB-4` **Override registry** | Một nguồn dữ liệu "mọi điểm đang bị ép tay + ai ra lệnh + TTL còn lại" | §6.1-P1a, §6.2-P1b, §6.2-P1a, §6.19-P2 |
+| `BB-5` **Alarm presentation** | `SeverityBadge` dùng chung cho cả nhật ký + lớp annunciation | `F-UX-13`, §6.3-P1a, §6.3-P1b |
+| `BB-6` **Chart interaction** | Crosshair, trục Y thứ hai, marker sự kiện — một lớp trên `TrendChart` | §6.4-P1, §6.4-P2a, §6.4-P2c |
+| `BB-7` **Preview/Simulate** | Mẫu "nhập giá trị thử → hiện kết quả theo cấu hình đang soạn", chưa lưu gì | §6.9-P1, §6.10-P2, §6.13-P1b |
+| `BB-8` **Candidate diff** | Bảng so sánh "đang lưu ↔ bản nháp" (đã có `NetworkCandidateDiff`) | §6.9-P2a |
+
+---
+
+## 4. Wave 0 — Đóng nợ và chống tái diễn
+
+Mục tiêu: **không mang nợ cũ vào tính năng mới.** Wave này không thêm UC nào;
+nó đóng 10 finding còn mở và dựng ba gate chặn lỗi tái diễn.
+
+### Track A — Finding code còn mở
+
+| # | Task | File chính | Acceptance criteria | Ước lượng |
+|---|---|---|---|---:|
+| `T57-0.1` | `BB-2` `useDirtyGuard` + áp cho `OutputsPage`, `AlarmSettingsPage`, `VirtualIoPage`, `UserParametersPage` (`F-UX-12`) | `shared/hooks/useDirtyGuard.ts` (mới), 4 trang | Sửa một field rồi bấm mục menu khác ⇒ hiện modal Lưu/Bỏ/Ở lại; đóng tab ⇒ `beforeunload`; không dirty ⇒ **không** chặn gì | 2.0 |
+| `T57-0.2` | Nhật ký alarm dùng `SeverityBadge` 5 mức thay ánh xạ 3 trạng thái tại chỗ (`F-UX-13`) | `AlarmsPage.tsx` (`HistoryRow`) | `low` và `info` **không** còn dùng xanh lá; 5 mức phân biệt được bằng icon + nhãn + màu; `contrast.test.ts` vẫn PASS | 0.5 |
+| `T57-0.3` | `TrendPreview` lấy mẫu theo `updatedAt` của producer, không theo `setInterval` trình duyệt (`F-UX-14`, §6.1-P1b) | `DashboardPage.tsx` | Điểm cập nhật 5 s/lần ⇒ biểu đồ có **1** mẫu/5 s, không phải 5; điểm ngừng cập nhật ⇒ đường đứt (xem §12-Q3) | 1.0 |
+| `T57-0.4` | Thêm `<h1>` cho 19 trang/tab + nhánh trả về sớm của `SchedulerGridPage` (`F-UX-15`, §6.12-P2a, §6.14-P2b) | `modbus-rtu/*`, `programming/*`, `scheduler/*` | Mọi route render đúng **một** `<h1>`; test tự động duyệt bảng route và assert | 1.5 |
+
+### Track B — Test khoá 11 finding đã sửa
+
+Hiện 11 bản sửa của phiên review chỉ được 692 test **hiện có** bao quanh, chưa
+có test riêng. Không có lớp này thì lần refactor sau sẽ mở lại đúng các lỗi đó.
+
+| # | Task | File chính | Acceptance criteria | Ước lượng |
+|---|---|---|---|---:|
+| `T57-0.5` | Test cho `F-UX-05/06/09/10/11` (bàn phím nút gạt DO, nút ép tay có nhãn, giá trị mặc định rỗng, nút gạt trend, đếm điểm nhị phân) | `MonitorPage.*.test.tsx` | Mỗi finding một test âm (tái hiện lỗi cũ) + một test dương | 1.5 |
+| `T57-0.6` | Test cho `F-UX-07` (sparkline rỗng) và `F-UX-08` (nhãn `uncertain`) | `MonitorPage.*.test.tsx` | Point không có mẫu ⇒ **không** có phần tử `<polyline>`; `uncertain` ⇒ chuỗi `UNCERTAIN`, không chứa `HIGH` | 0.5 |
+| `T57-0.7` | Test deep link `F-UX-02/03/04` ở cả ba trang đích | `AlarmsPage.test.tsx`, `TrendsPage.*.test.tsx`, `MonitorPage.test.tsx` | Mở với query ⇒ danh sách bị lọc đúng; query trỏ tới đối tượng không tồn tại ⇒ có thông báo, **không** bảng rỗng im lặng | 1.0 |
+
+### Track C — Gate chặn tái diễn
+
+Đây là phần có giá trị dài hạn nhất của Wave 0: nó đóng **cơ chế sinh lỗi**, không chỉ lỗi.
+
+| # | Task | File chính | Acceptance criteria | Ước lượng |
+|---|---|---|---|---:|
+| `T57-0.8` | **Test hợp đồng deep link hai chiều**: đối chiếu tập tham số `drilldown.ts` phát ra với tập tham số mỗi trang đích thực sự đọc | `shared/overview/drilldown.contract.test.ts` (mới) | Thêm một `targetType` mới mà quên nối trang đích ⇒ test **đỏ**. Đây là gate chặn `F-UX-02/03/04` tái diễn (§7.3 review, cơ chế 1) | 1.5 |
+| `T57-0.9` | **Lint gate chuỗi tiếng Việt mất dấu** trong JSX | `eslint.config.js` + rule tuỳ biến hoặc script `scripts/check_ui_strings.py` | Thêm `pick('Dang tai...', ...)` ⇒ lint **đỏ**; chạy được trong `npm run lint`. Gate chặn `F-UX-01` tái diễn | 1.0 |
+| `T57-0.10` | **Kiểm chéo từ vựng trạng thái HMI ↔ Web** (§6.19-P1) | Nguồn chung (JSON/YAML) sinh mã cho cả `apps/hmi/i18n` (C++) và `shared/i18n.tsx` (TS), hoặc test đối chiếu hai bảng | Sửa nhãn một bên mà không sửa bên kia ⇒ test đỏ. `UX-SYSTEM-001` §1.5 yêu cầu điều này nhưng chưa có gì khoá | 2.0 |
+
+### Track D — Tài liệu authority (**cần UX Lead ký**)
+
+| # | Task | Hồ sơ | Acceptance criteria | Ước lượng |
+|---|---|---|---|---:|
+| `T57-0.11` | Đồng bộ bảng token `UX-SYSTEM-001` §2 với `theme/tokens.ts` (`F-DOC-01`) | `KX-DDC24-UX-SYSTEM-001_VI.md` → v1.8 | Tên biến và giá trị khớp 1-1 với `tokens.ts` (cả `light` và `dark`); ghi rõ lý do đổi (siết để đạt AA ở plan 45); Revision History cập nhật | 1.0 |
+| `T57-0.12` | Sửa §9 "Handoff cho FE" — bỏ `tokens.json`/`theme.css` không tồn tại, mô tả cơ chế thật (`F-DOC-02`) | `KX-DDC24-UX-SYSTEM-001_VI.md` | §9 mô tả đúng: token ở TS để test được; dẫn `tokens.ts` và `contrast.test.ts` | 0.25 |
+| `T57-0.13` | **ADR mới**: điều hướng 3 nhóm → 4 nhóm (`F-DOC-04`) | ADR mới (số cấp ở `docs/00_governance/DECISIONS.md`), `UX-SYSTEM-001` §6 | ADR nêu quan hệ `supersedes` với ADR-009 phần navigation; §6 của design system khớp `NavRail.tsx` | 0.75 |
+| `T57-0.14` | Chốt breakpoint chuẩn (`F-DOC-05`) | `UX-SYSTEM-001` §4, `UX_REQ_PA3_WEB` §3.2 | Một con số duy nhất cho ngưỡng thanh bên ↔ ngăn kéo, khớp `lg` của code; nêu rõ 390×844 là mục tiêu hỗ trợ | 0.25 |
+| `T57-0.15` | Sửa mâu thuẫn `unknown` trong `UX_REQ_PA3_WEB` §1.1 (`F-DOC-03`) | `UX_REQ_PA3_WEB.md` → v1.1 | Câu luật "bốn trạng thái" chuyển về đúng mục `health.state`, hoặc thêm `unknown` vào `PointQuality` ở **cả** doc lẫn `types.ts` (xem §12-Q1) | 0.5 |
+
+**Tổng Wave 0:** ~15,25 người-ngày · **không đổi contract, không cần backend.**
+
+---
+
+## 5. Wave 1 — An toàn vận hành
+
+Tiêu chí vào Wave 1: đề xuất **P1** ảnh hưởng trực tiếp tới an toàn hoặc khả
+năng bàn giao ca, và **làm được bằng dữ liệu đã có trên wire**.
+
+| # | Task | Đề xuất | File chính | Acceptance criteria | Ước lượng |
+|---|---|---|---|---|---:|
+| `T57-1.1` | `BB-4` Override registry — nguồn dữ liệu chung | — | `shared/overview/overrides.ts` (mới) | Trả về danh sách điểm `forced` kèm `priority`/actor (từ Activity) và `overrideExpiresInS` do Core cấp; **không** tự tính TTL ở FE | 1.0 |
+| `T57-1.2` | Khối "Ai đang giữ quyền điều khiển" trên Landing | §6.1-P1a | `DashboardPage.tsx` | Liệt kê mọi điểm đang ép tay + người ra lệnh + đếm ngược; rỗng ⇒ nói rõ "không có lệnh tay nào"; có đường tới `/activity?objectId=` | 1.5 |
+| `T57-1.3` | Cột "Còn lại" (TTL) trên bảng Monitor | §6.2-P1b | `MonitorPage.tsx` | Đếm ngược `mm:ss` trên mọi hàng đang ép tay; sắp hết hạn có dấu hiệu phi-màu kèm theo | 0.75 |
+| `T57-1.4` | Ép tay hàng loạt có xác nhận chung | §6.2-P1a | `MonitorPage.tsx` | Chọn nhiều điểm ⇒ **một** hộp thoại liệt kê từng điểm với giá trị hiện tại → giá trị mới; một thời hạn dùng chung; một vết audit cho mỗi điểm; huỷ giữa chừng không để lại lệnh nửa vời | 2.5 |
+| `T57-1.5` | `BB-5` Annunciation cho cảnh báo chưa ack | §6.3-P1a | `AppShell.tsx`, `AlarmsPage.tsx`, `DisplaySettingsPage.tsx` | Badge nhấp nháy khi có unack mới; âm thanh **mặc định TẮT**, bật/tắt trong Hiển thị, lưu theo tài khoản; tôn trọng `prefers-reduced-motion` (xem §12-Q2) | 2.0 |
+| `T57-1.6` | Ack hàng loạt có lý do bắt buộc | §6.3-P2c | `AlarmsPage.tsx` | Chọn nhiều ⇒ một hộp thoại; trường lý do **bắt buộc**; mỗi cảnh báo một vết audit riêng mang cùng lý do | 1.5 |
+| `T57-1.7` | Diễn giải hậu quả `safeState`/`safeValue` bằng ngôn ngữ vận hành | §6.10-P1b | `OutputsPage.tsx` | Mỗi lựa chọn kèm câu mô tả hậu quả vật lý ("mất liên lạc ⇒ van đóng hoàn toàn"); không dùng tên trường làm nhãn | 1.0 |
+| `T57-1.8` | Cảnh báo hậu quả khi đổi giờ hệ thống | §6.17-P1 | `TimeSettingsPage.tsx` | Lùi đồng hồ ⇒ cảnh báo nêu rõ ảnh hưởng historian và lịch vận hành, yêu cầu xác nhận riêng | 0.75 |
+| `T57-1.9` | Chính sách mật khẩu hiển thị và cưỡng chế | §6.16-P1 | `UsersPage.tsx`, `LoginPage.tsx` | Luật hiện trên form trước khi gõ; chỉ báo độ mạnh; FE **không** được lỏng hơn luật backend (xem §12-Q6) | 1.0 |
+| `T57-1.10` | Phân biệt lý do đăng nhập hỏng | §6.18-P2a | `LoginPage.tsx`, `AuthProvider.tsx` | Sai mật khẩu / không tới được backend / tài khoản bị khoá ⇒ **ba** thông điệp khác nhau, không lộ thông tin giúp dò tài khoản | 0.5 |
+| `T57-1.11` | "Tuổi dữ liệu tệ nhất trong các phân hệ" trên dải trạng thái | §6.1-P2b | `DashboardPage.tsx` | Lấy `max(observedAt age)` trong `health[]`; overall `good` mà có phân hệ cũ ⇒ vẫn hiện rõ | 0.5 |
+| `T57-1.12` | `CommTile` phân biệt "tắt có chủ đích" với "không đọc được" | §6.6-P2b | `DiagnosticsPage.tsx` | BACnet/IP feature-gated OFF ⇒ nhãn riêng, **không** dùng `N/A` chung với lỗi đọc | 0.25 |
+
+**Tổng Wave 1:** ~13,25 người-ngày. `T57-1.9` cần backend xác nhận luật mật khẩu.
+
+---
+
+## 6. Wave 2 — Hiệu quả chẩn đoán và cấu hình
+
+Tiêu chí: rút ngắn thời gian trả lời một câu hỏi chẩn đoán, hoặc bắt lỗi cấu
+hình **trước** khi nó ra tới thiết bị. Hầu hết là FE thuần.
+
+| # | Task | Đề xuất | File chính | Acceptance criteria | Ước lượng |
+|---|---|---|---|---|---:|
+| `T57-2.1` | `BB-1` `useUrlFilters` + lớp Saved View | — | `shared/hooks/useUrlFilters.ts` (mới) | Bộ lọc ↔ URL hai chiều; Back/F5 giữ ngữ cảnh; khung nhìn đặt tên lưu theo tài khoản (phụ thuộc `T57-3.2`) | 2.0 |
+| `T57-2.2` | Áp `BB-1` cho Alarms, Scheduler, Activity | §6.3-P2a, §6.7-P2b, §6.5-P2b | 3 trang | Gửi được đường dẫn "High chưa ack trong 24 h"; Activity thêm lọc khoảng thời gian | 1.5 |
+| `T57-2.3` | Saved View cho Monitor và bộ trend đặt tên | §6.2-P2a, §6.4-P2b | `MonitorPage.tsx`, `TrendsPage.tsx` | Tạo/đổi tên/xoá khung nhìn; mở bằng `?view=`; không mất bộ lọc cũ trong localStorage | 2.0 |
+| `T57-2.4` | `BB-6` Crosshair đọc giá trị mọi series | §6.4-P1 | `TrendChart.tsx` | Di chuột/bàn phím dọc trục thời gian ⇒ bảng giá trị tại mốc đó cho **mọi** series; gap hiện `—`, không nội suy | 2.0 |
+| `T57-2.5` | Trục Y thứ hai cho series khác đơn vị | §6.4-P2a | `TrendChart.tsx`, `TrendsPage.tsx` | Gán series sang trục phụ; nhãn trục ghi rõ đơn vị; tối đa 2 trục | 1.5 |
+| `T57-2.6` | Marker sự kiện trên biểu đồ (ép tay, cảnh báo bật) | §6.4-P2c | `TrendsPage.tsx` | Marker lấy từ Activity/Alarm thật; bật/tắt được; hover nói rõ sự kiện gì, ai | 2.0 |
+| `T57-2.7` | Ghi rõ độ phân giải aggregate đang dùng | §6.4-P3 | `HistoryStateBanner.tsx` | Hiện `raw`/`1m`/`5m` cạnh tiêu đề, lấy từ response, không đoán theo preset | 0.25 |
+| `T57-2.8` | Liên kết cảnh báo → điểm nguồn → trend cùng cửa sổ thời gian | §6.3-P3 | `AlarmRow.tsx` | Từ một cảnh báo mở được trend của điểm nguồn với khoảng bao quanh thời điểm bật | 0.75 |
+| `T57-2.9` | `BB-7` Xem trước quy đổi Input | §6.9-P1 | `InputsPage.tsx` | Nhập giá trị thô ⇒ hiện giá trị kỹ thuật theo cấu hình **đang soạn**, không phải cấu hình đã lưu; không gọi API ghi | 1.5 |
+| `T57-2.10` | `BB-8` Diff "đang lưu ↔ bản nháp" cho Inputs | §6.9-P2a | `InputsPage.tsx` | Dùng lại mẫu `NetworkCandidateDiff`; chỉ hiện field thật sự đổi | 1.0 |
+| `T57-2.11` | Sao chép cấu hình sang nhiều kênh | §6.9-P2b | `InputsPage.tsx` | Chọn kênh nguồn + nhiều kênh đích; xem trước danh sách sẽ bị ghi đè **trước** khi áp; không tự Save | 1.0 |
+| `T57-2.12` | Xem trước đường cong `minPv`/`maxPv` → tín hiệu ra | §6.10-P2 | `OutputsPage.tsx` | Đồ thị hai điểm cập nhật theo giá trị đang soạn | 0.75 |
+| `T57-2.13` | Mô phỏng luật cảnh báo trước khi lưu | §6.13-P1b | `AlarmSettingsPage.tsx` | Nhập chuỗi giá trị thử ⇒ nói ra cảnh báo bật/không, sau bao lâu, mức nào; chạy hoàn toàn ở FE theo đúng luật backend (xem §12-Q4) | 2.0 |
+| `T57-2.14` | Thống nhất ngôn ngữ nhãn `AlarmSettingsPage` | §6.13-P2b | `AlarmSettingsPage.tsx`, `i18n.tsx` | Không còn trộn Việt–Anh trong cùng form; thuật ngữ giao thức giữ nguyên có chú giải | 1.0 |
+| `T57-2.15` | Xuất CSV Activity theo bộ lọc hiện tại | §6.5-P2a | `ActivityPage.tsx` | CSV khớp đúng bộ lọc đang xem; không chứa secret (theo `REQ-PA3-X-1`) | 0.75 |
+| `T57-2.16` | Flash cell "giá trị vừa đổi" ở Monitor | §6.2-P3 | `MonitorPage.tsx` | Theo spec `DataTable` của `UX-SYSTEM-001` §5; tôn trọng `prefers-reduced-motion` | 0.5 |
+| `T57-2.17` | Trợ giúp theo ngữ cảnh | §6.18-P2b | `HelpPage.tsx`, `TopBar.tsx` | Mở Help từ một trang ⇒ nhảy đúng mục của trang đó | 1.0 |
+| `T57-2.18` | `/me` hiện quyền hiệu lực dạng danh sách việc làm được | §6.18-P3 | `UserInfoPage.tsx` | Sinh từ `ROUTE_MIN_ROLE`, không viết tay (tránh lệch khi siết quyền) | 0.5 |
+| `T57-2.19` | Xem trước theme/ngôn ngữ trước khi áp | §6.17-P3 | `DisplaySettingsPage.tsx` | Xem trước không đổi trạng thái toàn app cho tới khi xác nhận | 0.5 |
+| `T57-2.20` | Nhân bản một Virtual Point | §6.11-P3 | `VirtualIoPage.tsx` | Nhân bản mở form đã điền sẵn, tag mới chưa trùng; không tự tạo khi chưa xác nhận | 0.5 |
+| `T57-2.21` | Xuất "ảnh chụp trạng thái" và "gói chẩn đoán" (JSON) | §6.1-P3, §6.6-P3 | `DashboardPage.tsx`, `DiagnosticsPage.tsx` | JSON kèm mốc thời gian và phiên bản; **không** chứa secret; tải về bằng cơ chế trình duyệt cho phép | 1.0 |
+| `T57-2.22` | Mã QR địa chỉ truy cập mới sau khi đổi IP | §6.15-P3 | `NetworkPage.tsx` | QR sinh tại chỗ, không gọi dịch vụ ngoài (bo không có Internet ra ngoài) | 0.5 |
+
+**Tổng Wave 2:** ~24,5 người-ngày.
+
+---
+
+## 7. Wave 3 — Cần contract hoặc backend mới
+
+Mỗi task ở đây **phải có ADR riêng** trước khi code (`DOC_GOVERNANCE.md` §4).
+Ước lượng chỉ tính phần FE + Go; chưa tính Core/C++ nếu phát sinh.
+
+| # | Task | Đề xuất | Tầng chạm | ADR cần có | Ước lượng |
+|---|---|---|---|---|---:|
+| `T57-3.1` | `BB-3` Equipment tag: trường "thuộc thiết bị" trong cấu hình điểm + nhóm theo thiết bị ở Monitor | §6.2-P2b | Contract · Go · FE | **Có** — đổi `CONFIG_SCHEMA` | 4.0 |
+| `T57-3.2` | Lưu tuỳ chọn người dùng trên thiết bị (ghim, khung nhìn, âm thanh alarm) | §6.1-P2a | Contract · Go · FE | **Có** — endpoint mới | 2.5 |
+| `T57-3.3` | Bảng chỉ số hệ alarm ISA-18.2 §16 (rate, top lặp, shelved sắp hết hạn) | §6.3-P2b | Go · FE (+ màn hình mới) | **Có** — nguồn lưu trữ số đo (§12-Q5) | 4.0 |
+| `T57-3.4` | Lịch sử 60 phút cho CPU/RAM/nhiệt độ | §6.6-P2a | Go · FE | Không (mở rộng `/health`) | 2.0 |
+| `T57-3.5` | Xem trước "hiệu lực thực tế" khi nhiều lịch cùng tác động một điểm | §6.7-P1 | Go (hoặc Core) · FE | **Có** — ai tính hợp nhất (§12-Q7) | 4.0 |
+| `T57-3.6` | Cảnh báo xung đột lịch ngay khi soạn | §6.7-P2a | Go · FE | Dùng chung ADR của `T57-3.5` | 2.0 |
+| `T57-3.7` | Nhật ký "lịch này đã tác động những gì trong 7 ngày" | §6.7-P3 | Go · FE | Không | 1.5 |
+| `T57-3.8` | Quét/dò thiết bị trên bus Modbus | §6.12-P1a | Core/iobus · Go · FE | **Có** — quét là **ghi ra bus thật** (§12-Q8) | 5.0 |
+| `T57-3.9` | Xem thô khung truyền Modbus (gửi/nhận, CRC, timeout) | §6.12-P1b | Core/iobus · Go · FE | **Có** — thêm luồng telemetry | 4.0 |
+| `T57-3.10` | Nhập/xuất bảng ánh xạ điểm Modbus (CSV) | §6.12-P2b | Go · FE | Không | 2.0 |
+| `T57-3.11` | Mẫu thiết bị Modbus dựng sẵn theo hãng | §6.12-P3 | Go · FE · dữ liệu mẫu | Không | 2.0 |
+| `T57-3.12` | "Ai đang dùng Virtual Point này" trước khi xoá | §6.11-P2 | Go · FE | Không | 2.0 |
+| `T57-3.13` | Ước lượng tần suất cảnh báo từ lịch sử điểm | §6.13-P2a | Go (historian) · FE | Không | 2.5 |
+| `T57-3.14` | Diff trước/sau cho hành động sửa cấu hình trong Activity | §6.5-P3 | Go · FE | Không | 2.0 |
+| `T57-3.15` | Trạng thái đồng bộ NTP (lệch, nguồn, lần cuối) | §6.17-P2 | Go · FE | Không | 1.5 |
+| `T57-3.16` | Lần đăng nhập gần nhất + phiên đang hoạt động của mỗi tài khoản | §6.16-P2b | Go · FE | Không | 1.5 |
+| `T57-3.17` | Buộc đổi mật khẩu mặc định ở lần đăng nhập đầu | §6.16-P2a | Go · FE | **Có** — đổi luồng xác thực | 2.0 |
+| `T57-3.18` | Kiểm tra kết nối sau apply mạng (ping gateway/DNS) trong cửa sổ đếm ngược | §6.15-P2 | netcfg · Go · FE | Không | 2.0 |
+| `T57-3.19` | HMI: đếm ngược TTL lệnh ép tay trên màn Control | §6.19-P2 | `apps/hmi` (C++) | Không | 1.5 |
+| `T57-3.20` | HMI: chỉ báo "Web đang có người đăng nhập" | §6.19-P3 | Go · `apps/hmi` | Không | 1.5 |
+
+**Tổng Wave 3:** ~49,5 người-ngày · **9 ADR** phải viết và ký trước.
+
+---
+
+## 8. Wave 4 và Track P — Quyết định sản phẩm
+
+### Wave 4 — Chưa có quyết định phạm vi
+
+| # | Việc | Nguồn | Vì sao chưa lên lịch được |
+|---|---|---|---|
+| `T57-4.1` | **ISA-101 Level 2 — process graphic** theo thiết bị công nghệ (AHU/FCU/chiller) | §4.1 review | Đây là **khoảng hở lớn nhất về sản phẩm**, nhưng Rev A không có trình soạn đồ hoạ theo phạm vi đã chốt. Cần CTO/PM quyết: Rev B, hay chấp nhận đường đi tối thiểu qua `T57-3.1` (nhóm theo thiết bị). Nếu làm: cần hồ sơ UI/UX riêng với asset đầy đủ theo `DOC_GOVERNANCE` §2.2 |
+| `T57-4.2` | Code-splitting theo route | `F-UX-16` | Bundle Foxlinx **892 kB** (227 kB gzip). Đổi chiến lược chunking chạm toàn bộ quy trình đóng gói/deploy; phải đo lại thời gian mở trang đầu **trên board thật**, không so kích thước tệp |
+
+> **Chú thích phép đo (`F-DOC-10`, đo lại 2026-08-18).** Con số 892 kB ở trên đo
+> bằng `npm run build:foxlinx`, tức có bake bốn workspace Programming; còn
+> `F-UX-16` trong biên bản review đo bằng `npm run build` trần. Hai phép đo khác
+> nhau, không mâu thuẫn. Đo lại trên cùng cây làm việc: **715,18 kB** (trần) so
+> với **898,84 kB** (Foxlinx), chênh **183,66 kB**; chunk `charts` giống hệt nhau
+> ở **407,31 kB**.
+
+### Track P — Programming (không lập lại ở plan này)
+
+| Đề xuất | Thuộc plan |
+|---|---|
+| §6.14-P1a Palette block + node INPUT/OUTPUT cho FBD | [Plan 56](56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md), nguồn `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15` §8 |
+| §6.14-P1b Đóng UC-PROG-03 | [Plan 53](53_PROGRAMMING_IMPLEMENTATION_PLAN.md), nguồn `REV-PROG-FE-UX-2026-08-13` — **đang chặn `RELEASE_READY`** |
+| §6.14-P2a `DraftAttentionPanel` 4/6 trạng thái còn thiếu | Plan 56 |
+| §6.14-P2b `<h1>` cho 9 màn Programming | **Gộp vào `T57-0.4`** (cùng loại việc, làm một lần) |
+
+---
+
+## 9. Ma trận tài liệu phải cập nhật
+
+### 9.1 Trước khi code (gate)
+
+| Hồ sơ | Việc | Task chặn |
+|---|---|---|
+| `KX-DDC24-UX-SYSTEM-001_VI.md` → v1.8 | Token, §6 nav 4 nhóm, §4 breakpoint, §9 handoff | `T57-0.11..0.14` chặn **toàn bộ** Wave 1–3 (design system là nguồn chuẩn) |
+| `UX_REQ_PA3_WEB.md` → v1.1 | Sửa `F-DOC-03`; thêm requirement ID cho UC mới | `T57-0.15`; mỗi UC mới ở Wave 1–3 phải có ID trước khi code |
+| ADR điều hướng 4 nhóm | Mới, số cấp ở `docs/00_governance/DECISIONS.md` | `T57-0.13` |
+| Hồ sơ UI/UX cho màn hình mới **kèm asset SVG/PNG** | Override registry · Ép tay hàng loạt · Alarm KPI · Modbus scan · Modbus frame monitor · Scheduler effective preview | Chặn `T57-1.2`, `T57-1.4`, `T57-3.3`, `T57-3.8`, `T57-3.9`, `T57-3.5` |
+| `MODBUS_RTU_UI_UX_DESIGN.md` | Bổ sung scan + frame monitor + CSV | `T57-3.8..3.11` |
+| `KX-DDC24-UX-WEB-SCHEDULER-001_VI.md` | Bổ sung effective preview + cảnh báo xung đột | `T57-3.5`, `T57-3.6` |
+| `CONFIG_SCHEMA_MK-DDC-24_VI.md` + `contracts/` | Equipment tag; user preferences | `T57-3.1`, `T57-3.2` |
+| 9 ADR của Wave 3 | Theo bảng §7 | Từng task tương ứng |
+
+> [!WARNING]
+> `DOC_GOVERNANCE.md` §2.2: **wireframe chữ hoặc ASCII không đủ** để qua cổng
+> Detailed Design. Sáu màn hình mới ở trên đều chứa quyết định an toàn hoặc
+> hành động ghi ra thiết bị ⇒ **bắt buộc** có asset render được, cả desktop và
+> mobile cho màn hình responsive. Đây là hạng mục dễ bị bỏ sót nhất khi lên lịch.
+
+### 9.2 Khi mỗi task Done
+
+Theo `DOC_GOVERNANCE.md` §7 — làm đủ 6 bước, không bỏ bước nào:
+
+1. Sửa hồ sơ chủ quản, giữ ID ổn định.
+2. Revision History **trong chính hồ sơ**.
+3. Đồng bộ `docs/05_verification/UX_PA3_TRACEABILITY.md` và Open Decisions nếu ảnh hưởng requirement/contract/test.
+4. `CHANGELOG.md` dưới `[Unreleased]` **trong cùng phiên**.
+5. `python3 scripts/docs_iso_harness.py --expect` và ghi số đo thật (cập nhật khối `EXPECT` **trong cùng commit**).
+6. Commit — hồ sơ chưa được Git theo dõi thì chưa phải baseline có kiểm soát.
+
+---
+
+## 10. Ma trận truy vết — 67 đề xuất → task
+
+Không đề xuất nào được bỏ im lặng.
+
+| Đề xuất | Task | Wave |
+|---|---|---|
+| §6.1-P1a Ai đang giữ quyền điều khiển | `T57-1.1`, `T57-1.2` | 1 |
+| §6.1-P1b TrendPreview theo producer | `T57-0.3` | 0 |
+| §6.1-P2a Ghim đồng bộ theo tài khoản | `T57-3.2` | 3 |
+| §6.1-P2b Tuổi dữ liệu tệ nhất | `T57-1.11` | 1 |
+| §6.1-P3 Xuất ảnh chụp trạng thái | `T57-2.21` | 2 |
+| §6.2-P1a Ép tay hàng loạt | `T57-1.4` | 1 |
+| §6.2-P1b Cột TTL | `T57-1.3` | 1 |
+| §6.2-P2a Saved view | `T57-2.1`, `T57-2.3` | 2 |
+| §6.2-P2b Nhóm theo thiết bị | `T57-3.1` | 3 |
+| §6.2-P3 Flash cell | `T57-2.16` | 2 |
+| §6.3-P1a Annunciation | `T57-1.5` | 1 |
+| §6.3-P1b 5 severity trong nhật ký | `T57-0.2` | 0 |
+| §6.3-P2a Bộ lọc URL | `T57-2.2` | 2 |
+| §6.3-P2b Chỉ số hệ alarm | `T57-3.3` | 3 |
+| §6.3-P2c Ack hàng loạt có lý do | `T57-1.6` | 1 |
+| §6.3-P3 Liên kết alarm → điểm → trend | `T57-2.8` | 2 |
+| §6.4-P1 Crosshair | `T57-2.4` | 2 |
+| §6.4-P2a Trục Y thứ hai | `T57-2.5` | 2 |
+| §6.4-P2b Bộ trend đặt tên | `T57-2.3` | 2 |
+| §6.4-P2c Marker sự kiện | `T57-2.6` | 2 |
+| §6.4-P3 Độ phân giải aggregate | `T57-2.7` | 2 |
+| §6.5-P2a Xuất CSV Activity | `T57-2.15` | 2 |
+| §6.5-P2b Lọc khoảng thời gian | `T57-2.2` | 2 |
+| §6.5-P3 Diff trước/sau | `T57-3.14` | 3 |
+| §6.6-P2a Lịch sử CPU/RAM/nhiệt | `T57-3.4` | 3 |
+| §6.6-P2b CommTile phân biệt tắt/không đọc được | `T57-1.12` | 1 |
+| §6.6-P3 Gói chẩn đoán | `T57-2.21` | 2 |
+| §6.7-P1 Hiệu lực thực tế | `T57-3.5` | 3 |
+| §6.7-P2a Cảnh báo xung đột | `T57-3.6` | 3 |
+| §6.7-P2b Bộ lọc URL | `T57-2.2` | 2 |
+| §6.7-P3 Nhật ký tác động 7 ngày | `T57-3.7` | 3 |
+| **§6.8 (3 mục)** | **LOẠI — chỉ thị user 2026-08-18** | — |
+| §6.9-P1 Xem trước quy đổi | `T57-2.9` | 2 |
+| §6.9-P2a Diff nháp | `T57-2.10` | 2 |
+| §6.9-P2b Sao chép nhiều kênh | `T57-2.11` | 2 |
+| §6.10-P1a Dirty-guard | `T57-0.1` | 0 |
+| §6.10-P1b Hậu quả safeState | `T57-1.7` | 1 |
+| §6.10-P2 Đường cong minPv/maxPv | `T57-2.12` | 2 |
+| §6.11-P1 Dirty-guard | `T57-0.1` | 0 |
+| §6.11-P2 Ai đang dùng VP | `T57-3.12` | 3 |
+| §6.11-P3 Nhân bản VP | `T57-2.20` | 2 |
+| §6.12-P1a Quét thiết bị bus | `T57-3.8` | 3 |
+| §6.12-P1b Xem thô khung truyền | `T57-3.9` | 3 |
+| §6.12-P2a `<h1>` các tab | `T57-0.4` | 0 |
+| §6.12-P2b CSV ánh xạ điểm | `T57-3.10` | 3 |
+| §6.12-P3 Device template | `T57-3.11` | 3 |
+| §6.13-P1a Dirty-guard | `T57-0.1` | 0 |
+| §6.13-P1b Mô phỏng luật cảnh báo | `T57-2.13` | 2 |
+| §6.13-P2a Ước lượng tần suất | `T57-3.13` | 3 |
+| §6.13-P2b Thống nhất ngôn ngữ | `T57-2.14` | 2 |
+| §6.14 (4 mục) | Track P — Plan 53/56; riêng `<h1>` gộp `T57-0.4` | — |
+| §6.15-P2 Kiểm kết nối sau apply | `T57-3.18` | 3 |
+| §6.15-P3 QR địa chỉ mới | `T57-2.22` | 2 |
+| §6.16-P1 Chính sách mật khẩu | `T57-1.9` | 1 |
+| §6.16-P2a Buộc đổi mật khẩu mặc định | `T57-3.17` | 3 |
+| §6.16-P2b Lần đăng nhập gần nhất | `T57-3.16` | 3 |
+| §6.17-P1 Cảnh báo đổi giờ | `T57-1.8` | 1 |
+| §6.17-P2 Trạng thái NTP | `T57-3.15` | 3 |
+| §6.17-P3 Xem trước theme/ngôn ngữ | `T57-2.19` | 2 |
+| §6.18-P2a Lý do đăng nhập hỏng | `T57-1.10` | 1 |
+| §6.18-P2b Help theo ngữ cảnh | `T57-2.17` | 2 |
+| §6.18-P3 `/me` quyền hiệu lực | `T57-2.18` | 2 |
+| §6.19-P1 Kiểm chéo từ vựng HMI ↔ Web | `T57-0.10` | 0 |
+| §6.19-P2 TTL trên HMI Control | `T57-3.19` | 3 |
+| §6.19-P3 Chỉ báo Web có người đăng nhập | `T57-3.20` | 3 |
+
+**Finding còn mở → task:** `F-UX-12`→`T57-0.1` · `F-UX-13`→`T57-0.2` ·
+`F-UX-14`→`T57-0.3` · `F-UX-15`→`T57-0.4` · `F-UX-16`→`T57-4.2` ·
+`F-DOC-01`→`T57-0.11` · `F-DOC-02`→`T57-0.12` · `F-DOC-03`→`T57-0.15` ·
+`F-DOC-04`→`T57-0.13` · `F-DOC-05`→`T57-0.14`.
+
+---
+
+## 11. Ước lượng và thứ tự đề xuất
+
+| Wave | Nội dung | Người-ngày | Chặn bởi |
+|---|---|---:|---|
+| 0 | Đóng nợ + gate chống tái diễn | ~15,25 | `PLAN_READY`; Track D cần UX Lead |
+| 1 | An toàn vận hành | ~13,25 | Wave 0 Track D (design system) |
+| 2 | Hiệu quả chẩn đoán | ~24,5 | Wave 0 Track C; `T57-2.3` cần `T57-3.2` |
+| 3 | Contract/backend mới | ~49,5 | 9 ADR + Tech Lead |
+| 4 | Quyết định sản phẩm | chưa ước lượng | CTO/PM |
+| **Tổng Wave 0–3** | | **~102,5 người-ngày dev** | chưa tính review/QA/e2e |
+
+**Thứ tự đề xuất:** `Wave 0 Track A+B+C` (song song với `Track D` do UX Lead
+làm) → `Wave 1` → `Wave 2` → `Wave 3` theo từng ADR được ký. Không nên đảo Wave
+0 xuống sau: ba gate ở Track C là thứ giữ cho Wave 1–3 không mở lại đúng những
+lỗi vừa sửa.
+
+**Đề xuất cắt phạm vi nếu cần giao nhanh:** giữ `Wave 0` + `Wave 1` (≈28,5
+người-ngày) đã đóng toàn bộ nợ kỹ thuật và mọi đề xuất **P1 ảnh hưởng an toàn**;
+Wave 2–3 lùi sang đợt sau mà không để lại nợ.
+
+---
+
+## 12. Tám câu hỏi phải trả lời trước khi mở `IMPLEMENT_READY`
+
+> **Cập nhật 2026-08-18: cả 8 câu đã có quyết định.** Q1/Q3 đóng bằng mặc định
+> kỹ thuật trong `AUTH-WEBUX-2026-08-18-01`; Q2/Q4/Q5/Q6/Q7/Q8 đóng bằng
+> `ADR-034`…`ADR-039`. Riêng **Q8 chỉ đóng phần THIẾT KẾ** — `ADR-039` đặc tả
+> điều kiện quét bus nhưng **không** cấp phép ghi ra bus RS-485, nên `T57-3.8`
+> giữ nguyên `IMPLEMENT_READY BLOCKED`.
+
+| # | Câu hỏi | Ảnh hưởng | Người quyết | **Trạng thái** |
+|---|---|---|---|---|
+| Q1 | `F-DOC-03`: thêm `unknown` vào `PointQuality` (đổi cả type lẫn backend), hay chuyển câu luật về đúng mục `health.state`? | `T57-0.15`; nếu chọn cách 1 thì chạm contract | UX Lead + Tech Lead | **ĐÃ ĐÓNG** — `AUTH-WEBUX-…-01` (chỉ sửa tài liệu) |
+| Q2 | Annunciation âm thanh: trình duyệt chặn autoplay khi chưa có tương tác người dùng. Chấp nhận "phải bấm một lần để bật âm" hay chỉ làm nhấp nháy? | `T57-1.5` | UX Lead + PM | **ĐÃ ĐÓNG** — `ADR-034` |
+| Q3 | `TrendPreview` khi điểm ngừng cập nhật: để **đứt đường** (đúng luật "không nối qua gap") hay giữ giá trị cuối? | `T57-0.3` | UX Lead | **ĐÃ ĐÓNG** — `AUTH-WEBUX-…-01` (đứt đường) |
+| Q4 | Mô phỏng luật cảnh báo chạy ở FE (nhanh, nhưng phải chép luật backend — rủi ro lệch) hay gọi endpoint mô phỏng ở BE? | `T57-2.13` | Tech Lead | **ĐÃ ĐÓNG** — `ADR-035` |
+| Q5 | Chỉ số hệ alarm ISA-18.2 lưu ở đâu: historian, kho Activity, hay bảng riêng? Giữ bao lâu? | `T57-3.3` | Tech Lead | **ĐÃ ĐÓNG** — `ADR-036` |
+| Q6 | Chính sách mật khẩu cụ thể (độ dài, ký tự, khoá tài khoản sau N lần sai) | `T57-1.9`, `T57-3.17` | PM + Tech Lead | **ĐÃ ĐÓNG** — `ADR-037` |
+| Q7 | "Hiệu lực thực tế" của lịch tính ở đâu: Go (nhanh nhưng phải chép ngữ nghĩa Core) hay Core (đúng nguồn nhưng phải mở API)? | `T57-3.5`, `T57-3.6` | Tech Lead | **ĐÃ ĐÓNG** — `ADR-038` |
+| Q8 | Quét bus Modbus **ghi ra bus thật** và có thể làm nhiễu thiết bị đang chạy. Cho phép quét lúc nào — chỉ khi bus idle, chỉ vai trò admin, có cảnh báo chặn? | `T57-3.8` | PM + Tech Lead (an toàn) | **ĐÃ ĐÓNG** (thiết kế) — `ADR-039`; `T57-3.8` vẫn BLOCKED, ADR **không** cho phép ghi ra bus |
+
+---
+
+## 13. Rủi ro
+
+| Rủi ro | Mức | Giảm thiểu |
+|---|---|---|
+| Sáu màn hình mới cần asset trực quan theo `DOC_GOVERNANCE` §2.2 — dễ bị bỏ qua khi lên lịch, rồi kẹt ở cổng Detailed Design | Cao | Đưa việc dựng asset thành task riêng có ước lượng, không coi là "phần đầu của task code" |
+| Wave 3 có 9 ADR; nếu viết dồn cuối kỳ sẽ chặn toàn bộ | Cao | Viết ADR theo từng task ngay khi task được chọn, không gom |
+| Nhiều phiên agent chạy song song trên cùng file FE (đã xảy ra: `git add` cuốn theo edit của phiên khác) | Trung bình | Mỗi Wave một nhánh; soát `git status` trước mọi `add`; không tự merge PR draft khác scope |
+| CI GitHub Actions đang bị chặn bởi billing | Trung bình | Dùng test local làm bằng chứng merge, ghi rõ trong PR — như các đợt trước |
+| `T57-3.1` (equipment tag) có thể lan tới Core/FW nếu contract điểm được Core đọc | Trung bình | Spike 0,5 ngày đọc `CONFIG_SCHEMA` + Core trước khi ước lượng lại |
+| Bundle đã 892 kB; Wave 1–3 chỉ làm nó lớn thêm | Thấp–Trung bình | Đo kích thước bundle ở cuối mỗi Wave; nếu vượt ngưỡng thoả thuận thì kéo `T57-4.2` lên sớm |
+
+---
+
+## 13b. Trạng thái triển khai (cập nhật 2026-08-18, lần 2)
+
+**Plan CHƯA đóng được**, nhưng đã qua được mọi cổng quyết định.
+
+| Wave | Task | Trạng thái | Ghi chú |
+|---|---:|---|---|
+| 0 — Đóng nợ + gate | 15 | **XONG 14,5/15** | `T57-0.7` thiếu test hành vi `F-UX-03` (xem dưới) |
+| 1 — An toàn vận hành | 12 | **XONG 12/12** | Mở bằng `AUTH-WEBUX-2026-08-18-02` sau khi phát hành asset trực quan và đóng Q2/Q6 |
+| 2 — Hiệu quả chẩn đoán | 22 | **CHƯA BẮT ĐẦU** | Cổng đã `PASS` cho phần FE thuần (Q4 đóng bằng `ADR-035`); `T57-2.13` chuyển sang Wave 3 vì ngữ nghĩa luật cảnh báo thuộc Core |
+| 3 — Contract/backend mới | 20 | **CHƯA BẮT ĐẦU** | Q5/Q7/Q8 đã trả lời nhưng còn thiếu **9 ADR theo từng task** + chữ ký Tech Lead. **`T57-3.8` chặn riêng**: `ADR-039` đặc tả thiết kế quét bus nhưng KHÔNG cấp phép ghi ra bus RS-485 |
+| 4 — Quyết định sản phẩm | 2 | **CHƯA BẮT ĐẦU** | Rev A/Rev B chưa quyết |
+| **Tổng** | **71** | **27/71 (~38%)** | ~28,5/102,5 người-ngày |
+
+**Tám câu hỏi §12: đã đóng cả 8** (Q1/Q3 bằng `AUTH-WEBUX-…-01`; Q2/Q4/Q5/Q6/Q7/Q8
+bằng `ADR-034`…`ADR-039`). Đây là thay đổi lớn nhất so với lần cập nhật trước —
+không còn quyết định nào chặn việc lập kế hoạch tiếp.
+
+Trong 67 đề xuất UC/UI/UX ở §10, đã chạm **16**. **51 đề xuất còn lại chưa triển khai.**
+
+### Việc còn lại
+
+| Mục | Trạng thái |
+|---|---|
+| Test hành vi `F-UX-03` (`/trends?points=`) | Viết rồi nhưng **làm treo vitest ngay lúc import** `TrendsPage`; đã gỡ khỏi repo thay vì để lại test treo. Hiện phủ bằng gate hợp đồng (kiểm có `searchParams.get('points')`), **không** phủ hành vi |
+| Test hành vi `F-UX-13` | Chưa viết; phủ gián tiếp qua bộ test alarm sẵn có |
+| Chặn Back/Forward trong `useDirtyGuard` | Cần `useBlocker` của data router; app dùng `<BrowserRouter>`. Ghi rõ trong docstring là khoảng hở đã biết |
+| Wave 2 (22 task) | Cổng đã mở cho phần FE thuần — **sẵn sàng triển khai**, chưa bắt đầu |
+| Wave 3 (20 task) | Cần 9 ADR theo task + Tech Lead. `T57-3.8` cần thêm quyết định người về việc ghi ra bus |
+| Wave 4 (2 task) | Cần quyết định sản phẩm Rev A/Rev B |
+| **Deploy lên board** | **BỊ CHẶN** — board Foxlinx tạm mất kết nối 2026-08-18, chủ sở hữu chỉ thị để lại. Bản trên board vẫn là bản 03:15Z, **không** gồm Wave 0 lẫn Wave 1 |
+
+### Điều kiện để đóng plan
+
+Còn **44 task** ở Wave 2–4. Cổng quyết định đã thông; thứ còn thiếu là **năng lực
+triển khai**, 9 ADR theo từng task của Wave 3, và một quyết định người cho
+`T57-3.8` (ghi ra bus RS-485 thật) cùng Wave 4 (Rev A/Rev B).
+
+## 14. Revision History
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.1 | 2026-08-18 | Thêm §13b — trạng thái triển khai thật: Wave 0 xong 14,5/15, Wave 1–4 chưa bắt đầu, tổng 15/71 task; ghi rõ điều kiện đóng plan và bốn việc còn lại của chính Wave 0 (gồm deploy bị chặn do board mất kết nối) |
+| 1.0 | 2026-08-18 | Tạo plan: 67 đề xuất UC/UI/UX (trừ §6.8 theo chỉ thị) + 10 finding còn mở, chia 5 Wave và 8 khối hạ tầng dùng chung; ma trận truy vết 1-1; 8 câu hỏi chặn `IMPLEMENT_READY` |

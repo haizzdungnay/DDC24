@@ -1,7 +1,8 @@
 # Yêu cầu UX Web PA3 — MK-DDC-24
 
 > **ID:** UX-REQ-PA3-WEB-001
-> **Ngày:** 2026-08-08
+> **Phiên bản:** 1.1 | 2026-08-18
+> **Ngày phát hành đầu:** 2026-08-08
 > **Trạng thái:** Baseline cho slice P1–P6
 > **Nguồn:** `docs/CHUONG_YEU_CAU/dashboard.md` (UX-REQ-MKDDC24-PA3-001),
 > `docs/CHUONG_YEU_CAU/UX_DESIGN_MK-DDC-24_PA3.md` (UX-DES-MKDDC24-PA3-001)
@@ -31,9 +32,15 @@ một nẻo".
 | `stale` | Số đo cũ hơn ngưỡng tươi | mất kết nối |
 | `offline` | Không liên lạc được với nguồn | giá trị bằng 0 |
 
-**Luật:** producer không nói gì ⇒ `uncertain`, KHÔNG phải `good`. Bốn trạng thái
-`bad`/`stale`/`offline`/`unknown` phải có **bốn cách trình bày khác nhau** trên
-giao diện (UX-DES §22).
+**Đúng năm giá trị. `quality` KHÔNG có `unknown`** — thang có `unknown` là
+`health.state` ở §1.2, và đó là hai thang khác nhau. Type `PointQuality` trong
+`apps/web-ui/src/shared/types.ts` cũng chỉ có năm giá trị này; `QualityBadge` gặp
+giá trị lạ thì lùi về `uncertain`, không tự sinh mức thứ sáu.
+
+**Luật:** producer không nói gì ⇒ `uncertain`, KHÔNG phải `good`. Ba trạng thái
+`bad`/`stale`/`offline` phải có **ba cách trình bày khác nhau** trên giao diện
+(UX-DES §22): chúng dẫn tới ba hành động xử lý khác nhau, nên gộp hình thức trình
+bày là xoá mất thông tin chẩn đoán.
 
 ### 1.2 Sức khoẻ phân hệ (`health.state`)
 
@@ -42,6 +49,24 @@ giao diện (UX-DES §22).
 **Luật:** `unknown` là trạng thái riêng. Không đọc được một phân hệ KHÔNG được
 hiển thị như `good` (đây là hồi quy PA3-F01 đã xảy ra một lần) và cũng không
 được hiển thị như `fault` (có thể chỉ là chưa cấu hình).
+
+**Luật trình bày:** bốn trạng thái bất thường `degraded`/`fault`/`offline`/`unknown`
+phải có **bốn cách trình bày khác nhau**. `offline` (mất liên lạc) và `unknown`
+(chưa biết, có thể chỉ là chưa cấu hình) đặc biệt không được trộn: một cái cần đi
+kiểm tra đường truyền, cái kia cần đi cấu hình.
+
+> [!NOTE]
+> **Vì sao mục này đổi ở v1.1.** Bản v1.0 đặt câu luật "bốn trạng thái
+> `bad`/`stale`/`offline`/`unknown`" vào §1.1, trong khi bảng ngay trên nó định
+> nghĩa `quality` **không** có `unknown` — tài liệu tự mâu thuẫn (finding
+> `F-DOC-03` của [`REV-FE-UIUX-UC-2026-08-18`](../07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md)).
+> Nguyên nhân: câu luật được viết cho thang `health.state` rồi đặt nhầm vào mục
+> của thang `quality`. Cách sửa đã chốt là **chỉ sửa tài liệu** — chuyển câu luật
+> về đúng §1.2 — theo quyết định **Q1** của
+> [`AUTH-WEBUX-2026-08-18-01`](../00_governance/DECISIONS.md). Phương án còn lại
+> (thêm `unknown` vào `PointQuality`) bị loại vì nó đổi contract giữa backend và
+> frontend, vượt phạm vi Wave 0 của Plan 57. **Không** thêm `unknown` vào
+> `PointQuality` khi chưa có ADR riêng.
 
 ### 1.3 Mức cảnh báo (`severity`)
 
@@ -237,6 +262,12 @@ MONITOR (/monitor)
 
 ### 3.2 Thứ tự ưu tiên trên mobile 390×844
 
+Bộ breakpoint chuẩn (một bộ số duy nhất cho toàn sản phẩm) nằm ở
+[`KX-DDC24-UX-SYSTEM-001` §4.1](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md). Điều
+quan trọng với mục này: **1024 px** là ngưỡng thanh bên ↔ ngăn kéo, nên 390×844
+luôn nằm ở phía ngăn kéo.
+
+
 1. Dải trạng thái tổng (luôn hiện)
 2. Cần xử lý
 3. Health strip (xếp dọc một cột)
@@ -275,4 +306,5 @@ Xem `PA3-N01..N04` trong [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/202
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.1 | 2026-08-18 | Đóng `F-DOC-03` của [`REV-FE-UIUX-UC-2026-08-18`](../07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md) (Plan 57 `T57-0.15`): §1.1 tự mâu thuẫn vì mang câu luật "bốn trạng thái … `unknown`" của thang `health.state` đặt nhầm vào thang `quality` — bảng `quality` và type `PointQuality` đều **không** có `unknown`. Câu luật được chuyển về §1.2 (đúng thang), §1.1 nói rõ `quality` có đúng năm giá trị và ghi lý do đổi. Theo quyết định **Q1** của `AUTH-WEBUX-2026-08-18-01`: **chỉ sửa tài liệu**, không đổi `PointQuality`. §3.2 dẫn chiếu bộ breakpoint chuẩn ở `UX-SYSTEM-001` §4.1 (`F-DOC-05`). |
 | 1.0 | 2026-08-08 | Chuyển UX-REQ/UX-DES PA3 thành requirement có ID, chốt từ vựng và wireflow |

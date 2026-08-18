@@ -18,12 +18,19 @@ import type { ProgrammingProject, ProgrammingRuntime } from '../model/types'
  * (UX §5 PGM-01). KHÔNG đặt CPU/RAM/hash/compiler/% sức khỏe ở đây (§3.1).
  */
 export function OverviewPage() {
+  const { pick } = useI18n()
   const { runtime } = useProgrammingRuntimeContext()
   const projects = useProgrammingProjects()
   const audit = useProgrammingRecentAudit(5)
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
+      {/* F-UX-15 (`REV-FE-UIUX-UC-2026-08-18` §7.1): mỗi màn/tab phải có mốc
+          tiêu đề riêng trong cây heading. `<h1>` của route Programming nằm ở
+          `ProgrammingLayout` (một và chỉ một), nên ở đây là `<h2>`/`<h3>`.
+          Ẩn thị giác vì thanh tab đã hiện tên — thứ còn thiếu là mốc điều
+          hướng cho trình đọc màn hình, không phải thêm chữ lên màn hình. */}
+      <h2 className="sr-only">{pick('Tổng quan lập trình', 'Programming overview')}</h2>
       <RunningApplicationPanel runtime={runtime.data} status={runtime.status} />
       <CoreSafeStatePanel runtime={runtime.data} status={runtime.status} />
       <DraftAttentionPanel projects={projects} />

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
 import type { AoConfig, DoConfig, OutputsConfig, Point, VirtualPoint } from '../../shared/types'
+import { MemoryRouter } from 'react-router-dom'
 import { OutputsPage } from './OutputsPage'
 
 const api = vi.hoisted(() => ({
@@ -37,8 +38,10 @@ const outputConfig: OutputsConfig = {
   do: [{ id: 'DO-01', channel: 1, kind: 'DO', tag: 'DO-01', label: 'Other Output', safeState: 'open', manualValue: false } as DoConfig]
 }
 
+/* Trang này nay dùng `useDirtyGuard` (F-UX-12) nên cần Router — đúng thực tế
+ * ứng dụng: `OutputsPage` luôn nằm dưới `<Routes>` của `App.tsx`. */
 function renderPage() {
-  return render(<I18nProvider><ToastProvider><OutputsPage /></ToastProvider></I18nProvider>)
+  return render(<MemoryRouter><I18nProvider><ToastProvider><OutputsPage /></ToastProvider></I18nProvider></MemoryRouter>)
 }
 
 describe('OutputsPage point metadata recovery', () => {

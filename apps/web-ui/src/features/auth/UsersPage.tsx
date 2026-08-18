@@ -11,6 +11,12 @@ import { useToast } from '../../shared/components/Toast'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import type { UserAccount, UserRole } from '../../shared/types'
+import {
+  ENFORCED_MIN_PASSWORD_LENGTH,
+  RECOMMENDED_MIN_PASSWORD_LENGTH,
+  assessPassword,
+  type PasswordStrength
+} from './passwordPolicy'
 
 /**
  * Quản lý người dùng — WEB-UX-011.
@@ -33,7 +39,11 @@ import type { UserAccount, UserRole } from '../../shared/types'
  */
 
 const ROLE_OPTIONS: UserRole[] = ['viewer', 'operator', 'admin']
-const MIN_PASSWORD_LENGTH = 6
+/* T57-1.9 / `ADR-037` — con số này phải KHỚP `validNewPassword` trong
+   `apps/web-api/internal/auth/service.go`. Siết ở đây mà không siết ở Go làm
+   giao diện mô tả sai thiết bị: màn hình bảo "tối thiểu 8" trong khi cùng cái
+   bo đó vẫn nhận mật khẩu 6 ký tự qua bất kỳ client nào khác. */
+const MIN_PASSWORD_LENGTH = ENFORCED_MIN_PASSWORD_LENGTH
 
 type Dialog =
   | { kind: 'create' }
@@ -258,17 +268,12 @@ export function UsersPage() {
               {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
             </select>
           </label>
-          <label className="block text-xs text-[var(--c-text-dim)]">
-            {pick('Mật khẩu', 'Password')}
-            <input
-              className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
-              aria-label={pick('Mật khẩu', 'Password')}
-              type="password"
-              autoComplete="new-password"
-              value={createForm.password}
-              onChange={(event) => setCreateForm((form) => ({ ...form, password: event.target.value }))}
-            />
-          </label>
+          <PasswordField
+            label={pick('Mật khẩu', 'Password')}
+            value={createForm.password}
+            username={createForm.username}
+            onChange={(password) => setCreateForm((form) => ({ ...form, password }))}
+          />
         </div>
       </Modal>
 
@@ -284,17 +289,12 @@ export function UsersPage() {
           <div className="space-y-3">
             <p>{pick(`Đặt mật khẩu mới cho tài khoản `, 'Set a new password for account ')}<span className="mono font-semibold text-[var(--c-text)]">{dialog.user.username}</span>.</p>
             <p>{pick('Người dùng đó sẽ không được thông báo; hãy tự bàn giao mật khẩu mới cho họ.', 'That user is not notified; hand the new password over yourself.')}</p>
-            <label className="block text-xs text-[var(--c-text-dim)]">
-              {pick('Mật khẩu mới', 'New password')}
-              <input
-                className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
-                aria-label={pick('Mật khẩu mới', 'New password')}
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-              />
-            </label>
+            <PasswordField
+              label={pick('Mật khẩu mới', 'New password')}
+              value={newPassword}
+              username={dialog.user.username}
+              onChange={setNewPassword}
+            />
           </div>
         )}
       </Modal>
@@ -315,6 +315,83 @@ export function UsersPage() {
           </>
         )}
       </Modal>
+    </div>
+  )
+}
+
+/**
+ * Ô nhập mật khẩu kèm luật thiết bị và chỉ báo độ mạnh — `T57-1.9`.
+ *
+ * Hai lớp thông tin, và chúng **phải** phân biệt được với nhau:
+ *
+ *  - **Luật thiết bị** (`≥ 6 ký tự`): hiện TRƯỚC khi người dùng gõ, và là thứ
+ *    duy nhất chặn nút. Đây là câu mô tả đúng cái bo đang làm.
+ *  - **Khuyến nghị** (độ mạnh, danh sách gợi ý): **không** chặn gì, và được dán
+ *    nhãn "Khuyến nghị" tường minh. Biến nó thành cổng chặn là dựng ra một luật
+ *    mà thiết bị không thi hành — đúng lỗi mà `ADR-037` điều 1 loại bỏ.
+ */
+function PasswordField({ label, value, username, onChange }: {
+  label: string
+  value: string
+  username: string
+  onChange: (value: string) => void
+}) {
+  const { pick } = useI18n()
+  const assessment = assessPassword(value, username)
+  const strengthLabel: Record<PasswordStrength, string> = {
+    unusable: pick('CHƯA ĐỦ ĐỘ DÀI', 'TOO SHORT'),
+    weak: pick('YẾU', 'WEAK'),
+    fair: pick('TRUNG BÌNH', 'FAIR'),
+    strong: pick('MẠNH', 'STRONG')
+  }
+  const strengthColor: Record<PasswordStrength, string> = {
+    unusable: 'var(--c-fault-fg)',
+    weak: 'var(--c-fault-fg)',
+    fair: 'var(--c-warn-fg)',
+    strong: 'var(--c-good-fg)'
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs text-[var(--c-text-dim)]">
+        {label}
+        <input
+          className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+          aria-label={label}
+          aria-describedby="password-rule"
+          type="password"
+          autoComplete="new-password"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </label>
+
+      {/* Luật hiện TRƯỚC khi gõ, không phải sau khi bị từ chối. */}
+      <p id="password-rule" className="text-xs text-[var(--c-text-dim)]">
+        {pick(
+          `Luật thiết bị đang cưỡng chế: tối thiểu ${ENFORCED_MIN_PASSWORD_LENGTH} ký tự. Không bắt buộc loại ký tự nào, và thiết bị hiện KHÔNG khoá tài khoản sau nhiều lần đăng nhập sai.`,
+          `Rule enforced by the device: at least ${ENFORCED_MIN_PASSWORD_LENGTH} characters. No character classes are required, and the device does NOT currently lock accounts after repeated failed sign-ins.`
+        )}
+      </p>
+
+      {value.length > 0 && (
+        <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold text-[var(--c-text-dim)]">{pick('Khuyến nghị — không chặn lưu:', 'Advisory — does not block saving:')}</span>
+            <span className="font-bold" style={{ color: strengthColor[assessment.strength] }}>{strengthLabel[assessment.strength]}</span>
+          </div>
+          {assessment.advice.length > 0 && (
+            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-[var(--c-text-dim)]">
+              {assessment.advice.map((line) => <li key={line}>{line}</li>)}
+            </ul>
+          )}
+          {assessment.strength === 'strong' && (
+            <p className="mt-1 text-xs text-[var(--c-text-dim)]">
+              {pick(`Đạt mức khuyến nghị (từ ${RECOMMENDED_MIN_PASSWORD_LENGTH} ký tự, trộn nhiều nhóm ký tự).`, `Meets the recommendation (${RECOMMENDED_MIN_PASSWORD_LENGTH}+ characters, mixed character classes).`)}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

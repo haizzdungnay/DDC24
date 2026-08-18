@@ -1,9 +1,19 @@
-import { Circle, Pencil, Power, RefreshCw, RotateCcw, Save, Search, ShieldAlert, X } from 'lucide-react'
+import { CheckCircle2, Circle, Pencil, Power, RefreshCw, RotateCcw, Save, Search, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { POINT_UNIT_OPTIONS, aiUnitFromPointUnit, apiClient, pointUnitFromAiUnit } from '../../shared/api/client'
 import { createHistoryClient, type HistorySample } from '../../shared/api/history'
 import { ForcedBadge, QualityBadge } from '../../shared/components/pa3/StateAtoms'
+import {
+  isBulkSelectable,
+  planBulkOverride,
+  runBulkOverride,
+  summarizeBulkOutcomes,
+  type BulkOverrideOutcome,
+  type BulkOverrideStatus,
+  type BulkPlanRow
+} from './bulkOverride'
+import { OverrideRemaining } from '../../shared/components/OverrideRemaining'
 import { useAuth } from '../auth'
 import { roleAtLeast } from '../auth'
 import { displayPointName, normalizePointName, normalizePointTag, pointNameConflicts, pointFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
@@ -32,6 +42,27 @@ const historyClient = createHistoryClient()
  * chọn thay vì năm hộp kiểm rời.
  */
 type MonitorStateFilter = 'all' | 'forced' | 'fault' | 'offline' | 'writable' | 'logging'
+
+/**
+ * Nhóm nguồn điểm — tham số `?group=` mà Health Strip của Landing đã trỏ tới từ
+ * lâu (`drilldown.ts` → `subsystems.local_io = '/monitor?group=local'`).
+ *
+ * Trang này trước đây chỉ đọc `kind/quality/state/q/point`, nên bấm ô "I/O tại
+ * chỗ" mở đúng trang nhưng KHÔNG lọc gì — đúng kiểu "hỏng im lặng" mà chính
+ * `drilldown.ts` cảnh báo trong phần chú thích của nó (finding F-UX-03).
+ */
+type MonitorGroupFilter = 'all' | 'local' | 'virtual' | 'modbus'
+
+const GROUP_KINDS: Record<Exclude<MonitorGroupFilter, 'all'>, PointKind[]> = {
+  local: ['UI', 'AI', 'DI', 'AO', 'DO'],
+  virtual: ['virtual'],
+  modbus: ['modbus_rtu']
+}
+
+function matchesGroupFilter(point: Point, group: MonitorGroupFilter): boolean {
+  if (group === 'all') return true
+  return GROUP_KINDS[group].includes(point.kind)
+}
 
 function matchesStateFilter(point: Point, filter: MonitorStateFilter): boolean {
   switch (filter) {
@@ -98,6 +129,11 @@ function visibleMonitorPoints(points: Point[], virtualPoints: VirtualPoint[]): P
   })
 }
 
+/** Điểm nhị phân theo bản chất tín hiệu, không theo giá trị tức thời. */
+function isBinaryPoint(point: Point): boolean {
+  return point.kind === 'DO' || point.kind === 'DI' || point.signalType === 'boolean' || typeof point.value === 'boolean'
+}
+
 function canForcePoint(point: Point): boolean {
   return point.kind === 'DO' || point.kind === 'AO' || (point.kind === 'virtual' && point.writable === true)
 }
@@ -105,7 +141,13 @@ function canForcePoint(point: Point): boolean {
 function defaultForceValue(point: Point): string {
   if (point.kind === 'DO') return String(!point.value)
   if (point.kind === 'virtual') return String(point.value ?? '')
-  return String(pointNumber(point))
+  /* `pointNumber` trả `null` khi point chưa có số đo dùng được. `String(null)`
+     cho ra chuỗi `"null"` và nó ĐI THẲNG vào ô "Giá trị mới" của hộp thoại ép
+     tay — người vận hành nhìn thấy một giá trị trông như dữ liệu thật, còn
+     `parseForceValue` thì ném lỗi "must be a number" sau khi đã bấm xác nhận.
+     Không có số đo thì để TRỐNG và bắt người dùng tự nhập (finding F-UX-09). */
+  const numeric = pointNumber(point)
+  return numeric === null ? '' : String(numeric)
 }
 
 function parseForceValue(point: Point, raw: string): number | boolean | string {
@@ -169,9 +211,10 @@ export function MonitorPage() {
   const quality = (searchParams.get('quality') as PointQuality | 'all' | null) ?? 'all'
   const query = searchParams.get('q') ?? ''
   const stateFilter = (searchParams.get('state') as MonitorStateFilter | null) ?? 'all'
+  const group = (searchParams.get('group') as MonitorGroupFilter | null) ?? 'all'
   const deepLinkedPoint = searchParams.get('point')
 
-  function setFilter(key: 'kind' | 'quality' | 'q' | 'state' | 'point', value: string) {
+  function setFilter(key: 'kind' | 'quality' | 'q' | 'state' | 'point' | 'group', value: string) {
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
       if (!value || value === 'all') next.delete(key)
@@ -185,6 +228,11 @@ export function MonitorPage() {
   const [forceValue, setForceValue] = useState('1')
   const [forceDurationMinutes, setForceDurationMinutes] = useState('10')
   const [pointModalId, setPointModalId] = useState<string | null>(null)
+  /* T57-1.4 — lựa chọn cho ép tay hàng loạt. Giữ ở `Set` id chứ không phải ở
+     mảng point: bảng được poll lại mỗi giây, nên giữ tham chiếu point sẽ trỏ
+     tới snapshot cũ ngay sau nhịp poll kế tiếp. */
+  const [bulkSelection, setBulkSelection] = useState<Set<string>>(new Set())
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [editingName, setEditingName] = useState<string | null>(null)
   const [editingNameValue, setEditingNameValue] = useState('')
   const [editingUnit, setEditingUnit] = useState<string | null>(null)
@@ -210,8 +258,25 @@ export function MonitorPage() {
     const matchesQuality = quality === 'all' || point.quality === quality
     // §9.2: tìm theo id, tag, tên hiển thị và nguồn.
     const haystack = `${point.id} ${point.tag} ${point.name} ${point.source}`.toLowerCase()
-    return matchesKind && matchesQuality && matchesStateFilter(point, stateFilter) && haystack.includes(query.toLowerCase())
-  }).sort((a, b) => a.id.localeCompare(b.id)), [kind, points, quality, query, stateFilter])
+    return matchesKind && matchesQuality && matchesGroupFilter(point, group) && matchesStateFilter(point, stateFilter) && haystack.includes(query.toLowerCase())
+  }).sort((a, b) => a.id.localeCompare(b.id)), [group, kind, points, quality, query, stateFilter])
+
+  /* Điểm đã chọn được GIẢI LẠI từ bảng điểm mới nhất mỗi lần render, nên bảng
+     hậu quả trong hộp thoại luôn dùng giá trị hiện tại chứ không phải giá trị
+     lúc bấm chọn. Id trỏ tới điểm đã biến mất khỏi cấu hình thì tự rơi ra. */
+  const bulkPoints = useMemo(
+    () => points.filter((point) => bulkSelection.has(point.id) && isBulkSelectable(point)),
+    [points, bulkSelection]
+  )
+
+  function toggleBulkSelection(id: string) {
+    setBulkSelection((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const groups = useMemo(() => ({
     UI: filtered.filter((point) => point.kind === 'UI'),
@@ -231,7 +296,13 @@ export function MonitorPage() {
     do: points.filter((point) => point.kind === 'DO').length,
     ao: points.filter((point) => point.kind === 'AO').length,
     virtual: points.filter((point) => point.kind === 'virtual').length,
-    on: points.filter((point) => Boolean(point.value)).length,
+    /* F-UX-11 — "Điểm ON" chỉ có nghĩa với điểm NHỊ PHÂN. Bản trước đếm
+       `Boolean(point.value)` trên toàn bộ inventory, nên một cảm biến nhiệt độ
+       đọc 23.5 °C được tính là "ON" còn chính nó lúc 0 °C thì không: thẻ đếm
+       nói về một đại lượng không tồn tại, và tỉ lệ % bên dưới nó cũng vậy.
+       Mẫu số nay là số điểm nhị phân, không phải tổng số điểm. */
+    binaryTotal: points.filter(isBinaryPoint).length,
+    on: points.filter((point) => isBinaryPoint(point) && Boolean(point.value)).length,
     analogTotal: configuredAnalogPoints.length,
     analogGood: configuredAnalogPoints.filter((point) => point.quality === 'good').length,
     abnormal: points.filter((point) => point.quality !== 'good' && !isChannelNotConfigured(point)).length
@@ -373,7 +444,11 @@ export function MonitorPage() {
   }
 
   async function saveTrend(point: Point) {
-    const enabled = editingTrendEnabled[point.id] ?? true
+    /* Giá trị mặc định phải khớp CHÍNH XÁC cái mà `DetailPanel` đang hiển thị
+       (`point.trend != null`). Trước đây chỗ hiển thị mặc định theo dữ liệu
+       thật còn chỗ ghi mặc định `true`, nên bấm Lưu mà không chạm nút gạt sẽ
+       BẬT trend cho một point vốn đang tắt (finding F-UX-10). */
+    const enabled = editingTrendEnabled[point.id] ?? (point.trend != null)
     try {
       await apiClient.updatePointConfig(point.id, { trendEnabled: enabled })
       toast.push('success', pick(`Đã cập nhật trend ${point.id}`, `Updated trend for ${point.id}`))
@@ -384,8 +459,17 @@ export function MonitorPage() {
     }
   }
 
-  function cancelEditTrend() {
+  /** Huỷ phải TRẢ LẠI trạng thái nút gạt về giá trị đã lưu; nếu không, "Hủy"
+   *  đóng khung soạn thảo nhưng để lại một nút gạt hiển thị sai so với thiết bị. */
+  function cancelEditTrend(pointId?: string) {
     setEditingTrend(null)
+    if (!pointId) return
+    setEditingTrendEnabled((prev) => {
+      if (!(pointId in prev)) return prev
+      const next = { ...prev }
+      delete next[pointId]
+      return next
+    })
   }
 
   function toggleTrend(pointId: string) {
@@ -457,14 +541,23 @@ export function MonitorPage() {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <StatCard label={pick('Tổng số điểm', 'Total points')} value={stats.total} detail={`UI ${stats.ui} | DO ${stats.do} | AO ${stats.ao}`} />
-        <StatCard label={pick('Điểm ON', 'ON points')} value={stats.on} detail={`${Math.round((stats.on / Math.max(1, stats.total)) * 100)}%`} />
+        <StatCard label={pick('Điểm nhị phân đang ON', 'Binary points ON')} value={stats.on} detail={stats.binaryTotal ? `${stats.on}/${stats.binaryTotal} · ${Math.round((stats.on / stats.binaryTotal) * 100)}%` : NO_DATA} />
         {/* `detail` từng gán cứng "100%" nên thẻ này luôn khẳng định mọi điểm
             analog bình thường, kể cả khi không đọc được điểm nào. */}
         <StatCard label={pick('Điểm UI/AO bình thường', 'Normal UI/AO points')} value={stats.analogGood} detail={stats.analogTotal ? `${Math.round((stats.analogGood / stats.analogTotal) * 100)}%` : '—'} />
         <StatCard label={pick('Điểm lỗi / mất tín hiệu', 'Fault / signal-loss points')} value={stats.abnormal} detail={stats.total ? `${Math.round((stats.abnormal / stats.total) * 100)}%` : '—'} danger />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-[170px_170px_190px_1fr_132px]">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[170px_170px_170px_190px_1fr_132px]">
+        {/* Bộ chọn `group` phải TỒN TẠI trên giao diện, không chỉ đọc được từ
+            URL: một bộ lọc chỉ đặt được bằng cách gõ tay query string thì người
+            dùng đến từ Health Strip không có cách nào tự gỡ nó ra. */}
+        <select aria-label={pick('Lọc theo nguồn điểm', 'Filter by point source')} value={group} onChange={(event) => setFilter('group', event.target.value)} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
+          <option value="all">{pick('Nguồn - Tất cả', 'Source - All')}</option>
+          <option value="local">{pick('I/O tại chỗ', 'Local I/O')}</option>
+          <option value="virtual">{pick('Điểm ảo', 'Virtual')}</option>
+          <option value="modbus">Modbus RTU</option>
+        </select>
         <select aria-label={pick('Lọc theo nhóm I/O', 'Filter by I/O group')} value={kind} onChange={(event) => setFilter('kind', event.target.value)} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
           <option value="all">{pick('Nhóm I/O - Tất cả', 'I/O group - All')}</option><option value="UI">UI</option><option value="DO">DO</option><option value="AO">AO</option><option value="virtual">{pick('Ảo', 'Virtual')}</option><option value="modbus_rtu">Modbus RTU</option>
         </select>
@@ -486,12 +579,31 @@ export function MonitorPage() {
         <Button icon={<RefreshCw className="h-4 w-4" />} onClick={pointsState.refetch}>{pick('Làm mới', 'Refresh')}</Button>
       </div>
 
+      {/* T57-1.4 — thanh hành động chỉ xuất hiện khi đã chọn ít nhất một điểm.
+          Hiện nó thường trực sẽ đặt một nút phát lệnh ghi ra cơ cấu chấp hành
+          nằm sẵn trên màn hình giám sát, cạnh các bộ lọc vô hại. */}
+      {canForce && bulkSelection.size > 0 && (
+        <div role="region" aria-label={pick('Thao tác hàng loạt', 'Bulk actions')} className="flex flex-wrap items-center gap-3 rounded-[var(--radius)] border-2 border-[var(--c-accent)] bg-[var(--c-accent-bg)] px-3 py-2">
+          <span className="text-sm font-bold text-[var(--c-accent)]">
+            {pick(`Đã chọn ${bulkPoints.length} điểm ghi được`, `${bulkPoints.length} writable points selected`)}
+          </span>
+          <span className="ml-auto flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setBulkSelection(new Set())}>
+              {pick('Bỏ chọn tất cả', 'Clear selection')}
+            </Button>
+            <Button size="sm" variant="danger" icon={<ShieldAlert className="h-4 w-4" />} disabled={bulkPoints.length === 0} onClick={() => setBulkOpen(true)}>
+              {pick(`Ép tay ${bulkPoints.length} điểm…`, `Override ${bulkPoints.length} points…`)}
+            </Button>
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_334px]">
         <div className={cn('space-y-3', offline && 'stale')}>
-          <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={requestForce} />
-          <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} />
-          <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={requestForce} />
-          <AnalogSection title="VIRTUAL POINTS" rows={groups.Virtual} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={requestForce} />
+          <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={requestForce} bulkSelection={canForce ? bulkSelection : null} onBulkToggle={toggleBulkSelection} />
+          <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} bulkSelection={canForce ? bulkSelection : null} onBulkToggle={toggleBulkSelection} />
+          <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={requestForce} bulkSelection={canForce ? bulkSelection : null} onBulkToggle={toggleBulkSelection} />
+          <AnalogSection title="VIRTUAL POINTS" rows={groups.Virtual} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={requestForce} bulkSelection={canForce ? bulkSelection : null} onBulkToggle={toggleBulkSelection} />
         </div>
         {selected && <DetailPanel
           point={selected}
@@ -513,7 +625,7 @@ export function MonitorPage() {
           onCancelEditUnit={cancelEditUnit}
           onStartEditTrend={() => startEditTrend(selected)}
           onSaveEditTrend={() => saveTrend(selected)}
-          onCancelEditTrend={cancelEditTrend}
+          onCancelEditTrend={() => cancelEditTrend(selected.id)}
           onToggleTrend={(id) => toggleTrend(id)}
           conflictIds={nameConflicts.get(selected.id)}
         />}
@@ -528,6 +640,21 @@ export function MonitorPage() {
           onSave={savePointBasics}
           onForce={forcePointWithDuration}
           onRelease={releasePoint}
+        />
+      )}
+
+      {bulkOpen && (
+        <BulkOverrideDialog
+          points={bulkPoints}
+          actor={session?.username}
+          role={session?.role}
+          onClose={() => setBulkOpen(false)}
+          onDone={() => { setBulkSelection(new Set()); void pointsState.refetch() }}
+          onSend={(row, value, ttlS) => forcePointWithDuration(
+            points.find((point) => point.id === row.pointId) as Point,
+            value,
+            ttlS
+          )}
         />
       )}
 
@@ -610,46 +737,144 @@ function StatCard({ label, value, detail, danger }: { label: string; value: numb
   )
 }
 
-function DigitalSection({ title, rows, selectedId, conflicts, onSelect, onOpenDetails, onToggle }: { title: string; rows: Point[]; selectedId?: string; conflicts: Map<string, string[]>; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void }) {
+function DigitalSection({ title, rows, selectedId, conflicts, onSelect, onOpenDetails, onToggle, bulkSelection, onBulkToggle }: { title: string; rows: Point[]; selectedId?: string; conflicts: Map<string, string[]>; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void; bulkSelection?: Set<string> | null; onBulkToggle?: (id: string) => void }) {
   const { pick } = useI18n()
   return (
     <SectionFrame title={`${title} (${rows.length})`}>
-      <div className="grid grid-cols-[70px_minmax(150px,1fr)_112px_128px_58px] border-b border-[var(--c-border)] px-3 py-2 text-[10px] uppercase text-[var(--c-text-dim)]">
-        <span>{pick('Điểm', 'Point')}</span><span>{pick('Tên điểm', 'Point name')}</span><span>{pick('Trạng thái', 'Status')}</span><span>{pick('Thời gian cập nhật', 'Updated at')}</span><span />
+      <div className="flex border-b border-[var(--c-border)] py-2 pl-3 text-[10px] uppercase text-[var(--c-text-dim)]">
+        {bulkSelection && <span className="w-[30px] shrink-0" />}
+        <div className={`grid min-w-0 flex-1 grid-cols-[70px_minmax(150px,1fr)_112px_128px_104px]`}>
+        <span>{pick('Điểm', 'Point')}</span><span>{pick('Tên điểm', 'Point name')}</span><span>{pick('Trạng thái', 'Status')}</span><span>{pick('Thời gian cập nhật', 'Updated at')}</span><span>{pick('Còn lại', 'Remaining')}</span></div><span className="w-[60px] shrink-0" />
       </div>
-      {rows.map((point) => <DigitalRow key={point.id} point={point} conflictIds={conflicts.get(point.id)} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onToggle={onToggle} />)}
+      {rows.map((point) => <DigitalRow key={point.id} point={point} conflictIds={conflicts.get(point.id)} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onToggle={onToggle} bulkSelection={bulkSelection} onBulkToggle={onBulkToggle} />)}
     </SectionFrame>
   )
 }
 
-function DigitalRow({ point, conflictIds, selected, onSelect, onOpenDetails, onToggle }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void }) {
+/**
+ * Một dòng DO.
+ *
+ * F-UX-05 — bản trước dựng cả dòng là `<button>` rồi NHÉT thêm một
+ * `<span role="switch" tabIndex={0}>` vào bên trong nó. Ba hệ quả:
+ *
+ *  1. HTML không hợp lệ (phần tử tương tác lồng trong phần tử tương tác); trình
+ *     đọc màn hình đọc ra một control mà bàn phím không tới đúng chỗ.
+ *  2. `role="switch"` KHÔNG có `onKeyDown`: người dùng Tab tới được nút gạt rồi
+ *     bấm Space/Enter thì không có gì xảy ra — WCAG 2.2 §2.1.1 (Keyboard).
+ *     Với một control ĐÓNG/MỞ contactor, "nhìn thấy mà không bấm được" là lỗi
+ *     khả dụng chứ không phải khiếm khuyết mỹ thuật.
+ *  3. Nút gạt không nói ra nó điều khiển cái gì.
+ *
+ * Nay: hàng là `<div>` với một nút chọn riêng và một `<button role="switch">`
+ * thật đứng cạnh — cả hai đều là điểm dừng Tab hợp lệ và tự kích hoạt bằng
+ * Space/Enter theo hành vi mặc định của `<button>`.
+ */
+function DigitalRow({ point, conflictIds, selected, onSelect, onOpenDetails, onToggle, bulkSelection, onBulkToggle }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void; bulkSelection?: Set<string> | null; onBulkToggle?: (id: string) => void }) {
+  const { pick } = useI18n()
   const active = Boolean(point.value)
   const state = active ? 'on' : 'off'
   const stateFillColor = statusFill(state)
   const stateTextColor = statusColor(state)
   return (
-    <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_112px_128px_58px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[var(--c-accent-bg)]', selected && 'bg-[var(--c-accent-bg)]')}>
-      <span className="mono font-semibold">{pointDisplayTag(point)}</span>
-      <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
-      <span className="inline-flex items-center gap-2 font-semibold" style={{ color: stateTextColor }}><Circle className="h-2.5 w-2.5 fill-current" style={{ color: stateFillColor }} />{active ? 'ON' : 'OFF'}</span>
-      <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
-      <span onClick={(event) => { event.stopPropagation(); onToggle(point) }} className={cn('ml-auto flex h-5 w-9 items-center rounded-full border px-0.5 transition', active ? 'justify-end border-[var(--c-good)] bg-[var(--c-good-bg)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface-2)]')} role="switch" aria-checked={active} tabIndex={0}>
-        <span className={cn('h-3.5 w-3.5 rounded-full', active ? 'bg-[var(--c-good)]' : 'bg-[var(--c-off)]')} />
+    <div className={cn('flex w-full items-center border-b border-[var(--c-border)] text-xs transition last:border-0', selected && 'bg-[var(--c-accent-bg)]')}>
+      <BulkSelectCell point={point} bulkSelection={bulkSelection} onBulkToggle={onBulkToggle} />
+      <button
+        type="button"
+        onClick={() => onSelect(point.id)}
+        onDoubleClick={() => onOpenDetails(point)}
+        className="grid min-w-0 flex-1 grid-cols-[70px_minmax(150px,1fr)_112px_128px_104px] items-center py-2 pl-3 text-left transition hover:bg-[var(--c-accent-bg)]"
+      >
+        <span className="mono font-semibold">{pointDisplayTag(point)}</span>
+        <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
+        <span className="inline-flex items-center gap-2 font-semibold" style={{ color: stateTextColor }}><Circle className="h-2.5 w-2.5 fill-current" style={{ color: stateFillColor }} />{active ? 'ON' : 'OFF'}</span>
+        <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
+        {/* T57-1.3 (§6.2-P1b) — cột "Còn lại" ngay trên bảng.
+            `overrideExpiresInS` trước đây CHỈ hiện trong khung chi tiết của điểm
+            đang chọn, nên không quét được toàn bảng xem cái nào sắp hết hạn —
+            đúng câu hỏi cần trả lời nhanh nhất khi đang chạy thử một AHU. */}
+        <OverrideRemainingCell point={point} />
+      </button>
+      {/* Ô hành động rộng CỐ ĐỊNH 60px, khớp đúng ô chừa chỗ của header (N-04).
+          Căn bằng margin trên chính nút gạt sẽ trôi mỗi lần ai đó đổi kích thước
+          nút — ô cố định thì không. */}
+      <span className="flex w-[60px] shrink-0 justify-center">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={active}
+          aria-label={pick(`Ép tay ${pointDisplayTag(point)} — ${point.name}`, `Manual override ${pointDisplayTag(point)} — ${point.name}`)}
+          onClick={() => onToggle(point)}
+          className={cn('flex h-5 w-9 items-center rounded-full border px-0.5 transition', active ? 'justify-end border-[var(--c-good)] bg-[var(--c-good-bg)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface-2)]')}
+        >
+          <span className={cn('h-3.5 w-3.5 rounded-full', active ? 'bg-[var(--c-good)]' : 'bg-[var(--c-off)]')} />
+        </button>
       </span>
-    </button>
+    </div>
   )
 }
 
-function AnalogSection({ title, rows, selectedId, conflicts, onSelect, onOpenDetails, onForce }: { title: string; rows: Point[]; selectedId?: string; conflicts: Map<string, string[]>; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void }) {
+function AnalogSection({ title, rows, selectedId, conflicts, onSelect, onOpenDetails, onForce, bulkSelection, onBulkToggle }: { title: string; rows: Point[]; selectedId?: string; conflicts: Map<string, string[]>; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void; bulkSelection?: Set<string> | null; onBulkToggle?: (id: string) => void }) {
   const { pick } = useI18n()
   return (
     <SectionFrame title={`${title} (${rows.length})`}>
-      <div className="grid grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] border-b border-[var(--c-border)] px-3 py-2 text-[10px] uppercase text-[var(--c-text-dim)]">
-        <span>{pick('Điểm', 'Point')}</span><span>{pick('Tên điểm', 'Point name')}</span><span>{pick('Giá trị', 'Value')}</span><span>{pick('Đơn vị', 'Unit')}</span><span>{pick('Trạng thái', 'Status')}</span><span>Trend</span><span>{pick('Cập nhật', 'Updated')}</span>
+      <div className="flex border-b border-[var(--c-border)] px-3 py-2 text-[10px] uppercase text-[var(--c-text-dim)]">
+        {bulkSelection && <span className="w-[30px] shrink-0" />}
+        <div className={`grid min-w-0 flex-1 grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px_104px]`}>
+        <span>{pick('Điểm', 'Point')}</span><span>{pick('Tên điểm', 'Point name')}</span><span>{pick('Giá trị', 'Value')}</span><span>{pick('Đơn vị', 'Unit')}</span><span>{pick('Trạng thái', 'Status')}</span><span>Trend</span><span>{pick('Cập nhật', 'Updated')}</span><span>{pick('Còn lại', 'Remaining')}</span></div><span className="w-[76px] shrink-0" />
       </div>
-      {rows.map((point) => <AnalogRow key={point.id} point={point} conflictIds={conflicts.get(point.id)} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onForce={onForce} />)}
+      {rows.map((point) => <AnalogRow key={point.id} point={point} conflictIds={conflicts.get(point.id)} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onForce={onForce} bulkSelection={bulkSelection} onBulkToggle={onBulkToggle} />)}
     </SectionFrame>
   )
+}
+
+/**
+ * Ô chọn của một hàng cho ép tay hàng loạt — `T57-1.4`.
+ *
+ * Điểm KHÔNG ép tay được vẫn có ô chọn nhưng bị **vô hiệu** kèm `title` nói rõ
+ * lý do, thay vì biến mất. Ẩn hẳn ô làm các hàng lệch nhau và người dùng không
+ * biết vì sao hàng này chọn được còn hàng kia thì không — trong khi vô hiệu
+ * kèm lý do trả lời luôn câu hỏi đó.
+ *
+ * `bulkSelection === null` (vai trò dưới `operator`) thì không render gì: người
+ * chỉ-đọc không nên thấy một cột dẫn tới lệnh ghi mà họ không được phép phát.
+ */
+function BulkSelectCell({ point, bulkSelection, onBulkToggle }: {
+  point: Point
+  bulkSelection?: Set<string> | null
+  onBulkToggle?: (id: string) => void
+}) {
+  const { pick } = useI18n()
+  if (!bulkSelection || !onBulkToggle) return null
+  const selectable = isBulkSelectable(point)
+  return (
+    <span className="flex w-[30px] shrink-0 justify-center">
+      <input
+        type="checkbox"
+        checked={bulkSelection.has(point.id)}
+        disabled={!selectable}
+        onChange={() => onBulkToggle(point.id)}
+        aria-label={pick(
+          `Chọn ${pointDisplayTag(point)} — ${point.name} để ép tay hàng loạt`,
+          `Select ${pointDisplayTag(point)} — ${point.name} for bulk override`
+        )}
+        title={selectable ? undefined : pick('Điểm này không ép tay được', 'This point cannot be overridden')}
+        className="h-4 w-4 accent-[var(--c-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+      />
+    </span>
+  )
+}
+
+/**
+ * Ô "Còn lại" trong bảng — `T57-1.3`.
+ *
+ * Điểm KHÔNG bị ép tay để TRỐNG chứ không hiện `—`: trên một bảng 29 hàng mà
+ * 26 hàng hiện `—` thì ba hàng có số bị chìm mất, và `—` ở đây sẽ bị đọc nhầm
+ * thành "đang ép nhưng không rõ còn bao lâu". Chỉ hàng đang bị ép mới có nội
+ * dung ở cột này, và khi đó `OverrideRemaining` phân biệt tiếp ba trạng thái.
+ */
+function OverrideRemainingCell({ point }: { point: Point }) {
+  if (point.forced !== true) return <span aria-hidden="true" />
+  return <OverrideRemaining remainingS={point.overrideExpiresInS} compact />
 }
 
 /** Sparkline khi chưa có buffer: một điểm nếu đã đo được, rỗng nếu chưa.
@@ -659,7 +884,7 @@ function sparklineFallback(point: Point): number[] {
   return value === null ? [] : [value]
 }
 
-function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onForce }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void }) {
+function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onForce, bulkSelection, onBulkToggle }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void; bulkSelection?: Set<string> | null; onBulkToggle?: (id: string) => void }) {
   const { pick } = useI18n()
   const trendBuffer = useTrendBuffer(point.id, point.value, point.trend)
   // Kênh Signal Type = "none" ("Không hoạt động") là người dùng CHỦ Ý chưa
@@ -668,20 +893,333 @@ function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onFo
   // nghiêm trọng (cùng họ với domain Local I/O ở Dashboard, đã sửa ở backend
   // F-DASH-LOCALIO-01). Tách hiển thị: chấm/màu trung tính + nhãn riêng.
   const notConfigured = isChannelNotConfigured(point)
+  /* F-UX-08 — `uncertain` KHÔNG phải một dạng nhẹ của `bad`, và tuyệt đối không
+     mang mức cảnh báo. Nhãn cũ "Lỗi - HIGH" vi phạm cả hai luật của
+     `UX_REQ_PA3_WEB` §1.1 (bảng chất lượng điểm) và §1.3 (severity là năm mức
+     của ISA-18.2, không dính gì tới quality): nó biến "đo được nhưng không đảm
+     bảo" thành "đang lỗi mức HIGH", tức là bịa ra một mức ưu tiên xử lý mà
+     không producer nào phát ra. */
   const statusText = notConfigured
     ? pick('Chưa cấu hình', 'Not configured')
-    : point.quality === 'good' ? pick('Bình thường', 'Normal') : point.quality === 'uncertain' ? pick('Lỗi - HIGH', 'Fault - HIGH') : point.quality.toUpperCase()
+    : point.quality === 'good' ? pick('Bình thường', 'Normal')
+      /* Giữ đúng bộ từ vựng viết hoa mà `QualityBadge` dùng ở mọi nơi khác
+         (UNCERTAIN/BAD/STALE/OFFLINE) — một trang nói "Lỗi - HIGH" còn trang
+         bên cạnh nói "UNCERTAIN" cho cùng một điểm là cách chắc chắn để người
+         trực kết luận hai chỗ đang đo hai thứ khác nhau. */
+      : point.quality.toUpperCase()
   return (
-    <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[var(--c-accent-bg)]', selected && 'bg-[var(--c-accent-bg)]')}>
-      <span className="mono font-semibold">{pointDisplayTag(point)}</span>
-      <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
-      <span className="mono">{notConfigured ? NO_DATA : typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
-      <span className="mono text-[var(--c-text-dim)]">{notConfigured ? NO_DATA : point.unit ?? (point.kind === 'AO' ? 'V' : '-')}</span>
-      <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: notConfigured ? statusFill('inactive') : statusFill(point.quality) }} />{statusText}</span>
-      <span onClick={(event) => { if (onForce) { event.stopPropagation(); onForce(point) } }}><Sparkline values={trendBuffer.length > 0 ? trendBuffer : sparklineFallback(point)} color={notConfigured ? 'var(--c-text-dim)' : point.quality === 'good' ? 'var(--c-accent-2)' : point.quality === 'bad' ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)'} /></span>
-      <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
-    </button>
+    /* N-04 (kiểm tra viên độc lập): header và hàng phải dùng CHÍNH một template
+       grid. Bản trước bọc nút hành động trong một lớp `flex` bên ngoài grid của
+       hàng, nên cột `1fr` (Tên điểm) nuốt toàn bộ phần chênh và mọi cột PHÍA SAU
+       nó lệch trái ~65-70 px so với header của chính bảng — và chỉ lệch ở AO/VP
+       (có nút) chứ không lệch ở UI (không nút), tức bảng lệch không đều trong
+       cùng một trang. */
+    <div className={cn('flex w-full items-center border-b border-[var(--c-border)] px-3 text-xs transition last:border-0', selected && 'bg-[var(--c-accent-bg)]')}>
+      <BulkSelectCell point={point} bulkSelection={bulkSelection} onBulkToggle={onBulkToggle} />
+      <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className="grid min-w-0 flex-1 grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px_104px] items-center py-2 text-left transition hover:bg-[var(--c-accent-bg)]">
+        <span className="mono font-semibold">{pointDisplayTag(point)}</span>
+        <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
+        <span className="mono">{notConfigured ? NO_DATA : typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
+        <span className="mono text-[var(--c-text-dim)]">{notConfigured ? NO_DATA : point.unit ?? (point.kind === 'AO' ? 'V' : '-')}</span>
+        <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: notConfigured ? statusFill('inactive') : statusFill(point.quality) }} />{statusText}</span>
+        {/* F-UX-06 — ô này TỪNG là một `<span onClick>` mở thẳng hộp thoại ép
+            tay. Một vùng bấm không nhãn, không viền, không con trỏ, nằm dưới
+            tiêu đề cột "Trend", mà lại là đường vào lệnh ghi ra cơ cấu chấp
+            hành: người dùng bấm nhầm mới biết nó có; người dùng cần nó thì
+            không có cách nào biết. Nay nó chỉ còn là biểu đồ, và lệnh ép tay đi
+            qua nút có nhãn ở cuối hàng. */}
+        <span><Sparkline values={trendBuffer.length > 0 ? trendBuffer : sparklineFallback(point)} color={notConfigured ? 'var(--c-text-dim)' : point.quality === 'good' ? 'var(--c-accent-2)' : point.quality === 'bad' ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)'} /></span>
+        <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
+        <OverrideRemainingCell point={point} />
+      </button>
+      {/* N-05 (kiểm tra viên độc lập): điều kiện phải gồm `canForcePoint`, không
+          chỉ `onForce`. `DetailPanel` và modal đã dùng `canForcePoint` nên một VP
+          `writable: false` bị từ chối ở đó — nhưng bảng vẫn bày nút. Trước bản sửa
+          F-UX-06 đây là một vùng bấm ẩn nên không ai thấy; F-UX-06 biến nó thành
+          một LỜI HỨA CÓ NHÃN. Bảng mời ghi còn khung chi tiết của cùng điểm lại từ
+          chối là mâu thuẫn tệ hơn bẫy cũ trên một HMI vận hành. */}
+      <span className="flex w-[76px] shrink-0 justify-end">
+        {onForce && canForcePoint(point) && (
+          <button
+            type="button"
+            onClick={() => onForce(point)}
+            className="rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-[11px] font-semibold text-[var(--c-accent)] transition hover:border-[var(--c-accent)]"
+          >
+            {point.kind === 'virtual' ? pick('Ghi', 'Write') : pick('Ép tay', 'Override')}
+          </button>
+        )}
+      </span>
+    </div>
   )
+}
+
+/**
+ * Hộp thoại ép tay hàng loạt — `T57-1.4`, đề xuất §6.2-P1a.
+ *
+ * TRIỆU CHỨNG: chạy thử một AHU cần ép 3–5 điểm liên tiếp. Hôm nay phải mở 5
+ * hộp thoại, mỗi cái nhập lại thời hạn — vừa chậm, vừa dễ để sót một điểm chưa
+ * nhả, và năm thời hạn lệch nhau nghĩa là năm thời điểm tự nhả khác nhau ngay
+ * giữa lúc đang chạy thử.
+ *
+ * NGUYÊN NHÂN GỐC: giao diện ánh xạ 1-1 với hợp đồng backend (`PUT /points/{id}`
+ * là một điểm một request), nên thao tác của người dùng bị chẻ theo hình dạng
+ * của API thay vì theo hình dạng của công việc.
+ *
+ * CÁCH SỬA: một hộp thoại gom N điểm, một thời hạn dùng chung, và **vẫn** gửi
+ * N request tuần tự — nhưng người dùng chỉ phải quyết định một lần. Kết quả báo
+ * theo TỪNG điểm vì đây không phải một giao dịch nguyên tử và không được giả vờ
+ * là như vậy.
+ *
+ * Đặc tả trực quan: `docs/04_uiux/KX-DDC24-UX-WEB-OPERATIONS-001_VI.md` §2.
+ */
+function BulkOverrideDialog({ points, actor, role, onClose, onDone, onSend }: {
+  points: Point[]
+  actor?: string
+  role?: string
+  onClose: () => void
+  onDone: () => void
+  onSend: (row: BulkPlanRow, value: number | boolean, ttlS: number) => Promise<void>
+}) {
+  const { pick } = useI18n()
+  const [binaryValue, setBinaryValue] = useState('true')
+  const [analogValue, setAnalogValue] = useState('100')
+  const [durationMinutes, setDurationMinutes] = useState('10')
+  const [acknowledged, setAcknowledged] = useState(false)
+  const [phase, setPhase] = useState<'confirm' | 'running' | 'done'>('confirm')
+  const [outcomes, setOutcomes] = useState<BulkOverrideOutcome[]>([])
+  /* Kế hoạch được ĐÓNG BĂNG khi bắt đầu gửi. `plan` dẫn xuất từ prop `points`,
+     mà `points` co lại ngay khi trang xoá lựa chọn — nếu render kết quả theo
+     `plan` thì danh sách biến mất đúng lúc người dùng cần đọc nó nhất, ngay sau
+     khi vừa phát N lệnh ghi ra cơ cấu chấp hành. */
+  const [runPlan, setRunPlan] = useState<BulkPlanRow[]>([])
+  /* Cờ huỷ ở `ref` chứ không ở state: `runBulkOverride` đọc nó qua closure
+     giữa các `await`, và một giá trị state bị đóng băng tại lần render bắt đầu
+     vòng lặp sẽ làm nút Huỷ không có tác dụng nào. */
+  const abortRef = useRef(false)
+
+  const parsedAnalog = Number(analogValue)
+  /* `Number('')` trả `0`, hữu hạn — nên kiểm mỗi `isFinite` sẽ coi ô TRỐNG là
+     hợp lệ và gửi `0` xuống mọi kênh analog đã chọn. Trên một van, `0 %` là
+     "đóng hoàn toàn": im lặng biến một ô bỏ trống thành một lệnh vận hành. */
+  const analogValid = analogValue.trim() !== '' && Number.isFinite(parsedAnalog)
+  const parsedMinutes = Number(durationMinutes)
+  const durationValid = Number.isFinite(parsedMinutes) && parsedMinutes > 0
+
+  const plan = useMemo(
+    () => planBulkOverride(points, binaryValue === 'true', analogValid ? parsedAnalog : 0),
+    [points, binaryValue, analogValid, parsedAnalog]
+  )
+  const hasBinary = plan.some((row) => row.isBinary)
+  const hasAnalog = plan.some((row) => !row.isBinary)
+  const canApply = acknowledged && durationValid && (!hasAnalog || analogValid) && plan.length > 0
+
+  async function apply() {
+    abortRef.current = false
+    setRunPlan(plan)
+    setPhase('running')
+    setOutcomes([])
+    const ttlS = Math.round(parsedMinutes * 60)
+    const result = await runBulkOverride(
+      plan,
+      (row) => onSend(row, row.nextValue, ttlS),
+      {
+        isAborted: () => abortRef.current,
+        onProgress: (outcome) => setOutcomes((current) => [...current, outcome])
+      }
+    )
+    setOutcomes(result)
+    setPhase('done')
+    onDone()
+  }
+
+  const summary = summarizeBulkOutcomes(outcomes)
+
+  return (
+    <Modal
+      open
+      size="xl"
+      danger
+      title={phase === 'done'
+        ? pick(`${summary.sent} điểm đã ép, ${summary.failed} điểm thất bại`, `${summary.sent} overridden, ${summary.failed} failed`)
+        : pick(`Ép tay ${plan.length} điểm cùng lúc`, `Override ${plan.length} points at once`)}
+      cancelLabel={phase === 'done' ? pick('Đóng', 'Close') : pick('Huỷ', 'Cancel')}
+      confirmLabel={phase === 'confirm' ? pick(`Áp dụng cho ${plan.length} điểm`, `Apply to ${plan.length} points`) : undefined}
+      confirmDisabled={!canApply}
+      confirmLoading={phase === 'running'}
+      onConfirm={phase === 'confirm' ? () => { void apply() } : undefined}
+      onClose={() => {
+        // Đóng khi đang chạy = huỷ phần CHƯA gửi. Phần đã gửi vẫn đang bị ép.
+        if (phase === 'running') abortRef.current = true
+        onClose()
+      }}
+    >
+      <div className="space-y-4">
+        {phase === 'confirm' && (
+          <>
+            <div className="flex gap-3 rounded-[var(--radius)] border-2 border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-[var(--c-warn-fg)]">
+              <ShieldAlert className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span className="text-sm">
+                {pick(
+                  `Lệnh này tạo override Local Manual (mức 2) trên ${plan.length} đầu ra vật lý. Bộ điều khiển tự nhả khi hết thời hạn, kể cả khi bạn đóng trình duyệt. Không có bộ chọn mức ưu tiên: mọi lệnh từ web đều là mức 2.`,
+                  `This creates Local Manual (level 2) overrides on ${plan.length} physical outputs. The controller releases them when the duration expires, even if you close the browser. There is no priority selector: every command from the web is level 2.`
+                )}
+              </span>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-semibold">{pick('Từng điểm sẽ đổi như sau — kiểm lại trước khi xác nhận:', 'Each point changes as follows — review before confirming:')}</p>
+              <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--c-border)]">
+                <table className="w-full min-w-[520px] text-xs">
+                  <thead>
+                    <tr className="border-b border-[var(--c-border)] bg-[var(--c-surface-2)] text-left text-[10px] uppercase text-[var(--c-text-dim)]">
+                      <th className="px-3 py-2 font-semibold">{pick('Điểm', 'Point')}</th>
+                      <th className="px-3 py-2 font-semibold">{pick('Tên', 'Name')}</th>
+                      <th className="px-3 py-2 text-right font-semibold">{pick('Hiện tại', 'Current')}</th>
+                      <th className="px-3 py-2 text-center font-semibold" aria-hidden="true" />
+                      <th className="px-3 py-2 font-semibold">{pick('Sẽ thành', 'Becomes')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plan.map((row) => (
+                      <tr key={row.pointId} className="border-b border-[var(--c-border)] last:border-0">
+                        <td className="mono px-3 py-2 font-semibold">{row.displayTag}</td>
+                        <td className="px-3 py-2">{row.name}</td>
+                        {/* Không có số đo ⇒ `—`. Điền sẵn một con số đoán vào
+                            bảng hậu quả của lệnh ghi ra thiết bị là đúng lỗi
+                            F-UX-09, chỉ nguy hiểm hơn vì ở đây có N điểm. */}
+                        <td className="mono px-3 py-2 text-right">{row.currentValue === undefined ? NO_DATA : formatValue(row.currentValue, row.unit)}</td>
+                        <td className="px-3 py-2 text-center font-bold text-[var(--c-accent)]" aria-hidden="true">→</td>
+                        <td className="mono px-3 py-2 font-semibold">{formatValue(row.nextValue, row.unit)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {hasBinary && (
+                <label className="block text-sm">
+                  {pick('Giá trị mới cho nhóm nhị phân', 'New value for the binary group')}
+                  <select value={binaryValue} onChange={(event) => setBinaryValue(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3">
+                    <option value="true">ON</option>
+                    <option value="false">OFF</option>
+                  </select>
+                </label>
+              )}
+              {hasAnalog && (
+                <label className="block text-sm">
+                  {pick('Giá trị mới cho nhóm analog', 'New value for the analog group')}
+                  <input
+                    type="number"
+                    value={analogValue}
+                    aria-invalid={!analogValid}
+                    onChange={(event) => setAnalogValue(event.target.value)}
+                    className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3"
+                  />
+                  {!analogValid && <span role="alert" className="mt-1 block text-xs text-[var(--c-fault-fg)]">{pick('Giá trị analog phải là một số', 'The analog value must be a number')}</span>}
+                </label>
+              )}
+            </div>
+
+            <label className="block text-sm">
+              {pick('Thời hạn dùng chung (phút) — do bộ điều khiển cưỡng chế', 'Shared duration (minutes) — enforced by the controller')}
+              <input
+                type="number"
+                min="1"
+                max="1440"
+                value={durationMinutes}
+                aria-invalid={!durationValid}
+                onChange={(event) => setDurationMinutes(event.target.value)}
+                className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3"
+              />
+              {!durationValid && <span role="alert" className="mt-1 block text-xs text-[var(--c-fault-fg)]">{pick('Thời hạn phải lớn hơn 0 phút', 'The duration must be greater than 0 minutes')}</span>}
+            </label>
+
+            <dl className="grid grid-cols-[140px_1fr] gap-y-1 text-xs">
+              <dt className="text-[var(--c-text-dim)]">{pick('Người thực hiện', 'Actor')}</dt>
+              <dd>{actor ?? NO_DATA} · {role ?? NO_DATA}</dd>
+            </dl>
+
+            {/* Ma sát CỐ Ý: hộp thoại này gộp 3–5 lệnh nguy hiểm thành một cú
+                bấm, nên phải trả lại một nhịp dừng. */}
+            <label className="flex items-start gap-3 rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] p-3 text-sm">
+              <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--c-accent)]" />
+              <span>{pick(
+                `Tôi đã đọc bảng hậu quả phía trên và chịu trách nhiệm cho ${plan.length} lệnh này.`,
+                `I have read the consequence table above and take responsibility for these ${plan.length} commands.`
+              )}</span>
+            </label>
+          </>
+        )}
+
+        {phase !== 'confirm' && (
+          <>
+            <p className="text-sm text-[var(--c-text-dim)]">
+              {pick(
+                'Gửi TUẦN TỰ, mỗi điểm một lệnh riêng — backend không có API ghi hàng loạt.',
+                'Sent SEQUENTIALLY, one command per point — the backend has no bulk write API.'
+              )}
+            </p>
+            <p className="text-sm font-semibold">
+              {pick(`${outcomes.length} / ${runPlan.length} điểm đã xử lý`, `${outcomes.length} / ${runPlan.length} points processed`)}
+            </p>
+            <ul className="divide-y divide-[var(--c-border)] rounded-[var(--radius)] border border-[var(--c-border)]">
+              {runPlan.map((row) => {
+                const outcome = outcomes.find((item) => item.pointId === row.pointId)
+                return (
+                  <li key={row.pointId} role={outcome?.status === 'failed' ? 'alert' : 'status'} className="flex flex-wrap items-center gap-3 px-3 py-2 text-xs">
+                    <span className="mono w-[92px] shrink-0 font-semibold">{row.displayTag}</span>
+                    <span className="min-w-[140px] flex-1 truncate">{row.name}</span>
+                    <BulkOutcomeBadge status={outcome?.status} />
+                    {outcome?.message && <span className="w-full text-[var(--c-fault-fg)] md:w-auto">{outcome.message}</span>}
+                  </li>
+                )
+              })}
+            </ul>
+            {phase === 'done' && summary.sent > 0 && (
+              <p className="rounded-[var(--radius)] border border-[var(--c-force)] bg-[var(--c-force-bg)] px-3 py-2 text-xs text-[var(--c-force)]">
+                {pick(
+                  `${summary.sent} điểm đã ép vẫn đang giữ quyền điều khiển và có đếm ngược riêng. Đóng hộp thoại này KHÔNG nhả chúng — xem khối "Ai đang giữ quyền điều khiển" trên trang Tổng quan.`,
+                  `${summary.sent} overridden points still hold control with their own countdowns. Closing this dialog does NOT release them — see the "Who holds control" block on the overview page.`
+                )}
+              </p>
+            )}
+            {phase === 'done' && summary.skipped > 0 && (
+              <p role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
+                {pick(
+                  `${summary.skipped} điểm bị bỏ qua do huỷ giữa chừng. Các điểm đã gửi trước đó vẫn đang bị ép.`,
+                  `${summary.skipped} points were skipped because the run was cancelled. Points already sent remain overridden.`
+                )}
+              </p>
+            )}
+            {phase === 'running' && (
+              <Button size="sm" variant="secondary" onClick={() => { abortRef.current = true }}>
+                {pick('Huỷ phần còn lại', 'Cancel the rest')}
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+/** Trạng thái từng điểm — nhãn CHỮ kèm icon hình khác nhau, không chỉ màu
+ *  (WCAG 2.2 §1.4.1). Tick tròn ↔ tam giác cảnh báo phân biệt được cả khi in
+ *  đen trắng hoặc khi người dùng không phân biệt được đỏ–lục. */
+function BulkOutcomeBadge({ status }: { status?: BulkOverrideStatus }) {
+  const { pick } = useI18n()
+  if (status === 'sent') {
+    return <span className="inline-flex items-center gap-1 font-bold text-[var(--c-good-fg)]"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />{pick('ĐÃ ÉP', 'OVERRIDDEN')}</span>
+  }
+  if (status === 'failed') {
+    return <span className="inline-flex items-center gap-1 font-bold text-[var(--c-fault-fg)]"><ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />{pick('THẤT BẠI', 'FAILED')}</span>
+  }
+  if (status === 'skipped') {
+    return <span className="inline-flex items-center gap-1 font-bold text-[var(--c-text-dim)]"><X className="h-3.5 w-3.5" aria-hidden="true" />{pick('ĐÃ BỎ QUA', 'SKIPPED')}</span>
+  }
+  return <span className="inline-flex items-center gap-1 font-bold text-[var(--c-accent)]"><Circle className="h-3.5 w-3.5" aria-hidden="true" />{pick('ĐANG GỬI…', 'SENDING…')}</span>
 }
 
 function SectionFrame({ title, children }: { title: string; children: React.ReactNode }) {
@@ -1059,22 +1597,35 @@ function DetailPanel({
             {isAnalog && (
               <div className="col-span-2 flex items-center justify-between rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2">
                 <span className="text-xs text-[var(--c-text-dim)]">{pick('Hiển thị trend', 'Show trend')}</span>
+                {/* F-UX-10 — bản trước bày nút gạt ở chế độ XEM và giấu nút Lưu
+                    sau biểu tượng bút chì: gạt xong thì giao diện đổi nhưng
+                    không có gì được ghi xuống, và không có dấu hiệu nào nói
+                    rằng còn phải bấm bút chì rồi bấm Lưu. Ngoài ra nút gạt là
+                    `<span role="switch">` không có `tabIndex` nên bàn phím
+                    không tới được (WCAG 2.2 §2.1.1).
+                    Nay: chế độ xem chỉ ĐỌC trạng thái; nút gạt chỉ xuất hiện
+                    khi đang sửa, và luôn đi kèm Lưu/Hủy. */}
                 {isEditingTrend ? (
-                  <div className="flex items-center gap-1">
-                    <button onClick={onSaveEditTrend} className="text-xs font-semibold text-[var(--c-good-fg)]">{pick('Lưu', 'Save')}</button>
-                    <button onClick={onCancelEditTrend} className="text-xs font-semibold text-[var(--c-text-dim)]">{pick('Hủy', 'Cancel')}</button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={trendEnabled}
+                      aria-label={pick('Bật ghi trend cho điểm này', 'Enable trend logging for this point')}
+                      className={cn('flex h-5 w-9 items-center rounded-full border px-0.5 transition', trendEnabled ? 'justify-end border-[var(--c-good)] bg-[var(--c-good-bg)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface)]')}
+                      onClick={() => onToggleTrend(point.id)}
+                    >
+                      <span className={cn('h-3.5 w-3.5 rounded-full', trendEnabled ? 'bg-[var(--c-good)]' : 'bg-[var(--c-off)]')} />
+                    </button>
+                    <button type="button" onClick={onSaveEditTrend} className="text-xs font-semibold text-[var(--c-good-fg)]">{pick('Lưu', 'Save')}</button>
+                    <button type="button" onClick={onCancelEditTrend} className="text-xs font-semibold text-[var(--c-text-dim)]">{pick('Hủy', 'Cancel')}</button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span
-                      className={cn('flex h-5 w-9 items-center rounded-full border px-0.5 transition cursor-pointer', trendEnabled ? 'justify-end border-[var(--c-good)] bg-[var(--c-good-bg)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface)]')}
-                      onClick={() => onToggleTrend(point.id)}
-                      role="switch"
-                      aria-checked={trendEnabled}
-                    >
-                      <span className={cn('h-3.5 w-3.5 rounded-full', trendEnabled ? 'bg-[var(--c-good)]' : 'bg-[var(--c-off)]')} />
+                    <span className="text-xs font-semibold" style={{ color: trendEnabled ? 'var(--c-good-fg)' : 'var(--c-text-dim)' }}>
+                      {trendEnabled ? pick('Đang bật', 'On') : pick('Đang tắt', 'Off')}
                     </span>
-                    <button onClick={onStartEditTrend} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Cài đặt trend', 'Trend settings')}>
+                    <button type="button" onClick={onStartEditTrend} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Cài đặt trend', 'Trend settings')} aria-label={pick('Sửa cài đặt trend', 'Edit trend settings')}>
                       <Pencil className="h-3 w-3" />
                     </button>
                   </div>
@@ -1202,7 +1753,13 @@ function PointHistoryPanel({ point }: { point: Point }) {
 }
 
 function Sparkline({ values, color }: { values: number[]; color: string }) {
-  const safe = values.length > 1 ? values : [values[0] ?? 0, values[0] ?? 0]
+  /* F-UX-07 — `sparklineFallback` cố ý trả mảng RỖNG cho point chưa có số đo
+     ("Vẽ điểm 0 cho point chưa từng được poll là bịa một số đo", REV-FE-04),
+     nhưng chỗ này lại nhận mảng rỗng rồi tự thay bằng `[0, 0]` và vẽ một đường
+     nằm ngang ở đáy — đúng thứ mà fallback muốn tránh, chỉ là bịa ở một tầng
+     thấp hơn. Không có mẫu thì không vẽ gì. */
+  if (values.length === 0) return <span className="mono text-[11px] text-[var(--c-text-dim)]">{NO_DATA}</span>
+  const safe = values.length > 1 ? values : [values[0], values[0]]
   const min = Math.min(...safe)
   const max = Math.max(...safe)
   const span = Math.max(1, max - min)

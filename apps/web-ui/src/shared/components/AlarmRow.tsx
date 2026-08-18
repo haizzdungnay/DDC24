@@ -32,12 +32,17 @@ function triggerText(alarm: Alarm): string {
 export function AlarmRow({
   alarm,
   canAct = true,
+  bulkSelected,
+  onBulkToggle,
   onAck,
   onSuppress,
   onReturn
 }: {
   alarm: Alarm
   canAct?: boolean
+  /** `undefined` = không hiện cột chọn (vai trò dưới `operator`). */
+  bulkSelected?: boolean
+  onBulkToggle?: (alarm: Alarm) => void
   onAck?: (alarm: Alarm) => void
   onSuppress?: (alarm: Alarm) => void
   onReturn?: (alarm: Alarm) => void
@@ -49,7 +54,21 @@ export function AlarmRow({
   const returnAvailable = alarm.status === 'acked' && alarm.active !== false && alarm.returnable !== false
   const deniedReason = canAct ? undefined : 'Cần vai trò operator trở lên'
   return (
-    <div className="grid grid-cols-[140px_96px_1fr_180px] items-center gap-3 border-b border-[var(--c-border)] px-3 py-3 text-xs last:border-0 max-lg:grid-cols-1">
+    <div className={`grid items-center gap-3 border-b border-[var(--c-border)] px-3 py-3 text-xs last:border-0 max-lg:grid-cols-1 ${bulkSelected === undefined ? 'grid-cols-[140px_96px_1fr_180px]' : 'grid-cols-[28px_140px_96px_1fr_180px]'}`}>
+      {/* T57-1.6 — ô chọn cho xác nhận hàng loạt. Chỉ cảnh báo CHƯA xác nhận
+          mới chọn được: ack một cảnh báo đã acked là một request chắc chắn bị
+          từ chối, và bày nút cho nó là mời người dùng vào một lỗi. */}
+      {bulkSelected !== undefined && (
+        <input
+          type="checkbox"
+          checked={bulkSelected}
+          disabled={!ackAvailable || !canAct}
+          onChange={() => onBulkToggle?.(alarm)}
+          aria-label={`Chọn cảnh báo ${alarm.id} để xác nhận hàng loạt`}
+          title={ackAvailable ? undefined : 'Cảnh báo này không ở trạng thái xác nhận được'}
+          className="h-4 w-4 accent-[var(--c-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+        />
+      )}
       <span className="mono text-[var(--c-text-dim)]">{formatDateTime(alarm.time)}</span>
       <StatusBadge state={state} label={alarm.severity.toUpperCase()} />
       <div className="min-w-0">

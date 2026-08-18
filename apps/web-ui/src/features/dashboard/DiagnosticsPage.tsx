@@ -1,4 +1,4 @@
-import { Activity, Clock3, Cpu, Database, MemoryStick, Network, Router, Thermometer } from 'lucide-react'
+import { Activity, CircleHelp, Clock3, Cpu, Database, MemoryStick, Network, PowerOff, Router, Thermometer } from 'lucide-react'
 import type React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../../shared/api/client'
@@ -144,21 +144,34 @@ export function DiagnosticsPage() {
             vẽ nó ra rồi ghi `unknown` khiến người đi hiện trường đi tìm một
             cổng không tồn tại. Số bus lấy từ `capabilities.modbusRtuBuses`. */}
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-5">
-          <CommTile icon={Network} title="Ethernet / IPv4" value={overview?.controller.ip} ok={Boolean(overview?.controller.ip)} />
-          {Array.from({ length: overview?.capabilities.modbusRtuBuses ?? 0 }, (_, index) => (
-            <CommTile
-              key={`bus-${index + 1}`}
-              icon={Router}
-              title={`RS-485 / Bus ${index + 1}`}
-              value={modbusStateLabel(overview?.health.find((item) => item.domain === 'modbus')?.state)}
-              ok={overview?.health.find((item) => item.domain === 'modbus')?.state === 'good'}
-            />
-          ))}
+          <CommTile
+            icon={Network}
+            title="Ethernet / IPv4"
+            value={overview?.controller.ip}
+            state={overview?.controller.ip ? 'ok' : 'unreadable'}
+          />
+          {Array.from({ length: overview?.capabilities.modbusRtuBuses ?? 0 }, (_, index) => {
+            const modbus = overview?.health.find((item) => item.domain === 'modbus')
+            return (
+              <CommTile
+                key={`bus-${index + 1}`}
+                icon={Router}
+                title={`RS-485 / Bus ${index + 1}`}
+                value={modbusStateLabel(modbus?.state)}
+                state={commStateOf(modbus?.state, modbus?.reasonCode)}
+              />
+            )
+          })}
+          {/* T57-1.12 (§6.6-P2b) — BACnet/IP feature-gated OFF là "tắt có chủ
+              đích", KHÔNG phải "không đọc được". Bản trước cho cả hai ra `N/A`,
+              nên một cổng chết và một tính năng cố ý chưa bật trông giống hệt
+              nhau — và người đi hiện trường mất thời gian đi tìm lỗi ở chỗ
+              không có lỗi. */}
           <CommTile
             icon={Database}
             title="BACnet/IP"
-            value={overview?.capabilities.bacnetIpEnabled ? pick('Đang bật', 'Enabled') : pick('Tắt (feature-gated)', 'Disabled (feature-gated)')}
-            ok={Boolean(overview?.capabilities.bacnetIpEnabled)}
+            value={overview?.capabilities.bacnetIpEnabled ? pick('Đang bật', 'Enabled') : pick('Chưa bật trong cấu hình sản phẩm', 'Not enabled in the product configuration')}
+            state={overview?.capabilities.bacnetIpEnabled ? 'ok' : 'disabled'}
           />
         </div>
       </Panel>
@@ -199,6 +212,22 @@ function modbusStateLabel(state: string | undefined): string {
   return state.toUpperCase()
 }
 
+export type CommTileState = 'ok' | 'disabled' | 'unreadable'
+
+/**
+ * Ba trạng thái của một ô truyền thông — `T57-1.12`, đề xuất §6.6-P2b.
+ *
+ * `unknown` + `not_configured` nghĩa là **chưa cấu hình**: không có slave nào
+ * được khai, nên bus không mở là đúng thiết kế chứ không phải sự cố. Mọi
+ * `unknown` khác là **không đọc được**, và hai thứ đó dẫn tới hai hành động
+ * hoàn toàn khác nhau của người đi hiện trường.
+ */
+export function commStateOf(healthState: string | undefined, reasonCode: string | undefined): CommTileState {
+  if (healthState === 'good') return 'ok'
+  if (reasonCode === 'not_configured') return 'disabled'
+  return 'unreadable'
+}
+
 function MetricCard({ icon: Icon, label, value, detail, color }: { icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; label: string; value: string; detail: string; color: string }) {
   return (
     <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
@@ -212,7 +241,18 @@ function MetricCard({ icon: Icon, label, value, detail, color }: { icon: React.C
   )
 }
 
-function CommTile({ icon: Icon, title, value, ok }: { icon: React.ComponentType<{ className?: string }>; title: string; value?: string; ok: boolean }) {
+function CommTile({ icon: Icon, title, value, state }: { icon: React.ComponentType<{ className?: string }>; title: string; value?: string; state: CommTileState }) {
+  const { pick } = useI18n()
+  /* Ba trạng thái phải phân biệt được bằng NHÃN CHỮ + ICON HÌNH KHÁC NHAU, không
+     chỉ bằng màu (WCAG 2.2 §1.4.1 và `UX_REQ_PA3_WEB` §11). Nhãn `N/A` cũ dùng
+     chung cho cả "tắt có chủ đích" lẫn "không đọc được" là gộp hai nghĩa vào
+     một chữ — kiểu mất thông tin mà màu không cứu được. */
+  const visual = {
+    ok: { label: pick('ĐANG HOẠT ĐỘNG', 'ACTIVE'), color: 'var(--c-good-fg)', Icon: Activity },
+    disabled: { label: pick('TẮT CÓ CHỦ ĐÍCH', 'INTENTIONALLY OFF'), color: 'var(--c-text-dim)', Icon: PowerOff },
+    unreadable: { label: pick('KHÔNG ĐỌC ĐƯỢC', 'UNREADABLE'), color: 'var(--c-warn-fg)', Icon: CircleHelp }
+  }[state]
+  const StateIcon = visual.Icon
   return (
     <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
       <div className="flex items-center gap-3">
@@ -222,9 +262,9 @@ function CommTile({ icon: Icon, title, value, ok }: { icon: React.ComponentType<
           <div className="mono mt-0.5 truncate text-xs text-[var(--c-text-dim)]">{value || NO_DATA}</div>
         </div>
       </div>
-      <div className="mt-2 flex items-center gap-2 text-xs font-semibold" style={{ color: ok ? 'var(--c-good-fg)' : 'var(--c-text-dim)' }}>
-        <Activity className="h-3.5 w-3.5" aria-hidden="true" />
-        {ok ? 'OK' : 'N/A'}
+      <div className="mt-2 flex items-center gap-2 text-xs font-semibold" style={{ color: visual.color }}>
+        <StateIcon className="h-3.5 w-3.5" aria-hidden="true" />
+        {visual.label}
       </div>
     </div>
   )

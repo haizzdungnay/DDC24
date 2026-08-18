@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="1000" viewBox="0 0 880 1000" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
+  <title>OPS-01 Khối "Ai đang giữ quyền điều khiển" — mobile 390×844, bảng đổ thành thẻ</title>
+  <desc>Hai artboard mobile 390 CSS px: danh sách thẻ thay cho bảng, và trạng thái rỗng. Ngưỡng đổi bố cục là lg = 1024 px theo KX-DDC24-UX-SYSTEM-001 §4.1. Dữ liệu là MINH HOẠ, không phải dữ liệu runtime.</desc>
+
+  <rect width="880" height="1000" fill="#C8CCD0"/>
+
+  <text x="24" y="24" font-size="12" font-weight="700" fill="#4A4F55">Artboard 1 — mobile 390 × 844, có lệnh ép tay</text>
+  <text x="24" y="42" font-size="11" fill="#4A4F55">Dưới ngưỡng lg (1024 px) bảng 7 cột KHÔNG cuộn ngang mà đổ thành thẻ: cuộn ngang trên</text>
+  <text x="24" y="58" font-size="11" fill="#4A4F55">màn hình cầm tay giấu mất cột “CÒN LẠI”, tức giấu đúng thông tin an toàn của khối này.</text>
+
+  <!-- khung điện thoại 390x844 -->
+  <g transform="translate(24,72)">
+    <rect x="0" y="0" width="390" height="844" rx="14" fill="#C8CCD0" stroke="#4C5056" stroke-width="2"/>
+
+    <!-- topbar -->
+    <rect x="0" y="0" width="390" height="52" rx="14" fill="#D8DBDE"/>
+    <rect x="0" y="38" width="390" height="14" fill="#D8DBDE"/>
+    <line x1="0" y1="52" x2="390" y2="52" stroke="#636970"/>
+    <rect x="12" y="14" width="26" height="24" rx="4" fill="#C2C6CA" stroke="#636970"/>
+    <g stroke="#26527C" stroke-width="2"><line x1="18" y1="22" x2="32" y2="22"/><line x1="18" y1="26" x2="32" y2="26"/><line x1="18" y1="30" x2="32" y2="30"/></g>
+    <text x="50" y="31" font-size="13" font-weight="700" fill="#1C1F23">MK-DDC-24</text>
+    <circle cx="356" cy="26" r="11" fill="#F7E0E1" stroke="#CC1F28"/>
+    <text x="356" y="30" font-size="10" font-weight="700" fill="#A01017" text-anchor="middle">2</text>
+
+    <!-- panel -->
+    <rect x="10" y="64" width="370" height="700" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="22" y="88" font-size="12" font-weight="700" fill="#26527C">AI ĐANG GIỮ QUYỀN</text>
+    <text x="22" y="104" font-size="10" fill="#4A4F55">Điểm đang bị ép tay · ai ra lệnh · còn bao lâu</text>
+    <line x1="22" y1="114" x2="368" y2="114" stroke="#636970"/>
+
+    <!-- tóm tắt -->
+    <rect x="22" y="126" width="346" height="36" rx="6" fill="#E9E3F1" stroke="#693797" stroke-width="2"/>
+    <path d="M38 140 h9 v-4 a5 5 0 0 1 10 0 v4 h9 v13 h-28 z" fill="none" stroke="#693797" stroke-width="2"/>
+    <text x="80" y="149" font-size="12" font-weight="700" fill="#693797">3 điểm đang bị ép tay</text>
+
+    <!-- thẻ 1 -->
+    <rect x="22" y="174" width="346" height="118" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="34" y="196" font-size="12" font-weight="700" fill="#1C1F23" font-family="monospace">DO-02</text>
+    <rect x="248" y="182" width="108" height="18" rx="4" fill="#E9E3F1" stroke="#693797"/>
+    <text x="254" y="195" font-size="9" font-weight="700" fill="#693797">LOCAL MANUAL</text>
+    <text x="34" y="214" font-size="12" font-weight="700" fill="#1C1F23">Quạt cấp AHU-1</text>
+    <text x="34" y="234" font-size="10" fill="#4A4F55">Giá trị ép</text>
+    <text x="110" y="234" font-size="11" font-weight="700" fill="#1C1F23" font-family="monospace">ON</text>
+    <text x="196" y="234" font-size="10" fill="#4A4F55">Còn lại</text>
+    <text x="256" y="234" font-size="13" font-weight="700" fill="#1C1F23" font-family="monospace">18:24</text>
+    <text x="34" y="252" font-size="10" fill="#4A4F55">chuong · operator · 14:02:11</text>
+    <rect x="34" y="260" width="150" height="24" rx="5" fill="#D8DBDE" stroke="#636970"/>
+    <text x="44" y="276" font-size="10" fill="#26527C">Xem ở Monitor</text>
+    <rect x="192" y="260" width="164" height="24" rx="5" fill="#D8DBDE" stroke="#636970"/>
+    <text x="202" y="276" font-size="10" fill="#26527C">Xem vết lệnh</text>
+
+    <!-- thẻ 2 — sắp hết hạn -->
+    <rect x="22" y="302" width="346" height="118" rx="6" fill="#EEE9DB" stroke="#826500" stroke-width="2"/>
+    <text x="34" y="324" font-size="12" font-weight="700" fill="#1C1F23" font-family="monospace">AO-01</text>
+    <rect x="248" y="310" width="108" height="18" rx="4" fill="#E9E3F1" stroke="#693797"/>
+    <text x="254" y="323" font-size="9" font-weight="700" fill="#693797">LOCAL MANUAL</text>
+    <text x="34" y="342" font-size="12" font-weight="700" fill="#1C1F23">Van nước lạnh AHU-1</text>
+    <text x="34" y="362" font-size="10" fill="#4A4F55">Giá trị ép</text>
+    <text x="110" y="362" font-size="11" font-weight="700" fill="#1C1F23" font-family="monospace">62.0 %</text>
+    <path d="M196 366 l8 -14 l8 14 z" fill="none" stroke="#634D00" stroke-width="2"/>
+    <text x="204" y="364" font-size="8" font-weight="700" fill="#634D00" text-anchor="middle">!</text>
+    <text x="220" y="359" font-size="13" font-weight="700" fill="#634D00" font-family="monospace">04:11</text>
+    <text x="220" y="370" font-size="8" font-weight="700" fill="#634D00">SẮP HẾT HẠN</text>
+    <text x="34" y="382" font-size="10" fill="#4A4F55">chuong · operator · 14:16:40</text>
+    <rect x="34" y="390" width="150" height="24" rx="5" fill="#D8DBDE" stroke="#636970"/>
+    <text x="44" y="406" font-size="10" fill="#26527C">Xem ở Monitor</text>
+    <rect x="192" y="390" width="164" height="24" rx="5" fill="#D8DBDE" stroke="#636970"/>
+    <text x="202" y="406" font-size="10" fill="#26527C">Xem vết lệnh</text>
+
+    <!-- thẻ 3 — không TTL, không actor -->
+    <rect x="22" y="430" width="346" height="118" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="34" y="452" font-size="12" font-weight="700" fill="#1C1F23" font-family="monospace">VP-SETP-01</text>
+    <rect x="252" y="438" width="104" height="18" rx="4" fill="#E5E6E8" stroke="#636970"/>
+    <text x="258" y="451" font-size="9" font-weight="700" fill="#4A4F55">GHI TRỰC TIẾP</text>
+    <text x="34" y="470" font-size="12" font-weight="700" fill="#1C1F23">Setpoint nhiệt độ khu A</text>
+    <text x="34" y="490" font-size="10" fill="#4A4F55">Giá trị ép</text>
+    <text x="110" y="490" font-size="11" font-weight="700" fill="#1C1F23" font-family="monospace">24.0 °C</text>
+    <text x="196" y="490" font-size="10" fill="#4A4F55">Còn lại</text>
+    <text x="256" y="490" font-size="13" font-weight="700" fill="#4A4F55" font-family="monospace">—</text>
+    <text x="34" y="508" font-size="10" fill="#4A4F55">— · không có vết trong Activity</text>
+    <text x="34" y="524" font-size="9" font-style="italic" fill="#4A4F55">“—” ở CÒN LẠI = không có thời hạn tự nhả, không phải “vừa hết hạn”.</text>
+    <rect x="34" y="530" width="150" height="24" rx="5" fill="#D8DBDE" stroke="#636970"/>
+    <text x="44" y="546" font-size="10" fill="#26527C">Xem ở Monitor</text>
+
+    <!-- vùng chạm -->
+    <rect x="22" y="566" width="346" height="76" rx="6" fill="#E0E6EC" stroke="#26527C"/>
+    <text x="34" y="586" font-size="10" font-weight="700" fill="#26527C">Kích thước vùng chạm</text>
+    <text x="34" y="602" font-size="10" fill="#4A4F55">Mọi nút trong thẻ cao ≥ 24 px CSS và cách nhau ≥ 8 px,</text>
+    <text x="34" y="616" font-size="10" fill="#4A4F55">thoả WCAG 2.2 §2.5.8 Target Size (Minimum) 24×24.</text>
+    <text x="34" y="632" font-size="10" fill="#4A4F55">Thứ tự Tab: thẻ 1 → nút 1 → nút 2 → thẻ 2 → …</text>
+
+    <rect x="22" y="654" width="346" height="98" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="34" y="674" font-size="10" font-weight="700" fill="#1C1F23">Vì sao thẻ chứ không phải bảng cuộn ngang</text>
+    <text x="34" y="690" font-size="10" fill="#4A4F55">Bảng 7 cột trên 390 px buộc phải cuộn ngang. Cột “CÒN LẠI”</text>
+    <text x="34" y="704" font-size="10" fill="#4A4F55">nằm gần cuối, nên mặc định nó nằm NGOÀI màn hình —</text>
+    <text x="34" y="718" font-size="10" fill="#4A4F55">tức là thông tin an toàn quan trọng nhất của khối bị giấu</text>
+    <text x="34" y="732" font-size="10" fill="#4A4F55">sau một thao tác mà người dùng không biết là có.</text>
+    <text x="34" y="746" font-size="10" fill="#4A4F55">Thẻ đưa nó lên hàng thứ hai, luôn nhìn thấy.</text>
+  </g>
+
+  <!-- artboard 2 -->
+  <text x="450" y="24" font-size="12" font-weight="700" fill="#4A4F55">Artboard 2 — mobile, trạng thái rỗng</text>
+  <g transform="translate(450,72)">
+    <rect x="0" y="0" width="390" height="360" rx="14" fill="#C8CCD0" stroke="#4C5056" stroke-width="2"/>
+    <rect x="0" y="0" width="390" height="52" rx="14" fill="#D8DBDE"/>
+    <rect x="0" y="38" width="390" height="14" fill="#D8DBDE"/>
+    <line x1="0" y1="52" x2="390" y2="52" stroke="#636970"/>
+    <text x="16" y="31" font-size="13" font-weight="700" fill="#1C1F23">MK-DDC-24</text>
+
+    <rect x="10" y="64" width="370" height="270" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="22" y="88" font-size="12" font-weight="700" fill="#26527C">AI ĐANG GIỮ QUYỀN</text>
+    <line x1="22" y1="98" x2="368" y2="98" stroke="#636970"/>
+    <rect x="22" y="112" width="346" height="126" rx="6" fill="#E0ECE5" stroke="#227742"/>
+    <circle cx="48" cy="142" r="11" fill="none" stroke="#165B2E" stroke-width="2"/>
+    <path d="M42 142 l4 5 l9 -10" fill="none" stroke="#165B2E" stroke-width="2"/>
+    <text x="70" y="139" font-size="12" font-weight="700" fill="#165B2E">Không có lệnh tay nào</text>
+    <text x="70" y="154" font-size="10" fill="#4A4F55">Mọi đầu ra do logic và lịch quyết định.</text>
+    <text x="34" y="184" font-size="10" fill="#4A4F55">Đã đọc 29/29 điểm lúc 14:31:02 — kết luận từ</text>
+    <text x="34" y="198" font-size="10" fill="#4A4F55">dữ liệu đủ, không phải màn hình trống.</text>
+    <text x="34" y="222" font-size="9" font-style="italic" fill="#4A4F55">Trạng thái “không đọc được” dùng khối đỏ khác hẳn.</text>
+    <text x="22" y="266" font-size="10" fill="#4A4F55">Khối rỗng vẫn chiếm chỗ cố định trên trang để</text>
+    <text x="22" y="280" font-size="10" fill="#4A4F55">bố cục không nhảy khi có lệnh ép tay xuất hiện.</text>
+    <text x="22" y="308" font-size="10" font-weight="700" fill="#26527C">Ngưỡng bố cục: lg = 1024 px (UX-SYSTEM-001 §4.1)</text>
+    <text x="22" y="322" font-size="10" fill="#4A4F55">≥ 1024 px: bảng 7 cột · &lt; 1024 px: danh sách thẻ</text>
+  </g>
+</svg>

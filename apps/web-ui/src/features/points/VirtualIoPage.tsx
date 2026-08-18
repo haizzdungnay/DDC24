@@ -4,6 +4,7 @@ import type React from 'react'
 import { apiClient } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, normalizePointTag, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
 import { Button } from '../../shared/components/Button'
+import { DirtyGuardModal } from '../../shared/components/DirtyGuardModal'
 import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { PointNameConflictNotice } from '../../shared/components/PointNameConflictNotice'
@@ -12,6 +13,7 @@ import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { TrendChart } from '../../shared/components/TrendChart'
 import { useApi } from '../../shared/hooks/useApi'
+import { useDirtyGuard } from '../../shared/hooks/useDirtyGuard'
 import { useI18n } from '../../shared/i18n'
 import type { Point, TrendSample, VirtualPoint, VirtualPointSignalType } from '../../shared/types'
 import { cn, formatTime, formatValue, pointNumber } from '../../shared/utils'
@@ -99,6 +101,14 @@ export function VirtualPointsPage() {
   const livePoint = selected ? findLivePoint(pointsState.data ?? [], selected.id) : undefined
   const quotas = useMemo(() => quotaUsage(items), [items])
   const currentStep = wizardSteps[Math.min(wizardIndex, wizardSteps.length - 1)]
+  /* F-UX-12: `items` là bản đang soạn, `serverItems` là bản backend đang giữ.
+   * So sánh nguyên khối để không phải liệt kê tay từng field — liệt kê tay là
+   * chỗ dirty-guard hay bỏ sót nhất. */
+  const dirtyItems = useMemo(() => {
+    const byId = new Map(serverItems.map((item) => [item.id, JSON.stringify(item)]))
+    return items.filter((item) => byId.get(item.id) !== JSON.stringify(item))
+  }, [items, serverItems])
+  const dirtyGuard = useDirtyGuard(dirtyItems.length > 0)
 
   function updateSelected(patch: Partial<VirtualPoint>) {
     if (!selected) return
@@ -106,8 +116,10 @@ export function VirtualPointsPage() {
     setItems((current) => current.map((item) => item.id === selected.id ? { ...item, ...patch } : item))
   }
 
-  async function saveSelected(closeConfirm = false) {
-    if (!selected) return
+  /* Trả `true` chỉ khi backend đã nhận — `DirtyGuardModal` dùng giá trị này để
+   * quyết định có rời trang hay không (F-UX-12). */
+  async function saveSelected(closeConfirm = false): Promise<boolean> {
+    if (!selected) return false
     const index = items.findIndex((item) => item.id === selected.id)
     const errors: Record<string, string> = {}
     const recoveringName = persistedNameConflicts.has(selected.id)
@@ -118,7 +130,7 @@ export function VirtualPointsPage() {
     if (Object.keys(errors).length) {
       setTagErrors(errors)
       setErrorFocusPath(Object.keys(errors)[0])
-      return
+      return false
     }
     setSaving(true)
     try {
@@ -136,16 +148,70 @@ export function VirtualPointsPage() {
       }
       setTagErrors({})
       setErrorFocusPath(undefined)
-      toast.push('success', pick('Da luu Virtual Point', 'Virtual Point saved'))
+      toast.push('success', pick('Đã lưu Virtual Point', 'Virtual Point saved'))
       if (closeConfirm) {
         setConfirmOpen(false)
         setMode('advanced')
       }
+      return true
     } catch (error) {
       const fieldErrors = pointTagFieldErrors(error)
       setTagErrors(fieldErrors)
       setErrorFocusPath(pointFieldFocusPath(error, selected.id, ['items']) ?? Object.keys(fieldErrors)[0])
       toast.push('error', error instanceof Error ? error.message : String(error))
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /* F-UX-12: nút Lưu của trang chỉ ghi VP ĐANG CHỌN, nhưng bản nháp chưa lưu có
+   * thể nằm ở nhiều VP (người dùng sửa VP1, bấm sang VP2 rồi mới rời trang).
+   * Nếu hộp thoại rời trang chỉ lưu VP đang chọn thì nó nói dối: người dùng bấm
+   * "Lưu rồi rời đi" và vẫn mất các VP kia. Hàm này lưu **mọi** VP đang lệch so
+   * với bản backend, và dừng ngay ở VP đầu tiên hỏng (không rời trang) thay vì
+   * ghi tiếp nửa vời. */
+  async function saveDirtyPoints(): Promise<boolean> {
+    if (!dirtyItems.length) return true
+    const errors: Record<string, string> = {}
+    for (const item of dirtyItems) {
+      const index = items.findIndex((entry) => entry.id === item.id)
+      const tagError = persistedNameConflicts.has(item.id) ? undefined : validatePointTag(item.tag)
+      const nameError = validatePointName(item.label)
+      if (tagError) errors[`items[${index}].tag`] = tagError
+      if (nameError) errors[`items[${index}].name`] = nameError
+    }
+    if (Object.keys(errors).length) {
+      setTagErrors(errors)
+      setErrorFocusPath(Object.keys(errors)[0])
+      return false
+    }
+    setSaving(true)
+    try {
+      for (const item of dirtyItems) {
+        if (persistedNameConflicts.has(item.id)) {
+          const name = normalizePointName(item.label)
+          await apiClient.updatePointName(item.id, name)
+          const applyName = (entry: VirtualPoint) => entry.id === item.id ? { ...entry, name, label: name } : entry
+          setItems((current) => current.map(applyName))
+          setServerItems((current) => current.map(applyName))
+        } else {
+          const saved = normalizeVirtualPoint(await apiClient.updateVirtualPoint(normalizeVirtualPoint({ ...item, tag: normalizePointTag(item.tag), label: displayPointName(normalizePointName(item.label), item.id) })))
+          setItems((current) => current.map((entry) => entry.id === saved.id ? saved : entry))
+          setServerItems((current) => current.map((entry) => entry.id === saved.id ? saved : entry))
+        }
+      }
+      setTagErrors({})
+      setErrorFocusPath(undefined)
+      void pointsState.refetch()
+      toast.push('success', pick('Đã lưu Virtual Point', 'Virtual Point saved'))
+      return true
+    } catch (error) {
+      const fieldErrors = pointTagFieldErrors(error)
+      setTagErrors(fieldErrors)
+      setErrorFocusPath(Object.keys(fieldErrors)[0])
+      toast.push('error', error instanceof Error ? error.message : String(error))
+      return false
     } finally {
       setSaving(false)
     }
@@ -178,7 +244,7 @@ export function VirtualPointsPage() {
       setAddOpen(false)
       setTagErrors({})
       setErrorFocusPath(undefined)
-      toast.push('success', pick('Da tao VP', 'Virtual Point created'))
+      toast.push('success', pick('Đã tạo VP', 'Virtual Point created'))
     } catch (error) {
       const fieldErrors = pointTagFieldErrors(error)
       setTagErrors(fieldErrors)
@@ -200,7 +266,7 @@ export function VirtualPointsPage() {
       setSelectedId(next[0]?.id ?? '')
       setWizardIndex(0)
       setDeleteOpen(false)
-      toast.push('success', pick('Da xoa VP', 'Virtual Point deleted'))
+      toast.push('success', pick('Đã xoá VP', 'Virtual Point deleted'))
     } catch (error) {
       toast.push('error', error instanceof Error ? error.message : String(error))
     } finally {
@@ -217,7 +283,7 @@ export function VirtualPointsPage() {
       setServerItems((current) => current.filter((item) => item.id !== id))
       setSelectedId((current) => (current === id ? (next[0]?.id ?? '') : current))
       setWizardIndex(0)
-      toast.push('success', pick('Da xoa VP', 'Virtual Point deleted'))
+      toast.push('success', pick('Đã xoá VP', 'Virtual Point deleted'))
     } catch (error) {
       toast.push('error', error instanceof Error ? error.message : String(error))
     } finally {
@@ -258,11 +324,11 @@ export function VirtualPointsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-[var(--c-text)]">{pick('Virtual Points', 'Virtual Points')}</h1>
-          <p className="text-sm text-[var(--c-text-dim)]">{pick('VP backend-only, chi hien khi da tao.', 'Backend-only Virtual Points, visible only after creation.')}</p>
+          <p className="text-sm text-[var(--c-text-dim)]">{pick('VP backend-only, chỉ hiện khi đã tạo.', 'Backend-only Virtual Points, visible only after creation.')}</p>
         </div>
         <div className="flex gap-2">
-          <Button icon={<Plus className="h-4 w-4" />} onClick={() => setAddOpen(true)}>{pick('Tao VP', 'Add VP')}</Button>
-          <Button icon={<LayoutGrid className="h-4 w-4" />} disabled={!items.length} onClick={() => setOverviewOpen(true)}>{pick('Tong quan', 'Overview')}</Button>
+          <Button icon={<Plus className="h-4 w-4" />} onClick={() => setAddOpen(true)}>{pick('Tạo VP', 'Add VP')}</Button>
+          <Button icon={<LayoutGrid className="h-4 w-4" />} disabled={!items.length} onClick={() => setOverviewOpen(true)}>{pick('Tổng quan', 'Overview')}</Button>
           <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} disabled={!selected || loading} onClick={() => setConfirmOpen(true)}>{t('save')}</Button>
         </div>
       </div>
@@ -270,7 +336,7 @@ export function VirtualPointsPage() {
       <QuotaStrip quotas={quotas} />
 
       <div className="grid gap-5 lg:grid-cols-[276px_minmax(0,1fr)]">
-        <Panel title={pick('VP da tao', 'Created VP')}>
+        <Panel title={pick('VP đã tạo', 'Created VP')}>
           <div className="space-y-2">
             {items.map((item) => (
               <button
@@ -290,7 +356,7 @@ export function VirtualPointsPage() {
                 <span className="text-xs font-mono uppercase text-[var(--c-text-dim)]">{item.signalType}</span>
               </button>
             ))}
-            {!items.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{loading ? t('loading') : pick('Chua co VP nao.', 'No VP created.')}</div>}
+            {!items.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{loading ? t('loading') : pick('Chưa có VP nào.', 'No VP created.')}</div>}
           </div>
         </Panel>
 
@@ -304,7 +370,7 @@ export function VirtualPointsPage() {
                 <ModeButton active={mode === 'wizard'} icon={<Wand2 className="h-4 w-4" />} label={t('wizard')} onClick={() => setMode('wizard')} />
                 <ModeButton active={mode === 'advanced'} icon={<SlidersHorizontal className="h-4 w-4" />} label={t('advanced')} onClick={() => setMode('advanced')} />
               </div>
-              <Button icon={<Trash2 className="h-4 w-4" />} onClick={() => setDeleteOpen(true)}>{pick('Xoa', 'Delete')}</Button>
+              <Button icon={<Trash2 className="h-4 w-4" />} onClick={() => setDeleteOpen(true)}>{pick('Xoá', 'Delete')}</Button>
             </div>
           )}
         >
@@ -337,7 +403,7 @@ export function VirtualPointsPage() {
             </div>
           ) : (
             <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-6 text-sm text-[var(--c-text-dim)]">
-              {pick('Bam Tao VP de tao bien ao.', 'Use Add VP to create a virtual point.')}
+              {pick('Bấm Tạo VP để tạo biến ảo.', 'Use Add VP to create a virtual point.')}
             </div>
           )}
         </Panel>
@@ -357,7 +423,7 @@ export function VirtualPointsPage() {
         onDelete={(id) => setOverviewDeleteId(id)}
         onClose={() => setOverviewOpen(false)}
       />
-      <Modal open={overviewDeleteId !== null} danger title={pick('Xoa VP?', 'Delete Virtual Point?')} confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => { if (overviewDeleteId) void deleteById(overviewDeleteId); setOverviewDeleteId(null) }} onClose={() => setOverviewDeleteId(null)}>
+      <Modal open={overviewDeleteId !== null} danger title={pick('Xoá VP?', 'Delete Virtual Point?')} confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => { if (overviewDeleteId) void deleteById(overviewDeleteId); setOverviewDeleteId(null) }} onClose={() => setOverviewDeleteId(null)}>
         {overviewDeleteTarget?.tag ?? ''}
       </Modal>
       <Modal
@@ -370,9 +436,24 @@ export function VirtualPointsPage() {
       >
         {pick('Bạn có muốn lưu thay đổi không?', 'Do you want to save the changes?')}
       </Modal>
-      <Modal open={deleteOpen} danger title={pick('Xoa VP?', 'Delete Virtual Point?')} confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => void deleteSelected()} onClose={() => setDeleteOpen(false)}>
+      <Modal open={deleteOpen} danger title={pick('Xoá VP?', 'Delete Virtual Point?')} confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => void deleteSelected()} onClose={() => setDeleteOpen(false)}>
         {selected?.tag ?? ''}
       </Modal>
+      <DirtyGuardModal
+        guard={dirtyGuard}
+        saving={saving}
+        title={pick('Virtual Point chưa lưu', 'Unsaved virtual points')}
+        message={pick(
+          `Có ${dirtyItems.length} Virtual Point đang sửa mà chưa lưu. Rời trang sẽ mất các thay đổi này trừ khi lưu trước.`,
+          `${dirtyItems.length} virtual point(s) have unsaved edits. Leaving this page will discard them unless you save first.`
+        )}
+        onSave={saveDirtyPoints}
+        onDiscard={() => {
+          setItems(serverItems)
+          setTagErrors({})
+          setErrorFocusPath(undefined)
+        }}
+      />
     </div>
   )
 }
@@ -466,21 +547,21 @@ function Summary({ item, livePoint, saving, onWrite }: { item: VirtualPoint; liv
         <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-[var(--c-text)]">Live Data</h3>
-            <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} onClick={reset}>{pick('Dat lai', 'Reset')}</Button>
+            <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} onClick={reset}>{pick('Đặt lại', 'Reset')}</Button>
           </div>
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <LiveDataItem label="Value" value={formatValue(livePoint?.value ?? item.value ?? defaultValue(item.signalType), item.unit)} />
             <LiveDataItem label="Quality" value={livePoint?.quality ?? 'good'} />
-            <LiveDataItem label={pick('Nho nhat', 'Minimum')} value={stats ? formatStat(stats.min, unit) : '--'} />
-            <LiveDataItem label={pick('Lon nhat', 'Maximum')} value={stats ? formatStat(stats.max, unit) : '--'} />
-            <LiveDataItem label={pick('Trung binh', 'Average')} value={stats ? formatStat(stats.avg, unit) : '--'} />
+            <LiveDataItem label={pick('Nhỏ nhất', 'Minimum')} value={stats ? formatStat(stats.min, unit) : '--'} />
+            <LiveDataItem label={pick('Lớn nhất', 'Maximum')} value={stats ? formatStat(stats.max, unit) : '--'} />
+            <LiveDataItem label={pick('Trung bình', 'Average')} value={stats ? formatStat(stats.avg, unit) : '--'} />
             <LiveDataItem label={t('unitsLabel')} value={unitLabel(unitFromString(item.unit), t)} />
              <LiveDataItem label="Diagnostic log" value={item.logEnabled ? `${item.logIntervalMs}ms` : 'Off'} />
           </dl>
         </section>
         <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Bieu do truc tiep', 'Live Chart')}</h3>
+            <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Biểu đồ trực tiếp', 'Live Chart')}</h3>
             <span className="text-xs font-semibold text-[var(--c-text-dim)]">{item.id}</span>
           </div>
           <TrendChart
@@ -488,7 +569,7 @@ function Summary({ item, livePoint, saving, onWrite }: { item: VirtualPoint; liv
             height={250}
             series={[{ key: item.id, label: item.tag, color: 'var(--c-accent)', unit }]}
           />
-          {data.length === 0 && <div className="mt-2 text-xs text-[var(--c-text-dim)]">{pick('Chua co du lieu live cho VP nay.', 'No live data for this VP yet.')}</div>}
+          {data.length === 0 && <div className="mt-2 text-xs text-[var(--c-text-dim)]">{pick('Chưa có dữ liệu trực tiếp cho VP này.', 'No live data for this VP yet.')}</div>}
         </section>
       </div>
       <section className="space-y-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
@@ -716,7 +797,7 @@ function VirtualPointOverviewModal({ open, items, livePoints, onEdit, onDelete, 
                   <td className="px-3 py-2 text-right">
                     <div className="flex justify-end gap-1">
                       <Button size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => onEdit(item.id)}>{pick('Sửa', 'Edit')}</Button>
-                      <Button size="sm" variant="danger" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => onDelete(item.id)}>{pick('Xoa', 'Delete')}</Button>
+                      <Button size="sm" variant="danger" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => onDelete(item.id)}>{pick('Xoá', 'Delete')}</Button>
                     </div>
                   </td>
                 </tr>

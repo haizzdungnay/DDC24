@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Token màu KHÔNG nằm ở đây — xem `src/theme/tokens.ts`.
+/* Token màu KHÔNG nằm ở đây — xem `src/shared/theme/tokens.ts`.
  *
  * Chúng được `applyTheme()` ghi lên `:root` lúc khởi động và mỗi lần đổi theme.
  * Đặt ở TypeScript để (a) test tương phản chạy trên đúng giá trị mà ứng dụng
@@ -48,6 +48,22 @@ textarea:focus-visible {
     linear-gradient(rgba(91, 96, 102, 0.22) 1px, transparent 1px),
     linear-gradient(90deg, rgba(91, 96, 102, 0.22) 1px, transparent 1px);
   background-size: 42px 42px;
+}
+
+/* T57-1.5 / `ADR-034` — nhấp nháy annunciation cho cảnh báo chưa xác nhận.
+   Nhịp ~1,4 Hz: đủ để bắt mắt ở khoảng cách phòng trực, và DƯỚI ngưỡng 3 Hz mà
+   WCAG 2.2 §2.3.1 (Three Flashes) đặt ra cho nguy cơ co giật. Nhấp nháy đổi
+   VIỀN và NỀN chứ không đổi chữ, để nội dung vẫn đọc được liên tục.
+   Người khai báo `prefers-reduced-motion` không bao giờ nhận lớp này (TopBar
+   quyết định ở TS), và `@media` bên dưới là lớp chặn thứ hai phòng khi có nơi
+   khác gắn nhầm. */
+.annunciate { animation: annunciatePulse 700ms ease-in-out infinite alternate; }
+@keyframes annunciatePulse {
+  from { background-color: var(--c-surface); box-shadow: 0 0 0 0 var(--c-fault); }
+  to   { background-color: var(--c-fault-bg); box-shadow: 0 0 0 3px var(--c-fault); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .annunciate { animation: none; background-color: var(--c-fault-bg); box-shadow: 0 0 0 2px var(--c-fault); }
 }
 
 .value-flash { animation: valueFlash 640ms ease-out; }

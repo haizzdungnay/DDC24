@@ -45,6 +45,12 @@ export function RuntimeServicePage() {
 
   return (
     <div className="space-y-4">
+      {/* F-UX-15 (`REV-FE-UIUX-UC-2026-08-18` §7.1): mỗi màn/tab phải có mốc
+          tiêu đề riêng trong cây heading. `<h1>` của route Programming nằm ở
+          `ProgrammingLayout` (một và chỉ một), nên ở đây là `<h2>`/`<h3>`.
+          Ẩn thị giác vì thanh tab đã hiện tên — thứ còn thiếu là mốc điều
+          hướng cho trình đọc màn hình, không phải thêm chữ lên màn hình. */}
+      <h2 className="sr-only">{pick('Runtime & Bảo trì', 'Runtime & Service')}</h2>
       <div role="tablist" aria-label={pick('Tab Runtime & Bảo trì', 'Runtime & Service tabs')} className="flex gap-1 border-b border-[var(--c-border)]">
         {VALID_TABS.map((candidate) => (
           <button

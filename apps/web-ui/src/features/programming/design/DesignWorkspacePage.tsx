@@ -142,6 +142,12 @@ export function DesignWorkspacePage() {
 
   return (
     <div className="space-y-3">
+      {/* F-UX-15 (`REV-FE-UIUX-UC-2026-08-18` §7.1): mỗi màn/tab phải có mốc
+          tiêu đề riêng trong cây heading. `<h1>` của route Programming nằm ở
+          `ProgrammingLayout` (một và chỉ một), nên ở đây là `<h2>`/`<h3>`.
+          Ẩn thị giác vì thanh tab đã hiện tên — thứ còn thiếu là mốc điều
+          hướng cho trình đọc màn hình, không phải thêm chữ lên màn hình. */}
+      <h2 className="sr-only">{pick('Workspace Thiết kế', 'Design workspace')}</h2>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-2">
         <div role="tablist" aria-label={pick('Tab workspace Thiết kế', 'Design workspace tabs')} className="flex gap-1">
           {VALID_TABS.map((candidate) => (

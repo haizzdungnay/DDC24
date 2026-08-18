@@ -10,14 +10,27 @@ import type { HealthResponse, UserRole } from '../types'
 import { cn } from '../utils'
 
 /**
- * Bốn nhóm điều hướng theo UX-DES §3 và IA của UX-REQ §6.
+ * Bốn nhóm điều hướng — `ADR-032` (Accepted 2026-08-18) là quyết định canonical.
  *
  * Thay đổi so với bản trước: `Cài đặt` (trộn hiển thị, người dùng, mạng, thời
  * gian, thiết bị) tách thành `Vận hành` và `Hệ thống`, và `Chẩn đoán` xuất hiện
  * như một mục THẬT trong nhóm Kỹ thuật. Trước đây không có mục nào dẫn tới
  * trang chẩn đoán vì trang đó không tồn tại — nó chính là Dashboard (PA3-F13).
+ *
+ * BẢNG NÀY LÀ HỢP ĐỒNG, KHÔNG PHẢI DANH SÁCH TIỆN TAY. `route-menu-contract.test.ts`
+ * đối chiếu nó với bảng route trong `app/App.tsx` theo cả hai chiều, nên:
+ *
+ * - thêm một route mới mà quên xếp nhóm ⇒ test đỏ, không im lặng thành trang
+ *   chỉ tới được bằng cách gõ URL (finding `F-UX-17`);
+ * - để một mục trỏ tới route không tồn tại ⇒ cũng test đỏ.
+ *
+ * Hai route CỐ Ý không có trong bảng này, theo `ADR-033`: `/eng/user-parameters`
+ * và `/eng/aux`. Chúng bị cách ly chứ không phải bị bỏ quên — lý do đầy đủ nằm
+ * trong `ADR-033` và trong danh sách `QUARANTINED_ROUTES` của chính test trên.
+ * Đưa một trong hai vào menu là đảo ngược một quyết định, nên phải sửa `ADR-033`
+ * trước; test sẽ chặn nếu chỉ sửa mã.
  */
-const groups = [
+export const NAV_GROUPS = [
   {
     id: 'overview',
     titleKey: 'overview',
@@ -63,7 +76,7 @@ const groups = [
   }
 ] as const
 
-type GroupId = typeof groups[number]['id']
+type GroupId = typeof NAV_GROUPS[number]['id']
 
 /**
  * Lọc mục menu theo vai trò — WEB-UX-009.
@@ -101,7 +114,7 @@ function NavGroups({ alarmCount, collapsed, role, onNavigate }: {
 
   return (
     <>
-      {groups.map((group) => {
+      {NAV_GROUPS.map((group) => {
         const isOpen = collapsed || openGroups[group.id]
         const Chevron = isOpen ? ChevronDown : ChevronRight
         const items = group.items.filter((item) =>

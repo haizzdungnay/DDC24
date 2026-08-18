@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="1020" viewBox="0 0 880 1020" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
+  <title>OPS-02 Hộp thoại ép tay hàng loạt — mobile 390×844, toàn màn hình và cuộn dọc</title>
+  <desc>Hai artboard mobile: hộp thoại chiếm toàn màn hình với hàng nút cố định dưới đáy, và trạng thái kết quả hỗn hợp. Dữ liệu là MINH HOẠ, không phải dữ liệu runtime.</desc>
+
+  <rect width="880" height="1020" fill="#C8CCD0"/>
+
+  <text x="24" y="24" font-size="12" font-weight="700" fill="#4A4F55">Artboard 1 — mobile 390 × 844, hộp thoại xác nhận</text>
+  <text x="24" y="42" font-size="11" fill="#4A4F55">Dưới lg (1024 px) hộp thoại chiếm TOÀN màn hình. Hàng nút ghim cố định ở đáy để</text>
+  <text x="24" y="58" font-size="11" fill="#4A4F55">“Huỷ” luôn với tới được — không bao giờ nằm dưới nếp cuộn của một lệnh ghi ra thiết bị.</text>
+
+  <g transform="translate(24,72)">
+    <rect x="0" y="0" width="390" height="844" rx="14" fill="#D8DBDE" stroke="#4C5056" stroke-width="2"/>
+    <rect x="2" y="2" width="386" height="6" fill="#CC1F28"/>
+
+    <!-- header dính -->
+    <rect x="2" y="8" width="386" height="66" fill="#D8DBDE"/>
+    <text x="18" y="34" font-size="14" font-weight="700" fill="#1C1F23">Ép tay 3 điểm cùng lúc</text>
+    <text x="18" y="52" font-size="10" fill="#4A4F55">Một thời hạn dùng chung · một vết kiểm toán mỗi điểm</text>
+    <rect x="352" y="20" width="24" height="24" rx="5" fill="#C2C6CA" stroke="#636970"/>
+    <g stroke="#1C1F23" stroke-width="2"><line x1="358" y1="26" x2="370" y2="38"/><line x1="370" y1="26" x2="358" y2="38"/></g>
+    <line x1="2" y1="74" x2="388" y2="74" stroke="#636970"/>
+
+    <!-- cảnh báo -->
+    <rect x="14" y="86" width="362" height="70" rx="6" fill="#EEE9DB" stroke="#826500" stroke-width="2"/>
+    <path d="M30 122 l12 -22 l12 22 z" fill="none" stroke="#634D00" stroke-width="2"/>
+    <text x="42" y="119" font-size="10" font-weight="700" fill="#634D00" text-anchor="middle">!</text>
+    <text x="62" y="106" font-size="10.5" fill="#634D00">Tạo override Local Manual (mức 2) trên</text>
+    <text x="62" y="120" font-size="10.5" fill="#634D00">3 đầu ra vật lý. Bộ điều khiển tự nhả khi</text>
+    <text x="62" y="134" font-size="10.5" fill="#634D00">hết hạn, kể cả khi đóng trình duyệt.</text>
+    <text x="30" y="150" font-size="10" fill="#634D00">Không có bộ chọn mức ưu tiên.</text>
+
+    <!-- hậu quả dạng thẻ -->
+    <text x="18" y="178" font-size="10.5" font-weight="700" fill="#1C1F23">Từng điểm sẽ đổi như sau</text>
+
+    <rect x="14" y="188" width="362" height="60" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="26" y="208" font-size="11" font-family="monospace" font-weight="700" fill="#1C1F23">DO-01</text>
+    <text x="92" y="208" font-size="11" fill="#1C1F23">Bơm nước lạnh 1</text>
+    <text x="26" y="228" font-size="11" font-family="monospace" fill="#1C1F23">OFF</text>
+    <text x="72" y="228" font-size="11" font-weight="700" fill="#26527C">→</text>
+    <text x="96" y="228" font-size="11" font-family="monospace" font-weight="700" fill="#1C1F23">ON</text>
+    <text x="26" y="242" font-size="9.5" fill="#4A4F55">Hậu quả: bơm chạy</text>
+
+    <rect x="14" y="256" width="362" height="60" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="26" y="276" font-size="11" font-family="monospace" font-weight="700" fill="#1C1F23">DO-02</text>
+    <text x="92" y="276" font-size="11" fill="#1C1F23">Quạt cấp AHU-1</text>
+    <text x="26" y="296" font-size="11" font-family="monospace" fill="#1C1F23">OFF</text>
+    <text x="72" y="296" font-size="11" font-weight="700" fill="#26527C">→</text>
+    <text x="96" y="296" font-size="11" font-family="monospace" font-weight="700" fill="#1C1F23">ON</text>
+    <text x="26" y="310" font-size="9.5" fill="#4A4F55">Hậu quả: quạt chạy</text>
+
+    <rect x="14" y="324" width="362" height="60" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="26" y="344" font-size="11" font-family="monospace" font-weight="700" fill="#1C1F23">AO-01</text>
+    <text x="92" y="344" font-size="11" fill="#1C1F23">Van nước lạnh AHU-1</text>
+    <text x="26" y="364" font-size="11" font-family="monospace" fill="#1C1F23">0.0 %</text>
+    <text x="88" y="364" font-size="11" font-weight="700" fill="#26527C">→</text>
+    <text x="112" y="364" font-size="11" font-family="monospace" font-weight="700" fill="#1C1F23">100.0 %</text>
+    <text x="26" y="378" font-size="9.5" fill="#4A4F55">Hậu quả: van mở hoàn toàn</text>
+
+    <!-- nhập -->
+    <text x="18" y="410" font-size="10.5" font-weight="700" fill="#1C1F23">Giá trị mới — nhóm nhị phân</text>
+    <rect x="14" y="418" width="362" height="34" rx="6" fill="#C8CCD0" stroke="#636970"/>
+    <text x="28" y="440" font-size="11.5" font-family="monospace" fill="#1C1F23">ON</text>
+    <text x="356" y="440" font-size="11" fill="#4A4F55">▾</text>
+
+    <text x="18" y="474" font-size="10.5" font-weight="700" fill="#1C1F23">Giá trị mới — nhóm analog (%)</text>
+    <rect x="14" y="482" width="362" height="34" rx="6" fill="#C8CCD0" stroke="#636970"/>
+    <text x="28" y="504" font-size="11.5" font-family="monospace" fill="#1C1F23">100.0</text>
+
+    <text x="18" y="538" font-size="10.5" font-weight="700" fill="#1C1F23">Thời hạn dùng chung (phút)</text>
+    <rect x="14" y="546" width="362" height="34" rx="6" fill="#C8CCD0" stroke="#636970"/>
+    <text x="28" y="568" font-size="11.5" font-family="monospace" fill="#1C1F23">10</text>
+    <text x="18" y="596" font-size="9.5" fill="#4A4F55">Bộ điều khiển cưỡng chế thời hạn này, không phải tab trình duyệt.</text>
+
+    <!-- checklist -->
+    <rect x="14" y="608" width="362" height="60" rx="6" fill="#E0E6EC" stroke="#26527C"/>
+    <rect x="28" y="622" width="16" height="16" rx="3" fill="#D8DBDE" stroke="#26527C" stroke-width="2"/>
+    <text x="54" y="634" font-size="10.5" fill="#1C1F23">Tôi đã đọc bảng hậu quả phía trên và chịu</text>
+    <text x="54" y="648" font-size="10.5" fill="#1C1F23">trách nhiệm cho 3 lệnh này.</text>
+    <text x="28" y="662" font-size="9.5" font-style="italic" fill="#4A4F55">Bắt buộc tick để bật nút Áp dụng.</text>
+
+    <text x="18" y="694" font-size="9.5" fill="#4A4F55">↕ vùng trên đây cuộn dọc; hàng nút bên dưới ghim cố định.</text>
+
+    <!-- hàng nút ghim đáy -->
+    <line x1="2" y1="770" x2="388" y2="770" stroke="#636970"/>
+    <rect x="2" y="770" width="386" height="72" fill="#D8DBDE"/>
+    <rect x="14" y="784" width="110" height="44" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="52" y="811" font-size="12" fill="#1C1F23">Huỷ</text>
+    <rect x="134" y="784" width="242" height="44" rx="6" fill="#C2C6CA" stroke="#636970" stroke-dasharray="4 3"/>
+    <text x="152" y="811" font-size="12" font-weight="700" fill="#4A4F55">Áp dụng cho 3 điểm</text>
+  </g>
+
+  <!-- Artboard 2 -->
+  <text x="450" y="24" font-size="12" font-weight="700" fill="#4A4F55">Artboard 2 — mobile, kết quả hỗn hợp</text>
+  <g transform="translate(450,72)">
+    <rect x="0" y="0" width="390" height="560" rx="14" fill="#D8DBDE" stroke="#4C5056" stroke-width="2"/>
+    <rect x="2" y="2" width="386" height="6" fill="#826500"/>
+    <text x="18" y="36" font-size="13" font-weight="700" fill="#1C1F23">2 điểm đã ép, 1 thất bại</text>
+    <text x="18" y="54" font-size="10" fill="#4A4F55">Kết quả từng điểm, không gộp thành một câu</text>
+    <line x1="2" y1="66" x2="388" y2="66" stroke="#636970"/>
+
+    <g font-size="11">
+      <circle cx="30" cy="90" r="8" fill="none" stroke="#165B2E" stroke-width="2"/><path d="M26 90 l3 4 l6 -7" fill="none" stroke="#165B2E" stroke-width="2"/>
+      <text x="48" y="94" font-family="monospace" font-weight="700" fill="#1C1F23">DO-01</text><text x="118" y="94" fill="#1C1F23">→ ON</text><text x="196" y="94" font-weight="700" fill="#165B2E">ĐÃ ÉP</text><text x="280" y="94" font-size="10" fill="#4A4F55">còn 09:58</text>
+      <circle cx="30" cy="120" r="8" fill="none" stroke="#165B2E" stroke-width="2"/><path d="M26 120 l3 4 l6 -7" fill="none" stroke="#165B2E" stroke-width="2"/>
+      <text x="48" y="124" font-family="monospace" font-weight="700" fill="#1C1F23">DO-02</text><text x="118" y="124" fill="#1C1F23">→ ON</text><text x="196" y="124" font-weight="700" fill="#165B2E">ĐÃ ÉP</text><text x="280" y="124" font-size="10" fill="#4A4F55">còn 09:57</text>
+    </g>
+
+    <rect x="14" y="138" width="362" height="74" rx="6" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+    <path d="M30 176 l12 -22 l12 22 z" fill="none" stroke="#A01017" stroke-width="2"/>
+    <text x="42" y="173" font-size="10" font-weight="700" fill="#A01017" text-anchor="middle">!</text>
+    <text x="62" y="160" font-size="11" font-family="monospace" font-weight="700" fill="#1C1F23">AO-01</text>
+    <text x="126" y="160" font-size="11" font-weight="700" fill="#A01017">THẤT BẠI</text>
+    <text x="62" y="180" font-size="10" fill="#4A4F55">403 forbidden — nguyên văn từ backend.</text>
+    <text x="62" y="194" font-size="10" fill="#4A4F55">Điểm này KHÔNG bị ép; trạng thái không đổi.</text>
+    <text x="30" y="206" font-size="9.5" fill="#4A4F55">Không diễn dịch lại lỗi thành câu chung chung.</text>
+
+    <rect x="14" y="224" width="362" height="70" rx="6" fill="#E9E3F1" stroke="#693797"/>
+    <text x="28" y="244" font-size="10" font-weight="700" fill="#693797">2 điểm đã ép vẫn đang giữ quyền</text>
+    <text x="28" y="260" font-size="10" fill="#4A4F55">Chúng hiện trong khối “Ai đang giữ quyền” trên</text>
+    <text x="28" y="274" font-size="10" fill="#4A4F55">Landing kèm đếm ngược riêng. Đóng hộp thoại</text>
+    <text x="28" y="288" font-size="10" fill="#4A4F55">này KHÔNG nhả chúng.</text>
+
+    <rect x="14" y="308" width="176" height="40" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="34" y="333" font-size="11.5" fill="#26527C">Thử lại AO-01</text>
+    <rect x="200" y="308" width="176" height="40" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="266" y="333" font-size="12" fill="#1C1F23">Đóng</text>
+
+    <rect x="14" y="366" width="362" height="176" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="28" y="388" font-size="10.5" font-weight="700" fill="#1C1F23">Bàn phím và trình đọc màn hình</text>
+    <text x="28" y="406" font-size="10" fill="#4A4F55">· Hộp thoại bẫy tiêu điểm và trả tiêu điểm về nút</text>
+    <text x="28" y="420" font-size="10" fill="#4A4F55">  đã mở nó khi đóng (Modal đã có sẵn hành vi này).</text>
+    <text x="28" y="438" font-size="10" fill="#4A4F55">· Esc = Huỷ, đồng nghĩa nút Huỷ.</text>
+    <text x="28" y="456" font-size="10" fill="#4A4F55">· Mỗi dòng kết quả là một `role="status"`; dòng thất</text>
+    <text x="28" y="470" font-size="10" fill="#4A4F55">  bại là `role="alert"` để đọc ngay.</text>
+    <text x="28" y="488" font-size="10" fill="#4A4F55">· ĐÃ ÉP / THẤT BẠI là NHÃN CHỮ kèm icon hình</text>
+    <text x="28" y="502" font-size="10" fill="#4A4F55">  khác nhau (dấu tick tròn ↔ tam giác cảnh báo),</text>
+    <text x="28" y="516" font-size="10" fill="#4A4F55">  nên phân biệt được khi in đen trắng — WCAG 1.4.1.</text>
+    <text x="28" y="534" font-size="10" fill="#4A4F55">· Nút vô hiệu dùng viền đứt + chữ mờ, không chỉ màu.</text>
+  </g>
+</svg>

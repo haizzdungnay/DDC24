@@ -5,6 +5,7 @@ import { setAuthHeaderProvider } from '../../shared/api/client'
 import { setHistoryAuthHeaderProvider } from '../../shared/api/history'
 import { useI18n } from '../../shared/i18n'
 import type { UserRole } from '../../shared/types'
+import { LoginError } from './loginError'
 
 interface Session {
   username: string
@@ -70,16 +71,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Chế độ đăng nhập apikey chưa được backend hỗ trợ; dùng VITE_AUTH_MODE=jwt')
     }
 
-    const response = await fetch(`${base}/auth/login`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    })
-    // TC-L02/TC-L03 (TR-MKDDC24-P1-20260814-01): trước đây hard-code tiếng
-    // Việt, nên phiên English vẫn nhận "Đăng nhập thất bại" — dịch theo locale
-    // đang chọn thay vì luôn tiếng Việt.
-    if (!response.ok) throw new Error(pick('Đăng nhập thất bại', 'Sign in failed'))
+    /* T57-1.10 (§6.18-P2a) — ba nguyên nhân hỏng cần ba hành động khác nhau,
+       nên phải phân biệt được ở giao diện.
+    
+       `fetch` CHỈ ném khi không tới được máy chủ (DNS hỏng, dây rút, proxy
+       chết). Mọi phản hồi HTTP — kể cả 401 và 500 — đều resolve. Đó chính là
+       ranh giới dùng để tách "sai mật khẩu" khỏi "không tới được thiết bị". */
+    let response: Response
+    try {
+      response = await fetch(`${base}/auth/login`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      })
+    } catch {
+      throw new LoginError('unreachable', pick(
+        'Không kết nối được tới thiết bị. Kiểm tra dây mạng, địa chỉ IP và nguồn của bộ điều khiển.',
+        'Cannot reach the device. Check the network cable, the IP address and the controller power.'
+      ))
+    }
+    if (!response.ok) {
+      /* KHÔNG phân biệt "sai tên đăng nhập" với "sai mật khẩu". Backend cố ý
+         trả cùng một `401 invalid credentials` cho cả hai (`AuthService.
+         Authenticate`), và đó là hành vi ĐÚNG chống dò tài khoản. FE không được
+         suy diễn thêm.
+    
+         Cũng KHÔNG có thông điệp "tài khoản bị khoá": backend không hiện thực
+         khoá tài khoản sau N lần sai (`ADR-037` điều 4). Hiện một trạng thái
+         không tồn tại là bịa — cùng lớp lỗi với bốn badge `online` giả từng nằm
+         trên chính trang này (WEB-UX-002). */
+      if (response.status === 401 || response.status === 403) {
+        throw new LoginError('credentials', pick(
+          'Tên đăng nhập hoặc mật khẩu không đúng.',
+          'Incorrect username or password.'
+        ))
+      }
+      throw new LoginError('server', pick(
+        `Thiết bị trả lỗi máy chủ (HTTP ${response.status}). Đăng nhập không phải nguyên nhân; kiểm tra dịch vụ web trên bộ điều khiển.`,
+        `The device returned a server error (HTTP ${response.status}). This is not a credential problem; check the web service on the controller.`
+      ))
+    }
     const body = await response.json() as { token?: string; role?: UserRole }
     if (body.token) {
       const provider = () => ({ Authorization: `Bearer ${body.token}` })

@@ -4,6 +4,7 @@ import type React from 'react'
 import { apiClient } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
 import { Button } from '../../shared/components/Button'
+import { DirtyGuardModal } from '../../shared/components/DirtyGuardModal'
 import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { PointNameConflictNotice } from '../../shared/components/PointNameConflictNotice'
@@ -12,6 +13,7 @@ import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { TrendChart } from '../../shared/components/TrendChart'
 import { useApi } from '../../shared/hooks/useApi'
+import { useDirtyGuard } from '../../shared/hooks/useDirtyGuard'
 import { useI18n } from '../../shared/i18n'
 import type { AoConfig, AoEngineeringUnit, AoSignalMode, DoConfig, DoSafeState, OutputsConfig, Point, TrendSample } from '../../shared/types'
 import { cn, formatTime, formatValue, pointNumber } from '../../shared/utils'
@@ -31,6 +33,11 @@ export function OutputsPage() {
   const { t, pick } = useI18n()
   const toast = useToast()
   const [config, setConfig] = useState<OutputsConfig>(emptyOutputs)
+  /* F-UX-12 (`REV-FE-UIUX-UC-2026-08-18`): bản chụp lần cuối đã tải/đã lưu,
+   * dùng làm mốc so sánh "có thay đổi chưa lưu". KHÔNG suy ra từ `config` một
+   * mình vì `config` chính là bản đang gõ dở. Cùng khuôn với `savedConfigs` của
+   * `InputsPage`. */
+  const [savedConfig, setSavedConfig] = useState<OutputsConfig>(emptyOutputs)
   const [selectedId, setSelectedId] = useState('AO-01')
   const [tab, setTab] = useState<OutputTab>('summary')
   const [wizardIndex, setWizardIndex] = useState(0)
@@ -57,6 +64,11 @@ export function OutputsPage() {
     ...outputsEntries(config).map((output) => ({ id: output.id, name: output.label, kind: output.kind }))
   ], [config, pointsState.data, virtualPointsState.data])
   const nameConflicts = useMemo(() => pointNameConflicts(namespaceEntries), [namespaceEntries])
+  /* F-UX-12: so sánh nguyên khối bằng JSON là đủ và rẻ ở đây — cấu hình ngõ ra
+   * có 8 AO + 8 DO, không phải danh sách nghìn dòng — và nó bắt được mọi field
+   * mà không phải liệt kê tay (liệt kê tay là chỗ dirty-guard hay bỏ sót nhất). */
+  const dirty = useMemo(() => JSON.stringify(config) !== JSON.stringify(savedConfig), [config, savedConfig])
+  const dirtyGuard = useDirtyGuard(dirty)
 
   // Nạp cấu hình output. `selectedId` KHÔNG được nằm trong deps.
   //
@@ -76,6 +88,7 @@ export function OutputsPage() {
       .then((items) => {
         if (!active) return
         setConfig(items)
+        setSavedConfig(items)
         const current = selectedIdRef.current
         if (!items.ao.some((item) => item.id === current) && !items.do.some((item) => item.id === current)) {
           setSelectedId(items.ao[0]?.id ?? items.do[0]?.id ?? 'AO-01')
@@ -121,7 +134,11 @@ export function OutputsPage() {
     }))
   }
 
-  async function saveOutputs(next = config, closeConfirm = false) {
+  /* Trả về `true` chỉ khi cấu hình ĐÃ nằm trên backend. `DirtyGuardModal` dựa
+   * vào giá trị này để quyết định có rời trang hay không — lưu hỏng mà vẫn rời
+   * trang là cách chắc chắn nhất để mất bản nháp đúng lúc người dùng tin là đã
+   * giữ được nó (F-UX-12). */
+  async function saveOutputs(next = config, closeConfirm = false): Promise<boolean> {
     const recovery = outputsEntries(next).find((output) => output.id === selectedId)
     const recoveringName = Boolean(recovery && persistedNameConflicts.has(recovery.id))
     if (recoveringName && recovery) {
@@ -129,13 +146,13 @@ export function OutputsPage() {
       const errors = nameError ? { [`${recovery.kind.toLowerCase()}[${(recovery.kind === 'AO' ? next.ao : next.do).findIndex((item) => item.id === recovery.id)}].name`]: nameError } : {}
       setTagErrors(errors)
       setErrorFocusPath(Object.keys(errors)[0])
-      if (nameError) return
+      if (nameError) return false
     }
     const errors = outputTagErrors(next)
     if (!recoveringName) {
       setTagErrors(errors)
       setErrorFocusPath(Object.keys(errors)[0])
-      if (Object.keys(errors).length > 0) return
+      if (Object.keys(errors).length > 0) return false
     }
     const normalized = normalizeOutputs(next)
     setSaving(true)
@@ -143,14 +160,17 @@ export function OutputsPage() {
       if (recoveringName && recovery) {
         const name = normalizePointName(recovery.label)
         await apiClient.updatePointName(recovery.id, name)
-        setConfig({
+        const renamed: OutputsConfig = {
           ao: next.ao.map((item) => item.id === recovery.id ? { ...item, label: name } : item),
           do: next.do.map((item) => item.id === recovery.id ? { ...item, label: name } : item)
-        })
+        }
+        setConfig(renamed)
+        setSavedConfig(renamed)
         void pointsState.refetch()
       } else {
         await apiClient.putOutputs(normalized)
         setConfig(normalized)
+        setSavedConfig(normalized)
       }
       setTagErrors({})
       setErrorFocusPath(undefined)
@@ -159,11 +179,13 @@ export function OutputsPage() {
         setConfirmOpen(false)
         setTab('advanced')
       }
+      return true
     } catch (error) {
       const fieldErrors = pointTagFieldErrors(error)
       setTagErrors(fieldErrors)
       setErrorFocusPath(pointFieldFocusPath(error, recovery?.id ?? selectedId, ['ao', 'do']) ?? Object.keys(fieldErrors)[0])
       toast.push('error', `${t('outputsSaveError')}: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     } finally {
       setSaving(false)
     }
@@ -297,6 +319,21 @@ export function OutputsPage() {
           setOverviewOpen(false)
         }}
         onClose={() => setOverviewOpen(false)}
+      />
+      <DirtyGuardModal
+        guard={dirtyGuard}
+        saving={saving}
+        title={pick('Cấu hình ngõ ra chưa lưu', 'Unsaved output configuration')}
+        message={pick(
+          'Bạn có thay đổi cấu hình ngõ ra chưa lưu. Rời trang sẽ mất các thay đổi này trừ khi lưu trước.',
+          'You have unsaved output configuration changes. Leaving this page will discard them unless you save first.'
+        )}
+        onSave={() => saveOutputs(config)}
+        onDiscard={() => {
+          setConfig(savedConfig)
+          setTagErrors({})
+          setErrorFocusPath(undefined)
+        }}
       />
     </div>
   )
@@ -591,12 +628,27 @@ function renderOutputField(output: OutputConfig, key: keyof AoConfig | keyof DoC
     if (key === 'units') return <SelectField label={label} value={ao.units} options={aoEngineeringUnits.map((unit) => [unit, engineeringUnitLabel(unit)])} onChange={(units) => onChange({ units: units as AoEngineeringUnit })} wired large={large} />
     if (key === 'minPv') return <NumberField label={`${label} (${engineeringUnitLabel(ao.units)})`} value={ao.minPv} min={-999999} max={ao.maxPv - 0.001} step={0.1} onChange={(minPv) => onChange({ minPv })} wired large={large} />
     if (key === 'maxPv') return <NumberField label={`${label} (${engineeringUnitLabel(ao.units)})`} value={ao.maxPv} min={ao.minPv + 0.001} max={999999} step={0.1} onChange={(maxPv) => onChange({ maxPv })} wired large={large} />
-    if (key === 'safeValue') return <NumberField label={`${label} (${aoSafeUnit(ao.mode)})`} value={ao.safeValue} min={0} max={aoSafeMax(ao.mode)} step={0.1} onChange={(safeValue) => onChange({ safeValue })} wired large={large} />
+    if (key === 'safeValue') return (
+      <SafeConsequence text={aoSafeConsequence(ao, label)}>
+        <NumberField label={`${label} (${aoSafeUnit(ao.mode)})`} value={ao.safeValue} min={0} max={aoSafeMax(ao.mode)} step={0.1} onChange={(safeValue) => onChange({ safeValue })} wired large={large} />
+      </SafeConsequence>
+    )
     if (key === 'manualValue') return <NumberField label={label} value={ao.manualValue} min={0} max={100} step={1} integer onChange={(manualValue) => onChange({ manualValue })} wired large={large} />
     return null
   }
   const digital = output
-  if (key === 'safeState') return <SelectField label={label} value={digital.safeState} options={[['open', 'open'], ['closed', 'closed']]} onChange={(safeState) => onChange({ safeState: safeState as DoSafeState })} wired large={large} />
+  if (key === 'safeState') return (
+    <SafeConsequence text={doSafeConsequence(digital.safeState)}>
+      <SelectField
+        label={label}
+        value={digital.safeState}
+        options={[['open', 'open — tiếp điểm HỞ, tải MẤT điện'], ['closed', 'closed — tiếp điểm ĐÓNG, tải CÓ điện']]}
+        onChange={(safeState) => onChange({ safeState: safeState as DoSafeState })}
+        wired
+        large={large}
+      />
+    </SafeConsequence>
+  )
   if (key === 'manualValue') return <SelectField label={label} value={digital.manualValue ? '1' : '0'} options={[['0', 'OFF'], ['1', 'ON']]} onChange={(manualValue) => onChange({ manualValue: manualValue === '1' })} wired large={large} />
   return null
 }
@@ -810,4 +862,61 @@ function engineeringUnitLabel(unit: AoEngineeringUnit): string {
 
 function controlClass(): string {
   return 'h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]'
+}
+
+/**
+ * Diễn giải hậu quả VẬT LÝ của `safeState`/`safeValue` — `T57-1.7`, đề xuất §6.10-P1b.
+ *
+ * TRIỆU CHỨNG: giao diện chỉ hỏi một giá trị (`open`/`closed`, hoặc một con số
+ * volt/mA) và dùng chính tên trường làm nhãn. Nhưng "Safe state = OFF" trên một
+ * van sưởi giữa mùa đông và trên một quạt hút khói là **hai quyết định an toàn
+ * hoàn toàn khác nhau**, và màn hình không nói ra sự khác nhau đó.
+ *
+ * NGUYÊN NHÂN GỐC: trường được render bằng bộ render dùng chung theo *kiểu dữ
+ * liệu* (`SelectField`/`NumberField`), nên không chỗ nào mang ngữ nghĩa vận
+ * hành của riêng trường này.
+ *
+ * CÁCH SỬA: bọc riêng hai trường an toàn bằng một câu mô tả điều gì xảy ra trên
+ * dây khi bộ điều khiển mất quyền điều khiển. Câu này suy từ chính giá trị đang
+ * chọn, nên nó đổi theo lựa chọn thay vì là một dòng trợ giúp tĩnh.
+ *
+ * Giới hạn được ghi rõ: hệ thống **không biết** kênh này nối tới thiết bị gì
+ * (chưa có trường "thuộc thiết bị" — đó là `T57-3.1`/`BB-3`). Nên câu mô tả chỉ
+ * nói tới **tín hiệu điện**, và nhắc người cấu hình tự đối chiếu với cơ cấu
+ * thật. Viết "van sẽ đóng" khi không biết đó có phải van hay không, và không
+ * biết van thuộc loại thường-đóng hay thường-mở, chính là bịa.
+ */
+function SafeConsequence({ text, children }: { text: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      {children}
+      <p className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-2 py-1 text-[11px] leading-snug text-[var(--c-warn-fg)]">
+        {text}
+      </p>
+    </div>
+  )
+}
+
+export function doSafeConsequence(safeState: DoSafeState): string {
+  const signal = safeState === 'closed'
+    ? 'tiếp điểm relay ĐÓNG — tải nối vào kênh này sẽ CÓ điện'
+    : 'tiếp điểm relay HỞ — tải nối vào kênh này sẽ MẤT điện'
+  return `Khi bộ điều khiển mất quyền điều khiển (mất liên lạc, khởi động lại, hoặc vào trạng thái an toàn): ${signal}. `
+    + 'Đối chiếu với cơ cấu thật trước khi lưu: cùng một lựa chọn có nghĩa ngược nhau giữa một quạt hút khói và một van sưởi.'
+}
+
+export function aoSafeConsequence(ao: AoConfig, label: string): string {
+  const unit = aoSafeUnit(ao.mode)
+  const min = ao.mode === '4-20mA' ? 4 : 0
+  const max = aoSafeMax(ao.mode)
+  const at = `${ao.safeValue} ${unit}`
+  let position: string
+  if (ao.safeValue <= min) position = 'ĐẦU THẤP của dải tín hiệu'
+  else if (ao.safeValue >= max) position = 'ĐẦU CAO của dải tín hiệu'
+  else position = 'giữa dải tín hiệu'
+  const extra = ao.mode === '4-20mA' && ao.safeValue < 4
+    ? ' Lưu ý: dưới 4 mA nằm NGOÀI dải hợp lệ của vòng 4-20 mA và thường được cơ cấu hiểu là ĐỨT DÂY, không phải là một lệnh.'
+    : ''
+  return `Khi bộ điều khiển mất quyền điều khiển: kênh này giữ ${at} (${position}).${extra} `
+    + `"${label}" là tín hiệu ĐIỆN, không phải phần trăm hành trình — đối chiếu với dải vào của cơ cấu trước khi lưu.`
 }

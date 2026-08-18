@@ -21,6 +21,10 @@ export function RuntimeTab({ runtime, status }: { runtime: ProgrammingRuntime | 
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      {/* F-UX-15: tab con phải có mốc tiêu đề riêng trong cây heading. `<h1>`
+          thuộc layout của feature, `<h2>` thuộc màn hình cha, nên tab là
+          `<h3>`. Ẩn thị giác vì thanh tab đã hiện tên. */}
+      <h3 className="sr-only">{pick('Trạng thái Runtime', 'Runtime status')}</h3>
       <Panel title={pick('Đang vận hành / LKG', 'Active / LKG')}>
         <dl className="space-y-2 text-sm">
           <div className="flex items-center justify-between">

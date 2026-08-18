@@ -1,5 +1,6 @@
 import { Check, Clock3, Download, Plus, RotateCcw, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '../../shared/api/client'
 import { historyClient, historyCsvUrl, historyPresetDurationMs, historySeriesKey, type HistoryPresetRange, type HistoryQuery, type HistoryResponse } from '../../shared/api/history'
 import { HISTORIAN_V2_TRENDS_ENABLED } from '../../shared/config'
@@ -110,6 +111,22 @@ function readTrendPrefs(): TrendPrefs | null {
   }
 }
 
+/**
+ * Đọc `?points=<id>[,<id>...]` — F-UX-03.
+ *
+ * `MonitorPage` gắn liên kết "Mở trong Trends" trỏ tới `/trends?points=<id>`
+ * cho từng điểm, nhưng trang này chưa từng đọc query string: người dùng bấm vào
+ * và rơi thẳng vào bộ chọn đã lưu trong localStorage của lần trước, không có
+ * điểm mình vừa xem. Với một thao tác chẩn đoán ("giá trị này lạ, xem xu hướng
+ * của nó"), mất đúng đối tượng đang điều tra là mất cả mục đích của liên kết.
+ */
+function parseDeepLinkedTrendIds(raw: string | null): string[] {
+  if (!raw) return []
+  return Array.from(new Set(
+    raw.split(',').map((id) => id.trim()).filter(Boolean).map(canonicalOutputPointId)
+  )).slice(0, 8)
+}
+
 function writeTrendPrefs(prefs: TrendPrefs) {
   try {
     window.localStorage.setItem(TREND_PREFS_KEY, JSON.stringify(prefs))
@@ -121,9 +138,15 @@ function writeTrendPrefs(prefs: TrendPrefs) {
 export function TrendsPage() {
   const realtime = useRealtime()
   const { pick } = useI18n()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const deepLinkedIdsRef = useRef<string[] | undefined>(undefined)
+  if (deepLinkedIdsRef.current === undefined) deepLinkedIdsRef.current = parseDeepLinkedTrendIds(searchParams.get('points'))
+  const deepLinkedIds = deepLinkedIdsRef.current
   const initialPrefsRef = useRef<TrendPrefs | null | undefined>(undefined)
   if (initialPrefsRef.current === undefined) initialPrefsRef.current = readTrendPrefs()
-  const hasSavedPrefsRef = useRef(initialPrefsRef.current !== null)
+  /* Deep link được coi như "đã có lựa chọn" để effect dựng mặc định (UI-01..08)
+     không đè lên điểm mà người dùng vừa yêu cầu xem. */
+  const hasSavedPrefsRef = useRef(initialPrefsRef.current !== null || deepLinkedIds.length > 0)
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const virtualState = useApi(apiClient.getVirtualPoints, [], { refreshMs: 2000 })
   const analogPoints = useMemo(() => {
@@ -133,9 +156,9 @@ export function TrendsPage() {
       : polledPoints
     return visibleTrendPoints(source, virtualState.data ?? []).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
   }, [pointsState.data, realtime.allPoints, realtime.lastPointEventAt, virtualState.data])
-  const [selectedIds, setSelectedIds] = useState<string[]>(() => initialPrefsRef.current?.selectedIds ?? [])
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => deepLinkedIds.length ? deepLinkedIds : (initialPrefsRef.current?.selectedIds ?? []))
   const [rangeMinutes, setRangeMinutes] = useState<number>(() => initialPrefsRef.current?.rangeMinutes ?? 30)
-  const [prefsReady, setPrefsReady] = useState(() => initialPrefsRef.current !== null)
+  const [prefsReady, setPrefsReady] = useState(() => initialPrefsRef.current !== null || deepLinkedIds.length > 0)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerQuery, setPickerQuery] = useState('')
   const [pickerKinds, setPickerKinds] = useState<TrendFilterKind[]>(trendFilterKinds)
@@ -228,6 +251,20 @@ export function TrendsPage() {
     writeTrendPrefs({ selectedIds, rangeMinutes })
     hasSavedPrefsRef.current = true
   }, [prefsReady, rangeMinutes, selectedIds])
+
+  /* `?points=` là lệnh MỞ một lần, không phải trạng thái của trang. Giữ nó lại
+     trên thanh địa chỉ sẽ khiến mọi thay đổi bộ chọn sau đó bị hoàn nguyên ở
+     lần tải lại kế tiếp — người dùng thêm series, F5, và chúng biến mất mà
+     không rõ vì sao. Tiêu thụ xong thì gỡ khỏi URL. */
+  useEffect(() => {
+    if (!deepLinkedIds.length) return
+    if (!searchParams.has('points')) return
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.delete('points')
+      return next
+    }, { replace: true })
+  }, [deepLinkedIds.length, searchParams, setSearchParams])
 
   useEffect(() => {
     if (customRange) return undefined

@@ -41,6 +41,11 @@ export function SimulateTab({ schedule, dirty }: { schedule: ScheduleObject; dir
 
   return (
     <div className="space-y-3">
+      {/* N-08: tab nằm trong `ScheduleEditorPage` vốn đã giữ `<h1>`, nên đây là
+          `<h2>` — và `sr-only` vì tên tab đã hiện trên thanh tab, lặp lại bằng
+          mắt là nhiễu. Cây heading vẫn phải liền mạch cho trình đọc màn hình
+          (WCAG 2.2 §2.4.6). */}
+      <h2 className="sr-only">Mô phỏng</h2>
       {dirty && (
         <p className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-4 py-2.5 text-sm text-[var(--c-warn-fg)]">
           Đang có thay đổi chưa lưu. Mô phỏng chạy trên <strong>bản đã lưu</strong> ở máy chủ, không phải bản bạn đang sửa.
