@@ -1,4 +1,4 @@
-import { Filter, RefreshCw } from 'lucide-react'
+import { Download, Filter, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { fetchActivity } from '../../shared/api/overview'
@@ -35,12 +35,53 @@ const ACTION_LABELS: Record<string, [string, string]> = {
 
 const PAGE_SIZE = 50
 
+/** Một ô CSV: bọc nháy kép và nhân đôi nháy bên trong theo RFC 4180. */
+function csvCell(value: unknown): string {
+  const text = value === null || value === undefined ? '' : String(value)
+  return `"${text.replace(/"/g, '""')}"`
+}
+
+/**
+ * Xuất nhật ký đang hiển thị ra CSV.
+ *
+ * KHÔNG chứa secret: chỉ ghi đúng các trường đã hiển thị trên màn hình, vốn đã
+ * qua bộ lọc của backend theo `REQ-PA3-X-1` ("mọi vết audit truy vấn được,
+ * không chứa secret"). Không thêm trường nào từ payload thô.
+ */
+function downloadActivityCsv(rows: ActivityEvent[]) {
+  const header = ['time', 'actor', 'role', 'action', 'objectType', 'objectId', 'outcome', 'detail']
+  const body = rows.map((event) => [
+    event.time, event.actor, event.role, event.action,
+    event.objectType, event.objectId, event.outcome, event.detail
+  ].map(csvCell).join(','))
+  const blob = new Blob(['\ufeff' + [header.join(','), ...body].join('\n')], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `activity-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+/** `datetime-local` cho ra giờ ĐỊA PHƯƠNG không có múi; API nhận ISO UTC. */
+function localToIso(value: string): string | undefined {
+  if (!value) return undefined
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString()
+}
+
 export function ActivityPage() {
   const { pick } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const kind = (searchParams.get('kind') as ActivityKind | null) ?? undefined
   const objectId = searchParams.get('objectId') ?? ''
   const action = searchParams.get('action') ?? ''
+  /* `T57-2.2` — lọc theo khoảng thời gian. Điều tra sự cố luôn bắt đầu bằng
+     "chuyện gì xảy ra quanh 14:05 hôm qua", nhưng trang chỉ có `kind`/`objectId`
+     /`action` cộng phân trang theo cursor: muốn tới một mốc thời gian phải bấm
+     "tải thêm" cho tới khi chạm nó. */
+  const from = searchParams.get('from') ?? ''
+  const to = searchParams.get('to') ?? ''
 
   const [state, setState] = useState<{ status: 'loading' | 'ready' | 'error'; page: ActivityPageModel | null; message?: string }>({ status: 'loading', page: null })
   const [older, setOlder] = useState<ActivityEvent[]>([])
@@ -49,23 +90,23 @@ export function ActivityPage() {
     setState({ status: 'loading', page: null })
     setOlder([])
     try {
-      const page = await fetchActivity({ limit: PAGE_SIZE, kind, objectId: objectId || undefined, action: action || undefined })
+      const page = await fetchActivity({ limit: PAGE_SIZE, kind, objectId: objectId || undefined, action: action || undefined, from: localToIso(from), to: localToIso(to) })
       setState({ status: 'ready', page })
     } catch (error) {
       setState({ status: 'error', page: null, message: error instanceof Error ? error.message : String(error) })
     }
-  }, [action, kind, objectId])
+  }, [action, from, kind, objectId, to])
 
   useEffect(() => { void load() }, [load])
 
   async function loadMore() {
     const cursor = older.length ? older[older.length - 1].id : state.page?.nextCursor
     if (!cursor) return
-    const next = await fetchActivity({ limit: PAGE_SIZE, before: cursor, kind, objectId: objectId || undefined, action: action || undefined })
+    const next = await fetchActivity({ limit: PAGE_SIZE, before: cursor, kind, objectId: objectId || undefined, action: action || undefined, from: localToIso(from), to: localToIso(to) })
     setOlder((current) => [...current, ...next.items])
   }
 
-  function setFilter(key: 'kind' | 'objectId' | 'action', value: string) {
+  function setFilter(key: 'kind' | 'objectId' | 'action' | 'from' | 'to', value: string) {
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
       if (value) next.set(key, value)
@@ -119,12 +160,42 @@ export function ActivityPage() {
           placeholder={pick('Hành động, ví dụ point_override', 'Action, e.g. point_override')}
           className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm"
         />
+        <label className="flex flex-col gap-1 text-xs text-[var(--c-text-dim)]">
+          {pick('Từ', 'From')}
+          <input
+            type="datetime-local"
+            value={from}
+            onChange={(event) => setFilter('from', event.target.value)}
+            className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm text-[var(--c-text)]"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-[var(--c-text-dim)]">
+          {pick('Đến', 'To')}
+          <input
+            type="datetime-local"
+            value={to}
+            onChange={(event) => setFilter('to', event.target.value)}
+            className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm text-[var(--c-text)]"
+          />
+        </label>
         <Button
           variant="secondary"
           icon={<Filter className="h-4 w-4" />}
           onClick={() => setSearchParams(new URLSearchParams(), { replace: true })}
         >
           {pick('Xoá lọc', 'Clear')}
+        </Button>
+        {/* `T57-2.15` — biên bản nghiệm thu và điều tra sự cố đều cần bản xuất;
+            trước đây chỉ xem được trên màn hình. Xuất ĐÚNG những dòng đang hiển
+            thị theo bộ lọc hiện tại, không phải toàn kho: người dùng tải về thứ
+            họ đang nhìn. */}
+        <Button
+          variant="secondary"
+          icon={<Download className="h-4 w-4" />}
+          disabled={rows.length === 0}
+          onClick={() => downloadActivityCsv(rows)}
+        >
+          {pick('Xuất CSV', 'Export CSV')}
         </Button>
       </div>
 

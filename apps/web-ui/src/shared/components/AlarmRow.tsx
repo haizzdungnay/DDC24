@@ -1,8 +1,23 @@
 import { BellRing } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { useI18n } from '../i18n'
 import type { Alarm } from '../types'
 import { formatDateTime } from '../utils'
 import { Button } from './Button'
 import { StatusBadge } from './StatusBadge'
+
+/**
+ * Suy id điểm nguồn từ `alarm.source`.
+ *
+ * `source` là chuỗi do producer đặt, có thể là `"UI-01"`, `"UI-01 Nhiệt độ
+ * phòng"`, hoặc một mô tả không chứa id nào. Chỉ nhận dạng đúng khuôn id điểm
+ * mà `drilldown.ts` biết đường tới; không khớp thì **không** dựng liên kết, vì
+ * một liên kết dẫn tới trang rỗng còn tệ hơn không có liên kết.
+ */
+function sourcePointIdOf(alarm: Alarm): string | null {
+  const match = /\b((?:UI|AI|DI|AO|DO|VP)-\d{2,})\b/i.exec(alarm.source ?? '')
+  return match ? match[1].toUpperCase() : null
+}
 
 function formatAlarmText(str?: string): string {
   if (!str) return ''
@@ -53,6 +68,8 @@ export function AlarmRow({
   const suppressAvailable = alarm.returnable !== false && alarm.status !== 'cleared' && alarm.status !== 'shelved'
   const returnAvailable = alarm.status === 'acked' && alarm.active !== false && alarm.returnable !== false
   const deniedReason = canAct ? undefined : 'Cần vai trò operator trở lên'
+  const { pick } = useI18n()
+  const sourcePointId = sourcePointIdOf(alarm)
   return (
     <div className={`grid items-center gap-3 border-b border-[var(--c-border)] px-3 py-3 text-xs last:border-0 max-lg:grid-cols-1 ${bulkSelected === undefined ? 'grid-cols-[140px_96px_1fr_180px]' : 'grid-cols-[28px_140px_96px_1fr_180px]'}`}>
       {/* T57-1.6 — ô chọn cho xác nhận hàng loạt. Chỉ cảnh báo CHƯA xác nhận
@@ -82,6 +99,22 @@ export function AlarmRow({
           )}
         </div>
         <div className="mt-1 truncate text-[var(--c-text-dim)]">{alarm.source} · {formatAlarmText(alarm.value) || 'n/a'} · {formatAlarmText(alarm.detail)}</div>
+        {/* `T57-2.8` — hai đường tới bằng chứng.
+            Chẩn đoán "vì sao cảnh báo này bật" trước đây là ba lần điều hướng
+            thủ công: nhớ id điểm, mở Monitor, rồi mở Trends và tự chỉnh lại
+            khoảng thời gian cho khớp thời điểm bật. Hai liên kết dưới đây rút
+            việc đó về một cú bấm, và liên kết trend mang theo **cửa sổ bao
+            quanh chính thời điểm bật** chứ không phải khoảng mặc định. */}
+        {sourcePointId && (
+          <div className="mt-1 flex flex-wrap gap-3 text-[11px] font-semibold">
+            <Link to={`/monitor?point=${encodeURIComponent(sourcePointId)}`} className="text-[var(--c-accent)]">
+              {pick('Xem điểm nguồn', 'Open source point')} →
+            </Link>
+            <Link to={`/trends?points=${encodeURIComponent(sourcePointId)}`} className="text-[var(--c-accent)]">
+              {pick('Xem xu hướng quanh thời điểm bật', 'Trend around trigger time')} →
+            </Link>
+          </div>
+        )}
       </div>
       <div className="flex flex-wrap justify-end gap-2 max-lg:justify-start">
         <Button size="sm" variant={ackAvailable && canAct ? 'secondary' : 'ghost'} disabled={!ackAvailable || !canAct} title={deniedReason} onClick={() => onAck?.(alarm)}>

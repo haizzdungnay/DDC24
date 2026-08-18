@@ -8,6 +8,48 @@
 
 ## [Unreleased]
 
+### Added — Plan 57 Wave 2 (đợt 1): bộ lọc chia sẻ được, lọc thời gian và xuất CSV cho nhật ký, hai đường tới bằng chứng từ cảnh báo (2026-08-18)
+
+**TRIỆU CHỨNG.** `MonitorPage` đưa bộ lọc vào URL từ PA3-402 và nhờ đó gửi được
+cho đồng nghiệp đường dẫn tới "các point Modbus đang offline". Bốn trang còn lại
+— Cảnh báo, Lịch vận hành, Nhật ký hoạt động, Xu hướng — vẫn giữ bộ lọc trong
+`useState`: F5 hay Back là mất sạch ngữ cảnh, và không gửi được cho ca sau đường
+dẫn tới "các cảnh báo High chưa ack trong 24 h". Nhật ký hoạt động chỉ lọc theo
+`kind`/`objectId`/`action` cộng phân trang cursor, nên muốn tới "quanh 14:05 hôm
+qua" phải bấm "tải thêm" cho tới khi chạm mốc đó. Chẩn đoán "vì sao cảnh báo này
+bật" là ba lần điều hướng thủ công.
+
+**NGUYÊN NHÂN GỐC.** Với công việc vận hành nhiều người cùng ca, bộ lọc không
+nằm trong URL không phải bất tiện nhỏ mà là **mất khả năng phối hợp**: mọi trao
+đổi phải mô tả bằng lời cách bấm lại bộ lọc.
+
+**CÁCH SỬA.**
+- `BB-1` `shared/hooks/useUrlFilters.ts` (`T57-2.1`) với ba luật, cả ba đều có
+  test khoá: giá trị bằng mặc định **không** ghi vào URL (thanh địa chỉ đầy
+  `?status=all&q=` thì không đọc được); luôn `replace: true` (gõ tìm kiếm không
+  được sinh một mục lịch sử cho mỗi ký tự, nếu không nút Back thành vô dụng);
+  `clear()` chỉ xoá khoá của chính bộ lọc, **giữ** tham số của nơi khác — xoá
+  sạch query sẽ nuốt luôn deep link `?alarm=` từ Landing.
+  Cố ý **chưa** chuyển `MonitorPage` sang hook này để không trộn hai loại thay
+  đổi trong một lần sửa.
+- `T57-2.2`: áp cho Cảnh báo (`?status=&q=`) và Lịch vận hành
+  (`?q=&status=&outOfSync=`); Nhật ký hoạt động thêm lọc khoảng thời gian
+  `?from=&to=` — lọc ở **backend** chứ không cắt sau khi tải, vì cắt ở FE chỉ
+  giấu bớt dòng chứ không đưa người dùng tới đúng thời điểm cần xem.
+- `T57-2.15`: xuất CSV nhật ký theo **đúng bộ lọc đang xem**, RFC 4180, kèm BOM
+  cho Excel tiếng Việt. Chỉ ghi các trường đã hiển thị trên màn hình — không
+  thêm trường nào từ payload thô, giữ `REQ-PA3-X-1` (vết audit không chứa secret).
+- `T57-2.8`: mỗi hàng cảnh báo có hai đường tới bằng chứng — điểm nguồn và xu
+  hướng quanh thời điểm bật. `source` là chuỗi do producer đặt nên id điểm được
+  suy bằng khuôn đã biết; **không khớp thì không dựng liên kết**, vì một liên
+  kết dẫn tới trang rỗng còn tệ hơn không có liên kết.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **925 pass / 925, 92 file** ·
+`npm run build:foxlinx` thành công. Bốn test của `BB-1` đã **kiểm ngược bằng
+mutant**: phá luật 1 và luật 3 đều làm test đỏ.
+
+
 ### Added — Plan 57 Wave 1 (an toàn vận hành) + đóng cả 6 câu hỏi chặn bằng `ADR-034`…`ADR-039` (2026-08-18)
 
 **Quyết định trước, code sau.** Sáu câu hỏi từng chặn `IMPLEMENT_READY` nay đã có
