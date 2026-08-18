@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { I18nProvider } from '../../shared/i18n'
 import { HelpPage } from './HelpPage'
 
@@ -9,7 +10,7 @@ afterEach(cleanup)
 
 describe('HelpPage', () => {
   it('presents quick guidance and frequently asked questions', () => {
-    render(<I18nProvider><HelpPage /></I18nProvider>)
+    render(<MemoryRouter><I18nProvider><HelpPage /></I18nProvider></MemoryRouter>)
 
     expect(screen.getByRole('heading', { name: 'Help' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Point configuration' })).toBeInTheDocument()

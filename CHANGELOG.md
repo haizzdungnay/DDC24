@@ -8,6 +8,42 @@
 
 ## [Unreleased]
 
+### Added — Plan 57 Wave 2 (đợt 5): trợ giúp theo ngữ cảnh và gói xuất chẩn đoán có lọc an toàn (2026-08-18)
+
+**`T57-2.17` — trợ giúp theo ngữ cảnh.** Trợ giúp không theo ngữ cảnh gần như
+không được dùng trên thiết bị nhúng: người đang kẹt ở một trang cụ thể sẽ không
+đọc hết ba thẻ tổng quát để tìm đoạn liên quan. Nút Trợ giúp trên TopBar nay mang
+theo trang hiện tại (`?topic=<pathname>`), và trang Trợ giúp mở thẳng mục của
+trang đó. Bảy mục ngữ cảnh, mỗi mục nói đúng thứ dễ hiểu nhầm ở trang tương ứng —
+ví dụ Modbus: *"chưa từng được poll" khác "mất liên lạc"*; Trends: *số từ tầng
+aggregate đã bị gộp nên đỉnh thật có thể cao hơn đỉnh nhìn thấy*.
+Khoá `topic` cố ý trùng đường dẫn route để không phải bảo trì hai bảng tên.
+
+**`T57-2.21` — xuất ảnh chụp trạng thái và gói chẩn đoán.** Điều tra từ xa hiện
+phải hướng dẫn người tại chỗ chụp năm màn hình rồi gửi qua tin nhắn: ảnh mất khả
+năng tìm kiếm, mất số chính xác, và không mang theo phiên bản phần mềm hay mốc
+thời gian. Nay Landing xuất `status-snapshot`, Chẩn đoán xuất `diagnostic-bundle`
+(health + overview + mạng + trạng thái realtime), cả hai là JSON có mốc thời gian
+và phiên bản web.
+
+**Luật an toàn của gói xuất, có test khoá.** Tệp này sẽ được gửi qua email hoặc
+dán vào ticket — nơi nó **thoát khỏi mọi lớp kiểm soát truy cập của sản phẩm**, và
+một trường nhạy cảm lọt vào đó không có cách nào thu hồi. `redactSensitive()` loại
+**đệ quy** mọi khoá chứa `token`/`password`/`secret`/`apiKey`/`cookie`… thay vì
+chỉ lọc tầng đầu: payload `health`/`overview` là dữ liệu lồng nhau do backend định
+hình, và một trường mới thêm ở tầng sâu sẽ lọt qua bộ lọc nông mà không ai nhận ra
+cho tới khi tệp đã gửi đi. Có xử lý cấu trúc vòng. Kiểm ngược bằng mutant: hạ
+xuống lọc nông ⇒ 3 test đỏ.
+
+Hai test cũ được cập nhật theo hợp đồng mới của liên kết Trợ giúp — assert phần
+đường dẫn và sự tồn tại của `?topic=`, **không** assert nguyên văn href, để mỗi
+trang thêm vào bảng ngữ cảnh không làm test đỏ mà chẳng có gì hỏng.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **954 pass / 954, 97 file** ·
+`npm run build:foxlinx` thành công.
+
+
 ### Added — Plan 57 Wave 2 (đợt 4): quyền hiệu lực, nhân bản VP, chớp ô giá trị, và một thông báo thành công giả bị gỡ (2026-08-18)
 
 **`T57-2.18` — `/me` nói ra người dùng LÀM ĐƯỢC GÌ.** "operator" tự nó không nói

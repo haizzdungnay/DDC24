@@ -38,7 +38,12 @@ describe('shell user navigation', () => {
     renderNavigation(<TopBar connectionState="connected" alarmCount={0} currentUser={{ username: 'admin', role: 'admin' }} />)
 
     expect(screen.getByRole('link', { name: 'Alarms' })).toHaveAttribute('href', '/alarms')
-    expect(screen.getByRole('link', { name: 'Help' })).toHaveAttribute('href', '/help')
+    /* `T57-2.17`: liên kết Trợ giúp nay mang theo trang hiện tại để mở thẳng
+       mục liên quan, nên href có thêm `?topic=`. Assert phần đường dẫn và sự
+       tồn tại của tham số, không assert nguyên văn — nếu không, mọi trang mới
+       thêm vào bảng ngữ cảnh sẽ làm test này đỏ mà chẳng có gì hỏng. */
+    const helpLink = screen.getByRole('link', { name: 'Help' })
+    expect(helpLink.getAttribute('href')).toMatch(/^\/help\?topic=/)
     expect(screen.getByRole('link', { name: 'User' })).toHaveAttribute('href', '/me')
   })
 
