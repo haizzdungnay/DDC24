@@ -1,10 +1,11 @@
-import { ArrowRight, ChevronRight, ListFilter, Maximize2, Pin, PinOff, RefreshCw } from 'lucide-react'
+import { ArrowRight, ChevronRight, Download, ListFilter, Maximize2, Pin, PinOff, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { apiClient } from '../../shared/api/client'
 import { fetchActivity } from '../../shared/api/overview'
 import { Button } from '../../shared/components/Button'
+import { buildSnapshot, downloadJson, snapshotFilename } from '../../shared/diagnosticsExport'
 import { Modal } from '../../shared/components/Modal'
 import { OverrideRemaining } from '../../shared/components/OverrideRemaining'
 import { Panel } from '../../shared/components/Panel'
@@ -167,6 +168,17 @@ function OverviewHeader({ overview, receivedAt, degradedFetch, onRefresh }: {
           {severities.map((item) => <SeverityBadge key={item.key} severity={item.key} count={item.count} />)}
           <Button size="sm" variant="ghost" icon={<RefreshCw className="h-4 w-4" />} onClick={onRefresh}>
             {pick('Làm mới', 'Refresh')}
+          </Button>
+          {/* `T57-2.21` — đính vào phiếu sự cố mà không phải chụp năm màn hình.
+              Ảnh chụp mất khả năng tìm kiếm, mất số chính xác, và không mang
+              theo phiên bản phần mềm hay mốc thời gian. */}
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<Download className="h-4 w-4" />}
+            onClick={() => downloadJson(snapshotFilename('status-snapshot'), buildSnapshot('status-snapshot', overview.controller.webVersion ?? '', { overview }))}
+          >
+            {pick('Xuất ảnh chụp', 'Export snapshot')}
           </Button>
         </div>
       </div>

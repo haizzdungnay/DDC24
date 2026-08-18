@@ -1,6 +1,6 @@
 import { Bell, ChevronDown, CircleHelp, LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
 import { prefersReducedMotion } from '../alarms/annunciation'
 import { IS_DEMO } from '../config'
@@ -23,6 +23,7 @@ import { HealthChip, SeverityBadge, healthReasonLabel } from './pa3/StateAtoms'
  */
 export function TopBar({ connectionState, alarmCount, unackedCount = 0, annunciating = false, currentUser, onOpenNav }: { connectionState: ConnectionState; alarmCount: number; unackedCount?: number; annunciating?: boolean; currentUser: CurrentUser | null; onOpenNav?: () => void }) {
   const [now, setNow] = useState(new Date())
+  const location = useLocation()
   const { logout } = useAuth()
   const { lang, locale, setLang, t, pick } = useI18n()
   const { theme, toggleTheme } = useTheme()
@@ -126,7 +127,10 @@ export function TopBar({ connectionState, alarmCount, unackedCount = 0, annuncia
             {pick(`${unackedCount} chưa xác nhận`, `${unackedCount} unacknowledged`)}
           </span>
         )}
-        <Link to="/help" className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Trợ giúp", "Help")}><CircleHelp className="h-5 w-5" /></Link>
+        {/* `T57-2.17` — mang theo trang hiện tại để Trợ giúp mở thẳng mục liên
+            quan. Trợ giúp không theo ngữ cảnh gần như không được dùng: người
+            đang kẹt ở một trang sẽ không đọc hết mục lục để tìm đoạn của mình. */}
+        <Link to={`/help?topic=${encodeURIComponent(location.pathname)}`} className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Trợ giúp", "Help")}><CircleHelp className="h-5 w-5" /></Link>
         <Link to="/me" className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Người dùng", "User")}><UserRound className="h-5 w-5" /></Link>
         <div className="hidden min-w-[132px] xl:block">
           <div className="text-sm font-semibold">{currentUser?.username ?? 'N/A'}</div>

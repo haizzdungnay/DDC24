@@ -1,8 +1,9 @@
-import { Activity, CircleHelp, Clock3, Cpu, Database, MemoryStick, Network, PowerOff, Router, Thermometer } from 'lucide-react'
+import { Activity, CircleHelp, Clock3, Cpu, Database, Download, MemoryStick, Network, PowerOff, Router, Thermometer } from 'lucide-react'
 import type React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../../shared/api/client'
 import { Button } from '../../shared/components/Button'
+import { buildSnapshot, downloadJson, snapshotFilename } from '../../shared/diagnosticsExport'
 import { ControllerDiagram } from '../../shared/components/ControllerDiagram'
 import { Panel } from '../../shared/components/Panel'
 import { StateBlock } from '../../shared/components/StateBlock'
@@ -53,7 +54,8 @@ export function DiagnosticsPage() {
 
   return (
     <div className="space-y-4">
-      <header>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
         <h1 className="text-2xl font-semibold leading-tight">{pick('Chẩn đoán', 'Diagnostics')}</h1>
         <p className="text-sm text-[var(--c-text-dim)]">
           {pick(
@@ -61,6 +63,23 @@ export function DiagnosticsPage() {
             'System, service and infrastructure metrics. Metrics without a real source show a dash instead of a guess.'
           )}
         </p>
+        </div>
+        {/* `T57-2.21` — gói chẩn đoán gộp health + overview + mạng vào một tệp
+            JSON có mốc thời gian, thay cho việc hướng dẫn người tại chỗ chụp
+            năm màn hình. Trường nhạy cảm bị loại đệ quy trước khi ghi. */}
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<Download className="h-4 w-4" />}
+          onClick={() => downloadJson(snapshotFilename('diagnostic-bundle'), buildSnapshot('diagnostic-bundle', overview?.controller.webVersion ?? '', {
+            health: health.data,
+            overview,
+            network: networkState.data,
+            realtime: { connectionState: realtime.connectionState, lastPointEventAt: realtime.lastPointEventAt }
+          }))}
+        >
+          {pick('Sao chép gói chẩn đoán', 'Export diagnostic bundle')}
+        </Button>
       </header>
 
       {health.error && !h && (
