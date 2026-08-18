@@ -8,6 +8,583 @@
 
 ## [Unreleased]
 
+### Added — Plan 57 Wave 1 (an toàn vận hành) + đóng cả 6 câu hỏi chặn bằng `ADR-034`…`ADR-039` (2026-08-18)
+
+**Quyết định trước, code sau.** Sáu câu hỏi từng chặn `IMPLEMENT_READY` nay đã có
+quyết định có căn cứ, mỗi câu một ADR:
+
+| Câu | Quyết định | ADR |
+|---|---|---|
+| Q2 | Annunciation **hai lớp**; lớp nghe được phải **tự khai báo trạng thái thật** (trình duyệt chặn autoplay nên không được vờ như đã bật) | `ADR-034` |
+| Q4 | Ngữ nghĩa luật cảnh báo **thuộc Core**; mô phỏng phải gọi lại chính Core — **cấm cài lại ở FE hoặc Go**. Hệ quả: `T57-2.13` chuyển từ Wave 2 sang Wave 3 | `ADR-035` |
+| Q5 | Chỉ số ISA-18.2 §16 **dẫn xuất** từ `alarm_history.jsonl`, **không lập kho thứ hai**; nêu rõ file này chưa có xoay vòng/retention nên phải xử lý trước khi mở màn hình KPI | `ADR-036` |
+| Q6 | Ghi ra **luật thật hôm nay**: `validNewPassword` = `len >= 6` byte, không có lớp ký tự — thay vì mô tả một chính sách không tồn tại | `ADR-037` |
+| Q7 | "Hiệu lực thực tế" của lịch tính ở **Core**, mở rộng `mkddc-schedule-sim`, không cài lại trong Go | `ADR-038` |
+| Q8 | Đặc tả điều kiện quét bus Modbus. **ADR này KHÔNG cấp phép ghi ra bus RS-485**; `T57-3.8` giữ nguyên `IMPLEMENT_READY BLOCKED` | `ADR-039` |
+
+Hai quyết định đáng chú ý vì chúng **thu hẹp** phạm vi thay vì mở rộng: `ADR-035`
+đẩy `T57-2.13` sang Wave 3 vì chép ngữ nghĩa luật cảnh báo sang FE là tạo hai
+nguồn chân lý cho một quyết định an toàn; `ADR-037` từ chối mô tả một chính sách
+mật khẩu đẹp đẽ mà backend không thi hành.
+
+**Asset trực quan — điều kiện cứng của `DOC_GOVERNANCE` §2.2.** Phát hành hồ sơ
+`KX-DDC24-UX-WEB-OPERATIONS-001` kèm **4 SVG** (`OPS-01` khối "Ai đang giữ quyền
+điều khiển" và `OPS-02` hộp thoại ép tay hàng loạt, mỗi cái đủ desktop + mobile).
+Wireframe ASCII không đủ qua cổng Detailed Design; đây là hạng mục dễ bị bỏ sót
+nhất khi lên lịch, nên nó được làm **trước** khi viết dòng code nào của hai màn hình.
+
+**Wave 1 — 12/12 task.** Khối hạ tầng `BB-4` (`shared/overview/overrides.ts`) làm
+nguồn dữ liệu chung cho "ai đang giữ quyền điều khiển"; `shared/bulk/sequential.ts`
++ `features/points/bulkOverride.ts` cho ép tay hàng loạt có xác nhận chung;
+`shared/alarms/annunciation.ts` cho lớp thu hút chú ý; `features/auth/passwordPolicy.ts`
+và `loginError.ts` cho hai đề xuất P1 của trang đăng nhập/người dùng;
+`shared/components/OverrideRemaining.tsx` cho đếm ngược TTL trên bảng Monitor.
+
+Kiểm chứng (đo lại trong phiên): `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **921 pass / 921, 91 file**
+(mốc trước Wave 1: 775/80 — thêm 146 test, 11 file) · `docs_iso_harness --expect` PASS.
+
+**Trạng thái plan: 27/71 task (~38%).** Cả 8 câu hỏi §12 đã đóng, nên không còn
+quyết định nào chặn việc lập kế hoạch tiếp. Còn **44 task** ở Wave 2–4: Wave 2
+(22 task) cổng đã `PASS` cho phần FE thuần và **sẵn sàng triển khai**; Wave 3
+cần 9 ADR theo từng task + chữ ký Tech Lead; Wave 4 cần quyết định sản phẩm
+Rev A/Rev B. Chi tiết ở Plan 57 §13b.
+
+
+### Fixed — Đóng nốt nhóm "còn mở" của hai kiểm tra viên: toàn vẹn dữ liệu biểu đồ, lớp chặn thứ ba, cây heading (2026-08-18)
+
+Nhóm `N-01`, `N-02`, `N-06`, `N-07`, `N-08` và `G-04` mà đợt trước ghi là "còn mở"
+nay đã đóng. Ba trong số đó là **lỗi toàn vẹn dữ liệu**, tức đụng thẳng luật nền
+của sản phẩm.
+
+**`N-01` — đóng dấu mốc của điểm này lên số đo của điểm khác.** `TrendPreview` gộp
+mọi điểm vừa đổi vào MỘT hàng rồi lấy `newestStamp` của cả nhóm làm nhãn thời gian
+cho tất cả: số đo của điểm A tại t1 bị vẽ dưới nhãn t2 của điểm B. Đây đúng lớp lỗi
+mà chú thích ngay bên trên nó cấm ("tuyệt đối không đóng dấu giờ máy trạm lên số
+đo") — chỉ khác ở chỗ đóng dấu đồng hồ của producer khác thay vì của trình duyệt.
+Sửa: **một hàng cho mỗi mốc thời gian**, gộp theo `stampMs` rồi sắp xếp.
+
+**`N-02` — chuỗi thưa BIẾN MẤT thay vì đứt đường.** Hàng chỉ mang khoá của các điểm
+vừa đổi, mà `TrendChart` vẽ `dot={false}`: một chuỗi không có mẫu ở hàng liền kề thì
+không nối được đoạn thẳng và cũng không có chấm ⇒ vô hình. Chọn một điểm 1 s cùng
+một điểm Modbus 5 s thì điểm Modbus biến mất, không phải "đường đứt" như AC yêu cầu.
+Thêm nữa trục X là `category` trên chuỗi `HH:MM:SS` nên khoảng thời gian không đều
+vẫn được vẽ đều — buffer đã trung thực nhưng hình vẽ thì chưa. Sửa: đặt `__ts` để
+bật trục thời gian **số** đã có sẵn trong `TrendChart`, và thêm prop `showDots` cho
+riêng khối xem nhanh (trang Trends giữ mặc định tắt vì mật độ mẫu cao, chấm chỉ rối).
+
+**`G-04`** — `lastSampledAtRef` được ghi TRƯỚC khi kiểm `value === null`, nên một
+mốc kèm giá trị hỏng "đốt" luôn mốc đó; nếu sau này đọc được giá trị dưới cùng mốc
+thì nó không bao giờ vào biểu đồ. Sửa: chỉ ghi ref sau khi đã có giá trị dùng được.
+
+**`N-07` — "lớp chặn thứ ba" là mã chết.** `requestNavigation` được docstring và
+CHANGELOG trình bày như một trong ba lớp đang bảo vệ, nhưng `grep` toàn `src` cho
+thấy **không nơi nào gọi**. Cùng lúc `CommandPalette` gọi thẳng `navigate(to)` —
+tức Ctrl/⌘+K là đường điều hướng duy nhất trong ứng dụng không đi qua `<a href>`,
+và nó lách được cả ba lớp. Không chọn cách rẻ là xoá mã chết rồi sửa docstring; nối
+nó vào đúng chỗ đang lách: guard đăng ký ở cấp module khi dirty (một ô nhớ là đủ vì
+tối đa một trang dirty tại một thời điểm — không cần thêm provider), `CommandPalette`
+gọi `requestGuardedNavigation(to)` trước khi điều hướng.
+
+**`N-06` — docstring hứa nhiều hơn mã làm.** Nó liệt kê "bấm Back" là triệu chứng
+được sửa, nhưng Back/Forward không đi qua `<a href>` và không bắn `beforeunload` cho
+điều hướng SPA. Chặn đúng cách cần `useBlocker` của data router, mà ứng dụng đang
+dùng `<BrowserRouter>` + `<Routes>`. Đã ghi thẳng vào docstring là **khoảng hở đã
+biết**, không phải điều đã xử lý.
+
+**`N-08` — AC của `T57-0.4` đòi test tự động, đợt đầu chỉ đối chiếu bằng tay.** Thêm
+5 test vào `route-menu-contract.test.ts` (tổng 48): layout sở hữu `<h1>` phải có đúng
+một; 15 trang con của ba layout **không** được tự thêm; 21 trang tự đứng phải có; và
+ba trang có nhánh trả về sớm phải dùng component tiêu đề DÙNG CHUNG ở cả hai nhánh.
+Trong lúc viết, `countH1` mắc lại đúng dương tính giả đã làm hỏng phép đo `F-UX-15`
+lần đầu — đếm cả `<h1>` **trong chú thích**, mà repo này trích dẫn thẻ đó rất nhiều
+để giải thích ai sở hữu tiêu đề; đã bỏ chú thích trước khi đếm. **Kiểm ngược:** trả
+nhánh lỗi của `SchedulerGridPage` về `StateBlock` trần ⇒ test đỏ đúng thông điệp.
+Bổ sung `<h2 className="sr-only">` cho 4 tab Lịch vận hành (Lịch tuần / Ngoại lệ /
+Điểm đích / Mô phỏng) — `sr-only` vì tên tab đã hiện trên thanh tab, lặp lại bằng
+mắt là nhiễu, nhưng cây heading vẫn phải liền mạch.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **775 pass / 775, 80 file** ·
+`npm run build:foxlinx` thành công.
+
+**Vẫn còn mở:** `F-UX-03` và `F-UX-13` chưa có test hành vi riêng (đang được phủ
+gián tiếp qua gate hợp đồng và bộ test alarm hiện có).
+
+
+> [!WARNING]
+> **CHƯA DEPLOY LÊN BOARD.** Toàn bộ thay đổi Wave 0 (46 tệp) mới chỉ được kiểm
+> bằng typecheck/lint/unit test và build trên máy dev. Board Foxlinx
+> `SOM-DDC-24-foxlinx` **tạm mất kết nối** ngày 2026-08-18, nên bước deploy bị
+> chặn và **cố ý để lại**. Bản đang chạy trên board vẫn là bản deploy lúc
+> 03:15Z (chỉ gồm 11 bản sửa của phiên review, KHÔNG gồm Wave 0).
+> Khi board có lại kết nối: `npm run build:foxlinx` (không dùng `npm run build`
+> trần), kiểm `grep -c REVA_SCOPE_ROADMAP` = 0, backup `dist` → `dist.prev`,
+> `scp` (board Buildroot không có `rsync`), `systemctl restart mkddc-web-pi`.
+
+### Fixed — Đóng phát hiện của kiểm tra viên #1: hai lỗi CHẶN, gate chủ lực từng vô dụng (2026-08-18)
+
+Kiểm tra viên độc lập **tự tay áp mutant** vào mã thay vì đọc lời khai, và chứng
+minh hai tuyên bố của phiên trước là sai.
+
+**B-01 — gate hợp đồng deep link KHÔNG bắt được chính lỗi nó sinh ra để bắt.**
+Bản đầu chỉ hỏi `source.includes("'group'")`, tức "tên tham số có xuất hiện đâu đó
+trong tệp không". Kiểm tra viên xoá `searchParams.get('group')` khỏi `MonitorPage`
+mà vẫn để literal `'group'` trong union type ⇒ **14/14 xanh**, trang thì hết lọc.
+Một thành viên union hay một `value=` tình cờ đủ giữ nó xanh. Sửa: đòi đúng biểu
+thức `searchParams.get('<param>')`. **Kiểm ngược bằng chính mutant đó**: nay đỏ,
+dù tệp còn 2 literal `'group'`.
+
+**B-02 — "test khoá 11 bản sửa" là sai.** Ba hồi quy thật đi lọt cả 729 test:
+(a) trả lại `onClick` ẩn trên ô sparkline; (b) `defaultForceValue` về
+`String(pointNumber(point))` ⇒ chuỗi `"null"` quay lại; (c) `saveTrend` về `?? true`.
+Thêm nữa `F-UX-03` và `F-UX-13` không có test nào, và `it` mang tên "ô Trend không
+còn là vùng bấm" **không assert gì về ô sparkline**.
+Đã thêm 6 test. Trong lúc tự chạy mutant phát hiện thêm **hai test của chính phiên
+này vô nghĩa**: (i) assert `getAttribute('onclick')` luôn `null` vì React gắn
+handler qua synthetic event — viết lại thành bấm thật rồi assert không có dialog;
+(ii) đường "bấm Lưu mà KHÔNG chạm nút gạt" chưa được phủ, nên mutant `?? true` sống
+sót — thêm test assert `updatePointConfig` nhận `trendEnabled: false`.
+**Cả ba mutant nay đều bị bắt.**
+
+**N-05 — bản vá F-UX-06 tạo ra mâu thuẫn mới.** Nút hành động trên bảng chỉ phụ
+thuộc `onForce`, không phụ thuộc `canForcePoint`, nên VP `writable: false` vẫn được
+bày nút "Ghi" trong khi khung chi tiết của **cùng điểm đó** từ chối. Trước F-UX-06
+đây là vùng bấm ẩn nên không ai thấy; bản sửa biến nó thành **lời hứa có nhãn** —
+tệ hơn bẫy cũ trên một HMI vận hành. Đã thêm `canForcePoint(point)` vào điều kiện.
+
+**N-04 — lệch cột do đưa nút ra ngoài grid.** Header và hàng dùng cùng template
+nhưng hàng bọc thêm lớp `flex` chứa nút, nên cột `1fr` nuốt phần chênh và mọi cột
+phía sau lệch ~65-70 px — và chỉ lệch ở AO/VP (có nút), không lệch ở UI (không
+nút), tức bảng lệch không đều trong cùng một trang. Sửa bằng cấu trúc gương: header
+và hàng cùng `flex` + grid 7 cột + ô hành động rộng cố định (76 px cho AO/VP,
+60 px cho DO). **Không dùng `grid-cols-subgrid`** dù ngắn gọn hơn: nó hỏng nặng
+trên trình duyệt cũ, mà hỏng nặng tệ hơn lệch nhẹ.
+
+**N-03 — gate mù với template literal, và chỗ mù đó CÓ lỗi thật.** `CALL_PATTERN`
+chỉ khớp `pick('…')`/`pick("…")`, bỏ qua ~6,6 % lời gọi dùng backtick. Thêm nhánh
+template (bỏ `${…}` trước khi chấm điểm) ⇒ lập tức lộ **4 chuỗi không dấu còn sót**
+trong `AlarmSettingsPage.tsx` mà đợt sửa `F-UX-01` bỏ qua: "Toi da ${…} alarm.",
+"Trung ID voi alarm #${…}.", "Toi da ${…} source.", "Toi da ${…} alarm publish
+BACnet dang enabled." Đã phục hồi dấu cả 4.
+
+**G-01** — ba từ nằm ở cả hai tầng từ điển, tầng 1 luôn thắng nên luật "cần hai từ"
+của tầng 2 âm thầm không áp dụng; đã ghi chú cấm lặp.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **735 pass / 735, 80 file** ·
+`npm run build:foxlinx` thành công.
+
+**Còn mở, kiểm tra viên chỉ ra và CHƯA đóng** — ghi thẳng thay vì bỏ qua:
+`N-01` `TrendPreview` gộp nhiều điểm vào một hàng và đóng dấu mốc mới nhất của
+nhóm lên số đo của điểm khác · `N-02` chuỗi có mẫu không ở hàng liền kề bị **biến
+mất** thay vì đứt đường (`dot={false}`), và trục X vẫn là `category` nên khoảng
+thời gian không đều được vẽ đều · `N-06`/`N-07` docstring `useDirtyGuard` kể ba lớp
+chặn nhưng `requestNavigation` **không có nơi gọi nào** và Back trình duyệt không
+được chặn · `N-08` chưa có test duyệt bảng route assert đúng một `<h1>`, và 5 tab
+Lịch vận hành vẫn không có heading · `F-UX-03`/`F-UX-13` vẫn chưa có test hành vi.
+
+
+### Fixed — Đóng phát hiện của kiểm tra viên độc lập cho Wave 0 (2026-08-18)
+
+Hai agent kiểm chéo độc lập soi lại toàn bộ Wave 0. Kết quả không phải "đã tốt" —
+họ tìm ra một **lỗi trợ năng mới do chính bản vá chống mất dữ liệu tạo ra**, và
+một finding bị khai "ĐÃ SỬA" khi chưa sửa hết.
+
+**MỚI — skip link bị `useDirtyGuard` nuốt (WCAG 2.2 §2.4.1 Bypass Blocks).**
+`interceptInternalLink` so đích bằng `url.href`, nên `<a href="#main-content">`
+của `AppShell` (điểm dừng Tab đầu tiên, đúng cơ chế Bypass Blocks) bị coi là rời
+trang: `/eng/outputs#main-content` ≠ `/eng/outputs`. Hậu quả trên 4 trang cấu hình
+khi đang dirty: người dùng bàn phím **không nhảy được tới nội dung**, và nếu chọn
+"Bỏ thay đổi, rời đi" thì app điều hướng về **chính trang đang đứng** rồi xoá bản
+nháp — một bẫy mất dữ liệu do đúng bản vá chống mất dữ liệu gây ra. Sửa: so bằng
+`pathname + search`, vì đổi hash là di chuyển TRONG trang, không có gì để mất.
+
+**`F-UX-01` chưa đóng thật, và gate mới mù đúng chỗ đó.** Biên bản ghi finding này
+"ĐÃ SỬA / 78 chuỗi", nhưng `shared/i18n.tsx` vẫn còn **4 khoá không dấu**, trong đó
+`alarmSettingsTitle: 'Cau hinh canh bao'` chính là `<h1>` của trang Cấu hình cảnh
+báo ở chế độ tiếng Việt, kèm hai toast lưu/lỗi. `check_ui_strings.py` không thấy vì
+chỉ quét `pick(...)`, không quét từ điển `t()`. Sửa cả hai: phục hồi dấu cho 4 khoá,
+và mở rộng gate sang khối `vi:` của `i18n.tsx`. **Kiểm ngược:** chạy gate mới lên
+bản `HEAD` của `i18n.tsx` ⇒ bắt đúng 4 khoá nó từng bỏ sót. Trong lúc mở rộng, gate
+báo nhầm "Xem theo thanh ghi (u0-u7)" — "thanh ghi" và "theo" là tiếng Việt đúng
+chính tả không dấu — nên gỡ hai từ đó khỏi từ điển; đo lại vẫn **68/81**, dương tính
+giả **0**.
+
+**Ba đính chính tài liệu — tuyên bố cũ nói quá so với mã:**
+- §3.3/§5.2 biên bản viết "mỗi mức một icon hình dạng khác nhau" cho cả hai thang.
+  Đúng với `quality` (5 hình), **nói quá** với `severity`: 5 mức dùng **3** hình
+  (`AlertOctagon` · `AlertTriangle`×2 · `Info`×2). WCAG 1.4.1 vẫn đạt nhờ nhãn chữ.
+- §5.4 ghi "19 trang/tab không có `<h1>`" — phần lớn là **dương tính giả do đếm
+  theo file**. Đối chiếu lại toàn bộ 28 route: mỗi route đúng một `<h1>`.
+- Attribution "CTO quyết định" trong `ADR-033`, `UX-SYSTEM-001` v1.9 và biên bản §10
+  **không có gốc**: không có chữ ký người nào cho vai trò đó. Đổi sang chuẩn trung
+  thực đã dùng ở v1.8 (`WAIVED FOR IMPLEMENTATION`), và thêm **§9b** vào biên bản ghi
+  rõ: hai ADR đủ tư cách làm đầu vào implementation, **chưa đủ tư cách baseline
+  `M5 — APPROVED`**; `RELEASE_READY` vẫn là cổng độc lập.
+
+Đồng bộ `F-UX-12..15` trong §7.1 sang **ĐÃ ĐÓNG**, và §5.2/§5.3/§5.4 sang trạng
+thái sau `T57-0.2`/`T57-0.4`.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch (gate mở rộng) ·
+`npx vitest --run --environment jsdom src` → **729 pass / 729, 80 file** ·
+`python3 scripts/docs_iso_harness.py --expect` → PASS, khớp toàn bộ ngưỡng.
+
+**Còn mở, do kiểm tra viên chỉ ra và chưa đóng:** chưa có test tự động duyệt bảng
+route assert đúng một `<h1>` (đúng AC của `T57-0.4`); chưa có test cho `F-UX-09`,
+`F-UX-10`, `F-UX-03`, `F-UX-14`; `useDirtyGuard` chưa chặn nút Back trình duyệt
+(`popstate`) và chưa nối `CommandPalette` vào `requestNavigation`.
+
+
+### Changed — `ADR-033`: cách ly hai route chạy trên dữ liệu mock khỏi điều hướng, và test hợp đồng route↔menu (2026-08-18)
+
+Xử lý 6 phát hiện bổ sung `F-UX-17`, `F-DOC-06..10` (biên bản review §7.2b), do
+vai trò CTO quyết định và thực thi.
+
+**Quyết định đáng kể nhất — và nó NGƯỢC với gợi ý ban đầu trong biên bản review.**
+`F-UX-17` ghi nhận `/eng/user-parameters` và `/eng/aux` là "route thật nhưng không
+có lối vào điều hướng", và gợi ý xếp chúng vào một nhóm của `NavRail`. Kiểm chứng
+lại cho thấy **giả định "route thật" là sai**: `apiClient.getUserParams()` trả
+thẳng `getDemoUserParams()` **bất kể cờ `IS_DEMO`** (kèm chú thích trong chính mã
+nguồn: "Mock demo-only: EasySet User Parameters has no backend/core hook yet"),
+`putUserParams()` chỉ ghi vào một biến module, và `grep` toàn `apps/web-api` cho
+`user-param` trả về **0**. Trên board thật, trang này hiển thị 38 tham số MCU **bịa**
+và trả toast "đã lưu" cho một lệnh không bao giờ tới thiết bị. `AuxFunctionsPage`
+sinh cụm graph 28-node — legacy theo ADR-020/023, không có đường nạp xuống thiết bị.
+
+Thêm hai trang đó vào menu sẽ **nhân một lỗi bịa dữ liệu** từ phạm vi "chỉ người
+gõ tay URL mới gặp" lên "mọi admin đều thấy và tin" — trái luật nền của sản phẩm
+và trái `ADR-013` ("chỉ field có consumer mới được công bố"). Nên quyết định là
+**cách ly có chủ đích**, không phải thêm vào menu.
+
+Chọn cách ly thay vì xoá hẳn vì hai lý do: xoá sẽ huỷ `useDirtyGuard` vừa gắn vào
+`UserParametersPage` ở `T57-0.1`, và là quyết định phạm vi Rev A không hoàn tác
+được bằng một lệnh; cách ly rollback bằng đúng một dòng. **Rủi ro còn lại được ghi
+rõ, không giấu:** gõ tay URL vẫn tới được hai trang này.
+
+`ADR-033` ghi đầy đủ bối cảnh, ba phương án bị loại, bảng thi hành, rủi ro còn lại
+và cách rollback. **Cần Product quyết tiếp** (đã ghi vào §9 biên bản review): nối
+thật hai trang này vào backend, hay gỡ hẳn. Tới lúc đó **không** được mô tả
+`/eng/user-parameters` là chức năng đã có trong bất kỳ demo hay biên bản nghiệm thu nào.
+
+**Gate mới `route-menu-contract.test.ts`** (8 assert) — cùng họ với gate deep link
+hai chiều ở `T57-0.8`, đóng đúng cơ chế sinh lỗi §7.3 mục 1: chụp nguyên văn bảng
+`path=` của `App.tsx`; menu không được trỏ đường chết; tập route nhóm `nav` phải
+trùng tập mục menu; hai route cách ly phải nằm ngoài menu; mọi khoá `ROUTE_MIN_ROLE`
+phải là route thật; bốn nhóm `NavRail` phải khớp bảng `ADR-032`. **Đã kiểm ngược:**
+thêm tạm một route `eng/orphan-probe` vào `App.tsx` ⇒ test đỏ đúng thông điệp thiết
+kế; khôi phục xong `git diff` trên tệp đó rỗng.
+
+**Bốn finding tài liệu còn lại:**
+- `F-DOC-06` `UX-SYSTEM-001` §3 viết lại theo cơ chế thật (utility class Tailwind +
+  `.mono`), thay vì thêm 4 biến CSS `--fs-*` chỉ để khớp giấy — thêm một tầng trung
+  gian mà không test nào đi qua là làm tài liệu đúng bằng cách làm mã xấu đi.
+- `F-DOC-07` §5 sửa 6 → **14** biến thể `StatusBadge` (khớp `BADGE_VARIANTS` và
+  `contrast.test.ts`), thêm §5.2 tách rõ 14 biến thể với 27 khoá bí danh trong `labelMap`.
+- `F-DOC-08` `styles.css` sửa đường dẫn `src/theme/tokens.ts` → `src/shared/theme/tokens.ts`.
+- `F-DOC-09` `09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md` §1 dựng lại cây trang theo hiện
+  trạng (4 nhóm `ADR-032`, bổ sung 6 route thiếu, thêm mục CÁCH LY); §1.4 **giữ
+  nguyên** và được đánh dấu là ghi chép lịch sử — `DOC_GOVERNANCE` §6 cấm xoá lịch sử.
+- `F-DOC-10` **đo lại thật** thay vì kết luận từ suy đoán: cùng cây làm việc,
+  `vite build` trần = **715,18 kB**, `VITE_PROGRAMMING_REV_A=1` = **898,84 kB**,
+  chênh **183,66 kB**; chunk `charts` giống hệt nhau ở 407,31 kB. Xác nhận hai hồ sơ
+  không mâu thuẫn, chỉ thiếu chú thích — đã thêm vào `F-UX-16` §7.1, review §8.5 và
+  Plan 57 §8.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npx eslint src --max-warnings=0` sạch ·
+`npx vitest --run --environment jsdom src` → **729 pass / 729, 80 file** ·
+`python3 scripts/docs_iso_harness.py --expect` → PASS, khớp toàn bộ ngưỡng.
+
+
+### Added — Plan 57 Wave 0: đóng nợ UI/UX và dựng ba gate chặn tái diễn (2026-08-18)
+
+Triển khai theo chỉ thị `AUTH-WEBUX-2026-08-18-01` (`docs/00_governance/DECISIONS.md`),
+mở đúng Wave 0 của Plan 57; Wave 1–4 vẫn `IMPLEMENT_READY BLOCKED`.
+
+**Track A — bốn finding còn mở:**
+- `T57-0.1` (`F-UX-12`) Hook mới `shared/hooks/useDirtyGuard.ts` + `DirtyGuardModal`,
+  áp cho `OutputsPage`, `AlarmSettingsPage`, `VirtualIoPage`, `UserParametersPage`.
+  Ba lớp chặn: `beforeunload`, bắt `click` ở pha capture cho mọi `<a href>` nội bộ
+  (React Router 7 không cho chặn `<Link>` bằng API công khai ổn định), và
+  `requestNavigation()` cho nút gọi `navigate()` trực tiếp. Luật không được phá:
+  **không dirty thì không chặn gì** — một guard bật thường trực sẽ dạy người dùng
+  bấm "rời đi" theo phản xạ, và khi nó chặn thật thì không ai đọc nữa.
+- `T57-0.2` (`F-UX-13`) `AlarmsPage.HistoryRow` bỏ ánh xạ severity→3 trạng thái viết
+  tại chỗ, dùng `SeverityBadge` (đã có đủ 5 mức). `low`/`info` không còn hiện xanh lá
+  — xanh lá theo IEC 60073 nghĩa là "bình thường đã xác nhận", không phải "cảnh báo mức thấp".
+- `T57-0.3` (`F-UX-14`) `DashboardPage.TrendPreview` chỉ ghi mẫu khi `updatedAt` của
+  producer ĐỔI, thay vì `setInterval` 1 s theo đồng hồ trình duyệt. Điểm cập nhật
+  5 s/lần nay cho 1 mẫu/5 s thay vì 5 — bản cũ tạo mật độ dữ liệu giả. Điểm ngừng
+  cập nhật ⇒ đứt đường (quyết định Q3 trong AUTH record, theo tiền lệ `REQ-PA3-06-2`).
+- `T57-0.4` (`F-UX-15`) Bọc hai nhánh trả về sớm của `SchedulerGridPage`
+  (`legacyFormat`, `error`) bằng `SchedulerHeading` dùng chung, để `<h1>` không biến
+  mất khi trang không dựng được nội dung (WCAG 2.2 §2.4.6). Bổ sung `<h2>` cho các
+  màn Programming vốn không có tiêu đề riêng nào.
+
+  **Đính chính finding `F-UX-15`:** phần lớn là dương tính giả. Review gốc đếm theo
+  FILE, nhưng `ModbusRtuLayout`, `ProgrammingHeader` và `ScheduleEditorPage` đều đã
+  giữ đúng một `<h1>` cho route của chúng, và các page/tab con cố ý không có — đúng
+  thiết kế, có ghi trong chú thích của chính các layout đó. Chỉ hai nhánh lỗi của
+  `SchedulerGridPage` là khiếm khuyết thật.
+
+**Track B — test khoá 11 bản sửa của phiên review** (`T57-0.5/0.6/0.7`):
+`MonitorPage.regressionLocks.test.tsx` (8 test) và `AlarmsPage.deepLink.test.tsx`
+(4 test). Trước đó không test nào trong 692 test hiện có thất bại nếu ai hoàn nguyên
+các bản vá — ba trong số các finding (nút gạt không dùng được bằng bàn phím, vùng bấm
+ẩn mở lệnh ép tay, sparkline vẽ số 0 giả) đã sống nhiều tháng mà không bộ test nào thấy.
+
+**Track C — ba gate chặn cơ chế sinh lỗi** (§7.3 của review):
+- `T57-0.8` `shared/overview/drilldown.contract.test.ts` (14 test) — hợp đồng deep link
+  **hai chiều**: đối chiếu tham số resolver PHÁT RA với tham số trang đích THỰC SỰ ĐỌC,
+  và soát mọi nhánh `case` cùng mọi `subsystemRoutes` đã có trang đích khai báo.
+  **Đã kiểm chứng gate thật sự đỏ được**: thêm thử một `targetType` mới mà quên nối
+  trang đích ⇒ test đỏ với đúng thông điệp chỉ ra chỗ thiếu.
+- `T57-0.9` `scripts/check_ui_strings.py`, nối vào `npm run lint` qua
+  `check:ui-strings`. Từ điển **hai tầng** vì tiếng Việt có nhiều từ đúng chính tả mà
+  không dấu ("Ghi", "an", "cho", "khi"): tầng 1 một từ là đủ kết luận, tầng 2 cần hai
+  từ trở lên. **Hiệu lực đã ĐO ngược trên bản `HEAD` của ba tệp từng mắc lỗi**
+  (81 chuỗi không dấu thật): bắt **68/81**, dương tính giả trên cây đã sửa **0**.
+  13 chuỗi còn lại gồm 12 thuật ngữ tiếng Anh hợp lệ (gate đúng khi không bắt) và
+  1 chuỗi thật sự lọt ("da ack") — chấp nhận đổi lấy việc không báo nhầm, vì một gate
+  hay báo nhầm sẽ bị tắt đi và khi đó nó bắt được 0.
+- `T57-0.10` `shared/i18n.hmiVocabulary.test.ts` (3 test) — kiểm chéo từ vựng chất
+  lượng điểm giữa HMI (C++/LVGL) và Web (TS), thi hành `UX-SYSTEM-001` §1.5 vốn chưa
+  có gì khoá. Phát hiện và **ghi nhận có ý thức** một khoảng hở thật: HMI không có
+  `OFFLINE` (mất liên lạc thể hiện bằng dải "I/O FAULT" toàn màn hình, không phải nhãn
+  từng điểm). Test khoá danh sách này để nó không âm thầm dài thêm.
+
+Thêm `src/node-builtins.d.ts` khai báo kiểu tối thiểu cho `node:fs`/`node:url`/`node:path`
+mà chỉ hai test hợp đồng dùng: dự án cố ý không cài `@types/node`, và `?raw` của Vite
+không đọc được `apps/hmi` (ngoài root, trả `Denied ID`) — nới `server.fs.allow` chỉ để
+phục vụ test là đánh đổi sai.
+
+Kiểm chứng (đo lại trong phiên): `npx tsc --noEmit` sạch ·
+`npm run lint` sạch (eslint + gate chuỗi mới) ·
+`npx vitest --run --environment jsdom src` → **729 pass / 729, 80 file**
+(mốc đầu Wave 0: 692/75 — thêm 37 test, 5 file) · `npm run build:foxlinx` thành công.
+Chưa deploy bản này lên board; chưa chạy e2e Playwright.
+
+
+### Changed — Plan 57 Wave 0 Track D: đồng bộ tài liệu authority UI/UX với mã (2026-08-18)
+
+Đóng cả **5 finding tài liệu** `F-DOC-01..05` của `REV-FE-UIUX-UC-2026-08-18`
+theo `AUTH-WEBUX-2026-08-18-01`. Cả năm đều là **trường hợp mã đúng, tài liệu
+sai** — nguy hiểm y như chiều ngược lại, vì tài liệu mới là thứ người mới đọc.
+Không có dòng mã nào bị sửa trong đợt này.
+
+**`T57-0.11` (`F-DOC-01`) — `docs/04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md` §2 → v1.8.**
+Triệu chứng: bảng token của hồ sơ "nguồn-chuẩn hình ảnh" lệch **hoàn toàn** khỏi
+`apps/web-ui/src/shared/theme/tokens.ts` — khác cả tên biến (`--good` vs
+`--c-good`) lẫn giá trị (`#2FA45A` vs `#227742`, `#E8B500` vs `#826500`,
+`#9AA0A6` vs `#636970`). Nguyên nhân gốc: plan 45 (`WEB-UX-008`/`WEB-UX-012`)
+siết token để đạt WCAG AA nhưng không cập nhật ngược vào tài liệu, nên một FE dev
+mới làm theo tài liệu sẽ dựng lại đúng bộ màu **trượt AA** đã bỏ công sửa. Cách
+sửa: thay bằng bảng **30 token cho cả hai theme** `light`/`dark`, khớp 1-1 với mã,
+kèm cột "nhóm kiểm" nói rõ ngưỡng nào áp cho token nào; thêm §2.2 (6 luật mà
+`contrast.test.ts` kiểm tự động) và §2.3 (ánh xạ tên `--x` → `--c-x` + **số đo
+tương phản thật** giải thích từng giá trị bị siết: `--border` 1,64:1 → 3,44:1,
+`--warn` 1,18:1 → 3,41:1, `--warn-fg` 4,49:1 → 5,02:1…). Ghi rõ một điểm dễ hiểu
+nhầm: nhiều giá trị cũ **vẫn còn trong mã** nhưng ở **theme tối**; bảng cũ chỉ có
+một cột nên đã đem độ bão hoà hợp lệ của theme tối áp vào theme sáng.
+
+**`T57-0.12` (`F-DOC-02`) — cùng hồ sơ, §9 "Handoff cho FE".** Triệu chứng: hứa
+export `tokens.json` / `theme.css`, **không tệp nào tồn tại** trong repo. Nguyên
+nhân: mục viết theo quy trình design-tool truyền thống, không theo kịp quyết định
+để token trong TypeScript. Cách sửa: mô tả cơ chế thật — token ở `tokens.ts` để
+test tương phản chạy trên *token thật* và để hai theme cùng một hình dạng kiểu
+(thiếu token là lỗi biên dịch); `applyTheme()` ghi 30 biến lên `:root`;
+`styles.css` chỉ giữ giá trị không phụ thuộc theme. Kèm bảng "việc cần làm → nơi
+làm → kiểm bằng gì".
+
+**`T57-0.13` (`F-DOC-04`) — `ADR-032` mới + §6 hồ sơ trên.** Triệu chứng: tài liệu
+canonical và `ADR-009` chốt **3 nhóm** điều hướng, mã `NavRail.tsx` dựng **4
+nhóm**. Nguyên nhân: thay đổi được làm trong mã kèm lý do tốt nhưng **không có
+ADR** ghi việc rời khỏi ADR-009. Cách sửa: ban hành `ADR-032` trong
+`docs/00_governance/DECISIONS.md` (file này là authority cấp phát số ADR), nêu rõ
+`supersedes` **Decision #2** của ADR-009 và **chỉ** phần đó — triết lý màu Level B
+hybrid vẫn còn hiệu lực; đánh dấu `SUPERSEDED` tại đúng chỗ trong
+`docs/adr/ADR-009-isa101-hmi-and-nav-restructure.md` theo `DOC_GOVERNANCE.md` §6
+quy tắc 6, và cảnh báo rằng bảng hex trong ADR-009 không còn là giá trị đang chạy.
+Đồng bộ §6 của design system với `NavRail.tsx`: 4 nhóm, 19 route, 3 luật đi kèm
+(cờ build-time Programming, dùng chung `ROUTE_MIN_ROLE`, `/settings/network` mở
+cho mọi vai trò theo ADR-017 §2.7).
+
+**`T57-0.14` (`F-DOC-05`) — §4.1 mới.** Triệu chứng: tài liệu ghi "≥1280 desktop,
+≥768 tablet", mã dùng `lg` = **1024 px** làm ngưỡng thanh bên ↔ ngăn kéo và
+`UX_REQ_PA3_WEB` §3.2 yêu cầu hỗ trợ 390×844 — ba nguồn, không nguồn nào là trọng
+tài. Cách sửa: chốt **một** bộ số theo mặc định Tailwind v4 (không có
+`tailwind.config.*`, không có `@theme` đè `--breakpoint-*`), nêu rõ `lg` = 1024 px
+là **ngưỡng hành vi duy nhất** và cả ba khai báo (`NavRail` `lg:flex`, `NavDrawer`
+`lg:hidden`, nút ☰ `lg:hidden`) phải đổi cùng lúc — lệch nhau sẽ tạo một dải chiều
+rộng không có điều hướng nào. Ghi hai viewport tham chiếu 1440×900 và 390×844 đúng
+bộ mà e2e đo.
+
+**`T57-0.15` (`F-DOC-03`) — `docs/02_requirements/UX_REQ_PA3_WEB.md` §1.1 → v1.1.**
+Triệu chứng: bảng định nghĩa 5 giá trị `quality` (**không** có `unknown`) nhưng câu
+luật ngay dưới nói "bốn trạng thái `bad`/`stale`/`offline`/`unknown`"; type
+`PointQuality` cũng không có `unknown`. Nguyên nhân: câu luật được viết cho thang
+`health.state` rồi đặt nhầm vào mục của thang `quality`. Cách sửa theo quyết định
+**Q1** của `AUTH-WEBUX-2026-08-18-01` — **chỉ sửa tài liệu**: chuyển câu luật về
+đúng §1.2, §1.1 nói rõ `quality` có đúng năm giá trị và `QualityBadge` lùi về
+`uncertain` khi gặp giá trị lạ. **Không** thêm `unknown` vào `PointQuality` (đổi
+contract, vượt phạm vi Wave 0).
+
+Đánh dấu 5 dòng `F-DOC-01..05` trong `docs/07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md`
+§7.2 là **ĐÃ ĐÓNG** kèm task và hồ sơ đích, và cập nhật dòng "cần uỷ quyền" ở §9.
+
+Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` → **PASS**, `EXPECT`
+khớp toàn bộ ngưỡng, không `DRIFT` (22/22 baseline, 6/6 support, link/anchor/
+trailing-ws/fence/duplicate-ID/span đều 0, 60 SRS ID, 60 trace row, 0 vi phạm
+trace). Thay đổi không đụng họ ID nào đang được đếm nên khối `EXPECT` giữ nguyên.
+
+### Added — Plan 57: nâng cấp UC/UI/UX Web HMI + đóng finding `REV-FE-UIUX-UC-2026-08-18` (2026-08-18)
+
+Thêm `docs/03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md` —
+**DRAFT, chờ duyệt. `PLAN_READY` CHƯA đóng, `IMPLEMENT_READY` CHƯA mở**; không
+viết code production trước khi có phê duyệt (`DOC_GOVERNANCE.md` §4 + quy tắc
+"DOC TRƯỚC CODE SAU").
+
+Phạm vi: **67 đề xuất UC/UI/UX** ở §6 của review (19 nhóm PAGE) + **10 finding
+còn mở** (`F-UX-12..16`, `F-DOC-01..05`) + hạ tầng khoá lại 11 finding đã sửa.
+**Loại §6.8 `/eng/commissioning`** (3 đề xuất) theo chỉ thị user cùng ngày — ghi
+rõ trong plan để không bị coi là bỏ sót. Bốn đề xuất Programming §6.14 dẫn chiếu
+Plan 53/56 thay vì lập lại.
+
+Cấu trúc: 8 khối hạ tầng dùng chung (`BB-1..BB-8`) rút ra từ chỗ nhiều trang cần
+cùng một thứ — làm khối trước, trang sau, tránh viết lại 3–4 lần. Chia 5 Wave:
+Wave 0 đóng nợ + **ba gate chống tái diễn** (test hợp đồng deep link hai chiều,
+lint chuỗi tiếng Việt mất dấu, kiểm chéo từ vựng HMI ↔ Web) ·
+Wave 1 an toàn vận hành (FE thuần) · Wave 2 hiệu quả chẩn đoán ·
+Wave 3 cần contract/backend mới (**9 ADR** phải ký trước) ·
+Wave 4 quyết định sản phẩm (ISA-101 Level 2 process graphic, code-splitting).
+
+Ước lượng Wave 0–3: **~102,5 người-ngày** dev (chưa tính review/QA/e2e). Đề xuất
+cắt phạm vi nếu cần giao nhanh: Wave 0 + Wave 1 (~28,5 người-ngày) đã đóng toàn
+bộ nợ kỹ thuật và mọi đề xuất P1 ảnh hưởng an toàn.
+
+Plan có **ma trận truy vết 1-1** cho cả 67 đề xuất (không mục nào biến mất im
+lặng), ma trận tài liệu phải cập nhật trước/sau khi code, và **8 câu hỏi chặn
+`IMPLEMENT_READY`** cần PM/CTO/UX Lead/Tech Lead trả lời — trong đó Q8 là câu
+hỏi an toàn: quét bus Modbus là **ghi ra bus thật**, có thể nhiễu thiết bị đang
+chạy.
+
+Ghi nhận rủi ro đáng chú ý: 6 màn hình mới đều chứa quyết định an toàn nên
+**bắt buộc** có asset trực quan render được theo `DOC_GOVERNANCE.md` §2.2
+(wireframe ASCII không đủ) — hạng mục dễ bị bỏ sót nhất khi lên lịch.
+
+Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` → **PASS, khớp toàn
+bộ ngưỡng** (không đổi số đếm ID/asset nên `EXPECT` giữ nguyên).
+
+### Added — Review UI/UX/UC toàn bộ web-ui và tài liệu thiết kế (2026-08-18)
+
+Thêm `docs/07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md`
+(`REV-FE-UIUX-UC-2026-08-18`): review hiện trạng UI/UX/UC toàn bộ
+`apps/web-ui` (23 route, 36.310 dòng TS/TSX) và bộ tài liệu thiết kế
+(`docs/04_uiux`, `UX_REQ_PA3_WEB.md`, `docs/01_product`), đối chiếu ISA-101,
+ISA-18.2, IEC 60073, WCAG 2.2 AA và ISO 9241-110.
+
+Nội dung: điểm mạnh/điểm yếu có dẫn `file:line`, bảng đối chiếu 5 tiêu chuẩn,
+đề xuất bổ sung UC/UI/UX cho **19 nhóm PAGE** kèm lý do, và bảng 21 finding
+(16 lỗi code + 5 lỗi tài liệu) kèm nguyên nhân gốc. Ba cơ chế sinh lỗi được
+rút ra: hợp đồng nội bộ chỉ có test một chiều; quyết định kỹ thuật đúng nhưng
+không cập nhật ngược vào tài liệu authority; bản vá đặt ở một tầng bị tầng bên
+cạnh vô hiệu hoá.
+
+Phán quyết: **PASS có điều kiện**. Khoảng hở lớn nhất về sản phẩm là **thiếu
+tầng hiển thị Level 2 của ISA-101** (process graphic theo thiết bị công nghệ
+AHU/FCU/chiller) — ghi nhận là quyết định phạm vi Rev A, không phải lỗi.
+
+### Fixed — 11 lỗi UI/UX trên Monitor, Alarms, Trends phát hiện trong review `REV-FE-UIUX-UC-2026-08-18` (2026-08-18)
+
+Tất cả nằm trong phạm vi review nên được sửa cùng phiên thay vì chỉ ghi finding.
+
+**Deep link hỏng im lặng (`F-UX-02/03/04`)** — `drilldown.ts` phát ra
+`/alarms?alarm=`, `/monitor?group=` và `MonitorPage` phát ra `/trends?points=`,
+nhưng cả ba trang đích chưa từng đọc tham số đó: liên kết mở đúng trang mà
+không lọc gì. Triệu chứng nặng nhất ở `F-UX-02`: bấm "Xem chi tiết" trên một
+cảnh báo Critical ở khối CẦN XỬ LÝ của Landing mở ra danh sách đầy đủ, người
+trực phải tự dò lại đúng cảnh báo giữa lúc đang có sự cố. Nguyên nhân gốc:
+`drilldown.test.ts` chỉ kiểm **chiều sinh URL**, không có gì kiểm trang đích
+tiêu thụ tham số — hợp đồng nội bộ một chiều.
+Sửa: `AlarmsPage` đọc `?alarm=` + dải trạng thái có nút thoát lọc và thông báo
+riêng khi cảnh báo đã hết; `TrendsPage` đọc `?points=` rồi **gỡ tham số khỏi
+URL sau khi tiêu thụ** (giữ lại sẽ làm mọi thay đổi bộ chọn sau đó bị hoàn
+nguyên ở lần tải lại kế tiếp); `MonitorPage` thêm bộ lọc `group`
+(`local`/`virtual`/`modbus`) đọc từ URL **và** có bộ chọn thật trên giao diện.
+
+**Bàn phím và HTML không hợp lệ (`F-UX-05`, `F-UX-10`, WCAG 2.2 §2.1.1 + §4.1.2)** —
+nút gạt ĐÓNG/MỞ contactor ở hàng DO là `<span role="switch" tabIndex={0}>`
+**lồng trong `<button>`** và không có `onKeyDown`: người dùng bàn phím focus
+được nhưng Space/Enter không làm gì, còn trình đọc màn hình gặp phần tử tương
+tác lồng phần tử tương tác. Nút gạt "Hiển thị trend" còn tệ hơn — thiếu cả
+`tabIndex` nên bàn phím không tới được.
+Sửa: hàng DO thành `<div>` chứa một `<button>` chọn hàng và một
+`<button role="switch">` riêng có `aria-label` nêu rõ điểm bị tác động.
+
+**Vùng bấm nguy hiểm không có affordance (`F-UX-06`)** — ô biểu đồ ở cột
+"Trend" của mỗi hàng AO/Virtual là `<span onClick>` mở thẳng hộp thoại ép tay
+ra cơ cấu chấp hành: không nhãn, không viền, không con trỏ, không tên cho
+trình đọc màn hình. Người bấm nhầm mới biết nó có; người cần nó thì không có
+cách nào biết. Sửa: gỡ handler ẩn, thêm nút có nhãn "Ép tay"/"Ghi" ở cuối hàng.
+
+**Trộn hai thang từ vựng (`F-UX-08`)** — `quality = uncertain` in ra màn hình
+là `"Lỗi - HIGH"`, trộn thang chất lượng điểm (`UX_REQ_PA3_WEB` §1.1) với thang
+severity ISA-18.2 (§1.3) và bịa ra một mức ưu tiên xử lý không producer nào
+phát ra. Sửa: dùng đúng từ vựng viết hoa của `QualityBadge` (`UNCERTAIN`).
+
+**Bịa số đo còn sót (`F-UX-07`, `F-UX-09`, `F-UX-11`)** —
+(a) `sparklineFallback` cố ý trả mảng rỗng cho điểm chưa có số đo (đúng theo
+REV-FE-04) nhưng `Sparkline` lại tự bù `[0, 0]` và vẽ một đường nằm ngang ở
+mức 0: bản vá ở tầng gọi bị tầng vẽ vô hiệu hoá;
+(b) `defaultForceValue` trả `String(pointNumber(point))` nên điểm chưa có số đo
+điền sẵn chuỗi `"null"` vào ô "Giá trị mới" của hộp thoại ép tay;
+(c) thẻ đếm "Điểm ON" đếm mọi điểm có `value` truthy — một cảm biến 23.5 °C
+được tính là "ON" còn chính nó ở 0 °C thì không.
+Sửa: không có mẫu ⇒ hiện `—`; không có số đo ⇒ ô giá trị để trống; "Điểm ON"
+chỉ đếm điểm nhị phân với mẫu số là số điểm nhị phân.
+
+**Nút gạt không ghi gì (`F-UX-10`)** — nút gạt "Hiển thị trend" hiện ở chế độ
+xem, gạt xong không ghi xuống backend; phải bấm thêm biểu tượng bút chì rồi
+Lưu mà không có dấu hiệu nào nói vậy. Thêm nữa mặc định lúc lưu là `true`
+trong khi mặc định lúc hiển thị là `point.trend != null`, nên bấm Lưu mà không
+chạm nút gạt sẽ **bật** trend cho một point vốn đang tắt; và "Hủy" không hoàn
+nguyên. Sửa: nút gạt chỉ hiện khi đang sửa và luôn đi kèm Lưu/Hủy; chế độ xem
+chỉ đọc trạng thái; hai mặc định khớp nhau; "Hủy" hoàn nguyên.
+
+**78 chuỗi tiếng Việt mất dấu (`F-UX-01`)** — `AlarmsPage` (24),
+`AlarmSettingsPage` (34), `VirtualIoPage` (20): "Dang tai alarm",
+"Trang thai cau hinh", "Chua co VP nao"… Nặng nhất ở `AlarmsPage` — màn hình
+quan trọng nhất khi có sự cố. Nguyên nhân: không có gate nào kiểm nội dung
+chuỗi UI (`check:programming-*` chỉ kiểm hợp đồng của Programming).
+
+Test: `TrendsPage.requests.test.tsx` và `TrendsPage.orphanSeries.test.tsx`
+render `TrendsPage` ngoài Router nên `useSearchParams` mới thêm làm 8 test đổ;
+đã bọc `MemoryRouter` cho khớp thực tế (trang này luôn nằm trong Router).
+
+Kiểm chứng (đo lại trong phiên, không dẫn số cũ):
+`npx tsc --noEmit` sạch · `npx eslint src --max-warnings=0` sạch ·
+`npx vitest --run --environment jsdom src` → **692 pass / 692, 75 file** ·
+`npm run build:foxlinx` thành công.
+Chưa chạy e2e Playwright (cần Playwright browsers) — ghi ở §9 của báo cáo review.
+
+**Deploy board Foxlinx `SOM-DDC-24-foxlinx` lúc 2026-08-18T03:15Z**:
+- Build bằng `npm run build:foxlinx` (**không** phải `npm run build` trần — cờ
+  `VITE_PROGRAMMING_REV_A` là build-time và board này bật vĩnh viễn từ
+  `TASK-PROG-507`; quên là mất route `/eng/programming`). Kiểm trước khi copy:
+  `grep -c REVA_SCOPE_ROADMAP build/web-ui/dist/assets/index-*.js` = **0**.
+- Backup `/opt/mkddc-web/dist` → `/opt/mkddc-web/dist.prev` để rollback một lệnh.
+- Copy bằng `scp` (board Buildroot **không có** `rsync`), thay `dist`,
+  `chown 1001:1001`, `systemctl restart mkddc-web-pi`.
+- Xác minh **trên bundle đang chạy trên board**, không phải trên bản local:
+  4 chuỗi mất dấu = 0 lần xuất hiện; 4 chuỗi có dấu = 1; bộ lọc "Nguồn - Tất cả"
+  = 1; "I/O tại chỗ" = 1; nhãn cũ "Lỗi - HIGH" = **0**; "Điểm nhị phân đang ON"
+  = 1; "Xem tất cả cảnh báo" = 1.
+- Sau restart: `mkddc-web-pi` + `mkddc-core` `active`; `/api/v1/health` trả
+  `status=ok` với cả 6 check (`core`/`io_shm`/`iobus`/`mcu_connection`/
+  `plc_shm`/`web`) đều `ok`. Một trình duyệt thật (`101.99.36.34`) đã nạp bản
+  mới và gọi thành công `/api/v1/overview`, `/api/v1/alarms`,
+  `/api/v1/programming/{capabilities,point-catalog,runtime}` — tất cả 200.
+
 ### Fixed — Historian vẫn DEGRADED sau bản vá `writerActive` trước đó: authority v2 lệch revision vĩnh viễn trên board single-node (2026-08-17)
 
 User xác nhận bản vá "historian.writerActive bỏ sót writer legacy" (PR #200,
