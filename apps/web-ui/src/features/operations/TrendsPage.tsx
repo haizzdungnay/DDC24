@@ -11,7 +11,7 @@ import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { StatusBadge } from '../../shared/components/StatusBadge'
-import { TrendChart, hasMinMaxBand, trendBandKey, type TrendSeries } from '../../shared/components/TrendChart'
+import { TrendChart, assignSecondAxis, hasMinMaxBand, trendBandKey, type TrendSeries } from '../../shared/components/TrendChart'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { useRealtime } from '../../shared/realtime'
@@ -212,6 +212,18 @@ export function TrendsPage() {
   const tableRows = useMemo(() => buildTrendRows(series, selectedPoints, samples, HISTORIAN_V2_TRENDS_ENABLED && !customRange), [customRange, samples, selectedPoints, series])
   const historyPresentation = historyPresentationState(historyState.data, historyState.error)
   const currentRange = rangeOptions.find((item) => item.minutes === rangeMinutes)
+  /* `T57-2.7` — nói ra tầng dữ liệu ĐANG dùng, lấy từ `tiersUsed` của response
+     chứ không suy theo preset: cùng một preset có thể ra tầng khác nhau tuỳ
+     lượng dữ liệu còn lưu. Đây là thứ quyết định cách đọc đỉnh/đáy — số từ tầng
+     aggregate đã bị gộp nên đỉnh thật có thể cao hơn đỉnh nhìn thấy, và người
+     đọc phải biết điều đó trước khi kết luận về một sự cố. */
+  const tierLabel = useMemo(() => {
+    const tiers = historyState.data?.tiersUsed ?? []
+    if (!tiers.length) return ''
+    const names: Record<string, string> = { cache: 'cache', ram: 'RAM', hot: 'hot', archive: 'archive' }
+    return `${pick('Nguồn', 'Tier')}: ${tiers.map((tier) => names[tier] ?? tier).join(' + ')}`
+  }, [historyState.data?.tiersUsed, pick])
+
   const rangeLabel = customRange
     ? pick('Tùy chỉnh (giờ địa phương)', 'Custom (local time)')
     : currentRange ? pick(currentRange.labelVi, currentRange.labelEn) : pick(`${rangeMinutes} phút`, `${rangeMinutes} min`)
@@ -397,6 +409,10 @@ export function TrendsPage() {
         <div ref={analogPanelRef}>
           <Panel
             title={`${pick('Xu hướng analog', 'Analog trend')} - ${rangeLabel}`}
+            /* Tầng dữ liệu là thông tin PHỤ nên đi vào `subtitle`, không nối vào
+               tiêu đề: tiêu đề là thứ người dùng và test cùng dựa vào để nhận ra
+               khối này, nối thêm chuỗi động vào đó làm nó mất tính ổn định. */
+            subtitle={tierLabel || undefined}
             action={
               <div className="flex flex-wrap gap-2">
                 {/* Dải min–max chỉ bật được khi dữ liệu THẬT SỰ có nó. Ở độ phân
@@ -598,6 +614,8 @@ export function buildHistoryChartModel(response: HistoryResponse | null, points:
       stepped: point?.kind === 'DO' || point?.kind === 'DI' || point?.signalType === 'boolean' || typeof point?.value === 'boolean'
     }
   })
+
+  assignSecondAxis(series)
 
   const rows = new Map<number, TrendSample>()
   const rowAt = (timeMs: number) => {
