@@ -1,4 +1,4 @@
-import { Activity, ChevronLeft, ChevronRight, Database, LayoutGrid, Pencil, Plus, RotateCcw, Save, SlidersHorizontal, Trash2, Wand2, Zap } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, Copy, Database, LayoutGrid, Pencil, Plus, RotateCcw, Save, SlidersHorizontal, Trash2, Wand2, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../../shared/api/client'
@@ -51,6 +51,7 @@ export function VirtualPointsPage() {
   const [reloadToken, setReloadToken] = useState(0)
   const [saving, setSaving] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  const [duplicateSeed, setDuplicateSeed] = useState<VirtualPoint | null>(null)
   const [overviewOpen, setOverviewOpen] = useState(false)
   const [overviewDeleteId, setOverviewDeleteId] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -327,7 +328,9 @@ export function VirtualPointsPage() {
           <p className="text-sm text-[var(--c-text-dim)]">{pick('VP backend-only, chỉ hiện khi đã tạo.', 'Backend-only Virtual Points, visible only after creation.')}</p>
         </div>
         <div className="flex gap-2">
-          <Button icon={<Plus className="h-4 w-4" />} onClick={() => setAddOpen(true)}>{pick('Tạo VP', 'Add VP')}</Button>
+          <Button icon={<Plus className="h-4 w-4" />} onClick={() => { setDuplicateSeed(null); setAddOpen(true) }}>{pick('Tạo VP', 'Add VP')}</Button>
+          {/* `T57-2.20` — nhân bản VP đang chọn. */}
+          <Button icon={<Copy className="h-4 w-4" />} disabled={!selected} onClick={() => { setDuplicateSeed(selected ?? null); setAddOpen(true) }}>{pick('Nhân bản', 'Duplicate')}</Button>
           <Button icon={<LayoutGrid className="h-4 w-4" />} disabled={!items.length} onClick={() => setOverviewOpen(true)}>{pick('Tổng quan', 'Overview')}</Button>
           <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} disabled={!selected || loading} onClick={() => setConfirmOpen(true)}>{t('save')}</Button>
         </div>
@@ -409,7 +412,7 @@ export function VirtualPointsPage() {
         </Panel>
       </div>
 
-      <AddVirtualPointModal open={addOpen} saving={saving} tagError={tagErrors[`items[${items.length}].tag`]} nameError={tagErrors[`items[${items.length}].name`]} fieldIndex={items.length} onCreate={createItem} onClose={() => setAddOpen(false)} />
+      <AddVirtualPointModal open={addOpen} saving={saving} tagError={tagErrors[`items[${items.length}].tag`]} nameError={tagErrors[`items[${items.length}].name`]} fieldIndex={items.length} seed={duplicateSeed} onCreate={createItem} onClose={() => { setAddOpen(false); setDuplicateSeed(null) }} />
       <VirtualPointOverviewModal
         open={overviewOpen}
         items={items}
@@ -706,7 +709,14 @@ function WizardField({ label, children }: { label: string; children: React.React
   )
 }
 
-function AddVirtualPointModal({ open, saving, tagError, nameError, fieldIndex, onCreate, onClose }: { open: boolean; saving: boolean; tagError?: string; nameError?: string; fieldIndex: number; onCreate: (input: Partial<VirtualPoint>) => void; onClose: () => void }) {
+/**
+ * `seed` = nhân bản một VP đã có (`T57-2.20`).
+ *
+ * Điền sẵn MỌI trường trừ `tag`: tag là danh tính, và điền sẵn một tag đã tồn
+ * tại chỉ để người dùng phải xoá đi là thêm một bước thừa cộng một cơ hội tạo
+ * trùng. Tạo hàng loạt biến cùng kiểu trước đây phải nhập lại từ đầu mỗi lần.
+ */
+function AddVirtualPointModal({ open, saving, tagError, nameError, fieldIndex, seed, onCreate, onClose }: { open: boolean; saving: boolean; tagError?: string; nameError?: string; fieldIndex: number; seed?: VirtualPoint | null; onCreate: (input: Partial<VirtualPoint>) => void; onClose: () => void }) {
   const [tag, setTag] = useState('')
   const [label, setLabel] = useState('')
   const [signalType, setSignalType] = useState<VirtualPointSignalType>('float')
@@ -717,17 +727,18 @@ function AddVirtualPointModal({ open, saving, tagError, nameError, fieldIndex, o
 
   useEffect(() => {
     if (!open) return
+    // Tag để TRỐNG kể cả khi nhân bản — xem chú thích ở đầu component.
     setTag('')
-    setLabel('')
-    setSignalType('float')
-    setUnit(0)
-    setWritable(true)
-    setLogMode(0)
-    setValue('0')
-  }, [open])
+    setLabel(seed ? `${seed.name ?? seed.label ?? ''}` : '')
+    setSignalType(seed?.signalType ?? 'float')
+    setUnit(seed ? unitFromString(seed.unit) : 0)
+    setWritable(seed?.writable ?? true)
+    setLogMode(seed?.logEnabled ? (seed.logIntervalMs ?? 0) : 0)
+    setValue(seed?.value === undefined || seed.value === null ? '0' : String(seed.value))
+  }, [open, seed])
 
   return (
-    <Modal open={open} title="Add Virtual Point" confirmLabel="Create" cancelLabel="Cancel" onConfirm={() => onCreate({ tag, label, signalType, unit: unitToString(unit), writable, logEnabled: logMode !== 0, logIntervalMs: logMode || undefined, retentionS: logMode ? defaultRetention(logMode) : undefined, value: parseValue(signalType, value), enabled: true })} onClose={onClose}>
+    <Modal open={open} title={seed ? `Nhân bản ${seed.tag}` : "Add Virtual Point"} confirmLabel="Create" cancelLabel="Cancel" onConfirm={() => onCreate({ tag, label, signalType, unit: unitToString(unit), writable, logEnabled: logMode !== 0, logIntervalMs: logMode || undefined, retentionS: logMode ? defaultRetention(logMode) : undefined, value: parseValue(signalType, value), enabled: true })} onClose={onClose}>
       <div className="space-y-4">
         <TextInput fieldPath={`items[${fieldIndex}].tag`} label="Tag" value={tag} error={tagError} onChange={setTag} />
         <TextInput fieldPath={`items[${fieldIndex}].name`} label="Label" value={label} error={nameError} onChange={setLabel} />

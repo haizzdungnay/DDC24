@@ -8,6 +8,44 @@
 
 ## [Unreleased]
 
+### Added — Plan 57 Wave 2 (đợt 4): quyền hiệu lực, nhân bản VP, chớp ô giá trị, và một thông báo thành công giả bị gỡ (2026-08-18)
+
+**`T57-2.18` — `/me` nói ra người dùng LÀM ĐƯỢC GÌ.** "operator" tự nó không nói
+lên điều gì với người dùng mới; họ phải thử từng trang mới biết ranh giới ở đâu.
+Câu tóm tắt vai trò trước đây là văn xuôi **chép tay**, nên sẽ lệch ngay lần đầu
+ai đó siết quyền một route — và lệch theo hướng nguy hiểm nhất: hứa nhiều hơn
+thực tế. Nay danh sách sinh từ chính `ROUTE_MIN_ROLE` mà `RequireRole` và
+`NavRail` đang dùng, nên ba nơi không bao giờ nói ba điều khác nhau. Hiện **cả
+hai vế** — làm được và cần vai trò cao hơn — vì chỉ liệt kê vế đầu thì khi va vào
+giới hạn người dùng vẫn không biết cần vai trò nào để vượt qua.
+
+**`T57-2.20` — nhân bản Virtual Point.** Điền sẵn mọi trường **trừ `tag`**: tag là
+danh tính, điền sẵn một tag đã tồn tại chỉ để người dùng phải xoá đi là thêm một
+bước thừa cộng một cơ hội tạo trùng.
+
+**`T57-2.16` — chớp ô khi giá trị vừa đổi.** `KX-DDC24-UX-SYSTEM-001` §5 đã đặc tả
+`DataTable` có "realtime cell flash", và `.value-flash` đã nằm sẵn trong
+`styles.css` — nhưng **không nơi nào dùng nó**. Trên bảng 30 điểm cùng cập nhật,
+người trực phải nhớ con số cũ trong đầu mới biết ô nào vừa đổi.
+Hai luật, cả hai đều có test và đã kiểm ngược bằng mutant: **không chớp ở lần
+render đầu** (mở trang mà cả bảng chớp cùng lúc là nhiễu, và nó dạy người dùng bỏ
+qua hiệu ứng đúng lúc cần chú ý), và **giá trị lặp lại không chớp** (poll mỗi giây
+trả cùng con số mà ô vẫn chớp thì cả bảng nhấp nháy vô nghĩa). Tắt hẳn khi người
+dùng khai `prefers-reduced-motion` — mất nó không mất thông tin nào.
+
+**`T57-2.19` — gỡ một thông báo thành công giả.** Trang Hiển thị báo "Đã lưu cấu
+hình hiển thị (demo)" cho cả ngôn ngữ lẫn mật độ, trong khi ngôn ngữ áp thật
+(`setLang` ghi `localStorage`) còn **mật độ không được lưu ở đâu cả**. Một thông
+báo thành công cho việc không xảy ra là cùng họ với lỗi WEB-UX-003 ở trang đổi mật
+khẩu: người dùng đóng màn hình với niềm tin sai. Nay chỉ báo thành công cho thứ
+thật sự áp được, và mật độ nói rõ là chưa nối. Thà thiếu tính năng còn hơn có một
+tính năng giả.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **947 pass / 947, 96 file** ·
+`npm run build:foxlinx` thành công.
+
+
 ### Fixed — Giao diện Modbus phân biệt "chưa từng được poll" với "mất liên lạc", và đính chính hồ sơ bàn giao RS-485 (2026-08-18)
 
 **ĐÍNH CHÍNH MỘT KẾT LUẬN SAI TRONG TÀI LIỆU.** `RS485_BANGIAO_TEAM_SW.md` §5

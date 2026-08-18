@@ -25,6 +25,7 @@ import { StateBlock } from '../../shared/components/StateBlock'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useToast } from '../../shared/components/Toast'
 import { useApi } from '../../shared/hooks/useApi'
+import { useValueFlash } from '../../shared/hooks/useValueFlash'
 import { useI18n } from '../../shared/i18n'
 import { useRealtime } from '../../shared/realtime'
 import type { Point, PointKind, PointQuality, VirtualPoint } from '../../shared/types'
@@ -772,6 +773,7 @@ function DigitalSection({ title, rows, selectedId, conflicts, onSelect, onOpenDe
 function DigitalRow({ point, conflictIds, selected, onSelect, onOpenDetails, onToggle, bulkSelection, onBulkToggle }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void; bulkSelection?: Set<string> | null; onBulkToggle?: (id: string) => void }) {
   const { pick } = useI18n()
   const active = Boolean(point.value)
+  const flash = useValueFlash(point.value)
   const state = active ? 'on' : 'off'
   const stateFillColor = statusFill(state)
   const stateTextColor = statusColor(state)
@@ -786,7 +788,7 @@ function DigitalRow({ point, conflictIds, selected, onSelect, onOpenDetails, onT
       >
         <span className="mono font-semibold">{pointDisplayTag(point)}</span>
         <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
-        <span className="inline-flex items-center gap-2 font-semibold" style={{ color: stateTextColor }}><Circle className="h-2.5 w-2.5 fill-current" style={{ color: stateFillColor }} />{active ? 'ON' : 'OFF'}</span>
+        <span className={cn('inline-flex items-center gap-2 rounded px-1 font-semibold', flash)} style={{ color: stateTextColor }}><Circle className="h-2.5 w-2.5 fill-current" style={{ color: stateFillColor }} />{active ? 'ON' : 'OFF'}</span>
         <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
         {/* T57-1.3 (§6.2-P1b) — cột "Còn lại" ngay trên bảng.
             `overrideExpiresInS` trước đây CHỈ hiện trong khung chi tiết của điểm
@@ -887,6 +889,7 @@ function sparklineFallback(point: Point): number[] {
 function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onForce, bulkSelection, onBulkToggle }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void; bulkSelection?: Set<string> | null; onBulkToggle?: (id: string) => void }) {
   const { pick } = useI18n()
   const trendBuffer = useTrendBuffer(point.id, point.value, point.trend)
+  const flash = useValueFlash(point.value)
   // Kênh Signal Type = "none" ("Không hoạt động") là người dùng CHỦ Ý chưa
   // nối cảm biến — Core trả quality=bad đúng thiết kế (không có dữ liệu
   // thật), nhưng hiện đỏ "BAD" y hệt một fault phần cứng là báo sai mức độ
@@ -919,7 +922,7 @@ function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onFo
       <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className="grid min-w-0 flex-1 grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px_104px] items-center py-2 text-left transition hover:bg-[var(--c-accent-bg)]">
         <span className="mono font-semibold">{pointDisplayTag(point)}</span>
         <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
-        <span className="mono">{notConfigured ? NO_DATA : typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
+        <span className={cn('mono rounded px-1', flash)}>{notConfigured ? NO_DATA : typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
         <span className="mono text-[var(--c-text-dim)]">{notConfigured ? NO_DATA : point.unit ?? (point.kind === 'AO' ? 'V' : '-')}</span>
         <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: notConfigured ? statusFill('inactive') : statusFill(point.quality) }} />{statusText}</span>
         {/* F-UX-06 — ô này TỪNG là một `<span onClick>` mở thẳng hộp thoại ép

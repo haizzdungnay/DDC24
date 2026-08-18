@@ -1,13 +1,38 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useMemo, useState } from 'react'
 import { KeyRound, LogOut, ShieldCheck, UserRound } from 'lucide-react'
 import { apiClient } from '../../shared/api/client'
 import { useAuth } from './AuthProvider'
+import { ROUTE_MIN_ROLE, roleAtLeast } from './roles'
 import { Button } from '../../shared/components/Button'
 import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { useToast } from '../../shared/components/Toast'
 import { useI18n } from '../../shared/i18n'
 import { formatDateTime } from '../../shared/utils'
+
+/**
+ * Nhãn tiếng Việt/Anh cho từng route có gate quyền.
+ *
+ * Chỉ liệt kê route NGƯỜI DÙNG hiểu được, không phải mọi path trong `App.tsx`:
+ * mục đích là trả lời "tôi làm được gì", không phải in ra bảng định tuyến.
+ */
+const ROUTE_LABELS: Array<[string, string, string]> = [
+  ['/monitor', 'Giám sát điểm I/O', 'Monitor I/O points'],
+  ['/alarms', 'Xem và xác nhận cảnh báo', 'View and acknowledge alarms'],
+  ['/trends', 'Xem xu hướng lịch sử', 'View historical trends'],
+  ['/eng/scheduler', 'Lịch vận hành', 'Operating schedules'],
+  ['/eng/commissioning', 'Chạy thử ngõ ra', 'Commission outputs'],
+  ['/eng/outputs', 'Cấu hình ngõ ra', 'Configure outputs'],
+  ['/eng/modbus-rtu', 'Modbus RTU', 'Modbus RTU'],
+  ['/eng/inputs', 'Cấu hình ngõ vào', 'Configure inputs'],
+  ['/eng/virtual-points', 'Điểm ảo', 'Virtual points'],
+  ['/eng/alarm-settings', 'Cấu hình cảnh báo', 'Alarm settings'],
+  ['/eng/user-parameters', 'Tham số người dùng', 'User parameters'],
+  ['/settings/network', 'Cấu hình mạng', 'Network settings'],
+  ['/settings/time', 'Thời gian hệ thống', 'System time'],
+  ['/settings/device', 'Thông tin thiết bị', 'Device settings'],
+  ['/settings/users', 'Quản lý người dùng', 'User management']
+]
 
 export function UserInfoPage() {
   const { session, logout } = useAuth()
@@ -25,6 +50,28 @@ export function UserInfoPage() {
     operator: pick('Vận hành: override có kiểm soát và acknowledge alarm.', 'Operator access: controlled override and alarm acknowledge.'),
     viewer: pick('Chỉ xem: theo dõi dashboard, monitoring, alarm và trends.', 'Read-only access: dashboard, monitoring, alarms, and trends.')
   }
+
+  /* `T57-2.18` — quyền hiệu lực SINH TỪ `ROUTE_MIN_ROLE`, không viết tay.
+   *
+   * "operator" tự nó không nói lên điều gì với người dùng mới: họ phải tự thử
+   * từng trang để biết mình làm được gì. Câu tóm tắt phía trên có ích nhưng là
+   * văn xuôi chép tay — nó sẽ lệch ngay lần đầu ai đó siết quyền một route, và
+   * lệch theo hướng nguy hiểm nhất: hứa nhiều hơn thực tế.
+   *
+   * Dẫn xuất từ chính bảng mà `RequireRole` và `NavRail` đang dùng, nên ba nơi
+   * không bao giờ nói ba điều khác nhau. */
+  const permissions = useMemo(() => {
+    const rows = ROUTE_LABELS.map(([route, vi, en]) => ({
+      route,
+      label: pick(vi, en),
+      required: ROUTE_MIN_ROLE[route],
+      allowed: roleAtLeast(role, ROUTE_MIN_ROLE[route] ?? 'viewer')
+    }))
+    return {
+      allowed: rows.filter((row) => row.allowed),
+      denied: rows.filter((row) => !row.allowed)
+    }
+  }, [pick, role])
 
   /* WEB-UX-003: hàm này trước đây validate xong rồi bắn thẳng
      `toast.push('success', 'Đã đổi mật khẩu (demo)')` mà KHÔNG gọi API nào.
@@ -93,6 +140,43 @@ export function UserInfoPage() {
               <div className="text-sm font-semibold">{role.toUpperCase()}</div>
               <p className="mt-1 text-sm text-[var(--c-text-dim)]">{roleSummary[role]}</p>
             </div>
+          </div>
+
+          {/* `T57-2.18` — danh sách việc LÀM ĐƯỢC và KHÔNG làm được, sinh từ
+              `ROUTE_MIN_ROLE`. Hiện cả hai vế là có chủ đích: chỉ liệt kê việc
+              làm được thì người dùng vẫn phải thử mới biết ranh giới ở đâu, và
+              khi va vào giới hạn họ không biết cần vai trò nào để vượt qua. */}
+          <div className="mt-4 space-y-3 border-t border-[var(--c-border)] pt-4">
+            <div>
+              <div className="text-xs font-semibold uppercase text-[var(--c-good-fg)]">
+                {pick('Bạn làm được', 'You can')} ({permissions.allowed.length})
+              </div>
+              <ul className="mt-1 space-y-0.5 text-sm">
+                {permissions.allowed.map((row) => (
+                  <li key={row.route} className="text-[var(--c-text)]">· {row.label}</li>
+                ))}
+              </ul>
+            </div>
+            {permissions.denied.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">
+                  {pick('Cần vai trò cao hơn', 'Requires a higher role')} ({permissions.denied.length})
+                </div>
+                <ul className="mt-1 space-y-0.5 text-sm">
+                  {permissions.denied.map((row) => (
+                    <li key={row.route} className="text-[var(--c-text-dim)]">
+                      · {row.label} — <span className="font-semibold">{row.required}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="text-xs text-[var(--c-text-dim)]">
+              {pick(
+                'Danh sách sinh từ bảng quyền của route, cùng bảng mà giao diện dùng để khoá nút. Máy chủ vẫn là nơi chặn cuối cùng.',
+                'Derived from the route permission table — the same table the UI uses to disable controls. The server remains the final gate.'
+              )}
+            </p>
           </div>
         </Panel>
       </div>

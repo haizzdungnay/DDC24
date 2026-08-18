@@ -64,8 +64,14 @@ textarea:focus-visible {
 }
 @media (prefers-reduced-motion: reduce) {
   .annunciate { animation: none; background-color: var(--c-fault-bg); box-shadow: 0 0 0 2px var(--c-fault); }
+  .value-flash { animation: none; }
 }
 
+/* Chớp nền một nhịp khi giá trị vừa đổi — spec `DataTable` của
+   `KX-DDC24-UX-SYSTEM-001` §5. Chỉ đổi NỀN, không đổi chữ, nên số vẫn đọc được
+   liên tục trong lúc chớp.
+   `prefers-reduced-motion` tắt hẳn hiệu ứng thay vì làm nhẹ đi: đây là chỉ báo
+   phụ, mất nó không mất thông tin nào — giá trị mới vẫn hiện ra. */
 .value-flash { animation: valueFlash 640ms ease-out; }
 @keyframes valueFlash {
   0% { background-color: rgba(42, 92, 138, 0.18); }
