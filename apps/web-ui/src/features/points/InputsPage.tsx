@@ -1,4 +1,4 @@
-import { Activity, ChevronLeft, ChevronRight, LayoutGrid, Pencil, Plus, Save, Search, Wand2 } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, Copy, LayoutGrid, Pencil, Plus, Save, Search, Wand2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, unitToIo } from '../../shared/api/client'
@@ -54,6 +54,7 @@ export function InputsPage() {
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [overviewOpen, setOverviewOpen] = useState(false)
+  const [copyOpen, setCopyOpen] = useState(false)
   const [tagErrors, setTagErrors] = useState<Record<string, string>>({})
   const [errorFocusPath, setErrorFocusPath] = useState<string>()
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
@@ -259,6 +260,9 @@ export function InputsPage() {
         </div>
         <div className="flex gap-2">
           <Button icon={<LayoutGrid className="h-4 w-4" />} disabled={loading || configs.length === 0} onClick={() => setOverviewOpen(true)}>{pick('Tổng quan', 'Overview')}</Button>
+          {/* `T57-2.11` — 16 kênh cùng loại cảm biến phải cấu hình 16 lần là
+              nguồn sai sót lớn nhất của trang này. */}
+          <Button icon={<Copy className="h-4 w-4" />} disabled={loading || !selected} onClick={() => setCopyOpen(true)}>{pick('Sao chép sang kênh khác', 'Copy to channels')}</Button>
           <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={requestSave} disabled={loading || configs.length === 0}>
             {t('save')}
           </Button>
@@ -387,6 +391,20 @@ export function InputsPage() {
       >
         {pick('Bạn có muốn lưu thay đổi không?', 'Do you want to save the changes?')}
       </Modal>
+      {selected && (
+        <CopyToChannelsModal
+          open={copyOpen}
+          source={selected}
+          configs={configs}
+          onClose={() => setCopyOpen(false)}
+          onApply={(targets, patch) => {
+            setConfigs((current) => current.map((config) =>
+              targets.includes(config.channel) ? { ...config, ...patch } : config))
+            setCopyOpen(false)
+          }}
+        />
+      )}
+
       <InputsOverviewModal
         open={overviewOpen}
         configs={configs}
@@ -447,6 +465,92 @@ export function InputsPage() {
         </Button>
       </Modal>
     </div>
+  )
+}
+
+/**
+ * Sao chép cấu hình sang nhiều kênh — `T57-2.11`.
+ *
+ * KHÔNG chép `channel`, `tag`, `label` và `note`: bốn trường đó là danh tính
+ * của kênh. Chép chúng sẽ tạo ra 16 kênh trùng tên — đúng lỗi mà
+ * `pointNameConflicts` tồn tại để phát hiện, và ta không nên chủ động sinh ra nó.
+ *
+ * Xem trước danh sách sẽ bị ghi đè TRƯỚC khi áp, và **không tự Save**: người
+ * dùng vẫn phải bấm Lưu, nên dirty-guard và hộp thoại xác nhận hiện có vẫn là
+ * lớp chặn cuối.
+ */
+function CopyToChannelsModal({ open, source, configs, onClose, onApply }: {
+  open: boolean
+  source: AiInputConfig
+  configs: AiInputConfig[]
+  onClose: () => void
+  onApply: (targets: number[], patch: Partial<AiInputConfig>) => void
+}) {
+  const { pick } = useI18n()
+  const [targets, setTargets] = useState<number[]>([])
+
+  useEffect(() => { if (open) setTargets([]) }, [open])
+
+  const candidates = configs.filter((config) => config.channel !== source.channel)
+  const patch: Partial<AiInputConfig> = {
+    signalType: source.signalType,
+    analogCurrent: source.analogCurrent,
+    displayMin: source.displayMin,
+    displayMax: source.displayMax,
+    rangeMultiplier: source.rangeMultiplier,
+    unit: source.unit,
+    filterSamples: source.filterSamples,
+    mathFunction: source.mathFunction,
+    ioType: source.ioType,
+    ioUnit: source.ioUnit
+  }
+
+  return (
+    <Modal
+      open={open}
+      title={pick(`Sao chép cấu hình từ UI-${String(source.channel).padStart(2, '0')}`, `Copy configuration from UI-${String(source.channel).padStart(2, '0')}`)}
+      confirmLabel={pick(`Áp cho ${targets.length} kênh`, `Apply to ${targets.length} channels`)}
+      onConfirm={() => onApply(targets, patch)}
+      onClose={onClose}
+      size="lg"
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-[var(--c-text-dim)]">
+          {pick(
+            'Chép loại tín hiệu, dải quy đổi, đơn vị, lọc và hàm toán. KHÔNG chép tag, tên và ghi chú — đó là danh tính riêng của từng kênh.',
+            'Copies signal type, scaling, unit, filter and math function. Does NOT copy tag, name or note — those identify each channel.'
+          )}
+        </p>
+
+        <div className="grid max-h-[40vh] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-4">
+          {candidates.map((config) => {
+            const checked = targets.includes(config.channel)
+            return (
+              <label key={config.channel} className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 py-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => setTargets((current) => checked ? current.filter((item) => item !== config.channel) : [...current, config.channel])}
+                />
+                <span className="mono">UI-{String(config.channel).padStart(2, '0')}</span>
+              </label>
+            )
+          })}
+        </div>
+
+        {targets.length > 0 && (
+          <div className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-xs text-[var(--c-warn-fg)]">
+            {/* Xem trước cái sẽ MẤT, không chỉ cái sẽ được đặt: người dùng cần
+                biết mình đang ghi đè lên cấu hình nào. */}
+            <div className="font-semibold">{pick('Sẽ ghi đè cấu hình hiện tại của:', 'Will overwrite the current configuration of:')}</div>
+            <div className="mono mt-1">
+              {targets.slice().sort((a, b) => a - b).map((channel) => `UI-${String(channel).padStart(2, '0')}`).join(', ')}
+            </div>
+            <div className="mt-2">{pick('Chưa lưu xuống thiết bị — bạn vẫn phải bấm Lưu.', 'Not saved to the device yet — you still need to click Save.')}</div>
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -735,6 +839,8 @@ function ScalingTab({ config, onChange }: { config: AiInputConfig; onChange: (pa
       <p className="text-xs text-[var(--c-text-dim)]">
         {pick('Quy đổi tuyến tính từ dải điện/tín hiệu vào sang đơn vị kỹ thuật (raw → engineering).', 'Linear conversion from the input electrical range to engineering units (raw → engineering).')}
       </p>
+
+      <ConversionPreview config={config} />
 
       <details className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
         <summary className="cursor-pointer text-sm font-semibold text-[var(--c-text)]">{pick('Nâng cao: Hệ số dải (Range Multiplier)', 'Advanced: Range Multiplier')}</summary>
@@ -1161,6 +1267,109 @@ function rawRangeLabel(config: AiInputConfig, pick: PickText): string {
   if (config.signalType === 6) return pick('Biến trở (kΩ, tuỳ thiết bị)', 'Potentiometer (kΩ, device-dependent)')
   if (config.signalType === 7) return pick('Ánh sáng/chuyển động (tuỳ cảm biến)', 'Light/motion (sensor-dependent)')
   return pick('Đếm xung', 'Pulse count')
+}
+
+/**
+ * Dải thô SỐ của tín hiệu, hoặc `null` nếu không xác định được.
+ *
+ * Chỉ ba loại có dải thô tuyến tính cố định do phần cứng quy định: 0-10 V,
+ * 2-10 V và 4-20 mA. Nhiệt trở đi theo đường cong phi tuyến phụ thuộc Sensor
+ * Profile; biến trở, ánh sáng và xung thì phụ thuộc thiết bị đấu vào. Với những
+ * loại đó, mọi phép quy đổi tuyến tính ở FE đều là **đoán**, và xem trước một
+ * con số đoán còn tệ hơn không xem trước: người dùng sẽ tin nó.
+ */
+function linearRawRange(config: AiInputConfig): { low: number; high: number; unit: string } | null {
+  if (config.signalType === 1) return { low: 0, high: 10, unit: 'V' }
+  if (config.signalType === 2) {
+    return config.analogCurrent ? { low: 4, high: 20, unit: 'mA' } : { low: 2, high: 10, unit: 'V' }
+  }
+  return null
+}
+
+/**
+ * Quy đổi thô → kỹ thuật theo đúng cấu hình ĐANG SOẠN (`T57-2.9`).
+ *
+ * VÌ SAO CẦN
+ *
+ * Đặt nhầm `displayMin`/`displayMax` chỉ lộ ra khi cảm biến đã đấu và người ta
+ * đọc được một con số vô lý trên màn hình — tức là sau khi thiết bị đã chạy sai
+ * một quãng. Xem trước bắt lỗi ngay lúc cấu hình, và bắt bằng chính con số mà
+ * người dùng sắp lưu chứ không phải cấu hình đã lưu.
+ */
+export function previewEngineeringValue(config: AiInputConfig, rawValue: number): number | null {
+  const range = linearRawRange(config)
+  if (!range) return null
+  if (!Number.isFinite(rawValue)) return null
+  const span = range.high - range.low
+  if (span === 0) return null
+  const ratio = (rawValue - range.low) / span
+  return config.displayMin + ratio * (config.displayMax - config.displayMin)
+}
+
+/**
+ * Xem trước quy đổi — `T57-2.9`.
+ *
+ * Không gọi API, không ghi gì: đây là một máy tính tay dùng đúng công thức mà
+ * thiết bị sẽ dùng, chạy trên cấu hình đang soạn. Loại tín hiệu không có dải
+ * thô tuyến tính xác định được thì **nói ra là không xem trước được**, thay vì
+ * đưa một con số đoán.
+ */
+function ConversionPreview({ config }: { config: AiInputConfig }) {
+  const { pick } = useI18n()
+  const range = linearRawRange(config)
+  const [rawText, setRawText] = useState('')
+
+  if (!range) {
+    if (config.signalType === 0) return null
+    return (
+      <p className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] px-3 py-2 text-xs text-[var(--c-text-dim)]">
+        {pick(
+          'Loại tín hiệu này không có dải thô tuyến tính cố định (đường cong nhiệt trở, biến trở, xung...), nên không xem trước quy đổi được. Một con số đoán ở đây còn tệ hơn không có.',
+          'This signal type has no fixed linear raw range (thermistor curve, potentiometer, pulse…), so conversion cannot be previewed. A guessed number here would be worse than none.'
+        )}
+      </p>
+    )
+  }
+
+  const raw = Number(rawText)
+  const engineering = rawText.trim() === '' ? null : previewEngineeringValue(config, raw)
+  const outOfRange = engineering !== null && (raw < range.low || raw > range.high)
+
+  return (
+    <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
+      <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Xem trước quy đổi', 'Conversion preview')}</span>
+      <div className="mt-2 flex flex-wrap items-end gap-3">
+        <label className="block space-y-1">
+          <span className="text-xs text-[var(--c-text-dim)]">{pick('Giá trị thô', 'Raw value')} ({range.unit})</span>
+          <input
+            type="number"
+            value={rawText}
+            onChange={(event) => setRawText(event.target.value)}
+            placeholder={`${range.low} – ${range.high}`}
+            className="mono h-9 w-32 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 text-sm"
+          />
+        </label>
+        <span className="pb-2 text-[var(--c-text-dim)]">→</span>
+        <div className="pb-1">
+          <div className="text-xs text-[var(--c-text-dim)]">{pick('Giá trị kỹ thuật', 'Engineering value')}</div>
+          <div className="mono text-lg font-bold text-[var(--c-accent)]">
+            {engineering === null ? NO_DATA : engineering.toFixed(2)}
+          </div>
+        </div>
+      </div>
+      {outOfRange && (
+        <p className="mt-2 text-xs text-[var(--c-warn-fg)]">
+          {pick(
+            `Giá trị thô nằm ngoài dải ${range.low}–${range.high} ${range.unit}; kết quả là ngoại suy, thiết bị thật có thể kẹp về biên.`,
+            `Raw value is outside ${range.low}–${range.high} ${range.unit}; the result is extrapolated and the device may clamp instead.`
+          )}
+        </p>
+      )}
+      <p className="mt-2 text-xs text-[var(--c-text-dim)]">
+        {pick('Tính theo cấu hình ĐANG SOẠN, chưa lưu. Không gửi gì xuống thiết bị.', 'Computed from the draft configuration, not the saved one. Nothing is sent to the device.')}
+      </p>
+    </div>
+  )
 }
 
 function scaleEndpointLabels(config: AiInputConfig, pick: PickText): [string, string] {

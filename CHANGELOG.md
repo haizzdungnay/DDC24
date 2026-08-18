@@ -8,6 +8,96 @@
 
 ## [Unreleased]
 
+### Added — Plan 57 Wave 2 (đợt 3): xem trước quy đổi trước khi cấu hình ra tới thiết bị (2026-08-18)
+
+Ba task của khối `BB-7`, cùng một ý: **bắt lỗi cấu hình ngay lúc soạn, không đợi
+tới lúc cơ cấu đã chạy sai một quãng.**
+
+**`T57-2.9` — xem trước quy đổi ngõ vào.** Đặt nhầm `displayMin`/`displayMax` chỉ
+lộ ra khi cảm biến đã đấu và người ta đọc được một con số vô lý. Nay nhập giá trị
+thô ⇒ hiện ngay giá trị kỹ thuật theo **cấu hình đang soạn** (không phải cấu hình
+đã lưu), kèm cảnh báo khi giá trị nằm ngoài dải vì kết quả khi đó là ngoại suy còn
+thiết bị thật có thể kẹp về biên.
+Chỉ ba loại tín hiệu có dải thô tuyến tính cố định do phần cứng quy định (0-10 V,
+2-10 V, 4-20 mA). Nhiệt trở đi theo đường cong phi tuyến phụ thuộc Sensor Profile;
+biến trở/ánh sáng/xung phụ thuộc thiết bị đấu vào. Với những loại đó giao diện
+**nói ra là không xem trước được** thay vì đưa một con số đoán — người dùng sẽ tin nó.
+
+**`T57-2.12` — xem trước tín hiệu ra AO.** Cùng mẫu, nhưng hậu quả nặng hơn một
+bậc: số sai không chỉ hiển thị sai mà **ra tới van hoặc biến tần**. Bảng ba mốc
+(đầu dải / giữa / cuối dải) đủ thấy ngay chiều và biên của đường cong. Dải kỹ
+thuật suy biến (`minPv === maxPv`) trả `—` và nói rõ đó là **cấu hình chưa hợp
+lệ**, không phải thiếu dữ liệu.
+
+**`T57-2.11` — sao chép cấu hình sang nhiều kênh.** 16 kênh cùng loại cảm biến
+phải cấu hình 16 lần là nguồn sai sót lớn nhất của trang Inputs. Chép loại tín
+hiệu, dải quy đổi, đơn vị, lọc và hàm toán; **không** chép `tag`/`label`/`note` vì
+đó là danh tính riêng của từng kênh — chép chúng sẽ chủ động sinh ra đúng lỗi mà
+`pointNameConflicts` tồn tại để phát hiện. Xem trước danh sách **sẽ bị ghi đè**
+trước khi áp, và không tự Save: dirty-guard cùng hộp thoại xác nhận hiện có vẫn là
+lớp chặn cuối.
+
+Chín test mới, đã **kiểm ngược bằng mutant** (đổi gốc dải 4-20 mA về 0 ⇒ đỏ). Một
+lỗi trong chính test bị bắt trong lúc kiểm: helper `ao()` quên spread `overrides`
+nên ba test chạy trên cấu hình mặc định thay vì cấu hình chúng khai báo.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **939 pass / 939, 94 file** ·
+`npm run build:foxlinx` thành công.
+
+
+### Added — Bật Modbus RTU master trên board và bàn giao cổng RS-485 #1 cho team SW (2026-08-18)
+
+**TRIỆU CHỨNG.** Phần cứng đã đấu module RS-485 đúng cặp chân 8/10 và cần bàn giao
+cho team SW để phát triển cấu hình ứng dụng. Nhưng trên board không có một dòng log
+Modbus nào, `/run/mkddc/modbus-control.sock` không tồn tại, và không tiến trình nào
+mở `/dev/rs485-1`.
+
+**NGUYÊN NHÂN GỐC.** `mkddc-iobus` có sẵn cả `ModbusMaster` lẫn `ControlChannel`,
+nhưng **cả unit gốc lẫn drop-in `nomcu.conf` đều không truyền `--fieldbus-config`**.
+Không có cờ đó thì `ModbusMaster` không bao giờ khởi động. Cổng RS-485 đã kiểm chứng
+xong ở lớp điện (uart5 mux đúng ra P16 chân 8/10, TX lái được chân thật) nhưng lớp
+ứng dụng chưa hề được nối vào — tức phần cứng "sẵn sàng" mà phần mềm không có đường
+chạm tới.
+
+**CÁCH SỬA.**
+- Drop-in `/etc/systemd/system/mkddc-iobus.service.d/nomcu.conf`: giữ nguyên
+  `--uart /tmp/mkddc-iop-a` (fake MCU) và bổ sung `--fieldbus-config`,
+  `--fieldbus-sock`, `--fieldbus-control-sock`. Bản cũ sao lưu tại
+  `/root/nomcu.conf.bak-20260818T120015Z`.
+- `docs/08_hardware/foxlinx-som-ddc24/RS485_BANGIAO_TEAM_SW.md` (mới) —
+  `HW-FOXLINX-RS485-HANDOVER-001`: spec bàn giao, gồm schema slave đọc thẳng từ
+  `parse_slave`, thông số cổng, phân chia việc còn lại giữa phần cứng và team SW.
+- **Cố ý KHÔNG hand-edit `/data/config/fieldbus.conf`.** Backend Go tính checksum
+  canonical (`MBR-B206`, `canonical.go`) và quản lý `revision`; sửa tay sẽ làm
+  checksum lệch nội dung. Việc tắt bus 2 giao cho team SW làm qua API/UI.
+
+**VERIFICATION (đo thật trên board, có backup và đã hoàn tác cấu hình thử).**
+
+| Hạng mục | Kết quả |
+|---|---|
+| `mkddc-iobus` sau khi bật fieldbus | `ActiveState=active`, `NRestarts=0`, **0 dòng ERROR/30 s** |
+| Fieldbus nạp cấu hình | `fieldbus_config.loaded buses=2 slaves=0 revision=35` |
+| Kênh điều khiển | `control_channel.listening path=/run/mkddc/modbus-control.sock` |
+| Cổng có mở khi có slave không | **CÓ** — `bus_worker.open bus=1 device=/dev/rs485-1 9600N81 slaves=1`, `mkddc-iobus` giữ `ttyS5`, cờ cổng đổi thành `RTS\|DTR` |
+| Điều khiển hướng | `bus_worker.rs485_direction bus=1 mode=auto driver_enabled=0 rts_on_send=0` — đúng transceiver auto-direction |
+| Toàn bộ service | `mkddc-iobus/core/web-pi/netcfg/fakemcu` đều `active` |
+
+**HAI BẪY ĐÃ GHI LẠI CHO TEAM SW.**
+1. **`profile` thiếu ⇒ slave im lặng mà mọi thứ vẫn "xanh".** Thử với
+   `profile=generic` (không tồn tại): `bus_worker.open` **vẫn** chạy, worker vẫn
+   khởi động, service vẫn `active`, nhưng `ext=[0..0)` và `tx` không hề tăng. Chỉ
+   có `ERROR bus_worker.profile_not_found` + `ALARM E302` là dấu hiệu. Board hiện
+   chỉ có đúng một profile `mtr-1`; `/usr/share/kinexus/profiles/` chưa tồn tại.
+2. **Bus 2 `enabled=true` nhưng `/dev/rs485-2` không có.** Ngay khi có slave đầu
+   tiên, worker bus 2 spam `connect_fail` ~5 dòng/phút với backoff. Hiện chưa spam
+   *chỉ vì* chưa có slave nào (`rtu_configured` cần `!slaves.empty()`).
+
+**CÒN CHẶN.** Chưa có slave nào đấu vào bus A/B, nên `rx:0` hiện là kết quả **đúng**
+chứ không phải lỗi, và phép thử end-to-end cuối cùng chưa chạy được. Cần người tại
+chỗ: đấu slave thật (kèm nguồn + mass cho module) rồi chạy `rs485_check.sh scan`,
+hoặc nối tắt chân 8 ↔ chân 10 chạy `rs485_check.sh loopback` để chốt riêng phần SoC.
+
 ### Added — Plan 57 Wave 2 (đợt 2): con trỏ đọc mọi chuỗi, trục Y thứ hai, và nói ra tầng dữ liệu đang dùng (2026-08-18)
 
 **`T57-2.4` — con trỏ đọc giá trị.** Tooltip trước đây duyệt theo `payload` của
@@ -97,10 +187,18 @@ không restart service nào).**
 | Cổng có bị tranh chấp không | không tiến trình nào mở `ttyS5`; `mkddc-iobus` đang chạy drop-in `--uart /tmp/mkddc-iop-a` (fake MCU) |
 
 **CÒN CHẶN.** Đường **RX vật lý** của RS-485 #1 chưa chứng minh được, và không thể
-chứng minh từ xa. Cần một trong hai, đều phải có người tại chỗ: (a) nối tắt P16
-chân 8 ↔ chân 10 rồi chạy `rs485_check.sh loopback`, hoặc (b) đấu một slave Modbus
-RTU thật vào bus A/B rồi chạy `rs485_check.sh scan`. RS-485 #2 vẫn chặn ở device
-tree như cũ, nay biết thêm là cần hai thay đổi chứ không phải một.
+chứng minh từ xa. Hardware owner đã xác nhận kèm sơ đồ mạch P16 rằng module nối
+đúng cặp **chân 8 (TXD) + chân 10 (RXD)**, nên giả thuyết "nối nhầm chân" bị loại.
+Đo lại sau đó vẫn `rx:0`: chân 10 không dao động trong lúc truyền (module không
+echo), nghe thụ động 3 giây không byte nào, quét slave 1..16 ở **cả 9600 lẫn
+19200** đều im. Còn lại ba khả năng chưa tách được từ xa vì cả ba cho cùng một
+quan sát: **module chưa được cấp nguồn** (chân 8/10 chỉ là tín hiệu, transceiver
+vẫn cần VCC + GND riêng — khả dĩ nhất), **bus A/B chưa có slave** (khi đó `rx:0`
+là đúng chứ không phải lỗi), hoặc **sai baud/parity**. Cần người tại chỗ: (a) nối
+tắt P16 chân 8 ↔ chân 10, bỏ module ra khỏi phương trình, chạy
+`rs485_check.sh loopback` để chốt phần SoC; hoặc (b) cấp nguồn module + đấu slave
+thật rồi chạy `rs485_check.sh scan`. RS-485 #2 vẫn chặn ở device tree như cũ, nay
+biết thêm là cần hai thay đổi chứ không phải một.
 
 ### Added — Plan 57 Wave 2 (đợt 1): bộ lọc chia sẻ được, lọc thời gian và xuất CSV cho nhật ký, hai đường tới bằng chứng từ cảnh báo (2026-08-18)
 
