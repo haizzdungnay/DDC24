@@ -8,6 +8,100 @@
 
 ## [Unreleased]
 
+### Added — Plan 57 Wave 2 (đợt 2): con trỏ đọc mọi chuỗi, trục Y thứ hai, và nói ra tầng dữ liệu đang dùng (2026-08-18)
+
+**`T57-2.4` — con trỏ đọc giá trị.** Tooltip trước đây duyệt theo `payload` của
+recharts, vốn chỉ chứa những chuỗi CÓ giá trị ở đúng hàng đang hover. Với dữ liệu
+thưa (mỗi điểm một nhịp lấy mẫu riêng), chuỗi thiếu mẫu ở hàng đó **biến mất khỏi
+tooltip** — người dùng không phân biệt được "chuỗi này không có dữ liệu tại đây"
+với "chuỗi này không được chọn". So sánh setpoint với giá trị thực tại đúng thời
+điểm sự cố là thao tác chẩn đoán cơ bản nhất, và nó chỉ làm được khi mọi chuỗi
+cùng xuất hiện tại một mốc. Nay duyệt theo `series`; chuỗi không có mẫu hiện `—`.
+
+**`T57-2.5` — trục Y thứ hai.** Vẽ nhiệt độ (°C) chung trục với độ mở van (%) làm
+cả hai đường dẹt lại: thang 0-100 nuốt hết biến thiên của thang 18-26. `TrendSeries`
+thêm `axis`, và `assignSecondAxis()` gán **tự động theo đơn vị** — lý do cần trục
+thứ hai luôn là "hai chuỗi khác đơn vị", mà đơn vị đã có sẵn trong dữ liệu; bắt
+người dùng tự gán là bắt họ làm lại một phép suy máy làm được, ngay giữa lúc đang
+chẩn đoán. Đơn vị phổ biến nhất giữ trục trái, đơn vị nhiều thứ hai sang phải; từ
+đơn vị thứ ba trở đi vẫn ở trục trái vì ba thang thì người đọc không còn biết
+đường nào thuộc thang nào.
+
+**`T57-2.7` — tầng dữ liệu đang dùng.** Lấy từ `tiersUsed` của response, **không**
+suy theo preset: cùng một preset có thể ra tầng khác nhau tuỳ lượng dữ liệu còn
+lưu. Đây là thứ quyết định cách đọc đỉnh/đáy — số từ tầng aggregate đã bị gộp nên
+đỉnh thật có thể cao hơn đỉnh nhìn thấy.
+
+**Hai lần tự sửa mình trong đợt này**, ghi lại vì cả hai đều là lỗi đã từng mắc:
+- Nối tầng dữ liệu vào **tiêu đề** panel làm 3 test cũ đỏ. Tiêu đề là thứ người
+  dùng và test cùng dựa vào để nhận ra khối; nối chuỗi động vào đó làm nó mất tính
+  ổn định. Chuyển sang `subtitle`.
+- Test "kết quả ổn định" so hai lần chạy cùng đầu vào — **vô nghĩa**, vì `Map` giữ
+  thứ tự chèn nên cùng đầu vào luôn cho cùng đầu ra kể cả khi bỏ tiebreaker. Tự
+  chạy mutant mới lộ ra. Viết lại để khoá đúng hành vi cần khoá: hoà số lượng thì
+  phá hoà theo **tên đơn vị**, không theo thứ tự backend trả series về.
+- ESLint bắt `shared/` deep-import từ `features/` — ranh giới đúng, và
+  `assignSecondAxis` vốn thuộc về `TrendChart`. Đã chuyển sang `shared/`.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **930 pass / 930, 93 file** ·
+`npm run build:foxlinx` thành công. 5 test mới đã kiểm ngược bằng mutant.
+
+
+### Added / Fixed — Kiểm chứng RS-485 #1 trên Header P16 và đính chính hồ sơ bật RS-485 #2 (2026-08-18)
+
+**TRIỆU CHỨNG.** Phần cứng đấu module RS-485 vào Header P16 và hỏi "dùng được
+chưa, có cần setup link tới UART không". Không có cách nào trả lời từ tài liệu:
+`FOXLINX_UART_RS485_GUIDE.md` mô tả thiết kế mong muốn chứ không phải trạng thái
+đo được, còn `/dev/ttyS5` trên board có `tx:0 rx:0` — tức **chưa từng có byte nào
+đi qua cổng RS-485 #1** kể từ khi bo chạy.
+
+**NGUYÊN NHÂN GỐC.** Câu hỏi "RS-485 dùng được chưa" **không đọc được từ device
+tree**. DT chỉ khẳng định UART đã enable và chân đã mux; nó không nói gì về việc
+dây RX có thật sự nối vào transceiver hay không. Tệ hơn, chân RX (`gpio4-7`) có
+`input bias pull up` nội, nên khi thả nổi nó đọc ra mức cao **y hệt** khi có
+transceiver giữ đường idle ở mức mark — mọi phép đo tĩnh đều cho cùng kết quả và
+không phân biệt được hai trạng thái. Thiếu công cụ tách hai khả năng này chính là
+lý do trạng thái cổng bị mơ hồ suốt từ 2026-08-04.
+
+**CÁCH SỬA.**
+- `tools/rs485/rs485_check.sh` (mới, đã đưa lên board tại `/usr/local/bin/`): ba
+  chế độ `info` / `loopback` / `scan`. `scan` tự tính CRC-16/MODBUS bằng shell
+  thuần (board Buildroot không có `python3`, `socat`, `mbpoll`) và coi bất kỳ
+  khung trả lời nào — kể cả exception — là bằng chứng cả TX lẫn RX đều thông.
+- Hồ sơ đo `docs/07_records/test-evidence/fw-som/2026-08-18-foxlinx-rs485-p16-verification.md`
+  (`EVID-MBRTU-FOXLINX-P16-2026-08-18`).
+- **Đính chính `ENABLE_TTYS1_RS485_2.md` §2** — lỗi tài liệu có hậu quả thật. Bản
+  1.0 khẳng định bật RS-485 #2 "không cần thêm hay sửa pin mux", chỉ cần đổi
+  `status` thành `okay`. Đọc `pinctrl-0` thật của `serial@21160000` thì thấy nó
+  trỏ `uart1m0-xfer/ctsn/rtsn` (phandle `0xb2/0xb3/0xb4`), tức nhóm **M0** =
+  `GPIO0_C4`/`GPIO0_C5` — **hai chân này không ra Header P16**. Làm theo hướng dẫn
+  cũ sẽ ra một bo có `/dev/ttyS1`, udev tạo `/dev/rs485-2`, `BusWorker` mở cổng
+  thành công, `tx:` vẫn tăng đều — mọi thứ tầng phần mềm đều "xanh" nhưng chân
+  26/36 hoàn toàn không có tín hiệu. Bản vá DT phải đổi **cả** `pinctrl-0` sang
+  `<&uart1m1_xfer>` lẫn `status`. Đã đồng bộ §1, §4.1, §4.2 và câu hỏi mở §5.
+- `FOXLINX_PINOUT_MAP.md` v1.1 và `FOXLINX_UART_RS485_GUIDE.md` v1.1: ghi số đo
+  thay cho suy luận, thêm bảng đấu dây và cảnh báo chân 7.
+
+**VERIFICATION (đo thật trên board `SOM-DDC-24-foxlinx`, không sửa DT/config,
+không restart service nào).**
+
+| Hạng mục | Kết quả |
+|---|---|
+| `uart5`/`ttyS5` pin mux | `pin 134 (gpio4-6)` + `pin 135 (gpio4-7)` do `211a0000.serial` chiếm, nhóm `uart5m0-xfer-pins` |
+| Chân 8 là TX (đo `GPIO_EXT_PORT` lúc truyền `0x55`) | dao động **20/40 mẫu** ⇒ uart5 lái được chân thật trên header |
+| Chân 10 là RX | **40/40 mẫu mức cao** — không kết luận được, do có pull-up nội |
+| Bộ đếm `ttyS5` | `tx: 0 → 684`, `rx: 0` |
+| Quét Modbus slave 1..32 @ 9600 | không slave nào trả lời (`tx` +256 byte = đúng 32 khung × 8 byte) |
+| `/dev/rs485-1 → ttyS5` | **đã có sẵn và bền qua reboot** — do udev rule `99-mkddc-rs485.rules`, không phải `ln -s` thủ công |
+| Cổng có bị tranh chấp không | không tiến trình nào mở `ttyS5`; `mkddc-iobus` đang chạy drop-in `--uart /tmp/mkddc-iop-a` (fake MCU) |
+
+**CÒN CHẶN.** Đường **RX vật lý** của RS-485 #1 chưa chứng minh được, và không thể
+chứng minh từ xa. Cần một trong hai, đều phải có người tại chỗ: (a) nối tắt P16
+chân 8 ↔ chân 10 rồi chạy `rs485_check.sh loopback`, hoặc (b) đấu một slave Modbus
+RTU thật vào bus A/B rồi chạy `rs485_check.sh scan`. RS-485 #2 vẫn chặn ở device
+tree như cũ, nay biết thêm là cần hai thay đổi chứ không phải một.
+
 ### Added — Plan 57 Wave 2 (đợt 1): bộ lọc chia sẻ được, lọc thời gian và xuất CSV cho nhật ký, hai đường tới bằng chứng từ cảnh báo (2026-08-18)
 
 **TRIỆU CHỨNG.** `MonitorPage` đưa bộ lọc vào URL từ PA3-402 và nhờ đó gửi được
