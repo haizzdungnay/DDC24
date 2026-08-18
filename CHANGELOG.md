@@ -8,6 +8,49 @@
 
 ## [Unreleased]
 
+### Fixed — Giao diện Modbus phân biệt "chưa từng được poll" với "mất liên lạc", và đính chính hồ sơ bàn giao RS-485 (2026-08-18)
+
+**ĐÍNH CHÍNH MỘT KẾT LUẬN SAI TRONG TÀI LIỆU.** `RS485_BANGIAO_TEAM_SW.md` §5
+bản 1.0 mô tả `find_profile_path` tra profile theo **hai** ứng viên
+(`/data/config/profiles/<id>.json`, `/usr/share/kinexus/...`) và gọi profile
+thiếu là "bẫy nguy hiểm nhất". Đọc code thật (`device_profile.cpp:299`) thì có
+**ba** ứng viên, và ứng viên ĐẦU là dùng nguyên `profile` như một đường dẫn —
+đúng nhánh mà backend Go dùng: `persistence.go:272` ghi `profile` là đường dẫn
+tuyệt đối và `BuildProfile()` sinh sẵn file đó trong cùng thao tác apply.
+
+Nghĩa là **thiết bị tạo qua API/UI không dính bẫy này**; bẫy chỉ áp dụng cho
+slave khai bằng tay trong `fieldbus.conf`. Đọc bản 1.0 rất dễ kết luận nhầm rằng
+mọi thiết bị tạo qua UI đều hỏng, và đi sửa một thứ không hỏng. Hồ sơ lên **v1.1**.
+
+**LỖ HỔNG THẬT TRONG GIAO DIỆN, ĐÃ VÁ.** Giao diện Modbus RTU không có tham
+chiếu nào tới `E302`/`slave_config_error`, và không cảnh báo khi một bus đang bật
+mà cổng vật lý không tồn tại. Triệu chứng của cả hai bẫy trên màn hình chỉ là một
+số `0` trong cột "Poll / lỗi" — trông y hệt một thiết bị vừa được thêm và chưa
+tới lượt, giữa một bảng đầy số khác.
+
+Thêm cảnh báo phân biệt **"đã cấu hình nhưng CHƯA TỪNG được poll"** với **"mất
+liên lạc"**. Đây là hai kết luận khác hẳn nhau về nguyên nhân: chưa từng poll là
+lỗi **cấu hình** (profile không giải được ⇒ bus vẫn mở, service vẫn `active`,
+nhưng slave được cấp `ext=[0..0)` và `tx` không bao giờ tăng; hoặc bus bật mà
+cổng vật lý không có), còn mất liên lạc là lỗi **dây/thiết bị**. Trộn chúng vào
+cùng một chỗ hiển thị là buộc người đi hiện trường dò dây cho một lỗi nằm trong
+file JSON.
+
+Điều kiện dùng `total_polls === 0`, **không** dùng `online === false`: thiết bị
+chưa từng được poll thì cũng `online === false`, nhưng chiều ngược lại không đúng.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **943 pass / 943, 95 file** ·
+`npm run build:foxlinx` thành công · `docs_iso_harness --expect` PASS.
+
+**Chưa làm được, cần người:** `#5` của hồ sơ bàn giao (đặt `buses[1].enabled=false`
+cho bus 2 chưa có phần cứng) **bị chặn ở xác thực** — API trả `401` và board chỉ
+có bcrypt hash cho `admin`/`CHUONG`. Hồ sơ cấm sửa tay `fieldbus.conf` vì Go tính
+checksum canonical và quản lý `revision`; đã tôn trọng ràng buộc đó thay vì lách.
+`#3`/`#4` (thêm profile thiết bị, khai slave) bị chặn vì chưa biết thiết bị nào
+sẽ đấu vào bus.
+
+
 ### Added — Plan 57 Wave 2 (đợt 3): xem trước quy đổi trước khi cấu hình ra tới thiết bị (2026-08-18)
 
 Ba task của khối `BB-7`, cùng một ý: **bắt lỗi cấu hình ngay lúc soạn, không đợi
