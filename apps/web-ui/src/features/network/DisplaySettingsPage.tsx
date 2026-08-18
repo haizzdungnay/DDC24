@@ -28,9 +28,27 @@ export function DisplaySettingsPage() {
     { id: 'compact', label: pick('Gọn', 'Compact'), detail: pick('Mật độ cao hơn cho màn hình giám sát.', 'Higher density for monitoring screens.') }
   ]
 
+  /**
+   * `T57-2.19` — áp bản nháp, và NÓI ĐÚNG cái gì được lưu.
+   *
+   * Bản trước báo "Đã lưu cấu hình hiển thị (demo)" cho cả hai mục, trong khi
+   * ngôn ngữ thì áp thật (`setLang` ghi xuống `localStorage`) còn mật độ thì
+   * không được lưu ở đâu cả. Một thông báo thành công cho việc không xảy ra là
+   * cùng họ với lỗi WEB-UX-003 ở trang đổi mật khẩu: người dùng đóng màn hình
+   * với niềm tin sai.
+   *
+   * Nay chỉ báo thành công cho thứ thật sự áp được, và mật độ nói rõ là chưa
+   * nối. Thà thiếu tính năng còn hơn có một tính năng giả.
+   */
   function save() {
     setLang(draftLang)
-    toast.push('success', pick('Đã lưu cấu hình hiển thị (demo)', 'Display settings saved (demo)'))
+    toast.push('success', pick('Đã áp ngôn ngữ hiển thị', 'Display language applied'))
+    if (density !== 'comfortable') {
+      toast.push('warn', pick(
+        'Mật độ hiển thị chưa được nối vào giao diện — lựa chọn này chưa có tác dụng.',
+        'Display density is not wired into the UI yet — this choice has no effect.'
+      ))
+    }
   }
 
   return (
