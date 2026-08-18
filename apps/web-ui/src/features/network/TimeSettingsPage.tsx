@@ -98,6 +98,12 @@ export function TimeSettingsPage() {
   }
 
   const displayedUtc = status ? new Date(new Date(status.nowUtc).getTime() + Date.now() - anchorMs).toISOString() : ''
+  /* T57-1.8 — độ lệch giữa giờ SẼ ĐẶT và giờ thiết bị ĐANG chạy. Tính từ
+     `status.nowUtc` (giờ của bo) chứ không từ `Date.now()` của máy trạm: máy
+     trạm có thể lệch, và khi đó cảnh báo sẽ nói sai về hướng dịch chuyển. */
+  const clockDelta = computeClockDelta(config?.ntpEnabled ? '' : config?.systemTime, status?.nowUtc)
+  const backwardSeconds = clockDelta !== null && clockDelta < 0 ? Math.abs(clockDelta) : null
+  const deltaLabel = clockDelta === null ? null : formatClockDelta(clockDelta)
   const dirty = Boolean(config && savedConfig && JSON.stringify(config) !== JSON.stringify(savedConfig))
   const update = (patch: Partial<TimeConfig>) => setConfig((current) => current ? { ...current, ...patch } : current)
 
@@ -169,8 +175,23 @@ export function TimeSettingsPage() {
         </Panel>
       </div>
 
-      <Modal open={confirmOpen} title={pick('Xác nhận đổi giờ thủ công', 'Confirm manual time change')} onClose={() => setConfirmOpen(false)} onConfirm={() => void save()}>
-        {pick('Đổi wall clock có thể ảnh hưởng audit, lịch và timestamp lịch sử. Tiếp tục?', 'Changing wall clock can affect audit, schedules, and history timestamps. Continue?')}
+      {/* T57-1.8 (§6.17-P1) — cảnh báo hậu quả khi đổi giờ hệ thống.
+          Bản trước là MỘT câu chung chung ("có thể ảnh hưởng audit, lịch và
+          timestamp"), giống hệt nhau cho việc chỉnh tới 3 giây và cho việc lùi
+          đồng hồ 6 tiếng. Lùi đồng hồ trên một thiết bị đang ghi historian tạo
+          ra dữ liệu CHỒNG LẤN không thể phân giải: hai mẫu khác nhau mang cùng
+          một mốc thời gian, và không truy vấn nào tách được chúng về sau. */}
+      <Modal
+        open={confirmOpen}
+        danger={backwardSeconds !== null}
+        title={backwardSeconds !== null
+          ? pick('Bạn đang LÙI đồng hồ hệ thống', 'You are moving the system clock BACKWARD')
+          : pick('Xác nhận đổi giờ thủ công', 'Confirm manual time change')}
+        confirmLabel={backwardSeconds !== null ? pick('Tôi hiểu hậu quả, vẫn lùi đồng hồ', 'I understand, move the clock back') : undefined}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => void save()}
+      >
+        <ClockChangeConsequences backwardSeconds={backwardSeconds} deltaLabel={deltaLabel} />
       </Modal>
     </div>
   )
@@ -183,4 +204,80 @@ function StatusItem({ label, value }: { label: string; value: string }) {
 function State({ title, detail, retry }: { title: string; detail?: string; retry?: () => void }) {
   const { pick } = useI18n()
   return <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-6 text-sm"><p className="font-semibold">{title}</p>{detail && <p className="mt-2 text-[var(--c-fault-fg)]">{detail}</p>}{retry && <Button className="mt-4" onClick={retry}>{pick('Thử lại', 'Retry')}</Button>}</div>
+}
+
+/**
+ * Độ lệch giây giữa giờ sắp đặt và giờ thiết bị. Âm = LÙI đồng hồ.
+ *
+ * `null` khi không tính được — và khi đó giao diện KHÔNG được đoán hướng dịch
+ * chuyển; nó quay về câu cảnh báo chung.
+ */
+export function computeClockDelta(target: string | undefined, deviceNowUtc: string | undefined): number | null {
+  if (!target || !deviceNowUtc) return null
+  const targetMs = Date.parse(target)
+  const deviceMs = Date.parse(deviceNowUtc)
+  if (!Number.isFinite(targetMs) || !Number.isFinite(deviceMs)) return null
+  return Math.round((targetMs - deviceMs) / 1000)
+}
+
+export function formatClockDelta(seconds: number): string {
+  const abs = Math.abs(seconds)
+  const direction = seconds < 0 ? 'lùi' : 'tiến'
+  if (abs < 60) return `${direction} ${abs} giây`
+  if (abs < 3600) return `${direction} ${Math.floor(abs / 60)} phút ${abs % 60} giây`
+  const hours = Math.floor(abs / 3600)
+  const minutes = Math.floor((abs % 3600) / 60)
+  return `${direction} ${hours} giờ ${minutes} phút`
+}
+
+/**
+ * Nội dung hộp thoại xác nhận đổi giờ — `T57-1.8`, đề xuất §6.17-P1.
+ *
+ * LÙI đồng hồ và TIẾN đồng hồ có hậu quả khác hẳn nhau, nên không dùng chung
+ * một câu:
+ *
+ *  - **Lùi**: historian đang ghi sẽ nhận hai mẫu khác nhau mang **cùng một mốc
+ *    thời gian**. Không truy vấn nào tách được chúng về sau — dữ liệu của
+ *    khoảng bị chồng lấn hỏng vĩnh viễn, kể cả khi đặt lại giờ đúng ngay sau đó.
+ *    Lịch vận hành cũng có thể chạy lại các chuyển trạng thái đã chạy rồi.
+ *  - **Tiến**: tạo một khoảng TRỐNG trong historian và có thể làm lịch **bỏ
+ *    qua** các chuyển trạng thái nằm trong khoảng nhảy — bơm đáng lẽ bật lúc
+ *    06:00 sẽ không bao giờ nhận lệnh nếu đồng hồ nhảy từ 05:59 sang 06:05.
+ */
+function ClockChangeConsequences({ backwardSeconds, deltaLabel }: { backwardSeconds: number | null; deltaLabel: string | null }) {
+  const { pick } = useI18n()
+  if (backwardSeconds === null) {
+    return (
+      <div className="space-y-3 text-sm">
+        {deltaLabel && <p className="font-semibold">{pick(`Đồng hồ hệ thống sẽ ${deltaLabel}.`, `The system clock will move ${deltaLabel}.`)}</p>}
+        <p>{pick(
+          'Đẩy đồng hồ TIẾN tạo một khoảng trống trong dữ liệu lịch sử, và có thể làm lịch vận hành BỎ QUA các chuyển trạng thái nằm trong khoảng nhảy — một bơm đáng lẽ bật lúc 06:00 sẽ không nhận lệnh nếu đồng hồ nhảy từ 05:59 sang 06:05.',
+          'Moving the clock FORWARD leaves a gap in historical data and can make schedules SKIP transitions inside the jump — a pump due to start at 06:00 never receives the command if the clock jumps from 05:59 to 06:05.'
+        )}</p>
+        <p>{pick('Mọi vết kiểm toán ghi sau thời điểm này sẽ mang mốc thời gian mới. Tiếp tục?', 'Every audit record written after this point carries the new timestamp. Continue?')}</p>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="font-semibold text-[var(--c-fault-fg)]">
+        {pick(`Đồng hồ hệ thống sẽ ${deltaLabel ?? 'lùi lại'}.`, `The system clock will move ${deltaLabel ?? 'backward'}.`)}
+      </p>
+      <ul className="list-disc space-y-2 pl-5">
+        <li>{pick(
+          'Historian: khoảng thời gian bị lặp lại sẽ nhận HAI mẫu khác nhau mang CÙNG một mốc thời gian. Không truy vấn nào tách được chúng về sau — dữ liệu của khoảng đó hỏng vĩnh viễn, kể cả khi bạn đặt lại giờ đúng ngay sau đó.',
+          'Historian: the repeated interval receives TWO different samples with the SAME timestamp. No query can separate them afterwards — that range is permanently corrupted, even if you restore the correct time immediately.'
+        )}</li>
+        <li>{pick(
+          'Lịch vận hành: các chuyển trạng thái trong khoảng bị lùi qua sẽ CHẠY LẠI. Thiết bị đã tắt theo lịch có thể bật lại, và ngược lại.',
+          'Schedules: transitions inside the repeated interval RUN AGAIN. Equipment already stopped by a schedule may restart, and vice versa.'
+        )}</li>
+        <li>{pick(
+          'Nhật ký kiểm toán: các vết mới sẽ nằm TRƯỚC các vết cũ khi sắp theo thời gian, làm trình tự sự việc đọc sai.',
+          'Audit log: new records sort BEFORE existing ones, so the sequence of events reads incorrectly.'
+        )}</li>
+      </ul>
+      <p>{pick('Chỉ tiếp tục nếu bạn thực sự cần đặt lại đồng hồ về quá khứ.', 'Only continue if you genuinely need to set the clock back.')}</p>
+    </div>
+  )
 }
