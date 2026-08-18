@@ -92,6 +92,8 @@ export function DiagnosticsPage() {
 
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
         <h3 className="text-base font-semibold text-[var(--c-text)]">CRC / timeout / retry diagnostics</h3>
+        <NeverPolledWarning rows={diagnostics} deviceNames={deviceNames} />
+
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
@@ -145,6 +147,61 @@ export function DiagnosticsPage() {
           <p className="mt-3 text-sm text-[var(--c-text-dim)]">{pick('Chưa có telemetry Modbus RTU từ iobus.', 'No Modbus RTU telemetry from iobus yet.')}</p>
         )}
       </section>
+    </div>
+  )
+}
+
+/**
+ * Cảnh báo "đã cấu hình nhưng CHƯA TỪNG được poll" — bẫy số 1 của
+ * `HW-FOXLINX-RS485-HANDOVER-001` §5.
+ *
+ * VÌ SAO CẦN
+ *
+ * Khi `profile` của một slave không giải được, `bus_worker` ghi
+ * `profile_not_found`, **vẫn mở cổng**, worker vẫn chạy, service vẫn `active` —
+ * nhưng slave được cấp `ext=[0..0)` và `tx` không bao giờ tăng. Hồ sơ bàn giao
+ * gọi đây là bẫy nguy hiểm nhất đúng vì "mọi thứ nhìn từ ngoài đều xanh".
+ *
+ * Trên trang này, triệu chứng đó hiện ra là một hàng có `total_polls = 0`. Nhưng
+ * số 0 trong một bảng đầy số khác thì không ai đọc — nó trông y hệt một thiết bị
+ * vừa được thêm và chưa tới lượt.
+ *
+ * PHÂN BIỆT HAI TRẠNG THÁI
+ *
+ * `offline` (đã từng poll rồi thôi trả lời) và `chưa từng được poll` là hai kết
+ * luận khác hẳn nhau về nguyên nhân: một cái là dây/thiết bị, một cái là **cấu
+ * hình**. Trộn chúng vào cùng một chỗ hiển thị là buộc người đi hiện trường đi
+ * dò dây cho một lỗi nằm trong file JSON.
+ *
+ * Ngưỡng dùng `total_polls === 0` chứ không phải `online === false`: một thiết
+ * bị chưa từng được poll thì cũng `online === false`, nhưng chiều ngược lại
+ * không đúng.
+ */
+function NeverPolledWarning({ rows, deviceNames }: {
+  rows: ModbusRTUDiagnostics[]
+  deviceNames: Record<string, string>
+}) {
+  const { pick } = useI18n()
+  const neverPolled = rows.filter((row) => row.total_polls === 0)
+  if (neverPolled.length === 0) return null
+
+  return (
+    <div role="alert" className="mt-3 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
+      <div className="font-semibold">
+        {pick(
+          `${neverPolled.length} thiết bị đã cấu hình nhưng CHƯA TỪNG được poll lần nào`,
+          `${neverPolled.length} configured device(s) have never been polled`
+        )}
+      </div>
+      <div className="mono mt-1">
+        {neverPolled.map((row) => deviceNames[row.device_id] ?? row.device_id ?? `slave ${row.slave_id}`).join(', ')}
+      </div>
+      <div className="mt-2">
+        {pick(
+          'Đây KHÁC với "mất liên lạc": thiết bị mất liên lạc là đã từng trả lời rồi thôi, còn ở đây bus chưa hề phát gói nào cho nó. Nguyên nhân thường gặp là cấu hình chứ không phải dây: profile của thiết bị không giải được (bus vẫn mở, service vẫn chạy, nhưng slave không được cấp ô dữ liệu), hoặc bus của nó đang bật mà cổng vật lý không tồn tại. Kiểm cảnh báo E302 modbus.slave_config_error và log iobus trước khi đi dò dây.',
+          'This is NOT the same as "offline": an offline device answered before and then stopped, whereas here the bus has never sent it a single frame. The usual cause is configuration rather than wiring — the device profile could not be resolved (the port still opens and the service still runs, but the slave gets no data window), or its bus is enabled while the physical port does not exist. Check alarm E302 modbus.slave_config_error and the iobus log before chasing cables.'
+        )}
+      </div>
     </div>
   )
 }

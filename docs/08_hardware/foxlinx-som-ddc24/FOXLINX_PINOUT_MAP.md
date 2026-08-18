@@ -41,6 +41,17 @@ Raspberry Pi 40-pin. Bảng dưới đây là ánh xạ **đã xác nhận** t�
 
 > **Chú thích `◄──`**: Chân có thể chuyển sang chức năng UART qua Pin Mux (sửa Device Tree).
 
+> [!NOTE]
+> **Đã đo xác nhận trên board 2026-08-18** (`EVID-MBRTU-FOXLINX-P16-2026-08-18`):
+> chân **8 = TX**, chân **10 = RX** của `uart5`/`ttyS5` (RS-485 #1) — không phải suy
+> ra từ tài liệu mà đo bằng cách lấy mẫu `GPIO_EXT_PORT` của bank GPIO4 trong lúc
+> truyền mẫu bit `0x55`: `gpio4-6` (chân 8) dao động 20/40 mẫu, `gpio4-7` (chân 10)
+> không dao động. Cả hai chân đều đang bị `211a0000.serial` chiếm với nhóm
+> `uart5m0-xfer-pins`.
+>
+> **Chân 7 (`GPIO0_C7`) đang `MUX UNCLAIMED`** — là GPIO thường, **không** phải chân
+> UART. Đừng nối RXD của module RS-485 vào đây.
+
 ### 1.2 Bảng chi tiết 40 chân
 
 | Chân | Tên nhãn trên sơ đồ | CPU Ball | GPIO | Alt Mux khả dụng cho UART | Miền điện áp | Trạng thái hiện tại |
@@ -96,19 +107,26 @@ Mỗi UART của RV1126B có thể đưa ra nhiều cụm chân khác nhau (M0, 
 | UART | Cụm Mux | Chân TX trên P16 | Chân RX trên P16 | Chân RTS trên P16 | DT Status | Dùng cho | Khả dụng? |
 |---|---|:---:|:---:|:---:|---|---|---|
 | **UART0** | M2 | 9 | 10 (\*) | — | `disabled` | Debug (earlycon) | ⚠ Chồng RS485 #1 |
-| **UART1** | **M1** | **26** | **36** | **23** | `disabled` | **→ ĐỀ XUẤT RS485 #2** | ✅ **CÓ** |
+| **UART1** | **M1** | **26** | **36** | **23** | `disabled` | **→ ĐỀ XUẤT RS485 #2** | ⚠ **CÓ, nhưng `pinctrl-0` đang trỏ M0** |
 | UART1 | M0 | — | — | — | — | Không ra P16 | ❌ |
 | **UART2** | M0 | — | — | — | — | Dùng nội bộ (IOP MCU?) | ❌ |
 | UART2 | M1 | — | — | — | — | Trong Part N VCCIO7 | ❌ Không ra P16 |
 | UART3 | M1 | (22) | (LCDC) | — | `disabled` | Chân LCDC, khó dùng | ⚠ Xung đột |
 | **UART4** | M0 | **37** | **38** | **13** | `disabled` | BT_WAKE/HOST_WAKE | ❌ **BT chiếm** |
-| **UART5** | M0 | **8** | **10** | — | `okay` | **RS485 #1 hiện tại** | ✅ Đang dùng |
+| **UART5** | M0 | **8** | **10** | — | `okay` | **RS485 #1 hiện tại** | ✅ Đã đo xác nhận |
 | UART6 | M0 | — | — | — | `disabled` | Trong Part L VCCIO5 (LCDC) | ❌ Không ra P16 |
 | UART7 | M0 | — | — | — | `disabled` | Trong Part L VCCIO5 (LCDC) | ❌ Không ra P16 |
 
 > [!IMPORTANT]
 > **Kết luận:** Trên Header P16, chỉ có **UART1 M1** (chân 26/36/23) là cụm duy nhất
 > khả dụng để mở rộng RS485 #2 mà không xung đột với bất kỳ chức năng đang dùng nào.
+
+> [!CAUTION]
+> **Nhưng device tree hiện tại chưa trỏ vào M1.** Đo ngày 2026-08-18: `pinctrl-0` của
+> `serial@21160000` đang là `<&uart1m0_xfer &uart1m0_ctsn &uart1m0_rtsn>`, tức nhóm
+> **M0** = `GPIO0_C4`/`GPIO0_C5` — **hai chân này không ra P16**. Bật RS-485 #2 vì vậy
+> cần **hai** thay đổi DT (`status` **và** `pinctrl-0`), không phải một. Chi tiết và
+> đoạn DTS đúng: [ENABLE_TTYS1_RS485_2.md §2](ENABLE_TTYS1_RS485_2.md).
 
 ---
 
@@ -172,3 +190,4 @@ Mỗi UART của RV1126B có thể đưa ra nhiều cụm chân khác nhau (M0, 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-08-05 | Phiên bản đầu tiên — ánh xạ từ bảng Pin Mux SoM + sơ đồ mạch P16 + Device Tree live |
+| 1.1 | 2026-08-18 | Đo xác nhận chân 8 = TX / chân 10 = RX của uart5 bằng lấy mẫu `GPIO_EXT_PORT` lúc truyền; cảnh báo chân 7 không phải chân UART; ghi nhận `pinctrl-0` của uart1 đang trỏ nhóm M0 nên UART1 M1 chưa dùng được nếu chỉ đổi `status` |
