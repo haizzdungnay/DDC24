@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../../shared/api/client'
 import { Button } from '../../shared/components/Button'
+import { DirtyGuardModal } from '../../shared/components/DirtyGuardModal'
 import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { useToast } from '../../shared/components/Toast'
+import { useDirtyGuard } from '../../shared/hooks/useDirtyGuard'
 import { useI18n } from '../../shared/i18n'
 import type { UserParamKey, UserParamValue, UserParamsConfig } from '../../shared/types'
 import { cn } from '../../shared/utils'
@@ -80,9 +82,13 @@ const paramDefs: UserParamDef[] = [
 const wizardDefs = wizardKeys.map((key) => paramDefs.find((def) => def.key === key)).filter(Boolean) as UserParamDef[]
 
 export function UserParametersPage() {
-  const { t } = useI18n()
+  const { t, pick } = useI18n()
   const toast = useToast()
   const [config, setConfig] = useState<UserParamsConfig | null>(null)
+  /* F-UX-12: bản chụp lần cuối đã tải/đã lưu, làm mốc so sánh "chưa lưu".
+   * Trang này chỉnh tham số vận hành của MCU (UP00..LOCK3) — mất bản nháp mà
+   * không báo là mất cả một lượt cấu hình gõ tay. */
+  const [savedConfig, setSavedConfig] = useState<UserParamsConfig | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('summary')
   const [wizardIndex, setWizardIndex] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -94,7 +100,9 @@ export function UserParametersPage() {
     setLoading(true)
     apiClient.getUserParams()
       .then((item) => {
-        if (active) setConfig(item)
+        if (!active) return
+        setConfig(item)
+        setSavedConfig(item)
       })
       .catch((error) => {
         if (active) toast.push('error', `${t('error')}: ${error instanceof Error ? error.message : String(error)}`)
@@ -108,6 +116,8 @@ export function UserParametersPage() {
   }, [t, toast])
 
   const currentStep = wizardDefs[Math.min(wizardIndex, wizardDefs.length - 1)]
+  const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig)
+  const dirtyGuard = useDirtyGuard(dirty)
 
   function updateParam(key: UserParamKey, value: UserParamValue) {
     setConfig((current) => current ? { ...current, [key]: value } : current)
@@ -117,15 +127,20 @@ export function UserParametersPage() {
     setConfig((current) => current ? { ...current, note } : current)
   }
 
-  async function saveConfig(nextMode?: ViewMode) {
-    if (!config) return
+  /* Trả `true` chỉ khi backend đã nhận; `DirtyGuardModal` dùng giá trị này để
+   * quyết định có rời trang hay không (F-UX-12). */
+  async function saveConfig(nextMode?: ViewMode): Promise<boolean> {
+    if (!config) return false
     setSaving(true)
     try {
       await apiClient.putUserParams(config)
+      setSavedConfig(config)
       toast.push('success', t('saveDemoSuccess'))
       if (nextMode) setViewMode(nextMode)
+      return true
     } catch (error) {
       toast.push('error', `${t('error')}: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     } finally {
       setSaving(false)
     }
@@ -196,6 +211,17 @@ export function UserParametersPage() {
       >
         {t('saveUserParamsBody')}
       </Modal>
+      <DirtyGuardModal
+        guard={dirtyGuard}
+        saving={saving}
+        title={pick('Tham số người dùng chưa lưu', 'Unsaved user parameters')}
+        message={pick(
+          'Bạn có thay đổi tham số người dùng chưa lưu. Rời trang sẽ mất các thay đổi này trừ khi lưu trước.',
+          'You have unsaved user parameter changes. Leaving this page will discard them unless you save first.'
+        )}
+        onSave={() => saveConfig()}
+        onDiscard={() => setConfig(savedConfig)}
+      />
     </div>
   )
 }

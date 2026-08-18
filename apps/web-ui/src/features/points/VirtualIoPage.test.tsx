@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type Point, type VirtualPoint } from '../../shared/types'
 import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
+import { MemoryRouter } from 'react-router-dom'
 import { VirtualPointsPage, normalizeVirtualPoint } from './VirtualIoPage'
 
 const api = vi.hoisted(() => ({
@@ -45,13 +46,17 @@ function virtualPoint(overrides: Partial<VirtualPoint> = {}): VirtualPoint {
   }
 }
 
+/* Trang này nay dùng `useDirtyGuard` (F-UX-12) nên cần Router — đúng thực tế
+ * ứng dụng: `VirtualPointsPage` luôn nằm dưới `<Routes>` của `App.tsx`. */
 function renderPage() {
   return render(
-    <I18nProvider>
-      <ToastProvider>
-        <VirtualPointsPage />
-      </ToastProvider>
-    </I18nProvider>
+    <MemoryRouter>
+      <I18nProvider>
+        <ToastProvider>
+          <VirtualPointsPage />
+        </ToastProvider>
+      </I18nProvider>
+    </MemoryRouter>
   )
 }
 

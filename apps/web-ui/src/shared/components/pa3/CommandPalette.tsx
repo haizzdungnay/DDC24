@@ -1,5 +1,6 @@
 import { Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { requestGuardedNavigation } from '../../hooks/useDirtyGuard'
 import { useNavigate } from 'react-router-dom'
 import { roleAtLeast, useAuth, ROUTE_MIN_ROLE } from '../../../features/auth'
 import { useI18n } from '../../i18n'
@@ -113,6 +114,11 @@ export function CommandPalette() {
 
   function go(to: string) {
     close()
+    /* N-07: xin phép guard trước. Ctrl+K là đường điều hướng duy nhất trong
+       ứng dụng không đi qua `<a href>`, nên nếu bỏ qua bước này thì mọi trang
+       cấu hình vẫn mất bản nháp qua chính lối tắt mà người dùng thạo việc hay
+       dùng nhất. */
+    if (requestGuardedNavigation(to)) return
     navigate(to)
   }
 
