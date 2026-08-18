@@ -75,6 +75,11 @@ export function WeeklyTab({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+      {/* N-08: tab nằm trong `ScheduleEditorPage` vốn đã giữ `<h1>`, nên đây là
+          `<h2>` — và `sr-only` vì tên tab đã hiện trên thanh tab, lặp lại bằng
+          mắt là nhiễu. Cây heading vẫn phải liền mạch cho trình đọc màn hình
+          (WCAG 2.2 §2.4.6). */}
+      <h2 className="sr-only">Lịch tuần</h2>
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
         <WeekGrid
           draft={draft}

@@ -68,8 +68,12 @@ export function ExecutionTab({
 
   return (
     <div className="max-w-xl space-y-4">
+      {/* F-UX-15: tab con phải có mốc tiêu đề riêng trong cây heading. `<h1>`
+          thuộc layout của feature, `<h2>` thuộc màn hình cha, nên tab là
+          `<h3>`. Ẩn thị giác vì thanh tab đã hiện tên. */}
+      <h3 className="sr-only">{pick('Tác vụ thực thi', 'Execution task')}</h3>
       <div>
-        <h3 className="text-sm font-semibold text-[var(--c-text)]">Control_Main</h3>
+        <h4 className="text-sm font-semibold text-[var(--c-text)]">Control_Main</h4>
         <label className="mt-2 block text-xs font-medium text-[var(--c-text-dim)]" htmlFor="programming-task-period">
           {pick('Chu kỳ', 'Period')}
         </label>

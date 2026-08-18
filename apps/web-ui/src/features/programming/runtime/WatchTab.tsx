@@ -82,6 +82,10 @@ export function WatchTab() {
 
   return (
     <div className="space-y-4">
+      {/* F-UX-15: tab con phải có mốc tiêu đề riêng trong cây heading. `<h1>`
+          thuộc layout của feature, `<h2>` thuộc màn hình cha, nên tab là
+          `<h3>`. Ẩn thị giác vì thanh tab đã hiện tên. */}
+      <h3 className="sr-only">{pick('Theo dõi trực tuyến', 'Online watch')}</h3>
       <Panel title={pick('Theo dõi trực tuyến', 'Online watch')}>
         {monitor.status === 'loading' ? (
           <StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} />

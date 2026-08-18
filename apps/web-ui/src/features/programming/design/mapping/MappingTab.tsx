@@ -82,6 +82,10 @@ export function MappingTab({
 
   return (
     <div className="space-y-3">
+      {/* F-UX-15: tab con phải có mốc tiêu đề riêng trong cây heading. `<h1>`
+          thuộc layout của feature, `<h2>` thuộc màn hình cha, nên tab là
+          `<h3>`. Ẩn thị giác vì thanh tab đã hiện tên. */}
+      <h3 className="sr-only">{pick('Ánh xạ Biến ↔ Điểm', 'Variable ↔ point mapping')}</h3>
       {canEdit && (
         <Button size="sm" icon={<Plus className="h-4 w-4" aria-hidden="true" />} onClick={() => setShowPicker(true)} disabled={document.programs.length === 0}>
           {pick('Thêm ánh xạ', 'Add mapping')}

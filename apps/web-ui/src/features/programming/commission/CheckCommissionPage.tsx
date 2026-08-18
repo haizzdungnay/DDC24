@@ -114,6 +114,10 @@ export function CheckCommissionPage() {
     const running = phase === 'sealing' || phase === 'checking'
     return (
       <div className="space-y-3">
+        {/* F-UX-15: mọi NHÁNH TRẢ VỀ của màn hình đều phải giữ tiêu đề, kể cả
+          nhánh trạng thái rỗng/lỗi — đó chính là chỗ finding gốc chỉ ra ở
+          `SchedulerGridPage`. `<h1>` của route nằm ở `ProgrammingLayout`. */}
+        <h2 className="sr-only">{pick('Kiểm tra & Đưa vào vận hành', 'Check & Commission')}</h2>
         {phase === 'error' ? (
           <StateBlock state="error" title={checkWorkflow.state.message} onRetry={checkWorkflow.reset} />
         ) : (
@@ -183,6 +187,7 @@ export function CheckCommissionPage() {
 
   return (
     <div className="space-y-4">
+      <h2 className="sr-only">{pick('Kiểm tra & Đưa vào vận hành', 'Check & Commission')}</h2>
       <Panel title={pick('Kết quả Kiểm tra', 'Check result')}>
         {check.status === 'loading' ? (
           <StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} />

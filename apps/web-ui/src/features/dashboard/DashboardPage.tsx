@@ -6,6 +6,7 @@ import { apiClient } from '../../shared/api/client'
 import { fetchActivity } from '../../shared/api/overview'
 import { Button } from '../../shared/components/Button'
 import { Modal } from '../../shared/components/Modal'
+import { OverrideRemaining } from '../../shared/components/OverrideRemaining'
 import { Panel } from '../../shared/components/Panel'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { TrendChart, type TrendSeries } from '../../shared/components/TrendChart'
@@ -21,11 +22,18 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { resolveDrilldown, safeInternalLink } from '../../shared/overview/drilldown'
+import {
+  collectOverrideOwners,
+  isOverrideExpiringSoon,
+  summarizeOverrides,
+  type OverrideOwner
+} from '../../shared/overview/overrides'
 import { useOverview } from '../../shared/overview/OverviewProvider'
 import { useRealtime } from '../../shared/realtime'
 import type { ActivityEvent, OverviewAttentionItem, OverviewDomainHealth, OverviewResponse, Point, TrendSample } from '../../shared/types'
 import {
   NO_DATA,
+  cn,
   formatCountdown,
   formatDataAge,
   formatDateTime,
@@ -104,6 +112,12 @@ export function DashboardPage() {
         <AttentionPanel items={overview.attention} alarms={overview.alarms} />
         <OperatingSummary overview={overview} />
       </div>
+      {/* T57-1.2 — khối này đứng NGAY DƯỚI "CẦN XỬ LÝ" và TRÊN "KHÔNG GIAN CỦA
+          TÔI". Thứ tự ưu tiên của Landing (UX-DES §4.1) xếp "mất liên lạc/suy
+          giảm" trên "ghim của người dùng"; một lệnh tay đang giữ đầu ra là
+          thông tin cùng hạng an toàn với hai mục đó, và cao hơn hẳn không gian
+          cá nhân. Đặc tả: `KX-DDC24-UX-WEB-OPERATIONS-001` §1. */}
+      <OverrideOwnershipPanel />
       <MyWorkspace overview={overview} />
       <TrendPreview />
       <ActivityPanel />
@@ -178,6 +192,11 @@ function OverviewHeader({ overview, receivedAt, degradedFetch, onRefresh }: {
           <dt className="text-[var(--c-text-dim)]">{pick('Cảnh báo chưa xác nhận', 'Unacked alarms')}</dt>
           <dd className="mono font-semibold">{overview.alarms.unacked}</dd>
         </div>
+        {/* T57-1.11 (§6.1-P2b) — "tuổi dữ liệu tệ nhất trong các phân hệ".
+            Overall `good` vẫn có thể che một phân hệ có `observedAt` 40 phút
+            trước, và hiện người trực phải tự đọc 5 ô của Health Strip rồi so
+            bằng mắt. Ô này làm phép so đó một lần, ở chỗ dễ thấy nhất. */}
+        <StalestSubsystem health={overview.health} />
       </dl>
 
       {degradedFetch && (
@@ -195,6 +214,56 @@ function OverviewHeader({ overview, receivedAt, degradedFetch, onRefresh }: {
         </p>
       )}
     </header>
+  )
+}
+
+/**
+ * Phân hệ có dữ liệu CŨ NHẤT — `T57-1.11`, đề xuất §6.1-P2b.
+ *
+ * Trả về phân hệ có `observedAt` xa hiện tại nhất, hoặc `null` khi **không**
+ * phân hệ nào có mốc thời gian dùng được.
+ *
+ * Vì sao tách thành hàm thuần và xuất ra: nó là thứ duy nhất trong ô này có thể
+ * sai theo cách im lặng, nên nó phải test được mà không phải dựng cả trang.
+ */
+export function stalestSubsystem(
+  health: OverviewDomainHealth[],
+  now = Date.now()
+): { domain: string; observedAt: string; ageMs: number } | null {
+  let worst: { domain: string; observedAt: string; ageMs: number } | null = null
+  for (const item of health) {
+    if (!item.observedAt) continue
+    const time = Date.parse(item.observedAt)
+    if (!Number.isFinite(time)) continue
+    /* Mốc trong TƯƠNG LAI (lệch đồng hồ giữa bo và máy trạm) cho ra tuổi âm.
+       Kẹp về 0 thay vì để số âm thắng phép so `>` — một phân hệ "âm 3 giây"
+       không phải phân hệ cũ nhất, nó là phân hệ có đồng hồ lệch. */
+    const ageMs = Math.max(0, now - time)
+    if (worst === null || ageMs > worst.ageMs) worst = { domain: item.domain, observedAt: item.observedAt, ageMs }
+  }
+  return worst
+}
+
+function StalestSubsystem({ health }: { health: OverviewDomainHealth[] }) {
+  const { lang, pick } = useI18n()
+  const worst = stalestSubsystem(health)
+  if (!worst) {
+    /* Không phân hệ nào cấp mốc thời gian ⇒ nói ra là KHÔNG BIẾT. Ẩn hẳn ô này
+       sẽ khiến người đọc tưởng mọi phân hệ đều tươi. */
+    return (
+      <div className="flex gap-2">
+        <dt className="text-[var(--c-text-dim)]">{pick('Phân hệ cũ nhất', 'Stalest subsystem')}</dt>
+        <dd className="mono">{NO_DATA}</dd>
+      </div>
+    )
+  }
+  const label = HEALTH_DOMAIN_LABELS[worst.domain]
+  const title = label ? (lang === 'vi' ? label.vi : label.en) : worst.domain
+  return (
+    <div className="flex gap-2">
+      <dt className="text-[var(--c-text-dim)]">{pick('Phân hệ cũ nhất', 'Stalest subsystem')}</dt>
+      <dd className="mono font-semibold">{title} · {formatDataAge(worst.observedAt)}</dd>
+    </div>
   )
 }
 
@@ -367,6 +436,155 @@ function OperatingSummary({ overview }: { overview: OverviewResponse }) {
 function NumberCell({ value, warn, danger }: { value: number; warn?: boolean; danger?: boolean }) {
   const color = danger && value > 0 ? 'var(--c-fault-fg)' : warn && value > 0 ? 'var(--c-warn-fg)' : 'var(--c-text)'
   return <td className="mono py-2 pr-2 text-right" style={{ color }}>{value}</td>
+}
+
+/* ── 4.5. Ai đang giữ quyền điều khiển ──────────────────────────────────── */
+
+/**
+ * Khối "AI ĐANG GIỮ QUYỀN ĐIỀU KHIỂN" — `T57-1.2`, đề xuất §6.1-P1a.
+ *
+ * TRIỆU CHỨNG: `points.forced` hôm nay chỉ là MỘT CON SỐ trong khối TỔNG HỢP
+ * ĐIỂM. Câu hỏi bắt buộc khi bàn giao ca — "còn lệnh tay nào chưa nhả không,
+ * của ai, còn bao lâu" — không có chỗ nào trả lời.
+ *
+ * NGUYÊN NHÂN GỐC: dữ liệu đã có đủ trên wire (`forced`, `overrideExpiresInS`,
+ * và Activity có vết `point_force`), nhưng chưa nơi nào ghép ba nguồn đó lại.
+ * Người trực phải vào Monitor, lọc `state=forced`, rồi bấm từng điểm để đọc TTL
+ * trong khung chi tiết — ba thao tác cho một câu hỏi hỏi mỗi ngày hai lần.
+ *
+ * CÁCH SỬA: một khối đọc-thuần dựng từ `collectOverrideOwners`, đặt trên nếp
+ * gấp ưu tiên. Đặc tả trực quan: `docs/04_uiux/KX-DDC24-UX-WEB-OPERATIONS-001_VI.md` §1.
+ *
+ * QUYỀN: khối chỉ ĐỌC. `GET /points` và `GET /activity` đều là `RoleViewer` ở
+ * backend, nên nó hiện cho mọi vai trò và `ROUTE_MIN_ROLE` của Landing KHÔNG
+ * đổi. Ca trực chỉ-đọc phải nhìn thấy ai đang giữ quyền — đó chính là câu hỏi
+ * bàn giao ca, và giấu nó đi không làm hệ thống an toàn hơn.
+ */
+function OverrideOwnershipPanel() {
+  const { pick } = useI18n()
+  const realtime = useRealtime()
+  const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
+  /* Lấy nhật ký NGƯỜI DÙNG để tìm ai ra lệnh. `limit` kịch trần trang của
+     backend (`activityMaxPage = 200`) vì một lệnh ép tay cũ hơn 200 sự kiện sẽ
+     không tìm thấy actor — và khi đó cột "Người ra lệnh" hiện `—` kèm lý do,
+     không bịa ra "hệ thống". */
+  const activityState = useApi(useCallback(() => fetchActivity({ limit: 200, kind: 'user' }), []), [], { refreshMs: 10000 })
+
+  const polled = pointsState.data ?? emptyPoints
+  const points = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
+    ? mergePointsById(polled, realtime.allPoints)
+    : polled
+  const owners = useMemo(
+    () => collectOverrideOwners(points, activityState.data?.items ?? []),
+    [points, activityState.data]
+  )
+  const summary = useMemo(() => summarizeOverrides(owners), [owners])
+
+  /* Chưa đọc được bảng điểm LẦN NÀO ⇒ không kết luận được là có hay không có
+     lệnh ép tay. Đây KHÔNG phải "không có lệnh nào": trình bày "không đọc được"
+     thành "mọi thứ bình thường" trên màn hình bàn giao ca là lỗi an toàn vận
+     hành, cùng họ với `FE-DATA-01`. */
+  const cannotConclude = pointsState.data === null
+
+  return (
+    <Panel
+      title={pick('AI ĐANG GIỮ QUYỀN ĐIỀU KHIỂN', 'WHO HOLDS CONTROL')}
+      className="p-3"
+      action={
+        <Link to="/activity" className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--c-accent)]">
+          {pick('Mở nhật ký hoạt động', 'Open activity log')} <ArrowRight className="h-4 w-4" />
+        </Link>
+      }
+    >
+      {cannotConclude ? (
+        <StateBlock
+          state={pointsState.error ? 'error' : 'loading'}
+          title={pointsState.error
+            ? pick('Không đọc được bảng điểm', 'Could not read the point table')
+            : pick('Đang đọc bảng điểm', 'Reading the point table')}
+          detail={pointsState.error
+            ? pick(
+              `Không kết luận được là có hay không có lệnh ép tay. ${pointsState.error.message}`,
+              `Cannot conclude whether any manual override is active. ${pointsState.error.message}`
+            )
+            : undefined}
+          onRetry={pointsState.error ? pointsState.refetch : undefined}
+        />
+      ) : owners.length === 0 ? (
+        <StateBlock
+          state="empty"
+          title={pick('Không có lệnh tay nào đang giữ quyền', 'No manual override holds control')}
+          detail={pick(
+            `Mọi đầu ra đang do logic điều khiển và lịch vận hành quyết định. Đã đọc được ${points.length} điểm — đây là kết luận từ dữ liệu đủ, không phải màn hình trống vì không đọc được gì.`,
+            `Every output is driven by control logic and schedules. ${points.length} points were read — this is a conclusion from complete data, not an empty screen caused by a failed read.`
+          )}
+        />
+      ) : (
+        <>
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--radius)] border-2 border-[var(--c-force)] bg-[var(--c-force-bg)] px-3 py-2">
+            <ForcedBadge />
+            <span className="text-sm font-bold text-[var(--c-force)]">
+              {pick(`${summary.total} điểm đang bị ép tay`, `${summary.total} points under manual override`)}
+            </span>
+            {summary.expiringSoon > 0 && (
+              <span className="text-xs text-[var(--c-warn-fg)]">
+                {pick(`· ${summary.expiringSoon} điểm sắp hết hạn`, `· ${summary.expiringSoon} expiring soon`)}
+              </span>
+            )}
+            {summary.withoutTtl > 0 && (
+              <span className="text-xs text-[var(--c-text-dim)]">
+                {pick(
+                  `· ${summary.withoutTtl} điểm không có thời hạn tự nhả`,
+                  `· ${summary.withoutTtl} without an automatic release`
+                )}
+              </span>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <ul className="min-w-[640px] divide-y divide-[var(--c-border)] max-lg:min-w-0">
+              {owners.map((owner) => <OverrideOwnerRow key={owner.pointId} owner={owner} />)}
+            </ul>
+          </div>
+        </>
+      )}
+    </Panel>
+  )
+}
+
+function OverrideOwnerRow({ owner }: { owner: OverrideOwner }) {
+  const { pick } = useI18n()
+  const expiringSoon = isOverrideExpiringSoon(owner.remainingS)
+  return (
+    <li className={cn('flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5 text-xs first:pt-0 last:pb-0', expiringSoon && 'bg-[var(--c-warn-bg)]')}>
+      <span className="mono w-[92px] shrink-0 font-semibold">{owner.displayTag}</span>
+      <span className="min-w-[150px] flex-1 truncate font-semibold">{owner.name}</span>
+      <span className="mono w-[92px] shrink-0">{formatValue(owner.value, owner.unit)}</span>
+      {/* Không có vết trong Activity ⇒ `—` KÈM LÝ DO. Ghi "hệ thống" ở đây là
+          bịa: lệnh ép tay do người phát, ta chỉ mất vết vì vòng nhớ Activity có
+          hạn (2000 sự kiện). */}
+      <span className="w-[190px] shrink-0 truncate">
+        {owner.actor
+          ? `${owner.actor}${owner.actorRole ? ` · ${owner.actorRole}` : ''}`
+          : <span className="text-[var(--c-text-dim)]">{NO_DATA} <span className="text-[10px]">({pick('không có vết trong nhật ký', 'no trace in the activity log')})</span></span>}
+      </span>
+      <span className="mono w-[130px] shrink-0 text-[var(--c-text-dim)]">
+        {owner.commandedAt ? formatDateTime(owner.commandedAt) : NO_DATA}
+      </span>
+      <span className="w-[132px] shrink-0"><OverrideRemaining remainingS={owner.remainingS} /></span>
+      <span className="flex shrink-0 gap-2">
+        <Link to={`/monitor?point=${encodeURIComponent(owner.pointId)}`} className="rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 font-semibold text-[var(--c-accent)] hover:border-[var(--c-accent)]">
+          {pick('Xem điểm', 'View point')}
+        </Link>
+        {/* `objectId` là tham số mà `ActivityPage` THẬT SỰ đọc (`fetchActivity`
+            → `params.set('objectId', …)`). Dùng tên khác cho đẹp sẽ cho ra một
+            liên kết mở đúng trang nhưng không lọc gì — kiểu hỏng im lặng mà
+            `drilldown.ts` đã cảnh báo (F-UX-02/03/04). */}
+        <Link to={`/activity?objectId=${encodeURIComponent(owner.pointId)}`} className="rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 font-semibold text-[var(--c-accent)] hover:border-[var(--c-accent)]">
+          {pick('Xem vết lệnh', 'View trace')}
+        </Link>
+      </span>
+    </li>
+  )
 }
 
 /* ── 5. My Workspace ────────────────────────────────────────────────────── */
@@ -568,31 +786,73 @@ function TrendPreview() {
     [chosen]
   )
 
-  const chosenRef = useRef<Point[]>([])
-  useEffect(() => { chosenRef.current = chosen }, [chosen])
-  useEffect(() => { setSamples([]) }, [selected])
-
+  /* Mốc `updatedAt` gần nhất ĐÃ ghi vào buffer, theo từng điểm. Đây là thứ
+     phân biệt "producer vừa phát giá trị mới" với "trình duyệt vừa tick". */
+  const lastSampledAtRef = useRef<Record<string, string>>({})
   useEffect(() => {
-    const append = () => {
-      const current = chosenRef.current
-      if (!current.length) return
-      /* Chỉ ghi mẫu cho point CÓ mốc thời gian thật của producer. Point thiếu
-         timestamp bị bỏ qua thay vì đóng dấu giờ máy trạm lên nó (PA3-F04),
-         nên đường của nó ĐỨT — đúng bản chất "không có dữ liệu ở khoảng này"
-         và khớp luật "trend không nối qua gap". */
-      const sample: TrendSample = { time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
-      for (const point of current) {
-        if (!point.updatedAt) continue
-        const value = pointNumber(point)
-        if (value !== null) sample[point.id] = Number(value.toFixed(2))
-      }
-      if (Object.keys(sample).length <= 1) return
-      setSamples((previous) => [...previous, sample].slice(-TREND_SAMPLE_LIMIT))
+    setSamples([])
+    lastSampledAtRef.current = {}
+  }, [selected])
+
+  /* F-UX-14 (`REV-FE-UIUX-UC-2026-08-18` §7.1) — lấy mẫu theo producer, không
+     theo đồng hồ trình duyệt.
+  
+     TRIỆU CHỨNG: buffer được dựng bằng `setInterval(append, 1000)`, nên mỗi
+     giây ghi một mẫu bất kể producer có phát gì mới hay không. Một điểm Modbus
+     cập nhật 5 s/lần cho ra 5 mẫu giống hệt nhau: mật độ dữ liệu GIẢ. Biểu đồ
+     trông dày và mượt đúng ở chỗ ta không biết gì thêm, và người đọc không có
+     cách nào phân biệt "đo được liên tục" với "đọc lại đúng con số cũ".
+  
+     NGUYÊN NHÂN GỐC: nhịp lấy mẫu lấy từ tab trình duyệt thay vì từ `updatedAt`
+     của chính điểm — cùng lớp lỗi với việc đóng dấu giờ máy trạm lên số đo.
+  
+     CÁCH SỬA: chỉ ghi mẫu khi `updatedAt` của ít nhất một điểm đang chọn ĐỔI,
+     và trục thời gian lấy từ chính mốc đó chứ không phải `Date.now()`. Điểm nào
+     không có mốc mới thì KHÔNG có khoá trong mẫu ⇒ `TrendChart`
+     (`connectNulls={false}`) để ĐỨT đường. Đứt mới là đúng: giữ giá trị cuối sẽ
+     vẽ một đường thẳng khẳng định "vẫn đo được" trong khoảng mà không producer
+     nào nói gì (quyết định Q3, Plan 57 §12). */
+  useEffect(() => {
+    if (!chosen.length) return
+    /* N-01 (kiểm tra viên độc lập): MỘT HÀNG CHO MỖI MỐC THỜI GIAN, không gộp
+       cả nhóm vào một hàng rồi đóng dấu mốc mới nhất lên tất cả.
+       Bản trước lấy `newestStamp` của cả nhóm làm nhãn thời gian cho mọi giá
+       trị trong hàng, nên số đo của điểm A tại t1 bị vẽ dưới nhãn t2 của điểm
+       B. Đó đúng là lớp lỗi mà chú thích ngay bên trên cấm ("tuyệt đối không
+       đóng dấu giờ máy trạm lên số đo") — chỉ khác ở chỗ đóng dấu đồng hồ của
+       producer khác thay vì của trình duyệt. */
+    const byStamp = new Map<number, Record<string, number>>()
+    for (const point of chosen) {
+      const stamp = point.updatedAt
+      /* Không có mốc thời gian thật ⇒ bỏ qua, tuyệt đối không đóng dấu giờ máy
+         trạm lên số đo của producer (PA3-F04). */
+      if (!stamp) continue
+      const stampMs = Date.parse(stamp)
+      if (Number.isNaN(stampMs)) continue
+      if (lastSampledAtRef.current[point.id] === stamp) continue
+      const value = pointNumber(point)
+      /* G-04: chỉ "đốt" mốc SAU khi đã có giá trị dùng được. Ghi ref trước phép
+         kiểm này làm một mốc kèm giá trị hỏng khoá luôn mốc đó, và nếu sau đó
+         đọc lại được giá trị dưới cùng mốc thì nó không bao giờ vào biểu đồ. */
+      if (value === null) continue
+      lastSampledAtRef.current[point.id] = stamp
+      const row = byStamp.get(stampMs) ?? {}
+      row[point.id] = Number(value.toFixed(2))
+      byStamp.set(stampMs, row)
     }
-    append()
-    const timer = window.setInterval(append, 1000)
-    return () => window.clearInterval(timer)
-  }, [])
+    if (byStamp.size === 0) return
+    const rows: TrendSample[] = [...byStamp.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([stampMs, values]) => ({
+        /* `__ts` bật trục thời gian SỐ của `TrendChart`: khoảng cách trên trục
+           phản ánh khoảng cách thật, thay vì trục `category` vẽ đều nhau bất kể
+           nhịp lấy mẫu (N-02). */
+        __ts: stampMs,
+        time: new Date(stampMs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        ...values
+      }))
+    setSamples((previous) => [...previous, ...rows].slice(-TREND_SAMPLE_LIMIT))
+  }, [chosen])
 
   function toggle(id: string) {
     setSelected((current) => {
@@ -620,7 +880,7 @@ function TrendPreview() {
       }
     >
       {samples.length > 1 && series.length ? (
-        <TrendChart data={samples} series={series} height={240} showTable={false} />
+        <TrendChart data={samples} series={series} height={240} showTable={false} showDots />
       ) : (
         <StateBlock
           state="empty"
