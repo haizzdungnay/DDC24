@@ -18,6 +18,11 @@ PriorityResolver::PriorityResolver()
     }
 }
 
+void PriorityResolver::begin_cycle()
+{
+    cycle_++;
+}
+
 bool PriorityResolver::set_ao(int level, int ch, float v)
 {
     if (!can_set_ao(level, ch, v)) {
@@ -33,11 +38,15 @@ bool PriorityResolver::set_ao(int level, int ch, float v)
         return false;
     }
     Slot& s = ao_[level - 1][ch];
-    if (s.active && s.value != v)
+    /* Xung đột thật = hai lần ghi cùng mức, cùng kênh, TRONG CÙNG một chu kỳ
+     * trọng tài. Một nguồn ghi lại giá trị mới ở chu kỳ sau là vận hành bình
+     * thường, không phải xung đột (F-PRIO-001) — xem begin_cycle(). */
+    if (s.active && s.cycle == cycle_ && s.value != v)
         std::fprintf(stderr, "WARN  priority.conflict ao ch=%d level=%d old=%.3f new=%.3f (nguồn sau thắng)\n",
                      ch, level, static_cast<double>(s.value), static_cast<double>(v));
     s.active = true;
     s.value = v;
+    s.cycle = cycle_;
     return true;
 }
 
@@ -72,11 +81,14 @@ bool PriorityResolver::set_do(int level, int ch, bool on)
 {
     if (!can_set_do(level, ch)) return false;
     Slot& s = do_[level - 1][ch];
-    if (s.active && (s.value != 0.0f) != on)
+    /* Cùng lý do với set_ao: chỉ cảnh báo khi hai lần ghi rơi vào cùng một
+     * chu kỳ trọng tài (F-PRIO-001). */
+    if (s.active && s.cycle == cycle_ && (s.value != 0.0f) != on)
         std::fprintf(stderr, "WARN  priority.conflict do ch=%d level=%d old=%d new=%d (nguồn sau thắng)\n",
                      ch, level, s.value != 0.0f, on);
     s.active = true;
     s.value = on ? 1.0f : 0.0f;
+    s.cycle = cycle_;
     return true;
 }
 
