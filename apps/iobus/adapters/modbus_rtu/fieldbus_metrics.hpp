@@ -6,6 +6,8 @@
 #define IOBUS_FIELDBUS_METRICS_HPP
 
 #include <cstdint>
+
+#include "modbus_rtu/frame_ring.hpp"
 #include <string>
 #include <vector>
 
@@ -110,6 +112,12 @@ constexpr size_t kUtilizationSlots = 8;
 
 class FieldbusMetrics {
 public:
+    /* `T57-3.9`: vòng nhớ khung đi CÙNG đường với metrics vì `poll_once` đã
+       nhận sẵn đối tượng này — thêm một tham số nữa xuyên qua ba tầng chỉ để
+       mang một con trỏ là chi phí không đổi lấy gì. */
+    FrameRing& frames() { return frames_; }
+    const FrameRing& frames() const { return frames_; }
+
     void init(const std::vector<std::string>& slave_names,
               const std::vector<uint8_t>& slave_addrs);
     /* Overload mang bus_id — cần cho tổng hợp theo bus ở tầng API. */
@@ -168,6 +176,7 @@ public:
     size_t size() const { return metrics_.size(); }
 
 private:
+    FrameRing frames_;
     BusMetrics* find_bus(uint8_t bus_id);
 
     std::vector<SlaveMetrics> metrics_;

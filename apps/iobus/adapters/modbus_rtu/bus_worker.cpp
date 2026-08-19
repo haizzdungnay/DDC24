@@ -485,6 +485,35 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
                 static_cast<uint32_t>((monotonic_ns() - t0) / 1000);
             metrics.record_bus_transaction(bus_.id, elapsed_us, rc >= 0);
 
+            /* `T57-3.9` (`ADR-046` bản sửa 2026-08-19): ghi lại giao dịch VỪA
+               XONG. Đây là lượt phát mà chu kỳ poll bình thường đã thực hiện —
+               không có byte nào phát thêm vì mục đích quan sát. */
+            {
+                FrameRecord frame;
+                /* Đồng hồ tường, KHÔNG phải `now_ms` của vòng quét: `now_ms`
+                   là uptime (`CLOCK_MONOTONIC`) nên giao diện sẽ hiện giờ năm
+                   1970 — xem chú thích ở `frame_ring.hpp`. */
+                frame.at_ms = frame_wall_clock_ms();
+                frame.bus = bus_.id;
+                frame.slave = sc.addr;
+                frame.fc = block.fc;
+                frame.addr = block.addr;
+                frame.count = block.count;
+                frame.elapsed_us = elapsed_us;
+                frame.attempt = static_cast<uint8_t>(attempt);
+                frame.ok = rc >= 0;
+                const char* reason = "ok";
+                if (rc < 0) {
+                    if (saved_errno == ETIMEDOUT) reason = "timeout";
+#ifdef EMBBADCRC
+                    else if (saved_errno == EMBBADCRC) reason = "crc";
+#endif
+                    else reason = "error";
+                }
+                std::snprintf(frame.reason, sizeof(frame.reason), "%s", reason);
+                metrics.frames().record(frame);
+            }
+
             if (rc >= 0) break;
 
             /* Đếm lỗi giao thức theo TỪNG lần phát: một lượt poll timeout 3 lần
