@@ -4,7 +4,12 @@
 **Trạng thái:** Active
 **Cập nhật:** 2026-08-18 (`ADR-034`…`ADR-039` `Accepted` — sáu câu hỏi chặn còn lại của Plan 57 §12: annunciation, chủ sở hữu ngữ nghĩa mô phỏng cảnh báo, kho chỉ số ISA-18.2, chính sách mật khẩu, chủ sở hữu "hiệu lực thực tế" của lịch, và **an toàn quét bus Modbus**; `ADR-033`/`ADR-032` `Accepted` — cách ly route và điều hướng web 4 nhóm)
 
-Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: EasySet parity thành ADR-013; raw SHM thành ADR-014.
+Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa; **bản 2026-08-19 sửa lại lần chuẩn hoá
+2026-07-22**: EasySet parity thành **`ADR-040`** (không phải `ADR-013`) và raw SHM thành **`ADR-041`**
+(không phải `ADR-014`). Lý do: `ADR-013`/`ADR-014` đã bị chiếm từ 2026-07-02 bởi hai ADR alarm ở
+[`docs/02_design/adr/`](../02_design/adr/) và **đang được viện dẫn trong hợp đồng canonical**
+`contracts/openapi/openapi.yaml` (7 chỗ), trong khi không dòng mã nào từng dùng `ADR-013`/`ADR-014`
+theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 
 > **File này là authority cấp phát số ADR, không phải thư mục `docs/adr/`.**
 > Một số ADR chỉ tồn tại dưới dạng dòng trong bảng dưới đây hoặc mục nội tuyến
@@ -14,7 +19,7 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 > `ADR-033` (cách ly route khỏi điều hướng) và `ADR-034`…`ADR-039` (sáu quyết
 > định Plan 57 §12, mục nội tuyến bên dưới). Vì vậy `ls docs/adr/` **không** cho
 > biết số nào còn trống. Trước khi đặt số mới, lấy số lớn nhất trong bảng này
-> rồi cộng một. Số cao nhất đã cấp phát: **`ADR-039`** (2026-08-18).
+> rồi cộng một. Số cao nhất đã cấp phát: **`ADR-041`** (2026-08-19).
 
 | ID | Quyết định hiện hành | Trạng thái |
 |---|---|---|
@@ -30,8 +35,8 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-010 | Kinexus-IOP v2 chạy 921600 baud, poll 2 ms; shared header là contract thực thi. | Accepted |
 | ADR-011 | BACnet reliability và raw/engineering metadata phải được bảo toàn xuyên suốt I/O → SHM → protocol/web. | Accepted |
 | ADR-012 | AO command ở biên core/iobus dùng đại lượng điện vật lý V hoặc mA; conversion chỉ thực hiện một lần. | Accepted |
-| ADR-013 | EasySet config phải round-trip nhất quán giữa UI, backend và iobus; chỉ field có consumer mới được công bố. | Accepted |
-| ADR-014 | SHM là ABI C packed/aligned được chia sẻ trực tiếp; thay layout phải đổi magic và rebuild đồng bộ consumer. | Accepted |
+| ADR-013 | Alarm config là **thực thể độc lập** (một alarm giám sát nhiều nguồn UI/AO/DO), không phải một dòng khoá cứng vào một point vật lý; công bố BACnet vẫn bị chặn bởi capability của object. Hồ sơ rời: [`docs/02_design/adr/ADR-013-alarm-entity-model.md`](../02_design/adr/ADR-013-alarm-entity-model.md). | Accepted 2026-07-02 — đăng ký bổ sung 2026-08-19 |
+| ADR-014 | Vòng đời acknowledge của alarm: ACK ở mức thực thể trừ khi UX về sau yêu cầu ACK theo từng nguồn; trạng thái alarm **không** nằm trong SHM. Hồ sơ rời: [`docs/02_design/adr/ADR-014-alarm-ack-lifecycle.md`](../02_design/adr/ADR-014-alarm-ack-lifecycle.md). | Accepted 2026-07-02 — đăng ký bổ sung 2026-08-19 |
 | ADR-015 | HMI 2.4 inch là local status/commissioning/service panel; HMI không là control/alarm authority; action/ACK chỉ complete sau authoritative response và audit. | Amended by ADR-016 |
 | ADR-016 | HMI 2.4 inch áp dụng phạm vi **limited operator HMI**: chỉ setpoint, mode, override và release cho point được authority whitelist. Mọi lệnh đi qua local authenticated broker rồi core priority/interlock/safety; mất broker làm HMI read-only. Không đưa full Web HMI, engineering, schedule hoặc alarm configuration lên panel local. | Accepted |
 | ADR-017 | Network commissioning dùng strict authority v1 trên SOM: Web/local HMI không sửa trực tiếp Linux network. Ethernet IPv4 + optional DNS đi qua capability-discovered transaction `validate/stage/apply/confirm/rollback`; management hostname chỉ đọc và provision bằng script. Web GET status cho session xác thực, POST mutation Admin-only; local HMI đặt flow trong surface Service nhưng mutation chỉ role Admin. Đổi IP không dừng local control; BACnet/IP hot-rebind. | Accepted |
@@ -49,7 +54,7 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-029 | **Overrun/lỗi runtime của Program là fault của Task, không phải safe-state toàn trạm:** Task lỗi chuyển `FAULT` và hủy staging của chính chu kỳ đó; đầu ra mức 5 giữ `hold-last`, không về `0`. Cờ `any_force_safe` bị gỡ khỏi hợp đồng scheduler, thay bằng `taskFault{...}`; `anyForcingSafeState` deprecated một release rồi xóa. Chỉ SafetyManager quyết định safe-state toàn trạm. Đóng `ARCH-CONF-PROG-004`. | **Accepted 2026-08-11** — `AUTH-PROG-2026-08-11-03` |
 | ADR-030 | **Hai lớp mã lỗi:** `PRG-ERR-*` là mã công khai duy nhất client được rẽ nhánh theo; `IR-E-*`, `ST-*`, `API-E-*`, `RT-RETAIN-*` là `detailCode` giữ nguyên tên và nghĩa. Ánh xạ phải toàn phần và kiểm được bằng test; thiếu ánh xạ là lỗi build. `API-E-*` không deprecate trong Rev A. Đóng `ARCH-CONF-PROG-005`. | **Accepted 2026-08-11** — `AUTH-PROG-2026-08-11-03`; mapping evidence theo implementation |
 | ADR-032 | **Điều hướng web Rev A dùng 4 nhóm `Tổng quan / Vận hành / Kỹ thuật / Hệ thống`**, thay cho 3 nhóm `Overview/Settings/Engineering` của ADR-009 Decision #2. Nhóm `Settings` cũ trộn tác vụ vận hành hằng ngày với quản trị nền tảng nên bị tách; `Chẩn đoán` trở thành mục điều hướng thật. Chỉ đổi cách gom mục — **không** thêm/bớt route, không đổi `ROUTE_MIN_ROLE`, không đổi REST/WebSocket contract. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** — `AUTH-WEBUX-2026-08-18-01`; supersedes phần navigation của ADR-009 |
-| ADR-033 | **Hai route `/eng/user-parameters` và `/eng/aux` bị cách ly khỏi điều hướng Rev A**, không phải bị bỏ quên: `UserParametersPage` đọc/ghi qua mock demo trong `apiClient` và **không có endpoint backend**, nên trên board nó hiện tham số bịa và báo lưu thành công cho lệnh không tới thiết bị; `AuxFunctionsPage` sinh cụm component graph 28-node — runtime legacy theo ADR-020/ADR-023 — và không có đường nạp xuống thiết bị. Route giữ nguyên để không phá bookmark và không giẫm lên công việc song song; quyết định được **thi hành bằng test** `route-menu-contract.test.ts`, vốn đối chiếu bảng route với bảng menu theo cả hai chiều. Đóng finding `F-UX-17`. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** — `AUTH-WEBUX-2026-08-18-01`; quyết định do agent thực hiện, **chữ ký người: `WAIVED FOR IMPLEMENTATION`**. Áp `ADR-013` (chỉ field có consumer mới được công bố) và giữ đúng ý định demo-local của ADR EasySet parity |
+| ADR-033 | **Hai route `/eng/user-parameters` và `/eng/aux` bị cách ly khỏi điều hướng Rev A**, không phải bị bỏ quên: `UserParametersPage` đọc/ghi qua mock demo trong `apiClient` và **không có endpoint backend**, nên trên board nó hiện tham số bịa và báo lưu thành công cho lệnh không tới thiết bị; `AuxFunctionsPage` sinh cụm component graph 28-node — runtime legacy theo ADR-020/ADR-023 — và không có đường nạp xuống thiết bị. Route giữ nguyên để không phá bookmark và không giẫm lên công việc song song; quyết định được **thi hành bằng test** `route-menu-contract.test.ts`, vốn đối chiếu bảng route với bảng menu theo cả hai chiều. Đóng finding `F-UX-17`. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** — `AUTH-WEBUX-2026-08-18-01`; quyết định do agent thực hiện, **chữ ký người: `WAIVED FOR IMPLEMENTATION`**. Áp `ADR-040` (chỉ field có consumer mới được công bố) và giữ đúng ý định demo-local của ADR EasySet parity |
 | ADR-031 | **`IntegrityMode = HASH_ONLY` cho Rev A:** loader bắt buộc kiểm SHA-256, không yêu cầu chữ ký; chỉ hợp lệ khi compiler và staging path nằm trong trusted local boundary. Trường chữ ký giữ nguyên trong layout schema 1; `allow_unsigned` thay bằng `integrity_mode` với ba giá trị và **cấm** `SIGNATURE_OPTIONAL`. Đóng `ARCH-CONF-PROG-006`. | **Accepted 2026-08-11** — `AUTH-PROG-2026-08-11-03`; residual evidence theo implementation |
 | ADR-034 | **Annunciation cảnh báo hai lớp; lớp nghe được phải tự khai báo trạng thái thật.** Lớp NHÌN (nhấp nháy badge + dải chưa-ack) là bắt buộc và luôn chạy được vì không cần cử chỉ người dùng; lớp NGHE mặc định **TẮT**, chỉ bật bằng một nút "Bật và kiểm tra âm" — chính cú bấm đó là cử chỉ mở khoá `AudioContext`. Giao diện phải hiện đủ ba trạng thái `TẮT` / `ĐANG BẬT` / `BỊ TRÌNH DUYỆT CHẶN`; **cấm** hiển thị "đã bật" khi `AudioContext.state !== 'running'`. Tôn trọng `prefers-reduced-motion` bằng cách đổi sang chỉ báo tĩnh + `aria-live`, không tắt annunciation. Trả lời Plan 57 §12-Q2. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** — `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-035 | **Ngữ nghĩa luật cảnh báo thuộc Core, mô phỏng phải gọi lại chính Core — cấm cài lại ở FE hoặc Go.** Câu hỏi "FE hay BE" có tiền đề sai: Go (`alarmsettingsapi.go`) chỉ *kiểm hợp lệ*, còn ngữ nghĩa nằm ở `apps/core/domain/alarm/alarm_primitives.hpp` + `alarm_runtime.cpp`. Áp đúng nguyên tắc PM/CTO đã ràng buộc ở Plan 50/`ADR-023` ("simulation dùng chung evaluation engine với controller"), đã hiện thực bằng `mkddc-schedule-sim`. Mô phỏng luật cảnh báo đi qua một binary `mkddc-alarm-sim` tương tự; thiếu binary ⇒ `503` kèm giải thích, **không** rơi về bản tính trong Go. Hệ quả: `T57-2.13` chuyển **Wave 2 → Wave 3**. Trả lời Plan 57 §12-Q4. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** — `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
@@ -57,6 +62,8 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-037 | **Chính sách mật khẩu Rev A: giao diện công bố ĐÚNG luật thiết bị đang cưỡng chế (`≥ 6` byte), chỉ báo độ mạnh là KHUYẾN NGHỊ chứ không phải cổng chặn.** Luật thật hôm nay là `validNewPassword` = `len(password) >= 6` byte, không có lớp ký tự, **không có khoá tài khoản sau N lần sai**. Siết FE lên 8 mà để backend ở 6 sẽ làm giao diện mô tả sai thiết bị. Chính sách ĐÍCH (min 8, chặn trùng username và danh sách tầm thường, khoá 5 lần sai/15 phút có audit) là thay đổi Go + hợp đồng, giao cho `T57-3.21` mới. Hệ quả trực tiếp cho `T57-1.10`: **cấm** hiện thông điệp "tài khoản bị khoá" vì trạng thái đó không tồn tại. Trả lời Plan 57 §12-Q6. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** — `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-038 | **"Hiệu lực thực tế" của lịch tính ở Core, mở rộng `mkddc-schedule-sim`, không cài lại trong Go.** `schedule_runtime.hpp` đã ghi rõ `evaluate_schedule` là hàm mà "backend gọi CHÍNH hàm này qua vỏ C; cấm cài lại thuật toán ở nơi khác", và `handleSimulateSchedule` đã thi hành đúng như vậy kèm `503` khi thiếu binary. Bản hợp nhất nhiều lịch trên một point thêm chế độ `--point` cho cùng binary, dùng lại phân xử `priority_for_writing` 1..16 của `ScheduleRuntime`. Trả lời Plan 57 §12-Q7. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** — `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-039 | **AN TOÀN — Quét bus Modbus: chỉ mã hàm ĐỌC, dải tối đa 32 địa chỉ/lượt, vai trò `admin`, xem trước khô bắt buộc, và CẤM dò baud/parity khi bus còn slave đang bật.** Rev A chỉ có **một** cổng RS-485 nên mọi slave dùng chung dây; quét phải xếp hàng trên chính `BusWorker` qua nguyên thuỷ `probe_read` (MBR-B108) chứ không mở cổng thứ hai và không dừng poll. Địa chỉ không trả lời phải báo là **"không trả lời"**, không được báo là "không có thiết bị". `T57-3.8` vẫn `IMPLEMENT_READY BLOCKED`: ADR này là **đặc tả**, và trong phiên 2026-08-18 **không dòng code ghi ra bus nào được viết**. Trả lời Plan 57 §12-Q8. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** (đặc tả) — `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION`. Thi hành còn chặn bởi điều kiện Track B Modbus RTU (Fieldbus Lead + QA/HIL Lead chưa được chỉ định) |
+| ADR-040 | EasySet config phải round-trip nhất quán giữa UI, backend và iobus; chỉ field có consumer mới được công bố. Các màn config kiểu EasySet là lớp form phủ lên graph/io_map, không thay bằng mô hình parameter-based. **Phát hành lần đầu nhầm số `ADR-010`; bản chuẩn hoá 2026-07-22 gán nhầm `ADR-013`.** Hồ sơ rời: [`ADR-040`](../adr/ADR-040-easyset-parity-config-surfaces.md). | Accepted 2026-06-22 — cấp số lại 2026-08-19 |
+| ADR-041 | `kx_io_shm_t` mang thêm `ui_raw[]` và `ui_raw_unit[][]` để web hiện giá trị điện thô mà không phải dựng lại sau scaling; đổi layout thì phải bump `KX_SHM_MAGIC`. **Phát hành lần đầu nhầm số `ADR-011`; bản chuẩn hoá 2026-07-22 gán nhầm `ADR-014`.** Hồ sơ rời: [`ADR-041`](../adr/ADR-041-ui-raw-live-data-shm.md). | Accepted 2026-06-30 — cấp số lại 2026-08-19 |
 
 ## ADR-025 — Process-first + bounded modules cho repository
 
@@ -82,7 +89,7 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
   phải làm verification thất bại. Restructure không chứng minh Programming,
   real RS485, target HMI hoặc physical I/O HIL.
 - **Migration:** thực hiện tuần tự theo G0..G5 của
-  [`PLAN-ARCH-RESTRUCT-002`](../03_implementation/46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md);
+  [`PLAN-ARCH-RESTRUCT-002`](../03_implementation/archive/46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md);
   chỉ move source sau baseline và build indirection; chỉ xóa shim khi inventory
   xác nhận không còn consumer.
 - **Rollback:** revert theo task/nhóm path gần nhất; không đổi dữ liệu runtime,
@@ -158,7 +165,7 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 - **Trạng thái:** Accepted 2026-08-18. Đóng finding `F-UX-17` của
   [`REV-FE-UIUX-UC-2026-08-18`](../07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md) §7.2b.
   Không supersede ADR nào; nó **thi hành** hệ quả đã ghi trong `ADR-032` và áp
-  `ADR-013` vào đúng hai màn hình.
+  `ADR-040` vào đúng hai màn hình.
 - **Phê duyệt:** `WAIVED FOR IMPLEMENTATION` (agent đóng vai trò quyết định, chưa có chữ ký người), trong phạm vi `AUTH-WEBUX-2026-08-18-01` (Plan 57 Wave 0).
 
 ### Bối cảnh
@@ -167,8 +174,8 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 tồn tại thật, có trong `ROUTE_MIN_ROLE`, có nhãn i18n — nhưng **không mục nào
 trong `NavRail` dẫn tới**. Chỉ tới được bằng cách gõ tay URL. Hai trang này được
 thêm vào nhóm Engineering của bản 3 nhóm theo ADR EasySet parity
-([`ADR-010-easyset-parity-config-surfaces.md`](../adr/ADR-010-easyset-parity-config-surfaces.md),
-ID canonical là `ADR-013`); khi tái cấu trúc sang 4 nhóm chúng rơi ra ngoài mà
+([`ADR-040-easyset-parity-config-surfaces.md`](../adr/ADR-040-easyset-parity-config-surfaces.md),
+ID canonical là `ADR-040`); khi tái cấu trúc sang 4 nhóm chúng rơi ra ngoài mà
 không ai phát hiện, vì **không có test nào đối chiếu bảng route với bảng menu**.
 
 Câu hỏi hiển nhiên là "thêm chúng vào menu cho xong". Đọc mã trước khi trả lời:
@@ -194,7 +201,7 @@ Ba lý do, theo thứ tự sức nặng:
    phẩm này cấm ở mọi chỗ khác (`DashboardPage` `lastDataAt=null` ⇒ `—`,
    `DiagnosticsPage` bỏ `?? 23` cho CPU, `AuxFunctionsPage` đã tự gỡ dấu PASS ở
    live theo `SRC-F-03`).
-2. **`ADR-013` cấm đúng việc này:** "chỉ field có consumer mới được công bố".
+2. **`ADR-040` cấm đúng việc này:** "chỉ field có consumer mới được công bố".
    38 field không có consumer.
 3. **Đó chưa bao giờ là ý định thiết kế.** ADR EasySet parity Decision #2 ghi rõ
    các màn này là **"pattern demo-local Rev A … nút *Lưu* toast demo. KHÔNG đổi

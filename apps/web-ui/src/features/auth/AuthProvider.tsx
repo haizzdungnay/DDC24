@@ -3,6 +3,7 @@ import type React from 'react'
 import { API_ORIGIN, AUTH_MODE, IS_DEMO } from '../../shared/config'
 import { setAuthHeaderProvider } from '../../shared/api/client'
 import { setHistoryAuthHeaderProvider } from '../../shared/api/history'
+import { setSavedViewAccount } from '../../shared/savedViews'
 import { useI18n } from '../../shared/i18n'
 import type { UserRole } from '../../shared/types'
 import { LoginError } from './loginError'
@@ -40,6 +41,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthHeaderProvider(getAuthHeader)
     setHistoryAuthHeaderProvider(getAuthHeader)
   }, [getAuthHeader])
+
+  /* `T57-2.3`: khung nhìn đặt tên gắn theo tài khoản. Đẩy tên qua biến module
+     thay vì bắt mỗi trang gọi `useAuth` — Trends nằm ngoài cây `AuthProvider`
+     trong test, và thêm một phụ thuộc context chỉ để lấy một chuỗi là đổi lấy
+     sai thứ. */
+  useEffect(() => {
+    setSavedViewAccount(session?.username ?? null)
+  }, [session?.username])
 
   useEffect(() => {
     const handler = () => {
