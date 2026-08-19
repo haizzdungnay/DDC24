@@ -1,6 +1,15 @@
 # 26 — Modbus Implementation Plan (S7 #6)
 ## MK-DDC-24 — Modbus RTU master + device profile + ext cache
 
+> ## 🗄 ĐÃ LƯU TRỮ — 2026-08-19
+>
+> Hồ sơ **đã đóng**, giữ tại `docs/03_implementation/archive/` để truy nguyên.
+> **Không** dùng làm căn cứ mở việc mới hay làm nguồn-chuẩn cho mã hiện hành.
+>
+> **Lý do đóng:** Tài liệu tự đánh dấu `SUPERSEDED một phần` ngày 2026-08-04 và ghi rõ **không** được dùng làm căn cứ mở implementation mới; nội dung mô tả As-Built v1, không phải target.
+>
+> **Đọc thay bằng:** [49_MODBUS_RTU_IMPLEMENTATION_PLAN](../49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) · [DDD-FW-MBRTU-001](../../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md) · [ICD-IF-MBRTU-001](../../02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md) · [VVP-MBRTU-001](../../05_verification/MODBUS_RTU_VERIFICATION_PLAN.md)
+
 > ## ⚠ SUPERSEDED một phần — 2026-08-04
 >
 > Plan này mô tả việc đã làm cho **As-Built v1** và được giữ để truy nguyên. Các
@@ -8,24 +17,24 @@
 >
 > | Phát biểu trong tài liệu này | Thay bằng |
 > |---|---|
-> | §1 "RTU master một bus" | hai bus logic — [DDD-FW-MBRTU-001 §2](../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md), chờ `OD-MBRTU-001` |
-> | §3 ext contract `float` / quality 3 mức / `setpoint`+`dirty` — ghi "gap CLOSED" | đó là As-Built v1, **không** phải target; target là `ExtSnapshot v2` tại [ICD-IF-MBRTU-001 §5](../02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md) |
-> | §1 "Core/BACnet/Web set ext write request" | write phải qua core arbitration với request/result — [DDD-FW-MBRTU-001 §8](../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md) |
-> | §7 TC-10-09 "đổi baud yêu cầu restart rõ log" | reload tại ranh giới transaction có ACK — [DDD-BE-MBRTU-001 §3](../02_design/software/MODBUS_RTU_BE_DESIGN.md) |
+> | §1 "RTU master một bus" | hai bus logic — [DDD-FW-MBRTU-001 §2](../../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md), chờ `OD-MBRTU-001` |
+> | §3 ext contract `float` / quality 3 mức / `setpoint`+`dirty` — ghi "gap CLOSED" | đó là As-Built v1, **không** phải target; target là `ExtSnapshot v2` tại [ICD-IF-MBRTU-001 §5](../../02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md) |
+> | §1 "Core/BACnet/Web set ext write request" | write phải qua core arbitration với request/result — [DDD-FW-MBRTU-001 §8](../../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md) |
+> | §7 TC-10-09 "đổi baud yêu cầu restart rõ log" | reload tại ranh giới transaction có ACK — [DDD-BE-MBRTU-001 §3](../../02_design/software/MODBUS_RTU_BE_DESIGN.md) |
 > | §5 cây file `services/iobus/fieldbus/` | path hiện hành `apps/iobus/adapters/modbus_rtu/` sau ADR-025 |
 >
 > Test plan mở rộng và phân tầng evidence nằm tại
-> [VVP-MBRTU-001](../05_verification/MODBUS_RTU_VERIFICATION_PLAN.md). Plan này
+> [VVP-MBRTU-001](../../05_verification/MODBUS_RTU_VERIFICATION_PLAN.md). Plan này
 > **không** được dùng làm căn cứ mở implementation mới cho Modbus RTU.
 
 > **Document ID:** IMPL-MODBUS-PLAN-MK-DDC-24-VI
 > **Phiên bản:** 1.5 | 2026-06-22
-> **Trạng thái:** IN PROGRESS — MOD-012 native libmodbus + PTY read/write/timeout PASS, runtime worker và CI matrix đã implement; cross/board/physical evidence còn mở. Xem [31_PROTOCOL_LIB_INTEGRATION_PLAN §4](31_PROTOCOL_LIB_INTEGRATION_PLAN.md)
+> **Trạng thái:** IN PROGRESS — MOD-012 native libmodbus + PTY read/write/timeout PASS, runtime worker và CI matrix đã implement; cross/board/physical evidence còn mở. Xem [31_PROTOCOL_LIB_INTEGRATION_PLAN §4](../31_PROTOCOL_LIB_INTEGRATION_PLAN.md)
 > **Owner:** Dev 2 (iobus) + Protocol Lead
-> **Đọc cùng:** [SW_FIELDBUS_DESIGN](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) ·
-> [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) ·
-> [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
-> [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) · [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)
+> **Đọc cùng:** [SW_FIELDBUS_DESIGN](../../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) ·
+> [MODBUS_REGISTER_MAP](../../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) ·
+> [CONFIG_SCHEMA](../../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
+> [06_IOBUS](../06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) · [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)
 
 ---
 
@@ -199,7 +208,7 @@ services/iobus/fieldbus/
 
 > **Lưu ý:** Logic layer (MOD-001..011 unit test) ✅ hoàn tất. Toàn bộ DoD trên phụ thuộc vào
 > `libmodbus` 3.1.10 đã cài và PTY transport PASS; cross/board/soak evidence còn mở. Xem task MOD-012 tại
-> [31_PROTOCOL_LIB_INTEGRATION_PLAN §4](31_PROTOCOL_LIB_INTEGRATION_PLAN.md).
+> [31_PROTOCOL_LIB_INTEGRATION_PLAN §4](../31_PROTOCOL_LIB_INTEGRATION_PLAN.md).
 
 ---
 

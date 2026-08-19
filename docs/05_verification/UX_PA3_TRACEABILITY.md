@@ -3,7 +3,7 @@
 > **ID:** TRACE-WEB-PA3-001
 > **Ngày:** 2026-08-08
 > **Requirement:** [UX_REQ_PA3_WEB.md](../02_requirements/UX_REQ_PA3_WEB.md)
-> **Plan:** [52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md](../03_implementation/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md)
+> **Plan:** [52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md](../03_implementation/archive/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md)
 > **Bằng chứng runtime:** [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md)
 
 Một hàng chỉ được ghi `ĐẠT` khi có **cả bốn cột** đầy đủ. Requirement chỉ có

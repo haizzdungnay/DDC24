@@ -10,7 +10,7 @@
 > [`contracts/config/schedule_v3_1.schema.json`](../../contracts/config/schedule_v3_1.schema.json) (FROZEN 2026-08-07) ·
 > [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml) §`/schedules`
 > **Đặc tả trình bày:** [KX-DDC24-UX-WEB-SCHEDULER-001](KX-DDC24-UX-WEB-SCHEDULER-001_VI.md)
-> **Kế hoạch thực thi:** [Plan 50](../03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md)
+> **Kế hoạch thực thi:** [Plan 50](../03_implementation/archive/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md)
 
 ---
 

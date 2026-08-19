@@ -8,7 +8,7 @@
 **Yêu cầu đi kèm:** UX-REQ-MKDDC24-PA3-001
 
 > Đây là đầu vào thiết kế PA3 phục vụ truy xuất. Trạng thái hiện thực và bằng
-> chứng phê duyệt nằm tại `docs/03_implementation/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md`
+> chứng phê duyệt nằm tại `docs/03_implementation/archive/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md`
 > và `docs/07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md`.
 
 ---

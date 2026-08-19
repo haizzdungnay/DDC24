@@ -9,7 +9,7 @@
 > **Current authority:** [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md), [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h), and `hardware-design/05_mcu_io/IOP_PROTOCOL.md`. Do not implement payload/timing tables in this v1 file.
 > ⚠️ **Precedence (Contract Freeze):** giá trị thực thi — opcode, payload layout, enum, FAULT bit,
 > RESET reason, CRC, hằng số timing — lấy theo [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h).
-> Spec lệch header → **header thắng**, sửa spec theo. Xem [16_CONTRACT_FREEZE](../03_implementation/16_CONTRACT_FREEZE.md).
+> Spec lệch header → **header thắng**, sửa spec theo. Xem [16_CONTRACT_FREEZE](../03_implementation/archive/16_CONTRACT_FREEZE.md).
 
 **Tài liệu liên quan:**
 

@@ -1,6 +1,15 @@
 # 16 — Contract Freeze
 ## MK-DDC-24 — Bản chốt hợp đồng kỹ thuật Rev A (1 trang để tra, hết tranh cãi)
 
+> ## 🗄 ĐÃ LƯU TRỮ — 2026-08-19
+>
+> Hồ sơ **đã đóng**, giữ tại `docs/03_implementation/archive/` để truy nguyên.
+> **Không** dùng làm căn cứ mở việc mới hay làm nguồn-chuẩn cho mã hiện hành.
+>
+> **Lý do đóng:** Bản chốt hợp đồng IOP v1.1 ngày 2026-06-11 đã bị thay thế; chính tài liệu tự ghi `SUPERSEDED`.
+>
+> **Đọc thay bằng:** [`contracts/iop/iop_protocol.h`](../../../contracts/iop/iop_protocol.h) v2.0 · [`contracts/shm/mkddc_shm.h`](../../../contracts/shm/mkddc_shm.h) · [ADR-010](../../adr/ADR-010-iop-v2-poll-capability-map.md) · [05_IOP_UART_IMPLEMENTATION_GUIDE](../05_IOP_UART_IMPLEMENTATION_GUIDE.md) Rev 2.0
+
 > **Document ID:** IMPL-FREEZE-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | **Freeze date: 2026-06-11**
 > **Trạng thái:** SUPERSEDED — historical IOP v1.1 freeze; ADR-010 and `shared/iop_protocol.h` v2.0 are the current contract.
@@ -70,7 +79,7 @@ Hàm duy nhất: `iop_crc16()` trong header — không ai tự viết lại.
 
 > 🔴 **Test vector cũ `0x84C0`/`0x556B` trong mọi tài liệu trước 2026-06-11 là SAI**
 > (không khớp thuật toán). Bộ chuẩn 12 vector (đã verify bằng 2 implementation độc lập):
-> [SWFW spec §10.1](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md). Hai vector tra nhanh:
+> [SWFW spec §10.1](../../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md). Hai vector tra nhanh:
 > `{AA 00 01 00}→0x6C20` · `{AA 00 01 01}→0xACE1` · frame GET_IO SEQ=1 = `AA 00 01 01 AC E1`.
 
 ## 6. SHM + rename policy `kinexus → mkddc` (frozen)
@@ -83,7 +92,7 @@ Hàm duy nhất: `iop_crc16()` trong header — không ai tự viết lại.
 | Magic | **GIỮ** `0x4B584401` ("KXD\1") |
 | io_shm creator | `mkddc-iobus` (O_CREAT, init default, set magic cuối) — core/web chỉ attach |
 | plc_shm creator | `mkddc-core` |
-| Field ownership | duy nhất theo bảng [06 §5](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md); ngoại lệ: core ghi `ao_setpoint[]/do_cmd[]`; iobus ghi `ao_mode[]` |
+| Field ownership | duy nhất theo bảng [06 §5](../06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md); ngoại lệ: core ghi `ao_setpoint[]/do_cmd[]`; iobus ghi `ao_mode[]` |
 | Service/log/socket | `mkddc-core`/`mkddc-iobus`/`mkddc-web` · `/run/mkddc/` (alarm.sock, core.sock) |
 | systemd order | iobus trước (tạo SHM) → core `After=mkddc-iobus` (Wants) → web sau core |
 | `iop_protocol.h` | tên file giữ nguyên; guard đổi `MKDDC_IOP_PROTOCOL_H`; protocol gọi là "IOP" |
@@ -102,5 +111,5 @@ KHÔNG BAO GIỜ: sửa 1 bên, "tạm hardcode", hay fork header.
 ```
 
 ---
-**Rev** 1.0 | 2026-06-11 · Header: [`iop_protocol.h`](../../contracts/iop/iop_protocol.h) ·
-[`mkddc_shm.h`](../../contracts/shm/mkddc_shm.h) · Quick start: [17_QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md)
+**Rev** 1.0 | 2026-06-11 · Header: [`iop_protocol.h`](../../../contracts/iop/iop_protocol.h) ·
+[`mkddc_shm.h`](../../../contracts/shm/mkddc_shm.h) · Quick start: [17_QUICK_START_SOM_DEV](../17_QUICK_START_SOM_DEV.md)

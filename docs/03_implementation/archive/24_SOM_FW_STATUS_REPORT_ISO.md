@@ -1,6 +1,15 @@
 # Báo cáo tình trạng dự án SOM FW
 ## MK-DDC-24 — Đánh giá tính năng đã hoàn thành và tiến độ tổng thể
 
+> ## 🗄 ĐÃ LƯU TRỮ — 2026-08-19
+>
+> Hồ sơ **đã đóng**, giữ tại `docs/03_implementation/archive/` để truy nguyên.
+> **Không** dùng làm căn cứ mở việc mới hay làm nguồn-chuẩn cho mã hiện hành.
+>
+> **Lý do đóng:** Báo cáo chụp trạng thái ngày 2026-06-13 trên cây `services/` đã bị xoá; số liệu và cây thư mục trong đó không còn khớp mã nguồn.
+>
+> **Đọc thay bằng:** [11_TASK_CHECKLIST](../11_TASK_CHECKLIST.md) · [`docs/07_records/`](../../07_records/)
+
 > **Document ID:** KX-DDC24-SOM-FW-STATUS-023-VI  
 > **Phiên bản:** 1.1  
 > **Ngày lập:** 2026-06-13  
@@ -133,7 +142,7 @@ tools/test_reload_e2e.sh
 | GAP-03 | Sửa `tools/test_reload_e2e.sh` để chọn đúng PID live, loại zombie | Trung bình | Quick fix trước khi báo PASS E2E reload |
 | GAP-04 | Graph component còn thiếu: OnDelay, OffDelay, Interlock, ManualAuto, RuntimeCounter, PulseCounter, SafeState, AlarmHigh/Low/Delay, persist state | Trung bình-Cao | Plan Active: [23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md); chờ code COR-009/010 |
 | GAP-05 | Modbus RTU master trong iobus | Trung bình-Cao | Plan Active: [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md); chờ code MOD-001..011 |
-| GAP-06 | BACnet full: priority[16], relinquish_default, reliability, BACnet/IP datalink | Cao | Plan Active: [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md); chờ code BAC-001..011 + BTL pretest |
+| GAP-06 | BACnet full: priority[16], relinquish_default, reliability, BACnet/IP datalink | Cao | Plan Active: [25_BACNET_IMPLEMENTATION_PLAN](../25_BACNET_IMPLEMENTATION_PLAN.md); chờ code BAC-001..011 + BTL pretest |
 | GAP-07 | Sensor scaling/calibration thật cho PT100/PT1000/NTC và IO analog trên board | Cao | Cần hardware bench test |
 | GAP-08 | Alarm subscriber/ack workflow production | Trung bình | Phụ thuộc web/backend hoặc alarm service |
 | GAP-09 | iobus SIGHUP reload / runtime config reload | Trung bình | Unit file ghi chưa hỗ trợ ExecReload iobus |

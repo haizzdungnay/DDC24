@@ -3,7 +3,7 @@
 **ID:** REVIEW-RST205-001
 **Ngày:** 2026-08-04
 **Commit đối chiếu:** `9d90f66`
-**Plan:** [PLAN-ARCH-RESTRUCT-002](../../03_implementation/46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md)
+**Plan:** [PLAN-ARCH-RESTRUCT-002](../../03_implementation/archive/46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md)
 **Quyết định:** ADR-025 (Accepted 2026-08-03)
 
 ## 1. Mục đích

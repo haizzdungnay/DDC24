@@ -16,7 +16,7 @@ Wave đó trước khi có phê duyệt riêng, theo `DOC_GOVERNANCE.md` §4 và
 [Design system](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) (`KX-DDC24-UX-SYSTEM-001`) ·
 [Yêu cầu UX PA3](../02_requirements/UX_REQ_PA3_WEB.md) (`UX-REQ-PA3-WEB-001`) ·
 [Quy tắc kiểm soát tài liệu](../00_governance/DOC_GOVERNANCE.md) ·
-[Plan 45](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) · [Plan 52](52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) · [Plan 55](55_UI_UNIVERSAL_INPUT_REDESIGN_PLAN.md)
+[Plan 45](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) · [Plan 52](archive/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) · [Plan 55](55_UI_UNIVERSAL_INPUT_REDESIGN_PLAN.md)
 
 ---
 

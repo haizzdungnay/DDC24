@@ -814,7 +814,7 @@ Số ADR tiếp theo còn trống tại thời điểm ban hành: **`ADR-040`**.
 - IEC 60073, IEC 62682, IEC 62443, ISO 9241-210 và ISA-101 được dùng làm design/verification guidance theo scope; không được biến review tài liệu thành tuyên bố conformity/certification.
 - **Phê duyệt PM/CTO ngày 2026-08-07** đóng 6 quyết định kiến trúc Scheduler
   Engine v3.1 theo phương án PA-1 và cho phép triển khai
-  [Plan 50](../03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md)
+  [Plan 50](../03_implementation/archive/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md)
   (5 pha / 78 task / 64 người-ngày). Chi tiết tại
   [ADR-023](../adr/ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md) và
   [Tờ trình](../07_records/reviews/SCHEDULER_V3_1_APPROVAL_REQUEST_2026-08-07.md).

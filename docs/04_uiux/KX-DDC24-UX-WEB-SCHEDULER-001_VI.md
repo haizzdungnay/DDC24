@@ -9,7 +9,7 @@
 > **Tài liệu liên quan:** [ADR-023](../adr/ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md) ·
 > [UC-WEB-SCHEDULER-001](KX-DDC24-UC-WEB-SCHEDULER-001_VI.md) ·
 > [UX-SYSTEM-001](KX-DDC24-UX-SYSTEM-001_VI.md) (token & component) ·
-> [Plan 50](../03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md)
+> [Plan 50](../03_implementation/archive/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md)
 
 ---
 
