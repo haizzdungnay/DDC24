@@ -343,6 +343,10 @@ export interface HealthResponse {
 export interface CurrentUser {
   username: string
   role: UserRole
+  /** `T57-3.17` (`ADR-047`) — phiên đang bị buộc đổi mật khẩu. Backend chặn mọi
+   *  endpoint khác bằng `403 password_change_required`; cờ này chỉ để giao diện
+   *  nói đúng NGUYÊN NHÂN thay vì hiện một lỗi quyền chung chung. */
+  mustChangePassword?: boolean
 }
 
 /* ── PA3 Overview read model ─────────────────────────────────────────────────
@@ -1116,6 +1120,34 @@ export interface ConfigDevice {
 export interface UserAccount {
   username: string
   role: UserRole
+  mustChangePassword?: boolean
+}
+
+/** Một dòng soát truy cập tài khoản — `T57-3.16`. */
+export interface UserAccessRow extends UserAccount {
+  /** `null` = KHÔNG tìm thấy vết trong kho Activity. Có thể vì chưa từng đăng
+   *  nhập, cũng có thể vì vết đã bị đẩy khỏi vòng nhớ 2000 sự kiện — giao diện
+   *  phải nói "không rõ", không được nói "chưa đăng nhập bao giờ". */
+  lastLoginAt: string | null
+  lastLoginRemote: string | null
+  lastFailedLoginAt: string | null
+  activeSessions: number
+}
+
+export interface UserSession {
+  username: string
+  role: UserRole
+  issuedAt: string
+  lastSeenAt: string
+  remote?: string
+}
+
+export interface UserAccessResponse {
+  users: UserAccessRow[]
+  sessions: UserSession[]
+  /** Sổ phiên nằm trong bộ nhớ tiến trình nên chỉ nói được từ mốc này trở đi. */
+  sessionsSince: string
+  activityWindow: number
 }
 
 

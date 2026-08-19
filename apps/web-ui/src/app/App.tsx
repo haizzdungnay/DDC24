@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import {
+  ForcePasswordChangePage,
   LoginPage,
   ROUTE_MIN_ROLE,
   UserInfoPage,
@@ -32,12 +33,16 @@ import { LEGACY_GRAPH_DEMO_ENABLED, PROGRAMMING_REV_A_ENABLED } from '../shared/
 import { ProgrammingRoutes } from '../features/programming/ProgrammingRoutes'
 
 function ProtectedShell() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, session } = useAuth()
   const location = useLocation()
   if (!isAuthenticated) {
     const returnTo = `${location.pathname}${location.search}${location.hash}`
     return <Navigate to="/login" replace state={{ from: returnTo }} />
   }
+  /* `T57-3.17` (`ADR-047`): backend đã chặn mọi endpoint của phiên này, nên
+     dựng shell đầy đủ chỉ tạo ra một màn hình toàn lỗi 403. Đưa thẳng tới việc
+     cần làm. Đây là dẫn đường, KHÔNG phải lớp bảo vệ — lớp bảo vệ ở backend. */
+  if (session?.mustChangePassword) return <ForcePasswordChangePage />
   /* PA3-205: `OverviewProvider` bọc NGOÀI shell vì cả TopBar lẫn Landing đều
      đọc cùng một snapshot. Đặt nó bên trong Dashboard sẽ đưa ta về đúng lỗi
      PA3-F12: hai vùng của một màn hình poll riêng và nói hai điều khác nhau. */

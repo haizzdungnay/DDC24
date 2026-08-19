@@ -605,7 +605,9 @@ export function MonitorPage() {
         onSave={(name) => savedViews.save(name, currentFilterParams)}
         onRename={savedViews.rename}
         onRemove={savedViews.remove}
-        hint={pick('Lưu trên trình duyệt này, theo tài khoản đang đăng nhập.', 'Stored in this browser, under the signed-in account.')}
+        hint={savedViews.syncState === 'local-only'
+          ? pick('Thiết bị không lưu được tuỳ chọn — khung nhìn chỉ nằm trên trình duyệt này.', 'The device cannot store preferences — views stay in this browser only.')
+          : pick('Lưu trên thiết bị theo tài khoản đang đăng nhập.', 'Stored on the device under the signed-in account.')}
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[170px_170px_170px_190px_1fr_132px]">

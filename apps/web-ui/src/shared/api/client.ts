@@ -35,7 +35,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccessResponse, type UserAccessRow, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -224,6 +224,12 @@ export async function requestJson<T>(path: string, init: ApiRequestInit = {}): P
   }
   if (!response.ok) {
     const body = await response.text().catch(() => '')
+    /* `T57-3.17` (`ADR-047`): backend chặn mọi endpoint của một phiên đang bị
+       buộc đổi mật khẩu. Không nhận ra tín hiệu này thì giao diện chỉ hiện một
+       chuỗi lỗi quyền, và người dùng đi tìm quyền bị thiếu thay vì đổi mật khẩu. */
+    if (response.status === 403 && body.includes('password_change_required')) {
+      window.dispatchEvent(new CustomEvent('mkddc:password-change-required'))
+    }
     let message = body || `${response.status} ${response.statusText}`
     let details: ApiValidationDetail[] = []
     try {
@@ -436,6 +442,20 @@ function normalizeUserAccount(raw: Record<string, unknown> | unknown): UserAccou
     // Cùng nguyên tắc fail-closed như F-07 ở AuthProvider: một role lạ hoặc thiếu
     // phải rơi về quyền THẤP NHẤT, không được mặc định thành admin.
     role: role === 'admin' || role === 'operator' ? role : 'viewer'
+  }
+}
+
+function normalizeUserAccessRow(raw: unknown): UserAccessRow {
+  const record = (raw ?? {}) as Record<string, unknown>
+  const base = normalizeUserAccount(record)
+  const text = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value : null
+  return {
+    ...base,
+    mustChangePassword: Boolean(record.mustChangePassword),
+    lastLoginAt: text(record.lastLoginAt),
+    lastLoginRemote: text(record.lastLoginRemote),
+    lastFailedLoginAt: text(record.lastFailedLoginAt),
+    activeSessions: Number.isFinite(Number(record.activeSessions)) ? Number(record.activeSessions) : 0
   }
 }
 
@@ -1256,6 +1276,38 @@ export const apiClient = {
   async getMe(): Promise<CurrentUser> {
     if (IS_DEMO) return { username: 'demo', role: 'admin' }
     return requestJson<CurrentUser>('/me')
+  },
+
+  /** `T57-3.16` — lần đăng nhập gần nhất và phiên đang mở của từng tài khoản. */
+  async getUserAccess(): Promise<UserAccessResponse> {
+    if (IS_DEMO) {
+      const users = await getDemoUserAccounts()
+      return {
+        users: users.map((user) => ({ ...user, lastLoginAt: null, lastLoginRemote: null, lastFailedLoginAt: null, activeSessions: 0 })),
+        sessions: [], sessionsSince: new Date().toISOString(), activityWindow: 0
+      }
+    }
+    const raw = await requestJson<Partial<UserAccessResponse>>('/users/access', { cache: 'no-store' })
+    return {
+      users: Array.isArray(raw.users) ? raw.users.map(normalizeUserAccessRow) : [],
+      sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
+      sessionsSince: String(raw.sessionsSince ?? ''),
+      activityWindow: Number(raw.activityWindow ?? 0)
+    }
+  },
+
+  /** `T57-3.2` (`ADR-043`) — tuỳ chọn người dùng lưu trên thiết bị.
+   *
+   *  Backend không hiểu nội dung; hình dạng do chính FE định nghĩa. Lỗi đọc
+   *  KHÔNG được nuốt: nơi gọi phải biết để còn quay về bộ đệm cục bộ và nói ra. */
+  async getMyPreferences(): Promise<Record<string, unknown>> {
+    if (IS_DEMO) return {}
+    return requestJson<Record<string, unknown>>('/me/preferences', { cache: 'no-store' })
+  },
+
+  async putMyPreferences(value: Record<string, unknown>): Promise<void> {
+    if (IS_DEMO) return
+    await requestJson('/me/preferences', { method: 'PUT', body: JSON.stringify(value) })
   },
 
   /* WEB-UX-003 / WEB-UX-011: các endpoint quản trị tài khoản đã tồn tại đầy đủ ở
