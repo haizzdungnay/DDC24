@@ -644,6 +644,33 @@ Khuyến nghị phương án 1 kèm sửa `ADR-046` nói rõ Rev A không có by
 sao. **Chưa thi hành**: đổi điều một ADR đã ban hành là việc phải ghi trước khi
 code, đúng quy tắc "DOC TRƯỚC CODE SAU".
 
+### Kiểm chứng trên board sau khi vá kho lịch sử (2026-08-19, đợt 3)
+
+Deploy binary `mkddc-web` aarch64 mang bản vá `T57-3.13` lên board và gọi thật
+`POST /api/v1/alarm-settings/estimate`. Kết quả **đổi bản chất lỗi** — đó là bằng
+chứng bản vá có tác dụng:
+
+| Trước vá | Sau vá |
+|---|---|
+| `503 "không có mẫu lịch sử"` cho cả 28 điểm — dừng ở bước ĐỌC LỊCH SỬ | `503 "không tìm thấy mkddc-alarm-sim"` — đã qua bước đọc lịch sử, dừng ở bước GỌI ENGINE |
+
+**Hai khoảng hở mới lộ ra, và chúng nghiêm trọng hơn lỗi vừa vá:**
+
+1. **`mkddc-alarm-sim` chưa từng được viết.** `ADR-035` và `ADR-048` đặc tả nó
+   như binary engine cho `T57-2.13` (mô phỏng luật) và `T57-3.13` (ước lượng tần
+   suất), nhưng **không có target build nào trong toàn repo** — khác hẳn
+   `mkddc-schedule-sim` vốn có target tại `apps/core/CMakeLists.txt:137`.
+   Hệ quả: hai task này **đã giao đúng phần vỏ và đúng hợp đồng 503** như ADR
+   yêu cầu, nhưng **tính năng không dùng được ngoài hiện trường** cho tới khi
+   engine tồn tại. Trạng thái đúng của chúng là *vỏ xong, engine chưa có*.
+2. **`mkddc-schedule-sim` không được cài trên board.** Nó có target build nhưng
+   không nằm trong gói triển khai. Vì vậy `T57-3.5`/`T57-3.6`/`T57-3.7` (hiệu lực
+   thực tế của lịch) cũng sẽ trả `503` trên thiết bị thật, dù mã Go và FE đã đúng.
+
+Cả hai đều **không phải lỗi mã** — chúng là khoảng hở *đóng gói và phạm vi*, và
+chúng chỉ lộ ra khi gọi thật trên board. Ghi ở đây để lần lập kế hoạch sau không
+đọc "đã giao" thành "đã dùng được".
+
 ### Việc còn lại
 
 | Mục | Trạng thái | Điều kiện mở khoá |

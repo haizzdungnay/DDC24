@@ -8,6 +8,39 @@
 
 ## [Unreleased]
 
+### Changed — Deploy bản vá `T57-3.13` lên board và hai khoảng hở engine mô phỏng lộ ra (2026-08-19)
+
+**Deploy.** Cross-build `mkddc-web` cho aarch64, sao lưu binary cũ
+(`mkddc-web.bak-20260819-pre-estimate-fix`), cài và restart `mkddc-web-pi` —
+service `active`. FE trên board đã trùng hash với bản build hiện tại
+(`index-Ccy01LAI.js`) nên không cần deploy lại.
+
+**Bản vá kho lịch sử đã có tác dụng, xác nhận bằng cách gọi thật trên board:**
+
+| Trước vá | Sau vá |
+|---|---|
+| `503 "không có mẫu lịch sử"` cho cả 28 điểm — dừng ở bước đọc lịch sử | `503 "không tìm thấy mkddc-alarm-sim"` — đã qua bước đọc lịch sử |
+
+**Hai khoảng hở mới lộ ra, nghiêm trọng hơn lỗi vừa vá:**
+
+1. **`mkddc-alarm-sim` chưa từng được viết.** `ADR-035`/`ADR-048` đặc tả nó làm
+   engine cho `T57-2.13` và `T57-3.13`, nhưng không có target build nào trong
+   repo — khác `mkddc-schedule-sim` (có target tại `apps/core/CMakeLists.txt:137`).
+   Hai task đó **đã giao đúng vỏ và đúng hợp đồng 503**, nhưng tính năng chưa
+   dùng được ngoài hiện trường.
+2. **`mkddc-schedule-sim` không có trong gói cài trên board**, nên
+   `T57-3.5`/`3.6`/`3.7` cũng sẽ 503 trên thiết bị thật dù mã Go và FE đã đúng.
+
+Cả hai là khoảng hở **đóng gói và phạm vi**, không phải lỗi mã, và chỉ lộ ra khi
+gọi thật trên board.
+
+**Cứu việc của các phiên bị ngắt.** Ba commit trước gói này đưa vào lịch sử phần
+việc đã hoàn chỉnh nhưng chưa kịp commit của các phiên agent bị dừng vì hết hạn
+mức API: `F-PRIO-001` (core), `F-OUT-002` (web-ui) và hồ sơ kiểm chứng AO-01/UI-16.
+
+**Kiểm chứng.** `ctest` 1039/1039 · FE 109 file / 1050 test · `go test ./... -count=1`
+PASS · `docs_iso_harness --expect` PASS.
+
 ### Fixed — `T57-3.13` hỏi nhầm kho lịch sử: mọi điểm trả 503 trên board dù dữ liệu vẫn được ghi (2026-08-19)
 
 **Triệu chứng (phát hiện trên board thật, không phải trên máy dev).** Ước lượng
