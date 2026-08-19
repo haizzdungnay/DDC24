@@ -31,6 +31,22 @@ class PriorityResolver {
 public:
     PriorityResolver();
 
+    /* Mốc bắt đầu một chu kỳ trọng tài. scan_loop gọi đúng MỘT lần mỗi scan,
+     * trước khi bất kỳ nguồn nào ghi.
+     *
+     * Chỉ dùng cho cảnh báo `priority.conflict`: slot giữ `active` qua nhiều
+     * scan (đúng thiết kế — nguồn phải `release` mới nhả), nên nếu so "đã
+     * active và giá trị khác" thì một chương trình Local logic ghi giá trị
+     * BIẾN THIÊN mỗi scan sẽ bị báo xung đột mỗi scan dù chỉ có một nguồn duy
+     * nhất. Board Foxlinx ghi 97.410 dòng WARN trong ~11,5 giờ vì chuyện này
+     * (`F-PRIO-001`, 2026-08-19): nhiễu log lấp mất xung đột thật, và mỗi dòng
+     * là một lần ghi stderr đồng bộ ngay trong vòng quét realtime. Đánh dấu
+     * chu kỳ để chỉ còn cảnh báo khi HAI lần ghi rơi vào CÙNG một chu kỳ —
+     * đúng nghĩa "hai nguồn cùng mức tranh nhau".
+     *
+     * Caller không gọi `begin_cycle()` giữ nguyên hành vi cũ. */
+    void begin_cycle();
+
     /* nguồn ghi: level 1..6; trả false nếu level/ch ngoài range (CR-010) */
     bool set_ao(int level, int ch, float v);
     bool release_ao(int level, int ch);
@@ -68,12 +84,16 @@ public:
 
 private:
     struct Slot {
-        bool  active = false;
-        float value = 0.0f;
+        bool     active = false;
+        float    value = 0.0f;
+        uint64_t cycle = 0;   /* chu kỳ của lần ghi gần nhất — xem begin_cycle() */
     };
     Slot ao_[PRIO_LEVELS][KX_N_AO];   /* [level-1][ch] */
     Slot do_[PRIO_LEVELS][KX_N_DO];
     uint8_t ao_modes_[KX_N_AO] = {};
+    /* Bắt đầu từ 1 để slot chưa ai ghi (cycle = 0) không bao giờ bị coi là
+     * "vừa ghi trong chu kỳ này". */
+    uint64_t cycle_ = 1;
 
     static bool valid_level(int level) { return level >= 1 && level <= PRIO_LEVELS; }
 };

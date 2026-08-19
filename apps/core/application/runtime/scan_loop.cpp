@@ -64,6 +64,13 @@ void ScanLoop::step()
     d_.resolver->set_ao_modes(last_io_.ao_mode);
     d_.graph->set_ao_modes(last_io_.ao_mode);
 
+    /* Mở một chu kỳ trọng tài mới TRƯỚC mọi nguồn ghi của scan này (lệnh web/
+     * BACnet ở bước 4, schedule, graph bước 5, ST bước 5b). Nhờ vậy cảnh báo
+     * `priority.conflict` chỉ nổ khi hai nguồn cùng mức ghi trong CÙNG scan,
+     * thay vì nổ mỗi scan chỉ vì một chương trình ghi giá trị biến thiên
+     * (F-PRIO-001). */
+    d_.resolver->begin_cycle();
+
     /* 3. Read Modbus ext snapshot từ fieldbus.sock (MOD-009).
      * SOCK_DGRAM MSG_DONTWAIT — nếu không có datagram: dùng ext[] cũ (stale theo ts_ns). */
     d_.bacnet->read_ext(d_.fieldbus_sockfd);

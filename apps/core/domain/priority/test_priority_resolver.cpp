@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <string>
 
 #include "priority/priority_resolver.hpp"
 
@@ -102,4 +103,79 @@ TEST(PriorityResolver, RejectsAoOutsideAppliedPhysicalRange)
     EXPECT_FALSE(r.set_ao(PRIO_BACNET, 1, 3.99f));
     EXPECT_FALSE(r.set_ao(PRIO_BACNET, 1, 20.01f));
     EXPECT_FALSE(r.set_ao(PRIO_BACNET, 1, std::numeric_limits<float>::quiet_NaN()));
+}
+
+/**
+ * `F-PRIO-001` (2026-08-19) — cảnh báo `priority.conflict` phải nói đúng
+ * chuyện xung đột.
+ *
+ * Slot giữ `active` qua nhiều scan (đúng thiết kế: nguồn phải `release` mới
+ * nhả), nên điều kiện cũ "đã active và giá trị khác" biến MỌI thay đổi giá trị
+ * bình thường của một nguồn duy nhất thành "xung đột". Trên board Foxlinx,
+ * chương trình AHU ghi AO-01/02/03 mỗi scan nên Core đổ 97.410 dòng WARN trong
+ * ~11,5 giờ (~2,3 dòng/giây) — nhiễu log lấp mất xung đột thật và mỗi dòng là
+ * một lần ghi stderr đồng bộ ngay trong vòng quét realtime.
+ *
+ * Hai mệnh đề đối lập được khoá cùng lúc: nguồn đơn ghi qua nhiều chu kỳ thì
+ * IM LẶNG, còn hai lần ghi trong CÙNG một chu kỳ thì VẪN cảnh báo.
+ */
+namespace {
+
+/* Đếm dòng "priority.conflict" mà một đoạn code đẩy ra stderr. */
+template <typename Fn>
+int count_conflict_warnings(Fn&& body)
+{
+    ::testing::internal::CaptureStderr();
+    body();
+    const std::string log = ::testing::internal::GetCapturedStderr();
+    int count = 0;
+    for (std::string::size_type pos = log.find("priority.conflict");
+         pos != std::string::npos;
+         pos = log.find("priority.conflict", pos + 1))
+        count++;
+    return count;
+}
+
+}  // namespace
+
+TEST(PriorityResolver, SingleSourceChangingValueAcrossCyclesIsNotAConflict)
+{
+    PriorityResolver r;
+    const int warnings = count_conflict_warnings([&] {
+        for (int scan = 0; scan < 50; scan++) {
+            r.begin_cycle();
+            /* Một nguồn duy nhất (Local logic) ghi giá trị biến thiên mỗi scan
+             * — đúng hành vi của chương trình AHU trên board. */
+            r.set_ao(PRIO_LOCAL_LOGIC, 0, 6.0f + 0.01f * static_cast<float>(scan));
+            r.set_do(PRIO_LOCAL_LOGIC, 0, scan % 2 == 0);
+            (void)r.resolve();
+        }
+    });
+    EXPECT_EQ(warnings, 0) << "một nguồn đổi giá trị qua từng scan không phải xung đột";
+    EXPECT_FLOAT_EQ(r.resolve().ao[0], 6.0f + 0.01f * 49.0f) << "giá trị mới nhất vẫn thắng";
+}
+
+TEST(PriorityResolver, TwoWritesInSameCycleStillWarn)
+{
+    PriorityResolver r;
+    const int warnings = count_conflict_warnings([&] {
+        r.begin_cycle();
+        r.set_ao(PRIO_BACNET, 1, 3.0f);
+        r.set_ao(PRIO_BACNET, 1, 5.5f);   /* cùng chu kỳ, cùng mức → xung đột thật */
+        r.set_do(PRIO_BACNET, 1, false);
+        r.set_do(PRIO_BACNET, 1, true);
+    });
+    EXPECT_EQ(warnings, 2) << "hai nguồn cùng mức tranh nhau trong một scan phải được báo";
+    EXPECT_FLOAT_EQ(r.resolve().ao[1], 5.5f) << "nguồn sau vẫn thắng";
+}
+
+TEST(PriorityResolver, SameValueRewrittenNeverWarns)
+{
+    PriorityResolver r;
+    const int warnings = count_conflict_warnings([&] {
+        r.begin_cycle();
+        r.set_ao(PRIO_LOCAL_LOGIC, 2, 4.0f);
+        r.set_ao(PRIO_LOCAL_LOGIC, 2, 4.0f);
+    });
+    EXPECT_EQ(warnings, 0) << "ghi lại đúng giá trị cũ không phải xung đột";
 }

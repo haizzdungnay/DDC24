@@ -8,6 +8,39 @@
 
 ## [Unreleased]
 
+### Changed — Deploy bản vá `T57-3.13` lên board và hai khoảng hở engine mô phỏng lộ ra (2026-08-19)
+
+**Deploy.** Cross-build `mkddc-web` cho aarch64, sao lưu binary cũ
+(`mkddc-web.bak-20260819-pre-estimate-fix`), cài và restart `mkddc-web-pi` —
+service `active`. FE trên board đã trùng hash với bản build hiện tại
+(`index-Ccy01LAI.js`) nên không cần deploy lại.
+
+**Bản vá kho lịch sử đã có tác dụng, xác nhận bằng cách gọi thật trên board:**
+
+| Trước vá | Sau vá |
+|---|---|
+| `503 "không có mẫu lịch sử"` cho cả 28 điểm — dừng ở bước đọc lịch sử | `503 "không tìm thấy mkddc-alarm-sim"` — đã qua bước đọc lịch sử |
+
+**Hai khoảng hở mới lộ ra, nghiêm trọng hơn lỗi vừa vá:**
+
+1. **`mkddc-alarm-sim` chưa từng được viết.** `ADR-035`/`ADR-048` đặc tả nó làm
+   engine cho `T57-2.13` và `T57-3.13`, nhưng không có target build nào trong
+   repo — khác `mkddc-schedule-sim` (có target tại `apps/core/CMakeLists.txt:137`).
+   Hai task đó **đã giao đúng vỏ và đúng hợp đồng 503**, nhưng tính năng chưa
+   dùng được ngoài hiện trường.
+2. **`mkddc-schedule-sim` không có trong gói cài trên board**, nên
+   `T57-3.5`/`3.6`/`3.7` cũng sẽ 503 trên thiết bị thật dù mã Go và FE đã đúng.
+
+Cả hai là khoảng hở **đóng gói và phạm vi**, không phải lỗi mã, và chỉ lộ ra khi
+gọi thật trên board.
+
+**Cứu việc của các phiên bị ngắt.** Ba commit trước gói này đưa vào lịch sử phần
+việc đã hoàn chỉnh nhưng chưa kịp commit của các phiên agent bị dừng vì hết hạn
+mức API: `F-PRIO-001` (core), `F-OUT-002` (web-ui) và hồ sơ kiểm chứng AO-01/UI-16.
+
+**Kiểm chứng.** `ctest` 1039/1039 · FE 109 file / 1050 test · `go test ./... -count=1`
+PASS · `docs_iso_harness --expect` PASS.
+
 ### Fixed — `T57-3.13` hỏi nhầm kho lịch sử: mọi điểm trả 503 trên board dù dữ liệu vẫn được ghi (2026-08-19)
 
 **Triệu chứng (phát hiện trên board thật, không phải trên máy dev).** Ước lượng
@@ -102,6 +135,99 @@ giữa chừng là lời giải thích khớp nhất. Ghi lại để nếu tái
 **Trạng thái Plan 57: Rev A 69/70 (~98,6%).** Còn đúng `T57-3.9`. Hai việc ngoài
 mẫu số nhưng chặn `RELEASE_READY`: chữ ký người cho `ADR-033`…`ADR-049`, và một
 lượt deploy đợt 2 lên board.
+
+### Fixed — AO hiện số volt nhưng dán nhãn đơn vị kỹ thuật (`F-OUT-002`, 2026-08-19)
+
+**Triệu chứng.** Trang Outputs hiện "Current Value" của kênh AO bằng con số Core
+gửi về kèm nhãn lấy từ `units` trong cấu hình kênh. Kênh AO-03 "Chilled Water
+Valve" trên board Foxlinx (`0-10V`, `units: percent`, dải 0-100) đang ra 4,5 V
+= 45 % nhưng màn hình hiện **"4,5 %"** — sai 10 lần trên một lệnh mở van. Min /
+Max / Trung bình và đồ thị xu hướng cùng lỗi. Trang Monitor thì dán cứng nhãn
+`V` cho mọi kênh AO, nên kênh cấu hình `4-20mA` bị gọi là volt.
+
+**Nguyên nhân gốc.** Core chỉ lưu/đọc AO theo **tín hiệu thô volt/mA** (không tự
+quy đổi engineering unit như chiều UI qua `io_scaling.cpp`), còn `units` trong
+`io_config.conf` là **đơn vị kỹ thuật** của kênh. `OutputsPage` ghép thẳng hai
+thứ đó: số của Core + nhãn của cấu hình, không có bước quy đổi ở giữa. Bản vá
+`F-OUT-001` (2026-08-17) đã thêm ô "% mở" tính riêng theo MODE nhưng để nguyên
+ô "Current Value" sai nhãn.
+
+**Cách sửa.**
+- `apps/web-ui/src/features/points/OutputsPage.tsx`: thêm `aoSignalToEngineering()`
+  — nghịch đảo của `previewAoSignal()`, cùng đường cong đã hiện ở bảng "Xem
+  trước tín hiệu ra" — và `outputLiveDisplay()` dùng chung cho bảng tổng quan lẫn
+  khối Live data. Quy đổi cả chuỗi mẫu xu hướng nên Min/Max/Avg và đồ thị cùng
+  đơn vị với Current Value; `__raw` và ô "Raw output" giữ nguyên volt/mA để đối
+  chiếu đồng hồ đo. Dải kỹ thuật suy biến (`minPv = maxPv`) thì hiện lại số thô
+  kèm đơn vị tín hiệu thay vì bịa một con số.
+- **Chặn quy đổi khi đơn vị kỹ thuật TRÙNG đơn vị tín hiệu** (`units: volt` trên
+  `0-10V`, `milliampere` trên `4-20mA`): khi đó giá trị kỹ thuật chính là điện
+  áp/dòng trên đầu cực, không đi qua `minPv`/`maxPv`. Không có luật này thì cấu
+  hình thật trên board — AO-01 khai `units: volt` nhưng `max_pv: 100`, tức
+  "0..100 volt" trên một ngõ ra 0-10V, tự mâu thuẫn — sẽ hiện "60,7 V" cho một
+  ngõ ra 6,06 V: đúng theo đường cong đã khai nhưng vô nghĩa về vật lý. Luật này
+  bảo đảm con số không bao giờ chửi nhau với chính nhãn của nó.
+- `apps/web-ui/src/features/points/MonitorPage.tsx`: nhãn AO lấy `rawUnit` của
+  điểm (V hay mA theo MODE thật) thay cho chuỗi `'V'` đóng cứng.
+
+**Kiểm chứng.** `npx vitest --run --environment jsdom src` → **109 file / 1050
+test pass** (thêm `OutputsPage.engineeringUnit.test.ts` 7 test và 7 test khoá
+hành vi trong `OutputsPage.test.tsx`, trong đó có case cấu hình thật của AO-01);
+`npm run lint` sạch; `npm run build` OK. Trên board, đọc qua API bằng tài khoản
+`admin`, hiển thị trước/sau trên số liệu sống:
+
+| Kênh | `units` | Giá trị Core | Trước | Sau |
+|---|---|---|---|---|
+| AO-01 Supply Fan Speed | `volt` | 6,059 V | `6.1 V` | `6.1 V` (giữ nguyên) |
+| AO-02 Economizer Damper | `volt` | 1,500 V | `1.5 V` | `1.5 V` (giữ nguyên) |
+| AO-03 Chilled Water Valve | `percent` | 2,517 V | `2.5 %` | **`25.2 %`** |
+| AO-04 Hot Water Valve | `volt` | 0,000 V | `0.0 V` | `0.0 V` (giữ nguyên) |
+
+### Fixed — `priority.conflict` báo xung đột giả mỗi scan (`F-PRIO-001`, 2026-08-19)
+
+**Triệu chứng.** Core trên board Foxlinx đổ **97.410 dòng** `WARN
+priority.conflict` trong ~11,5 giờ (~2,3 dòng/giây), phân bố `ao ch=0` 42.235 /
+`ao ch=2` 42.235 / `ao ch=1` 12.235 / `do ch=1` 768 — số đếm bằng nhau y hệt
+giữa các kênh, dấu hiệu "mỗi scan một dòng" chứ không phải tranh chấp thật.
+
+**Nguyên nhân gốc.** `PriorityResolver::set_ao()`/`set_do()` cảnh báo khi
+`s.active && s.value != v`. Nhưng slot giữ `active` qua nhiều scan — đúng thiết
+kế, nguồn phải `release` mới nhả — nên **một** nguồn duy nhất ghi giá trị BIẾN
+THIÊN mỗi scan (chương trình AHU lái AO-01/02/03) cũng bị coi là xung đột mỗi
+scan. Hậu quả: nhiễu log lấp mất xung đột thật (đúng thứ log này sinh ra để phát
+hiện), và mỗi dòng là một lần ghi `stderr` đồng bộ ngay trong vòng quét realtime.
+
+**Cách sửa.** `apps/core/domain/priority/priority_resolver.{hpp,cpp}`: thêm
+`begin_cycle()` và dấu chu kỳ trên từng slot; chỉ cảnh báo khi hai lần ghi rơi
+vào **cùng một chu kỳ** trọng tài — đúng nghĩa "hai nguồn cùng mức tranh nhau".
+`apps/core/application/runtime/scan_loop.cpp` gọi `begin_cycle()` đúng một lần
+mỗi scan, ngay sau `set_ao_modes()` và trước mọi nguồn ghi (lệnh web/BACnet,
+schedule, graph, ST). Caller không gọi `begin_cycle()` giữ nguyên hành vi cũ.
+
+**Kiểm chứng.** `cmake --fresh` + build + `ctest --test-dir build/fw` với
+MODBUS/BACNET/HMI=ON → **1039/1039 pass** (thêm 3 test khoá hành vi trong
+`test_priority_resolver.cpp`). Trên board sau khi deploy bản vá: **0 dòng
+`priority.conflict` / 5 phút** (trước ~140 dòng/phút), log thường vẫn 643
+dòng/5 phút — không phải im lặng do chết service.
+
+### Changed — Deploy board Foxlinx bản vá `F-OUT-002` + `F-PRIO-001` (2026-08-19)
+
+`mkddc-core` (aarch64, `RelWithDebInfo`, đã strip) và `dist` web-ui build bằng
+`npm run build:foxlinx` đã cài lên board, service `mkddc-core` và
+`mkddc-web-pi` restart, `active`. Board phục vụ `assets/index-Ccy01LAI.js`,
+sha256 **khớp từng byte** với bản build local
+(`5578d873…3d0926c`). Bản cũ giữ lại để lùi:
+`/usr/sbin/mkddc-core.bak-20260819-preF-PRIO-001` và
+`/opt/mkddc-web/dist.prev-fprio-20260819`.
+
+### Added — Hồ sơ kiểm chứng báo cáo AO-01/UI-16 từ công cụ ngoài (2026-08-19)
+
+`docs/07_records/reviews/AO01_UI16_FEEDBACK_CLAIM_VERIFICATION_2026-08-19.md`:
+đối chiếu hai cáo buộc "lỗi source code" trong một báo cáo do công cụ ngoài lập
+với mã thật của repo và với board đang chạy. Cả hai **không đứng vững** (đọc
+nhầm ảnh chụp mã cũ trước `7be9bca`/`259d160`), nhưng đường truy vết dẫn tới
+`F-OUT-002` và `F-PRIO-001` ở trên — hai lỗi thật, khác nguyên nhân với lỗi
+được nêu. Kèm số đo trước/sau và ba bài học truy vết.
 
 ### Changed — Bốn quyết định người đóng cổng còn treo của Plan 57 (2026-08-19)
 

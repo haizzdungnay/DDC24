@@ -359,7 +359,7 @@ function OutputsOverviewModal({ open, outputs, livePoints, onEdit, onClose }: { 
           <tbody>
             {outputs.map((output) => {
               const live = findOutputPoint(livePoints, output)
-              const unit = live?.unit ?? (output.kind === 'AO' ? engineeringUnitLabel(output.units) : '')
+              const display = outputLiveDisplay(output, live)
               return (
                 <tr key={output.id} className="border-t border-[var(--c-border)] hover:bg-[var(--c-surface-2)]">
                   <td className="px-3 py-2 font-mono text-xs">{output.kind === 'AO' ? 16 + output.channel : 20 + output.channel}</td>
@@ -370,7 +370,7 @@ function OutputsOverviewModal({ open, outputs, livePoints, onEdit, onClose }: { 
                   <td className="px-3 py-2 font-mono text-xs">{output.kind}</td>
                   <td className="px-3 py-2 text-xs">{output.kind === 'AO' ? output.mode : 'Digital'}</td>
                   <td className="px-3 py-2">
-                    <span className="font-mono font-semibold">{live ? formatValue(live.value, unit) : '--'}</span>
+                    <span className="font-mono font-semibold">{live ? formatValue(display.value, display.unit) : '--'}</span>
                     <span className="ml-2 text-xs text-[var(--c-text-dim)]">{live?.quality ?? '--'}</span>
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">
@@ -474,14 +474,30 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
 }) {
   const { t, pick } = useI18n()
   const point = findOutputPoint(points, output)
-  const { data, reset } = useOutputTrend(output.id, point)
+  const { data: signalData, reset } = useOutputTrend(output.id, point)
+  const display = outputLiveDisplay(output, point)
+  // Mẫu do Core gửi về luôn là TÍN HIỆU thô (V/mA). Quy đổi cả chuỗi sang dải
+  // kỹ thuật để Min/Max/Avg và đồ thị cùng một đơn vị với "Giá trị hiện tại"
+  // (F-OUT-002) — trước đây ba chỗ này là số volt nhưng mang nhãn `units`.
+  // `__raw` trong mẫu vẫn là volt/mA nguyên bản cho ai đối chiếu đồng hồ đo.
+  const data = useMemo(() => {
+    // Cùng quy tắc với `outputLiveDisplay`: đơn vị kỹ thuật trùng đơn vị tín
+    // hiệu thì không quy đổi, nếu không Min/Max/Avg sẽ lệch đơn vị với ô
+    // "Giá trị hiện tại" ngay bên cạnh.
+    if (output.kind !== 'AO') return signalData
+    if (engineeringUnitLabel(output.units) === aoSafeUnit(output.mode)) return signalData
+    return signalData.map((sample) => {
+      const engineering = aoSignalToEngineering(output, sample.raw)
+      return engineering === null ? sample : { ...sample, raw: engineering, [output.id]: engineering }
+    })
+  }, [signalData, output])
   const values = data.map((sample) => sample.raw)
   const stats = values.length ? {
     min: Math.min(...values),
     max: Math.max(...values),
     avg: values.reduce((sum, value) => sum + value, 0) / values.length
   } : null
-  const unit = point?.unit ?? (output.kind === 'AO' ? engineeringUnitLabel(output.units) : '')
+  const unit = display.unit
   const modeRawUnit = output.kind === 'AO' ? aoSafeUnit(output.mode) : undefined
   const rawOutput = output.kind === 'AO' && typeof point?.raw === 'number'
     ? { value: point.raw, unit: point.rawUnit ?? modeRawUnit ?? '' }
@@ -506,7 +522,7 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
             <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} onClick={reset}>{pick('Đặt lại', 'Reset')}</Button>
           </div>
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <LiveDataItem label={t('currentvalue')} value={point ? formatValue(point.value, unit) : '--'} />
+            <LiveDataItem label={t('currentvalue')} value={point ? formatValue(display.value, unit) : '--'} />
             {output.kind === 'AO' && <LiveDataItem label={pick('% mở', '% open')} value={openPercent !== undefined ? formatStat(openPercent, '%') : '--'} />}
             {output.kind === 'AO' && <LiveDataItem label="Raw output" value={rawOutput ? formatStat(rawOutput.value, rawOutput.unit) : '--'} />}
             <LiveDataItem label={pick('Nhỏ nhất', 'Min')} value={stats ? formatStat(stats.min, unit) : '--'} />
@@ -866,6 +882,60 @@ export function previewAoSignal(config: AoConfig, engineeringValue: number): num
   const range = aoSignalRange(config.mode)
   const ratio = (engineeringValue - config.minPv) / span
   return range.low + ratio * (range.high - range.low)
+}
+
+/**
+ * Nghịch đảo của `previewAoSignal`: tín hiệu ra thô (V/mA) → giá trị kỹ thuật.
+ *
+ * Core chỉ lưu/đọc AO theo volt/mA thô (xem ghi chú "% mở" ở `OutputDetail`),
+ * còn `units` trong cấu hình là ĐƠN VỊ KỸ THUẬT của kênh. Trước bản vá này
+ * trang Outputs lấy thẳng số volt của Core rồi dán nhãn `units` lên, nên mọi
+ * kênh có đơn vị kỹ thuật khác đơn vị tín hiệu đều hiện sai số: AO-03
+ * "Chilled Water Valve" trên board (0-10V, `units: percent`, dải 0-100) đang
+ * ra 4,5 V = 45 % nhưng trang hiện "4,5 %" — sai 10 lần trên lệnh mở van
+ * (F-OUT-002, 2026-08-19).
+ *
+ * Trả `null` khi dải kỹ thuật suy biến (minPv = maxPv) — không quy đổi được,
+ * caller phải hiện lại số thô kèm đơn vị tín hiệu thay vì bịa một con số.
+ */
+export function aoSignalToEngineering(config: AoConfig, signal: number): number | null {
+  if (!Number.isFinite(signal)) return null
+  const span = config.maxPv - config.minPv
+  if (span === 0) return null
+  const range = aoSignalRange(config.mode)
+  const ratio = (signal - range.low) / (range.high - range.low)
+  return config.minPv + ratio * span
+}
+
+/**
+ * Số + đơn vị để HIỆN cho một kênh output đang chạy — một chỗ duy nhất cho cả
+ * bảng tổng quan lẫn khối Live data, để hai nơi không lệch nhau.
+ *
+ * Với AO: quy đổi tín hiệu Core về dải kỹ thuật rồi mới gắn nhãn `units`
+ * (F-OUT-002). KHÔNG dùng `point.unit` (`display_unit`, nhãn tự do sửa được ở
+ * trang Monitor) cho AO nữa: con số nay mang nghĩa theo `units`/`minPv`/`maxPv`
+ * cấu hình ngay trên trang này, để một nhãn ở trang khác đè lên là quay lại
+ * đúng lỗi số-một-đằng-nhãn-một-nẻo vừa sửa.
+ */
+function outputLiveDisplay(output: OutputConfig, point?: Point): { value: Point['value']; unit: string } {
+  if (output.kind !== 'AO') return { value: point?.value, unit: point?.unit ?? '' }
+  const signalUnit = point?.rawUnit ?? aoSafeUnit(output.mode)
+  const engineeringUnit = engineeringUnitLabel(output.units)
+  // Đơn vị kỹ thuật TRÙNG đơn vị tín hiệu (units=volt trên 0-10V, milliampere
+  // trên 4-20mA) thì giá trị kỹ thuật CHÍNH LÀ điện áp/dòng trên đầu cực —
+  // không quy đổi qua `minPv`/`maxPv`. Nếu vẫn quy đổi thì cấu hình thật trên
+  // board (AO-01 `units: volt` nhưng `max_pv: 100`, tức "0..100 volt" trên một
+  // ngõ ra 0-10V — cấu hình tự mâu thuẫn) sẽ hiện "60,7 V" cho một ngõ ra
+  // 6,07 V: đúng theo đường cong đã khai, nhưng vô nghĩa về vật lý. Quy tắc
+  // này đảm bảo con số không bao giờ chửi nhau với chính nhãn của nó.
+  if (engineeringUnit === signalUnit) return { value: point?.value, unit: signalUnit }
+  const signal = point ? pointNumber(point) : null
+  const engineering = signal === null ? null : aoSignalToEngineering(output, signal)
+  if (engineering === null) {
+    // Dải suy biến hoặc chưa có số đo: giữ nguyên số thô kèm đơn vị tín hiệu.
+    return { value: point?.value, unit: signalUnit }
+  }
+  return { value: engineering, unit: engineeringUnit }
 }
 
 // aoPercentToRaw/aoRawToPercent — cùng công thức Core đã dùng cho node

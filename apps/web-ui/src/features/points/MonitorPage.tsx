@@ -1015,7 +1015,11 @@ function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onFo
         <span className="mono font-semibold">{pointDisplayTag(point)}</span>
         <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
         <span className={cn('mono rounded px-1', flash)}>{notConfigured ? NO_DATA : typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
-        <span className="mono text-[var(--c-text-dim)]">{notConfigured ? NO_DATA : point.unit ?? (point.kind === 'AO' ? 'V' : '-')}</span>
+        {/* AO: số ở cột bên là tín hiệu ra thô của Core, nên nhãn phải là đơn vị
+            tín hiệu thật (`rawUnit`: V hay mA theo MODE của kênh) chứ không
+            phải "V" đóng cứng — kênh 4-20mA trước đây bị dán nhãn V
+            (F-OUT-002, 2026-08-19). */}
+        <span className="mono text-[var(--c-text-dim)]">{notConfigured ? NO_DATA : point.unit ?? (point.kind === 'AO' ? point.rawUnit ?? 'V' : '-')}</span>
         <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: notConfigured ? statusFill('inactive') : statusFill(point.quality) }} />{statusText}</span>
         {/* F-UX-06 — ô này TỪNG là một `<span onClick>` mở thẳng hộp thoại ép
             tay. Một vùng bấm không nhãn, không viền, không con trỏ, nằm dưới
