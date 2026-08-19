@@ -28,6 +28,9 @@ export interface Point {
   updatedAt?: string
   fault?: boolean
   forced?: boolean
+  /** `T57-3.1` (`ADR-042`) — thiết bị công nghệ mà điểm thuộc về (AHU-1…).
+   *  Rỗng/thiếu ⇒ nhóm "Chưa gán"; CẤM đoán từ tên điểm. */
+  equipment?: string
   /** Số giây còn lại của lệnh ép tay, do Core cấp (PA3-107).
    *  `undefined` = không có lệnh có thời hạn, KHÔNG phải "hết hạn". */
   overrideExpiresInS?: number

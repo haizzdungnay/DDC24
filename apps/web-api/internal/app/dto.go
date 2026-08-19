@@ -115,6 +115,8 @@ type VirtualPoint struct {
 	// (xem syncVirtualPointToCore ở virtualpoint.go) để ST Program bind được
 	// category VP hướng READ (resolve_io_bindings chấp nhận từ 2026-08-17).
 	BoundPointID string `json:"boundPointId,omitempty"`
+	// Equipment — `T57-3.1` (`ADR-042`). Rỗng = chưa gán, KHÔNG đoán theo tên.
+	Equipment       string  `json:"equipment,omitempty"`
 }
 
 type SystemConfig struct {
@@ -336,6 +338,13 @@ type PointConfigPatch struct {
 	Name         *string `json:"name,omitempty"`
 	Unit         *string `json:"unit,omitempty"`
 	TrendEnabled *bool   `json:"trendEnabled,omitempty"`
+	// Equipment — `T57-3.1` (`ADR-042`): thiết bị công nghệ mà điểm này thuộc
+	// về (AHU-1, FCU-03…). Chuỗi tự do đã chuẩn hoá, KHÔNG phải khoá ngoại tới
+	// một bảng thiết bị: mô hình thiết bị đầy đủ là quyết định Rev B, còn đây là
+	// đường tối thiểu để nhóm điểm theo cách người vận hành nghĩ.
+	//
+	// Chuỗi rỗng là lệnh GỠ thẻ; `nil` là "không đụng tới".
+	Equipment *string `json:"equipment,omitempty"`
 }
 
 type PointDTO struct {
@@ -363,6 +372,9 @@ type PointDTO struct {
 	// AV/BV thật (F-PROG-ASBUILT-014); Programming Point Catalog dùng field
 	// này thay cho ID thân thiện ("VP1") khi build binding cho ST Program.
 	BoundPointID       string   `json:"boundPointId,omitempty"`
+	// Equipment — `T57-3.1` (`ADR-042`): thiết bị công nghệ mà điểm thuộc về.
+	// Rỗng ⇒ giao diện xếp vào nhóm "Chưa gán"; CẤM đoán từ tên điểm.
+	Equipment          string   `json:"equipment,omitempty"`
 	PointID            string   `json:"point_id"`
 	TagName            string   `json:"tag_name"`
 	DisplayName        string   `json:"display_name"`

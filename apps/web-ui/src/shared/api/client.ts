@@ -1462,12 +1462,14 @@ export const apiClient = {
     return this.updatePointConfig(id, { name })
   },
 
-  async updatePointConfig(id: string, config: { tag?: string; name?: string; unit?: string; trendEnabled?: boolean }): Promise<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean }> {
+  /** `equipment` — `T57-3.1` (`ADR-042`): chuỗi rỗng là lệnh GỠ thẻ, `undefined`
+   *  là "không đụng tới". Hai thứ đó khác nhau và backend phân biệt chúng. */
+  async updatePointConfig(id: string, config: { tag?: string; name?: string; unit?: string; trendEnabled?: boolean; equipment?: string }): Promise<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean; equipment?: string }> {
     if (IS_DEMO) {
       savePointConfigOverride(id, config)
       return updateDemoPointConfig(id, config)
     }
-    return requestJson<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean }>(`/points/${encodeURIComponent(id)}/config`, {
+    return requestJson<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean; equipment?: string }>(`/points/${encodeURIComponent(id)}/config`, {
       method: 'PUT',
       body: JSON.stringify(config)
     })

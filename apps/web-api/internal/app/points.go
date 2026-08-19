@@ -132,8 +132,8 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 		ioCfg = ConfigIO{}
 	}
 	metadata := map[string]struct {
-		tag, name, unit, signalType string
-		trend                       bool
+		tag, name, unit, signalType, equipment string
+		trend                                  bool
 	}{}
 	addRows := func(rows []map[string]any, prefix string) {
 		for _, row := range rows {
@@ -149,10 +149,13 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 			// `type` chỉ có ý nghĩa ở kênh UI ("0-10V", "none"...); AO/DO
 			// không có field này nên signalType rỗng, không ảnh hưởng.
 			signalType, _, _ := stringField(row, "type")
+			// `T57-3.1` (`ADR-042`): thẻ thiết bị đi kèm điểm ra tới giao diện.
+			// Core KHÔNG đọc trường này — nó là dữ liệu trình bày.
+			equipment, _, _ := stringField(row, "equipment")
 			metadata[id] = struct {
-				tag, name, unit, signalType string
-				trend                       bool
-			}{fallbackPointTag(tag, id), strings.TrimSpace(name), strings.TrimSpace(unit), strings.TrimSpace(signalType), trend}
+				tag, name, unit, signalType, equipment string
+				trend                                  bool
+			}{fallbackPointTag(tag, id), strings.TrimSpace(name), strings.TrimSpace(unit), strings.TrimSpace(signalType), normalizeEquipmentTag(equipment), trend}
 		}
 	}
 	addRows(ioCfg.UI, "UI")
@@ -193,6 +196,7 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 			}
 			point.LogEnabled = meta.trend
 			point.SignalType = meta.signalType
+			point.Equipment = meta.equipment
 		}
 		if point.Name == "" {
 			point.Name = id
