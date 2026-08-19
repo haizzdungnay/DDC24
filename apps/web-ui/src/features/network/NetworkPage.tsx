@@ -2,7 +2,9 @@ import { CheckCircle2, Database, Network, RotateCcw, Save, Server, ShieldCheck, 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { apiClient } from '../../shared/api/client'
 import { Button } from '../../shared/components/Button'
+import { DraftDiffTable, type DraftDiffRow } from '../../shared/components/DraftDiffTable'
 import { Panel } from '../../shared/components/Panel'
+import { QrCode } from '../../shared/components/QrCode'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useToast } from '../../shared/components/Toast'
@@ -540,11 +542,25 @@ export function NetworkPage() {
           {transaction.pending?.ipv4 && transaction.pending.ipv4 !== transaction.active?.ipv4 && (
             <div className="mt-4 rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] p-3 text-sm">
               <div className="font-semibold text-[var(--c-accent)]">{pick('Địa chỉ truy cập sau khi giữ thay đổi', 'Address to use after keeping the change')}</div>
-              <div className="mono mt-1 break-all text-[var(--c-text)]">
-                {`${window.location.protocol}//${transaction.pending.ipv4}${window.location.port ? `:${window.location.port}` : ''}`}
-              </div>
-              <div className="mt-1 text-xs text-[var(--c-text-dim)]">
-                {pick('Mở địa chỉ này ở tab mới TRƯỚC khi bấm Giữ thay đổi để chắc chắn còn đường vào.', 'Open this address in a new tab BEFORE keeping the change, to be sure you still have a way in.')}
+              <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="mono break-all text-[var(--c-text)]">{nextAccessUrl(transaction.pending.ipv4)}</div>
+                  <div className="mt-1 text-xs text-[var(--c-text-dim)]">
+                    {pick('Mở địa chỉ này ở tab mới TRƯỚC khi bấm Giữ thay đổi để chắc chắn còn đường vào.', 'Open this address in a new tab BEFORE keeping the change, to be sure you still have a way in.')}
+                  </div>
+                </div>
+                {/* `T57-2.22` — người đứng cạnh tủ thường có điện thoại trong
+                    tay chứ không có bàn phím. Gõ tay một địa chỉ IP là nguồn sai
+                    sót ngay lúc đồng hồ rollback đang đếm ngược; quét mã thì
+                    không gõ nhầm được. Mã sinh tại chỗ, bo không cần Internet. */}
+                <figure className="shrink-0 text-center">
+                  <QrCode
+                    text={nextAccessUrl(transaction.pending.ipv4)}
+                    size={132}
+                    label={pick(`Mã QR địa chỉ truy cập mới ${transaction.pending.ipv4}`, `QR code for the new address ${transaction.pending.ipv4}`)}
+                  />
+                  <figcaption className="mt-1 text-[11px] text-[var(--c-text-dim)]">{pick('Quét bằng điện thoại', 'Scan with a phone')}</figcaption>
+                </figure>
               </div>
             </div>
           )}
@@ -579,6 +595,14 @@ export function NetworkPage() {
 /** Đổi prefix length của kernel (`/24`) sang subnet mask mà form dùng
  *  (`255.255.255.0`). Trả `''` khi prefix nằm ngoài dải hợp lệ — thà không so
  *  sánh còn hơn báo một khác biệt do chính phép quy đổi bịa ra. */
+/** Địa chỉ mà trình duyệt sẽ phải dùng sau khi đổi IP: giữ nguyên giao thức và
+ *  cổng của phiên hiện tại, chỉ thay phần host. Đoán sai cổng là dẫn người dùng
+ *  tới một trang không mở được đúng lúc họ không còn đường vào nào khác. */
+function nextAccessUrl(ipv4: string): string {
+  const port = window.location.port ? `:${window.location.port}` : ''
+  return `${window.location.protocol}//${ipv4}${port}/`
+}
+
 function prefixLengthToNetmask(prefix: number | undefined): string {
   if (typeof prefix !== 'number' || prefix < 0 || prefix > 32) return ''
   const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
@@ -587,10 +611,10 @@ function prefixLengthToNetmask(prefix: number | undefined): string {
 
 /** Bảng khác biệt giữa cấu hình đang chạy và bản nháp — PA3-506.
  *
- *  Không có khác biệt thì KHÔNG hiện gì: một bảng trống với toàn dấu "=" chỉ
- *  làm loãng màn hình. Có khác biệt thì nêu từng trường, giá trị cũ và giá trị
- *  mới — đủ để người vận hành đọc lại trước khi bấm, không phải so bằng mắt
- *  giữa hai vùng cách nhau nửa trang.
+ *  Phần dựng bảng nay nằm ở `DraftDiffTable` dùng chung (`BB-8` / `T57-2.10`);
+ *  ở đây chỉ còn phần RIÊNG của trang mạng: biết trường nào đáng so, và so
+ *  chúng theo đúng ngữ nghĩa của netcfg (prefix length ↔ subnet mask, DHCP thì
+ *  địa chỉ do máy chủ cấp nên không so từng octet).
  */
 function NetworkCandidateDiff({ active, candidate, pick }: {
   active: NetcfgActive | null | undefined
@@ -598,7 +622,7 @@ function NetworkCandidateDiff({ active, candidate, pick }: {
   pick: (vi: string, en: string) => string
 }) {
   if (!active) return null
-  const rows: Array<{ label: string; from: string; to: string }> = []
+  const rows: DraftDiffRow[] = []
   const add = (label: string, from: unknown, to: unknown) => {
     const fromText = from === undefined || from === null || from === '' ? '—' : String(from)
     const toText = to === undefined || to === null || to === '' ? '—' : String(to)
@@ -616,38 +640,12 @@ function NetworkCandidateDiff({ active, candidate, pick }: {
   }
   add('DNS', active.dnsServers?.join(', '), candidate.dns?.mode === 'manual' ? candidate.dns.servers.join(', ') : candidate.dns?.mode)
 
-  if (rows.length === 0) {
-    return (
-      <p className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2 text-xs text-[var(--c-text-dim)]">
-        {pick('Bản nháp trùng với cấu hình đang chạy — không có gì để lưu.', 'The draft matches the running configuration — nothing to save.')}
-      </p>
-    )
-  }
-
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3">
-      <div className="mb-2 text-xs font-bold uppercase text-[var(--c-warn-fg)]">
-        {pick(`${rows.length} thay đổi chưa lưu`, `${rows.length} unsaved change(s)`)}
-      </div>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-left text-[10px] uppercase text-[var(--c-text-dim)]">
-            <th className="py-1 pr-3">{pick('Trường', 'Field')}</th>
-            <th className="py-1 pr-3">{pick('Đang chạy', 'Running')}</th>
-            <th className="py-1">{pick('Sẽ đổi thành', 'Will become')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.label} className="border-t border-[var(--c-warn)]">
-              <td className="py-1 pr-3 font-semibold">{row.label}</td>
-              <td className="mono py-1 pr-3 text-[var(--c-text-dim)]">{row.from}</td>
-              <td className="mono py-1 font-semibold text-[var(--c-warn-fg)]">{row.to}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DraftDiffTable
+      rows={rows}
+      fromHeader={pick('Đang chạy', 'Running')}
+      emptyText={pick('Bản nháp trùng với cấu hình đang chạy — không có gì để lưu.', 'The draft matches the running configuration — nothing to save.')}
+    />
   )
 }
 
