@@ -8,6 +8,69 @@
 
 ## [Unreleased]
 
+### Changed — Bốn quyết định người đóng cổng còn treo của Plan 57 (2026-08-19)
+
+Ghi bằng `AUTH-WEBUX-2026-08-19-02` trong `docs/00_governance/DECISIONS.md`.
+Bốn mục này agent **không được tự quyết** — cấp phép an toàn cho việc phát khung
+lên bus RS-485 đang vận hành, chỉ định người thật, cấp quyền truy cập thiết bị, và
+chữ ký baseline mà `DOC_GOVERNANCE` §6 quy tắc 4 cấm agent tự ký. Record **không
+cấp ADR mới**; số trống kế tiếp giữ nguyên `ADR-050`.
+
+1. **`T57-3.8` (quét bus Modbus) hoãn sang Rev B.** Ra khỏi phạm vi Rev A, mẫu số
+   Rev A 71 → 70. `ADR-039` **không** bị `SUPERSEDED` — 11 ràng buộc giữ nguyên
+   làm đầu vào Rev B. Lý do giữ chặn thay vì cấp phép: cấp phép khi Fieldbus Lead
+   và QA/HIL Lead còn trống sẽ tự mâu thuẫn với điều kiện Track B đang có hiệu lực
+   từ phê duyệt PM/CTO 2026-08-04. Web UI Rev A vì vậy **không có** chức năng dò
+   thiết bị trên bus.
+2. **Ba task C++ có chủ sở hữu và mốc bắt đầu:** `T57-3.9` (`apps/iobus`, 4,0
+   người-ngày), `T57-3.19` + `T57-3.20` (`apps/hmi`, 1,5 mỗi task) — agent nhận,
+   bắt đầu 2026-08-19. Ràng buộc kế thừa: `T57-3.9` là vòng nhớ **CHỈ-ĐỌC**,
+   không một byte nào được phát thêm ra bus (`ADR-046` điều 1); việc `T57-3.8` bị
+   hoãn không biến `T57-3.9` thành đường vòng để có chức năng quét.
+3. **Uỷ quyền agent truy cập board Foxlinx** — xem mục Fixed bên dưới.
+4. **Waive chữ ký có mốc hết hiệu lực.** `ADR-033`…`ADR-049` giữ
+   `WAIVED FOR IMPLEMENTATION` nhưng chỉ tới **cổng `RELEASE_READY` Rev A**; sau
+   mốc đó phải có chữ ký người thật, không có waive lần hai. Đã gắn mốc vào 15 mục
+   ADR nội tuyến và một ghi chú chung sau bảng tổng hợp.
+
+**CI GitHub Actions: chưa có quyết định.** Chủ sở hữu không chọn phương án nào.
+Nguyên nhân vẫn là lỗi thanh toán của tổ chức từ 2026-08-17 (check fail sau 2–3
+giây, **không phải lỗi mã**); owner là chủ sở hữu sản phẩm vì cần quyền billing;
+**chưa đặt mốc**. Merge bằng bằng chứng test local được ghi đúng là **ngoại lệ
+chưa có ngày đáo hạn**, không phải trạng thái bình thường.
+
+### Fixed — Board Foxlinx kết nối lại, deploy Wave 0–3, và nghiệm thu `T57-4.2` (2026-08-19)
+
+Board **không còn mất kết nối**. Hai đính chính với trạng thái ghi trước đó: bản
+đang chạy trên board là mốc **2026-08-18 12:43Z** chứ không phải 03:15Z, và
+Web/API chạy dưới tên unit **`mkddc-web-pi`** (`:8081`) — `mkddc-web` không tồn
+tại trên board này.
+
+Deploy: sao lưu bản cũ sang `dist.bak-20260819`, build bằng `npm run
+build:foxlinx` (**không** phải `npm run build` trần — cờ Programming của Foxlinx
+là cờ build-time), đẩy bằng `scp` vì board Buildroot không có `rsync`. Wave 0–3
+đã lên board; năm service lõi `active` sau deploy.
+
+**Nghiệm thu `T57-4.2` theo `ADR-049` điều 3** — trình duyệt thật, cache rỗng mỗi
+lượt, **12 cặp mẫu xen kẽ** bản mới ↔ bản cũ trên cùng board cùng phiên:
+
+| Chỉ số | Bản cũ (`63f841d`) | Bản mới | Chênh |
+|---|---:|---:|---:|
+| Byte đường tới hạn | 1591,5 kB | 1255,7 kB | **−335,8 kB (−21,1%)** |
+| First Contentful Paint (trung vị) | 1216 ms | 1092 ms | −124 ms |
+| FCP — trung vị chênh theo cặp | — | — | **−236 ms**, 8/12 cặp |
+
+**Kết luận: ĐẠT ở đúng mức `ADR-049` yêu cầu** — đã đo trên board thật, không hồi
+quy. Hai giới hạn ghi kèm: `ADR-049` **không đặt ngưỡng đạt**, nên nghiệm thu chỉ
+khẳng định được "đã đo và không hồi quy"; và phép đo phải đi qua tunnel SSH ra WAN
+nên nhiễu từng lượt cùng cỡ hiệu ứng (kiểm định dấu `p ≈ 0,19`) — **không** được
+trích thành một con số cải thiện chính xác. Phần byte thì tất định.
+
+Tài liệu cập nhật: `docs/00_governance/DECISIONS.md` (record mới, `ADR-039` chuyển
+"thi hành hoãn Rev B", `ADR-049` thêm mục nghiệm thu), Plan 57 §0 (bảng cổng +
+callout) và §13b (bốn quyết định, deploy/nghiệm thu, việc còn lại, điều kiện đóng
+plan), Plan 57 §14 lên **v1.4**.
+
 ### Added — Plan 57 Wave 3 (đợt 1) + Wave 4: 14/21 task Wave 3, thẻ thiết bị, và code-splitting (2026-08-19)
 
 Mở bằng `AUTH-WEBUX-2026-08-19-01` — chủ sở hữu chốt hai điều: **mở Wave 3 trừ
