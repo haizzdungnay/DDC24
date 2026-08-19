@@ -8,6 +8,211 @@
 
 ## [Unreleased]
 
+### Added — Plan 57 Wave 2 (đợt cuối): khung nhìn đặt tên, dấu sự kiện trên xu hướng, diff trước khi lưu, form cảnh báo hết trộn ngôn ngữ, và mã QR địa chỉ mới (2026-08-19)
+
+Năm task khép lại Wave 2 (`T57-2.3`, `T57-2.6`, `T57-2.10`, `T57-2.14`, `T57-2.22`).
+Wave 2 nay **xong 21/21**; Plan 57 đạt **47,5/71 task**. Phần còn lại là Wave 3
+(cần 9 ADR theo từng task + chữ ký Tech Lead) và Wave 4 (cần quyết định sản phẩm).
+
+**`T57-2.3` — khung nhìn đặt tên.** `T57-2.1` đã làm bộ lọc *gửi được* qua URL;
+thứ còn thiếu là *đặt tên được*. Bộ lọc dựng lại mỗi sáng ("các điểm Modbus chất
+lượng xấu", "6 điểm của AHU-1 trong 6 giờ") vẫn phải bấm lại từng ô, và thứ không
+đặt tên được thì không bàn giao ca được.
+
+- `shared/savedViews.ts`: lưu theo **tài khoản** đang đăng nhập (`AuthProvider`
+  đẩy tên qua `setSavedViewAccount`, không bắt mỗi trang gọi `useAuth` — trang Xu
+  hướng nằm ngoài cây `AuthProvider` trong test). Trùng tên là **cập nhật**, không
+  đẻ mục thứ hai cùng tên; dữ liệu hỏng trong `localStorage` trả danh sách rỗng
+  thay vì làm chết trang.
+- `?view=<tên>` **nở thành chính bộ lọc** rồi tự rời khỏi thanh địa chỉ. Giữ tên
+  khung nhìn trên URL sẽ tạo ra đường dẫn chỉ chạy trên máy người gửi.
+- **Giới hạn đã biết, nói thẳng trên giao diện:** khung nhìn nằm trong trình duyệt
+  đó. Đi theo người dùng sang máy khác cần `T57-3.2` (Wave 3, chưa mở cổng).
+
+**`T57-2.6` — dấu sự kiện trên trục thời gian.** Đường xu hướng nói *cái gì đã xảy
+ra*, không nói *vì sao*. Câu hỏi thật khi thấy gãy khúc lúc 14:03 là "lúc đó có ai
+ép tay không, hay cảnh báo nào vừa bật?" — trước đây phải mở hai trang khác rồi so
+mốc bằng mắt.
+
+Nguồn là kho Activity và nhật ký cảnh báo **thật**; không suy diễn nguyên nhân từ
+chính hình dạng đường dữ liệu. Lệnh bị **từ chối không được đánh dấu** — nó chưa
+từng tới thiết bị nên không giải thích được gãy khúc nào; đánh dấu nó là mời người
+đọc kết luận sai về nguyên nhân sự cố. Quá 24 dấu thì cắt bớt **và nói ra đã cắt
+bao nhiêu**, thay vì vẽ dày đặc tới mức không đọc được.
+
+**`T57-2.10` — diff "đang lưu ↔ bản nháp" cho Ngõ vào (`BB-8`).** Hộp thoại lưu
+trước đây chỉ hỏi "Bạn có muốn lưu thay đổi không?" — với 16 kênh và `T57-2.11`
+(sao chép sang nhiều kênh) có thể ghi đè hàng chục trường trong một cú bấm, câu
+hỏi đó không trả lời được câu duy nhất cần trả lời trước khi cấu hình xuống thiết
+bị: **cái gì sắp đổi?** Diff nói bằng ngôn ngữ người ("Trung bình (Avg) → Lớn nhất
+(Max)"), không phải mã số của firmware.
+
+`NetworkCandidateDiff` (PA3-506) được rút thành `shared/components/DraftDiffTable`
+dùng chung, thay vì chép mẫu lần thứ hai — đúng cơ chế sinh lỗi số 3 mà review
+`REV-FE-UIUX-UC-2026-08-18` §7.3 mô tả.
+
+**`T57-2.14` — trang Cấu hình cảnh báo hết trộn Việt–Anh.** "Chế độ clear",
+"Delay (s)", "Severity rules", "Runtime hours" nằm giữa các nhãn tiếng Việt. Đây là
+màn hình đặt **ngưỡng an toàn**: đọc nhầm một trường là đặt sai một ngưỡng, và cái
+giá không nằm ở giao diện mà ở thiết bị.
+
+Hai nhóm giữ nguyên chữ **và** được chú giải, không để trần:
+- **Tên riêng trong chuẩn giao thức** (`BACnet`, `Notification Class`,
+  `Event Enrollment`) — dịch ra thì không tra được tài liệu ASHRAE.
+- **Mã trạng thái viết hoa** (`HIGH`, `CRITICAL`, `HH/H/L/LL`) —
+  `KX-DDC24-UX-SYSTEM-001` §1.5 buộc Web, nhật ký và HMI tại tủ nói cùng một chữ.
+
+**`T57-2.22` — mã QR địa chỉ truy cập mới.** Người vận hành đứng cạnh tủ với điện
+thoại trong tay, đồng hồ rollback đang đếm ngược, và đường vào giao diện sắp đổi
+địa chỉ. Gõ tay một địa chỉ IP đúng lúc đó là nguồn sai sót.
+
+`shared/qr.ts` sinh mã **tại chỗ** (byte mode, mức M, phiên bản 1–6): bo không có
+đường ra Internet nên mọi dịch vụ trực tuyến bị loại từ đầu, còn thêm một
+dependency npm là đổi lấy vài chục KB cho một bài toán có thuật toán đóng. Chuỗi
+quá dài thì **báo lỗi**, không cắt bớt âm thầm — một mã QR cụt dẫn tới địa chỉ sai
+còn tệ hơn không có mã.
+
+Không thể "nhìn thấy" một mã QR sai, nên test kiểm ba tầng: đối chiếu vector mẫu
+`HELLO WORLD` 1-Q của tài liệu chuẩn cho bước Reed–Solomon, tính chất chia hết cho
+đa thức sinh (đúng với mọi dữ liệu, không chỉ một vector), bảng thông tin định
+dạng, và **giải mã ngược** ma trận đúng theo cách máy quét đọc — bộ giải mã trong
+test viết riêng, không dùng lại hàm nội bộ, để một lỗi trong bảng đặt bit không tự
+triệt tiêu.
+
+**Kiểm chứng (đo lại 2026-08-19, không dẫn số cũ).**
+
+| Phép đo | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **104 file / 1016 test PASS** (trước đợt: 97 / 954) |
+| `npm run lint` (gồm `check_ui_strings.py`) | PASS |
+| `npm run build:foxlinx` | PASS — chunk `index` **989,94 kB** (gzip 257,54 kB) |
+| Bundle so với `63f841d` (dựng lại trên worktree sạch) | 967,67 kB → 989,94 kB, **+22,27 kB** cho cả năm task |
+
+Refs: Plan 57 §13b · `T57-2.3` `T57-2.6` `T57-2.10` `T57-2.14` `T57-2.22` ·
+`REV-FE-UIUX-UC-2026-08-18` §6.2-P2a/§6.4-P2b/§6.4-P2c/§6.9-P2a/§6.13-P2b/§6.15-P3
+
+### Fixed — Hết trùng số ADR: `ADR-010`/`ADR-011` chốt theo mã nguồn, EasySet và raw SHM nhận `ADR-040`/`ADR-041` (2026-08-19)
+
+**Triệu chứng.** `docs/adr/` có hai file mang số `ADR-010` và hai file mang số `ADR-011`.
+Trích dẫn `ADR-010` trong mã do đó không phân giải được về một hồ sơ duy nhất.
+
+**Chốt theo mã nguồn, không theo cảm tính.** Đếm nơi mã thật viện dẫn:
+
+| Số | Hồ sơ giữ số | Bằng chứng | Hồ sơ nhường số |
+|---|---|---|---|
+| `ADR-010` | IOP V2 Poll + Capability Map | 19 chỗ, gồm `contracts/shm/mkddc_shm.h:67` (`KX_N_UI 16`) và `firmware/stm32/src/iop/iop_link.h:23` | EasySet Parity Config Surfaces — **0 chỗ** |
+| `ADR-011` | BACnet Reliability/Quality Mapping | 15 chỗ, gồm `contracts/shm/mkddc_shm.h:301` và `apps/iobus/adapters/bacnet/bacnet_reliability.hpp` | UI Raw Live Data In SHM — **0 chỗ** |
+
+**Nguyên nhân gốc và chỗ sổ đăng ký sai.** `DECISIONS.md` bản 2026-07-22 đã chuẩn hoá
+hai hồ sơ nhường số thành `ADR-013`/`ADR-014` — nhưng **hai số đó đã bị chiếm** từ
+2026-07-02 bởi `docs/02_design/adr/ADR-013-alarm-entity-model.md` và
+`ADR-014-alarm-ack-lifecycle.md`, một nhánh ADR chưa từng được đăng ký vào log. Mã
+nguồn theo nhánh alarm chứ không theo log: `ADR-013`/`ADR-014` xuất hiện 7 lần trong
+**hợp đồng canonical** `contracts/openapi/openapi.yaml` cùng `apps/web-api/internal/app/dto.go`
+và `apps/web-ui/src/shared/i18n.tsx`, còn nghĩa EasySet/raw SHM thì **không có một dòng
+mã nào**. Lần chuẩn hoá đó chỉ đổi được chữ trong log, không đổi được thực tế.
+
+**Cách sửa.** Áp đúng quy tắc dự án — *hợp đồng thắng tài liệu* — và luật cấp số ghi
+ngay trong log (*"lấy số cao nhất đã cấp phát rồi cộng một"*, cao nhất là `ADR-039`):
+
+- `ADR-010-easyset-parity-config-surfaces.md` → **`ADR-040`**;
+  `ADR-011-ui-raw-live-data-shm.md` → **`ADR-041`**. Mỗi file gắn banner `⚠ ĐỔI SỐ`
+  ghi lại cả hai lần cấp số sai để tra ngược được từ trích dẫn cũ.
+- `DECISIONS.md`: sửa câu chuẩn hoá ở phần mở đầu; **đăng ký chính thức** `ADR-013`
+  (alarm entity model) và `ADR-014` (alarm ack lifecycle) đang bị bỏ ngoài sổ; thêm
+  hai dòng `ADR-040`/`ADR-041`; nâng "số cao nhất đã cấp phát" `ADR-039` → `ADR-041`;
+  ba chỗ viện dẫn `ADR-013` theo nghĩa EasySet đổi sang `ADR-040`.
+- `docs/adr/README.md`: bổ sung `ADR-013`/`ADR-014` (trỏ sang `docs/02_design/adr/`),
+  `ADR-040`, `ADR-041`, và ghi rõ căn cứ chọn số là mã nguồn.
+- Sửa hai trích dẫn còn lại: `ADR-020 §C0` (`ADR-014` → `ADR-041`) và
+  `FE_UIUX_UC_REVIEW_2026-08-18` (`ADR-013` → `ADR-040`).
+
+**Kiểm chứng.** `ls docs/adr docs/02_design/adr | grep -o '^ADR-[0-9]\{3\}' | uniq -d`
+trả về **rỗng** — không còn số ADR nào bị trùng. Liên kết Markdown **0 hỏng / 347 file**;
+`scripts/docs_iso_harness.py` **PASS**.
+
+
+### Changed — Dọn `docs/03_implementation`: lưu trữ 9 hồ sơ đã đóng và đồng bộ đường dẫn nguồn với mã (2026-08-19)
+
+**Triệu chứng.** Thư mục `docs/03_implementation` gộp chung hồ sơ đang sống và hồ sơ
+đã đóng, nên bảng Index không còn cho biết việc nào thật sự còn mở: hai plan đã hoàn
+tất (`50` Scheduler v3.1 và `52` Web PA3) vẫn hiển thị **"DRAFT — chờ phê duyệt"**,
+trong khi hai hồ sơ tự ghi `SUPERSEDED` (`16`, `32`) vẫn nằm ở vị trí nguồn-chuẩn.
+Nặng hơn: nhiều tài liệu **đang hoạt động** vẫn hướng dẫn build theo cây `services/`
+— thư mục đã bị `PLAN-ARCH-RESTRUCT-002` xoá. Chạy nguyên văn `cmake -S services/iobus
+-B build/iobus` hôm nay là hỏng ngay, còn `17_QUICK_START_SOM_DEV` §4 thì bảo dev mới
+`mkdir` lại cây nguồn đã tồn tại.
+
+**Nguyên nhân gốc.** Hai đợt restructure (ADR-021 Phase A rồi ADR-025/`PLAN-ARCH-RESTRUCT-002`)
+chỉ đổi mã và tài liệu kiến trúc, không quét lại bộ hướng dẫn triển khai; và không có
+quy ước lưu trữ nên hồ sơ đóng cứ tồn tại song song với hồ sơ sống.
+
+**Cách sửa — lưu trữ.** Thêm `docs/03_implementation/archive/` kèm `README.md` nêu rõ ba
+điều kiện được chuyển vào (đóng · bị thay thế · chụp trạng thái lịch sử) và bắt buộc
+kiểm chứng lại bằng mã nguồn chứ không tin lời tự khai của tài liệu. Chín hồ sơ đã
+chuyển, mỗi hồ sơ gắn banner `🗄 ĐÃ LƯU TRỮ` ghi **lý do đóng** và **đọc thay bằng gì**:
+
+| Hồ sơ | Lý do | Bằng chứng mã đã đối chiếu |
+|---|---|---|
+| `16_CONTRACT_FREEZE` | SUPERSEDED — freeze IOP v1.1 | `contracts/iop/iop_protocol.h` `IOP_VER_MAJOR=2` |
+| `18_WEEK1_SOM_BRINGUP_CHECKLIST` | mốc tuần đầu đã qua, lệnh build hỏng | `services/` không còn |
+| `23_GRAPH_STATEFUL_COMPONENTS_PLAN` | `COR-009/010` xong, 97/97 test | `apps/core/domain/graph/graph_runtime.hpp` |
+| `24_SOM_FW_STATUS_REPORT_ISO` | báo cáo chụp 2026-06-13 | cây `services/` đã xoá |
+| `26_MODBUS_IMPLEMENTATION_PLAN` | SUPERSEDED, As-Built v1 | `apps/iobus/adapters/modbus_rtu/` |
+| `32_DEV_TEAM_NEXT_ACTION` | SUPERSEDED Rev 2.0 | 3 task chặn đã xử lý |
+| `46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN` | Closed, G0..G5 PASS | `apps/*` + root `CMakeLists.txt` |
+| `50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN` | 96/96 task đóng | `apps/core/application/schedule/`, `bacnet_schedule.*` |
+| `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN` | 50/50 task, G0–G6 | `apps/web-ui/src/features/*` |
+
+Trước khi chuyển đã kiểm phần còn treo **không bị mất dấu**: `EXT_PHYSICAL_VERIFIED` /
+`PHYSICAL_IO_VERIFIED` của plan 50 thuộc `ADR-023` và mở khoá bởi plan 49 `G-C`/`G-D`;
+`PA3-N01/N02/N04` của plan 52 nằm ở `EV-WEB-PA3-001` và `UX_PA3_TRACEABILITY`; phần
+nghiệm thu target của plan 46 nằm ở runbook 47 — cả bốn hồ sơ nhận đều đang sống.
+
+**Cách sửa — đường dẫn.** Đồng bộ tài liệu còn hiệu lực với cây nguồn thật, đo lại
+ngày 2026-08-19 (không chép từ tài liệu cũ):
+
+- `17_QUICK_START_SOM_DEV` §4/§5: bỏ bước scaffold `mkdir services/...`; thay bằng
+  configure gốc `cmake --fresh -S . -B build/fw` và binary `build/fw/{iobus,core}/...`.
+- `06 §2` và `07 §1`: viết lại cây thư mục theo tầng hexagonal thật
+  (`domain/` ← `application/` ← `adapters/` ← `bootstrap/`, `ports/` giữ interface).
+- `05 §…`: bản đồ file IOP hai phía — SOM `apps/iobus/adapters/iop/*`, MCU
+  `firmware/stm32/src/iop/iop_link.{c,h}`; ghi rõ **không còn** `iop_protocol.hpp`.
+- `08` (HMI): `services/hmi/*` → `apps/hmi/*`, ba đường dẫn core về đúng tầng, và bảng
+  ánh xạ `web/backend/*.go` → `apps/web-api/internal/{app,hmi}/` kèm ghi chú file Go
+  chưa tồn tại thì đặt ở package nào.
+- `25`, `33` (BACnet): `apps/iobus/adapters/bacnet/`, `apps/core/adapters/bacnet/`.
+- `27` §4/§5: verify `apps/` thay vì `services/`, build gốc `--fresh -S . -B build/fw`;
+  số "141/141 PASS 2,67 s trên Orange Pi 5B" nay ghi rõ là **số lịch sử**, không phải
+  kỳ vọng hiện hành.
+- `00`, `01`, `02`, `12`, `15`: bảng sở hữu/sơ đồ/checklist đổi sang `apps/*`,
+  `firmware/`, `contracts/`; sửa `IOP_VER 1.1` → `2.0` theo header thật.
+- `11` và `22`: **không** viết lại 90 dòng lịch sử; gắn bảng ánh xạ đường dẫn ở đầu
+  tài liệu và bắt buộc task mở mới dùng `apps/`.
+- `00` §9 và bảng nguồn-chuẩn: gỡ hai mục trỏ hồ sơ đã đóng làm authority (Modbus →
+  plan 49 + `ICD-IF-MBRTU-001`; stateful graph → `SW_RUNTIME_EXECUTION_MODEL` + mã);
+  sửa "header trong `shared/`" → `contracts/` (thư mục `shared/` không còn tồn tại).
+
+**Sửa thêm trong lúc rà.** `07 §12.5` liệt kê `ext_cache_reader.hpp` là file phải tạo;
+đối chiếu mã thì file **chưa từng được tạo** — logic lookup nằm trong `graph_runtime`.
+Bảng đã đổi thành đối chiếu "kế hoạch ↔ hiện trạng" thay vì để nguyên một dòng sai.
+`README.md` của thư mục bổ sung ba dòng Index còn thiếu (`51`, `57`,
+`PROGRAMMING_IMPLEMENTATION_TRACKER`) và sửa trạng thái cũ của `50`/`52`.
+
+**Kiểm chứng (đo thật 2026-08-19).**
+
+| Phép kiểm | Kết quả |
+|---|---|
+| `cmake --fresh -S . -B build/fw` + `--parallel` (MODBUS/BACNET/HMI = ON) | configure exit 0, build exit 0 |
+| `ctest --test-dir build/fw --output-on-failure` | **1031/1031 PASS**, 16,45 s |
+| Liên kết Markdown tương đối toàn `docs/` + md gốc | **0 hỏng / 347 file** (trước khi dọn: 0/346) |
+| `python3 scripts/docs_iso_harness.py` | **PASS**, `code-span docs/** không tồn tại: 0` |
+
+**Không đụng tới.** Các dòng lịch sử trong `CHANGELOG.md` vẫn trỏ đường dẫn cũ của 9 hồ
+sơ đã chuyển — đó là hồ sơ của trạng thái tại thời điểm ghi, sửa lại sẽ làm sai lịch sử.
+Version-history và tiêu chí thoát phase đã đóng trong `03_PHASE_PLAN` cũng giữ nguyên.
+
+
 ### Added — Plan 57 Wave 2 (đợt 5): trợ giúp theo ngữ cảnh và gói xuất chẩn đoán có lọc an toàn (2026-08-18)
 
 **`T57-2.17` — trợ giúp theo ngữ cảnh.** Trợ giúp không theo ngữ cảnh gần như
