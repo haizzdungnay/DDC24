@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
 import { useI18n } from '../../../shared/i18n'
-import type { ModbusImportError, ModbusRTUDevice, ModbusRTUPoint } from '../../../shared/types'
+import type { ModbusImportError, ModbusRTUDevice, ModbusRTUPoint, ModbusTemplate } from '../../../shared/types'
 import { NO_DATA, buttonClass, emptyPoint, inputClass, readOnlyHint } from '../shared'
 import { Field } from '../components/Field'
 import { RegisterPreview } from '../components/RegisterPreview'
@@ -31,6 +31,11 @@ export function PointsPage() {
    * bảng nửa mới nửa cũ, sai mà trông vẫn hợp lý. */
   const runtime = useModbusRuntime()
   const [point, setPoint] = useState<ModbusRTUPoint>(emptyPoint)
+  /* `T57-3.11`: mẫu thiết bị chỉ ĐIỀN SẴN form, không tự lưu. Người dùng vẫn đi
+     qua đúng đường Thêm Point như thường — mẫu là phím tắt gõ, không phải một
+     đường ghi cấu hình riêng. */
+  const [templates, setTemplates] = useState<ModbusTemplate[]>([])
+  const [templateId, setTemplateId] = useState('')
   const [editingPoint, setEditingPoint] = useState(false)
   const [status, setStatus] = useState('')
   /* D-08: xoá phải qua xác nhận. Trước đây nút Xoá gọi thẳng API trong onClick,
@@ -60,6 +65,47 @@ export function PointsPage() {
   useEffect(() => {
     reload().catch((error: Error) => setStatus(error.message))
   }, [])
+
+  /* `T57-3.11`: tải mẫu một lần. Lỗi tải KHÔNG được làm hỏng trang — mẫu là
+     phím tắt, còn form khai điểm phải luôn dùng được. */
+  useEffect(() => {
+    let alive = true
+    /* Bọc `Promise.resolve().then` để một lỗi ĐỒNG BỘ (client cũ chưa có hàm)
+       cũng rơi vào nhánh catch thay vì ném ra ngoài và hạ cả trang khai Point. */
+    Promise.resolve().then(() => apiClient.getModbusTemplates())
+      .then((list) => { if (alive) setTemplates(list) })
+      .catch(() => { if (alive) setTemplates([]) })
+    return () => { alive = false }
+  }, [])
+
+  /** Điền form từ ĐIỂM ĐẦU của mẫu.
+   *
+   *  Không tự tạo hàng loạt điểm: mẫu nhiều điểm sẽ ghi đè thứ người dùng đang
+   *  gõ dở và tạo ra một loạt bản ghi họ chưa từng xem. Điền một điểm, người
+   *  dùng bấm Thêm, rồi chọn tiếp — mỗi bản ghi đều đi qua mắt người. */
+  function applyTemplate(id: string) {
+    setTemplateId(id)
+    const template = templates.find((item) => item.id === id)
+    const first = template?.points[0]
+    if (!first) return
+    setPoint((current) => ({
+      ...current,
+      tag_name: first.name,
+      display_name: first.name,
+      register_type: first.fc === 1 ? 'coil' : first.fc === 2 ? 'discrete_input' : first.fc === 4 ? 'input_register' : 'holding_register',
+      address: first.addr,
+      data_type: (['bool', 'int16', 'uint16', 'int32', 'uint32', 'float32'].includes(first.type) ? first.type : 'uint16') as ModbusRTUPoint['data_type'],
+      /* `byte_order` của mẫu ("ABCD") mô tả CẢ thứ tự byte lẫn thứ tự word, còn
+         hợp đồng Point tách làm hai trường. Chỉ ánh xạ trường hợp chắc chắn;
+         dạng lạ thì giữ nguyên mặc định thay vì đoán. */
+      byte_order: first.byte_order === 'DCBA' || first.byte_order === 'BADC' ? 'little' : 'big',
+      word_order: first.byte_order === 'CDAB' || first.byte_order === 'DCBA' ? 'low_high' : 'high_low',
+      scale: first.scale ?? 1,
+      offset: first.offset ?? 0,
+      unit: first.unit ?? '',
+      read_write: first.writable ? 'read_write' : 'read'
+    }))
+  }
 
   async function savePoint(event: FormEvent) {
     event.preventDefault()
@@ -246,6 +292,42 @@ export function PointsPage() {
             <input type="checkbox" checked={point.enabled} onChange={(e) => setPoint({ ...point, enabled: e.target.checked })} />
             {pick('Kích hoạt (Enabled)', 'Enabled')}
           </label>
+          {/* `T57-3.11` — chọn mẫu để điền sẵn, kèm NGUỒN của mẫu ngay cạnh:
+              người dùng sẽ tin mẫu hơn tin tài liệu, nên mẫu phải tự nói nó
+              đến từ đâu. */}
+          {templates.length > 0 && (
+            <div className="col-span-full">
+              <label className="text-xs font-semibold text-[var(--c-text-dim)]">
+                {pick('Điền sẵn từ mẫu thiết bị', 'Prefill from a device template')}
+                <select
+                  className={inputClass}
+                  aria-label={pick('Mẫu thiết bị', 'Device template')}
+                  value={templateId}
+                  onChange={(event) => applyTemplate(event.target.value)}
+                >
+                  <option value="">{pick('— Không dùng mẫu —', '— No template —')}</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.manufacturer ? `${template.manufacturer} · ` : ''}{template.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {templateId && (
+                <p className="mt-1 text-xs text-[var(--c-text-dim)]">
+                  {pick('Nguồn: ', 'Source: ')}
+                  {templates.find((template) => template.id === templateId)?.source}
+                  {' · '}
+                  {templates.find((template) => template.id === templateId)?.origin === 'site'
+                    ? pick('mẫu của công trình', 'site template')
+                    : pick('mẫu dựng sẵn', 'built-in template')}
+                  {' · '}
+                  {pick('Mẫu chỉ điền sẵn; bạn vẫn phải kiểm và bấm Thêm Point.', 'The template only prefills; you still review and click Add Point.')}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button className={buttonClass} type="submit" disabled={!canEdit} title={readOnlyHintText}>{editingPoint ? pick('Cập nhật', 'Update') : pick('Thêm Point', 'Add Point')}</button>
             {editingPoint && (

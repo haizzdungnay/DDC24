@@ -43,8 +43,16 @@ void ScreenControl::build(lv_obj_t* root, const Locale& l, const PointDb&)
     override_btn_ = button(root, 217, 70, 100, "", this, BTN_OVERRIDE, &override_label_);
     setpoint_btn_ = button(root, 3, 112, 154, "", this, BTN_SETPOINT, &setpoint_label_);
     release_btn_ = button(root, 163, 112, 154, "", this, BTN_RELEASE, &release_label_);
+    /* `T57-3.19`/`T57-3.20`: một dòng riêng cho đếm ngược ép tay và chỉ báo
+       phiên web. Nhét vào `status_` chung sẽ làm hai thông tin an toàn này bị
+       cuốn trôi mỗi lần có phản hồi lệnh mới. */
+    override_ttl_label_ = lv_label_create(root);
+    lv_obj_set_pos(override_ttl_label_, 3, 140); lv_obj_set_size(override_ttl_label_, 314, 14);
+    lv_obj_set_style_text_font(override_ttl_label_, hmi_font(), LV_PART_MAIN);
+    lv_label_set_long_mode(override_ttl_label_, LV_LABEL_LONG_CLIP);
+
     status_label_ = lv_label_create(root);
-    lv_obj_set_pos(status_label_, 3, 154); lv_obj_set_size(status_label_, 314, 30);
+    lv_obj_set_pos(status_label_, 3, 156); lv_obj_set_size(status_label_, 314, 28);
     lv_obj_set_style_text_font(status_label_, hmi_font(), LV_PART_MAIN);
     lv_label_set_long_mode(status_label_, LV_LABEL_LONG_WRAP);
     requested_ = effective_value();
@@ -139,10 +147,41 @@ void ScreenControl::poll()
     if (reply.payload.contains("point")) {
         const auto& point = reply.payload["point"];
         status_ += "\nsource=" + point.value("priority", "unknown");
-        if (point.contains("overrideExpiresInS"))
-            status_ += " ttl=" + std::to_string(point.value("overrideExpiresInS", 0u)) + "s";
+        /* `T57-3.19`: TTL do Core cấp. Ghi lại CẢ giá trị lẫn mốc nhận, để
+           `render()` trừ dần giữa hai lần poll mà vẫn đặt lại từ Core mỗi lần
+           có phản hồi mới. Thiếu trường ⇒ KHÔNG có lệnh có thời hạn, khác hẳn
+           "vừa hết hạn". */
+        if (point.contains("overrideExpiresInS")) {
+            override_ttl_s_ = point.value("overrideExpiresInS", 0u);
+            override_ttl_at_ms_ = lv_tick_get();
+            override_ttl_known_ = true;
+        } else {
+            override_ttl_known_ = false;
+            override_ttl_s_ = 0;
+        }
     }
+    /* `T57-3.20`: broker gắn số phiên web vào mọi phản hồi đã xác thực. */
+    if (reply.payload.contains("webSessions"))
+        web_sessions_ = reply.payload.value("webSessions", 0);
     dirty_ = false;
+}
+
+int override_remaining_seconds(bool known, uint32_t ttl_s, uint32_t elapsed_ms, bool link_up)
+{
+    if (!known) return -1;
+    // Mất liên lạc hoặc số liệu quá cũ ⇒ NGỪNG đếm, trả "không rõ".
+    if (!link_up) return -1;
+    if (elapsed_ms > kOverrideTtlStaleMs) return -1;
+    const uint32_t elapsed_s = elapsed_ms / 1000u;
+    if (elapsed_s >= ttl_s) return 0;
+    return static_cast<int>(ttl_s - elapsed_s);
+}
+
+int ScreenControl::override_remaining_s() const
+{
+    return override_remaining_seconds(override_ttl_known_, override_ttl_s_,
+                                      lv_tick_elaps(override_ttl_at_ms_),
+                                      api_ != nullptr && api_->available());
 }
 
 void ScreenControl::render()
@@ -175,6 +214,27 @@ void ScreenControl::render()
     const std::string read_only = std::string(locale_->str(StrKey::STR_READ_ONLY)) +
         (session ? " - authority policy denied" : " - login in Service");
     lv_label_set_text(status_label_, auth ? status_.c_str() : read_only.c_str());
+
+    /* `T57-3.19` + `T57-3.20` trên cùng một dòng: cả hai đều trả lời câu
+       "trước khi tôi ra lệnh, đang có gì tác động lên điểm này?". */
+    std::string line;
+    const int remaining = override_remaining_s();
+    if (remaining > 0) {
+        char buf[48];
+        std::snprintf(buf, sizeof(buf), "%s %02d:%02d",
+                      locale_->str(StrKey::STR_OVERRIDE), remaining / 60, remaining % 60);
+        line = buf;
+    } else if (remaining == 0) {
+        line = std::string(locale_->str(StrKey::STR_OVERRIDE)) + " 00:00";
+    } else if (override_ttl_known_) {
+        // Có lệnh ép tay nhưng KHÔNG còn đếm được: nói ra thay vì tiếp tục trừ.
+        line = std::string(locale_->str(StrKey::STR_OVERRIDE)) + " --:--";
+    }
+    if (web_sessions_ > 0) {
+        if (!line.empty()) line += "  |  ";
+        line += "WEB " + std::to_string(web_sessions_);
+    }
+    lv_label_set_text(override_ttl_label_, line.c_str());
 }
 
 void ScreenControl::event_cb(lv_event_t* e)

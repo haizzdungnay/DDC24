@@ -8,6 +8,69 @@
 
 ## [Unreleased]
 
+### Added — Plan 57 Wave 3 đợt 2: Rev A đạt 69/70, còn đúng `T57-3.9` (2026-08-19)
+
+Năm task còn lại của Wave 3 cộng phần dở của Wave 0, giao sau
+`AUTH-WEBUX-2026-08-19-02` (ba task C++ do chủ sở hữu giao cho agent).
+
+| Task | Nội dung |
+|---|---|
+| `T57-3.13` | `POST /alarm-settings/estimate` — ước lượng số lần cảnh báo bật/ngày từ lịch sử THẬT của điểm, qua chính `mkddc-alarm-sim` |
+| `T57-3.18` | `POST /network/connectivity-check` — ping gateway/DNS + phân giải tên trong cửa sổ đếm ngược rollback |
+| `T57-3.11` | `GET /modbus/templates` — mẫu thiết bị Modbus, **bắt buộc có nguồn** |
+| `T57-3.19` | HMI: đếm ngược `mm:ss` TTL lệnh ép tay trên màn Control |
+| `T57-3.20` | HMI: chỉ báo `WEB n` — số phiên web đang mở |
+| `T57-0.7` | Test hành vi `F-UX-03` cho `/trends?points=` — đóng nốt Wave 0 |
+
+**Ba quyết định trung thực xuyên suốt đợt này.** Cả ba đều là cùng một luật:
+*không nói điều mình không biết*.
+
+1. `T57-3.13` — không có lịch sử ⇒ **503 từ chối ước lượng**, cấm trả "0
+   lần/ngày". Số 0 ở đó sẽ được đọc thành "ngưỡng này an toàn". Hạ tần là bắt
+   buộc (engine nhận tối đa 1000 mẫu) và nó làm mất đợt vượt ngưỡng ngắn hơn
+   bước lấy mẫu, nên kết quả **thiên về thấp** — câu đó hiện ngay cạnh con số.
+2. `T57-3.18` — giữ **ba** trạng thái chứ không hai: `unknown` (thiếu `ping`,
+   hết giờ) tách hẳn khỏi `unreachable`. Gộp lại sẽ khiến người vận hành
+   rollback một cấu hình hoàn toàn đúng chỉ vì thiết bị thiếu một binary chẩn
+   đoán — và mất luôn cửa sổ 120 giây.
+3. `T57-3.19` — đồng hồ đếm ngược **ngừng chạy** khi mất liên lạc hoặc số liệu
+   quá 10 giây tuổi, hiện `--:--`. Một đồng hồ vẫn chạy sau khi kết nối chết nói
+   với người đứng trước tủ rằng "lệnh còn 4 phút nữa tự nhả", trong khi ta không
+   còn biết gì về lệnh đó.
+
+**`T57-3.11` không bịa thông số.** Danh sách dựng sẵn cố ý chỉ có **một** mẫu
+(`mtr-1`), đọc từ chính profile đang chạy trên board lab ngày 2026-08-19. Mẫu
+thiếu trường `source` bị backend loại khỏi danh sách — có test khoá. Một bảng
+thanh ghi đoán nguy hiểm hơn không có mẫu nào, vì người dùng tin mẫu hơn tin
+tài liệu.
+
+**Phát hiện chặn `T57-3.9` — cần sửa `ADR-046` trước khi code.** Điểm chèn vòng
+nhớ trong `bus_worker.cpp` đã rõ, nhưng `ADR-046` hứa "byte thô hiện dạng hex"
+và **libmodbus không lộ bộ đệm wire** nếu không thay lớp transport. Khuyến nghị:
+ghi **bản ghi giao dịch** (hướng, slave, mã hàm, địa chỉ, kết quả, phân loại
+timeout/CRC, thời lượng) — trả lời đủ ba câu hỏi hiện trường mà ADR nêu — kèm
+sửa ADR nói rõ Rev A không có byte thô. Chưa thi hành: đổi điều một ADR đã ban
+hành là việc phải ghi TRƯỚC khi code.
+
+**Kiểm chứng (đo lại 2026-08-19).**
+
+| Phép đo | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **109 file / 1047 test PASS** (chạy 3 lần liên tiếp) |
+| `ctest --test-dir build/fw` (Modbus+BACnet+HMI ON) | **1036/1036 PASS** (trước đợt: 1031) |
+| `go build ./...` · `go vet ./...` · `go test ./... -count=1` | PASS |
+| `npm run lint` · `tsc --noEmit` | PASS |
+| `python3 scripts/docs_iso_harness.py --expect` | PASS |
+
+**Một lần chạy đỏ đã điều tra, không giấu.** Lần chạy toàn bộ đầu tiên có 3 test
+của `OutputsPage.test.tsx` đỏ; chạy lại ba lần đều xanh. `OutputsPage.tsx` và
+`OutputsPage.test.tsx` đang được một phiên khác sửa dở ngay lúc chạy — file đổi
+giữa chừng là lời giải thích khớp nhất. Ghi lại để nếu tái diễn thì có đầu mối.
+
+**Trạng thái Plan 57: Rev A 69/70 (~98,6%).** Còn đúng `T57-3.9`. Hai việc ngoài
+mẫu số nhưng chặn `RELEASE_READY`: chữ ký người cho `ADR-033`…`ADR-049`, và một
+lượt deploy đợt 2 lên board.
+
 ### Changed — Bốn quyết định người đóng cổng còn treo của Plan 57 (2026-08-19)
 
 Ghi bằng `AUTH-WEBUX-2026-08-19-02` trong `docs/00_governance/DECISIONS.md`.

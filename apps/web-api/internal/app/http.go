@@ -178,6 +178,10 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("PUT /api/v1/network", RoleAdmin, a.handlePutNetworkPage),
 		webRouter.Protected("GET /api/v1/network/transaction", RoleViewer, a.handleGetNetworkTransaction),
 		webRouter.Protected("POST /api/v1/network/transaction/{action}", RoleAdmin, a.handlePostNetworkTransaction),
+		// `T57-3.18`: kiểm gateway/DNS trong cửa sổ đếm ngược rollback. Đây là
+		// ĐỌC (ping/phân giải tên), không đổi cấu hình, nên `operator` là đủ —
+		// chính người đang trực mới cần bấm nó.
+		webRouter.Protected("POST /api/v1/network/connectivity-check", RoleOperator, a.handleNetworkConnectivityCheck),
 		webRouter.Protected("GET /api/v1/points", RoleViewer, a.handlePoints),
 		webRouter.Protected("GET /api/v1/points/{id}", RoleViewer, a.handlePoint),
 		webRouter.Protected("PUT /api/v1/points/{id}", RoleOperator, a.handleForcePoint),
@@ -215,6 +219,9 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("POST /api/v1/modbus/config/apply", RoleAdmin, a.handleApplyModbusConfig),
 		webRouter.Protected("GET /api/v1/modbus/mapping", RoleViewer, a.handleModbusMapping),
 		webRouter.Protected("GET /api/v1/modbus/ports", RoleViewer, a.handleModbusPorts),
+		// `T57-3.11`: mẫu thiết bị dựng sẵn. ĐỌC ⇒ `viewer`; mẫu chỉ điền sẵn
+		// form, người dùng vẫn phải xác nhận và lưu như bình thường.
+		webRouter.Protected("GET /api/v1/modbus/templates", RoleViewer, a.handleListModbusTemplates),
 		webRouter.Protected("GET /api/v1/modbus/export", RoleViewer, a.handleModbusExport),
 		webRouter.Protected("POST /api/v1/modbus/import", RoleAdmin, a.handleModbusImport),
 		webRouter.Protected("PUT /api/v1/modbus/devices/{id}/enabled", RoleAdmin, a.handleModbusDeviceEnabled),
@@ -295,6 +302,8 @@ func (a *App) Router() http.Handler {
 		// `T57-2.13` (`ADR-048`): mô phỏng luật cảnh báo, là VỎ gọi
 		// `mkddc-alarm-sim`. Không chạm cấu hình đang lưu nên `viewer` là đủ.
 		webRouter.Protected("POST /api/v1/alarm-settings/simulate", RoleViewer, a.handleSimulateAlarmSetting),
+		// `T57-3.13`: ước lượng tần suất từ lịch sử THẬT của điểm, cùng engine.
+		webRouter.Protected("POST /api/v1/alarm-settings/estimate", RoleViewer, a.handleEstimateAlarmSetting),
 	}
 	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, programminghttp.Services{
 		Projects: a.programmingProjects, Checks: a.programmingChecks, Operations: a.programmingOperations,

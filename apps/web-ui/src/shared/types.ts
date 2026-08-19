@@ -1146,6 +1146,66 @@ export interface AlarmSimulateResult {
   engine: string
 }
 
+/** Mẫu thiết bị Modbus dựng sẵn — `T57-3.11`.
+ *
+ *  `source` là BẮT BUỘC ở backend: mẫu không nói được nó đến từ đâu thì không
+ *  được hiển thị. Giao diện phải hiện `source` cạnh mẫu, vì người dùng sẽ tin
+ *  mẫu hơn tin tài liệu. */
+export interface ModbusTemplatePoint {
+  name: string
+  fc: number
+  addr: number
+  count: number
+  type: string
+  byte_order?: string
+  scale?: number
+  offset?: number
+  unit?: string
+  writable?: boolean
+}
+
+export interface ModbusTemplate {
+  id: string
+  name: string
+  manufacturer?: string
+  description?: string
+  source: string
+  origin: 'builtin' | 'site' | string
+  points: ModbusTemplatePoint[]
+}
+
+/** Kiểm kết nối sau khi apply mạng — `T57-3.18`.
+ *
+ *  `unknown` KHÁC `unreachable`: gộp hai thứ này lại sẽ khiến người dùng rollback
+ *  một cấu hình hoàn toàn đúng chỉ vì thiết bị thiếu công cụ chẩn đoán. */
+export interface NetworkCheckTarget {
+  kind: 'gateway' | 'dns' | 'dns_resolve' | string
+  host: string
+  state: 'ok' | 'unreachable' | 'unknown'
+  detail?: string
+  rttMs?: number
+}
+
+export interface NetworkCheckResponse {
+  checkedAt: string
+  targets: NetworkCheckTarget[]
+  summary: 'ok' | 'degraded' | 'unknown'
+}
+
+/** Ước lượng tần suất cảnh báo từ lịch sử điểm — `T57-3.13`. */
+export interface AlarmEstimateResult {
+  pointId: string
+  days: number
+  samplesAvailable: number
+  samplesUsed: number
+  /** Bước lấy mẫu sau hạ tần: đỉnh ngắn hơn khoảng này KHÔNG được nhìn thấy. */
+  stepS: number
+  raises: number
+  raisesPerDay: number
+  downsampled: boolean
+  engine: string
+}
+
 /** Hiệu lực thực tế của lịch trên một điểm — `T57-3.5`/`T57-3.6`/`T57-3.7`. */
 export interface ScheduleEffectiveSegment {
   from: string

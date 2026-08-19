@@ -454,19 +454,19 @@ xong 14/21, Wave 4 xong 2/2 và **đã nghiệm thu**.
 sở hữu và mốc bắt đầu**, board Foxlinx **đã kết nối lại và deploy xong**, và
 waive chữ ký **đã có mốc hết hiệu lực**.
 
-Sáu task Rev A còn lại: ba cần sửa mã C++ (`T57-3.9`, `T57-3.19`, `T57-3.20` —
-agent nhận, bắt đầu 2026-08-19), hai chưa tới lượt và không bị chặn (`T57-3.11`,
-`T57-3.13`), và `T57-3.18` cần sửa `mkddc-netcfg`.
+Rev A còn **đúng một task**: `T57-3.9`. Nó không bị chặn bởi thẩm quyền hay
+nhân sự, mà bởi một mâu thuẫn kỹ thuật phát hiện khi khảo sát mã: `ADR-046` hứa
+byte thô dạng hex, còn libmodbus không lộ bộ đệm wire. Phải sửa ADR trước.
 
 | Wave | Task | Trạng thái | Ghi chú |
 |---|---:|---|---|
-| 0 — Đóng nợ + gate | 15 | **XONG 14,5/15** | `T57-0.7` thiếu test hành vi `F-UX-03` (xem dưới) |
+| 0 — Đóng nợ + gate | 15 | **XONG 15/15** (2026-08-19) | `T57-0.7` đóng nốt bằng `TrendsPage.deepLink.test.tsx`; xem "Wave 3 — đợt 2" |
 | 1 — An toàn vận hành | 12 | **XONG 12/12** | Mở bằng `AUTH-WEBUX-2026-08-18-02` sau khi phát hành asset trực quan và đóng Q2/Q6 |
 | 2 — Hiệu quả chẩn đoán | 21 | **XONG 21/21** (2026-08-19) | 22 task ban đầu trừ `T57-2.13` đã chuyển sang Wave 3 theo `ADR-035` (ngữ nghĩa luật cảnh báo thuộc Core, cấm cài lại ở FE) |
-| 3 — Contract/backend mới | 21 | **XONG 14/21** (2026-08-19) | Mở bằng `AUTH-WEBUX-2026-08-19-01` + `ADR-042`…`ADR-049`. Còn `T57-3.9`/`T57-3.11`/`T57-3.13`/`T57-3.18`/`T57-3.19`/`T57-3.20`; `T57-3.8` **chuyển sang Rev B** theo `AUTH-WEBUX-2026-08-19-02` — ra khỏi mẫu số Rev A |
+| 3 — Contract/backend mới | 21 | **XONG 19/21** (2026-08-19) | Đợt 2 giao thêm `T57-3.11`/`T57-3.13`/`T57-3.18`/`T57-3.19`/`T57-3.20`. Còn **`T57-3.9`** (chặn bởi một sửa đổi `ADR-046`); `T57-3.8` **chuyển sang Rev B** — ra khỏi mẫu số Rev A |
 | 4 — Quyết định sản phẩm | 2 | **XONG 2/2 · đã nghiệm thu** (2026-08-19) | Chủ sở hữu chốt đường tối thiểu: `T57-4.1` qua thẻ thiết bị (`T57-3.1`), ISA-101 Level 2 hoãn sang Rev B; `T57-4.2` **đã deploy và đo trên board thật** theo `ADR-049` điều 3 — xem "Deploy và nghiệm thu" bên dưới |
-| **Tổng (mọi bản)** | **71** | **63,5/71 (~89,4%)** | Gồm cả `T57-3.8` đã chuyển sang Rev B |
-| **Phạm vi Rev A** | **70** | **63,5/70 (~90,7%)** | 6,5 task còn lại: `T57-3.9`/`T57-3.19`/`T57-3.20` (C++, agent nhận), `T57-3.11`/`T57-3.13` (chưa tới lượt), `T57-3.18` (netcfg), + 0,5 của `T57-0.7` |
+| **Tổng (mọi bản)** | **71** | **69/71 (~97,2%)** | Gồm cả `T57-3.8` đã chuyển sang Rev B |
+| **Phạm vi Rev A** | **70** | **69/70 (~98,6%)** | Còn **đúng `T57-3.9`**, chặn bởi mâu thuẫn giữa `ADR-046` (hứa byte thô) và libmodbus (không lộ bộ đệm wire) |
 
 **Tám câu hỏi §12: đã đóng cả 8** (Q1/Q3 bằng `AUTH-WEBUX-…-01`; Q2/Q4/Q5/Q6/Q7/Q8
 bằng `ADR-034`…`ADR-039`). Không còn quyết định nào chặn việc lập kế hoạch tiếp.
@@ -601,49 +601,88 @@ byte thì tất định và lặp lại y hệt mọi lượt.
 968 kB ↔ 558 kB tác động mạnh nhất qua thời gian parse/execute, phần mà phép đo
 qua tunnel chưa tách ra được.
 
+### Wave 3 — đợt 2 (2026-08-19, sau `AUTH-WEBUX-2026-08-19-02`)
+
+Năm task còn lại của Rev A cộng phần dở của Wave 0. Ba task C++ do chủ sở hữu
+giao cho agent tại quyết định 2 của record đó.
+
+| Task | Nội dung đã giao | Nơi kiểm |
+|---|---|---|
+| `T57-3.13` | `POST /alarm-settings/estimate` — ước lượng số lần bật/ngày từ lịch sử THẬT của điểm, qua chính `mkddc-alarm-sim`. Không có lịch sử ⇒ 503, **cấm** trả "0 lần/ngày" | `alarmestimate_test.go` (5) |
+| `T57-3.18` | `POST /network/connectivity-check` — ping gateway/DNS + phân giải tên trong cửa sổ đếm ngược rollback | `networkcheck_test.go` (6 tổ hợp) |
+| `T57-3.11` | `GET /modbus/templates` — mẫu thiết bị, **bắt buộc có `source`**; mẫu thiếu nguồn bị loại khỏi danh sách | `modbustemplates_test.go` (4) |
+| `T57-3.19` | HMI: đếm ngược `mm:ss` TTL ép tay trên màn Control, **ngừng đếm khi mất liên lạc** | `test_override_countdown.cpp` (5) |
+| `T57-3.20` | HMI: chỉ báo `WEB n` — số phiên web đang mở, gắn vào mọi phản hồi broker đã xác thực | như trên |
+| `T57-0.7` | Test hành vi `F-UX-03` cho `/trends?points=` — phần 0,5 còn dở của Wave 0 | `TrendsPage.deepLink.test.tsx` (4) |
+
+**Ba quyết định trung thực đáng ghi lại:**
+
+1. **`T57-3.13` không có lịch sử ⇒ từ chối ước lượng.** Trả "0 lần/ngày" sẽ được
+   đọc thành "ngưỡng này an toàn", trong khi sự thật là chưa biết gì. Hạ tần
+   (bắt buộc, vì engine nhận tối đa 1000 mẫu) làm mất đợt vượt ngưỡng ngắn hơn
+   bước lấy mẫu, nên kết quả **thiên về thấp** — câu đó hiện ngay cạnh con số.
+2. **`T57-3.18` giữ ba trạng thái, không hai.** `unknown` (thiếu `ping`, hết
+   giờ) tách hẳn khỏi `unreachable`. Gộp lại sẽ khiến người dùng rollback một
+   cấu hình đúng chỉ vì thiết bị thiếu một binary chẩn đoán.
+3. **`T57-3.11` không bịa thông số.** Danh sách dựng sẵn cố ý chỉ có **một** mẫu
+   (`mtr-1`), đọc từ chính profile đang chạy trên board lab ngày 2026-08-19. Một
+   bảng thanh ghi đoán nguy hiểm hơn không có mẫu nào, vì người dùng tin mẫu hơn
+   tin tài liệu.
+
+**Phát hiện chặn `T57-3.9` — cần sửa `ADR-046` trước khi thi hành.** Khi khảo
+sát `apps/iobus/adapters/modbus_rtu/bus_worker.cpp`, điểm chèn vòng nhớ đã rõ
+(ngay sau mỗi lượt `modbus_read_*`), nhưng `ADR-046` hứa "byte thô hiện dạng
+hex" — và **libmodbus không lộ bộ đệm wire** ra ngoài nếu không thay lớp
+transport của nó. Hai đường đi, đều phải qua ADR:
+
+| Phương án | Đánh đổi |
+|---|---|
+| Ghi **bản ghi giao dịch** (hướng, slave, mã hàm, địa chỉ, số thanh ghi, kết quả, phân loại timeout/CRC, thời lượng) | Trả lời được cả ba câu hỏi hiện trường mà `ADR-046` nêu; **không** có byte thô |
+| Thay backend libmodbus để chạm được wire buffer | Có byte thô; đổi lại là sửa lớp truyền của một thư viện đang chạy trên bus thật — rủi ro không tương xứng với một tính năng chẩn đoán |
+
+Khuyến nghị phương án 1 kèm sửa `ADR-046` nói rõ Rev A không có byte thô và vì
+sao. **Chưa thi hành**: đổi điều một ADR đã ban hành là việc phải ghi trước khi
+code, đúng quy tắc "DOC TRƯỚC CODE SAU".
+
 ### Việc còn lại
 
 | Mục | Trạng thái | Điều kiện mở khoá |
 |---|---|---|
-| `T57-3.8` quét bus Modbus | **HOÃN SANG REV B** | Ra khỏi phạm vi Rev A theo `AUTH-WEBUX-2026-08-19-02` quyết định 1. Mở lại khi PM chỉ định **Fieldbus Lead + QA/HIL Lead** (điều kiện Track B, phê duyệt PM/CTO 2026-08-04), hoặc khi mở phạm vi Rev B |
-| `T57-3.9` xem thô khung truyền Modbus | Chưa làm — **owner: agent, bắt đầu 2026-08-19** | Không còn bị chặn. Sửa `apps/iobus` (C++): vòng nhớ khung **CHỈ-ĐỌC** trong `BusWorker` theo `ADR-046`, rồi mới tới Go + FE. 4,0 người-ngày |
-| `T57-3.11` mẫu thiết bị Modbus dựng sẵn | Chưa làm | Cần bộ dữ liệu mẫu theo hãng; không có ràng buộc kỹ thuật nào chặn |
-| `T57-3.13` ước lượng tần suất cảnh báo từ lịch sử | Chưa làm | Phải đi qua `mkddc-alarm-sim` (`ADR-048`) trên mẫu historian đã hạ tần; không có ràng buộc nào chặn |
-| `T57-3.18` kiểm kết nối sau apply mạng | Chưa làm | Cần sửa `mkddc-netcfg` để ping gateway/DNS trong cửa sổ đếm ngược |
-| `T57-3.19`, `T57-3.20` (HMI) | Chưa làm — **owner: agent, bắt đầu 2026-08-19** | Không còn bị chặn. Sửa `apps/hmi` (C++/LVGL); 1,5 người-ngày mỗi task |
-| Test hành vi `F-UX-03`, `F-UX-13` | Chưa viết | Như bản trước |
-| Chặn Back/Forward trong `useDirtyGuard` | Khoảng hở đã biết | Cần `useBlocker` của data router |
-| **Deploy lên board** | **XONG (2026-08-19)** | Board đã trở lại mạng; agent được uỷ quyền truy cập theo `AUTH-WEBUX-2026-08-19-02` quyết định 3. Wave 0–3 đã deploy, `T57-4.2` **đã nghiệm thu** trên board thật — xem mục trên |
-| **CI GitHub Actions** | **CHƯA QUYẾT** | Lỗi thanh toán tổ chức từ 2026-08-17, không phải lỗi mã. Owner: chủ sở hữu sản phẩm (cần quyền billing GitHub). **Chưa đặt mốc.** Merge bằng test local là ngoại lệ chưa có ngày đáo hạn |
-| **Chữ ký `ADR-033`…`ADR-049`** | **Waive có thời hạn** | Giữ `WAIVED FOR IMPLEMENTATION` tới **cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4). Cần chữ ký người thật của Tech Lead/UX Lead/PM trước mốc đó; agent **không** được điền |
+| `T57-3.8` quét bus Modbus | **HOÃN SANG REV B** | Ra khỏi phạm vi Rev A theo `AUTH-WEBUX-2026-08-19-02` quyết định 1. Mở lại khi PM chỉ định **Fieldbus Lead + QA/HIL Lead**, hoặc khi mở phạm vi Rev B |
+| `T57-3.9` xem thô khung truyền Modbus | **Chưa làm — chặn bởi một sửa đổi `ADR-046`** | `ADR-046` hứa byte thô dạng hex, nhưng libmodbus không lộ bộ đệm wire. Phải sửa ADR (chọn "bản ghi giao dịch", nêu lý do) TRƯỚC khi code. Owner: agent. 4,0 người-ngày |
+| Test hành vi `F-UX-13` | Chưa viết | Phủ gián tiếp qua bộ test alarm sẵn có |
+| Chặn Back/Forward trong `useDirtyGuard` | Khoảng hở đã biết | Cần `useBlocker` của data router; app dùng `<BrowserRouter>` |
+| **Deploy lên board** | **XONG (2026-08-19)** | Wave 0–3 đã deploy; `T57-4.2` đã nghiệm thu trên board thật. Đợt 2 này **chưa deploy** — cần một lượt deploy nữa sau khi merge |
+| **CI GitHub Actions** | **CHƯA QUYẾT** | Lỗi thanh toán tổ chức từ 2026-08-17. Owner: chủ sở hữu sản phẩm (cần quyền billing GitHub). **Chưa đặt mốc** |
+| **Chữ ký `ADR-033`…`ADR-049`** | **Waive có thời hạn** | Giữ `WAIVED FOR IMPLEMENTATION` tới **cổng `RELEASE_READY` Rev A**. Cần chữ ký người thật của Tech Lead/UX Lead/PM trước mốc đó; agent **không** được điền |
 
 ### Điều kiện để đóng plan
 
-**Phạm vi Rev A còn 6 task cộng 0,5 task dở của Wave 0 (`T57-0.7`)** —
-và **không mục nào còn bị chặn**:
+Rev A còn **đúng một task**: `T57-3.9`. Nó không bị chặn bởi thẩm quyền hay nhân
+sự mà bởi **một mâu thuẫn kỹ thuật trong chính `ADR-046`** — ADR hứa "byte thô
+hiện dạng hex", còn libmodbus không lộ bộ đệm wire ra ngoài nếu không thay lớp
+transport của nó. Bước kế tiếp là **sửa ADR**, không phải viết code:
 
-| Task | Vì sao chưa xong | Ai làm |
+| Phương án | Đánh đổi | Khuyến nghị |
 |---|---|---|
-| `T57-3.9` | Cần sửa `apps/iobus` (C++) theo `ADR-046` | Agent, từ 2026-08-19 |
-| `T57-3.19`, `T57-3.20` | Cần sửa `apps/hmi` (C++/LVGL) | Agent, từ 2026-08-19 |
-| `T57-3.11` | Cần bộ dữ liệu mẫu theo hãng; không có ràng buộc kỹ thuật | Chưa tới lượt |
-| `T57-3.13` | Phải đi qua `mkddc-alarm-sim` (`ADR-048`); không có ràng buộc | Chưa tới lượt |
-| `T57-3.18` | Cần sửa `mkddc-netcfg` | Chưa tới lượt |
-| `T57-0.7` (0,5) | Thiếu test hành vi `F-UX-03` | Chưa tới lượt |
+| Ghi **bản ghi giao dịch** (hướng, slave, mã hàm, địa chỉ, số thanh ghi, kết quả, phân loại timeout/CRC, thời lượng) | Trả lời đủ ba câu hỏi hiện trường mà `ADR-046` nêu; **không** có byte thô | **Chọn cái này**, kèm sửa `ADR-046` nói rõ Rev A không có byte thô và vì sao |
+| Thay backend libmodbus để chạm wire buffer | Có byte thô; đổi lại là sửa lớp truyền của thư viện đang chạy trên bus thật | Không tương xứng với một tính năng chẩn đoán |
 
-`T57-3.8` **không** nằm trong danh sách này — nó đã chuyển sang **Rev B**.
+`T57-3.8` **không** nằm trong danh sách này — đã chuyển sang **Rev B** theo
+`AUTH-WEBUX-2026-08-19-02` quyết định 1.
 
-`T57-4.2` **đã nghiệm thu** trên board thật ngày 2026-08-19; mục "chưa nghiệm thu"
-ở bản trước của §13b **không còn đúng**.
+Hai việc ngoài mẫu số task nhưng **chặn cổng `RELEASE_READY` Rev A**:
 
-**Hai việc ngoài mẫu số task nhưng chặn `RELEASE_READY`:** chữ ký người thật cho
-`ADR-033`…`ADR-049` (waive hết hiệu lực tại chính cổng đó), và CI GitHub Actions
-còn hỏng vì thanh toán — mục CI **chưa có quyết định và chưa có mốc**.
+1. **Chữ ký người** cho `ADR-033`…`ADR-049`. Waive hết hiệu lực đúng tại cổng
+   đó; agent không được điền (`DOC_GOVERNANCE` §6 quy tắc 4).
+2. **Deploy đợt 2** lên board và đo lại. Đợt 1 đã deploy và nghiệm thu
+   `T57-4.2`; năm task của đợt 2 thì chưa lên board.
 
 ## 14. Revision History
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.5 | 2026-08-19 | Wave 3 đợt 2: giao `T57-3.11`, `T57-3.13`, `T57-3.18`, `T57-3.19`, `T57-3.20` và đóng nốt `T57-0.7`. Rev A đạt **69/70**; còn đúng `T57-3.9`, chặn bởi mâu thuẫn giữa `ADR-046` (hứa byte thô) và libmodbus (không lộ bộ đệm wire) — phải sửa ADR trước khi code. Số đo: FE 109 file / 1047 test, ctest **1036/1036**, `go test ./...` PASS |
 | 1.4 | 2026-08-19 | Bốn quyết định người đóng bằng `AUTH-WEBUX-2026-08-19-02`: `T57-3.8` **hoãn sang Rev B** (mẫu số Rev A 71 → 70), ba task C++ có owner + mốc bắt đầu, uỷ quyền agent truy cập board, và waive chữ ký `ADR-033`…`ADR-049` có **mốc hết hiệu lực tại cổng `RELEASE_READY` Rev A**. §13b ghi deploy Wave 0–3 lên board thật và **số đo nghiệm thu `T57-4.2`** (12 cặp mẫu, byte đường tới hạn −21,1%, FCP −236 ms trung vị theo cặp, 8/12 cặp) kèm hai giới hạn của phép đo; CI ghi rõ là **chưa có quyết định** |
 | 1.3 | 2026-08-19 | Wave 3 mở bằng `AUTH-WEBUX-2026-08-19-01` (chủ sở hữu chốt: mở trừ `T57-3.8`) với `ADR-042`…`ADR-049`; giao 14/21 task Wave 3 và 2/2 task Wave 4 (`T57-4.1` đường tối thiểu, `T57-4.2` code-splitting: chunk chính 989,94 → 558,49 kB). §13b ghi số đo thật 107 file / 1032 test FE, `go test ./...` PASS, và sáu task còn lại kèm điều kiện mở khoá từng mục |
 | 1.2 | 2026-08-19 | Wave 2 hoàn tất 21/21 task (`T57-2.3`, `T57-2.6`, `T57-2.10`, `T57-2.14`, `T57-2.22` khép lại đợt cuối); §13b ghi lại số đo thật 104 file / 1016 test, bundle Foxlinx 989,94 kB (+22,27 kB so với `63f841d`), và giới hạn đã biết của khung nhìn đặt tên (localStorage, chờ `T57-3.2`) |
