@@ -35,7 +35,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmMetrics, type AlarmSetting, type AlarmSimulateResult, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type ScheduleEffectiveResponse, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type SystemHistoryResponse, type UserAccessResponse, type UserAccessRow, type VirtualPointUsage, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -224,6 +224,12 @@ export async function requestJson<T>(path: string, init: ApiRequestInit = {}): P
   }
   if (!response.ok) {
     const body = await response.text().catch(() => '')
+    /* `T57-3.17` (`ADR-047`): backend chặn mọi endpoint của một phiên đang bị
+       buộc đổi mật khẩu. Không nhận ra tín hiệu này thì giao diện chỉ hiện một
+       chuỗi lỗi quyền, và người dùng đi tìm quyền bị thiếu thay vì đổi mật khẩu. */
+    if (response.status === 403 && body.includes('password_change_required')) {
+      window.dispatchEvent(new CustomEvent('mkddc:password-change-required'))
+    }
     let message = body || `${response.status} ${response.statusText}`
     let details: ApiValidationDetail[] = []
     try {
@@ -436,6 +442,20 @@ function normalizeUserAccount(raw: Record<string, unknown> | unknown): UserAccou
     // Cùng nguyên tắc fail-closed như F-07 ở AuthProvider: một role lạ hoặc thiếu
     // phải rơi về quyền THẤP NHẤT, không được mặc định thành admin.
     role: role === 'admin' || role === 'operator' ? role : 'viewer'
+  }
+}
+
+function normalizeUserAccessRow(raw: unknown): UserAccessRow {
+  const record = (raw ?? {}) as Record<string, unknown>
+  const base = normalizeUserAccount(record)
+  const text = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value : null
+  return {
+    ...base,
+    mustChangePassword: Boolean(record.mustChangePassword),
+    lastLoginAt: text(record.lastLoginAt),
+    lastLoginRemote: text(record.lastLoginRemote),
+    lastFailedLoginAt: text(record.lastFailedLoginAt),
+    activeSessions: Number.isFinite(Number(record.activeSessions)) ? Number(record.activeSessions) : 0
   }
 }
 
@@ -1258,6 +1278,87 @@ export const apiClient = {
     return requestJson<CurrentUser>('/me')
   },
 
+  /** `T57-3.3` — chỉ số hệ alarm ISA-18.2. Lỗi KHÔNG được nuốt thành 0: nơi gọi
+   *  phải phân biệt "không có cảnh báo" với "không đọc được nhật ký". */
+  async getAlarmMetrics(window: '10m' | '1h' | '24h' | '7d' = '24h'): Promise<AlarmMetrics> {
+    if (IS_DEMO) return { window, windowS: 86400, rate10m: 0, ratePerHour: 0, totalRaised: 0, flooding: false, topRepeating: [], shelved: [] }
+    return requestJson<AlarmMetrics>(`/alarms/metrics?window=${window}`, { cache: 'no-store' })
+  },
+
+  /** `T57-2.13` — mô phỏng luật cảnh báo bằng chính engine của Core. */
+  async simulateAlarmSetting(setting: AlarmSetting, samples: Array<{ t: string; value: number }>): Promise<AlarmSimulateResult> {
+    return requestJson<AlarmSimulateResult>('/alarm-settings/simulate', {
+      method: 'POST',
+      body: JSON.stringify({ setting, samples })
+    })
+  },
+
+  /** `T57-3.5`/`T57-3.6`/`T57-3.7` — lịch nào thực sự điều khiển điểm này. */
+  async getScheduleEffective(pointId: string, from: string, to: string): Promise<ScheduleEffectiveResponse> {
+    const params = new URLSearchParams({ pointId, from, to })
+    return requestJson<ScheduleEffectiveResponse>(`/schedules/effective?${params.toString()}`, { cache: 'no-store' })
+  },
+
+  /** `T57-3.4` — lịch sử 60 phút của CPU/RAM/nhiệt độ. Vòng nhớ nằm trong tiến
+   *  trình web-api nên chỉ có từ lần khởi động gần nhất; `sinceRestart` nói ra
+   *  điều đó để giao diện không giả vờ có một giờ dữ liệu ngay sau restart. */
+  async getSystemHistory(): Promise<SystemHistoryResponse> {
+    if (IS_DEMO) return { windowS: 3600, intervalS: 15, sinceRestart: new Date().toISOString(), samples: [] }
+    const raw = await requestJson<Partial<SystemHistoryResponse>>('/system/history', { cache: 'no-store' })
+    return {
+      windowS: Number(raw.windowS ?? 3600),
+      intervalS: Number(raw.intervalS ?? 15),
+      sinceRestart: String(raw.sinceRestart ?? ''),
+      samples: Array.isArray(raw.samples) ? raw.samples : []
+    }
+  },
+
+  /** `T57-3.12` — ai đang dùng điểm ảo này. */
+  async getVirtualPointUsage(id: string): Promise<VirtualPointUsage> {
+    if (IS_DEMO) return { pointId: id, references: [], scanned: [], incomplete: false }
+    const raw = await requestJson<Partial<VirtualPointUsage>>(`/virtual-points/${encodeURIComponent(id)}/usage`, { cache: 'no-store' })
+    return {
+      pointId: String(raw.pointId ?? id),
+      tag: raw.tag,
+      references: Array.isArray(raw.references) ? raw.references : [],
+      scanned: Array.isArray(raw.scanned) ? raw.scanned : [],
+      incomplete: Boolean(raw.incomplete),
+      errors: Array.isArray(raw.errors) ? raw.errors : undefined
+    }
+  },
+
+  /** `T57-3.16` — lần đăng nhập gần nhất và phiên đang mở của từng tài khoản. */
+  async getUserAccess(): Promise<UserAccessResponse> {
+    if (IS_DEMO) {
+      const users = await getDemoUserAccounts()
+      return {
+        users: users.map((user) => ({ ...user, lastLoginAt: null, lastLoginRemote: null, lastFailedLoginAt: null, activeSessions: 0 })),
+        sessions: [], sessionsSince: new Date().toISOString(), activityWindow: 0
+      }
+    }
+    const raw = await requestJson<Partial<UserAccessResponse>>('/users/access', { cache: 'no-store' })
+    return {
+      users: Array.isArray(raw.users) ? raw.users.map(normalizeUserAccessRow) : [],
+      sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
+      sessionsSince: String(raw.sessionsSince ?? ''),
+      activityWindow: Number(raw.activityWindow ?? 0)
+    }
+  },
+
+  /** `T57-3.2` (`ADR-043`) — tuỳ chọn người dùng lưu trên thiết bị.
+   *
+   *  Backend không hiểu nội dung; hình dạng do chính FE định nghĩa. Lỗi đọc
+   *  KHÔNG được nuốt: nơi gọi phải biết để còn quay về bộ đệm cục bộ và nói ra. */
+  async getMyPreferences(): Promise<Record<string, unknown>> {
+    if (IS_DEMO) return {}
+    return requestJson<Record<string, unknown>>('/me/preferences', { cache: 'no-store' })
+  },
+
+  async putMyPreferences(value: Record<string, unknown>): Promise<void> {
+    if (IS_DEMO) return
+    await requestJson('/me/preferences', { method: 'PUT', body: JSON.stringify(value) })
+  },
+
   /* WEB-UX-003 / WEB-UX-011: các endpoint quản trị tài khoản đã tồn tại đầy đủ ở
      backend (apps/web-api/internal/app/users.go, đăng ký tại http.go:170-176) từ lâu nhưng
      frontend chưa từng gọi tới. Trang Người dùng dựng bảng từ `getDemoUsers()`
@@ -1361,12 +1462,14 @@ export const apiClient = {
     return this.updatePointConfig(id, { name })
   },
 
-  async updatePointConfig(id: string, config: { tag?: string; name?: string; unit?: string; trendEnabled?: boolean }): Promise<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean }> {
+  /** `equipment` — `T57-3.1` (`ADR-042`): chuỗi rỗng là lệnh GỠ thẻ, `undefined`
+   *  là "không đụng tới". Hai thứ đó khác nhau và backend phân biệt chúng. */
+  async updatePointConfig(id: string, config: { tag?: string; name?: string; unit?: string; trendEnabled?: boolean; equipment?: string }): Promise<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean; equipment?: string }> {
     if (IS_DEMO) {
       savePointConfigOverride(id, config)
       return updateDemoPointConfig(id, config)
     }
-    return requestJson<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean }>(`/points/${encodeURIComponent(id)}/config`, {
+    return requestJson<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean; equipment?: string }>(`/points/${encodeURIComponent(id)}/config`, {
       method: 'PUT',
       body: JSON.stringify(config)
     })

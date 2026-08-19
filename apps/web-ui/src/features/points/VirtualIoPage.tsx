@@ -15,6 +15,7 @@ import { TrendChart } from '../../shared/components/TrendChart'
 import { useApi } from '../../shared/hooks/useApi'
 import { useDirtyGuard } from '../../shared/hooks/useDirtyGuard'
 import { useI18n } from '../../shared/i18n'
+import { VirtualPointUsageNotice } from './VirtualPointUsageNotice'
 import type { Point, TrendSample, VirtualPoint, VirtualPointSignalType } from '../../shared/types'
 import { cn, formatTime, formatValue, pointNumber } from '../../shared/utils'
 
@@ -428,6 +429,8 @@ export function VirtualPointsPage() {
       />
       <Modal open={overviewDeleteId !== null} danger title={pick('Xoá VP?', 'Delete Virtual Point?')} confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => { if (overviewDeleteId) void deleteById(overviewDeleteId); setOverviewDeleteId(null) }} onClose={() => setOverviewDeleteId(null)}>
         {overviewDeleteTarget?.tag ?? ''}
+        {/* `T57-3.12`: nói ra hậu quả TRƯỚC khi bấm, không sau. */}
+        <VirtualPointUsageNotice pointId={overviewDeleteId} />
       </Modal>
       <Modal
         open={confirmOpen}
@@ -441,6 +444,7 @@ export function VirtualPointsPage() {
       </Modal>
       <Modal open={deleteOpen} danger title={pick('Xoá VP?', 'Delete Virtual Point?')} confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => void deleteSelected()} onClose={() => setDeleteOpen(false)}>
         {selected?.tag ?? ''}
+        <VirtualPointUsageNotice pointId={deleteOpen ? selected?.id ?? null : null} />
       </Modal>
       <DirtyGuardModal
         guard={dirtyGuard}

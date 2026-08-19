@@ -9,6 +9,7 @@ import { useToast } from '../../shared/components/Toast'
 import { useI18n } from '../../shared/i18n'
 import { createUuid } from '../../shared/crypto'
 import type { TimeConfig, TimeStatus } from '../../shared/types'
+import { formatDataAge, NO_DATA } from '../../shared/utils'
 
 const inputClass = 'mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]'
 const rfc3339WithZone = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
@@ -136,9 +137,23 @@ export function TimeSettingsPage() {
           <StatusBadge state={status.synchronized ? 'online' : 'unknown'} label={status.mode === 'ntp' ? 'NTP ON' : 'MANUAL'} />
         </div>
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-          <StatusItem label={pick('Nguồn', 'Source')} value={status.source ?? 'n/a'} />
-          <StatusItem label={pick('Độ lệch', 'Offset')} value={status.offsetMs === null ? 'n/a' : `${status.offsetMs} ms`} />
-          <StatusItem label={pick('Đồng bộ cuối', 'Last sync')} value={status.lastSyncUtc ?? 'n/a'} />
+          <StatusItem label={pick('Nguồn', 'Source')} value={status.source ?? NO_DATA} />
+          {/* `T57-3.15`: độ lệch là con số quyết định mốc thời gian trong
+              historian và nhật ký cảnh báo có so được với thiết bị khác không.
+              Quá một giây thì nói ra ngay tại chỗ, không để lẫn vào danh sách
+              cảnh báo bên dưới. */}
+          <StatusItem
+            label={pick('Độ lệch', 'Offset')}
+            value={status.offsetMs === null ? NO_DATA : `${status.offsetMs.toFixed(1)} ms`}
+            tone={status.offsetMs !== null && Math.abs(status.offsetMs) > 1000 ? 'warn' : undefined}
+          />
+          {/* Trường này từng luôn rỗng vì backend chưa bao giờ điền. Nay lấy từ
+              `Ref time` của chrony; vẫn có thể rỗng khi chưa từng đồng bộ, và
+              khi đó phải hiện "—" chứ không phải một mốc đoán. */}
+          <StatusItem
+            label={pick('Đồng bộ cuối', 'Last sync')}
+            value={status.lastSyncUtc ? `${status.lastSyncUtc} (${formatDataAge(status.lastSyncUtc)})` : NO_DATA}
+          />
           <StatusItem label="RTC" value={status.rtcPresent ? status.rtcUtc ?? 'present' : 'not present'} />
         </dl>
         {status.warnings.map((warning) => <div key={warning} className="mt-3 flex gap-2 text-sm text-[var(--c-warn-fg)]"><AlertTriangle className="h-4 w-4 shrink-0" />{warning}</div>)}
@@ -197,8 +212,13 @@ export function TimeSettingsPage() {
   )
 }
 
-function StatusItem({ label, value }: { label: string; value: string }) {
-  return <div className="min-w-0 rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3"><dt className="text-xs text-[var(--c-text-dim)]">{label}</dt><dd className="mt-1 break-words font-medium">{value}</dd></div>
+function StatusItem({ label, value, tone }: { label: string; value: string; tone?: 'warn' }) {
+  return (
+    <div className="min-w-0 rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3">
+      <dt className="text-xs text-[var(--c-text-dim)]">{label}</dt>
+      <dd className={`mt-1 break-words font-medium${tone === 'warn' ? ' text-[var(--c-warn-fg)]' : ''}`}>{value}</dd>
+    </div>
+  )
 }
 
 function State({ title, detail, retry }: { title: string; detail?: string; retry?: () => void }) {

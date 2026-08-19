@@ -138,14 +138,27 @@ func sanitizeAuditValue(value string, max int) string {
 }
 
 func (a *AuditLogger) Change(user, action, target, result, remote string) {
+	a.ChangeWithDetail(user, action, target, result, remote, "")
+}
+
+// ChangeWithDetail — `T57-3.14`: vết sửa cấu hình mang theo TÓM TẮT KHÁC BIỆT.
+//
+// Trước đây nhật ký chỉ nói "ai đó đã sửa `io_config.conf` lúc 14:03". Khi điều
+// tra một sự cố, câu hỏi luôn là *sửa cái gì*, và câu trả lời trước đây chỉ có
+// bằng cách so hai bản sao lưu — nếu còn bản sao lưu.
+//
+// `detail` phải là tóm tắt ĐÃ RÚT GỌN chứ không phải cả tệp cấu hình: nhật ký
+// hoạt động là vòng nhớ có hạn, nhét nguyên một config vào một sự kiện sẽ đẩy
+// hàng chục sự kiện khác ra khỏi vòng.
+func (a *AuditLogger) ChangeWithDetail(user, action, target, result, remote, detail string) {
 	if a == nil {
 		return
 	}
 	if a.logger != nil {
-		a.logger.Printf("AUDIT change ts=%s user=%s action=%s target=%s result=%s remote=%s",
-			time.Now().UTC().Format(time.RFC3339), sanitizeAudit(user, 32), sanitizeAudit(action, 32), sanitizeAudit(target, 64), sanitizeAudit(result, 32), sanitizeAudit(remote, 64))
+		a.logger.Printf("AUDIT change ts=%s user=%s action=%s target=%s result=%s remote=%s detail=%s",
+			time.Now().UTC().Format(time.RFC3339), sanitizeAudit(user, 32), sanitizeAudit(action, 32), sanitizeAudit(target, 64), sanitizeAudit(result, 32), sanitizeAudit(remote, 64), sanitizeAuditValue(detail, 256))
 	}
-	a.emit(AuditRecord{Action: action, Actor: user, ObjectType: "config", ObjectID: target, Outcome: result})
+	a.emit(AuditRecord{Action: action, Actor: user, ObjectType: "config", ObjectID: target, Outcome: result, Detail: detail})
 }
 
 func (a *AuditLogger) HMI(user string, role Role, requestID, action, target, reason, result, reasonCode, remote string) {

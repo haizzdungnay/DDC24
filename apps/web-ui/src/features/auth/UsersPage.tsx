@@ -10,7 +10,8 @@ import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
-import type { UserAccount, UserRole } from '../../shared/types'
+import { formatDateTime } from '../../shared/utils'
+import type { UserAccessRow, UserAccount, UserRole } from '../../shared/types'
 import {
   ENFORCED_MIN_PASSWORD_LENGTH,
   RECOMMENDED_MIN_PASSWORD_LENGTH,
@@ -54,14 +55,18 @@ export function UsersPage() {
   const { pick } = useI18n()
   const toast = useToast()
   const { session } = useAuth()
-  const state = useApi(apiClient.listUsers, [])
+  /* `T57-3.16`: một nguồn duy nhất cho cả danh sách tài khoản lẫn dấu vết truy
+     cập. Gọi hai endpoint rồi ghép ở FE sẽ có lúc hai bảng lệch nhau ngay giữa
+     một thao tác quản trị. */
+  const state = useApi(apiClient.getUserAccess, [], { refreshMs: 15_000 })
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [busy, setBusy] = useState(false)
   const [createForm, setCreateForm] = useState({ username: '', role: 'viewer' as UserRole, password: '' })
   const [newPassword, setNewPassword] = useState('')
   const [pendingRole, setPendingRole] = useState<string | null>(null)
 
-  const users = state.data ?? []
+  const users = state.data?.users ?? []
+  const sessions = state.data?.sessions ?? []
   const adminCount = users.filter((user) => user.role === 'admin').length
 
   if (state.loading && !state.data) return <StateBlock state="loading" title={pick('Đang tải danh sách người dùng', 'Loading users')} />
@@ -158,7 +163,7 @@ export function UsersPage() {
     }
   }
 
-  const columns: Array<Column<UserAccount>> = [
+  const columns: Array<Column<UserAccessRow>> = [
     {
       key: 'username',
       header: pick('Tên đăng nhập', 'Username'),
@@ -183,6 +188,42 @@ export function UsersPage() {
         >
           {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
         </select>
+      )
+    },
+    {
+      key: 'lastLogin',
+      header: pick('Đăng nhập gần nhất', 'Last sign-in'),
+      render: (row) => (
+        <div className="text-xs">
+          {/* `null` KHÔNG phải "chưa từng đăng nhập": vết có thể đã bị đẩy khỏi
+              vòng nhớ Activity. Nói sai điều này trên màn hình soát tài khoản
+              dẫn tới kết luận sai về một tài khoản bỏ quên. */}
+          <div className={row.lastLoginAt ? '' : 'text-[var(--c-text-dim)]'}>
+            {row.lastLoginAt ? formatDateTime(row.lastLoginAt) : pick('Không rõ', 'Unknown')}
+          </div>
+          {row.lastLoginRemote && <div className="mono text-[10px] text-[var(--c-text-dim)]">{row.lastLoginRemote}</div>}
+          {row.lastFailedLoginAt && (
+            <div className="text-[10px] text-[var(--c-warn-fg)]">
+              {pick('Lần sai gần nhất: ', 'Last failure: ')}{formatDateTime(row.lastFailedLoginAt)}
+            </div>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'sessions',
+      header: pick('Phiên đang mở', 'Open sessions'),
+      render: (row) => (
+        <div className="text-xs">
+          <span className={row.activeSessions > 0 ? 'font-semibold text-[var(--c-accent)]' : 'text-[var(--c-text-dim)]'}>
+            {row.activeSessions}
+          </span>
+          {row.mustChangePassword && (
+            <div className="mt-1 text-[10px] font-semibold uppercase text-[var(--c-warn-fg)]">
+              {pick('Đang giữ mật khẩu tạm', 'Holding a temporary password')}
+            </div>
+          )}
+        </div>
       )
     },
     {
@@ -236,7 +277,33 @@ export function UsersPage() {
           getRowKey={(row) => row.username}
           emptyText={pick('Chưa có tài khoản nào', 'No accounts yet')}
         />
+        {/* Hai giới hạn PHẢI nói ra, nếu không người đọc sẽ tin đây là sổ đầy đủ:
+            phiên nằm trong bộ nhớ tiến trình, còn vết đăng nhập nằm trong một
+            vòng nhớ có hạn. */}
+        <p className="mt-3 text-xs text-[var(--c-text-dim)]">
+          {pick(
+            `Phiên đang mở chỉ tính từ lần khởi động dịch vụ web gần nhất (${state.data?.sessionsSince ? formatDateTime(state.data.sessionsSince) : '—'}). Dấu vết đăng nhập lấy từ nhật ký hoạt động, giữ tối đa ${state.data?.activityWindow ?? 0} sự kiện — vết cũ hơn sẽ không còn.`,
+            `Open sessions are counted only since the web service last started (${state.data?.sessionsSince ? formatDateTime(state.data.sessionsSince) : '—'}). Sign-in traces come from the activity log, which keeps at most ${state.data?.activityWindow ?? 0} events — older traces are gone.`
+          )}
+        </p>
       </Panel>
+
+      {sessions.length > 0 && (
+        <Panel title={pick('Phiên đang hoạt động', 'Active sessions')}>
+          <ul className="space-y-1 text-xs">
+            {sessions.map((item) => (
+              <li key={`${item.username}-${item.issuedAt}`} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="font-semibold">{item.username}</span>
+                <span className="text-[var(--c-text-dim)]">{item.role}</span>
+                {item.remote && <span className="mono text-[var(--c-text-dim)]">{item.remote}</span>}
+                <span className="text-[var(--c-text-dim)]">
+                  {pick('Mở lúc ', 'Opened ')}{formatDateTime(item.issuedAt)} · {pick('hoạt động lúc ', 'last seen ')}{formatDateTime(item.lastSeenAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       <Modal
         open={dialog?.kind === 'create'}

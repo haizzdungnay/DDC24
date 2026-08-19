@@ -1,4 +1,5 @@
 import { BellRing, Plus, RefreshCw, Save, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlarmRuleSimulation } from './AlarmRuleSimulation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -484,6 +485,11 @@ function AlarmEditor({
         </div>
         <AlarmParamsEditor row={row} onChange={onParamsChange} />
       </section>
+
+      {/* `T57-2.13`: bốn tham số ngưỡng tương tác với nhau, và kết quả của một
+          tổ hợp chỉ lộ ra khi giá trị thật đi qua ngưỡng — tức là sau khi cấu
+          hình đã ở trên thiết bị. Ô thử này rút vòng lặp đó về vài giây. */}
+      <AlarmRuleSimulation setting={row} />
 
       <section className="grid gap-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4 md:grid-cols-[minmax(0,1fr)_180px]">
         <label className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]">

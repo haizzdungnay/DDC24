@@ -28,6 +28,9 @@ export interface Point {
   updatedAt?: string
   fault?: boolean
   forced?: boolean
+  /** `T57-3.1` (`ADR-042`) — thiết bị công nghệ mà điểm thuộc về (AHU-1…).
+   *  Rỗng/thiếu ⇒ nhóm "Chưa gán"; CẤM đoán từ tên điểm. */
+  equipment?: string
   /** Số giây còn lại của lệnh ép tay, do Core cấp (PA3-107).
    *  `undefined` = không có lệnh có thời hạn, KHÔNG phải "hết hạn". */
   overrideExpiresInS?: number
@@ -343,6 +346,10 @@ export interface HealthResponse {
 export interface CurrentUser {
   username: string
   role: UserRole
+  /** `T57-3.17` (`ADR-047`) — phiên đang bị buộc đổi mật khẩu. Backend chặn mọi
+   *  endpoint khác bằng `403 password_change_required`; cờ này chỉ để giao diện
+   *  nói đúng NGUYÊN NHÂN thay vì hiện một lỗi quyền chung chung. */
+  mustChangePassword?: boolean
 }
 
 /* ── PA3 Overview read model ─────────────────────────────────────────────────
@@ -1116,6 +1123,109 @@ export interface ConfigDevice {
 export interface UserAccount {
   username: string
   role: UserRole
+  mustChangePassword?: boolean
+}
+
+/** Chỉ số hệ alarm ISA-18.2 §16 — `T57-3.3`. */
+export interface AlarmMetrics {
+  window: string
+  windowS: number
+  /** Nhịp trong 10 phút gần nhất — con số so trực tiếp với ngưỡng flood. */
+  rate10m: number
+  ratePerHour: number
+  totalRaised: number
+  /** Quá 10 cảnh báo trong 10 phút theo ISA-18.2. */
+  flooding: boolean
+  topRepeating: Array<{ alarmId: string; name?: string; count: number }>
+  shelved: Array<{ alarmId: string; name?: string; shelvedAt: string }>
+}
+
+/** Kết quả mô phỏng luật cảnh báo — `T57-2.13`. Engine là binary Core. */
+export interface AlarmSimulateResult {
+  events: Array<{ at: string; event: string; severity?: string; value: number; reason?: string }>
+  engine: string
+}
+
+/** Hiệu lực thực tế của lịch trên một điểm — `T57-3.5`/`T57-3.6`/`T57-3.7`. */
+export interface ScheduleEffectiveSegment {
+  from: string
+  to: string
+  value: unknown
+  scheduleId?: string
+  scheduleName?: string
+  priority?: number
+  reason?: string
+}
+
+export interface ScheduleEffectiveResponse {
+  pointId: string
+  from: string
+  to: string
+  segments: ScheduleEffectiveSegment[]
+  conflicts: Array<{ at: string; scheduleIds: string[]; winnerId: string; detail?: string }>
+  engine: string
+}
+
+/** Lịch sử sức khoẻ máy chủ 60 phút — `T57-3.4`. */
+export interface SystemHistorySample {
+  at: string
+  cpuPercent: number | null
+  ramPercent: number | null
+  tempC: number | null
+}
+
+export interface SystemHistoryResponse {
+  windowS: number
+  intervalS: number
+  /** Vòng nhớ chỉ có từ lần khởi động dịch vụ web gần nhất. */
+  sinceRestart: string
+  samples: SystemHistorySample[]
+}
+
+/** Tham chiếu tới một điểm ảo — `T57-3.12`. */
+export interface VirtualPointReference {
+  kind: 'alarm' | 'schedule' | 'program' | string
+  id: string
+  name?: string
+  detail?: string
+}
+
+export interface VirtualPointUsage {
+  pointId: string
+  tag?: string
+  references: VirtualPointReference[]
+  /** Phạm vi đã quét — danh sách rỗng chỉ có nghĩa khi biết đã quét những gì. */
+  scanned: string[]
+  /** Có nguồn không đọc được ⇒ danh sách KHÔNG đầy đủ. */
+  incomplete: boolean
+  errors?: string[]
+}
+
+/** Một dòng soát truy cập tài khoản — `T57-3.16`. */
+export interface UserAccessRow extends UserAccount {
+  /** `null` = KHÔNG tìm thấy vết trong kho Activity. Có thể vì chưa từng đăng
+   *  nhập, cũng có thể vì vết đã bị đẩy khỏi vòng nhớ 2000 sự kiện — giao diện
+   *  phải nói "không rõ", không được nói "chưa đăng nhập bao giờ". */
+  lastLoginAt: string | null
+  lastLoginRemote: string | null
+  lastFailedLoginAt: string | null
+  activeSessions: number
+}
+
+export interface UserSession {
+  username: string
+  role: UserRole
+  issuedAt: string
+  lastSeenAt: string
+  remote?: string
+}
+
+export interface UserAccessResponse {
+  users: UserAccessRow[]
+  sessions: UserSession[]
+  /** Sổ phiên nằm trong bộ nhớ tiến trình nên chỉ nói được từ mốc này trở đi. */
+  sessionsSince: string
+  activityWindow: number
 }
 
 

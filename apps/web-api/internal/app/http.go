@@ -167,6 +167,8 @@ func (a *App) Router() http.Handler {
 		webRouter.PublicFunc("POST /api/v1/auth/login", a.handleLogin),
 		webRouter.Protected("POST /api/v1/auth/logout", RoleViewer, a.handleLogout),
 		webRouter.Protected("GET /api/v1/system/status", RoleViewer, a.handleSystemStatus),
+		// `T57-3.4`: lịch sử 60 phút của CPU/RAM/nhiệt độ. Đọc ⇒ `viewer`.
+		webRouter.Protected("GET /api/v1/system/history", RoleViewer, a.handleSystemHistory),
 		// PA3-D02/D03: read model duy nhất của Landing và nhật ký vận hành.
 		// Cả hai ở `viewer`: quan sát không phải là đặc quyền, và mọi mutation
 		// vẫn nằm ở các endpoint riêng có role cao hơn.
@@ -184,6 +186,9 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("POST /api/v1/virtual-points", RoleAdmin, a.handleCreateVirtualPoint),
 		webRouter.Protected("PUT /api/v1/virtual-points/{id}", RoleAdmin, a.handleUpdateVirtualPoint),
 		webRouter.Protected("DELETE /api/v1/virtual-points/{id}", RoleAdmin, a.handleDeleteVirtualPoint),
+		// `T57-3.12`: "ai đang dùng điểm ảo này" — đọc, nên `viewer`. Nó không
+		// chặn xoá, chỉ cấp dữ kiện mà người vận hành đang thiếu.
+		webRouter.Protected("GET /api/v1/virtual-points/{id}/usage", RoleViewer, a.handleVirtualPointUsage),
 		webRouter.Protected("GET /api/v1/modbus/devices", RoleViewer, a.handleListModbusDevices),
 		webRouter.Protected("POST /api/v1/modbus/devices", RoleAdmin, a.handleCreateModbusDevice),
 		webRouter.Protected("PUT /api/v1/modbus/devices/{id}", RoleAdmin, a.handleUpdateModbusDevice),
@@ -218,6 +223,9 @@ func (a *App) Router() http.Handler {
 		webRouter.Public("GET /api/v1/ws/monitor", a.requireWSAuth(a.handleMonitorWS)),
 		webRouter.Protected("GET /api/v1/alarms", RoleViewer, a.handleAlarms),
 		webRouter.Protected("GET /api/v1/alarm-history", RoleViewer, a.handleAlarmHistory),
+		// `T57-3.3` (`ADR-044`): chỉ số hệ alarm ISA-18.2 §16, tính tại thời
+		// điểm hỏi từ chính nhật ký cảnh báo.
+		webRouter.Protected("GET /api/v1/alarms/metrics", RoleViewer, a.handleAlarmMetrics),
 		webRouter.Protected("POST /api/v1/alarms/{id}/ack", RoleOperator, a.handleAckAlarm),
 		webRouter.Protected("POST /api/v1/alarms/{id}/suppress", RoleOperator, a.handleSuppressAlarm),
 		webRouter.Protected("POST /api/v1/alarms/{id}/return", RoleOperator, a.handleReturnAlarm),
@@ -250,6 +258,14 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("POST /api/v1/users/{username}/reset-password", RoleAdmin, a.handleResetPassword),
 		webRouter.Protected("GET /api/v1/me", RoleViewer, a.handleGetMe),
 		webRouter.Protected("POST /api/v1/me/change-password", RoleViewer, a.handleChangePassword),
+		// Plan 57 Wave 3.
+		// `T57-3.2` (`ADR-043`): tuỳ chọn của CHÍNH phiên đang gọi, nên `viewer`
+		// là đúng mức — không có đường đọc tuỳ chọn người khác qua đây.
+		webRouter.Protected("GET /api/v1/me/preferences", RoleViewer, a.handleGetPreferences),
+		webRouter.Protected("PUT /api/v1/me/preferences", RoleViewer, a.handlePutPreferences),
+		// `T57-3.16`: ai đăng nhập lần cuối, ai đang mở phiên. Là dữ liệu soát
+		// tài khoản nên ở `admin`, cùng mức với danh sách người dùng.
+		webRouter.Protected("GET /api/v1/users/access", RoleAdmin, a.handleGetUserAccess),
 		webRouter.Protected("GET /api/v1/history", RoleViewer, a.handleHistoryRoute),
 		webRouter.Protected("GET /api/v1/history/export.csv", RoleViewer, a.handleHistoryExport),
 		webRouter.Protected("GET /api/v1/trends/config", RoleViewer, a.handleGetTrendConfig),
@@ -258,6 +274,9 @@ func (a *App) Router() http.Handler {
 		// hiểm (publish/rollback/delete/priority) còn qua một lớp quyền riêng
 		// bên trong handler (ADR-023 QĐ-5), vai trò ở đây chỉ là cửa đầu tiên.
 		webRouter.Protected("GET /api/v1/schedules", RoleViewer, a.handleGetSchedules),
+		// `T57-3.5`/`T57-3.6` (`ADR-045`): hiệu lực thực tế trên MỘT điểm khi
+		// nhiều lịch cùng tác động; cảnh báo xung đột dùng chính dữ liệu này.
+		webRouter.Protected("GET /api/v1/schedules/effective", RoleViewer, a.handleScheduleEffective),
 		webRouter.Protected("POST /api/v1/schedules", RoleAdmin, a.handleCreateSchedule),
 		webRouter.Protected("GET /api/v1/schedules/{id}", RoleViewer, a.handleGetSchedule),
 		webRouter.Protected("PUT /api/v1/schedules/{id}", RoleAdmin, a.handleUpdateSchedule),
@@ -273,6 +292,9 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("GET /api/v1/schedules/{id}/audit", RoleViewer, a.handleGetScheduleAudit),
 		webRouter.Protected("GET /api/v1/alarm-settings", RoleViewer, a.handleGetAlarmSettings),
 		webRouter.Protected("PUT /api/v1/alarm-settings", RoleAdmin, a.handlePutAlarmSettings),
+		// `T57-2.13` (`ADR-048`): mô phỏng luật cảnh báo, là VỎ gọi
+		// `mkddc-alarm-sim`. Không chạm cấu hình đang lưu nên `viewer` là đủ.
+		webRouter.Protected("POST /api/v1/alarm-settings/simulate", RoleViewer, a.handleSimulateAlarmSetting),
 	}
 	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, programminghttp.Services{
 		Projects: a.programmingProjects, Checks: a.programmingChecks, Operations: a.programmingOperations,

@@ -14,6 +14,10 @@ interface Session {
   /** ISO thời điểm phiên này được cấp. Xem WEB-UX-003. */
   loginAt: string
   token?: string
+  /** `T57-3.17` (`ADR-047`) — phiên chỉ gọi được `/me` và `/me/change-password`
+   *  cho tới khi đổi mật khẩu. Backend mới là nơi cưỡng chế; cờ này để giao
+   *  diện dẫn người dùng tới đúng việc cần làm. */
+  mustChangePassword?: boolean
 }
 
 interface AuthContextValue {
@@ -22,6 +26,8 @@ interface AuthContextValue {
   login: (password: string, username?: string) => Promise<void>
   logout: () => void
   getAuthHeader: () => Record<string, string>
+  /** Gọi sau khi đổi mật khẩu thành công để gỡ trạng thái chặn. */
+  clearPasswordChangeRequirement: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -58,6 +64,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     window.addEventListener('mkddc:auth-expired', handler)
     return () => window.removeEventListener('mkddc:auth-expired', handler)
+  }, [])
+
+  /* `T57-3.17`: backend là nơi cưỡng chế (403 `password_change_required`), nên
+     giao diện học được tình trạng này từ chính phản hồi bị chặn — kể cả khi
+     phiên được khôi phục từ một tab khác và chưa qua màn đăng nhập. */
+  useEffect(() => {
+    const handler = () => setSession((current) => current && !current.mustChangePassword
+      ? { ...current, mustChangePassword: true }
+      : current)
+    window.addEventListener('mkddc:password-change-required', handler)
+    return () => window.removeEventListener('mkddc:password-change-required', handler)
   }, [])
 
   const login = useCallback(async (password: string, username = 'admin') => {
@@ -121,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         `The device returned a server error (HTTP ${response.status}). This is not a credential problem; check the web service on the controller.`
       ))
     }
-    const body = await response.json() as { token?: string; role?: UserRole }
+    const body = await response.json() as { token?: string; role?: UserRole; mustChangePassword?: boolean }
     if (body.token) {
       const provider = () => ({ Authorization: `Bearer ${body.token}` })
       setAuthHeaderProvider(provider)
@@ -135,8 +152,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!body.role) {
       console.warn('mkddc: response login thiếu field "role"; mặc định về quyền viewer')
     }
-    setSession({ username, role: body.role ?? 'viewer', token: body.token, loginAt: new Date().toISOString() })
+    setSession({
+      username, role: body.role ?? 'viewer', token: body.token,
+      loginAt: new Date().toISOString(),
+      mustChangePassword: Boolean(body.mustChangePassword)
+    })
   }, [pick])
+
+  const clearPasswordChangeRequirement = useCallback(() => {
+    setSession((current) => current ? { ...current, mustChangePassword: false } : current)
+  }, [])
 
   const logout = useCallback(() => {
     const revokeToken = session?.token
@@ -172,8 +197,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated: Boolean(session),
     login,
     logout,
+    clearPasswordChangeRequirement,
     getAuthHeader
-  }), [getAuthHeader, login, logout, session])
+  }), [clearPasswordChangeRequirement, getAuthHeader, login, logout, session])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

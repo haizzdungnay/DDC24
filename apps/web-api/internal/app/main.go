@@ -76,6 +76,10 @@ type App struct {
 	programmingChecks     *programmingapplication.CheckService
 	programmingOperations *programmingapplication.OperationService
 	programmingRuntime    *programmingapplication.RuntimeService
+	// Plan 57 Wave 3
+	preferences   *UserPreferenceStore
+	systemHistory *SystemHistoryRing
+	startedAt     time.Time
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -156,6 +160,16 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	// nhưng lại vắng mặt trên Landing.
 	app.activity = NewActivityStore(app.activityPath())
 	audit.SetSink(app.activity)
+	// `T57-3.2` / `ADR-043`: tuỳ chọn người dùng nằm cạnh cấu hình, tệp riêng —
+	// không trộn vào `users.conf` vốn chứa hash mật khẩu và bị ghi lại toàn bộ
+	// mỗi lần đổi tài khoản.
+	app.preferences = NewUserPreferenceStore(app.userPreferencesPath())
+	// `T57-3.16`: sổ phiên nằm trong bộ nhớ nên chỉ nói được về khoảng thời gian
+	// từ lúc tiến trình khởi động. Ghi lại mốc đó để giao diện nói ra giới hạn.
+	app.startedAt = time.Now().UTC()
+	// `T57-3.4`: vòng nhớ 60 phút cho CPU/RAM/nhiệt độ, lấy mẫu ngay trên đường
+	// `/system/status` mà trang Chẩn đoán đã poll.
+	app.systemHistory = NewSystemHistoryRing(app.startedAt)
 	if err := app.migrateLegacyPointConfig(); err != nil {
 		if app.programmingStore != nil {
 			app.programmingOperations.Close()
@@ -440,6 +454,10 @@ func (a *App) StartSampler(ctx context.Context) {
 			}()
 		}
 		a.StartAlarmHistory(ctx)
+		// `ADR-036` điều kiện tiên quyết: `alarm_history.jsonl` trước đây không
+		// có xoay vòng và không có retention. Bật cắt định kỳ TRƯỚC khi mở màn
+		// hình chỉ số `T57-3.3`, vì chính màn hình đó quét tệp này.
+		a.StartAlarmHistoryPrune(ctx)
 	}
 }
 

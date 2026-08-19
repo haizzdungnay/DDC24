@@ -1,4 +1,5 @@
 import { ArrowLeft, CheckCircle2, Filter, History, RefreshCw, Search, TriangleAlert, X } from 'lucide-react'
+import { AlarmMetricsPanel } from './AlarmMetricsPanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiClient } from '../../shared/api/client'
@@ -172,6 +173,11 @@ export function AlarmsPage() {
         <Summary label="Shelved" value={counts.shelved} accent="info" />
         <Summary label={pick('Đang hiển thị', 'Listed')} value={alarms.length} accent="good" />
       </div>
+      {/* `T57-3.3`: nhịp cảnh báo là chỉ số quyết định hệ còn quản lý được hay
+          không. Đặt TRÊN danh sách vì nó trả lời câu hỏi phải hỏi trước khi đọc
+          từng cảnh báo: "hệ đang ngập hay không?". */}
+      <AlarmMetricsPanel />
+
       <Panel>
         <div className="mb-4 flex flex-wrap items-center gap-3">
           {alarmFilters.map((item) => (

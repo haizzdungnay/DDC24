@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
   updateVirtualPoint: vi.fn(),
   createVirtualPoint: vi.fn(),
   deleteVirtualPoint: vi.fn(),
+  // `T57-3.12`: hộp thoại xoá tra cứu nơi đang dùng điểm trước khi xoá.
+  getVirtualPointUsage: vi.fn(),
   forcePoint: vi.fn()
 }))
 const hookState = vi.hoisted(() => ({ points: [] as Point[] }))
@@ -62,6 +64,7 @@ function renderPage() {
 
 describe('VirtualPointsPage tag and label layout', () => {
   beforeEach(() => {
+  api.getVirtualPointUsage.mockResolvedValue({ pointId: 'VP1', references: [], scanned: ['alarm-settings', 'schedules'], incomplete: false })
     localStorage.setItem('mkddc-lang', 'en')
     api.getVirtualPoints.mockResolvedValue([virtualPoint()])
     api.updatePointName.mockResolvedValue({ id: 'VP1', name: 'Blocked Name' })

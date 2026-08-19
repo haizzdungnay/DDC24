@@ -70,7 +70,7 @@ function matchesGroupFilter(point: Point, group: MonitorGroupFilter): boolean {
 
 /** Khoá bộ lọc thuộc một khung nhìn (`T57-2.3`). `point` cố ý KHÔNG nằm ở đây:
  *  điểm đang mở là ngữ cảnh thao tác, không phải bộ lọc. */
-const MONITOR_VIEW_KEYS = ['kind', 'quality', 'q', 'state', 'group'] as const
+const MONITOR_VIEW_KEYS = ['kind', 'quality', 'q', 'state', 'group', 'equip'] as const
 
 function matchesStateFilter(point: Point, filter: MonitorStateFilter): boolean {
   switch (filter) {
@@ -220,9 +220,13 @@ export function MonitorPage() {
   const query = searchParams.get('q') ?? ''
   const stateFilter = (searchParams.get('state') as MonitorStateFilter | null) ?? 'all'
   const group = (searchParams.get('group') as MonitorGroupFilter | null) ?? 'all'
+  /* `T57-3.1`/`T57-4.1`: lọc theo THIẾT BỊ CÔNG NGHỆ. Đây là đường tối thiểu
+     tới khoảng hở ISA-101 Level 2: người vận hành nghĩ bằng "AHU-1", còn giao
+     diện trước nay chỉ nói được bằng kênh I/O. */
+  const equipment = searchParams.get('equip') ?? 'all'
   const deepLinkedPoint = searchParams.get('point')
 
-  function setFilter(key: 'kind' | 'quality' | 'q' | 'state' | 'point' | 'group', value: string) {
+  function setFilter(key: 'kind' | 'quality' | 'q' | 'state' | 'point' | 'group' | 'equip', value: string) {
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
       if (!value || value === 'all') next.delete(key)
@@ -237,7 +241,7 @@ export function MonitorPage() {
    * những khoá đó. Cố tình KHÔNG đụng tới `point` (điểm đang mở) — đó là ngữ
    * cảnh của thao tác hiện tại, không phải một phần của bộ lọc. */
   const savedViews = useSavedViews('monitor')
-  const currentFilterParams: Record<string, string> = { kind, quality, q: query, state: stateFilter, group }
+  const currentFilterParams: Record<string, string> = { kind, quality, q: query, state: stateFilter, group, equip: equipment }
 
   function applySavedFilters(params: Record<string, string>) {
     setSearchParams((current) => {
@@ -309,8 +313,22 @@ export function MonitorPage() {
     const matchesQuality = quality === 'all' || point.quality === quality
     // §9.2: tìm theo id, tag, tên hiển thị và nguồn.
     const haystack = `${point.id} ${point.tag} ${point.name} ${point.source}`.toLowerCase()
-    return matchesKind && matchesQuality && matchesGroupFilter(point, group) && matchesStateFilter(point, stateFilter) && haystack.includes(query.toLowerCase())
-  }).sort((a, b) => a.id.localeCompare(b.id)), [group, kind, points, quality, query, stateFilter])
+    const matchesEquipment = equipment === 'all'
+      // "Chưa gán" là một nhóm THẬT, không phải trạng thái lỗi: rất nhiều điểm
+      // hợp lệ chưa được gắn thẻ, và chúng vẫn phải xem được.
+      || (equipment === '__unassigned__' ? !point.equipment : point.equipment === equipment)
+    return matchesKind && matchesQuality && matchesGroupFilter(point, group) && matchesStateFilter(point, stateFilter) && matchesEquipment && haystack.includes(query.toLowerCase())
+  }).sort((a, b) => a.id.localeCompare(b.id)), [equipment, group, kind, points, quality, query, stateFilter])
+
+  /* Danh sách thiết bị dựng TỪ DỮ LIỆU chứ không từ một bảng cấu hình riêng:
+     `ADR-042` cố ý không tạo thực thể thiết bị, nên nguồn duy nhất là chính các
+     thẻ đang gắn trên điểm. */
+  const equipmentOptions = useMemo(() => {
+    const names = new Set<string>()
+    for (const point of points) if (point.equipment) names.add(point.equipment)
+    return [...names].sort((left, right) => left.localeCompare(right, 'vi', { sensitivity: 'base' }))
+  }, [points])
+  const unassignedCount = useMemo(() => points.filter((point) => !point.equipment).length, [points])
 
   /* Điểm đã chọn được GIẢI LẠI từ bảng điểm mới nhất mỗi lần render, nên bảng
      hậu quả trong hộp thoại luôn dùng giá trị hiện tại chứ không phải giá trị
@@ -364,7 +382,7 @@ export function MonitorPage() {
     setPointModalId(point.id)
   }
 
-  async function savePointBasics(point: Point, config: { tag: string; name: string; unit?: string }) {
+  async function savePointBasics(point: Point, config: { tag: string; name: string; unit?: string; equipment?: string }) {
     if (!canEditPointConfig) throw new Error(pick('Cần vai trò admin để sửa cấu hình điểm', 'Admin role is required to edit point configuration'))
     const tagError = point.kind === 'virtual' ? validatePointTag(config.tag) : undefined
     if (tagError) throw new Error(tagError)
@@ -376,7 +394,10 @@ export function MonitorPage() {
     } else {
       await apiClient.updatePointConfig(point.id, {
         ...(point.kind === 'virtual' ? { tag: normalizePointTag(config.tag) } : {}),
-        name
+        name,
+        /* Chỉ gửi khi NGƯỜI DÙNG có nhập ô này: `undefined` là "không đụng tới",
+           còn chuỗi rỗng là lệnh gỡ thẻ — hai ý định khác nhau. */
+        ...(config.equipment === undefined ? {} : { equipment: config.equipment })
       })
     }
     toast.push('success', pick(`Updated ${pointDisplayTag(point)}`, `Updated ${pointDisplayTag(point)}`))
@@ -605,10 +626,12 @@ export function MonitorPage() {
         onSave={(name) => savedViews.save(name, currentFilterParams)}
         onRename={savedViews.rename}
         onRemove={savedViews.remove}
-        hint={pick('Lưu trên trình duyệt này, theo tài khoản đang đăng nhập.', 'Stored in this browser, under the signed-in account.')}
+        hint={savedViews.syncState === 'local-only'
+          ? pick('Thiết bị không lưu được tuỳ chọn — khung nhìn chỉ nằm trên trình duyệt này.', 'The device cannot store preferences — views stay in this browser only.')
+          : pick('Lưu trên thiết bị theo tài khoản đang đăng nhập.', 'Stored on the device under the signed-in account.')}
       />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-[170px_170px_170px_190px_1fr_132px]">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[170px_170px_170px_170px_190px_1fr_132px]">
         {/* Bộ chọn `group` phải TỒN TẠI trên giao diện, không chỉ đọc được từ
             URL: một bộ lọc chỉ đặt được bằng cách gõ tay query string thì người
             dùng đến từ Health Strip không có cách nào tự gỡ nó ra. */}
@@ -617,6 +640,16 @@ export function MonitorPage() {
           <option value="local">{pick('I/O tại chỗ', 'Local I/O')}</option>
           <option value="virtual">{pick('Điểm ảo', 'Virtual')}</option>
           <option value="modbus">Modbus RTU</option>
+        </select>
+        <select
+          aria-label={pick('Lọc theo thiết bị công nghệ', 'Filter by equipment')}
+          value={equipment}
+          onChange={(event) => setFilter('equip', event.target.value)}
+          className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm"
+        >
+          <option value="all">{pick('Thiết bị - Tất cả', 'Equipment - All')}</option>
+          {equipmentOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+          {unassignedCount > 0 && <option value="__unassigned__">{pick(`Chưa gán (${unassignedCount})`, `Unassigned (${unassignedCount})`)}</option>}
         </select>
         <select aria-label={pick('Lọc theo nhóm I/O', 'Filter by I/O group')} value={kind} onChange={(event) => setFilter('kind', event.target.value)} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
           <option value="all">{pick('Nhóm I/O - Tất cả', 'I/O group - All')}</option><option value="UI">UI</option><option value="DO">DO</option><option value="AO">AO</option><option value="virtual">{pick('Ảo', 'Virtual')}</option><option value="modbus_rtu">Modbus RTU</option>
@@ -1304,7 +1337,7 @@ function PointDetailsModal({
   point: Point
   conflictIds?: string[]
   onClose: () => void
-  onSave: (point: Point, config: { tag: string; name: string; unit?: string }) => Promise<void>
+  onSave: (point: Point, config: { tag: string; name: string; unit?: string; equipment?: string }) => Promise<void>
   onForce: (point: Point, value: number | boolean | string, durationSeconds: number) => Promise<void>
   onRelease: (point: Point) => Promise<void>
 }) {
@@ -1315,6 +1348,10 @@ function PointDetailsModal({
   const [nameValue, setNameValue] = useState(point.name)
   const [nameError, setNameError] = useState<string>()
   const [unitValue, setUnitValue] = useState(selectUnitValue(point.unit))
+  /* `T57-3.1`: thẻ thiết bị sửa ngay tại chỗ người đang nhìn điểm, không phải ở
+     một màn hình quản trị riêng — gắn thẻ là việc làm rải rác trong lúc đi soát
+     tủ, không phải một đợt cấu hình tập trung. */
+  const [equipmentValue, setEquipmentValue] = useState(point.equipment ?? '')
   const [forceValue, setForceValue] = useState(defaultForceValue(point))
   const [forceDurationMinutes, setForceDurationMinutes] = useState('10')
   const [busy, setBusy] = useState<'save' | 'force' | 'release' | null>(null)
@@ -1343,7 +1380,7 @@ function PointDetailsModal({
       const nextTag = point.kind === 'virtual' ? normalizePointTag(tagValue) : point.tag
       const nextName = normalizePointName(nameValue)
       const nextUnit = isAnalog ? unitValue : undefined
-      await onSave(point, { tag: nextTag, name: nextName, unit: nextUnit })
+      await onSave(point, { tag: nextTag, name: nextName, unit: nextUnit, equipment: equipmentValue.trim() })
       setTagValue(nextTag)
       setTagError(undefined)
       setNameError(undefined)
@@ -1399,6 +1436,23 @@ function PointDetailsModal({
                 <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Point name', 'Point name')}</span>
                 <input ref={nameInputRef} data-point-field="name" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? `${point.id}-name-error` : undefined} value={nameValue} onChange={(event) => setNameValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
                 {nameError && <span id={`${point.id}-name-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{nameError}</span>}
+              </label>
+              {/* `T57-3.1` (`ADR-042`): thẻ thiết bị công nghệ. Chuỗi tự do có
+                  chuẩn hoá, KHÔNG phải khoá ngoại — mô hình thiết bị đầy đủ là
+                  quyết định Rev B. */}
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Thiết bị công nghệ', 'Equipment')}</span>
+                <input
+                  value={equipmentValue}
+                  maxLength={48}
+                  placeholder={pick('AHU-1, FCU-03…', 'AHU-1, FCU-03…')}
+                  aria-label={pick('Thiết bị công nghệ', 'Equipment')}
+                  onChange={(event) => setEquipmentValue(event.target.value)}
+                  className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]"
+                />
+                <span className="block text-xs text-[var(--c-text-dim)]">
+                  {pick('Để trống nếu chưa gán. Dùng để nhóm điểm theo thiết bị ở trang Giám sát.', 'Leave empty if unassigned. Used to group points by equipment on the Monitor page.')}
+                </span>
               </label>
             </div>
             <Button size="sm" variant="primary" icon={<Save className="h-4 w-4" />} loading={busy === 'save'} onClick={handleSave}>{pick('Save basics', 'Save basics')}</Button>

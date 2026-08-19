@@ -457,7 +457,9 @@ export function TrendsPage() {
           onSave={(name) => savedViews.save(name, currentViewParams)}
           onRename={savedViews.rename}
           onRemove={savedViews.remove}
-          hint={pick('Bộ điểm + khoảng thời gian, lưu trên trình duyệt này.', 'Point set plus range, stored in this browser.')}
+          hint={savedViews.syncState === 'local-only'
+            ? pick('Bộ điểm + khoảng thời gian; thiết bị không lưu được nên chỉ nằm trên trình duyệt này.', 'Point set plus range; the device cannot store preferences, so they stay in this browser.')
+            : pick('Bộ điểm + khoảng thời gian, lưu trên thiết bị theo tài khoản.', 'Point set plus range, stored on the device under your account.')}
         />
       </div>
 
