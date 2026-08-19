@@ -250,6 +250,14 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("POST /api/v1/users/{username}/reset-password", RoleAdmin, a.handleResetPassword),
 		webRouter.Protected("GET /api/v1/me", RoleViewer, a.handleGetMe),
 		webRouter.Protected("POST /api/v1/me/change-password", RoleViewer, a.handleChangePassword),
+		// Plan 57 Wave 3.
+		// `T57-3.2` (`ADR-043`): tuỳ chọn của CHÍNH phiên đang gọi, nên `viewer`
+		// là đúng mức — không có đường đọc tuỳ chọn người khác qua đây.
+		webRouter.Protected("GET /api/v1/me/preferences", RoleViewer, a.handleGetPreferences),
+		webRouter.Protected("PUT /api/v1/me/preferences", RoleViewer, a.handlePutPreferences),
+		// `T57-3.16`: ai đăng nhập lần cuối, ai đang mở phiên. Là dữ liệu soát
+		// tài khoản nên ở `admin`, cùng mức với danh sách người dùng.
+		webRouter.Protected("GET /api/v1/users/access", RoleAdmin, a.handleGetUserAccess),
 		webRouter.Protected("GET /api/v1/history", RoleViewer, a.handleHistoryRoute),
 		webRouter.Protected("GET /api/v1/history/export.csv", RoleViewer, a.handleHistoryExport),
 		webRouter.Protected("GET /api/v1/trends/config", RoleViewer, a.handleGetTrendConfig),

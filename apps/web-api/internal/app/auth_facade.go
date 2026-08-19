@@ -83,6 +83,9 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"token": token, "role": role, "expires_in": 3600,
+		// `T57-3.17` (`ADR-047`): nói ngay ở phản hồi đăng nhập, để giao diện
+		// dẫn thẳng tới màn đổi mật khẩu thay vì phải va vào một 403 trước đã.
+		"mustChangePassword": a.auth.MustChangePassword(req.Username),
 	})
 }
 
