@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { Suspense, lazy, type ReactNode } from 'react'
 import {
   ForcePasswordChangePage,
   LoginPage,
@@ -19,10 +19,38 @@ import {
   SystemDiagnosticsPage,
   UnavailableFeaturePage
 } from '../features/dashboard'
-import { DevicesPage, DiagnosticsPage, MappingPage, ModbusRtuLayout, OverviewPage, PointsPage, PortsPage } from '../features/modbus-rtu'
+/* `T57-4.2` (`ADR-049`) — bốn lô nghiệp vụ NẶNG và ÍT MỞ tách khỏi chunk chính.
+ *
+ * Bốn màn hình mở đầu mỗi ca (Landing, Giám sát, Cảnh báo, Chẩn đoán) cố ý ở
+ * lại chunk chính: chia chúng ra chỉ biến một lần tải thành hai lần chờ.
+ *
+ * Số đo nghiệm thu là THỜI GIAN MỞ TRANG ĐẦU TRÊN BOARD THẬT, không phải kích
+ * thước tệp — `F-DOC-10` đã cho thấy so kích thước giữa hai lệnh build khác
+ * nhau dẫn tới kết luận sai. */
+const ModbusRtuLayout = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.ModbusRtuLayout })))
+const ModbusDevicesPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.DevicesPage })))
+const ModbusDiagnosticsPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.DiagnosticsPage })))
+const ModbusMappingPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.MappingPage })))
+const ModbusOverviewPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.OverviewPage })))
+const ModbusPointsPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.PointsPage })))
+const ModbusPortsPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.PortsPage })))
+// Modbus RTU không có import tĩnh nào ở đây nên barrel dùng được.
 import { DisplaySettingsPage, NetworkPage, SettingsPage, TimeSettingsPage } from '../features/network'
-import { AlarmHistoryPage, AlarmSettingsPage, AlarmsPage, TrendsPage } from '../features/operations'
-import { ScheduleEditorPage, SchedulerGridPage, SchedulerLayout, SchedulerRuntimePage } from '../features/scheduler'
+/* Import THẲNG tệp nguồn thay vì barrel: barrel `operations/index.ts` cũng
+   re-export `TrendsPage`, nên chạm vào barrel là kéo luôn thư viện biểu đồ vào
+   chunk chính và `lazy` của Xu hướng mất tác dụng. */
+import { AlarmHistoryPage, AlarmsPage } from '../features/operations/AlarmsPage'
+import { AlarmSettingsPage } from '../features/operations/AlarmSettingsPage'
+/* Xu hướng kéo theo cả thư viện biểu đồ (407 kB) — lô nặng nhất, và không phải
+   màn hình mở đầu ca. */
+/* Trỏ THẲNG vào tệp nguồn, không qua barrel `index.ts`: cùng một barrel vừa
+   được import tĩnh (AlarmsPage) vừa import động sẽ khiến bundler gộp lại và
+   `lazy` mất tác dụng — rollup báo đúng điều đó bằng INEFFECTIVE_DYNAMIC_IMPORT. */
+const TrendsPage = lazy(() => import('../features/operations/TrendsPage').then((module) => ({ default: module.TrendsPage })))
+const SchedulerLayout = lazy(() => import('../features/scheduler/SchedulerLayout').then((module) => ({ default: module.SchedulerLayout })))
+const SchedulerGridPage = lazy(() => import('../features/scheduler/SchedulerGridPage').then((module) => ({ default: module.SchedulerGridPage })))
+const ScheduleEditorPage = lazy(() => import('../features/scheduler/ScheduleEditorPage').then((module) => ({ default: module.ScheduleEditorPage })))
+const SchedulerRuntimePage = lazy(() => import('../features/scheduler/SchedulerRuntimePage').then((module) => ({ default: module.SchedulerRuntimePage })))
 import { CommissioningPage, InputsPage, MonitorPage, OutputsPage, UserParametersPage, VirtualPointsPage } from '../features/points'
 import { AppShell } from '../shared/components/AppShell'
 import { RequireRole } from '../shared/components/RequireRole'
@@ -30,7 +58,7 @@ import { useI18n } from '../shared/i18n'
 import { OverviewProvider } from '../shared/overview/OverviewProvider'
 import { RealtimeProvider } from '../shared/realtime'
 import { LEGACY_GRAPH_DEMO_ENABLED, PROGRAMMING_REV_A_ENABLED } from '../shared/config'
-import { ProgrammingRoutes } from '../features/programming/ProgrammingRoutes'
+const ProgrammingRoutes = lazy(() => import('../features/programming/ProgrammingRoutes').then((module) => ({ default: module.ProgrammingRoutes })))
 
 function ProtectedShell() {
   const { isAuthenticated, session } = useAuth()
@@ -49,7 +77,13 @@ function ProtectedShell() {
   return (
     <RealtimeProvider>
       <OverviewProvider>
-        <AppShell />
+        {/* `ADR-049` điều 2: mỗi ranh giới `lazy` phải có trạng thái tải THẬT.
+            Màn hình trắng trong lúc tải là một kiểu hỏng, không phải một trạng
+            thái tải — trên bo nhúng qua Wi-Fi yếu nó kéo dài đủ để người dùng
+            tưởng thiết bị treo. */}
+        <Suspense fallback={<RouteLoading />}>
+          <AppShell />
+        </Suspense>
       </OverviewProvider>
     </RealtimeProvider>
   )
@@ -90,6 +124,15 @@ export function LoginRoute() {
   const location = useLocation()
   if (!isAuthenticated) return <LoginPage />
   return <Navigate to={safeReturnPath((location.state as { from?: unknown } | null)?.from)} replace />
+}
+
+/** Trạng thái tải cho ranh giới `lazy` — `ADR-049` điều 2. */
+function RouteLoading() {
+  return (
+    <div className="grid min-h-[40vh] place-items-center p-6">
+      <div role="status" className="text-sm text-[var(--c-text-dim)]">Đang tải màn hình…</div>
+    </div>
+  )
 }
 
 export function App() {
@@ -168,13 +211,13 @@ export function App() {
             nên ba tab hiển thị y hệt nhau và tiêu đề H1 lặp hai lần — xem
             `docs/07_records/reviews/FE_PAGES_ERROR_REVIEW_2026-08-05.md` FE-MB-01. */}
         <Route path="eng/modbus-rtu" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/modbus-rtu']}><ModbusRtuLayout /></RequireRole>}>
-          <Route index element={<OverviewPage />} />
-          <Route path="overview" element={<OverviewPage />} />
-          <Route path="ports" element={<PortsPage />} />
-          <Route path="devices" element={<DevicesPage />} />
-          <Route path="points" element={<PointsPage />} />
-          <Route path="mapping" element={<MappingPage />} />
-          <Route path="diagnostics" element={<DiagnosticsPage />} />
+          <Route index element={<ModbusOverviewPage />} />
+          <Route path="overview" element={<ModbusOverviewPage />} />
+          <Route path="ports" element={<ModbusPortsPage />} />
+          <Route path="devices" element={<ModbusDevicesPage />} />
+          <Route path="points" element={<ModbusPointsPage />} />
+          <Route path="mapping" element={<ModbusMappingPage />} />
+          <Route path="diagnostics" element={<ModbusDiagnosticsPage />} />
         </Route>
         <Route path="eng/virtual-io" element={<Navigate to="/eng/virtual-points" replace />} />
         <Route path="eng/user-parameters" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/user-parameters']}><UserParametersPage /></RequireRole>} />
