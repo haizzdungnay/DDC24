@@ -91,6 +91,89 @@ triệt tiêu.
 Refs: Plan 57 §13b · `T57-2.3` `T57-2.6` `T57-2.10` `T57-2.14` `T57-2.22` ·
 `REV-FE-UIUX-UC-2026-08-18` §6.2-P2a/§6.4-P2b/§6.4-P2c/§6.9-P2a/§6.13-P2b/§6.15-P3
 
+### Added — Plan 57 Wave 2 (đợt cuối): khung nhìn đặt tên, dấu sự kiện trên xu hướng, diff trước khi lưu, form cảnh báo hết trộn ngôn ngữ, và mã QR địa chỉ mới (2026-08-19)
+
+Năm task khép lại Wave 2 (`T57-2.3`, `T57-2.6`, `T57-2.10`, `T57-2.14`, `T57-2.22`).
+Wave 2 nay **xong 21/21**; Plan 57 đạt **47,5/71 task**. Phần còn lại là Wave 3
+(cần 9 ADR theo từng task + chữ ký Tech Lead) và Wave 4 (cần quyết định sản phẩm).
+
+**`T57-2.3` — khung nhìn đặt tên.** `T57-2.1` đã làm bộ lọc *gửi được* qua URL;
+thứ còn thiếu là *đặt tên được*. Bộ lọc dựng lại mỗi sáng ("các điểm Modbus chất
+lượng xấu", "6 điểm của AHU-1 trong 6 giờ") vẫn phải bấm lại từng ô, và thứ không
+đặt tên được thì không bàn giao ca được.
+
+- `shared/savedViews.ts`: lưu theo **tài khoản** đang đăng nhập (`AuthProvider`
+  đẩy tên qua `setSavedViewAccount`, không bắt mỗi trang gọi `useAuth` — trang Xu
+  hướng nằm ngoài cây `AuthProvider` trong test). Trùng tên là **cập nhật**, không
+  đẻ mục thứ hai cùng tên; dữ liệu hỏng trong `localStorage` trả danh sách rỗng
+  thay vì làm chết trang.
+- `?view=<tên>` **nở thành chính bộ lọc** rồi tự rời khỏi thanh địa chỉ. Giữ tên
+  khung nhìn trên URL sẽ tạo ra đường dẫn chỉ chạy trên máy người gửi.
+- **Giới hạn đã biết, nói thẳng trên giao diện:** khung nhìn nằm trong trình duyệt
+  đó. Đi theo người dùng sang máy khác cần `T57-3.2` (Wave 3, chưa mở cổng).
+
+**`T57-2.6` — dấu sự kiện trên trục thời gian.** Đường xu hướng nói *cái gì đã xảy
+ra*, không nói *vì sao*. Câu hỏi thật khi thấy gãy khúc lúc 14:03 là "lúc đó có ai
+ép tay không, hay cảnh báo nào vừa bật?" — trước đây phải mở hai trang khác rồi so
+mốc bằng mắt.
+
+Nguồn là kho Activity và nhật ký cảnh báo **thật**; không suy diễn nguyên nhân từ
+chính hình dạng đường dữ liệu. Lệnh bị **từ chối không được đánh dấu** — nó chưa
+từng tới thiết bị nên không giải thích được gãy khúc nào; đánh dấu nó là mời người
+đọc kết luận sai về nguyên nhân sự cố. Quá 24 dấu thì cắt bớt **và nói ra đã cắt
+bao nhiêu**, thay vì vẽ dày đặc tới mức không đọc được.
+
+**`T57-2.10` — diff "đang lưu ↔ bản nháp" cho Ngõ vào (`BB-8`).** Hộp thoại lưu
+trước đây chỉ hỏi "Bạn có muốn lưu thay đổi không?" — với 16 kênh và `T57-2.11`
+(sao chép sang nhiều kênh) có thể ghi đè hàng chục trường trong một cú bấm, câu
+hỏi đó không trả lời được câu duy nhất cần trả lời trước khi cấu hình xuống thiết
+bị: **cái gì sắp đổi?** Diff nói bằng ngôn ngữ người ("Trung bình (Avg) → Lớn nhất
+(Max)"), không phải mã số của firmware.
+
+`NetworkCandidateDiff` (PA3-506) được rút thành `shared/components/DraftDiffTable`
+dùng chung, thay vì chép mẫu lần thứ hai — đúng cơ chế sinh lỗi số 3 mà review
+`REV-FE-UIUX-UC-2026-08-18` §7.3 mô tả.
+
+**`T57-2.14` — trang Cấu hình cảnh báo hết trộn Việt–Anh.** "Chế độ clear",
+"Delay (s)", "Severity rules", "Runtime hours" nằm giữa các nhãn tiếng Việt. Đây là
+màn hình đặt **ngưỡng an toàn**: đọc nhầm một trường là đặt sai một ngưỡng, và cái
+giá không nằm ở giao diện mà ở thiết bị.
+
+Hai nhóm giữ nguyên chữ **và** được chú giải, không để trần:
+- **Tên riêng trong chuẩn giao thức** (`BACnet`, `Notification Class`,
+  `Event Enrollment`) — dịch ra thì không tra được tài liệu ASHRAE.
+- **Mã trạng thái viết hoa** (`HIGH`, `CRITICAL`, `HH/H/L/LL`) —
+  `KX-DDC24-UX-SYSTEM-001` §1.5 buộc Web, nhật ký và HMI tại tủ nói cùng một chữ.
+
+**`T57-2.22` — mã QR địa chỉ truy cập mới.** Người vận hành đứng cạnh tủ với điện
+thoại trong tay, đồng hồ rollback đang đếm ngược, và đường vào giao diện sắp đổi
+địa chỉ. Gõ tay một địa chỉ IP đúng lúc đó là nguồn sai sót.
+
+`shared/qr.ts` sinh mã **tại chỗ** (byte mode, mức M, phiên bản 1–6): bo không có
+đường ra Internet nên mọi dịch vụ trực tuyến bị loại từ đầu, còn thêm một
+dependency npm là đổi lấy vài chục KB cho một bài toán có thuật toán đóng. Chuỗi
+quá dài thì **báo lỗi**, không cắt bớt âm thầm — một mã QR cụt dẫn tới địa chỉ sai
+còn tệ hơn không có mã.
+
+Không thể "nhìn thấy" một mã QR sai, nên test kiểm ba tầng: đối chiếu vector mẫu
+`HELLO WORLD` 1-Q của tài liệu chuẩn cho bước Reed–Solomon, tính chất chia hết cho
+đa thức sinh (đúng với mọi dữ liệu, không chỉ một vector), bảng thông tin định
+dạng, và **giải mã ngược** ma trận đúng theo cách máy quét đọc — bộ giải mã trong
+test viết riêng, không dùng lại hàm nội bộ, để một lỗi trong bảng đặt bit không tự
+triệt tiêu.
+
+**Kiểm chứng (đo lại 2026-08-19, không dẫn số cũ).**
+
+| Phép đo | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **104 file / 1016 test PASS** (trước đợt: 97 / 954) |
+| `npm run lint` (gồm `check_ui_strings.py`) | PASS |
+| `npm run build:foxlinx` | PASS — chunk `index` **989,94 kB** (gzip 257,54 kB) |
+| Bundle so với `63f841d` (dựng lại trên worktree sạch) | 967,67 kB → 989,94 kB, **+22,27 kB** cho cả năm task |
+
+Refs: Plan 57 §13b · `T57-2.3` `T57-2.6` `T57-2.10` `T57-2.14` `T57-2.22` ·
+`REV-FE-UIUX-UC-2026-08-18` §6.2-P2a/§6.4-P2b/§6.4-P2c/§6.9-P2a/§6.13-P2b/§6.15-P3
+
 ### Fixed — Hết trùng số ADR: `ADR-010`/`ADR-011` chốt theo mã nguồn, EasySet và raw SHM nhận `ADR-040`/`ADR-041` (2026-08-19)
 
 **Triệu chứng.** `docs/adr/` có hai file mang số `ADR-010` và hai file mang số `ADR-011`.
