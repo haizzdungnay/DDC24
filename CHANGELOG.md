@@ -64,7 +64,7 @@ thẳng vào tệp nguồn.
 | Chunk tách riêng | `ProgrammingRoutes` 200,97 · `modbus-rtu` 89,91 · `ScheduleEditorPage` 62,88 · `TrendsPage` 27,58 kB |
 | `python3 scripts/docs_iso_harness.py --expect` | PASS |
 
-**Còn lại 6 task, ghi rõ điều kiện mở khoá từng mục ở Plan 57 §13b:** `T57-3.8`
+**Còn lại 7 task Wave 3, ghi rõ điều kiện mở khoá từng mục ở Plan 57 §13b:** `T57-3.8`
 (chặn bởi quyết định người về ghi ra bus RS-485), `T57-3.9`/`T57-3.19`/`T57-3.20`
 (cần sửa C++ ở `apps/iobus` và `apps/hmi`), `T57-3.11`/`T57-3.13` (không bị chặn),
 `T57-3.18` (cần sửa `mkddc-netcfg`). `T57-4.2` đã giao code nhưng **chưa nghiệm

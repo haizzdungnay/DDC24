@@ -442,7 +442,7 @@ Wave 2–3 lùi sang đợt sau mà không để lại nợ.
 ## 13b. Trạng thái triển khai (cập nhật 2026-08-19)
 
 **Plan CHƯA đóng được.** Wave 0–2 xong, Wave 3 xong 14/21, Wave 4 xong 2/2.
-Sáu task còn lại: một bị chặn bởi quyết định người (`T57-3.8`), ba cần sửa mã C++
+Bảy task Wave 3 còn lại: một bị chặn bởi quyết định người (`T57-3.8`), ba cần sửa mã C++
 (`T57-3.9`, `T57-3.19`, `T57-3.20`), hai chưa tới lượt (`T57-3.11`, `T57-3.13`),
 và `T57-3.18` cần sửa `mkddc-netcfg`.
 
@@ -453,7 +453,7 @@ và `T57-3.18` cần sửa `mkddc-netcfg`.
 | 2 — Hiệu quả chẩn đoán | 21 | **XONG 21/21** (2026-08-19) | 22 task ban đầu trừ `T57-2.13` đã chuyển sang Wave 3 theo `ADR-035` (ngữ nghĩa luật cảnh báo thuộc Core, cấm cài lại ở FE) |
 | 3 — Contract/backend mới | 21 | **XONG 14/21** (2026-08-19) | Mở bằng `AUTH-WEBUX-2026-08-19-01` + `ADR-042`…`ADR-049`. Còn `T57-3.9`/`T57-3.11`/`T57-3.13`/`T57-3.18`/`T57-3.19`/`T57-3.20`; `T57-3.8` **giữ BLOCKED có chủ đích** (ghi ra bus RS-485 thật) |
 | 4 — Quyết định sản phẩm | 2 | **XONG 2/2** (2026-08-19) | Chủ sở hữu chốt đường tối thiểu: `T57-4.1` qua thẻ thiết bị (`T57-3.1`), ISA-101 Level 2 hoãn sang Rev B; `T57-4.2` code-splitting đã giao, **chưa nghiệm thu** vì thiếu số đo trên board |
-| **Tổng** | **71** | **63,5/71 (~89%)** | 6 task còn lại: 1 chặn bởi quyết định người, 3 cần sửa C++, 2 chưa tới lượt |
+| **Tổng** | **71** | **63,5/71 (~89%)** | 7,5 task còn lại: 7 task Wave 3 (1 chặn bởi quyết định người, 3 cần sửa C++, 2 chưa tới lượt, 1 cần netcfg) + 0,5 của `T57-0.7` |
 
 **Tám câu hỏi §12: đã đóng cả 8** (Q1/Q3 bằng `AUTH-WEBUX-…-01`; Q2/Q4/Q5/Q6/Q7/Q8
 bằng `ADR-034`…`ADR-039`). Không còn quyết định nào chặn việc lập kế hoạch tiếp.
@@ -534,9 +534,10 @@ chunk tách riêng: `ProgrammingRoutes` 200,97 · `modbus-rtu` 89,91 ·
 
 ### Điều kiện để đóng plan
 
-Còn **6 task**: `T57-3.8` (chặn bởi quyết định người), `T57-3.9`/`T57-3.19`/
-`T57-3.20` (cần sửa C++ ở `apps/iobus` và `apps/hmi`), `T57-3.11` và `T57-3.13`
-(không bị chặn, chỉ chưa tới lượt), cùng `T57-3.18` (cần sửa `mkddc-netcfg`).
+Còn **7 task Wave 3** cộng 0,5 task dở của Wave 0 (`T57-0.7`): `T57-3.8` (chặn
+bởi quyết định người), `T57-3.9`/`T57-3.19`/`T57-3.20` (cần sửa C++ ở
+`apps/iobus` và `apps/hmi`), `T57-3.11` và `T57-3.13` (không bị chặn, chỉ chưa
+tới lượt), cùng `T57-3.18` (cần sửa `mkddc-netcfg`).
 Ngoài ra `T57-4.2` đã giao code nhưng **chưa nghiệm thu** vì thiếu số đo trên
 board thật.
 
