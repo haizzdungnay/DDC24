@@ -28,9 +28,10 @@ ra RS-485 thật; cần quyết định người riêng.
 | `IMPLEMENT_READY[Wave 0 Track A/B/C/D]` | **PASS** (2026-08-18) | Mở bằng cùng record; ba track A/B/C không đổi contract, Track D là tài liệu authority |
 | `IMPLEMENT_READY[Wave 1]` | **PASS** (2026-08-18) | Mở bằng `AUTH-WEBUX-2026-08-18-02`. Hai điều kiện chặn đã gỡ: asset trực quan phát hành tại `docs/04_uiux/assets/operations/` và nhúng trong `KX-DDC24-UX-WEB-OPERATIONS-001`; Q2 (`ADR-034`) và Q6 (`ADR-037`) đã trả lời |
 | `IMPLEMENT_READY[Wave 2]` | **PASS** cho phần FE thuần (2026-08-18) · **đã triển khai xong 2026-08-19** | Wave 0 Track C xong + Q4 trả lời (`ADR-035`). **Trừ `T57-2.13`**, đã chuyển sang Wave 3 |
-| `IMPLEMENT_READY[Wave 3]` | **PASS trừ `T57-3.8`** (2026-08-19) | Mở bằng `AUTH-WEBUX-2026-08-19-01`; `ADR-042`…`ADR-049` là đầu vào implementation. `T57-3.8` giữ `BLOCKED` — quét bus là **ghi ra RS-485 thật**, cần quyết định người riêng |
-| `IMPLEMENT_READY[Wave 4]` | **PASS** (2026-08-19) | Chủ sở hữu chốt: `T57-4.1` đi đường tối thiểu qua `T57-3.1` (ISA-101 Level 2 hoãn Rev B), `T57-4.2` làm ngay |
-| `RELEASE_READY` | **N/A** | Cổng độc lập, **không** được suy ra từ hai record `AUTH-WEBUX-*` |
+| `IMPLEMENT_READY[Wave 3]` | **PASS trừ `T57-3.8`** (2026-08-19) | Mở bằng `AUTH-WEBUX-2026-08-19-01`; `ADR-042`…`ADR-049` là đầu vào implementation. Ba task C++ còn lại đã có chủ sở hữu theo `AUTH-WEBUX-2026-08-19-02` quyết định 2 |
+| `IMPLEMENT_READY[T57-3.8]` | **BLOCKED — hoãn sang Rev B** (2026-08-19) | `AUTH-WEBUX-2026-08-19-02` quyết định 1. Quét là **phát khung ra RS-485 thật** trên Rev A một cổng; `ADR-039` giữ nguyên tư cách **đặc tả**, không phải giấy phép. Mở lại khi PM chỉ định **Fieldbus Lead + QA/HIL Lead** (điều kiện Track B từ phê duyệt PM/CTO 2026-08-04) |
+| `IMPLEMENT_READY[Wave 4]` | **PASS** (2026-08-19) · **đã nghiệm thu** | Chủ sở hữu chốt: `T57-4.1` đi đường tối thiểu qua `T57-3.1` (ISA-101 Level 2 hoãn Rev B), `T57-4.2` làm ngay. `T57-4.2` **đã đo trên board thật** 2026-08-19 theo `ADR-049` điều 3 — xem §13b |
+| `RELEASE_READY` | **N/A** | Cổng độc lập, **không** được suy ra từ ba record `AUTH-WEBUX-*`. Nay có thêm một tiền đề tường minh: **chữ ký người thật cho `ADR-033`…`ADR-049`** — waive hết hiệu lực đúng tại cổng này (`AUTH-WEBUX-2026-08-19-02` quyết định 4) |
 
 > [!IMPORTANT]
 > **Cả tám câu hỏi §12 đã có quyết định có ghi chép.** Q1/Q3 đóng bằng
@@ -38,13 +39,17 @@ ra RS-485 thật; cần quyết định người riêng.
 > và `ADR-034`…`ADR-039`.
 >
 > Riêng **Q8 là câu hỏi an toàn** — quét bus Modbus là ghi ra bus thật. `ADR-039`
-> là **đặc tả, không phải giấy phép thi hành**: `T57-3.8` vẫn `BLOCKED`, và
-> trong phiên 2026-08-18 **không dòng code ghi ra bus RS-485 nào được viết**.
+> là **đặc tả, không phải giấy phép thi hành**. Chủ sở hữu sản phẩm đã quyết định
+> tại `AUTH-WEBUX-2026-08-19-02`: **`T57-3.8` hoãn sang Rev B**, ra khỏi phạm vi
+> Rev A. Không dòng code ghi ra bus RS-485 nào được viết trong phiên 2026-08-18
+> lẫn 2026-08-19.
 >
-> Mọi quyết định trong `ADR-034`…`ADR-039` do **agent** thực hiện dưới vai trò
+> Mọi quyết định trong `ADR-034`…`ADR-049` do **agent** thực hiện dưới vai trò
 > được giao; ô chữ ký ghi `WAIVED FOR IMPLEMENTATION` theo `DOC_GOVERNANCE` §6
 > quy tắc 4. Chúng đủ tư cách làm **đầu vào implementation**, chưa đủ tư cách
-> baseline `M5 — APPROVED`.
+> baseline `M5 — APPROVED`. Từ `AUTH-WEBUX-2026-08-19-02` quyết định 4, waive này
+> **có mốc hết hiệu lực: cổng `RELEASE_READY` Rev A**. Tới mốc mà chưa có chữ ký
+> người thật thì cổng đó không được mở.
 
 ---
 
@@ -441,19 +446,27 @@ Wave 2–3 lùi sang đợt sau mà không để lại nợ.
 
 ## 13b. Trạng thái triển khai (cập nhật 2026-08-19)
 
-**Plan CHƯA đóng được.** Wave 0–2 xong, Wave 3 xong 14/21, Wave 4 xong 2/2.
-Bảy task Wave 3 còn lại: một bị chặn bởi quyết định người (`T57-3.8`), ba cần sửa mã C++
-(`T57-3.9`, `T57-3.19`, `T57-3.20`), hai chưa tới lượt (`T57-3.11`, `T57-3.13`),
-và `T57-3.18` cần sửa `mkddc-netcfg`.
+**Plan CHƯA đóng được, nhưng phạm vi Rev A đã thu gọn.** Wave 0–2 xong, Wave 3
+xong 14/21, Wave 4 xong 2/2 và **đã nghiệm thu**.
+
+`AUTH-WEBUX-2026-08-19-02` (2026-08-19) đóng bốn mục thẩm quyền còn treo:
+`T57-3.8` **hoãn sang Rev B** (ra khỏi phạm vi Rev A), ba task C++ **đã có chủ
+sở hữu và mốc bắt đầu**, board Foxlinx **đã kết nối lại và deploy xong**, và
+waive chữ ký **đã có mốc hết hiệu lực**.
+
+Sáu task Rev A còn lại: ba cần sửa mã C++ (`T57-3.9`, `T57-3.19`, `T57-3.20` —
+agent nhận, bắt đầu 2026-08-19), hai chưa tới lượt và không bị chặn (`T57-3.11`,
+`T57-3.13`), và `T57-3.18` cần sửa `mkddc-netcfg`.
 
 | Wave | Task | Trạng thái | Ghi chú |
 |---|---:|---|---|
 | 0 — Đóng nợ + gate | 15 | **XONG 14,5/15** | `T57-0.7` thiếu test hành vi `F-UX-03` (xem dưới) |
 | 1 — An toàn vận hành | 12 | **XONG 12/12** | Mở bằng `AUTH-WEBUX-2026-08-18-02` sau khi phát hành asset trực quan và đóng Q2/Q6 |
 | 2 — Hiệu quả chẩn đoán | 21 | **XONG 21/21** (2026-08-19) | 22 task ban đầu trừ `T57-2.13` đã chuyển sang Wave 3 theo `ADR-035` (ngữ nghĩa luật cảnh báo thuộc Core, cấm cài lại ở FE) |
-| 3 — Contract/backend mới | 21 | **XONG 14/21** (2026-08-19) | Mở bằng `AUTH-WEBUX-2026-08-19-01` + `ADR-042`…`ADR-049`. Còn `T57-3.9`/`T57-3.11`/`T57-3.13`/`T57-3.18`/`T57-3.19`/`T57-3.20`; `T57-3.8` **giữ BLOCKED có chủ đích** (ghi ra bus RS-485 thật) |
-| 4 — Quyết định sản phẩm | 2 | **XONG 2/2** (2026-08-19) | Chủ sở hữu chốt đường tối thiểu: `T57-4.1` qua thẻ thiết bị (`T57-3.1`), ISA-101 Level 2 hoãn sang Rev B; `T57-4.2` code-splitting đã giao, **chưa nghiệm thu** vì thiếu số đo trên board |
-| **Tổng** | **71** | **63,5/71 (~89%)** | 7,5 task còn lại: 7 task Wave 3 (1 chặn bởi quyết định người, 3 cần sửa C++, 2 chưa tới lượt, 1 cần netcfg) + 0,5 của `T57-0.7` |
+| 3 — Contract/backend mới | 21 | **XONG 14/21** (2026-08-19) | Mở bằng `AUTH-WEBUX-2026-08-19-01` + `ADR-042`…`ADR-049`. Còn `T57-3.9`/`T57-3.11`/`T57-3.13`/`T57-3.18`/`T57-3.19`/`T57-3.20`; `T57-3.8` **chuyển sang Rev B** theo `AUTH-WEBUX-2026-08-19-02` — ra khỏi mẫu số Rev A |
+| 4 — Quyết định sản phẩm | 2 | **XONG 2/2 · đã nghiệm thu** (2026-08-19) | Chủ sở hữu chốt đường tối thiểu: `T57-4.1` qua thẻ thiết bị (`T57-3.1`), ISA-101 Level 2 hoãn sang Rev B; `T57-4.2` **đã deploy và đo trên board thật** theo `ADR-049` điều 3 — xem "Deploy và nghiệm thu" bên dưới |
+| **Tổng (mọi bản)** | **71** | **63,5/71 (~89,4%)** | Gồm cả `T57-3.8` đã chuyển sang Rev B |
+| **Phạm vi Rev A** | **70** | **63,5/70 (~90,7%)** | 6,5 task còn lại: `T57-3.9`/`T57-3.19`/`T57-3.20` (C++, agent nhận), `T57-3.11`/`T57-3.13` (chưa tới lượt), `T57-3.18` (netcfg), + 0,5 của `T57-0.7` |
 
 **Tám câu hỏi §12: đã đóng cả 8** (Q1/Q3 bằng `AUTH-WEBUX-…-01`; Q2/Q4/Q5/Q6/Q7/Q8
 bằng `ADR-034`…`ADR-039`). Không còn quyết định nào chặn việc lập kế hoạch tiếp.
@@ -518,33 +531,120 @@ làm đầu vào implementation.
 chunk tách riêng: `ProgrammingRoutes` 200,97 · `modbus-rtu` 89,91 ·
 `ScheduleEditorPage` 62,88 · `TrendsPage` 27,58 kB.
 
+### Bốn quyết định người (2026-08-19) — `AUTH-WEBUX-2026-08-19-02`
+
+Bốn mục dưới đây agent **không được tự quyết**: một là cấp phép an toàn cho việc
+phát khung lên bus RS-485 đang vận hành, một là chỉ định người thật, một là cấp
+quyền truy cập thiết bị, một là chữ ký baseline mà `DOC_GOVERNANCE` §6 quy tắc 4
+**cấm agent tự ký**. Agent đã dừng và hỏi; đây là câu trả lời của chủ sở hữu.
+
+| # | Quyết định | Hệ quả cho plan |
+|---|---|---|
+| 1 | `T57-3.8` **hoãn sang Rev B** | Ra khỏi mẫu số Rev A (71 → 70). `ADR-039` **không** bị `SUPERSEDED`; 11 ràng buộc là đầu vào nguyên vẹn cho Rev B. Mở lại khi PM chỉ định **Fieldbus Lead + QA/HIL Lead** |
+| 2 | Ba task C++ **giao cho agent, bắt đầu 2026-08-19** | `T57-3.9` (`apps/iobus`, 4,0 người-ngày), `T57-3.19` + `T57-3.20` (`apps/hmi`, 1,5 mỗi task). Tổng **7,0 người-ngày** |
+| 3 | **Uỷ quyền agent truy cập board Foxlinx** | Gỡ chặn deploy và gỡ chặn nghiệm thu `T57-4.2` — đã thi hành ngay, xem dưới |
+| 4 | Waive chữ ký **giữ nguyên, có mốc hết hiệu lực** | `ADR-033`…`ADR-049` giữ `WAIVED FOR IMPLEMENTATION` tới **cổng `RELEASE_READY` Rev A**; sau mốc đó phải có chữ ký người thật, không có waive lần hai |
+
+**Ràng buộc kế thừa cho `T57-3.9`.** Việc `T57-3.8` bị hoãn **không** nới lỏng gì
+cho `T57-3.9`, và `T57-3.9` **không** được dùng làm đường vòng để có chức năng
+quét: vòng nhớ khung là **CHỈ-ĐỌC**, chỉ chụp lại khung mà chu kỳ poll bình
+thường đã phát, **không một byte nào được phát thêm** (`ADR-046` điều 1). Vi phạm
+là finding `P0`.
+
+**CI GitHub Actions — chưa có quyết định.** Chủ sở hữu không chọn phương án nào
+cho mục này. Trạng thái đúng: nguyên nhân là **lỗi thanh toán của tổ chức** từ
+2026-08-17 (mọi check fail sau 2–3 giây, **không phải lỗi mã**); owner là chủ sở
+hữu sản phẩm vì cần quyền billing GitHub; **chưa đặt mốc**. PR tiếp tục merge
+bằng bằng chứng test local — đây là **ngoại lệ chưa có ngày đáo hạn**, không phải
+trạng thái bình thường.
+
+### Deploy lên board và nghiệm thu `T57-4.2` (2026-08-19)
+
+**Board đã trở lại mạng.** Hai đính chính với mô tả trước đó: board **không còn
+mất kết nối**, và bản đang chạy trên board là mốc **2026-08-18 12:43Z** chứ không
+phải 03:15Z. `uptime` cho thấy board khởi động lại khoảng **2026-08-18 10:06Z**.
+Web/API chạy dưới tên unit **`mkddc-web-pi`** (`:8081`) — tên `mkddc-web` không
+tồn tại trên board này.
+
+| Bước | Kết quả |
+|---|---|
+| Sao lưu | Bản cũ giữ tại `/opt/mkddc-web/dist.bak-20260819` trước khi ghi đè |
+| Build | `npm run build:foxlinx` (**không** phải `npm run build` trần — cờ Programming của Foxlinx là cờ build-time) → `index` **558,49 kB** (gzip 149,20) |
+| Deploy | `scp` — board Buildroot **không có `rsync`**. Wave 0–3 đã lên board, xác nhận `index-CDJ4il9J.js` đang được phục vụ |
+| Service | `mkddc-core`, `mkddc-iobus`, `mkddc-netcfg`, `mkddc-fakemcu`, `mkddc-web-pi` đều **active** sau deploy |
+
+**Số đo nghiệm thu theo `ADR-049` điều 3** — trình duyệt thật (Chromium/
+Playwright), context mới mỗi lượt nên **cache rỗng**, **12 cặp mẫu xen kẽ** bản
+mới ↔ bản cũ trên **cùng board, cùng phiên** để loại trôi đường truyền:
+
+| Chỉ số | Bản cũ (`63f841d`) | Bản mới (`T57-4.2`) | Chênh |
+|---|---:|---:|---:|
+| Byte đường tới hạn | 1591,5 kB | **1255,7 kB** | **−335,8 kB (−21,1%)** |
+| Số request lần mở đầu | 7 | 7 | 0 |
+| First Contentful Paint (trung vị) | 1216 ms | **1092 ms** | −124 ms |
+| FCP — trung vị chênh **theo cặp** | — | — | **−236 ms**, 8/12 cặp nghiêng về bản mới |
+| `domContentLoaded` (trung vị) | 1063,5 ms | **959,5 ms** | −104 ms |
+
+**Kết luận: ĐẠT ở đúng mức mà `ADR-049` yêu cầu** — đã có số đo trên board thật,
+**không có hồi quy**, hướng cải thiện nhất quán với mức giảm byte.
+
+**Hai giới hạn phải nêu kèm mỗi khi trích số này.** (a) `ADR-049` điều 3 đặt
+*loại* số đo nhưng **không đặt ngưỡng đạt**, nên nghiệm thu chỉ khẳng định được
+"đã đo trên board thật và không hồi quy" — muốn có ngưỡng thì cần một quyết định
+riêng. (b) Phép đo phải đi qua **tunnel SSH ra WAN** (cổng HTTP của board không
+mở ra ngoài), nên nhiễu từng lượt cùng cỡ với hiệu ứng: 8/12 cặp cho kiểm định
+dấu `p ≈ 0,19`, **chưa đủ mạnh để tuyên bố một con số cải thiện chính xác**. Phần
+byte thì tất định và lặp lại y hệt mọi lượt.
+
+**Để có số dứt khoát:** đo lại trên **LAN cùng mạng với board** (bỏ tunnel), trên
+đúng máy khách mà người vận hành dùng — CPU máy khách là nơi chênh lệch
+968 kB ↔ 558 kB tác động mạnh nhất qua thời gian parse/execute, phần mà phép đo
+qua tunnel chưa tách ra được.
+
 ### Việc còn lại
 
 | Mục | Trạng thái | Điều kiện mở khoá |
 |---|---|---|
-| `T57-3.8` quét bus Modbus | **BỊ CHẶN — có chủ đích** | Quyết định người riêng cho việc phát khung ra bus RS-485 đang vận hành. Chủ sở hữu đã chọn giữ chặn ở `AUTH-WEBUX-2026-08-19-01` |
-| `T57-3.9` xem thô khung truyền Modbus | Chưa làm | Cần sửa `apps/iobus` (C++): vòng nhớ khung trong `BusWorker` theo `ADR-046`, rồi mới tới Go + FE |
+| `T57-3.8` quét bus Modbus | **HOÃN SANG REV B** | Ra khỏi phạm vi Rev A theo `AUTH-WEBUX-2026-08-19-02` quyết định 1. Mở lại khi PM chỉ định **Fieldbus Lead + QA/HIL Lead** (điều kiện Track B, phê duyệt PM/CTO 2026-08-04), hoặc khi mở phạm vi Rev B |
+| `T57-3.9` xem thô khung truyền Modbus | Chưa làm — **owner: agent, bắt đầu 2026-08-19** | Không còn bị chặn. Sửa `apps/iobus` (C++): vòng nhớ khung **CHỈ-ĐỌC** trong `BusWorker` theo `ADR-046`, rồi mới tới Go + FE. 4,0 người-ngày |
 | `T57-3.11` mẫu thiết bị Modbus dựng sẵn | Chưa làm | Cần bộ dữ liệu mẫu theo hãng; không có ràng buộc kỹ thuật nào chặn |
 | `T57-3.13` ước lượng tần suất cảnh báo từ lịch sử | Chưa làm | Phải đi qua `mkddc-alarm-sim` (`ADR-048`) trên mẫu historian đã hạ tần; không có ràng buộc nào chặn |
 | `T57-3.18` kiểm kết nối sau apply mạng | Chưa làm | Cần sửa `mkddc-netcfg` để ping gateway/DNS trong cửa sổ đếm ngược |
-| `T57-3.19`, `T57-3.20` (HMI) | Chưa làm | Cần sửa `apps/hmi` (C++/LVGL) |
+| `T57-3.19`, `T57-3.20` (HMI) | Chưa làm — **owner: agent, bắt đầu 2026-08-19** | Không còn bị chặn. Sửa `apps/hmi` (C++/LVGL); 1,5 người-ngày mỗi task |
 | Test hành vi `F-UX-03`, `F-UX-13` | Chưa viết | Như bản trước |
 | Chặn Back/Forward trong `useDirtyGuard` | Khoảng hở đã biết | Cần `useBlocker` của data router |
-| **Deploy lên board** | **BỊ CHẶN** | Board Foxlinx mất kết nối từ 2026-08-18. `ADR-049` điều 3 đặt số đo nghiệm thu của `T57-4.2` là thời gian mở trang trên board thật — chưa đo được |
+| **Deploy lên board** | **XONG (2026-08-19)** | Board đã trở lại mạng; agent được uỷ quyền truy cập theo `AUTH-WEBUX-2026-08-19-02` quyết định 3. Wave 0–3 đã deploy, `T57-4.2` **đã nghiệm thu** trên board thật — xem mục trên |
+| **CI GitHub Actions** | **CHƯA QUYẾT** | Lỗi thanh toán tổ chức từ 2026-08-17, không phải lỗi mã. Owner: chủ sở hữu sản phẩm (cần quyền billing GitHub). **Chưa đặt mốc.** Merge bằng test local là ngoại lệ chưa có ngày đáo hạn |
+| **Chữ ký `ADR-033`…`ADR-049`** | **Waive có thời hạn** | Giữ `WAIVED FOR IMPLEMENTATION` tới **cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4). Cần chữ ký người thật của Tech Lead/UX Lead/PM trước mốc đó; agent **không** được điền |
 
 ### Điều kiện để đóng plan
 
-Còn **7 task Wave 3** cộng 0,5 task dở của Wave 0 (`T57-0.7`): `T57-3.8` (chặn
-bởi quyết định người), `T57-3.9`/`T57-3.19`/`T57-3.20` (cần sửa C++ ở
-`apps/iobus` và `apps/hmi`), `T57-3.11` và `T57-3.13` (không bị chặn, chỉ chưa
-tới lượt), cùng `T57-3.18` (cần sửa `mkddc-netcfg`).
-Ngoài ra `T57-4.2` đã giao code nhưng **chưa nghiệm thu** vì thiếu số đo trên
-board thật.
+**Phạm vi Rev A còn 6 task cộng 0,5 task dở của Wave 0 (`T57-0.7`)** —
+và **không mục nào còn bị chặn**:
+
+| Task | Vì sao chưa xong | Ai làm |
+|---|---|---|
+| `T57-3.9` | Cần sửa `apps/iobus` (C++) theo `ADR-046` | Agent, từ 2026-08-19 |
+| `T57-3.19`, `T57-3.20` | Cần sửa `apps/hmi` (C++/LVGL) | Agent, từ 2026-08-19 |
+| `T57-3.11` | Cần bộ dữ liệu mẫu theo hãng; không có ràng buộc kỹ thuật | Chưa tới lượt |
+| `T57-3.13` | Phải đi qua `mkddc-alarm-sim` (`ADR-048`); không có ràng buộc | Chưa tới lượt |
+| `T57-3.18` | Cần sửa `mkddc-netcfg` | Chưa tới lượt |
+| `T57-0.7` (0,5) | Thiếu test hành vi `F-UX-03` | Chưa tới lượt |
+
+`T57-3.8` **không** nằm trong danh sách này — nó đã chuyển sang **Rev B**.
+
+`T57-4.2` **đã nghiệm thu** trên board thật ngày 2026-08-19; mục "chưa nghiệm thu"
+ở bản trước của §13b **không còn đúng**.
+
+**Hai việc ngoài mẫu số task nhưng chặn `RELEASE_READY`:** chữ ký người thật cho
+`ADR-033`…`ADR-049` (waive hết hiệu lực tại chính cổng đó), và CI GitHub Actions
+còn hỏng vì thanh toán — mục CI **chưa có quyết định và chưa có mốc**.
 
 ## 14. Revision History
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.4 | 2026-08-19 | Bốn quyết định người đóng bằng `AUTH-WEBUX-2026-08-19-02`: `T57-3.8` **hoãn sang Rev B** (mẫu số Rev A 71 → 70), ba task C++ có owner + mốc bắt đầu, uỷ quyền agent truy cập board, và waive chữ ký `ADR-033`…`ADR-049` có **mốc hết hiệu lực tại cổng `RELEASE_READY` Rev A**. §13b ghi deploy Wave 0–3 lên board thật và **số đo nghiệm thu `T57-4.2`** (12 cặp mẫu, byte đường tới hạn −21,1%, FCP −236 ms trung vị theo cặp, 8/12 cặp) kèm hai giới hạn của phép đo; CI ghi rõ là **chưa có quyết định** |
 | 1.3 | 2026-08-19 | Wave 3 mở bằng `AUTH-WEBUX-2026-08-19-01` (chủ sở hữu chốt: mở trừ `T57-3.8`) với `ADR-042`…`ADR-049`; giao 14/21 task Wave 3 và 2/2 task Wave 4 (`T57-4.1` đường tối thiểu, `T57-4.2` code-splitting: chunk chính 989,94 → 558,49 kB). §13b ghi số đo thật 107 file / 1032 test FE, `go test ./...` PASS, và sáu task còn lại kèm điều kiện mở khoá từng mục |
 | 1.2 | 2026-08-19 | Wave 2 hoàn tất 21/21 task (`T57-2.3`, `T57-2.6`, `T57-2.10`, `T57-2.14`, `T57-2.22` khép lại đợt cuối); §13b ghi lại số đo thật 104 file / 1016 test, bundle Foxlinx 989,94 kB (+22,27 kB so với `63f841d`), và giới hạn đã biết của khung nhìn đặt tên (localStorage, chờ `T57-3.2`) |
 | 1.1 | 2026-08-18 | Thêm §13b — trạng thái triển khai thật: Wave 0 xong 14,5/15, Wave 1–4 chưa bắt đầu, tổng 15/71 task; ghi rõ điều kiện đóng plan và bốn việc còn lại của chính Wave 0 (gồm deploy bị chặn do board mất kết nối) |

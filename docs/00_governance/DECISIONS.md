@@ -2,7 +2,7 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-19 (`ADR-042`…`ADR-049` `Accepted` — chín quyết định theo từng task để mở Wave 3 của Plan 57, ban hành cùng `AUTH-WEBUX-2026-08-19-01`; trước đó: `ADR-034`…`ADR-039` `Accepted` — sáu câu hỏi chặn còn lại của Plan 57 §12: annunciation, chủ sở hữu ngữ nghĩa mô phỏng cảnh báo, kho chỉ số ISA-18.2, chính sách mật khẩu, chủ sở hữu "hiệu lực thực tế" của lịch, và **an toàn quét bus Modbus**; `ADR-033`/`ADR-032` `Accepted` — cách ly route và điều hướng web 4 nhóm)
+**Cập nhật:** 2026-08-19 (`AUTH-WEBUX-2026-08-19-02` — bốn quyết định người: `T57-3.8` **hoãn sang Rev B**, chủ sở hữu ba task C++, uỷ quyền truy cập board Foxlinx, và **mốc hết hiệu lực của `WAIVED FOR IMPLEMENTATION`**; không cấp ADR mới; trước đó: `ADR-042`…`ADR-049` `Accepted` — chín quyết định theo từng task để mở Wave 3 của Plan 57, ban hành cùng `AUTH-WEBUX-2026-08-19-01`; trước đó: `ADR-034`…`ADR-039` `Accepted` — sáu câu hỏi chặn còn lại của Plan 57 §12: annunciation, chủ sở hữu ngữ nghĩa mô phỏng cảnh báo, kho chỉ số ISA-18.2, chính sách mật khẩu, chủ sở hữu "hiệu lực thực tế" của lịch, và **an toàn quét bus Modbus**; `ADR-033`/`ADR-032` `Accepted` — cách ly route và điều hướng web 4 nhóm)
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa; **bản 2026-08-19 sửa lại lần chuẩn hoá
 2026-07-22**: EasySet parity thành **`ADR-040`** (không phải `ADR-013`) và raw SHM thành **`ADR-041`**
@@ -61,7 +61,7 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 | ADR-036 | **Chỉ số hệ alarm ISA-18.2 §16 được DẪN XUẤT từ `alarm_history.jsonl`, không lập kho thứ hai** — historian là chuỗi thời gian theo point (sai hình dạng dữ liệu), Activity là vòng nhớ 2000 sự kiện (alarm flood tự xoá bằng chứng của chính nó). Điều kiện tiên quyết bắt buộc: `alarm_history.jsonl` hiện **không có xoay vòng, không có retention** và bị đọc bằng quét toàn tệp — phải thêm xoay vòng theo ngày + retention **90 ngày** trước khi mở màn hình KPI. Trả lời Plan 57 §12-Q5. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** — `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-037 | **Chính sách mật khẩu Rev A: giao diện công bố ĐÚNG luật thiết bị đang cưỡng chế (`≥ 6` byte), chỉ báo độ mạnh là KHUYẾN NGHỊ chứ không phải cổng chặn.** Luật thật hôm nay là `validNewPassword` = `len(password) >= 6` byte, không có lớp ký tự, **không có khoá tài khoản sau N lần sai**. Siết FE lên 8 mà để backend ở 6 sẽ làm giao diện mô tả sai thiết bị. Chính sách ĐÍCH (min 8, chặn trùng username và danh sách tầm thường, khoá 5 lần sai/15 phút có audit) là thay đổi Go + hợp đồng, giao cho `T57-3.21` mới. Hệ quả trực tiếp cho `T57-1.10`: **cấm** hiện thông điệp "tài khoản bị khoá" vì trạng thái đó không tồn tại. Trả lời Plan 57 §12-Q6. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** — `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-038 | **"Hiệu lực thực tế" của lịch tính ở Core, mở rộng `mkddc-schedule-sim`, không cài lại trong Go.** `schedule_runtime.hpp` đã ghi rõ `evaluate_schedule` là hàm mà "backend gọi CHÍNH hàm này qua vỏ C; cấm cài lại thuật toán ở nơi khác", và `handleSimulateSchedule` đã thi hành đúng như vậy kèm `503` khi thiếu binary. Bản hợp nhất nhiều lịch trên một point thêm chế độ `--point` cho cùng binary, dùng lại phân xử `priority_for_writing` 1..16 của `ScheduleRuntime`. Trả lời Plan 57 §12-Q7. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** — `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
-| ADR-039 | **AN TOÀN — Quét bus Modbus: chỉ mã hàm ĐỌC, dải tối đa 32 địa chỉ/lượt, vai trò `admin`, xem trước khô bắt buộc, và CẤM dò baud/parity khi bus còn slave đang bật.** Rev A chỉ có **một** cổng RS-485 nên mọi slave dùng chung dây; quét phải xếp hàng trên chính `BusWorker` qua nguyên thuỷ `probe_read` (MBR-B108) chứ không mở cổng thứ hai và không dừng poll. Địa chỉ không trả lời phải báo là **"không trả lời"**, không được báo là "không có thiết bị". `T57-3.8` vẫn `IMPLEMENT_READY BLOCKED`: ADR này là **đặc tả**, và trong phiên 2026-08-18 **không dòng code ghi ra bus nào được viết**. Trả lời Plan 57 §12-Q8. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** (đặc tả) — `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION`. Thi hành còn chặn bởi điều kiện Track B Modbus RTU (Fieldbus Lead + QA/HIL Lead chưa được chỉ định) |
+| ADR-039 | **AN TOÀN — Quét bus Modbus: chỉ mã hàm ĐỌC, dải tối đa 32 địa chỉ/lượt, vai trò `admin`, xem trước khô bắt buộc, và CẤM dò baud/parity khi bus còn slave đang bật.** Rev A chỉ có **một** cổng RS-485 nên mọi slave dùng chung dây; quét phải xếp hàng trên chính `BusWorker` qua nguyên thuỷ `probe_read` (MBR-B108) chứ không mở cổng thứ hai và không dừng poll. Địa chỉ không trả lời phải báo là **"không trả lời"**, không được báo là "không có thiết bị". `T57-3.8` vẫn `IMPLEMENT_READY BLOCKED`: ADR này là **đặc tả**, và trong phiên 2026-08-18 **không dòng code ghi ra bus nào được viết**. Trả lời Plan 57 §12-Q8. Mục nội tuyến bên dưới. | **Accepted 2026-08-18** (đặc tả) — `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION`. **Thi hành hoãn sang Rev B** theo `AUTH-WEBUX-2026-08-19-02` quyết định 1; mở lại khi PM chỉ định Fieldbus Lead + QA/HIL Lead |
 | ADR-040 | EasySet config phải round-trip nhất quán giữa UI, backend và iobus; chỉ field có consumer mới được công bố. Các màn config kiểu EasySet là lớp form phủ lên graph/io_map, không thay bằng mô hình parameter-based. **Phát hành lần đầu nhầm số `ADR-010`; bản chuẩn hoá 2026-07-22 gán nhầm `ADR-013`.** Hồ sơ rời: [`ADR-040`](../adr/ADR-040-easyset-parity-config-surfaces.md). | Accepted 2026-06-22 — cấp số lại 2026-08-19 |
 | ADR-041 | `kx_io_shm_t` mang thêm `ui_raw[]` và `ui_raw_unit[][]` để web hiện giá trị điện thô mà không phải dựng lại sau scaling; đổi layout thì phải bump `KX_SHM_MAGIC`. **Phát hành lần đầu nhầm số `ADR-011`; bản chuẩn hoá 2026-07-22 gán nhầm `ADR-014`.** Hồ sơ rời: [`ADR-041`](../adr/ADR-041-ui-raw-live-data-shm.md). | Accepted 2026-06-30 — cấp số lại 2026-08-19 |
 | ADR-042 | **Thẻ thiết bị công nghệ (`equipment`) là TRƯỜNG TRÌNH BÀY trên cấu hình điểm, không phải một thực thể mới.** Một chuỗi tự do đã chuẩn hoá (`trim`, ≤ 48 byte) gắn vào điểm; **không** tạo bảng thiết bị, không khoá ngoại, không ràng buộc Core. Lý do: đường đi tối thiểu tới ISA-101 Level 2 (§4.1 review) cần *nhóm điểm theo thiết bị*, còn mô hình thiết bị đầy đủ là quyết định Rev B. Điểm không có thẻ hiện nhóm "Chưa gán", **không** đoán từ tên. Phục vụ `T57-3.1`, và là đường tối thiểu đã chốt cho `T57-4.1`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
@@ -72,6 +72,15 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 | ADR-047 | **Buộc đổi mật khẩu mặc định: cờ `mustChangePassword` trên tài khoản, cưỡng chế ở BACKEND chứ không ở giao diện.** Phiên có cờ này chỉ gọi được `GET /api/v1/me` và `POST /api/v1/me/change-password`; mọi endpoint khác trả `403` với `reasonCode: password_change_required`. Cưỡng chế bằng cách ẩn màn hình ở FE là không cưỡng chế gì cả — `curl` vẫn đi thẳng. Cờ bật khi `admin` đặt lại mật khẩu và cho tài khoản khởi tạo lần đầu; tự tắt sau lần đổi thành công. Phục vụ `T57-3.17`; **không** đụng tới độ dài mật khẩu đã chốt ở `ADR-037`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-048 | **Mô phỏng luật cảnh báo đi qua `POST /api/v1/alarm-settings/simulate`, là VỎ gọi `mkddc-alarm-sim`.** Thi hành `ADR-035`: nhận một `AlarmSetting` bản nháp + chuỗi mẫu `(t, value)`, trả các lần bật/tắt kèm mốc thời gian và mức nghiêm trọng. Thiếu binary ⇒ `503` nói rõ thiếu gì; **cấm** bản tính xấp xỉ ở Go hay FE, kể cả "gần đúng". Mô phỏng **không** chạm cấu hình đang lưu và không ghi audit thay đổi. Phục vụ `T57-2.13`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-049 | **Code-splitting theo route dùng `React.lazy` cho các nhánh NẶNG và HIẾM, không chia nhỏ toàn bộ.** Chia theo lô nghiệp vụ: Programming, Xu hướng/biểu đồ, Lịch vận hành, Modbus RTU. Bốn màn hình mở đầu ca trực (Landing, Giám sát, Cảnh báo, Chẩn đoán) **ở lại chunk chính** — chia chúng ra chỉ đổi một lần tải thành hai lần chờ. Mỗi ranh giới `lazy` phải có `Suspense` với khối trạng thái thật, không màn hình trắng. Số đo bắt buộc là **thời gian mở trang đầu trên board thật**, không phải kích thước tệp. Phục vụ `T57-4.2`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
+
+> [!IMPORTANT]
+> **Mọi dòng ghi `chữ ký người: WAIVED FOR IMPLEMENTATION` trong bảng trên đều có
+> mốc hết hiệu lực.** Theo `AUTH-WEBUX-2026-08-19-02` quyết định 4, waive cho
+> `ADR-033`…`ADR-049` chỉ hợp lệ **tới cổng `RELEASE_READY` Rev A**. Trong thời
+> hạn đó chúng đủ tư cách làm **đầu vào implementation**, và **không** đủ tư cách
+> baseline `M5 — APPROVED` (`DOC_GOVERNANCE` §6 quy tắc 4). Tới mốc mà chưa có
+> chữ ký người thật thì **cổng `RELEASE_READY` không được mở** — không có đường
+> waive lần hai.
 
 ## ADR-025 — Process-first + bounded modules cho repository
 
@@ -174,7 +183,7 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
   [`REV-FE-UIUX-UC-2026-08-18`](../07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md) §7.2b.
   Không supersede ADR nào; nó **thi hành** hệ quả đã ghi trong `ADR-032` và áp
   `ADR-040` vào đúng hai màn hình.
-- **Phê duyệt:** `WAIVED FOR IMPLEMENTATION` (agent đóng vai trò quyết định, chưa có chữ ký người), trong phạm vi `AUTH-WEBUX-2026-08-18-01` (Plan 57 Wave 0).
+- **Phê duyệt:** `WAIVED FOR IMPLEMENTATION` (agent đóng vai trò quyết định, chưa có chữ ký người), trong phạm vi `AUTH-WEBUX-2026-08-18-01` (Plan 57 Wave 0) — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 
 ### Bối cảnh
 
@@ -288,7 +297,7 @@ ranh giới quyền nào phải hoàn tác.
 
 - **Trạng thái:** Accepted 2026-08-18. Trả lời [Plan 57](../03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md) §12-Q2.
   Không supersede ADR nào. Ràng buộc trước một phần phạm vi của `T57-3.2` (lưu tuỳ chọn người dùng trên thiết bị).
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 
 ### Bối cảnh
 
@@ -393,7 +402,7 @@ phải hoàn tác.
 - **Trạng thái:** Accepted 2026-08-18. Trả lời [Plan 57](../03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md) §12-Q4.
   Áp lại nguyên tắc đã ràng buộc trong [ADR-023](../adr/ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md)
   cho một tính năng khác; không supersede ADR nào.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 
 ### Bối cảnh — câu hỏi có tiền đề sai
 
@@ -462,7 +471,7 @@ lần cập nhật bo, và mỗi lần xem trước là một lần gọi tiến
 - **Trạng thái:** Accepted 2026-08-18. Trả lời [Plan 57](../03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md) §12-Q5.
   Không supersede [ADR-018](../adr/ADR-018-sqlite-block-historian.md); nó vạch rõ
   ranh giới historian **không** bao gồm chỉ số hệ alarm.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 
 ### Ba kho đang có, và vì sao hai kho bị loại
 
@@ -509,7 +518,7 @@ phí của phương án được chọn là quét `O(n)`, và điều 2 đặt c
 - **Trạng thái:** Accepted 2026-08-18. Trả lời [Plan 57](../03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md) §12-Q6.
   Bổ sung cho `ADR-021` (RBAC 3 vai trò — dòng trong bảng phía trên) ở phần
   *chất lượng thông tin xác thực*; không supersede ADR nào.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 
 ### Luật thật hôm nay — đọc từ mã, không từ tài liệu
 
@@ -601,7 +610,7 @@ dò tài khoản. FE không được suy diễn thêm.
 - **Trạng thái:** Accepted 2026-08-18. Trả lời [Plan 57](../03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md) §12-Q7.
   Thi hành nguyên tắc của [ADR-023](../adr/ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md);
   không supersede ADR nào.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 
 ### Bối cảnh
 
@@ -652,11 +661,15 @@ lặng, trên tính năng điều khiển thiết bị theo giờ.
   [Plan 57](../03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md) §12-Q8.
   Bổ sung cho `ADR-024` (Modbus RTU Point — dòng trong bảng phía trên) ở phần
   *thao tác ad-hoc trên bus*.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
-- **Thi hành:** vẫn **BLOCKED**. `T57-3.8` không được viết dòng code ghi ra bus
-  nào cho tới khi PM chỉ định **Fieldbus Lead + QA/HIL Lead** theo điều kiện
-  Track B đã ghi trong chính file này (phê duyệt PM/CTO 2026-08-04). Trong phiên
-  2026-08-18, **không có đường ghi ra bus nào được hiện thực**.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-18-02`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
+- **Thi hành:** **BLOCKED — hoãn sang Rev B** theo `AUTH-WEBUX-2026-08-19-02`
+  quyết định 1 (chủ sở hữu sản phẩm, 2026-08-19). `T57-3.8` ra khỏi phạm vi
+  Rev A; `T57-3.8` không được viết dòng code ghi ra bus nào cho tới khi PM chỉ
+  định **Fieldbus Lead + QA/HIL Lead** theo điều kiện Track B đã ghi trong chính
+  file này (phê duyệt PM/CTO 2026-08-04). Trong phiên 2026-08-18, **không có
+  đường ghi ra bus nào được hiện thực**; phiên 2026-08-19 cũng vậy.
+- **Không `SUPERSEDED`.** Chủ sở hữu chọn *hoãn*, không chọn *loại khỏi phạm vi*.
+  11 ràng buộc dưới đây là đầu vào nguyên vẹn cho Rev B.
 
 ### Vì sao đây là câu hỏi an toàn chứ không phải câu hỏi tính năng
 
@@ -717,7 +730,7 @@ thức**, và điều 8 tồn tại để người quyết định nhìn thấy 
 ## ADR-042 — Thẻ thiết bị công nghệ là trường trình bày, không phải thực thể mới
 
 - **Trạng thái:** Accepted 2026-08-19.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 - **Phục vụ:** `T57-3.1`, và là đường đi tối thiểu đã chốt cho `T57-4.1`.
 
 ### Bối cảnh
@@ -751,7 +764,7 @@ tạo bảng thiết bị, không khoá ngoại, không ràng buộc phía Core.
 ## ADR-043 — Tuỳ chọn người dùng là túi khoá-giá trị có hạn mức, backend không hiểu nội dung
 
 - **Trạng thái:** Accepted 2026-08-19.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 - **Phục vụ:** `T57-3.2`; gỡ giới hạn "chỉ trên trình duyệt này" của `T57-2.3`.
 
 ### Bối cảnh
@@ -782,7 +795,7 @@ dùng bản cục bộ.
 ## ADR-044 — Chỉ số hệ alarm tính tại thời điểm hỏi, cửa sổ tối đa 7 ngày
 
 - **Trạng thái:** Accepted 2026-08-19.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 - **Phục vụ:** `T57-3.3`. Thi hành `ADR-036` ở tầng Go.
 
 ### Quyết định
@@ -806,7 +819,7 @@ dùng bản cục bộ.
 ## ADR-045 — Hiệu lực thực tế và cảnh báo xung đột dùng chung một endpoint, chỉ là vỏ gọi Core
 
 - **Trạng thái:** Accepted 2026-08-19.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 - **Phục vụ:** `T57-3.5`, `T57-3.6`. Thi hành `ADR-038`.
 
 ### Quyết định
@@ -825,7 +838,7 @@ chế độ `--point`, trả chuỗi khoảng hiệu lực kèm **lịch nào th
 ## ADR-046 — Xem thô khung truyền Modbus là vòng nhớ chỉ-đọc, không phát thêm byte nào
 
 - **Trạng thái:** Accepted 2026-08-19.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 - **Phục vụ:** `T57-3.9`.
 
 ### Bối cảnh
@@ -849,7 +862,7 @@ nên câu trả lời phải lấy bằng máy phân tích bus cắm song song.
 ## ADR-047 — Buộc đổi mật khẩu mặc định cưỡng chế ở backend, không ở giao diện
 
 - **Trạng thái:** Accepted 2026-08-19.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 - **Phục vụ:** `T57-3.17`.
 
 ### Quyết định
@@ -869,7 +882,7 @@ endpoint khác trả `403` với `reasonCode: password_change_required`.
 ## ADR-048 — Mô phỏng luật cảnh báo qua một endpoint vỏ, cấm bản tính xấp xỉ
 
 - **Trạng thái:** Accepted 2026-08-19.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 - **Phục vụ:** `T57-2.13`. Thi hành `ADR-035`.
 
 ### Quyết định
@@ -887,7 +900,7 @@ và trả các lần bật/tắt kèm mốc thời gian, mức nghiêm trọng, 
 ## ADR-049 — Code-splitting theo lô nghiệp vụ nặng, giữ bốn màn hình mở ca ở chunk chính
 
 - **Trạng thái:** Accepted 2026-08-19.
-- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION`.
+- **Phê duyệt:** `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` — **hết hiệu lực tại cổng `RELEASE_READY` Rev A** (`AUTH-WEBUX-2026-08-19-02` quyết định 4).
 - **Phục vụ:** `T57-4.2` (`F-UX-16`).
 
 ### Quyết định
@@ -902,6 +915,38 @@ Tách `React.lazy` theo **lô nghiệp vụ nặng và ít mở**: Programming, 
 3. **Số đo nghiệm thu là thời gian mở trang đầu trên board thật**, không phải
    kích thước tệp — `F-DOC-10` đã cho thấy so kích thước giữa hai lệnh build
    khác nhau dẫn tới kết luận sai.
+
+### Nghiệm thu đã thực hiện (2026-08-19)
+
+Đo trên board `SOM-DDC-24-foxlinx` sau khi được uỷ quyền truy cập
+(`AUTH-WEBUX-2026-08-19-02` quyết định 3). Trình duyệt thật (Chromium/Playwright)
+mở trang đầu, context mới mỗi lượt nên **cache rỗng**; **12 cặp mẫu xen kẽ**
+bản mới ↔ bản cũ trên cùng board, cùng phiên, để loại trôi đường truyền.
+
+| Chỉ số | Bản cũ (`63f841d`) | Bản mới (`T57-4.2`) | Chênh |
+|---|---:|---:|---:|
+| Byte đường tới hạn | 1591,5 kB | **1255,7 kB** | **−335,8 kB (−21,1%)** |
+| Số request lần mở đầu | 7 | 7 | 0 |
+| First Contentful Paint (trung vị) | 1216 ms | **1092 ms** | −124 ms |
+| FCP — trung vị chênh **theo cặp** | — | — | **−236 ms**, 8/12 cặp nghiêng về bản mới |
+| `domContentLoaded` (trung vị) | 1063,5 ms | **959,5 ms** | −104 ms |
+
+**Kết luận trung thực về độ mạnh của số đo.** Phần byte là **tất định** và đo lại
+cho cùng kết quả mọi lượt. Phần thời gian **nghiêng đúng hướng** và cùng độ lớn
+với mức giảm byte, nhưng 8/12 cặp là **chưa đủ mạnh về thống kê** (kiểm định dấu
+cho `p ≈ 0,19`): đường đo phải đi qua tunnel SSH ra WAN, và nhiễu từng lượt của
+tunnel cùng cỡ với hiệu ứng. Kết luận được phép rút ra: **không có hồi quy**, và
+hướng cải thiện nhất quán. Kết luận **không** được phép rút ra: một con số cải
+thiện chính xác.
+
+**Khoảng hở của chính ADR này:** điều 3 đặt *loại* số đo nhưng **không đặt
+ngưỡng đạt**. Nghiệm thu vì vậy chỉ khẳng định được "đã đo trên board thật và
+không hồi quy". Muốn có ngưỡng thì phải bổ sung bằng một quyết định riêng.
+
+**Điều kiện để có số dứt khoát:** đo lại trên **LAN cùng mạng với board**, bỏ
+tunnel; và đo trên đúng máy khách mà người vận hành dùng — CPU máy khách là nơi
+chênh lệch 968 kB ↔ 558 kB tác động mạnh nhất qua thời gian parse/execute, phần
+mà phép đo qua tunnel này chưa tách ra được.
 
 ## `AUTH-WEBUX-2026-08-18-01` — Chỉ thị triển khai Wave 0 của Plan 57
 
@@ -1042,6 +1087,171 @@ implementation**, **chưa đủ tư cách baseline `M5 — APPROVED`**.
    Level 2 — nó vẫn mở, và thuộc Rev B.
 
 Số ADR tiếp theo còn trống tại thời điểm ban hành: **`ADR-050`**.
+
+## `AUTH-WEBUX-2026-08-19-02` — Bốn quyết định người: quét bus, chủ sở hữu C++, truy cập board, hiệu lực chữ ký
+
+**Ban hành:** 2026-08-19, theo bốn lựa chọn trực tiếp của **chủ sở hữu sản phẩm**
+khi được hỏi tường minh trong phiên làm việc.
+**Cơ sở:** `DOC_GOVERNANCE.md` §4.1 và §6 quy tắc 4/5. Nối tiếp
+`AUTH-WEBUX-2026-08-19-01`.
+
+**Vì sao cần record riêng.** Bốn mục dưới đây **không phải quyết định kỹ thuật**
+mà agent được tự quyết theo `CLAUDE.md`: một là cấp phép an toàn cho việc phát
+khung lên bus RS-485 đang vận hành, một là chỉ định người thật, một là cấp quyền
+truy cập thiết bị, một là chữ ký baseline mà §6 quy tắc 4 **cấm agent tự ký**.
+Agent đã dừng và hỏi; bốn ô "Lựa chọn đã chốt" dưới đây là câu trả lời của người.
+
+**Không cấp ADR mới.** Bốn mục này là quyết định *thẩm quyền và lịch trình*, không
+đổi kiến trúc, nên chúng ghi thẳng vào record này và ký ngược vào `ADR-039`/
+`ADR-049`. Số ADR trống kế tiếp **giữ nguyên `ADR-050`**.
+
+### Bốn quyết định của chủ sở hữu
+
+| # | Câu hỏi | Lựa chọn đã chốt |
+|---|---|---|
+| 1 | `T57-3.8` quét bus Modbus | **"Hoãn sang bản sau"** — `T57-3.8` **ra khỏi phạm vi Rev A**, chuyển sang **Rev B**. `ADR-039` giữ nguyên tư cách đặc tả, **không** được cấp phép thi hành |
+| 2 | Chủ sở hữu ba task C++ | **"Giao cho agent cả ba, bắt đầu ngay"** — `T57-3.9` (`apps/iobus`), `T57-3.19` + `T57-3.20` (`apps/hmi`). Tổng **7,0 người-ngày**, mốc bắt đầu **2026-08-19** |
+| 3 | Board Foxlinx | **"Uỷ quyền cho agent truy cập board"** — agent tự khôi phục kết nối, deploy Wave 0–3, và đo số nghiệm thu `T57-4.2` |
+| 4 | Chữ ký `ADR-034`…`ADR-049` | **"Giữ `WAIVED FOR IMPLEMENTATION`, có mốc hết hiệu lực"** — waive hợp lệ **tới cổng `RELEASE_READY` Rev A**; phải ký thật trước khi mở cổng đó |
+
+### Quyết định 1 — `T57-3.8` hoãn sang Rev B
+
+**Điều kiện xem lại (bắt buộc ghi theo §6 quy tắc 5):**
+
+| Mục | Nội dung |
+|---|---|
+| Owner của việc mở lại | Chủ sở hữu sản phẩm (người ban hành record này) |
+| Điều kiện mở khoá | PM chỉ định **Fieldbus Lead** và **QA/HIL Lead** — hai vai trò còn trống, vốn đã là điều kiện `CONDITIONAL` của Track B Modbus RTU từ phê duyệt PM/CTO **2026-08-04** |
+| Mốc xem lại | Khi mở phạm vi **Rev B**, hoặc sớm hơn nếu hai vai trò trên được chỉ định |
+| Ảnh hưởng | Web UI Rev A **không có** chức năng quét/dò thiết bị trên bus. Người vận hành thêm slave Modbus bằng cách nhập địa chỉ đã biết, không bằng dò tìm |
+| Gate | `IMPLEMENT_READY[Plan 57 T57-3.8]` = **BLOCKED (hoãn Rev B)** |
+
+**Lý do giữ chặn thay vì cấp phép.** Cấp phép thi hành khi Fieldbus Lead và QA/HIL
+Lead còn trống sẽ **tự mâu thuẫn với một quyết định đang có hiệu lực** — phê duyệt
+PM/CTO 2026-08-04 đặt hai vai trò đó làm tiền đề của Track B. Ngoài ra `ADR-039`
+mục "Rủi ro còn lại" đã ghi: kể cả một lượt quét hợp lệ 32 địa chỉ vẫn làm **trễ
+vòng poll của các slave đã cấu hình vài giây** — trên Rev A một cổng RS-485, đó là
+rủi ro cần người nhận, và hiện chưa có ai ở vai trò để nhận.
+
+**Không loại khỏi Rev A.** Chủ sở hữu chọn *hoãn*, không chọn *loại*. `ADR-039`
+**không** bị `SUPERSEDED`; 11 ràng buộc của nó là đầu vào nguyên vẹn cho Rev B.
+Mẫu số Plan 57 giữ **71 task**; `T57-3.8` được đánh dấu **chuyển phạm vi**, nên
+mẫu số *đóng plan cho Rev A* là **70**.
+
+### Quyết định 2 — Chủ sở hữu ba task C++
+
+| Task | Nơi sửa | Ước lượng | Owner | Mốc bắt đầu |
+|---|---|---:|---|---|
+| `T57-3.9` xem thô khung truyền Modbus | `apps/iobus` (C++) | 4,0 người-ngày | **Agent** | 2026-08-19 |
+| `T57-3.19` đếm ngược TTL ép tay trên màn Control | `apps/hmi` (C++/LVGL) | 1,5 người-ngày | **Agent** | 2026-08-19 |
+| `T57-3.20` chỉ báo "Web đang có người đăng nhập" | `apps/hmi` (C++/LVGL) | 1,5 người-ngày | **Agent** | 2026-08-19 |
+
+**Ràng buộc bắt buộc khi thi hành `T57-3.9` — kế thừa nguyên văn từ quyết định 1.**
+Việc `T57-3.8` bị hoãn **không** nới lỏng gì cho `T57-3.9`, và cũng **không** biến
+`T57-3.9` thành đường vòng để có chức năng quét:
+
+1. Vòng nhớ khung là **CHỈ-ĐỌC** (`ADR-046` điều 1). Chỉ chụp lại khung mà **chu kỳ
+   poll bình thường đã phát**. **Không một byte nào được phát thêm vì mục đích quan
+   sát.** Vi phạm là finding `P0`.
+2. Không mở handle thứ hai tới `/dev/ttyS*`, không chạy trên thread riêng — mọi
+   truy cập đi qua chính `BusWorker` (`ADR-039` mục "Nguyên thuỷ đúng đã có sẵn").
+3. Vòng nhớ nằm trong tiến trình `iobus` và **mất khi restart**. Đây là công cụ
+   chẩn đoán tại chỗ, **không** phải nhật ký lưu trữ — cấm mô tả nó như bằng chứng
+   vận hành lâu dài.
+
+### Quyết định 3 — Truy cập board Foxlinx
+
+**Uỷ quyền cấp cho agent**: khôi phục kết nối, deploy Wave 0–3, đo số nghiệm thu
+`T57-4.2`. Phạm vi là **board lab** `SOM-DDC-24-foxlinx`
+(`root@mekong-fac.ddns.net:2223`), không phải trạm vận hành thật.
+
+**Hiện trạng đo lại ngay sau khi được uỷ quyền (2026-08-19 08:54Z):**
+
+| Mục | Kết quả thật |
+|---|---|
+| TCP 2223 / 2222 | **Thông cả hai** — board đã trở lại mạng |
+| SSH | **Đăng nhập được**; `uptime` 22:48 ⇒ board khởi động lại khoảng **2026-08-18 10:06Z** |
+| Service | `mkddc-core`, `mkddc-iobus`, `mkddc-netcfg`, `mkddc-fakemcu` **active**; Web/API chạy dưới tên unit **`mkddc-web-pi`** (`:8081`), không phải `mkddc-web` |
+| Bản web đang chạy | `index-CTLcA5C6.js` = **967,67 kB**, mốc **2026-08-18 12:43Z** ⇒ đúng bản `63f841d` |
+
+**Hai đính chính với mô tả trong tờ trình:** bản trên board là **12:43Z** ngày
+2026-08-18 chứ không phải 03:15Z; và board **không còn mất kết nối** tại thời điểm
+ban hành record này. Việc "deploy bị chặn" trong Plan 57 §13b **hết hiệu lực** kể
+từ record này.
+
+**Đã thi hành ngay trong phiên (2026-08-19):**
+
+1. Sao lưu bản đang chạy sang `dist.bak-20260819` trước khi ghi đè.
+2. Deploy **Wave 0–3** bằng `scp` (board Buildroot không có `rsync`), build bằng
+   `npm run build:foxlinx` — không phải `npm run build` trần, vì cờ Programming
+   của Foxlinx là cờ **build-time**.
+3. Đo nghiệm thu `T57-4.2` theo `ADR-049` điều 3 bằng trình duyệt thật, 12 cặp
+   mẫu xen kẽ bản mới ↔ bản cũ trên cùng board. Chi tiết số đo ghi trong mục
+   `ADR-049` phía trên và Plan 57 §13b.
+
+**Kết luận nghiệm thu `T57-4.2`: ĐẠT ở mức mà `ADR-049` yêu cầu được** — đã có số
+đo trên board thật, byte đường tới hạn giảm **21,1%** (tất định), thời gian mở
+trang nghiêng đúng hướng (**−236 ms** trung vị theo cặp, 8/12 cặp), **không có hồi
+quy**. Hai giới hạn phải nêu kèm mỗi khi trích số này: (a) `ADR-049` **không đặt
+ngưỡng đạt**, nên nghiệm thu chỉ khẳng định được "đã đo và không hồi quy";
+(b) phép đo đi qua tunnel SSH ra WAN nên nhiễu từng lượt cùng cỡ hiệu ứng —
+kiểm định dấu `p ≈ 0,19`, **chưa đủ mạnh để tuyên bố một con số cải thiện chính
+xác**. Kích thước chunk (989,94 → 558,49 kB) vẫn **không** được dùng thay cho
+thời gian mở trang.
+
+**CI GitHub Actions — CHƯA CÓ QUYẾT ĐỊNH.** Chủ sở hữu không chọn phương án nào
+cho mục này khi được hỏi. Ghi lại đúng như vậy, không suy diễn:
+
+| Mục | Trạng thái |
+|---|---|
+| Nguyên nhân | Lỗi thanh toán của tổ chức từ 2026-08-17; mọi check fail sau 2–3 giây, **không phải lỗi mã** |
+| Owner | **Chủ sở hữu sản phẩm** — cần quyền billing GitHub của tổ chức, ngoài tầm agent |
+| Mốc | **Chưa đặt** |
+| Thực hành hiện hành | PR tiếp tục merge bằng bằng chứng test local. Đây là **ngoại lệ chưa có ngày đáo hạn**, không phải trạng thái bình thường |
+
+### Quyết định 4 — Hiệu lực của `WAIVED FOR IMPLEMENTATION`
+
+`ADR-034`…`ADR-049` (và `ADR-033`, cùng lớp waive, cùng Plan 57) giữ nguyên ô chữ
+ký `WAIVED FOR IMPLEMENTATION`, **kèm mốc hết hiệu lực**:
+
+| Mục | Nội dung |
+|---|---|
+| Waive cho phép | Dùng làm **đầu vào implementation** — đúng như `DOC_GOVERNANCE` §6 quy tắc 4 |
+| Waive **không** cho phép | Dùng làm **baseline `M5 — APPROVED`**; suy ra `RELEASE_READY`; suy ra đã có review của Tech Lead/UX Lead/PM |
+| Mốc hết hiệu lực | **Cổng `RELEASE_READY` Rev A.** Phải có chữ ký người thật trước khi mở cổng đó |
+| Nếu tới mốc mà chưa ký | Cổng `RELEASE_READY` **không được mở**. Không có đường waive lần hai |
+| Owner của việc ký | Tech Lead / UX Lead / PM theo từng ADR; điều phối bởi chủ sở hữu sản phẩm |
+
+Agent **không** được điền tên vào các ô chữ ký này trong bất kỳ tình huống nào
+(`DOC_GOVERNANCE` §6 quy tắc 4, và §5 "không điền giả chữ ký, nâng giả `M4/M5`").
+
+### Trạng thái các cổng sau record này
+
+| Cổng | Trạng thái |
+|---|---|
+| `PLAN_READY` | **PASS** — giữ nguyên |
+| `IMPLEMENT_READY[Plan 57 Wave 0/1/2]` | **PASS** — giữ nguyên |
+| `IMPLEMENT_READY[Plan 57 Wave 3]` | **PASS trừ `T57-3.8`** — giữ nguyên; ba task C++ đã có owner theo quyết định 2 |
+| `IMPLEMENT_READY[Plan 57 `T57-3.8`]` | **BLOCKED — hoãn sang Rev B** theo quyết định 1. Mở lại khi có Fieldbus Lead + QA/HIL Lead |
+| `IMPLEMENT_READY[Plan 57 Wave 4]` | **PASS** — giữ nguyên; đường nghiệm thu `T57-4.2` đã mở theo quyết định 3 |
+| `RELEASE_READY` | **N/A**, và nay có thêm một tiền đề tường minh: **chữ ký thật cho `ADR-033`…`ADR-049`** theo quyết định 4 |
+
+### Cấm cụ thể phát sinh từ record này
+
+1. **Không viết bất kỳ đường phát khung quét/dò nào ra bus RS-485** cho tới khi có
+   record cấp phép riêng. `T57-3.9` chỉ được đọc thụ động (`ADR-046` điều 1).
+   Vi phạm là finding `P0`.
+2. **Không dùng `T57-3.9` để tuyên bố đã có khả năng quét bus.** Xem khung đã phát
+   và chủ động dò thiết bị là hai việc khác nhau; gộp chúng trong tài liệu hay
+   giao diện là mô tả sai thiết bị.
+3. **Không dùng kích thước chunk thay cho thời gian mở trang** khi nghiệm thu
+   `T57-4.2` (`ADR-049` điều 3).
+4. **Không nâng `M4 → M5`** cho bất kỳ ADR nào trong `ADR-033`…`ADR-049` khi ô chữ
+   ký còn ghi `WAIVED FOR IMPLEMENTATION`.
+5. **Không ghi CI là "đã quyết"** dưới bất kỳ hình thức nào — mục đó còn mở, không
+   có mốc, và ngoại lệ merge-bằng-test-local phải được nêu đúng là ngoại lệ.
+
+Số ADR tiếp theo còn trống: **`ADR-050`** (record này không cấp ADR mới).
 
 ## Diễn giải bắt buộc
 
