@@ -167,6 +167,8 @@ func (a *App) Router() http.Handler {
 		webRouter.PublicFunc("POST /api/v1/auth/login", a.handleLogin),
 		webRouter.Protected("POST /api/v1/auth/logout", RoleViewer, a.handleLogout),
 		webRouter.Protected("GET /api/v1/system/status", RoleViewer, a.handleSystemStatus),
+		// `T57-3.4`: lịch sử 60 phút của CPU/RAM/nhiệt độ. Đọc ⇒ `viewer`.
+		webRouter.Protected("GET /api/v1/system/history", RoleViewer, a.handleSystemHistory),
 		// PA3-D02/D03: read model duy nhất của Landing và nhật ký vận hành.
 		// Cả hai ở `viewer`: quan sát không phải là đặc quyền, và mọi mutation
 		// vẫn nằm ở các endpoint riêng có role cao hơn.
@@ -184,6 +186,9 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("POST /api/v1/virtual-points", RoleAdmin, a.handleCreateVirtualPoint),
 		webRouter.Protected("PUT /api/v1/virtual-points/{id}", RoleAdmin, a.handleUpdateVirtualPoint),
 		webRouter.Protected("DELETE /api/v1/virtual-points/{id}", RoleAdmin, a.handleDeleteVirtualPoint),
+		// `T57-3.12`: "ai đang dùng điểm ảo này" — đọc, nên `viewer`. Nó không
+		// chặn xoá, chỉ cấp dữ kiện mà người vận hành đang thiếu.
+		webRouter.Protected("GET /api/v1/virtual-points/{id}/usage", RoleViewer, a.handleVirtualPointUsage),
 		webRouter.Protected("GET /api/v1/modbus/devices", RoleViewer, a.handleListModbusDevices),
 		webRouter.Protected("POST /api/v1/modbus/devices", RoleAdmin, a.handleCreateModbusDevice),
 		webRouter.Protected("PUT /api/v1/modbus/devices/{id}", RoleAdmin, a.handleUpdateModbusDevice),

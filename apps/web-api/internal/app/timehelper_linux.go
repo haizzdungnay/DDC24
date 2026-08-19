@@ -145,7 +145,7 @@ func waitForChronySync(timeout time.Duration) bool {
 	for time.Now().Before(deadline) {
 		output, err := exec.Command(chronycPath, "tracking").CombinedOutput()
 		if err == nil {
-			synchronized, _, _ := parseChronyTracking(string(output))
+			synchronized, _, _, _ := parseChronyTracking(string(output))
 			if synchronized {
 				return true
 			}

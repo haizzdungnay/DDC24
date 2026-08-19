@@ -77,8 +77,9 @@ type App struct {
 	programmingOperations *programmingapplication.OperationService
 	programmingRuntime    *programmingapplication.RuntimeService
 	// Plan 57 Wave 3
-	preferences *UserPreferenceStore
-	startedAt   time.Time
+	preferences   *UserPreferenceStore
+	systemHistory *SystemHistoryRing
+	startedAt     time.Time
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -166,6 +167,9 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	// `T57-3.16`: sổ phiên nằm trong bộ nhớ nên chỉ nói được về khoảng thời gian
 	// từ lúc tiến trình khởi động. Ghi lại mốc đó để giao diện nói ra giới hạn.
 	app.startedAt = time.Now().UTC()
+	// `T57-3.4`: vòng nhớ 60 phút cho CPU/RAM/nhiệt độ, lấy mẫu ngay trên đường
+	// `/system/status` mà trang Chẩn đoán đã poll.
+	app.systemHistory = NewSystemHistoryRing(app.startedAt)
 	if err := app.migrateLegacyPointConfig(); err != nil {
 		if app.programmingStore != nil {
 			app.programmingOperations.Close()

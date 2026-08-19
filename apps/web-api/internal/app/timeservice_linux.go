@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -71,7 +72,7 @@ func (s systemTimeService) Status(ctx context.Context, cfg ConfigTime) (TimeStat
 		location = time.UTC
 	}
 	tracking, trackingErr := s.command(ctx, chronycPath, "tracking")
-	synchronized, sourceValue, offsetValue := parseChronyTracking(tracking)
+	synchronized, sourceValue, offsetValue, refTime := parseChronyTracking(tracking)
 	mode := "manual"
 	if trackingErr == nil {
 		mode = "ntp"
@@ -81,6 +82,13 @@ func (s systemTimeService) Status(ctx context.Context, cfg ConfigTime) (TimeStat
 	if mode == "ntp" && !synchronized {
 		health = "degraded"
 		warnings = append(warnings, "NTP has not synchronized")
+	}
+	// `T57-3.15`: đồng hồ lệch quá một giây làm mốc thời gian trong historian và
+	// nhật ký cảnh báo không còn so được với thiết bị khác. "Đã đồng bộ" mà lệch
+	// 30 giây là một trạng thái phải nói ra, không phải một trạng thái khoẻ.
+	if synchronized && math.Abs(offsetValue) > 1000 {
+		health = "degraded"
+		warnings = append(warnings, fmt.Sprintf("clock offset %.0f ms exceeds 1000 ms", offsetValue))
 	}
 	var source *string
 	var offsetMS *float64
@@ -104,10 +112,18 @@ func (s systemTimeService) Status(ctx context.Context, cfg ConfigTime) (TimeStat
 			}
 		}
 	}
+	// `T57-3.15`: "lần đồng bộ cuối" từng là một trường luôn `null` trong hợp
+	// đồng — giao diện hiện `n/a` vĩnh viễn và không ai biết đó là thiếu dữ liệu
+	// hay là chưa bao giờ đồng bộ. Nay lấy từ `Ref time` của chrony.
+	var lastSyncUTC *string
+	if refTime != "" {
+		lastSyncUTC = &refTime
+	}
 	return TimeStatus{
 		NowUTC: now.UTC().Format(time.RFC3339), NowLocal: now.In(location).Format(time.RFC3339),
 		Timezone: zone, Mode: mode, Synchronized: synchronized, Source: source, OffsetMS: offsetMS,
-		RTCPresent: rtcPresent, RTCUTC: rtcUTC, Health: health, Warnings: warnings,
+		LastSyncUTC: lastSyncUTC,
+		RTCPresent:  rtcPresent, RTCUTC: rtcUTC, Health: health, Warnings: warnings,
 	}, nil
 }
 
@@ -200,9 +216,15 @@ func parseRTCUTC(output string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func parseChronyTracking(output string) (bool, string, float64) {
+// parseChronyTracking đọc `chronyc tracking`.
+//
+// Trả thêm `refTime` (`T57-3.15`): mốc tham chiếu gần nhất mà chrony ghi nhận,
+// tức thời điểm đồng hồ thật sự được chỉnh theo nguồn — thứ mà người vận hành
+// hỏi khi nghi ngờ mốc thời gian trong nhật ký.
+func parseChronyTracking(output string) (bool, string, float64, string) {
 	var source string
 	var offsetMS float64
+	var refTime string
 	leapNormal := false
 	for _, line := range strings.Split(output, "\n") {
 		key, value, ok := strings.Cut(line, ":")
@@ -224,9 +246,15 @@ func parseChronyTracking(output string) (bool, string, float64) {
 					offsetMS = seconds * 1000
 				}
 			}
+		case "Ref time (UTC)":
+			// Dạng `Wed Aug 19 06:12:13 2026`. Không parse được thì để trống —
+			// một mốc thời gian đoán sai còn tệ hơn không có mốc nào.
+			if instant, err := time.Parse("Mon Jan _2 15:04:05 2006", value); err == nil {
+				refTime = instant.UTC().Format(time.RFC3339)
+			}
 		case "Leap status":
 			leapNormal = value == "Normal"
 		}
 	}
-	return leapNormal && source != "", source, offsetMS
+	return leapNormal && source != "", source, offsetMS, refTime
 }
