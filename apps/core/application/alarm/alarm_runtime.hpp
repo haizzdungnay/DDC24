@@ -126,6 +126,12 @@ private:
 bool load_alarm_config(const std::string& path, bool must_exist,
                        std::vector<AlarmEntityConfig>* out);
 
+/* Phân tích một mảng luật cảnh báo từ chuỗi JSON có sẵn (`label` chỉ dùng cho
+ * thông điệp lỗi). `mkddc-alarm-sim` dùng hàm này để bộ mô phỏng và controller
+ * chấp nhận/từ chối cấu hình theo ĐÚNG một bộ luật. */
+bool parse_alarm_config_json(const std::string& src, const std::string& label,
+                             std::vector<AlarmEntityConfig>* out);
+
 } // namespace core
 
 #endif /* CORE_ALARM_RUNTIME_HPP */

@@ -138,6 +138,20 @@ add_executable(mkddc-schedule-sim application/schedule/schedule_sim_main.cpp)
 target_link_libraries(mkddc-schedule-sim PRIVATE core_lib)
 mkddc_apply_provenance(mkddc-schedule-sim)
 
+# `T57-2.13`/`T57-3.13` (`ADR-048`): bản song sinh của mkddc-schedule-sim cho
+# phía cảnh báo. Backend KHÔNG được tính xấp xỉ thay khi thiếu binary này — một
+# bản gần đúng sẽ được tin như bản thật đúng lúc người dùng đang đặt ngưỡng an
+# toàn, nên thiếu binary phải là 503 chứ không phải một con số đoán.
+add_executable(mkddc-alarm-sim application/alarm/alarm_sim_main.cpp)
+target_link_libraries(mkddc-alarm-sim PRIVATE core_lib)
+# Gắn tĩnh libstdc++/libgcc. Board Buildroot chỉ có tới `GLIBCXX_3.4.30`, còn
+# toolchain cross ở máy build sinh tham chiếu `GLIBCXX_3.4.32` cho các symbol mà
+# binary này dùng (iostream/sstream + nlohmann). Bản gắn động nạp được ở máy dev
+# nhưng **chết ngay trên board** — và triệu chứng là một endpoint 503 khó lần,
+# không phải một lỗi build. Đã đo trên board thật ngày 2026-08-19.
+target_link_options(mkddc-alarm-sim PRIVATE -static-libstdc++ -static-libgcc)
+mkddc_apply_provenance(mkddc-alarm-sim)
+
 option(CORE_BUILD_TESTS "Build core unit tests" ON)
 if(CORE_BUILD_TESTS)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -222,6 +236,16 @@ if(CORE_BUILD_TESTS)
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_runtime_symbols.py
               --binary $<TARGET_FILE:mkddc-core>
               --nm ${CMAKE_NM})
+
+  # `T57-2.13`/`T57-3.13`: kiểm ở mức BINARY, vì giá trị của engine nằm ở chỗ nó
+  # là đúng cái binary backend gọi — một unit test gọi thẳng AlarmRuntime sẽ bỏ
+  # lọt việc hợp đồng stdin/stdout lệch khỏi thứ Go gửi và đọc.
+  if(NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME alarm_sim_behaviour
+        COMMAND ${Python3_EXECUTABLE}
+                ${MKDDC_REPOSITORY_ROOT}/scripts/verify_alarm_sim.py
+                --binary $<TARGET_FILE:mkddc-alarm-sim>)
+  endif()
 endif()
 
 # ---- Fuzz harness (Phase 7 / VG-03) ----

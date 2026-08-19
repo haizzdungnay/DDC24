@@ -116,6 +116,19 @@ std::string ControlChannel::handle_line(const std::string& line) const
         return std::string("{\"result\":\"ok\"") + (fields.empty() ? "" : "," + fields) + "}";
     }
 
+    if (op == "frames") {
+        /* `T57-3.9` — đọc vòng nhớ giao dịch. Không có handler nghĩa là bản
+           iobus này chưa có tính năng; nói ra thay vì trả mảng rỗng, vì mảng
+           rỗng đọc thành "bus im lặng" — hai tình trạng khác hẳn nhau. */
+        if (!handlers_.frames_json)
+            return error_reply("unsupported", "iobus không hỗ trợ frames");
+        double bus = 0, limit = 0;
+        json_get_number(line, "bus", &bus);
+        json_get_number(line, "limit", &limit);
+        const std::string frames = handlers_.frames_json(static_cast<uint8_t>(bus), static_cast<int>(limit));
+        return std::string("{\"result\":\"ok\",\"frames\":") + frames + "}";
+    }
+
     if (op == "apply_config") {
         if (!handlers_.apply_config)
             return error_reply("unsupported", "iobus không hỗ trợ apply_config");

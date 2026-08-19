@@ -53,6 +53,9 @@ struct ControlProbeResult {
 struct ControlHandlers {
     /* Trả JSON object (không có dấu ngoặc ngoài) mô tả trạng thái hiện tại. */
     std::function<std::string()> status_fields;
+    /* `T57-3.9`: trả JSON mảng khung gần nhất. `bus_filter = 0` là mọi bus.
+       CHỈ-ĐỌC — không phát gì ra dây (`ADR-046` điều 1). */
+    std::function<std::string(uint8_t /*bus_filter*/, int /*limit*/)> frames_json;
     /* Nạp lại cấu hình tại ranh giới giữa hai transaction. Trả false ⇒ REJECT
      * và iobus GIỮ generation cũ đang chạy (FW_SOM_DESIGN §9). */
     std::function<bool(uint64_t /*revision*/, const std::string& /*checksum*/,

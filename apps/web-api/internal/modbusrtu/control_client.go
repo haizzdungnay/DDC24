@@ -145,3 +145,39 @@ func (c ControlClient) Status() (StatusReply, error) {
 	err := c.request(map[string]any{"op": "status"}, &reply)
 	return reply, err
 }
+
+// FrameRecord — một giao dịch Modbus đã thực hiện, đọc từ vòng nhớ của iobus.
+//
+// `T57-3.9` (`ADR-046` bản sửa 2026-08-19): Rev A ghi BẢN GHI GIAO DỊCH, không
+// phải byte thô — libmodbus không lộ bộ đệm wire, và thay lớp transport của nó
+// là rủi ro không tương xứng với một tính năng chẩn đoán.
+type FrameRecord struct {
+	At        int64  `json:"at"`
+	Bus       int    `json:"bus"`
+	Slave     int    `json:"slave"`
+	FC        int    `json:"fc"`
+	Addr      int    `json:"addr"`
+	Count     int    `json:"count"`
+	OK        bool   `json:"ok"`
+	Reason    string `json:"reason"`
+	ElapsedUS int    `json:"elapsedUs"`
+	Attempt   int    `json:"attempt"`
+}
+
+type FramesReply struct {
+	Result string        `json:"result"`
+	Reason string        `json:"reason"`
+	Code   string        `json:"code"`
+	Frames []FrameRecord `json:"frames"`
+}
+
+// Frames đọc vòng nhớ giao dịch. CHỈ ĐỌC — không phát gì ra bus.
+//
+// `busID = 0` nghĩa là mọi bus. iobus bản cũ chưa có op này trả `unsupported`;
+// nơi gọi phải phân biệt điều đó với "bus im lặng", vì hai tình trạng đó dẫn
+// tới hai kết luận trái ngược khi đứng ở hiện trường.
+func (c ControlClient) Frames(busID, limit int) (FramesReply, error) {
+	var reply FramesReply
+	err := c.request(map[string]any{"op": "frames", "bus": busID, "limit": limit}, &reply)
+	return reply, err
+}

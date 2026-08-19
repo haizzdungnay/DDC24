@@ -222,6 +222,9 @@ func (a *App) Router() http.Handler {
 		// `T57-3.11`: mẫu thiết bị dựng sẵn. ĐỌC ⇒ `viewer`; mẫu chỉ điền sẵn
 		// form, người dùng vẫn phải xác nhận và lưu như bình thường.
 		webRouter.Protected("GET /api/v1/modbus/templates", RoleViewer, a.handleListModbusTemplates),
+		// `T57-3.9` (`ADR-046` bản sửa 2026-08-19): đọc vòng nhớ giao dịch của
+		// iobus. CHỈ ĐỌC, không phát gì ra bus ⇒ `viewer`.
+		webRouter.Protected("GET /api/v1/modbus/frames", RoleViewer, a.handleModbusFrames),
 		webRouter.Protected("GET /api/v1/modbus/export", RoleViewer, a.handleModbusExport),
 		webRouter.Protected("POST /api/v1/modbus/import", RoleAdmin, a.handleModbusImport),
 		webRouter.Protected("PUT /api/v1/modbus/devices/{id}/enabled", RoleAdmin, a.handleModbusDeviceEnabled),

@@ -507,22 +507,16 @@ void AlarmRuntime::copy_lifecycle(const Entity& old_entity, Entity* entity)
     entity->last_status = old_entity.last_status;
 }
 
-bool load_alarm_config(const std::string& path, bool must_exist,
-                       std::vector<AlarmEntityConfig>* out)
+/* Tách phần PHÂN TÍCH khỏi phần ĐỌC TỆP để `mkddc-alarm-sim` nạp được một luật
+ * đến từ stdin bằng CHÍNH bộ phân tích và bộ kiểm tra ràng buộc mà controller
+ * dùng. Nếu bộ mô phỏng có bản phân tích riêng, nó sẽ chấp nhận những cấu hình
+ * mà controller từ chối — và người dùng chỉ phát hiện điều đó sau khi tải luật
+ * lên thiết bị thật. */
+bool parse_alarm_config_json(const std::string& src, const std::string& label,
+                             std::vector<AlarmEntityConfig>* out)
 {
+    const std::string path = label;
     out->clear();
-    std::string src;
-    const int rerr = read_file(path, &src);
-    if (rerr == ENOENT && !must_exist) {
-        std::fprintf(stderr, "WARN  alarm_cfg.missing path=%s (alarms disabled)\n",
-                     path.c_str());
-        return true;
-    }
-    if (rerr != 0) {
-        std::fprintf(stderr, "ERROR alarm_cfg.open_fail path=%s errno=%d (%s)\n",
-                     path.c_str(), rerr, std::strerror(rerr));
-        return false;
-    }
 
     std::string err;
     const json::ValuePtr root = json::Parser::parse(src, &err);
@@ -559,6 +553,25 @@ bool load_alarm_config(const std::string& path, bool must_exist,
     std::fprintf(stderr, "INFO  alarm_cfg.loaded path=%s entities=%zu\n",
                  path.c_str(), out->size());
     return true;
+}
+
+bool load_alarm_config(const std::string& path, bool must_exist,
+                       std::vector<AlarmEntityConfig>* out)
+{
+    out->clear();
+    std::string src;
+    const int rerr = read_file(path, &src);
+    if (rerr == ENOENT && !must_exist) {
+        std::fprintf(stderr, "WARN  alarm_cfg.missing path=%s (alarms disabled)\n",
+                     path.c_str());
+        return true;
+    }
+    if (rerr != 0) {
+        std::fprintf(stderr, "ERROR alarm_cfg.open_fail path=%s errno=%d (%s)\n",
+                     path.c_str(), rerr, std::strerror(rerr));
+        return false;
+    }
+    return parse_alarm_config_json(src, path, out);
 }
 
 bool AlarmRuntime::load(const std::string& path, bool must_exist)

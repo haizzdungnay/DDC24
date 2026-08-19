@@ -199,7 +199,8 @@ if(IOBUS_BUILD_TESTS)
       adapters/modbus_rtu/tests/test_bus_worker.cpp
       adapters/modbus_rtu/tests/test_control_channel.cpp
       adapters/modbus_rtu/tests/test_modbus_master_fake.cpp
-      adapters/modbus_rtu/tests/test_modbus_tcp.cpp)
+      adapters/modbus_rtu/tests/test_modbus_tcp.cpp
+      adapters/modbus_rtu/tests/test_frame_ring.cpp)
   target_link_libraries(iobus_tests PRIVATE iobus_lib)
   # GCC13 -O3 false positive (PR109945) với vector<struct nhỏ> trong test fixture
   target_compile_options(iobus_tests PRIVATE -Wno-error=stringop-overflow)

@@ -68,7 +68,7 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 | ADR-043 | **Tuỳ chọn người dùng lưu trên thiết bị theo tài khoản, dạng túi khoá-giá trị có hạn mức, KHÔNG phải schema có kiểu.** `GET/PUT /api/v1/me/preferences` trả một object JSON ≤ 16 KB do FE tự định hình (ghim, khung nhìn, âm thanh alarm). Backend **không** hiểu nội dung, chỉ cưỡng chế hạn mức và quyền sở hữu — mỗi tuỳ chọn UI mới mà phải đổi hợp đồng backend là một vòng lặp không đáng có. Đọc/ghi chỉ tuỳ chọn của **chính mình**; `admin` cũng không đọc được của người khác qua endpoint này. Phục vụ `T57-3.2`, gỡ giới hạn "chỉ trên trình duyệt này" của `T57-2.3`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-044 | **Chỉ số hệ alarm ISA-18.2 tính TẠI THỜI ĐIỂM HỎI từ nhật ký, không có tiến trình tổng hợp nền.** Thi hành `ADR-036` ở tầng Go: `GET /api/v1/alarms/metrics?window=` đọc `alarm_history.jsonl` đã xoay vòng và trả `rate10m`/`ratePerHour`/`topRepeating`/`shelvedExpiring`. Cửa sổ tối đa **7 ngày** để một lần hỏi không quét cả kho 90 ngày. Thiếu nhật ký ⇒ `503` nói rõ, **cấm** trả 0 (0 và "không đọc được" là hai tình trạng khác nhau trên màn hình an toàn). Phục vụ `T57-3.3`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-045 | **"Hiệu lực thực tế" và cảnh báo xung đột lịch dùng chung một endpoint, và endpoint đó chỉ là VỎ gọi Core.** Thi hành `ADR-038`: `GET /api/v1/schedules/effective?pointId=&from=&to=` gọi `mkddc-schedule-sim --point`; thiếu binary ⇒ `503` kèm giải thích, **cấm** rơi về bản tính trong Go. Cảnh báo xung đột khi soạn là **cùng dữ liệu, khác cách trình bày** — không mở endpoint thứ hai để hai đường không trôi khỏi nhau. Phục vụ `T57-3.5`, `T57-3.6`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
-| ADR-046 | **Xem thô khung truyền Modbus là VÒNG NHỚ CHỈ-ĐỌC trong iobus, lấy theo yêu cầu; không mở luồng đẩy và không ghi ra bus.** `GET /api/v1/modbus/frames?bus=&limit=` trả tối đa 200 khung gần nhất (mốc thời gian, hướng, slave, mã hàm, byte thô rút gọn, CRC, kết quả/timeout). Vòng nhớ nằm trong tiến trình iobus, mất khi restart — đây là công cụ chẩn đoán tại chỗ, **không** phải nhật ký lưu trữ. Chỉ chụp lại khung mà chu kỳ poll BÌNH THƯỜNG đã phát; **không một byte nào được phát thêm vì mục đích quan sát**. Phục vụ `T57-3.9`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
+| ADR-046 | **Xem thô khung truyền Modbus là VÒNG NHỚ CHỈ-ĐỌC trong iobus, lấy theo yêu cầu; không mở luồng đẩy và không ghi ra bus.** `GET /api/v1/modbus/frames?bus=&limit=` trả tối đa 200 khung gần nhất (mốc thời gian, bus, slave, mã hàm, địa chỉ, số thanh ghi, kết quả, phân loại `timeout`/`crc`, thời lượng, số lần phát). **Sửa 2026-08-19:** điều "byte thô dạng hex" `SUPERSEDED` — libmodbus không lộ bộ đệm wire, nên Rev A ghi **bản ghi giao dịch**; xem mục nội tuyến. Vòng nhớ nằm trong tiến trình iobus, mất khi restart — đây là công cụ chẩn đoán tại chỗ, **không** phải nhật ký lưu trữ. Chỉ chụp lại khung mà chu kỳ poll BÌNH THƯỜNG đã phát; **không một byte nào được phát thêm vì mục đích quan sát**. Phục vụ `T57-3.9`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-047 | **Buộc đổi mật khẩu mặc định: cờ `mustChangePassword` trên tài khoản, cưỡng chế ở BACKEND chứ không ở giao diện.** Phiên có cờ này chỉ gọi được `GET /api/v1/me` và `POST /api/v1/me/change-password`; mọi endpoint khác trả `403` với `reasonCode: password_change_required`. Cưỡng chế bằng cách ẩn màn hình ở FE là không cưỡng chế gì cả — `curl` vẫn đi thẳng. Cờ bật khi `admin` đặt lại mật khẩu và cho tài khoản khởi tạo lần đầu; tự tắt sau lần đổi thành công. Phục vụ `T57-3.17`; **không** đụng tới độ dài mật khẩu đã chốt ở `ADR-037`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-048 | **Mô phỏng luật cảnh báo đi qua `POST /api/v1/alarm-settings/simulate`, là VỎ gọi `mkddc-alarm-sim`.** Thi hành `ADR-035`: nhận một `AlarmSetting` bản nháp + chuỗi mẫu `(t, value)`, trả các lần bật/tắt kèm mốc thời gian và mức nghiêm trọng. Thiếu binary ⇒ `503` nói rõ thiếu gì; **cấm** bản tính xấp xỉ ở Go hay FE, kể cả "gần đúng". Mô phỏng **không** chạm cấu hình đang lưu và không ghi audit thay đổi. Phục vụ `T57-2.13`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-049 | **Code-splitting theo route dùng `React.lazy` cho các nhánh NẶNG và HIẾM, không chia nhỏ toàn bộ.** Chia theo lô nghiệp vụ: Programming, Xu hướng/biểu đồ, Lịch vận hành, Modbus RTU. Bốn màn hình mở đầu ca trực (Landing, Giám sát, Cảnh báo, Chẩn đoán) **ở lại chunk chính** — chia chúng ra chỉ đổi một lần tải thành hai lần chờ. Mỗi ranh giới `lazy` phải có `Suspense` với khối trạng thái thật, không màn hình trắng. Số đo bắt buộc là **thời gian mở trang đầu trên board thật**, không phải kích thước tệp. Phục vụ `T57-4.2`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
@@ -856,8 +856,43 @@ nên câu trả lời phải lấy bằng máy phân tích bus cắm song song.
    (`ADR-039`), và task này **không** bị chặn bởi ranh giới đó.
 2. Vòng nhớ nằm trong tiến trình iobus và **mất khi restart**. Đây là công cụ
    chẩn đoán tại chỗ, không phải nhật ký lưu trữ; nói rõ điều này trên giao diện.
-3. Byte thô hiện dạng hex, cắt ở 64 byte mỗi khung kèm dấu hiệu đã cắt.
+3. ~~Byte thô hiện dạng hex, cắt ở 64 byte mỗi khung kèm dấu hiệu đã cắt.~~
+   **`SUPERSEDED` 2026-08-19 — xem "Sửa đổi 2026-08-19" ở cuối mục này.** Rev A
+   ghi **bản ghi giao dịch**, không có byte thô.
 4. Vai trò `viewer` — đây là **đọc**, và người giám sát phải xem được (PR-MBRTU-001).
+
+### Sửa đổi 2026-08-19 — Rev A ghi bản ghi giao dịch, không có byte thô
+
+**Vì sao phải sửa chính ADR này.** Khi khảo sát để thi hành `T57-3.9`, điểm chèn
+vòng nhớ trong `apps/iobus/adapters/modbus_rtu/bus_worker.cpp` đã rõ, nhưng điều
+3 ở trên **không thực hiện được như đã hứa**: libmodbus không lộ bộ đệm wire ra
+ngoài. Muốn có byte thô phải thay lớp transport của chính thư viện đang điều
+khiển bus RS-485 thật.
+
+**Quyết định.** Rev A ghi **bản ghi giao dịch**, không phải byte thô:
+
+| Trường | Nội dung |
+|---|---|
+| `at` | Mốc thời gian |
+| `bus`, `slave` | Bus nào, slave nào |
+| `fc`, `addr`, `count` | Mã hàm, địa chỉ đầu, số thanh ghi/bit |
+| `ok` | Giao dịch thành công hay không |
+| `reason` | `timeout` · `crc` · `exception` · `ok` |
+| `elapsed_us` | Thời lượng lượt phát |
+| `attempt` | Lần phát thứ mấy (retry là dữ liệu chẩn đoán, không phải nhiễu) |
+
+**Ba câu hỏi hiện trường mà mục "Bối cảnh" của ADR này nêu vẫn trả lời được đủ:**
+khung có ra dây không (`at` + `attempt` tăng), slave có trả lời không (`ok`), CRC
+đúng không (`reason=crc`). Thứ mất đi là khả năng đọc từng byte để soi lỗi đóng
+khung ở tầng thấp — việc mà máy phân tích bus làm tốt hơn, và không phải việc mà
+một giao diện web nên gánh bằng cách thay transport của thư viện.
+
+**Không đổi gì khác.** Bốn ràng buộc còn lại của `ADR-046` giữ nguyên hiệu lực:
+vòng nhớ CHỈ-ĐỌC, không byte nào phát thêm vì mục đích quan sát, không mở handle
+thứ hai tới cổng, mất khi restart, tối đa 200 khung, vai trò `viewer`.
+
+**Nếu Rev B cần byte thô** thì đó là một quyết định riêng, phải cân với rủi ro
+thay lớp truyền — không được suy ra từ mục này.
 
 ## ADR-047 — Buộc đổi mật khẩu mặc định cưỡng chế ở backend, không ở giao diện
 
@@ -896,6 +931,22 @@ và trả các lần bật/tắt kèm mốc thời gian, mức nghiêm trọng, 
 2. **Không chạm cấu hình đang lưu**, không ghi audit thay đổi (chỉ là phép thử),
    và không phát bất kỳ lệnh nào xuống thiết bị.
 3. Giới hạn **1000 mẫu** mỗi lần gọi; vượt thì `400`.
+
+### Trạng thái thi hành (2026-08-19)
+
+`mkddc-alarm-sim` **đã tồn tại**: `apps/core/application/alarm/alarm_sim_main.cpp`
+với target build trong `apps/core/CMakeLists.txt`. Trước ngày này, ADR đặc tả một
+binary **chưa từng được viết** — endpoint đã đúng hợp đồng `503` nhưng tính năng
+không dùng được ngoài hiện trường. Khoảng hở đó đóng lại cùng `T57-3.9`.
+
+Binary là một vỏ mỏng quanh `AlarmRuntime`, nạp luật bằng chính
+`parse_alarm_config_json` của controller, nên bộ mô phỏng từ chối **đúng** những
+cấu hình mà thiết bị sẽ từ chối. Kiểm ở mức binary bằng ctest
+`alarm_sim_behaviour` (13 trường hợp, `scripts/verify_alarm_sim.py`) — hợp đồng
+stdin/stdout cũng là thứ phải khoá, không chỉ ngữ nghĩa.
+
+Đã cài trên board ở `/usr/sbin` **và** `/opt/mkddc-web/`: `exec.LookPath` phụ
+thuộc PATH của unit systemd, đường "cạnh chính mình" thì không.
 
 ## ADR-049 — Code-splitting theo lô nghiệp vụ nặng, giữ bốn màn hình mở ca ở chunk chính
 

@@ -679,3 +679,60 @@ TEST(RuntimeReconfigure, ApplyConfigTuCauHinhRongLamBusCountLonHonKhong)
     master.stop_workers();
     ::close(pty_master);
 }
+
+/* `T57-3.9` — vòng nhớ khung phải được ghi từ CHÍNH vòng quét thật.
+ *
+ * `FrameRing` có bộ test riêng cho hành vi của vòng nhớ; test này khoá thứ mà
+ * test đó không thể khoá: rằng `poll_once` thực sự gọi tới nó. Thiếu móc nối
+ * này thì mọi test vòng nhớ vẫn xanh trong khi màn hình chẩn đoán ngoài hiện
+ * trường mãi mãi rỗng — và một bảng rỗng đọc thành "bus im lặng".
+ */
+TEST(BusWorkerFrames, PollRecordsTransactionIncludingTheFailedOnes)
+{
+    const std::string prof = write_profile("frames",
+        R"json({"points":[{"name":"r","fc":3,"addr":0,"count":1,"type":"uint16"}]})json");
+
+    const int pty_master = ::posix_openpt(O_RDWR | O_NOCTTY);
+    ASSERT_GE(pty_master, 0);
+    ASSERT_EQ(::grantpt(pty_master), 0);
+    ASSERT_EQ(::unlockpt(pty_master), 0);
+    const char* pty_slave = ::ptsname(pty_master);
+    ASSERT_NE(pty_slave, nullptr);
+
+    FieldbusConfig cfg;
+    cfg.buses.push_back(bus_on(1, pty_slave));
+    cfg.slaves.push_back(slave_on(7, 1, prof, "s7"));   /* addr=7 trên bus 1 */
+
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    ModbusMaster master;
+    ASSERT_TRUE(master.open(cfg, cache, metrics));
+    ASSERT_EQ(metrics.frames().size(), 0u);
+
+    /* Đầu kia của pty không trả lời ⇒ giao dịch timeout. Timeout vẫn là một
+     * giao dịch ĐÃ XẢY RA: đây đúng là loại khung mà người kỹ thuật cần thấy. */
+    master.poll_once(1, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+
+    ASSERT_GT(metrics.frames().size(), 0u);
+    const std::string json = metrics.frames().to_json(0, 10);
+    EXPECT_NE(json.find("\"slave\":7"), std::string::npos) << json;
+    EXPECT_NE(json.find("\"bus\":1"), std::string::npos) << json;
+    EXPECT_NE(json.find("\"ok\":false"), std::string::npos) << json;
+    EXPECT_NE(json.find("\"reason\":\"timeout\""), std::string::npos) << json;
+    // Lọc theo một bus khác phải trả rỗng, không phải trả nhầm khung của bus 1.
+    EXPECT_EQ(metrics.frames().to_json(2, 10), "[]");
+
+    /* Mốc thời gian phải là đồng hồ TƯỜNG: giao diện hiện nó bằng `new Date()`.
+       Dùng nhầm `CLOCK_MONOTONIC` (uptime) sẽ cho một cột giờ năm 1970 — đúng
+       lỗi đã bị bắt ở đây ngày 2026-08-19. */
+    const uint64_t wall_now = iobus::fieldbus::frame_wall_clock_ms();
+    const size_t at_pos = json.find("\"at\":");
+    ASSERT_NE(at_pos, std::string::npos);
+    const uint64_t at_ms = std::strtoull(json.c_str() + at_pos + 5, nullptr, 10);
+    EXPECT_GT(at_ms, wall_now - 60000ull) << "at=" << at_ms << " wall=" << wall_now;
+    EXPECT_LE(at_ms, wall_now);
+
+    master.close();
+    ::close(pty_master);
+    ::unlink(prof.c_str());
+}
