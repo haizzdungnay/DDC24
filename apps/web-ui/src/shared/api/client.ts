@@ -35,7 +35,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type SystemHistoryResponse, type UserAccessResponse, type UserAccessRow, type VirtualPointUsage, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmMetrics, type AlarmSetting, type AlarmSimulateResult, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type ScheduleEffectiveResponse, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type SystemHistoryResponse, type UserAccessResponse, type UserAccessRow, type VirtualPointUsage, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -1276,6 +1276,27 @@ export const apiClient = {
   async getMe(): Promise<CurrentUser> {
     if (IS_DEMO) return { username: 'demo', role: 'admin' }
     return requestJson<CurrentUser>('/me')
+  },
+
+  /** `T57-3.3` — chỉ số hệ alarm ISA-18.2. Lỗi KHÔNG được nuốt thành 0: nơi gọi
+   *  phải phân biệt "không có cảnh báo" với "không đọc được nhật ký". */
+  async getAlarmMetrics(window: '10m' | '1h' | '24h' | '7d' = '24h'): Promise<AlarmMetrics> {
+    if (IS_DEMO) return { window, windowS: 86400, rate10m: 0, ratePerHour: 0, totalRaised: 0, flooding: false, topRepeating: [], shelved: [] }
+    return requestJson<AlarmMetrics>(`/alarms/metrics?window=${window}`, { cache: 'no-store' })
+  },
+
+  /** `T57-2.13` — mô phỏng luật cảnh báo bằng chính engine của Core. */
+  async simulateAlarmSetting(setting: AlarmSetting, samples: Array<{ t: string; value: number }>): Promise<AlarmSimulateResult> {
+    return requestJson<AlarmSimulateResult>('/alarm-settings/simulate', {
+      method: 'POST',
+      body: JSON.stringify({ setting, samples })
+    })
+  },
+
+  /** `T57-3.5`/`T57-3.6`/`T57-3.7` — lịch nào thực sự điều khiển điểm này. */
+  async getScheduleEffective(pointId: string, from: string, to: string): Promise<ScheduleEffectiveResponse> {
+    const params = new URLSearchParams({ pointId, from, to })
+    return requestJson<ScheduleEffectiveResponse>(`/schedules/effective?${params.toString()}`, { cache: 'no-store' })
   },
 
   /** `T57-3.4` — lịch sử 60 phút của CPU/RAM/nhiệt độ. Vòng nhớ nằm trong tiến

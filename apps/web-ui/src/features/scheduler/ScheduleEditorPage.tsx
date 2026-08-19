@@ -12,6 +12,7 @@ import { roleAtLeast, useAuth } from '../auth'
 import { RuntimeStrip, StatusDot } from './components/StatusDot'
 import { ExceptionTab } from './tabs/ExceptionTab'
 import { AuditTab, RevisionTab } from './tabs/HistoryTabs'
+import { EffectiveTab } from './tabs/EffectiveTab'
 import { SimulateTab } from './tabs/SimulateTab'
 import { TargetTab } from './tabs/TargetTab'
 import { WeeklyTab } from './tabs/WeeklyTab'
@@ -19,7 +20,7 @@ import { PublishDialog } from './components/PublishDialog'
 import { EM_DASH, ERROR_CODE_HINTS, formatValue, restingValue } from './shared'
 import { useScheduler } from './useScheduler'
 
-type TabKey = 'weekly' | 'exceptions' | 'targets' | 'simulate' | 'revisions' | 'audit'
+type TabKey = 'weekly' | 'exceptions' | 'targets' | 'simulate' | 'effective' | 'revisions' | 'audit'
 
 /**
  * Editor một Schedule Object — 6 tab dùng chung một bản nháp.
@@ -145,6 +146,10 @@ export function ScheduleEditorPage() {
     { key: 'exceptions', label: 'Ngoại lệ', badge: draft.exception_schedule.length },
     { key: 'targets', label: 'Điểm điều khiển', badge: draft.target_objects.length },
     { key: 'simulate', label: 'Mô phỏng' },
+    /* `T57-3.5`/`T57-3.6`/`T57-3.7`: "Mô phỏng" nói lịch NÀY sẽ làm gì;
+       "Hiệu lực thực tế" nói điểm đó CUỐI CÙNG nghe ai khi nhiều lịch cùng
+       ghi — hai câu hỏi khác nhau nên là hai tab khác nhau. */
+    { key: 'effective', label: 'Hiệu lực thực tế' },
     { key: 'revisions', label: 'Phiên bản' },
     { key: 'audit', label: 'Nhật ký' }
   ]
@@ -229,6 +234,7 @@ export function ScheduleEditorPage() {
         {tab === 'exceptions' && <ExceptionTab draft={draft} canEdit={canEdit} onChange={patch} />}
         {tab === 'targets' && <TargetTab draft={draft} saved={saved} canEdit={canEdit} onChange={patch} />}
         {tab === 'simulate' && <SimulateTab schedule={saved} dirty={dirty} />}
+        {tab === 'effective' && <EffectiveTab schedule={saved} />}
         {tab === 'revisions' && <RevisionTab schedule={saved} canEdit={canEdit} onRestored={upsert} />}
         {tab === 'audit' && <AuditTab schedule={saved} />}
       </div>

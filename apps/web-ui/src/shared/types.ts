@@ -1123,6 +1123,46 @@ export interface UserAccount {
   mustChangePassword?: boolean
 }
 
+/** Chỉ số hệ alarm ISA-18.2 §16 — `T57-3.3`. */
+export interface AlarmMetrics {
+  window: string
+  windowS: number
+  /** Nhịp trong 10 phút gần nhất — con số so trực tiếp với ngưỡng flood. */
+  rate10m: number
+  ratePerHour: number
+  totalRaised: number
+  /** Quá 10 cảnh báo trong 10 phút theo ISA-18.2. */
+  flooding: boolean
+  topRepeating: Array<{ alarmId: string; name?: string; count: number }>
+  shelved: Array<{ alarmId: string; name?: string; shelvedAt: string }>
+}
+
+/** Kết quả mô phỏng luật cảnh báo — `T57-2.13`. Engine là binary Core. */
+export interface AlarmSimulateResult {
+  events: Array<{ at: string; event: string; severity?: string; value: number; reason?: string }>
+  engine: string
+}
+
+/** Hiệu lực thực tế của lịch trên một điểm — `T57-3.5`/`T57-3.6`/`T57-3.7`. */
+export interface ScheduleEffectiveSegment {
+  from: string
+  to: string
+  value: unknown
+  scheduleId?: string
+  scheduleName?: string
+  priority?: number
+  reason?: string
+}
+
+export interface ScheduleEffectiveResponse {
+  pointId: string
+  from: string
+  to: string
+  segments: ScheduleEffectiveSegment[]
+  conflicts: Array<{ at: string; scheduleIds: string[]; winnerId: string; detail?: string }>
+  engine: string
+}
+
 /** Lịch sử sức khoẻ máy chủ 60 phút — `T57-3.4`. */
 export interface SystemHistorySample {
   at: string
