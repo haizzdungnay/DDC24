@@ -8,7 +8,7 @@
 > **Đọc cùng:** [SW_BACNET_DESIGN](../02_design/software/SW_BACNET_DESIGN_MK-DDC-24_VI.md) ·
 > [BACNET_PICS_EPICS](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) ·
 > [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
-> [07_CORE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) · [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)
+> [07_CORE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) · [16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md)
 
 ---
 
@@ -121,7 +121,7 @@ Chi tiết đầy đủ tại [07 §8](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) �
 ## 5. Module/file cần có
 
 ```text
-services/iobus/bacnet/
+apps/iobus/adapters/bacnet/
 ├── bacnet_server.{hpp,cpp}       # init stack, event loop, socket/bind
 ├── bacnet_config.{hpp,cpp}       # bacnet.conf + device.conf loader
 ├── bacnet_objects.{hpp,cpp}      # object registry, read/write callbacks
@@ -135,7 +135,7 @@ services/iobus/bacnet/
     ├── test_bacnet_object_map.cpp
     └── test_bacnet_cov.cpp
 
-services/core/
+apps/core/adapters/bacnet/
 ├── bacnet_objtable.{hpp,cpp}     # publish point values/quality to plc_shm
 └── tests/test_bacnet_objtable.cpp
 ```

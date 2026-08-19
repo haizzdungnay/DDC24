@@ -221,9 +221,13 @@ git rev-parse HEAD | ssh SOM-DDC-24 "cat > ~/work/DDC-PROJECT/DEPLOYED_COMMIT"
 Verify trên board:
 
 ```bash
-ssh SOM-DDC-24 "ls ~/work/DDC-PROJECT/services/"
-# CMakeLists.txt  core  iobus
+ssh SOM-DDC-24 "ls ~/work/DDC-PROJECT/apps/"
+# core  hmi  iobus  netcfg  web-api  web-ui
 ```
+
+> **Sửa 2026-08-19:** trước `PLAN-ARCH-RESTRUCT-002` mục này kiểm `services/`. Thư mục đó
+> **không còn tồn tại**; nguồn SOM nằm ở `apps/` và `CMakeLists.txt` **ở gốc repo** là
+> entrypoint duy nhất.
 
 ---
 
@@ -231,29 +235,34 @@ ssh SOM-DDC-24 "ls ~/work/DDC-PROJECT/services/"
 
 ```bash
 ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && \
-  cmake -S services -B build/services -DCMAKE_BUILD_TYPE=Release \
+  cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release \
     -DIOBUS_BUILD_TESTS=ON -DCORE_BUILD_TESTS=ON && \
-  cmake --build build/services -j\$(nproc) && \
-  ctest --test-dir build/services --output-on-failure"
+  cmake --build build/fw -j\$(nproc) && \
+  ctest --test-dir build/fw --output-on-failure"
 ```
 
-**Pass criteria (đã verify 2026-06-13):**
+**Pass criteria — đường dẫn binary (đối chiếu cây build ngày 2026-08-19):**
 
 ```text
-- build/services/iobus/mkddc-iobus   ← executable aarch64
-- build/services/core/mkddc-core     ← executable aarch64
-- build/services/iobus/fake_mcu      ← executable aarch64
-- build/services/iobus/shm_dump_io   ← executable aarch64
-- ctest: 141/141 tests PASS (2.67s trên Orange Pi 5B)
+- build/fw/iobus/mkddc-iobus   ← executable aarch64
+- build/fw/core/mkddc-core     ← executable aarch64
+- build/fw/iobus/fake_mcu      ← executable aarch64
+- build/fw/iobus/shm_dump_io   ← executable aarch64
 ```
+
+> **Số đo test:** "141/141 PASS trong 2,67 s trên Orange Pi 5B" là **số lịch sử ngày 2026-06-13**
+> trên cây `services/` cũ và bo Orange Pi, **không** phải kỳ vọng hiện hành. Mốc host ngày
+> 2026-08-19 là **1031/1031 PASS, 16,45 s**. Đo lại trên bo rồi ghi số thật; đừng dẫn lại số cũ.
+> Giữ `--fresh`: build dir cũ còn `CMAKE_HOME_DIRECTORY` trỏ `services/` sẽ làm configure hỏng
+> nhưng `ctest` vẫn chạy binary cũ và báo "pass" — số đo giả.
 
 Emergency build (không test, chỉ để debug compile):
 
 ```bash
 ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && \
-  cmake -S services -B build/services -DCMAKE_BUILD_TYPE=Release \
+  cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release \
     -DIOBUS_BUILD_TESTS=OFF -DCORE_BUILD_TESTS=OFF && \
-  cmake --build build/services -j\$(nproc)"
+  cmake --build build/fw -j\$(nproc)"
 ```
 
 ---

@@ -12,11 +12,11 @@
 
 | Nhóm | Sở hữu code | Không được đụng | Hợp đồng giáp ranh |
 |------|-------------|------------------|---------------------|
-| Dev 1 — FW_MCU | `fw/` | `services/`, `web/` | `shared/iop_protocol.h` (chung với Dev 2) |
-| Dev 2 — SOM | `services/iobus/`, `services/core/`, `shared/` | `fw/`, `web/` | `iop_protocol.h` (với Dev 1), `mkddc_shm.h` (với Dev 3 đọc qua web→core) |
-| Dev 3 — Web/BE | `web/` | `fw/`, `services/` | REST + IPC command/setpoint tới core (với Dev 2) |
+| Dev 1 — FW_MCU | `firmware/` | `apps/`, `apps/web-api`, `apps/web-ui` | `contracts/iop/iop_protocol.h` (chung với Dev 2) |
+| Dev 2 — SOM | `apps/iobus/`, `apps/core/`, `contracts/` | `firmware/`, `apps/web-api`, `apps/web-ui` | `iop_protocol.h` (với Dev 1), `mkddc_shm.h` (với Dev 3 đọc qua web→core) |
+| Dev 3 — Web/BE | `apps/web-api/`, `apps/web-ui/` | `firmware/`, `apps/{core,iobus}` | REST + IPC command/setpoint tới core (với Dev 2) |
 
-> Quy tắc vàng: **`shared/iop_protocol.h` và `shared/mkddc_shm.h` là HỢP ĐỒNG + nguồn-chuẩn CUỐI (docs lệch → header thắng, xem [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md))**. Đổi 1
+> Quy tắc vàng: **`shared/iop_protocol.h` và `shared/mkddc_shm.h` là HỢP ĐỒNG + nguồn-chuẩn CUỐI (docs lệch → header thắng, xem [16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md))**. Đổi 1
 > bên = đổi cả hai bên + bump version + chạy lại cross-test. KHÔNG fork.
 
 ---
@@ -111,9 +111,9 @@ S7 production:
 ### 2.2 Module / thư mục dự kiến
 
 ```
-services/iobus/   — xem 06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md cho file list
-services/core/    — xem 07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md cho file list
-shared/           — iop_protocol.h, mkddc_shm.h (rename từ kinexus_shm.h)
+apps/iobus/       — xem 06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md cho file list
+apps/core/        — xem 07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md cho file list
+contracts/        — iop/iop_protocol.h, shm/mkddc_shm.h (trước đây là shared/)
 ```
 
 ### 2.3 Kết quả đầu ra (acceptance)
@@ -133,9 +133,9 @@ shared/           — iop_protocol.h, mkddc_shm.h (rename từ kinexus_shm.h)
 [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) · [07_CORE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) ·
 [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) · [SW_ARCH_SPEC](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) ·
 [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) ·
-[23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) ·
+[23_GRAPH_STATEFUL_COMPONENTS_PLAN](archive/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) ·
 [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md) ·
-[26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md)
+[26_MODBUS_IMPLEMENTATION_PLAN](archive/26_MODBUS_IMPLEMENTATION_PLAN.md)
 
 ---
 

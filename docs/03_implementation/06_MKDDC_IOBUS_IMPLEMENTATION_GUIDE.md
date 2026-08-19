@@ -6,7 +6,7 @@
 > **Owner:** Dev 2 (SOM)
 > **Nguồn-chuẩn CUỐI CÙNG:** [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h) (protocol) +
 > [`contracts/shm/mkddc_shm.h`](../../contracts/shm/mkddc_shm.h) (SHM layout/path/ownership) — docs lệch header
-> → **header thắng** ([16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)). Diễn giải:
+> → **header thắng** ([16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md)). Diễn giải:
 > [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) ·
 > [ADR-005](../adr/ADR-005-three-process-architecture.md) · [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md)
 
@@ -27,7 +27,7 @@ mkddc-iobus CHỈ làm:
 - scale raw IO → engineering value
 - ghi IO state cho core (kx_io_shm, seqlock writer)
 - đọc output command từ core (ao_setpoint/do_cmd) và gửi SET_DO/SET_AO xuống MCU
-- (S7 #6) Modbus RTU master poll → ext cache; xem [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md)
+- (S7 #6) Modbus RTU master poll → ext cache; xem [26_MODBUS_IMPLEMENTATION_PLAN](archive/26_MODBUS_IMPLEMENTATION_PLAN.md)
 - (S7 #5) BACnet/IP datalink/object callbacks; xem [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md)
 - expose metrics + publish alarm
 
@@ -43,55 +43,57 @@ mkddc-iobus KHÔNG làm:
 
 ## 2. Cây thư mục chuẩn (cuối cùng)
 
+> **Đo lại 2026-08-19.** Sau `PLAN-ARCH-RESTRUCT-002` (ADR-025) cây nguồn chuyển từ `services/iobus/`
+> sang `apps/iobus/` và **xếp theo tầng hexagonal**: `domain/` (thuần nghiệp vụ) ← `application/`
+> (điều phối) ← `adapters/` (I/O, giao thức, hệ điều hành) ← `bootstrap/` (entry). `ports/` giữ
+> interface giữa các tầng. Bảng dưới là cây thật, không phải cây dự kiến.
+
 ```
-services/iobus/
+apps/iobus/
 ├── CMakeLists.txt
-├── README.md
-├── main.cpp                    — entry: init → load config → shm → UART → loops → signal → sd_notify
-├── config/
-│   ├── iobus_config.hpp        — struct config + default
-│   └── iobus_config.cpp        — load/parse JSON, validate, fallback
-├── iop/                        — TẦNG PROTOCOL (hợp đồng 05)
-│   ├── iop_port.hpp/.cpp       — mở/cấu hình /dev/ttyS2, read/write raw
-│   ├── iop_frame.hpp/.cpp      — build/parse frame
-│   ├── iop_crc.hpp/.cpp        — CRC-16/Modbus (wrap iop_crc16)
-│   ├── iop_client.hpp/.cpp     — state machine master + timeout/retry + SEQ
-│   └── iop_parser.hpp/.cpp     — IO_RESP/DIAG_RESP → struct
-├── io/
-│   ├── io_types.hpp            — IopIoResp, point types nội bộ
-│   ├── io_scaling.hpp/.cpp     — raw ↔ engineering (per sensor_type)
-│   └── io_cache.hpp/.cpp       — writer seqlock kx_io_shm
-├── bridge/
-│   ├── core_bridge.hpp/.cpp    — ranh giới shm với core (đọc output, ghi input)
-│   └── output_command.hpp/.cpp — phát hiện đổi → SET_DO/SET_AO
-├── diagnostics/
-│   ├── iobus_metrics.hpp/.cpp  — counters
-│   └── alarm_publisher.hpp/.cpp— /run/mkddc/alarm.sock JSON lines
-├── platform/
-│   ├── systemd_notify.hpp/.cpp — sd_notify READY/WATCHDOG
-│   └── realtime.hpp/.cpp       — SCHED_FIFO, mlockall, CPU affinity
-├── fieldbus/                   — S7 #6: Modbus RTU master, xem doc 25
-│   ├── modbus_master.hpp/.cpp
-│   ├── fieldbus_config.hpp/.cpp
-│   ├── device_profile.hpp/.cpp
-│   ├── poll_scheduler.hpp/.cpp
-│   ├── register_codec.hpp/.cpp
-│   └── ext_cache.hpp/.cpp
-├── bacnet/                     — S7 #5: BACnet/IP server/callbacks, xem doc 24
-│   ├── bacnet_server.hpp/.cpp
-│   ├── bacnet_config.hpp/.cpp
-│   ├── bacnet_objects.hpp/.cpp
-│   ├── bacnet_priority.hpp/.cpp
-│   ├── bacnet_cov.hpp/.cpp
-│   └── bacnet_reliability.hpp/.cpp
-└── tests/
-    ├── test_iop_crc.cpp
-    ├── test_iop_frame.cpp
-    ├── test_iop_parser.cpp
-    ├── test_io_scaling.cpp
-    ├── test_output_command.cpp
-    └── test_iop_client_fake_mcu.cpp   — integration với tools/fake_mcu
+├── bootstrap/
+│   └── main.cpp                      — entry: init → load config → shm → UART → loops → signal → sd_notify
+├── ports/
+│   └── command_sink.hpp              — interface nhận lệnh output từ tầng trên
+├── domain/
+│   ├── io/
+│   │   ├── io_types.hpp              — IopIoResp, point types nội bộ
+│   │   ├── io_scaling.hpp/.cpp       — raw ↔ engineering (per sensor_type)
+│   │   └── io_cache.hpp/.cpp         — writer seqlock kx_io_shm
+│   └── diagnostics/
+│       └── iobus_metrics.hpp/.cpp    — counters
+├── application/
+│   ├── config/
+│   │   └── iobus_config.hpp/.cpp     — struct config + load/parse JSON, validate, fallback
+│   ├── bridge/
+│   │   ├── core_bridge.hpp/.cpp      — ranh giới shm với core (đọc output, ghi input)
+│   │   └── output_command.hpp/.cpp   — phát hiện đổi → SET_DO/SET_AO
+│   └── diagnostics/
+│       └── alarm_publisher.hpp/.cpp  — /run/mkddc/alarm.sock JSON lines
+├── adapters/
+│   ├── iop/                          — TẦNG PROTOCOL (hợp đồng 05)
+│   │   ├── iop_port.hpp/.cpp         — mở/cấu hình /dev/ttyS2, read/write raw
+│   │   ├── iop_frame.hpp/.cpp        — build/parse frame
+│   │   ├── iop_crc.hpp/.cpp          — CRC-16/Modbus (wrap iop_crc16)
+│   │   ├── iop_client.hpp/.cpp       — state machine master + timeout/retry + SEQ
+│   │   └── iop_parser.hpp/.cpp       — IO_RESP/DIAG_RESP → struct
+│   ├── modbus_rtu/                   — trước đây là fieldbus/; xem plan 49
+│   │   ├── modbus_master.hpp/.cpp · modbus_tcp.hpp/.cpp
+│   │   ├── bus_worker.hpp/.cpp · control_channel.hpp/.cpp
+│   │   ├── fieldbus_config.hpp/.cpp · fieldbus_metrics.hpp/.cpp · fieldbus_time.hpp
+│   │   ├── device_profile.hpp/.cpp · poll_scheduler.hpp/.cpp
+│   │   └── register_codec.hpp/.cpp · ext_cache.hpp/.cpp
+│   ├── bacnet/                       — BACnet/IP server/callbacks; xem doc 25
+│   │   ├── bacnet_server.hpp/.cpp · bacnet_config.hpp/.cpp · bacnet_objects.hpp/.cpp
+│   │   ├── bacnet_priority.hpp/.cpp · bacnet_cov.hpp/.cpp · bacnet_reliability.hpp/.cpp
+│   │   └── bacnet_alarm.hpp/.cpp · bacnet_schedule.hpp/.cpp
+│   └── platform/
+│       ├── systemd_notify.hpp/.cpp   — sd_notify READY/WATCHDOG
+│       ├── realtime.hpp/.cpp         — SCHED_FIFO, mlockall, CPU affinity
+│       └── network_address.hpp/.cpp  — phân giải địa chỉ cho adapter mạng
+└── tests/                            — gộp toàn bộ unit + integration test của service
 ```
+
 > Rev A Phase 3 bắt buộc: config + iop/* + io/* + bridge/* + diagnostics/* + platform/* + tests/*.
 > S7 #5/#6 mở rộng thêm `bacnet/*` và `fieldbus/*` theo docs 24/25; vẫn giữ rule iobus không quyết output.
 
@@ -516,7 +518,9 @@ Chưa có subscriber → iobus drop + đếm (không buffer, không block poll).
 **Test framework chốt Rev A: GoogleTest (gtest)** — fetch qua CMake `FetchContent`
 (board không cần gtest, chỉ dev/CI). Toolchain: g++ ≥ 10, C++17.
 
-**`services/iobus/CMakeLists.txt` mẫu (copy được, build ngay):**
+**`apps/iobus/CMakeLists.txt` — trích để tham khảo:**
+
+> Sau `PLAN-ARCH-RESTRUCT-002`, `CMakeLists.txt` **ở gốc repo** là entrypoint duy nhất và `apps/iobus/CMakeLists.txt` được nạp qua `add_subdirectory`. Đoạn dưới là mẫu lịch sử để hiểu cấu trúc target, **không** còn copy ra dùng độc lập được.
 ```cmake
 cmake_minimum_required(VERSION 3.16)
 project(mkddc-iobus CXX)
@@ -557,10 +561,13 @@ gtest_discover_tests(iobus_tests)
 ```
 
 **Build + test local (PC dev, chưa cần board):**
+
+> **Sau `PLAN-ARCH-RESTRUCT-002`:** `CMakeLists.txt` **ở gốc repo** là entrypoint duy nhất; không cấu hình riêng từng service. Giữ `--fresh` để build dir cũ trỏ `services/` không làm ra số đo giả.
+
 ```bash
-cmake -S services/iobus -B build/iobus -DCMAKE_BUILD_TYPE=Release
-cmake --build build/iobus -j
-ctest --test-dir build/iobus --output-on-failure
+cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release
+cmake --build build/fw -j
+ctest --test-dir build/fw --output-on-failure
 ```
 **Install + systemd (trên SOM):**
 ```bash
@@ -656,9 +663,9 @@ Làm tuần tự; mỗi bước có command + kết quả mong đợi. Fail bư�
 
 | # | Việc | Command | Đạt khi |
 |---|------|---------|---------|
-| 1 | Build + unit test | `cmake -S services/iobus -B build/iobus && cmake --build build/iobus -j && ctest --test-dir build/iobus` | ctest 100% pass (crc 12/12 vector, frame round-trip, parser offset) |
-| 2 | Chạy fake MCU | `./build/iobus/fake_mcu --pty` | In ra `pty: /dev/pts/N` rồi chờ |
-| 3 | Handshake qua pty | `./build/iobus/mkddc-iobus --uart /dev/pts/N --log-level debug` | Log `iop.handshake mcu_iop=1.1 ... status=ok` rồi poll im lặng |
+| 1 | Build + unit test | `cmake --fresh -S . -B build/fw && cmake --build build/fw -j && ctest --test-dir build/fw` | ctest 100% pass (crc 12/12 vector, frame round-trip, parser offset) |
+| 2 | Chạy fake MCU | `./build/fw/iobus/fake_mcu --pty` | In ra `pty: /dev/pts/N` rồi chờ |
+| 3 | Handshake qua pty | `./build/fw/iobus/mkddc-iobus --uart /dev/pts/N --log-level debug` | Log `iop.handshake mcu_iop=1.1 ... status=ok` rồi poll im lặng |
 | 4 | SHM có dữ liệu | `xxd /dev/shm/mkddc_io_shm \| head -4` | 4 byte đầu = `01 44 58 4b` (magic LE); chạy lại sau 1s thấy ts/seq đổi |
 | 5 | Round-trip output | tool/test ghi `do_cmd[0]=1` vào shm (hoặc test_iop_client_fake_mcu case output) | Log `output.set_do mask=0x01 value=0x01 ack=ok`; IO_RESP kế có DO_FB bit0=1 → `do_feedback[0]=1` |
 | 6 | Negative: timeout | `fake_mcu --pty --timeout 5` (bỏ trả lời 5 frame) | Log retry → `iop.fault` → `iop.safe_state` → `iop.reconnect` → recover; alarm `IOP_TIMEOUT` ra `/run/mkddc/alarm.sock` |
@@ -741,4 +748,4 @@ core ghi ao_setpoint/do_cmd → core_bridge.read_outputs → output_command (CHA
 
 ---
 **Rev** 1.5 | 2026-06-27 (§3.14 MOD-013 DONE: ModbusTcp class, reconnect FSM, 10/10 test — annotate Done) · 1.4 | 2026-06-13 (thêm link/cây S7 #5/#6 BACnet/Modbus) · 1.3 | 2026-06-12 (packaging/systemd unit thật) · 1.2 | 2026-06-11 · Protocol: [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) ·
-Freeze: [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) · DoD: [13_DEFINITION_OF_DONE §3](13_DEFINITION_OF_DONE.md)
+Freeze: [16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md) · DoD: [13_DEFINITION_OF_DONE §3](13_DEFINITION_OF_DONE.md)

@@ -23,7 +23,7 @@
                           ▼
               ┌────────────────────────┐
               │       mkddc-core        │  C++17, SCHED_FIFO
-              │  Point table · Scan loop│  (services/core/)
+              │  Point table · Scan loop│  (apps/core/)   
               │  Graph · Priority ·     │
               │  Safe-state · BACnet obj│
               └───────────┬────────────┘
@@ -31,7 +31,7 @@
                           ▼ │
               ┌────────────────────────┐
               │      mkddc-iobus        │  C/C++17
-              │  MASTER UART/IOP ·      │  (services/iobus/)
+              │  MASTER UART/IOP ·      │  (apps/iobus/)   
               │  Modbus RTU master ·    │
               │  BACnet/IP datalink     │
               └───────────┬────────────┘
@@ -78,7 +78,7 @@
 | **Ghi** | snapshot IO vào `kx_io_shm` (seqlock); đọc `ao_setpoint[]`/`do_cmd[]` từ shm để gửi MCU |
 | **Cũng làm** | Modbus RTU master (poll async → ext cache; doc 25); BACnet/IP network datalink/callbacks (doc 24) |
 | **KHÔNG làm** | Không quyết định output theo logic (đó là việc core); chỉ thực thi lệnh đã được core quyết |
-| Trace | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [24_BACNET](25_BACNET_IMPLEMENTATION_PLAN.md), [25_MODBUS](26_MODBUS_IMPLEMENTATION_PLAN.md), [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) |
+| Trace | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [24_BACNET](25_BACNET_IMPLEMENTATION_PLAN.md), [25_MODBUS](archive/26_MODBUS_IMPLEMENTATION_PLAN.md), [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) |
 
 ### 2.3 mkddc-core (SOM, SCHED_FIFO)
 

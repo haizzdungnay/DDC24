@@ -31,10 +31,10 @@ Phân tích live board data (2026-06-30) phát hiện 4 gap phải fix trước 
 
 **IN scope (Phase 4.6):**
 - `shared/mkddc_shm.h`: thêm `kx_reliability_t` enum + `ui_reliability[]`
-- `services/iobus/io/io_scaling.cpp`: compute reliability per fault
-- `services/core/bacnet_objtable.cpp`: map kx_reliability_t → BACnet Reliability
-- `services/iobus/config/iobus_config.hpp/cpp`: parse AoChannelConfig
-- `services/core/bacnet_objtable.cpp`: AO property population + eng conversion
+- `apps/iobus/domain/io/io_scaling.cpp`: compute reliability per fault
+- `apps/core/adapters/bacnet/bacnet_objtable.cpp`: map kx_reliability_t → BACnet Reliability
+- `apps/iobus/application/config/iobus_config.hpp/cpp`: parse AoChannelConfig
+- `apps/core/adapters/bacnet/bacnet_objtable.cpp`: AO property population + eng conversion
 - `data/config/io_config.conf` template: cập nhật với AO fields
 
 **OUT of scope:**
@@ -100,7 +100,7 @@ uint8_t ui_reliability[KX_N_UI];  /* kx_reliability_t per channel */
 
 ⚠️ SHM size thay đổi → recompile iobus + core + web đồng bộ trước khi restart.
 
-### 4.2 BAC-014: `services/iobus/io/io_scaling.cpp`
+### 4.2 BAC-014: `apps/iobus/domain/io/io_scaling.cpp`
 
 `ui_to_eng()` signature mở rộng:
 ```cpp
@@ -129,7 +129,7 @@ void mark_all_iop_fault(kx_plc_shm_t* shm) {
 }
 ```
 
-### 4.3 IOB-AO-001: `services/iobus/config/iobus_config.hpp`
+### 4.3 IOB-AO-001: `apps/iobus/application/config/iobus_config.hpp`
 
 ```cpp
 struct AoChannelConfig {
@@ -148,7 +148,7 @@ struct IobusConfig {
 
 Parser: `nlohmann/json` parse `ao[].name/units/min_pv/max_pv`; fail-soft nếu missing fields.
 
-### 4.4 IOB-AO-002: `services/core/bacnet_objtable.cpp`
+### 4.4 IOB-AO-002: `apps/core/adapters/bacnet/bacnet_objtable.cpp`
 
 ```cpp
 // units_str → BACnet Units enum

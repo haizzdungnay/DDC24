@@ -4,6 +4,15 @@
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
 > **Phiên bản:** 1.49 | 2026-07-24 (COR-012: ADR-021 Phase A services/core restructure theo domain) · 1.48 | 2026-07-22 (merge historian v2 release gates with ADR-016/017 HOP/NWC/HNW task sets) · 1.47 | 2026-07-21 (bounded board schema-v5 activation GREEN; release gates open) · 1.46 | 2026-07-21 (ARM64 frozen schema-v5 package parity GREEN) · 1.38 | 2026-07-21 (physical rolling-prune engine code-local GREEN) · 1.25 | 2026-07-22 (ADR-017 NWC-000..017/HNW-000..013) · 1.24 | 2026-07-22 (ADR-016 HOP-000..077)
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
+> **Đường dẫn trong trường `File:` là cây nguồn tại thời điểm lập task, giữ nguyên làm hồ sơ.**
+> Ánh xạ sang cây thật sau `PLAN-ARCH-RESTRUCT-002`/ADR-025: `services/iobus/*` → `apps/iobus/`
+> (`adapters/iop` · `adapters/modbus_rtu` · `adapters/bacnet` · `adapters/platform` ·
+> `application/{config,bridge,diagnostics}` · `domain/{io,diagnostics}` · `bootstrap`);
+> `services/core/*` → `apps/core/` (`domain/{graph,priority,safety,alarm}` ·
+> `application/{runtime,st,schedule,alarm,programming}` · `adapters/{ipc,bacnet,config,persistence,diagnostics}`);
+> `services/hmi/*` → `apps/hmi/*`; `fw/*` → `firmware/stm32/*`; `web/backend/*` → `apps/web-api/internal/*`;
+> `shared/*.h` → `contracts/{iop,shm}/`. Cây thật chi tiết: [06 §2](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) ·
+> [07 §1](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md). **Task mở mới phải dùng đường dẫn `apps/`.**
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
 
@@ -654,7 +663,7 @@ Trạng thái: IMPLEMENTED LOCAL 2026-07-01 — 50% → raw 32768 via fake MCU; 
 
 ## Phase 3/4 — Modbus RTU Master (S7 #6)
 
-> Chi tiết triển khai: [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md).
+> Chi tiết triển khai: [26_MODBUS_IMPLEMENTATION_PLAN](archive/26_MODBUS_IMPLEMENTATION_PLAN.md).
 > **Doc gap audit 2026-06-17 — tất cả gap Modbus ĐÃ CLOSED. Sẵn sàng implement toàn bộ MOD-001..011.**
 
 Doc gap đã resolve (2026-06-17):

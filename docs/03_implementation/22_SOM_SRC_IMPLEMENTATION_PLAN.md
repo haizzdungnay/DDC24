@@ -7,7 +7,7 @@
 > 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) ·
 > 1.4 | 2026-06-13 (S7 #4 Active; thêm plan S7 #5 BACnet và S7 #6 Modbus) ·
 > 1.3 | 2026-06-12 (S7 #4: audit thiết kế xong, tách plan riêng
-> [23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md), lúc đó còn Draft) ·
+> [23_GRAPH_STATEFUL_COMPONENTS_PLAN](archive/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md), lúc đó còn Draft) ·
 > 1.2 | 2026-06-12 (thêm S7 Production Hardening — 6 việc còn lại sau S6;
 > #1 web_ipc overridden+audit, #2 SIGHUP reload, #3 packaging/systemd ĐÃ làm; cây §4 thêm
 > packaging/) · 1.1 | 2026-06-12 (SOM-COR-005: chốt microtask 1–4 ĐÃ làm theo
@@ -74,7 +74,7 @@ Dev 2 chỉ được code sau khi chốt 6 nguồn này:
 
 1. [contracts/iop/iop_protocol.h](../../contracts/iop/iop_protocol.h)
 2. [contracts/shm/mkddc_shm.h](../../contracts/shm/mkddc_shm.h)
-3. [16_CONTRACT_FREEZE.md](16_CONTRACT_FREEZE.md)
+3. [16_CONTRACT_FREEZE.md](archive/16_CONTRACT_FREEZE.md)
 4. [06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)
 5. [07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md)
 6. [21_VIRTUAL_COM_DECISION.md](21_VIRTUAL_COM_DECISION.md)
@@ -86,6 +86,12 @@ Rule:
 ---
 
 ## 4. Cấu trúc source cuối cùng phải có
+
+> **Cây dưới đây là cây tại thời điểm lập plan (gốc `services/`), giữ nguyên làm hồ sơ S0–S8.**
+> Từ `PLAN-ARCH-RESTRUCT-002`/ADR-025, nguồn nằm ở `apps/` và xếp theo tầng hexagonal. Cây thật
+> hiện hành đã đo lại và ghi ở [06 §2](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) (iobus) và
+> [07 §1](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) (core) — dùng hai chỗ đó khi cần biết file nằm đâu.
+
 
 ```text
 shared/
@@ -754,9 +760,9 @@ Thứ tự ưu tiên chốt 2026-06-12 (cụm 1+2+3 mở khóa Dev 3 web + board
 | 1 | `web_ipc` overridden + audit log (07 §8 đủ contract) | COR-007 | nhỏ | ✅ ĐÃ làm 2026-06-12 |
 | 2 | SIGHUP reload config không restart (CONFIG_SCHEMA D-5) | COR-008 | nhỏ | ✅ ĐÃ làm 2026-06-12 |
 | 3 | `packaging/systemd/*.service` + install script | SKEL-005 | rất nhỏ | ✅ ĐÃ làm 2026-06-12 |
-| 4 | Graph component thiếu: 10 type còn lại (OnDelay/OffDelay, Interlock, ManualAuto, RuntimeCounter/PulseCounter, SafeState, AlarmHigh/Low/Delay) + persist state qua reboot | COR-009/010 — [23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | vừa | ✅ ĐÃ làm 2026-06-13 — 97/97 test pass |
+| 4 | Graph component thiếu: 10 type còn lại (OnDelay/OffDelay, Interlock, ManualAuto, RuntimeCounter/PulseCounter, SafeState, AlarmHigh/Low/Delay) + persist state qua reboot | COR-009/010 — [23_GRAPH_STATEFUL_COMPONENTS_PLAN](archive/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | vừa | ✅ ĐÃ làm 2026-06-13 — 97/97 test pass |
 | 5 | BACnet/IP full: object registry, priority[16], relinquish_default, reliability, COV/alarm, BTL pretest | BAC-001..011 — [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md) | lớn | ✅ **DOC GAP CLOSED 2026-06-17** — sẵn sàng implement (BAC-CONFLICT-001 resolved, bind_interface added, Vendor_Identifier=9999) |
-| 6 | Modbus RTU master trong iobus: fieldbus.conf (rs485.device bắt buộc), profile parser, poll scheduler, ext cache (kx_ext_snapshot_msg_t → mkddc_shm.h), write queue | MOD-001..011 — [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md) | vừa-lớn | ✅ **DOC GAP CLOSED 2026-06-17** — sẵn sàng implement (kx_ext_snapshot struct resolved, device path resolved) |
+| 6 | Modbus RTU master trong iobus: fieldbus.conf (rs485.device bắt buộc), profile parser, poll scheduler, ext cache (kx_ext_snapshot_msg_t → mkddc_shm.h), write queue | MOD-001..011 — [26_MODBUS_IMPLEMENTATION_PLAN](archive/26_MODBUS_IMPLEMENTATION_PLAN.md) | vừa-lớn | ✅ **DOC GAP CLOSED 2026-06-17** — sẵn sàng implement (kx_ext_snapshot struct resolved, device path resolved) |
 
 Ràng buộc giữ nguyên:
 - Modbus/BACnet nằm trong `iobus`, KHÔNG phá rule "core quyết output" —
