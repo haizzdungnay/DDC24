@@ -8,6 +8,80 @@
 
 ## [Unreleased]
 
+### Added — `T57-3.9` xem khung truyền Modbus RTU, và `mkddc-alarm-sim` (2026-08-19)
+
+Đóng nốt phần task của Rev A Plan 57 (**70/70**) cùng hai khoảng hở đóng gói ghi
+ở mục dưới.
+
+**1. `T57-3.9` — bảng khung truyền, sau khi sửa `ADR-046` chứ không phải trước.**
+
+`ADR-046` bản ban hành hứa "byte thô hiện dạng hex". Không làm được: libmodbus
+không lộ bộ đệm wire, muốn có byte thô phải thay lớp transport của chính thư viện
+đang điều khiển bus RS-485 thật — rủi ro không tương xứng với một tính năng chẩn
+đoán. ADR được sửa trước (điều cũ đánh dấu `SUPERSEDED`, thêm mục "Sửa đổi
+2026-08-19 — Rev A ghi bản ghi giao dịch, không có byte thô"), rồi mới viết mã.
+
+| Lớp | Thay đổi |
+|---|---|
+| iobus | `adapters/modbus_rtu/frame_ring.hpp` — vòng nhớ 200 giao dịch, mutex, không cấp phát trong đường ghi |
+| iobus | `bus_worker.cpp` ghi lại mỗi lượt `modbus_read_*`, **kể cả lượt hỏng**, kèm phân loại `timeout`/`crc`/`error` và số lần phát |
+| iobus | Op `frames` trên control socket (`control_channel.*`, `bootstrap/main.cpp`) |
+| Go | `GET /api/v1/modbus/frames` (`RoleViewer`), kẹp `limit` về 200; iobus trả `unsupported` ⇒ **503 kèm nguyên văn lý do** |
+| FE | `FrameMonitor.tsx` trên trang chẩn đoán Modbus RTU |
+
+Nguyên tắc xuyên suốt các lớp: **"không đọc được" không bao giờ được rơi thành
+mảng rỗng**. Mảng rỗng đọc thành "bus im lặng", và hai tình trạng đó dẫn tới hai
+kết luận trái ngược khi người kỹ thuật đang đứng trước tủ.
+
+Giao diện in thẳng hai giới hạn thay vì để trong tài liệu: vòng nhớ **mất khi
+iobus khởi động lại**, và Rev A **không có byte thô**.
+
+**2. `mkddc-alarm-sim` — engine `ADR-035`/`ADR-048` đặc tả nhưng chưa từng tồn tại.**
+
+`apps/core/application/alarm/alarm_sim_main.cpp` + target build. Binary là một vỏ
+mỏng quanh `AlarmRuntime`: nạp luật bằng **chính** `parse_alarm_config_json` của
+controller (tách khỏi `load_alarm_config` trong cùng đợt), bơm mẫu vào
+`PointTable`, gọi `evaluate` từng bước, ghi lại các lần chuyển trạng thái. Không
+một dòng ngữ nghĩa cảnh báo nào được viết lại — một bản cài lại trong Go sẽ đúng
+cho tới ngày nó lệch khỏi bản C++, và ngày đó không ai biết.
+
+Kiểm ở **mức binary** (`scripts/verify_alarm_sim.py`, ctest `alarm_sim_behaviour`,
+13 trường hợp), vì thứ cần khoá là đúng cái binary backend gọi — kể cả hợp đồng
+stdin/stdout.
+
+**3. Cả hai engine đã cài lên board** ở `/usr/sbin` **và** cạnh binary web tại
+`/opt/mkddc-web/`: `exec.LookPath` phụ thuộc PATH của unit systemd, đường "cạnh
+chính mình" thì không.
+
+### Fixed — Hai lỗi bắt được trong chính đợt này (2026-08-19)
+
+1. **Mốc thời gian khung dùng nhầm `CLOCK_MONOTONIC`.** `bus_worker` lấy `now_ms`
+   của vòng quét, vốn là uptime. Giao diện đọc trường đó bằng `new Date(at)` nên
+   cột thời gian sẽ hiện **giờ năm 1970** — và cột thời gian là thứ người kỹ thuật
+   dùng để đối chiếu khung với thao tác vừa làm ở tủ, nên sai còn tệ hơn không có.
+   Sửa bằng `frame_wall_clock_ms()` (`CLOCK_REALTIME`); test `BusWorkerFrames` nay
+   khoá ràng buộc "mốc nằm trong 60 s gần đây theo đồng hồ tường".
+2. **`mkddc-alarm-sim` gắn động chết trên board.** Buildroot chỉ có tới
+   `GLIBCXX_3.4.30`, toolchain cross sinh tham chiếu `GLIBCXX_3.4.32`. Triệu
+   chứng phía người dùng là một endpoint 503 khó lần, **không** phải lỗi build.
+   Sửa bằng `-static-libstdc++ -static-libgcc` cho riêng binary này.
+
+### Verification (2026-08-19)
+
+| Bộ | Kết quả |
+|---|---|
+| `ctest --test-dir build/fw` (MODBUS+BACNET+HMI ON, `--fresh`) | **1049/1049 PASS** |
+| `go vet ./...` + `go test ./... -count=1` | PASS |
+| `npx vitest --run --environment jsdom src` | **110 file / 1056 test PASS** |
+| `npm run lint` + `npm run build:foxlinx` | PASS |
+| Board Foxlinx | `mkddc-core`/`mkddc-iobus`/`mkddc-web-pi` `active`; op `frames` trả `{"result":"ok","frames":[]}`; route `/api/v1/modbus/frames` trả `401` (đối chiếu `404` cho route không tồn tại); `mkddc-alarm-sim` chạy đúng dưới user `mkddc` |
+
+**Vòng nhớ rỗng trên board là trạng thái đúng, không phải lỗi:** board không có
+`fieldbus.json` nên không slave Modbus RTU nào được poll. Cấu hình thêm một thiết
+bị chỉ để sinh khung sẽ **phát byte ra bus RS-485 thật** — đúng điều `ADR-046`
+cấm. Đường ghi được phủ bằng test pty (`BusWorkerFrames`) thay vì bằng một lượt
+phát thật.
+
 ### Changed — Deploy bản vá `T57-3.13` lên board và hai khoảng hở engine mô phỏng lộ ra (2026-08-19)
 
 **Deploy.** Cross-build `mkddc-web` cho aarch64, sao lưu binary cũ
