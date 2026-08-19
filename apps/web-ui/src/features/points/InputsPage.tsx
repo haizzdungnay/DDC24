@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { apiClient, unitToIo } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
 import { Button } from '../../shared/components/Button'
+import { DraftDiffTable } from '../../shared/components/DraftDiffTable'
 import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { PointNameConflictNotice } from '../../shared/components/PointNameConflictNotice'
@@ -18,6 +19,7 @@ import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { isDigitalContact, type AiInputConfig, type AiSignalType, type AlarmSetting, type Point, type TrendSample } from '../../shared/types'
 import { clamp, cn, formatDataAge, formatTime, formatValue, isVisibleUniversalInput, NO_DATA, pointNumber, uiNode } from '../../shared/utils'
+import { aiInputDraftDiff } from './inputsDraftDiff'
 
 type TabKey = 'electrical' | 'scaling' | 'signal' | 'calibration' | 'alarmStorage' | 'diagnostics'
 type ElectricalMode = 'none' | 'volt' | 'voltCurrent' | 'resistance' | 'dry' | 'potentiometer' | 'light' | 'pulse'
@@ -71,6 +73,10 @@ export function InputsPage() {
   ], [configs, pointsState.data, virtualPointsState.data])
   const nameConflicts = useMemo(() => pointNameConflicts(namespaceEntries), [namespaceEntries])
   const dirty = useMemo(() => JSON.stringify(configs) !== JSON.stringify(savedConfigs), [configs, savedConfigs])
+  /* `T57-2.10` — bảng khác biệt "đang lưu ↔ bản nháp" (khối `BB-8`). Tính ở cấp
+     trang chứ không bên trong hộp thoại: hộp thoại chỉ tồn tại khi đang mở, còn
+     danh sách khác biệt phải tính được cả lúc đóng để nơi khác dùng lại. */
+  const draftDiffRows = useMemo(() => aiInputDraftDiff(savedConfigs, configs, pick), [configs, pick, savedConfigs])
   const filteredConfigs = useMemo(() => {
     const q = channelFilter.trim().toLowerCase()
     if (!q) return configs
@@ -384,12 +390,22 @@ export function InputsPage() {
       <Modal
         open={confirmOpen}
         title={pick('Lưu cấu hình UI?', 'Save UI config?')}
+        size="lg"
         confirmLabel="OK"
         cancelLabel="Cancel"
         onConfirm={() => { void confirmSave() }}
         onClose={() => setConfirmOpen(false)}
       >
-        {pick('Bạn có muốn lưu thay đổi không?', 'Do you want to save the changes?')}
+        {/* `T57-2.10`: hỏi "có muốn lưu không?" mà không nói lưu CÁI GÌ thì
+            người vận hành chỉ có thể bấm OK theo phản xạ. Cấu hình này đi
+            xuống thiết bị, nên hộp thoại phải liệt kê từng trường sắp đổi. */}
+        <div className="space-y-3 text-sm">
+          <p>{pick('Kiểm lại các thay đổi sau trước khi ghi xuống thiết bị:', 'Review the following changes before writing them to the device:')}</p>
+          <DraftDiffTable
+            rows={draftDiffRows}
+            emptyText={pick('Không có thay đổi nào so với cấu hình đã lưu.', 'No changes compared with the saved configuration.')}
+          />
+        </div>
       </Modal>
       {selected && (
         <CopyToChannelsModal
