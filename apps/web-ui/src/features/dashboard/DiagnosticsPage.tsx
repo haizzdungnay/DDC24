@@ -14,7 +14,8 @@ import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { useOverview } from '../../shared/overview/OverviewProvider'
 import { useRealtime } from '../../shared/realtime'
-import type { HealthResponse, Point } from '../../shared/types'
+import { TrendChart, type TrendSeries } from '../../shared/components/TrendChart'
+import type { HealthResponse, Point, TrendSample } from '../../shared/types'
 import { NO_DATA, formatDataAge, formatDateTime, formatUptime, isFreshIso, mergePointsById, metricStatusColor } from '../../shared/utils'
 
 const REALTIME_STALE_MS = 2500
@@ -42,7 +43,27 @@ export function DiagnosticsPage() {
   const health = useApi(apiClient.getHealth, [], { refreshMs: 5000 })
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
   const networkState = useApi(apiClient.getNetwork, [], { refreshMs: 10000 })
+  /* `T57-3.4`: một con số CPU tức thời không trả lời được câu hỏi thật sự của
+     người đang chẩn đoán — "vừa nãy có gì bất thường không?". Vòng nhớ 60 phút
+     ở backend trả lời được, và nó rẻ vì lấy mẫu ngay trên đường poll sẵn có. */
+  const historyState = useApi(apiClient.getSystemHistory, [], { refreshMs: 15_000 })
   const realtime = useRealtime()
+
+  /* Dựng dữ liệu biểu đồ từ mẫu backend. Chuỗi nào KHÔNG có mẫu nào thì không
+     vẽ: một đường phẳng ở 0 vì cảm biến nhiệt không đọc được sẽ bị đọc thành
+     "thiết bị mát", đúng lớp lỗi mà trang này tồn tại để tránh. */
+  const historySamples: TrendSample[] = (historyState.data?.samples ?? []).map((sample) => ({
+    time: sample.at,
+    __ts: Date.parse(sample.at),
+    ...(sample.cpuPercent === null ? {} : { cpu: sample.cpuPercent }),
+    ...(sample.ramPercent === null ? {} : { ram: sample.ramPercent }),
+    ...(sample.tempC === null ? {} : { temp: sample.tempC })
+  }))
+  const historySeries: TrendSeries[] = [
+    { key: 'cpu', label: 'CPU', color: 'var(--c-accent)', unit: '%' },
+    { key: 'ram', label: 'RAM', color: 'var(--c-good-fg)', unit: '%' },
+    { key: 'temp', label: pick('Nhiệt độ', 'Temperature'), color: 'var(--c-warn-fg)', unit: '°C' }
+  ].filter((series) => historySamples.some((sample) => sample[series.key] !== undefined))
 
   const polledPoints = pointsState.data ?? emptyPoints
   const points = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
@@ -208,6 +229,31 @@ export function DiagnosticsPage() {
           compact
           onOpenNetwork={() => navigate('/settings/network')}
         />
+      </Panel>
+
+      {/* `T57-3.4` — 60 phút gần nhất của CPU/RAM/nhiệt độ. */}
+      <Panel
+        title={pick('60 PHÚT GẦN NHẤT', 'LAST 60 MINUTES')}
+        subtitle={historyState.data?.sinceRestart
+          ? pick(
+            `Vòng nhớ trong dịch vụ web, tính từ ${formatDateTime(historyState.data.sinceRestart)} — mất khi dịch vụ khởi động lại.`,
+            `In-process ring since ${formatDateTime(historyState.data.sinceRestart)} — cleared when the web service restarts.`
+          )
+          : undefined}
+        className="p-3"
+      >
+        {historySeries.length && historySamples.length > 1
+          ? <TrendChart data={historySamples} series={historySeries} height={200} timeZone="local" showTable={false} showDots />
+          : (
+            <StateBlock
+              state="empty"
+              title={pick('Chưa đủ mẫu để vẽ', 'Not enough samples yet')}
+              detail={pick(
+                'Vòng nhớ bắt đầu từ lần khởi động dịch vụ web gần nhất; mở trang này vài phút sẽ có đường.',
+                'The ring starts at the last web service restart; leave this page open for a few minutes.'
+              )}
+            />
+          )}
       </Panel>
 
       <Panel title={pick('ĐỊNH DANH THIẾT BỊ', 'DEVICE IDENTITY')} className="p-3">

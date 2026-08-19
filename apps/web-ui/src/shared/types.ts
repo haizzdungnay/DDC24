@@ -1123,6 +1123,41 @@ export interface UserAccount {
   mustChangePassword?: boolean
 }
 
+/** Lịch sử sức khoẻ máy chủ 60 phút — `T57-3.4`. */
+export interface SystemHistorySample {
+  at: string
+  cpuPercent: number | null
+  ramPercent: number | null
+  tempC: number | null
+}
+
+export interface SystemHistoryResponse {
+  windowS: number
+  intervalS: number
+  /** Vòng nhớ chỉ có từ lần khởi động dịch vụ web gần nhất. */
+  sinceRestart: string
+  samples: SystemHistorySample[]
+}
+
+/** Tham chiếu tới một điểm ảo — `T57-3.12`. */
+export interface VirtualPointReference {
+  kind: 'alarm' | 'schedule' | 'program' | string
+  id: string
+  name?: string
+  detail?: string
+}
+
+export interface VirtualPointUsage {
+  pointId: string
+  tag?: string
+  references: VirtualPointReference[]
+  /** Phạm vi đã quét — danh sách rỗng chỉ có nghĩa khi biết đã quét những gì. */
+  scanned: string[]
+  /** Có nguồn không đọc được ⇒ danh sách KHÔNG đầy đủ. */
+  incomplete: boolean
+  errors?: string[]
+}
+
 /** Một dòng soát truy cập tài khoản — `T57-3.16`. */
 export interface UserAccessRow extends UserAccount {
   /** `null` = KHÔNG tìm thấy vết trong kho Activity. Có thể vì chưa từng đăng
