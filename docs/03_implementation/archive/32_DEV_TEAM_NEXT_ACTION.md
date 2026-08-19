@@ -1,6 +1,15 @@
 # 32 — Dev Team: Next Action FW SOM
 ## MK-DDC-24 — Yêu cầu triển khai các task còn lại
 
+> ## 🗄 ĐÃ LƯU TRỮ — 2026-08-19
+>
+> Hồ sơ **đã đóng**, giữ tại `docs/03_implementation/archive/` để truy nguyên.
+> **Không** dùng làm căn cứ mở việc mới hay làm nguồn-chuẩn cho mã hiện hành.
+>
+> **Lý do đóng:** Tài liệu tự đánh dấu `SUPERSEDED` (Rev 2.0); cả ba task chặn `IOB-006`/`MOD-012`/`BAC-012` đã xử lý và số liệu trong đó sai so với đo thật.
+>
+> **Đọc thay bằng:** [11_TASK_CHECKLIST](../11_TASK_CHECKLIST.md) · [31_PROTOCOL_LIB_INTEGRATION_PLAN](../31_PROTOCOL_LIB_INTEGRATION_PLAN.md)
+
 > **Document ID:** IMPL-DEV-NEXTACTION-MK-DDC-24-VI
 > **Phiên bản:** 2.0 | 2026-07-28 · 1.1 | 2026-06-22
 > **Người nhận:** Dev 2 (SOM), Tester
@@ -22,8 +31,8 @@ sai so với thực tế đo được ngày 2026-07-28 — đừng dùng nó đ�
 
 **Việc còn mở thật sự** không nằm ở đây mà ở:
 
-- [`docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md`](../review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md) — trạng thái và blocker hiện hành của FW SOM;
-- [`docs/handoff/`](../handoff/) — hợp đồng bàn giao BE (khi hoàn thành).
+- [`docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md`](../../review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md) — trạng thái và blocker hiện hành của FW SOM;
+- [`docs/handoff/`](../../handoff/) — hợp đồng bàn giao BE (khi hoàn thành).
 
 Phần còn lại của tài liệu này giữ nguyên nội dung gốc 2026-06-22 để truy vết
 lịch sử quyết định, không chỉnh sửa.
@@ -61,7 +70,7 @@ Mở file CI workflow (`.github/workflows/build.yml` hoặc tương đương), t
 
 **Done khi:** CI xanh, không còn dòng `SKIP`, kết quả inventory hiện tại là **226/226 PASS**.
 
-**Tài liệu tham khảo:** [31_PROTOCOL_LIB_INTEGRATION_PLAN §5](31_PROTOCOL_LIB_INTEGRATION_PLAN.md#5-task-iob-006--iocache-cleanup-shm-trong-ci-trước-khi-chạy-test)
+**Tài liệu tham khảo:** [31_PROTOCOL_LIB_INTEGRATION_PLAN §5](../31_PROTOCOL_LIB_INTEGRATION_PLAN.md#5-task-iob-006--iocache-cleanup-shm-trong-ci-trước-khi-chạy-test)
 
 ---
 
@@ -112,7 +121,7 @@ cmake -S services -B build/iobus-arm \
   -DPKG_CONFIG_PATH=/opt/aarch64-sysroot/usr/lib/pkgconfig
 ```
 
-Chi tiết cross-compile: [31_PROTOCOL_LIB_INTEGRATION_PLAN §4.2](31_PROTOCOL_LIB_INTEGRATION_PLAN.md)
+Chi tiết cross-compile: [31_PROTOCOL_LIB_INTEGRATION_PLAN §4.2](../31_PROTOCOL_LIB_INTEGRATION_PLAN.md)
 
 **Done khi — tick đủ DoD:**
 
@@ -176,7 +185,7 @@ journalctl -u mkddc-core | grep "bacnet" | tail -5
 
 **Bước 4 — Cross-compile aarch64 + deploy (giống MOD-012 bước 4, thêm `-DMKDDC_ENABLE_BACNET=ON`).**
 
-Chi tiết đầy đủ: [31_PROTOCOL_LIB_INTEGRATION_PLAN §3](31_PROTOCOL_LIB_INTEGRATION_PLAN.md)
+Chi tiết đầy đủ: [31_PROTOCOL_LIB_INTEGRATION_PLAN §3](../31_PROTOCOL_LIB_INTEGRATION_PLAN.md)
 
 **Done khi — tick đủ DoD:**
 
@@ -206,7 +215,7 @@ Chi tiết đầy đủ: [31_PROTOCOL_LIB_INTEGRATION_PLAN §3](31_PROTOCOL_LIB_
 - Windows VM setup (IOT-5674)
 - VTS v3.x cài trên VM, kết nối cùng LAN với SOM
 
-**Thực hiện theo:** [30_BACNET_BTL_PRETEST_PROCEDURE](30_BACNET_BTL_PRETEST_PROCEDURE.md)
+**Thực hiện theo:** [30_BACNET_BTL_PRETEST_PROCEDURE](../30_BACNET_BTL_PRETEST_PROCEDURE.md)
 
 **Done khi:** Log BTL pretest lưu tại `docs/00_management/evidence/certification/bacnet-pretest-<date>.log`
 
@@ -215,7 +224,7 @@ Chi tiết đầy đủ: [31_PROTOCOL_LIB_INTEGRATION_PLAN §3](31_PROTOCOL_LIB_
 ## Quy tắc khi làm xong mỗi task
 
 1. Tick đủ DoD checklist trong tài liệu tương ứng (31_PROTOCOL_LIB_INTEGRATION_PLAN)
-2. Cập nhật trạng thái trong [11_TASK_CHECKLIST.md](11_TASK_CHECKLIST.md) — ghi `Trạng thái: ĐÃ làm YYYY-MM-DD — [tóm tắt]`
+2. Cập nhật trạng thái trong [11_TASK_CHECKLIST.md](../11_TASK_CHECKLIST.md) — ghi `Trạng thái: ĐÃ làm YYYY-MM-DD — [tóm tắt]`
 3. Bump Rev footer của doc liên quan (24 cho BAC-012, 25 cho MOD-012)
 4. PR phải có CI xanh với flag ON trước khi merge
 

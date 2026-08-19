@@ -2,6 +2,7 @@ import { Check, Clock3, Download, Plus, RotateCcw, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '../../shared/api/client'
+import { fetchActivity } from '../../shared/api/overview'
 import { historyClient, historyCsvUrl, historyPresetDurationMs, historySeriesKey, type HistoryPresetRange, type HistoryQuery, type HistoryResponse } from '../../shared/api/history'
 import { HISTORIAN_V2_TRENDS_ENABLED } from '../../shared/config'
 import { Button } from '../../shared/components/Button'
@@ -9,15 +10,19 @@ import { DataTable, Column } from '../../shared/components/DataTable'
 import { HistoryStateBanner, type HistoryPresentationState } from '../../shared/components/HistoryStateBanner'
 import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
+import { SavedViewBar } from '../../shared/components/SavedViewBar'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { TrendChart, assignSecondAxis, hasMinMaxBand, trendBandKey, type TrendSeries } from '../../shared/components/TrendChart'
 import { useApi } from '../../shared/hooks/useApi'
+import { useSavedViews } from '../../shared/hooks/useSavedViews'
+import { findSavedView } from '../../shared/savedViews'
 import { useI18n } from '../../shared/i18n'
 import { useRealtime } from '../../shared/realtime'
 import type { Point, TrendSample, VirtualPoint } from '../../shared/types'
 import { canonicalOutputPointId, canonicalVirtualPointId, cn, isFreshIso, mergePointsById, pointDisplayTag } from '../../shared/utils'
 import { filterTrendPoints, filterTrendSamplesByRange, parseTrendCustomRange, localDateTimeInputValue, localTimeZoneLabel, type TrendCustomRange, type TrendFilterKind } from './trendsFilters'
+import { buildTrendMarkers } from './trendMarkers'
 
 interface TrendRow {
   id: string
@@ -278,6 +283,79 @@ export function TrendsPage() {
     }, { replace: true })
   }, [deepLinkedIds.length, searchParams, setSearchParams])
 
+  /* `T57-2.6` — dấu sự kiện trên trục thời gian.
+   *
+   * Chỉ tải khi người dùng BẬT: hai truy vấn phụ (Activity + nhật ký cảnh báo)
+   * cho mỗi lần đổi khoảng thời gian là cái giá không đáng trả khi người ta chỉ
+   * muốn nhìn đường. Bật mặc định vì đây chính là câu hỏi hay gặp nhất khi mở
+   * trang này ("lúc đó có ai làm gì không?"), nhưng tắt được và nhớ lựa chọn
+   * trong cùng phiên. */
+  const [showMarkers, setShowMarkers] = useState(true)
+  const markerWindow = useMemo(() => {
+    const request = buildTrendHistoryRequest(selectedIds, rangeMinutes, customRange)
+    return { fromMs: new Date(request.query.from).getTime(), toMs: new Date(request.query.to).getTime() }
+  }, [customRange, rangeMinutes, selectedIds])
+  const markerSourceState = useApi(async () => {
+    if (!showMarkers || !selectedIds.length) return { activity: [], alarms: [] }
+    const from = new Date(markerWindow.fromMs).toISOString()
+    const to = new Date(markerWindow.toMs).toISOString()
+    /* Hai nguồn độc lập: một nguồn hỏng KHÔNG được kéo theo nguồn kia biến mất.
+       Thiếu dấu ép tay mà vẫn thấy dấu cảnh báo còn hơn mất cả hai. */
+    const [activity, alarms] = await Promise.all([
+      fetchActivity({ limit: 200, from, to }).then((page) => page.items).catch(() => []),
+      apiClient.getAlarmHistory({ limit: 200, from, to }).catch(() => [])
+    ])
+    return { activity, alarms }
+  }, [markerWindow.fromMs, markerWindow.toMs, selectedSignature, showMarkers], { refreshMs: 30_000 })
+  const markerResult = useMemo(() => buildTrendMarkers({
+    activity: markerSourceState.data?.activity ?? [],
+    alarms: markerSourceState.data?.alarms ?? [],
+    pointIds: selectedIds,
+    fromMs: markerWindow.fromMs,
+    toMs: markerWindow.toMs,
+    pick
+  }), [markerSourceState.data, markerWindow.fromMs, markerWindow.toMs, pick, selectedIds])
+
+  /* `T57-2.3` — bộ trend ĐẶT TÊN (§6.4-P2b).
+   *
+   * Một khung nhìn ở đây = tập điểm + khoảng thời gian. Đó đúng là thứ mà thao
+   * tác chẩn đoán lặp lại cần: "bộ 6 điểm của AHU-1 trong 6 giờ" phải mở lại
+   * được bằng một cú bấm, không phải chọn lại sáu lần trong hộp thoại 8 ô.
+   *
+   * Khoảng tuỳ chỉnh (mốc from/to tuyệt đối) KHÔNG được lưu: một mốc thời gian
+   * cứng của hôm qua mở lại vào hôm nay là một khung nhìn rỗng, và người dùng
+   * sẽ tưởng dữ liệu mất. Khung nhìn giữ preset tương đối, còn khoảng tuyệt đối
+   * là thao tác một lần. */
+  const savedViews = useSavedViews('trends')
+  const currentViewParams: Record<string, string> = { points: selectedIds.join(','), range: String(rangeMinutes) }
+
+  function applyTrendView(params: Record<string, string>) {
+    const ids = parseDeepLinkedTrendIds(params.points ?? '')
+    const minutes = Number(params.range)
+    hasSavedPrefsRef.current = true
+    setPrefsReady(true)
+    setSelectedIds(ids)
+    if (rangeOptions.some((item) => item.minutes === minutes)) setRangeMinutes(minutes)
+    setCustomRange(null)
+    setCustomError(null)
+  }
+
+  const requestedViewRef = useRef<string | null | undefined>(undefined)
+  if (requestedViewRef.current === undefined) requestedViewRef.current = searchParams.get('view')
+  const requestedView = requestedViewRef.current
+  useEffect(() => {
+    if (!requestedView) return
+    const view = findSavedView(savedViews.views, requestedView)
+    if (view) applyTrendView(view.params)
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.delete('view')
+      return next
+    }, { replace: true })
+    requestedViewRef.current = null
+    /* Chỉ phụ thuộc `requestedView`: xem chú thích cùng loại ở `MonitorPage`. */
+  }, [requestedView])
+
   useEffect(() => {
     if (customRange) return undefined
     setLiveTailNowMs(Date.now())
@@ -368,9 +446,19 @@ export function TrendsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold">{pick('Xu hướng', 'Trends')}</h1>
-        <p className="text-sm text-[var(--c-text-dim)]">{pick('Trend Log dùng unified historian backend với trạng thái gap/partial rõ ràng.', 'Trend Log uses the unified historian backend with explicit gap and partial states.')}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">{pick('Xu hướng', 'Trends')}</h1>
+          <p className="text-sm text-[var(--c-text-dim)]">{pick('Trend Log dùng unified historian backend với trạng thái gap/partial rõ ràng.', 'Trend Log uses the unified historian backend with explicit gap and partial states.')}</p>
+        </div>
+        <SavedViewBar
+          views={savedViews.views}
+          onApply={(view) => applyTrendView(view.params)}
+          onSave={(name) => savedViews.save(name, currentViewParams)}
+          onRename={savedViews.rename}
+          onRemove={savedViews.remove}
+          hint={pick('Bộ điểm + khoảng thời gian, lưu trên trình duyệt này.', 'Point set plus range, stored in this browser.')}
+        />
       </div>
 
       <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[300px_1fr]">
@@ -440,6 +528,15 @@ export function TrendsPage() {
                 >
                   {pick('Xuất CSV', 'Export CSV')}
                 </Button>
+                {/* `T57-2.6` */}
+                <Button
+                  size="sm"
+                  variant={showMarkers ? 'primary' : 'secondary'}
+                  onClick={() => setShowMarkers((value) => !value)}
+                  title={pick('Vạch ép tay và cảnh báo bật, lấy từ nhật ký thật', 'Override and alarm-raise marks, taken from the real logs')}
+                >
+                  {pick('Dấu sự kiện', 'Event marks')}
+                </Button>
                 <Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={resetAuto}>Auto</Button>
               </div>
             }
@@ -470,6 +567,14 @@ export function TrendsPage() {
             {customError && <span role="alert" className="text-xs text-[var(--c-fault-fg)] md:col-span-3">{customError}</span>}
           </div>
           {historyPresentation && <HistoryStateBanner state={historyPresentation.state} gaps={historyPresentation.gaps} detail={historyPresentation.detail ?? (!HISTORIAN_V2_TRENDS_ENABLED ? pick('Legacy query vẫn authoritative; unified Trends chờ activation/cutover marker.', 'Legacy query remains authoritative; unified Trends awaits the activation/cutover marker.') : undefined)} onRetry={historyPresentation.state === 'unavailable' ? () => { void historyState.refetch() } : undefined} />}
+          {showMarkers && markerResult.omitted > 0 && (
+            <div role="status" className="mb-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-xs text-[var(--c-text-dim)]">
+              {pick(
+                `Khoảng này có nhiều sự kiện hơn mức vẽ được; ${markerResult.omitted} dấu không hiện. Thu hẹp khoảng thời gian hoặc bớt điểm để xem đủ.`,
+                `This range has more events than can be drawn; ${markerResult.omitted} marks are hidden. Narrow the range or select fewer points to see them all.`
+              )}
+            </div>
+          )}
           {customPointsWithoutHistory.length > 0 && <div role="status" className="mb-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-xs text-[var(--c-text-dim)]">
             {pick('Custom chỉ đọc lịch sử database. Không có series database cho:', 'Custom reads database history only. No database series were found for:')} {customPointsWithoutHistory.map(pointDisplayTag).join(', ')}.
           </div>}
@@ -482,7 +587,7 @@ export function TrendsPage() {
                 : historyState.error
                   ? <StateBlock state="error" title={pick('Không tải được historian', 'Could not load historian')} detail={historyState.error.message} />
                 : series.length && chartSamples.length > 1
-                ? <TrendChart data={chartSamples} series={series} height={360} timeZone="UTC" showBand={showBand} />
+                ? <TrendChart data={chartSamples} series={series} height={360} timeZone="UTC" showBand={showBand} markers={showMarkers ? markerResult.markers : []} />
                 : <StateBlock state="empty" title={series.length ? pick('Không có mẫu trong khoảng đã chọn', 'No history in the selected range') : pick('Chọn ít nhất một điểm trend', 'Select at least one trend point')} detail={series.length ? pick('Backend không trả sample khả dụng; gap evidence ở banner phía trên.', 'The backend returned no available samples; see the gap evidence above.') : undefined} />}
           </Panel>
         </div>

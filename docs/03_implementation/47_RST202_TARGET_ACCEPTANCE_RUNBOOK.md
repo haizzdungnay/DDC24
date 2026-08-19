@@ -4,7 +4,7 @@
 > **Trạng thái:** Draft — chờ owner cấp target window
 > **Phiên bản:** 1.0
 > **Ngày:** 2026-08-04
-> **Plan chủ quản:** [Plan 46 §6 Gate G5](46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md)
+> **Plan chủ quản:** [Plan 46 §6 Gate G5](archive/46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md)
 > **Quyết định liên quan:** ADR-022 (self-hosted runner trên board), ADR-025 (bounded modules)
 
 ## 1. Mục đích và ranh giới

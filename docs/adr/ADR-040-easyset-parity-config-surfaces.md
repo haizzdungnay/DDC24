@@ -1,4 +1,15 @@
-# ADR-010: EasySet Parity Config Surfaces
+# ADR-040: EasySet Parity Config Surfaces
+> ## ⚠ ĐỔI SỐ — 2026-08-19
+>
+> Hồ sơ này **phát hành nhầm số `ADR-010`**, trùng với [ADR-010 — IOP V2 Poll + Capability Map](ADR-010-iop-v2-poll-capability-map.md), vốn được viện dẫn ở `contracts/shm/mkddc_shm.h` và `firmware/stm32/src/iop/iop_link.h`. Số mới cấp phát là
+> **`ADR-040`** theo đúng luật ở [Decision Log](../00_governance/DECISIONS.md) ("lấy số cao
+> nhất đã cấp phát rồi cộng một").
+>
+> Decision Log bản 2026-07-22 từng chuẩn hoá hồ sơ này thành `ADR-013`, nhưng **số đó đã bị
+> chiếm** từ 2026-07-02 bởi [ADR-013 — Alarm Entity Model](../02_design/adr/ADR-013-alarm-entity-model.md) và **đang được viện dẫn trong hợp đồng
+> canonical** `contracts/openapi/openapi.yaml`. Theo quy tắc "hợp đồng thắng tài liệu",
+> `ADR-013` giữ nguyên nghĩa cũ và hồ sơ này nhận `ADR-040`.
+
 
 - Date: 2026-06-22
 - Owner: Solution Architect

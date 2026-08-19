@@ -1,13 +1,22 @@
 # Plan 46: Restructure kiến trúc repository theo bounded modules
 
+> ## 🗄 ĐÃ LƯU TRỮ — 2026-08-19
+>
+> Hồ sơ **đã đóng**, giữ tại `docs/03_implementation/archive/` để truy nguyên.
+> **Không** dùng làm căn cứ mở việc mới hay làm nguồn-chuẩn cho mã hiện hành.
+>
+> **Lý do đóng:** `Closed` — G0..G5 PASS, closure review `RST-205` ngày 2026-08-04. Đối chiếu mã ngày 2026-08-19: `apps/{core,iobus,netcfg,hmi,web-api,web-ui}` tồn tại, `services/` đã biến mất, `CMakeLists.txt` gốc là authority — đúng như plan mô tả.
+>
+> **Đọc thay bằng:** [47_RST202_TARGET_ACCEPTANCE_RUNBOOK](../47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md) (phần nghiệm thu target `RST-202` còn mở) · [RST205_CLOSURE_REVIEW](../../07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md)
+
 > **ID:** PLAN-ARCH-RESTRUCT-002
 > **Trạng thái:** **Closed** — G0..G5 PASS; `RST-205` closure review 2026-08-04
 > **Phiên bản:** 1.4
 > **Ngày:** 2026-08-04
 > **Owner đề xuất:** Tech Lead + Dev SOM/Core/Iobus + Dev Web + DevOps/QA
-> **Nguồn kiến trúc:** [System Architecture](../03_architecture/SYSTEM.md),
-> [Software Design](../04_design/SOFTWARE.md),
-> [Document Control](../00_governance/CONTROL.md)
+> **Nguồn kiến trúc:** [System Architecture](../../03_architecture/SYSTEM.md),
+> [Software Design](../../04_design/SOFTWARE.md),
+> [Document Control](../../00_governance/CONTROL.md)
 
 > **Quyết định triển khai:** ADR-025 Accepted ngày 2026-08-03 theo chỉ thị của
 > owner/user. Baseline G0 và path inventory được lưu tại
@@ -581,7 +590,7 @@ PLAN_CLOSED = YES
 | G2 | PASS | `contracts/` là authority duy nhất; contract/dependency negative tests làm gate đỏ khi tạo bản sao hoặc import sai chiều. |
 | G3 | PASS trên host | Core, Iobus, netcfg, HMI, Web API, Web UI, STM32 và packaging đã chuyển vật lý; path cũ không còn tồn tại; binary/service/API/contract semantics giữ nguyên. |
 | G4 | PASS | Core/Iobus có domain/application/ports/adapters/bootstrap và CMake boundary; React có app/features/shared cùng public barrel/lint guard. Go `RST-121..126` đã tách auth/audit, Point Catalog/config, Modbus RTU, historian, system/network/health/HMI và router thành package có test trực tiếp; `internal/app` chỉ giữ handler, middleware và façade composition cần tương thích. |
-| G5 | PASS | Compatibility shim đã bỏ, artifact đã cô lập, host regression, release checksum, npm security disposition và Chrome DevTools runtime đều có evidence. **`RST-202` DONE ngày 2026-08-04**: install, provenance, startup order sau reboot thật, crash/restart và diễn tập rollback đều PASS trên board lab (§12.6). **`RST-205` DONE cùng ngày** — xem §12.7 và [Closure Review](../07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md). |
+| G5 | PASS | Compatibility shim đã bỏ, artifact đã cô lập, host regression, release checksum, npm security disposition và Chrome DevTools runtime đều có evidence. **`RST-202` DONE ngày 2026-08-04**: install, provenance, startup order sau reboot thật, crash/restart và diễn tập rollback đều PASS trên board lab (§12.6). **`RST-205` DONE cùng ngày** — xem §12.7 và [Closure Review](../../07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md). |
 
 ### 12.2. Kiểm chứng host hiện hành
 
@@ -624,7 +633,7 @@ PLAN_CLOSED = YES
 
 Board lab `SOM-DDC-24` (`orangepi5b`, aarch64) đã được khảo sát read-only; không
 thay đổi gì trên target. Quy trình thực hiện nằm tại
-[Runbook 47](47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md).
+[Runbook 47](../47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md).
 
 Bốn dữ kiện quyết định trạng thái `RST-202`:
 
@@ -649,9 +658,9 @@ Bốn dữ kiện quyết định trạng thái `RST-202`:
 ### 12.5. Kết quả build và deploy ngày 2026-08-04
 
 Đã chạy build native aarch64 và deploy lên board tại commit `13fdc60`. Bằng
-chứng: [`TARGET_RST202_20260804.json`](../07_records/evidence/restructure/TARGET_RST202_20260804.json);
+chứng: [`TARGET_RST202_20260804.json`](../../07_records/evidence/restructure/TARGET_RST202_20260804.json);
 phân tích đầy đủ tại
-[Board Deploy Report](../07_records/reviews/BOARD_DEPLOY_REPORT_2026-08-04.md).
+[Board Deploy Report](../../07_records/reviews/BOARD_DEPLOY_REPORT_2026-08-04.md).
 
 - `build-release.sh` native trên board: **BUILD_OK**, version 0.2.0,
   `dirty=false`; 4 binary C++/Go đều `ELF 64-bit ARM aarch64`, 5/5 checksum.
@@ -682,7 +691,7 @@ bắt buộc restart đồng bộ.
 Bốn khiếm khuyết trên đã được sửa trong repo (`cb1303c`, `43b4cdb`) và bổ sung
 `ROLLBACK-001`: rollback trước đây là thao tác tay không có snapshot tự động,
 nay `install.sh` tự chụp bản đang chạy vào `/var/backups/mkddc/<version>-<ts>/`
-kèm symlink `previous`, và thêm [`platform/packaging/rollback.sh`](../../platform/packaging/rollback.sh)
+kèm symlink `previous`, và thêm [`platform/packaging/rollback.sh`](../../../platform/packaging/rollback.sh)
 để rollback lặp lại được. Sau khi sửa, chạy lại toàn bộ nghiệm thu tại commit
 `3f4c536`, version `0.2.1`:
 
@@ -703,11 +712,11 @@ nhãn version, nên nó diễn tập **cơ chế** đổi artifact + restart + p
 nhau. Toàn bộ vẫn là lab evidence trên board fake MCU không panel; không đóng gate
 physical I/O HIL, real RS485 hay bất kỳ gate Programming nào.
 
-Bằng chứng: [`TARGET_RST202_20260804.json`](../07_records/evidence/restructure/TARGET_RST202_20260804.json).
+Bằng chứng: [`TARGET_RST202_20260804.json`](../../07_records/evidence/restructure/TARGET_RST202_20260804.json).
 
 Về đường build: board là aarch64 nên `build-release.sh` chạy native trực tiếp
 trên target theo ADR-022 — đây là đường dùng cho `RST-202`. Đã bổ sung
-[`platform/cmake/toolchain-aarch64-linux-gnu.cmake`](../../platform/cmake/toolchain-aarch64-linux-gnu.cmake)
+[`platform/cmake/toolchain-aarch64-linux-gnu.cmake`](../../../platform/cmake/toolchain-aarch64-linux-gnu.cmake)
 làm đường phụ cho máy phát triển x86_64; toolchain đã kiểm chứng sinh đúng ELF
 `ARM aarch64`, nhưng build đầy đủ trên máy hiện tại **chưa chạy được** vì thiếu
 thư viện arm64 của bên thứ ba (`ld: cannot find -lmodbus`). Yêu cầu sysroot được
@@ -723,7 +732,7 @@ owner phê duyệt. Blocker đó đã được gỡ ngày 2026-08-04 — xem §1
 
 Owner cấp phép reboot ngày 2026-08-04, `RST-202` hoàn tất, closure review đã
 chạy. Hồ sơ đầy đủ:
-[RST-205 Closure Review](../07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md).
+[RST-205 Closure Review](../../07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md).
 
 Đối chiếu tại commit `9d90f66`, `scripts/verify-project.sh --component all` exit
 **0**:

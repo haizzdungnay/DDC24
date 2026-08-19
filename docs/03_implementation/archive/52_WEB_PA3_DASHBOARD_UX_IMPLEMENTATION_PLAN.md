@@ -1,5 +1,14 @@
 # PLAN-WEB-PA3-052 — Kế hoạch triển khai Dashboard và Web UX PA3
 
+> ## 🗄 ĐÃ LƯU TRỮ — 2026-08-19
+>
+> Hồ sơ **đã đóng**, giữ tại `docs/03_implementation/archive/` để truy nguyên.
+> **Không** dùng làm căn cứ mở việc mới hay làm nguồn-chuẩn cho mã hiện hành.
+>
+> **Lý do đóng:** **50/50 task, G0–G6 đạt**, đã deploy và diễn tập rollback trên Foxlinx (2026-08-08). Ba finding còn mở `PA3-N01`/`N02`/`N04` được theo dõi ở hồ sơ bằng chứng và ma trận trace, không nằm ở plan này.
+>
+> **Đọc thay bằng:** [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) · [UX_PA3_TRACEABILITY](../../05_verification/UX_PA3_TRACEABILITY.md) · [57_WEB_UIUX_UC_UPGRADE_PLAN](../57_WEB_UIUX_UC_UPGRADE_PLAN.md)
+
 > **Trạng thái:** HOÀN TẤT — 50/50 task, G0–G6 đạt, đã deploy và diễn tập rollback trên Foxlinx  
 > **Ngày lập:** 2026-08-08  
 > **Owner:** Product/UX Owner + Web Lead + Backend Lead + Verification Lead  
@@ -334,7 +343,7 @@ khi bắt đầu W6, không được âm thầm giữ mốc W7.
 **Cập nhật gần nhất:** 2026-08-08 · **Tiến độ:** 50/50 task (100%) · **Gate hiện tại:** G0–G6 đều đạt.
 
 Bằng chứng dùng chung cho các task đã đóng:
-[`docs/07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md`](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md)
+[`docs/07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md`](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md)
 (checksum gói, số đo gate, log runtime trên bo, và 4 finding còn mở PA3-N01..N04).
 
 Trạng thái hợp lệ: `CHƯA BẮT ĐẦU`, `ĐANG LÀM`, `CHỜ REVIEW`, `BỊ CHẶN`, `HOÀN TẤT`.
@@ -374,56 +383,56 @@ Trạng thái hợp lệ: `CHƯA BẮT ĐẦU`, `ĐANG LÀM`, `CHỜ REVIEW`, `B
 
 | Task | Mốc | Chủ trì | Phụ thuộc | Trạng thái | Đầu ra đóng task | PR/Bằng chứng |
 |---|---|---|---|---|---|---|
-| PA3-001 | W1 | Product Owner + UX Lead | — | HOÀN TẤT | Từ vựng, 5 severity, 3 role và trạng thái chốt trong §1 | [UX-REQ-PA3-WEB-001](../02_requirements/UX_REQ_PA3_WEB.md) |
-| PA3-002 | W1 | Product Owner + Verification Lead | PA3-001 | HOÀN TẤT | 12 UC thành 56 requirement có ID và tiêu chí kiểm chứng | [UX-REQ-PA3-WEB-001](../02_requirements/UX_REQ_PA3_WEB.md) |
-| PA3-003 | W1 | Tech Lead + Product Owner | PA3-001, PA3-002 | HOÀN TẤT | D01..D08 áp dụng trong `overview.go`; overall-state algorithm có test | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-001 | W1 | Product Owner + UX Lead | — | HOÀN TẤT | Từ vựng, 5 severity, 3 role và trạng thái chốt trong §1 | [UX-REQ-PA3-WEB-001](../../02_requirements/UX_REQ_PA3_WEB.md) |
+| PA3-002 | W1 | Product Owner + Verification Lead | PA3-001 | HOÀN TẤT | 12 UC thành 56 requirement có ID và tiêu chí kiểm chứng | [UX-REQ-PA3-WEB-001](../../02_requirements/UX_REQ_PA3_WEB.md) |
+| PA3-003 | W1 | Tech Lead + Product Owner | PA3-001, PA3-002 | HOÀN TẤT | D01..D08 áp dụng trong `overview.go`; overall-state algorithm có test | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
 | PA3-004 | W1 | Web API Lead | PA3-003 | HOÀN TẤT | OpenAPI có `/overview`, `/activity`, `ttlS`, `overrideExpiresInS` | contracts/openapi/openapi.yaml |
-| PA3-005 | W1 | Verification Lead | PA3-002, PA3-004 | HOÀN TẤT | Ma trận requirement→source→test→evidence, 56 hàng | [TRACE-WEB-PA3-001](../05_verification/UX_PA3_TRACEABILITY.md) |
-| PA3-006 | W1 | UX Lead | PA3-001, PA3-002 | HOÀN TẤT | Wireflow desktop/mobile và bảng nội dung tiếng Việt trong §3 | [UX-REQ-PA3-WEB-001](../02_requirements/UX_REQ_PA3_WEB.md) |
-| PA3-101 | W2–W3 | Web API Lead | G0, PA3-004 | HOÀN TẤT | `GET /api/v1/overview` versioned + `pa3_contract_test.go` | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-102 | W2–W3 | Web API Lead + Core Lead | PA3-101 | HOÀN TẤT | Aggregation từ core/points/alarms/modbus/historian thật | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-103 | W2–W3 | Web API Lead | G0, PA3-004 | HOÀN TẤT | Kho `activity.jsonl` có retention 2000/nén/phân trang/redaction | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-104 | W2–W3 | Web API Lead | PA3-103 | HOÀN TẤT | `AuditLogger` có sink; mọi vết audit vào Activity | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-105 | W2–W3 | Frontend Lead | PA3-004 | HOÀN TẤT | Normalizer giữ TTL/quality_reason/bus/slave/exception/online | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-106 | W2–W3 | Frontend Lead | PA3-105 | HOÀN TẤT | Bỏ `?? nowIso()`; fixture thiếu timestamp đạt | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-107 | W2–W3 | Core Lead + Web API Lead | G0, PA3-004 | HOÀN TẤT | REST `ttlS` + WS `expire_s` → Core; gỡ mọi timer FE/WS | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-108 | W2–W3 | Verification Lead + Web API Lead | PA3-101..PA3-107 | HOÀN TẤT | Contract/role/range/restart tests đạt | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-201 | W4–W5 | UX Lead + Frontend Lead | G1/G2 | HOÀN TẤT | Primitive Health/Severity/Quality/Forced có icon + nhãn chữ | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-202 | W4–W5 | Frontend Lead | PA3-201 | HOÀN TẤT | Shell responsive; e2e 1440×900 và 390×844 đạt | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-203 | W4–W5 | Frontend Lead | PA3-101, PA3-201 | HOÀN TẤT | TopBar có overall state, tuổi dữ liệu, severity thật | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-204 | W4–W5 | Frontend Lead | PA3-201 | HOÀN TẤT | Command palette Ctrl+K, breadcrumb, skip link | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-205 | W4–W5 | Frontend Lead | PA3-101, PA3-201 | HOÀN TẤT | `OverviewProvider` sở hữu nhịp poll dùng chung | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-206 | W4–W5 | Frontend Lead | PA3-201, PA3-202 | HOÀN TẤT | Route `/diagnostics` thật, viewer đọc được | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-301 | W6–W7 | Frontend Dashboard Owner | G3, PA3-101, PA3-205 | HOÀN TẤT | Health strip 5 domain có source/observedAt/drill-down | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-302 | W6–W7 | Frontend Dashboard Owner | G3, PA3-102, PA3-205 | HOÀN TẤT | Attention xếp theo severity, có target drill-down | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-303 | W6–W7 | Frontend Dashboard Owner | G3, PA3-102, PA3-205 | HOÀN TẤT | Operating Summary theo capability thật, không có DI | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-304 | W6–W7 | Frontend Dashboard Owner | G3, PA3-204, PA3-205 | HOÀN TẤT | My Workspace namespace controller+username, báo ghim mồ côi | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-305 | W6–W7 | Frontend Dashboard Owner | G3, PA3-201, PA3-205 | HOÀN TẤT | Preview ≤4 series; dải min–max và gap đứt đúng | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-306 | W6–W7 | Frontend Dashboard Owner | G3, PA3-103, PA3-104, PA3-205 | HOÀN TẤT | Activity tách user/system, có bộ lọc | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-307 | W6–W7 | UX Lead + Frontend Dashboard Owner | PA3-301..PA3-306 | HOÀN TẤT | Đủ loading/empty/error/permission, nội dung tiếng Việt | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-308 | W6–W7 | Verification Lead | PA3-301..PA3-307 | HOÀN TẤT | Unit + e2e Landing đạt | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-401 | W6–W7 | Frontend Monitor Owner | G3, PA3-105, PA3-106 | HOÀN TẤT | Inventory gồm UI/AO/DO/Virtual/Modbus; DI không dựng | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-402 | W6–W7 | Frontend Monitor Owner | PA3-401 | HOÀN TẤT | Bộ lọc đầy đủ và giữ state trong URL | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-403 | W6–W7 | Frontend Monitor Owner + Web API Lead | PA3-103, PA3-401 | HOÀN TẤT | Point Detail dùng historian thật; xoá 5 dòng lịch sử giả | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-404 | W6–W7 | Frontend Monitor Owner | PA3-105, PA3-106, PA3-401 | HOÀN TẤT | Giá trị kỹ thuật/raw theo signal type; bỏ ép Boolean | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-405 | W6–W7 | Frontend Monitor Owner + Core Lead | PA3-107, PA3-201 | HOÀN TẤT | Dialog có object/current/new/owner/actor + countdown Core | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-406 | W6–W7 | Frontend Monitor Owner + Web API Lead | PA3-104, PA3-107, PA3-405 | HOÀN TẤT | Trang `/activity` + deep link từ Point Detail và Commissioning | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-407 | W6–W7 | Frontend Monitor Owner + Verification Lead | PA3-108, PA3-405 | HOÀN TẤT | Nút disable kèm lý do; `TestViewerCannotOverride` phía Go | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-408 | W6–W7 | Verification Lead | PA3-405..PA3-407 | HOÀN TẤT | Test restart/expiry/concurrent/rate-limit + E2E đếm ngược | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-501 | W8 | Alarm Owner + Frontend Lead | G4, G5A, PA3-102, PA3-201 | HOÀN TẤT | Alarm 5 severity, action disable kèm lý do cho viewer | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-502 | W8 | Historian Owner + Frontend Lead | G4, G5A, PA3-305 | HOÀN TẤT | 1–8 series, dải min–max, gap, partial banner, export CSV | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-503 | W8 | Scheduler Owner + Frontend Lead | G4, G5A, PA3-201 | HOÀN TẤT | Route hạ xuống viewer; mutation vẫn khoá theo role | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-504 | W8 | Commissioning Owner + Web API Lead | G4, G5A, PA3-104 | HOÀN TẤT | Prerequisite chặn, tiến trình, kết quả giữ lại, link audit | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-505 | W8 | Modbus Owner + Frontend Lead | G4, G5A, PA3-401 | HOÀN TẤT | Cây Bus→Device→Point; serial ở cấp bus; unknown khi thiếu telemetry | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-506 | W8 | Configuration Owner + Frontend Lead | G4, G5A, PA3-201 | HOÀN TẤT | Bảng khác biệt bản nháp + hướng dẫn địa chỉ truy cập sau khi đổi IP | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-507 | W8 | Admin Owner + Web API Lead | G4, G5A, PA3-201 | HOÀN TẤT | Đã rà: không có OTA/reboot/restart service giả trong UI | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-601 | W9 | Verification Lead | G5B | HOÀN TẤT | ctest 860/860, Go 11/11, Vitest 465/465, lint+build sạch | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-602 | W9 | Verification Lead | PA3-601 | HOÀN TẤT | Playwright 43/43 gồm `e2e/pa3-dashboard.spec.ts` | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-603 | W9 | Verification Lead + UX Lead | PA3-602 | HOÀN TẤT | Bộ a11y Playwright + test tương phản token; sửa 2 trang thiếu H1 | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-604 | W9 | Release Owner | PA3-601 | HOÀN TẤT | Checksum gói + provenance ghi trong evidence | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-605 | W9 | Operations Owner | PA3-604 | HOÀN TẤT | Backup `/data/releases/20260808T145935` + deploy đúng checklist | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-606 | W9 | Operations Owner + Verification Lead | PA3-603, PA3-605 | HOÀN TẤT | Rollback thật 4 302 ms, dịch vụ active, kho Activity còn nguyên | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
-| PA3-607 | W9 | Tech Lead + Verification Lead | PA3-606 | HOÀN TẤT | CHANGELOG + evidence + tracker cập nhật | [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-005 | W1 | Verification Lead | PA3-002, PA3-004 | HOÀN TẤT | Ma trận requirement→source→test→evidence, 56 hàng | [TRACE-WEB-PA3-001](../../05_verification/UX_PA3_TRACEABILITY.md) |
+| PA3-006 | W1 | UX Lead | PA3-001, PA3-002 | HOÀN TẤT | Wireflow desktop/mobile và bảng nội dung tiếng Việt trong §3 | [UX-REQ-PA3-WEB-001](../../02_requirements/UX_REQ_PA3_WEB.md) |
+| PA3-101 | W2–W3 | Web API Lead | G0, PA3-004 | HOÀN TẤT | `GET /api/v1/overview` versioned + `pa3_contract_test.go` | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-102 | W2–W3 | Web API Lead + Core Lead | PA3-101 | HOÀN TẤT | Aggregation từ core/points/alarms/modbus/historian thật | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-103 | W2–W3 | Web API Lead | G0, PA3-004 | HOÀN TẤT | Kho `activity.jsonl` có retention 2000/nén/phân trang/redaction | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-104 | W2–W3 | Web API Lead | PA3-103 | HOÀN TẤT | `AuditLogger` có sink; mọi vết audit vào Activity | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-105 | W2–W3 | Frontend Lead | PA3-004 | HOÀN TẤT | Normalizer giữ TTL/quality_reason/bus/slave/exception/online | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-106 | W2–W3 | Frontend Lead | PA3-105 | HOÀN TẤT | Bỏ `?? nowIso()`; fixture thiếu timestamp đạt | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-107 | W2–W3 | Core Lead + Web API Lead | G0, PA3-004 | HOÀN TẤT | REST `ttlS` + WS `expire_s` → Core; gỡ mọi timer FE/WS | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-108 | W2–W3 | Verification Lead + Web API Lead | PA3-101..PA3-107 | HOÀN TẤT | Contract/role/range/restart tests đạt | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-201 | W4–W5 | UX Lead + Frontend Lead | G1/G2 | HOÀN TẤT | Primitive Health/Severity/Quality/Forced có icon + nhãn chữ | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-202 | W4–W5 | Frontend Lead | PA3-201 | HOÀN TẤT | Shell responsive; e2e 1440×900 và 390×844 đạt | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-203 | W4–W5 | Frontend Lead | PA3-101, PA3-201 | HOÀN TẤT | TopBar có overall state, tuổi dữ liệu, severity thật | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-204 | W4–W5 | Frontend Lead | PA3-201 | HOÀN TẤT | Command palette Ctrl+K, breadcrumb, skip link | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-205 | W4–W5 | Frontend Lead | PA3-101, PA3-201 | HOÀN TẤT | `OverviewProvider` sở hữu nhịp poll dùng chung | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-206 | W4–W5 | Frontend Lead | PA3-201, PA3-202 | HOÀN TẤT | Route `/diagnostics` thật, viewer đọc được | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-301 | W6–W7 | Frontend Dashboard Owner | G3, PA3-101, PA3-205 | HOÀN TẤT | Health strip 5 domain có source/observedAt/drill-down | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-302 | W6–W7 | Frontend Dashboard Owner | G3, PA3-102, PA3-205 | HOÀN TẤT | Attention xếp theo severity, có target drill-down | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-303 | W6–W7 | Frontend Dashboard Owner | G3, PA3-102, PA3-205 | HOÀN TẤT | Operating Summary theo capability thật, không có DI | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-304 | W6–W7 | Frontend Dashboard Owner | G3, PA3-204, PA3-205 | HOÀN TẤT | My Workspace namespace controller+username, báo ghim mồ côi | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-305 | W6–W7 | Frontend Dashboard Owner | G3, PA3-201, PA3-205 | HOÀN TẤT | Preview ≤4 series; dải min–max và gap đứt đúng | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-306 | W6–W7 | Frontend Dashboard Owner | G3, PA3-103, PA3-104, PA3-205 | HOÀN TẤT | Activity tách user/system, có bộ lọc | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-307 | W6–W7 | UX Lead + Frontend Dashboard Owner | PA3-301..PA3-306 | HOÀN TẤT | Đủ loading/empty/error/permission, nội dung tiếng Việt | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-308 | W6–W7 | Verification Lead | PA3-301..PA3-307 | HOÀN TẤT | Unit + e2e Landing đạt | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-401 | W6–W7 | Frontend Monitor Owner | G3, PA3-105, PA3-106 | HOÀN TẤT | Inventory gồm UI/AO/DO/Virtual/Modbus; DI không dựng | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-402 | W6–W7 | Frontend Monitor Owner | PA3-401 | HOÀN TẤT | Bộ lọc đầy đủ và giữ state trong URL | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-403 | W6–W7 | Frontend Monitor Owner + Web API Lead | PA3-103, PA3-401 | HOÀN TẤT | Point Detail dùng historian thật; xoá 5 dòng lịch sử giả | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-404 | W6–W7 | Frontend Monitor Owner | PA3-105, PA3-106, PA3-401 | HOÀN TẤT | Giá trị kỹ thuật/raw theo signal type; bỏ ép Boolean | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-405 | W6–W7 | Frontend Monitor Owner + Core Lead | PA3-107, PA3-201 | HOÀN TẤT | Dialog có object/current/new/owner/actor + countdown Core | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-406 | W6–W7 | Frontend Monitor Owner + Web API Lead | PA3-104, PA3-107, PA3-405 | HOÀN TẤT | Trang `/activity` + deep link từ Point Detail và Commissioning | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-407 | W6–W7 | Frontend Monitor Owner + Verification Lead | PA3-108, PA3-405 | HOÀN TẤT | Nút disable kèm lý do; `TestViewerCannotOverride` phía Go | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-408 | W6–W7 | Verification Lead | PA3-405..PA3-407 | HOÀN TẤT | Test restart/expiry/concurrent/rate-limit + E2E đếm ngược | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-501 | W8 | Alarm Owner + Frontend Lead | G4, G5A, PA3-102, PA3-201 | HOÀN TẤT | Alarm 5 severity, action disable kèm lý do cho viewer | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-502 | W8 | Historian Owner + Frontend Lead | G4, G5A, PA3-305 | HOÀN TẤT | 1–8 series, dải min–max, gap, partial banner, export CSV | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-503 | W8 | Scheduler Owner + Frontend Lead | G4, G5A, PA3-201 | HOÀN TẤT | Route hạ xuống viewer; mutation vẫn khoá theo role | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-504 | W8 | Commissioning Owner + Web API Lead | G4, G5A, PA3-104 | HOÀN TẤT | Prerequisite chặn, tiến trình, kết quả giữ lại, link audit | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-505 | W8 | Modbus Owner + Frontend Lead | G4, G5A, PA3-401 | HOÀN TẤT | Cây Bus→Device→Point; serial ở cấp bus; unknown khi thiếu telemetry | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-506 | W8 | Configuration Owner + Frontend Lead | G4, G5A, PA3-201 | HOÀN TẤT | Bảng khác biệt bản nháp + hướng dẫn địa chỉ truy cập sau khi đổi IP | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-507 | W8 | Admin Owner + Web API Lead | G4, G5A, PA3-201 | HOÀN TẤT | Đã rà: không có OTA/reboot/restart service giả trong UI | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-601 | W9 | Verification Lead | G5B | HOÀN TẤT | ctest 860/860, Go 11/11, Vitest 465/465, lint+build sạch | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-602 | W9 | Verification Lead | PA3-601 | HOÀN TẤT | Playwright 43/43 gồm `e2e/pa3-dashboard.spec.ts` | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-603 | W9 | Verification Lead + UX Lead | PA3-602 | HOÀN TẤT | Bộ a11y Playwright + test tương phản token; sửa 2 trang thiếu H1 | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-604 | W9 | Release Owner | PA3-601 | HOÀN TẤT | Checksum gói + provenance ghi trong evidence | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-605 | W9 | Operations Owner | PA3-604 | HOÀN TẤT | Backup `/data/releases/20260808T145935` + deploy đúng checklist | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-606 | W9 | Operations Owner + Verification Lead | PA3-603, PA3-605 | HOÀN TẤT | Rollback thật 4 302 ms, dịch vụ active, kho Activity còn nguyên | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
+| PA3-607 | W9 | Tech Lead + Verification Lead | PA3-606 | HOÀN TẤT | CHANGELOG + evidence + tracker cập nhật | [EV-WEB-PA3-001](../../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md) |
 
 ## 9. Ma trận nghiệm thu use case
 

@@ -43,15 +43,26 @@ authority. This does not add a sixth surface or general engineering to the panel
 
 ## 3. Existing source to preserve
 
+> **Đối chiếu cây nguồn 2026-08-19 (`PLAN-ARCH-RESTRUCT-002`/ADR-025).** Mọi đường dẫn trong tài
+> liệu này viết theo cây cũ; ánh xạ sang cây thật:
+>
+> | Viết trong tài liệu | Đường dẫn thật |
+> |---|---|
+> | `apps/hmi/<x>` | `apps/hmi/<x>` — giữ nguyên các thư mục con `api` · `data` · `drm` · `i18n` · `input` · `platform` · `screens` · `ui` · `tests` |
+> | `apps/core/adapters/ipc/web_ipc.*` | `apps/core/adapters/ipc/web_ipc.*` (test: `apps/core/adapters/ipc/tests/test_web_ipc.cpp`) |
+> | `apps/core/domain/priority/priority_resolver.*` | `apps/core/domain/priority/priority_resolver.*` |
+> | `apps/core/application/runtime/scan_loop.*` | `apps/core/application/runtime/scan_loop.*` |
+> | `apps/web-api/internal/hmi/*.go` | `apps/web-api/internal/` — hiện có `app/hmi_broker.go`, `app/core_client.go`, `hmi/audit_store.go`. File Go **chưa tồn tại** (`hmi_protocol` · `hmi_policy` · `hmi_session` · `hmi_ipc` · `hmi_idempotency`) đặt trong package `apps/web-api/internal/hmi/`; trong package đó tiền tố `hmi_` là thừa, dùng tên rút gọn (`policy.go`, `session.go`, …). |
+
 | Capability | Existing owner/source |
 |---|---|
-| SHM read/magic/seqlock | `services/hmi/data/shm_reader.*` |
-| DRM/LVGL/input/buttons | `services/hmi/drm`, `input`, `ui` |
-| Core manual command socket | `services/core/web_ipc.*` |
-| Priority arbitration | `services/core/priority_resolver.*`, `scan_loop.*` |
-| Go core client | `web/backend/core_client.go` |
-| Current alarm ring | `services/hmi/screens/alarm_model.cpp` |
-| Current direct maintenance hooks | `services/hmi/platform/core_control.*` — to retire from production path |
+| SHM read/magic/seqlock | `apps/hmi/data/shm_reader.*` |
+| DRM/LVGL/input/buttons | `apps/hmi/drm`, `apps/hmi/input`, `apps/hmi/ui` |
+| Core manual command socket | `apps/core/adapters/ipc/web_ipc.*` |
+| Priority arbitration | `apps/core/domain/priority/priority_resolver.*`, `scan_loop.*` |
+| Go core client | `apps/web-api/internal/app/core_client.go` |
+| Current alarm ring | `apps/hmi/screens/alarm_model.cpp` |
+| Current direct maintenance hooks | `apps/hmi/platform/core_control.*` — to retire from production path |
 
 Do not rewrite unrelated frontend or I/O work. Refactor existing HMI components in
 small vertical slices.
@@ -80,9 +91,9 @@ a PCI DRM device, no `/proc/device-tree/model`, and no active `mkddc-*` services
 not the RK3566/JD9852/FT5436 target and must not be used to close HOP-075/076.
 
 Implementation artifacts are `shared/hmi_protocol_v1.schema.json`,
-`web/backend/hmi_broker.go`, `web/backend/hmi_audit_store.go`,
-`services/core/web_ipc.*`, `services/core/scan_loop.*`,
-`services/hmi/api/hmi_api_client.*` and `services/hmi/screens/screen_control.*`.
+`apps/web-api/internal/app/hmi_broker.go`, `apps/web-api/internal/hmi/audit_store.go`,
+`apps/core/adapters/ipc/web_ipc.*`, `apps/core/application/runtime/scan_loop.*`,
+`apps/hmi/api/hmi_api_client.*` and `apps/hmi/screens/screen_control.*`.
 Host results do not establish IEC conformity or replace target/HIL acceptance.
 
 ## 4. Dependency map
@@ -116,7 +127,7 @@ may proceed in parallel only after P0 is frozen.
 #### HOP-001 — Freeze local UDS envelope
 
 - **Files:** `docs/04_design/INTERFACES.md`, then shared test fixtures under
-  `web/backend/testdata/` and `services/hmi/tests/fixtures/`.
+  `apps/web-api/internal/hmi/testdata/` and `apps/hmi/tests/fixtures/`.
 - **Output:** schema version, maximum frame size, action enum, request/response fields.
 - **Verify:** the same valid/invalid fixture is parsed by Go and C++ tests.
 - **Depends:** HOP-000.
@@ -125,7 +136,7 @@ may proceed in parallel only after P0 is frozen.
 #### HOP-002 — Freeze reason codes and lifecycle enums
 
 - **Files:** new generated-or-duplicated constants with a single checked fixture;
-  likely `web/backend/hmi_protocol.go`, `services/hmi/platform/hmi_protocol.hpp`.
+  likely `apps/web-api/internal/hmi/hmi_protocol.go`, `apps/hmi/platform/hmi_protocol.hpp`.
 - **Output:** `accepted/rejected/timeout`, command lifecycle and stable reason codes.
 - **Verify:** cross-language golden JSON equality test.
 - **Depends:** HOP-001.
@@ -133,7 +144,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-003 — Freeze authoritative point-policy projection
 
-- **Files:** `web/backend/hmi_policy.go`, config/schema owner selected after inspection,
+- **Files:** `apps/web-api/internal/hmi/hmi_policy.go`, config/schema owner selected after inspection,
   fixtures and validator tests.
 - **Output:** commandable, allowed actions, role, min/max/unit, priority, default/max
   TTL, reason/audit requirements and revision.
@@ -143,7 +154,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-004 — Freeze role matrix and session limits
 
-- **Files:** auth policy docs and `web/backend/hmi_session.go` test table.
+- **Files:** auth policy docs and `apps/web-api/internal/hmi/hmi_session.go` test table.
 - **Output:** Viewer/Operator/Service permissions, idle expiry ≤15 minutes, logout and
   lockout behavior.
 - **Verify:** table-driven allow/deny matrix includes unknown/expired session.
@@ -152,7 +163,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-005 — Freeze audit record schema
 
-- **Files:** `web/backend/hmi_audit.go`, migration/store tests.
+- **Files:** `apps/web-api/internal/hmi/hmi_audit.go`, migration/store tests.
 - **Output:** actor, role, request ID, action, target, requested/effective old/new,
   reason, TTL, result, reason code and time quality.
 - **Verify:** accepted, rejected, timeout, login and logout records round-trip.
@@ -163,7 +174,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-010 — Add local socket lifecycle
 
-- **Files:** new `web/backend/hmi_ipc.go`, `web/backend/hmi_ipc_test.go`, startup/shutdown
+- **Files:** new `apps/web-api/internal/hmi/hmi_ipc.go`, `apps/web-api/internal/hmi/hmi_ipc_test.go`, startup/shutdown
   wiring in the existing backend entrypoint.
 - **Output:** bounded Unix socket listener with clean unlink/start/stop behavior.
 - **Verify:** start/stop/restart, stale socket, bind failure and goroutine cleanup tests.
@@ -180,7 +191,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-012 — Implement login/logout session issue
 
-- **Files:** `web/backend/hmi_session.go`, tests.
+- **Files:** `apps/web-api/internal/hmi/hmi_session.go`, tests.
 - **Output:** authenticate against existing user store; return opaque token/role/expiry;
   logout revokes token.
 - **Verify:** success, bad credential, locked user, disabled user and logout cases.
@@ -213,7 +224,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-016 — Add request idempotency cache
 
-- **Files:** new `web/backend/hmi_idempotency.go`, fake-clock tests.
+- **Files:** new `apps/web-api/internal/hmi/hmi_idempotency.go`, fake-clock tests.
 - **Output:** bounded TTL/LRU result cache keyed by actor/session/request ID.
 - **Verify:** duplicate returns same result; conflicting payload with same ID rejects;
   cache remains bounded.
@@ -222,7 +233,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-017 — Forward point command through existing core client
 
-- **Files:** `web/backend/core_client.go`, `hmi_ipc.go`, tests with fake core.
+- **Files:** `apps/web-api/internal/app/core_client.go`, `hmi_ipc.go`, tests with fake core.
 - **Output:** setpoint/mode/override/release translation and authoritative response.
 - **Verify:** accepted/rejected/timeout/core-disconnect cases; context cancellation bound.
 - **Depends:** HOP-015, P2 command support.
@@ -238,7 +249,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-019 — Expose alarm snapshot and ACK
 
-- **Files:** new `web/backend/hmi_alarm.go`, alarm store/handler integration, tests.
+- **Files:** new `apps/web-api/internal/hmi/hmi_alarm.go`, alarm store/handler integration, tests.
 - **Output:** authoritative snapshot plus idempotent ACK response/audit.
 - **Verify:** active/unacked, active/acked, cleared states, stale ID, role deny, timeout.
 - **Depends:** HOP-012, HOP-016, HOP-018.
@@ -248,7 +259,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-020 — Extend core IPC request ID and stable result
 
-- **Files:** `services/core/web_ipc.*`, `tests/test_web_ipc.cpp`.
+- **Files:** `apps/core/adapters/ipc/web_ipc.*`, `apps/core/adapters/ipc/tests/test_web_ipc.cpp`.
 - **Output:** bounded UUID/string ID support and stable result/reason fields while
   preserving compatibility for existing numeric clients.
 - **Verify:** old request fixtures still pass; malformed/new requests fail explicitly.
@@ -316,7 +327,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-030 — Add bounded HMI API transport
 
-- **Files:** new `services/hmi/api/hmi_api_client.*`, CMake and tests.
+- **Files:** new `apps/hmi/api/hmi_api_client.*`, CMake and tests.
 - **Output:** connect/send/receive with max frame, deadline and request correlation.
 - **Verify:** partial read/write, malformed frame, oversized frame, disconnect and timeout.
 - **Depends:** HOP-001, HOP-002, HOP-010.
@@ -332,7 +343,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-032 — Add session model
 
-- **Files:** new `services/hmi/data/session_model.*`, tests.
+- **Files:** new `apps/hmi/data/session_model.*`, tests.
 - **Output:** login/logout/token/role/expiry state without persisting credential.
 - **Verify:** success/deny/expiry/logout/reconnect; secret-redaction inspection.
 - **Depends:** HOP-012, HOP-030.
@@ -340,7 +351,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-033 — Add authoritative point-control model
 
-- **Files:** new `services/hmi/data/control_model.*`, tests.
+- **Files:** new `apps/hmi/data/control_model.*`, tests.
 - **Output:** policy projection, effective state, source, priority and expiry cache.
 - **Verify:** invalid/missing policy becomes non-commandable; revision refresh revokes UI.
 - **Depends:** HOP-014, HOP-030.
@@ -366,7 +377,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-040 — Refactor navigation from six to five surfaces
 
-- **Files:** `services/hmi/ui/nav_controller.*`, `main.cpp`, nav tests.
+- **Files:** `apps/hmi/ui/nav_controller.*`, `main.cpp`, nav tests.
 - **Output:** Home/Points/Control/Alarms/Service ring and large page chooser.
 - **Verify:** touch and all six keys reach every surface; first-input wake suppression.
 - **Depends:** HOP-000.
@@ -446,7 +457,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-050 — Complete EN/VI strings and clipping tests
 
-- **Files:** `services/hmi/i18n/locale.*`, all five screens, tests.
+- **Files:** `apps/hmi/i18n/locale.*`, all five screens, tests.
 - **Output:** translated lifecycle/reason/session/override/alarm strings.
 - **Verify:** missing-key, UTF-8 and 320×240 clipping fixtures; visual target test.
 - **Depends:** HOP-041..049.
@@ -597,7 +608,7 @@ estimate, không phải release commitment; exit gate quan trọng hơn ngày l�
 
 #### HNW-001 — Add read-only network presentation model
 
-- **Files:** future `services/hmi/data/network_model.*` and tests.
+- **Files:** future `apps/hmi/data/network_model.*` and tests.
 - **Output:** bounded model for link, active IPv4/prefix/gateway/mode, transaction,
   deadline and last result; no config-file inference.
 - **Verify:** parse normal/missing/malformed/stale/unknown fields and clock countdown.
@@ -606,7 +617,7 @@ estimate, không phải release commitment; exit gate quan trọng hơn ngày l�
 
 #### HNW-002 — Add Network section under Service
 
-- **Files:** `services/hmi/screens/screen_service.*`, navigation/focus tests.
+- **Files:** `apps/hmi/screens/screen_service.*`, navigation/focus tests.
 - **Output:** read-only summary/detail; no sixth surface.
 - **Verify:** Viewer can inspect; unavailable authority shows `UNAVAILABLE`, not `OK`.
 - **Depends:** HNW-001.
@@ -687,7 +698,7 @@ estimate, không phải release commitment; exit gate quan trọng hơn ngày l�
 
 #### HNW-011 — Add HMI unit/component suite
 
-- **Files:** existing `services/hmi/tests` structure.
+- **Files:** existing `apps/hmi/tests` structure.
 - **Output:** deterministic model, state-machine, form and screen coverage.
 - **Verify:** warnings-as-errors HMI build/test with fake clock/transport.
 - **Depends:** HNW-001..010.

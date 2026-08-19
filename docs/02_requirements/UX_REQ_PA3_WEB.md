@@ -6,7 +6,7 @@
 > **Trạng thái:** Baseline cho slice P1–P6
 > **Nguồn:** `docs/CHUONG_YEU_CAU/dashboard.md` (UX-REQ-MKDDC24-PA3-001),
 > `docs/CHUONG_YEU_CAU/UX_DESIGN_MK-DDC-24_PA3.md` (UX-DES-MKDDC24-PA3-001)
-> **Plan:** [52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md](../03_implementation/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md)
+> **Plan:** [52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md](../03_implementation/archive/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md)
 > **Bằng chứng:** [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md)
 
 Tài liệu này chuyển hai bản mô tả PA3 thành **requirement có ID kiểm chứng

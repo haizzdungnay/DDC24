@@ -9,7 +9,7 @@
 > mọi giá trị (opcode, payload, enum, FAULT bit, RESET reason, hằng số) lấy theo header.
 > [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) và file này là
 > **diễn giải**: lệch header → **header thắng**, sửa docs theo
-> ([16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)).
+> ([16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md)).
 
 > ⚠️ File này là **HỢP ĐỒNG implement**. Nếu code MCU và code SOM bất đồng, sửa cho khớp
 > `iop_protocol.h`. **KHÔNG fork/sửa 1 bên.** Đổi hợp đồng = bump `IOP_VER_*` +
@@ -96,7 +96,7 @@ Hàm chung: iop_crc16() trong shared/iop_protocol.h — CẢ MCU lẫn SOM dùng
 ```
 > IOP-SW-010 + IOP-FW-010: mỗi phía PHẢI có unit test ≥10 vector — dùng **bộ chuẩn 12 vector**
 > trong [SWFW spec §10.1](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) /
-> [16_CONTRACT_FREEZE §5](16_CONTRACT_FREEZE.md). KHÔNG tự bịa vector khác làm chuẩn.
+> [16_CONTRACT_FREEZE §5](archive/16_CONTRACT_FREEZE.md). KHÔNG tự bịa vector khác làm chuẩn.
 > ⚠️ Vector cũ `0x84C0`/`0x556B` (docs trước 2026-06-11) là SAI — nếu test của bạn pass với
 > giá trị đó nghĩa là CRC implement sai thuật toán.
 
@@ -278,19 +278,21 @@ Protocol này có code tương đương ở 2 phía; **CRC + frame encode/decode
 chung logic** (không fork).
 
 ```
-MCU (firmware):
-fw/common/iop_protocol.h     ← COPY/symlink từ shared/iop_protocol.h (hằng số, CRC, enum)
-fw/common/iop_crc.c          ← wrapper iop_crc16 + unit test host
-fw/app/iop_comm.c            ← task slave: parse/build/dispatch (xem 04_FW_MCU §3)
-fw/drivers/iop_drv.c         ← USART1 DMA RX(IDLE)+TX
+MCU (firmware) — hiện trạng cây nguồn 2026-08-19, KHÔNG phải `fw/` như bản cũ ghi:
+firmware/stm32/src/iop/iop_link.{c,h}   ← lớp link IOP phía slave (176 dòng, mới ở mức khung)
+firmware/stm32/src/app/ddc24_runtime.c  ← vòng runtime ứng dụng (153 dòng)
+firmware/stm32/hostcheck/               ← test host cho lớp protocol (gate MKDDC_ENABLE_FW_HOSTCHECK)
+(hằng số/CRC/enum lấy thẳng từ contracts/iop/iop_protocol.h, không copy/symlink)
 
-SOM (mkddc-iobus):
-services/iobus/iop/iop_protocol.hpp  ← include shared/iop_protocol.h + wrapper C++ (struct, enum)
-services/iobus/iop/iop_crc.cpp       ← iop_crc16 + unit test (gtest/catch2)
-services/iobus/iop/iop_frame.cpp     ← build/parse frame
-services/iobus/iop/iop_client.cpp    ← state machine master + timeout/retry + SEQ
-services/iobus/iop/iop_parser.cpp    ← IO_RESP/DIAG_RESP → struct
+SOM (mkddc-iobus) — đo lại cây nguồn 2026-08-19:
+apps/iobus/adapters/iop/iop_crc.{hpp,cpp}     ← wrapper quanh iop_crc16() của contracts/iop/iop_protocol.h
+apps/iobus/adapters/iop/iop_frame.{hpp,cpp}   ← build/parse frame (#include "iop_protocol.h")
+apps/iobus/adapters/iop/iop_client.{hpp,cpp}  ← state machine master + timeout/retry + SEQ
+apps/iobus/adapters/iop/iop_parser.{hpp,cpp}  ← IO_RESP/DIAG_RESP → struct
+apps/iobus/adapters/iop/iop_port.{hpp,cpp}    ← mở/cấu hình cổng, read/write raw
 ```
+> **Không còn `iop_protocol.hpp`.** Phía SOM include thẳng `contracts/iop/iop_protocol.h`
+> (đường include do CMake gốc cấp); lớp tiện dụng C++ nằm trong từng file `iop_*.hpp`.
 > `iop_protocol.h` là 1 nguồn duy nhất (hằng số, enum CMD/ERR, `iop_crc16`, helper BE). MCU
 > include thẳng; SOM include qua `iop_protocol.hpp` (chỉ thêm lớp C++ tiện dụng, KHÔNG đổi
 > giá trị).
@@ -451,5 +453,5 @@ Frame mẫu (GET_IO SEQ=1): `AA 00 01 01 AC E1` (CRC=0xACE1).
 
 ---
 **Rev** 2.0 | 2026-06-25 · IOP v2 (ADR-010): IO_RESP 74B, HANDSHAKE_RESP 8B+BOARD_CAP_MAP, FAULT_FLAGS restructured, poll 500Hz. ·
-**Rev** 1.2 | 2026-06-11 · Freeze: [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) ·
+**Rev** 1.2 | 2026-06-11 · Freeze: [16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md) ·
 Service-level (thread/config/shm/build): [06_MKDDC_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)

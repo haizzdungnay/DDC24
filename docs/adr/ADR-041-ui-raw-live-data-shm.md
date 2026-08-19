@@ -1,4 +1,15 @@
-# ADR-011 — UI Raw Live Data In Shared Memory
+# ADR-041 — UI Raw Live Data In Shared Memory
+> ## ⚠ ĐỔI SỐ — 2026-08-19
+>
+> Hồ sơ này **phát hành nhầm số `ADR-011`**, trùng với [ADR-011 — BACnet Reliability/Quality Mapping](ADR-011-bacnet-reliability-quality-mapping.md), vốn được viện dẫn ở `contracts/shm/mkddc_shm.h` và 13 chỗ trong `apps/`. Số mới cấp phát là
+> **`ADR-041`** theo đúng luật ở [Decision Log](../00_governance/DECISIONS.md) ("lấy số cao
+> nhất đã cấp phát rồi cộng một").
+>
+> Decision Log bản 2026-07-22 từng chuẩn hoá hồ sơ này thành `ADR-014`, nhưng **số đó đã bị
+> chiếm** từ 2026-07-02 bởi [ADR-014 — Alarm Acknowledge Lifecycle](../02_design/adr/ADR-014-alarm-ack-lifecycle.md) và **đang được viện dẫn trong hợp đồng
+> canonical** `contracts/openapi/openapi.yaml`. Theo quy tắc "hợp đồng thắng tài liệu",
+> `ADR-014` giữ nguyên nghĩa cũ và hồ sơ này nhận `ADR-041`.
+
 
 **Status:** Accepted
 **Date:** 2026-06-30
@@ -19,7 +30,7 @@ Extend `kx_io_shm_t` with:
 
 Bump `KX_SHM_MAGIC` from `0x4B584402` to `0x4B584403` so stale consumers reject the new layout.
 
-> **Superseding integration note (2026-07-01):** ADR-011 Reliability adds
+> **Superseding integration note (2026-07-01):** ADR-011 (BACnet Reliability) adds
 > `ui_reliability[16]` without removing these raw-live fields and bumps the combined
 > contract to `0x4B584404` (v4).
 

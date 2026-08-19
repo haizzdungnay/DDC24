@@ -37,7 +37,7 @@ Mỗi phase chỉ "đóng" khi **Output** đạt + test group tương ứng tron
 - Chung: đưa `shared/iop_protocol.h` + `shared/mkddc_shm.h` vào build cả FW lẫn SOM
   (rename `kinexus_shm.h → mkddc_shm.h` ĐÃ làm 2026-06-11 — chỉ include, không copy).
 - Chung: lấy `systemd` unit ĐẦY ĐỦ từ 06 §10 + 07 §9 (không tự viết stub khác).
-- Trước khi code: cả 3 dev đọc [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) (10 phút).
+- Trước khi code: cả 3 dev đọc [16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md) (10 phút).
 
 **Output:**
 ```
@@ -151,14 +151,14 @@ BACnet object/priority bridge, Modbus ext cache integration.
 9. packaging/systemd unit files thật trong repo + install script
    (ĐÃ tạo 2026-06-12 — SKEL-005, điều kiện board bring-up 17_WEEK1).
 10. Stateful graph components còn thiếu + persist counter: COR-009/COR-010 theo
-    [23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) — Active 2026-06-13.
+    [23_GRAPH_STATEFUL_COMPONENTS_PLAN](archive/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) — Active 2026-06-13.
 11. BACnet/IP full path: object registry, Read/WriteProperty, Priority_Array[16] → core.sock
     source=bacnet mức 3 (BAC-CONFLICT-001 CLOSED 2026-06-17 — 07 §8 Rev 1.6), Reliability/
     Status_Flags, COV/alarm/pretest theo [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md).
     **ĐÃ implement 2026-06-17 — BAC-001..011 DONE (114 test pass).**
 12. Modbus RTU master: `fieldbus.conf` (incl. `rs485.device`), device profile, poll scheduler,
     ext cache (kx_ext_snapshot_msg_t vào mkddc_shm.h), write queue, E302/E303 alarm theo
-    [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md).
+    [26_MODBUS_IMPLEMENTATION_PLAN](archive/26_MODBUS_IMPLEMENTATION_PLAN.md).
     **ĐÃ implement 2026-06-17 — MOD-001..011 DONE (114 test pass).**
 13. `COR-HIST-001`: read-only coherent historian snapshot từ cùng scan, sau resolve + safe-state;
     UI-01..16/AO-01..04/DO-01..04 với quality/source/role/generation. Core không ghi DB.
@@ -273,7 +273,7 @@ Trạng thái P6 historian gate: bounded schema-v5 migration/activation and live
 | P5.5→P6 | HOP-000..077 done; five surfaces render trên board; touch/button, authoritative command, RBAC/audit, degraded mode và privilege gates pass | SW Lead + QA |
 | P6→Release | group 6/7/8 + E2E-HIST-001/target eMMC benchmark + local HMI/network HIL pass, [14_HANDOVER](15_RELEASE_HANDOVER_CHECKLIST.md) tick đủ | PM |
 
-> 📍 Tuần đầu trên SOM: làm theo 8 mốc [18_WEEK1_SOM_BRINGUP_CHECKLIST](18_WEEK1_SOM_BRINGUP_CHECKLIST.md)
+> 📍 Tuần đầu trên SOM: làm theo 8 mốc [18_WEEK1_SOM_BRINGUP_CHECKLIST](archive/18_WEEK1_SOM_BRINGUP_CHECKLIST.md)
 > (map P0→P4 round-trip). Dev mới: bắt đầu từ [17_QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md).
 
 ---

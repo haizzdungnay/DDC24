@@ -12,7 +12,7 @@
 > (Contract Freeze: chốt MVP Rev A, module API, build/systemd đầy đủ, seqlock reader mẫu)
 > **Owner:** Dev 2 (SOM)
 > **Nguồn-chuẩn CUỐI CÙNG:** [`contracts/shm/mkddc_shm.h`](../../contracts/shm/mkddc_shm.h) (SHM) — docs lệch
-> header → **header thắng** ([16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)). Diễn giải:
+> header → **header thắng** ([16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md)). Diễn giải:
 > [ADR-005](../adr/ADR-005-three-process-architecture.md) ·
 > [PRODUCT_DEFINITION §10,§13](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) ·
 > [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) ·
@@ -42,7 +42,7 @@ safe-state, ghi `ao_setpoint[]/do_cmd[]` ngược vào shm — đủ để round
 | 7 | `output_writer` | **đầy đủ** | Ghi `ao_setpoint[]/do_cmd[]` vào shm (writer duy nhất 2 field này) |
 | 8 | `core_metrics` | **đầy đủ** | scan_count/scan_overrun/timing |
 | 9 | `web_ipc` | **stub được** | Nhận command từ web qua `/run/mkddc/core.sock`; stub = accept + log + đưa vào queue |
-| 10 | `graph_runtime` | **implemented (Rev A subset); S7 #4 planned** | Base 13 component đã có; COR-009/010 thêm 10 component stateful + persist theo [22](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) |
+| 10 | `graph_runtime` | **implemented (Rev A subset); S7 #4 planned** | Base 13 component đã có; COR-009/010 thêm 10 component stateful + persist theo [22](archive/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) |
 | 11 | `bacnet_objtable` | **stub được; S7 #5 planned** | Stub ghi value/quality; full Priority_Array[16]/Reliability/COV theo [24](25_BACNET_IMPLEMENTATION_PLAN.md) |
 
 **KHÔNG làm trong core (mọi Rev):**
@@ -61,43 +61,49 @@ config `/data/config/` (đọc qua web deploy).
 
 ## 1. Cây thư mục chuẩn
 
-> **Trạng thái:** ĐÃ làm 2026-07-24 — restructure theo domain subfolder (ADR-021 Phase A),
-> mirror `services/iobus/`. Include nội bộ dùng full path từ `services/core/` root
-> (vd `#include "st/st_parser.hpp"`), kể cả include header cùng thư mục — xem
-> `docs/adr/ADR-021-restructure-core-and-backend-by-domain.md`.
+> **Đo lại 2026-08-19.** Hai lần restructure chồng lên nhau: ADR-021 Phase A (2026-07-24) chia theo
+> domain, rồi `PLAN-ARCH-RESTRUCT-002`/ADR-025 chuyển `services/core/` → `apps/core/` và xếp theo
+> **tầng hexagonal** `domain/` ← `application/` ← `adapters/` ← `bootstrap/`, với `ports/` giữ
+> interface. Include nội bộ dùng full path từ `apps/core/` root (vd `#include "application/st/st_parser.hpp"`).
+> Cây dưới đây là cây thật, không phải cây dự kiến.
 
 ```
-services/core/
+apps/core/
 ├── CMakeLists.txt
-├── main.cpp              — init, SCHED_FIFO 80, attach shm (retry), sd_notify, signal
-├── json_min.hpp          — parser JSON đệ quy tối thiểu (dùng chéo nhiều domain, giữ ở root)
-├── st/                    — ngôn ngữ ST: parser/semantic/runtime/stdlib/io_map/cyclic_runtime
-│   ├── st_parser.{hpp,cpp} · st_semantic.{hpp,cpp} · st_runtime.{hpp,cpp} · st_stdlib.{hpp,cpp}
-│   ├── st_artifact.{hpp,cpp} · st_io_map.{hpp,cpp} · st_cyclic_runtime.{hpp,cpp} · st_trace.{hpp,cpp}
-│   ├── st_diagnostic.hpp · st_program.hpp · st_validate_main.cpp (entry mkddc-st-validate)
-│   └── tests/
-├── graph/                 — component graph + point data model
-│   ├── scan_loop.{hpp,cpp}          — vòng quét clock_nanosleep(ABSTIME) 1s
-│   ├── point_table.{hpp,cpp}        — 24 IO + AV/BV/MSV, value+quality+ts+source
-│   ├── point_quality.{hpp,cpp}      — quality từ fault/stale
-│   ├── graph_runtime.{hpp,cpp}      — load/validate/topo/execute graph.json → resolver mức 5
-│   ├── runtime_point_snapshot.{hpp,cpp} · state_snapshot.{hpp,cpp} · clock_snapshot.hpp
-│   └── tests/
-├── alarm/                 — alarm_runtime.{hpp,cpp}, alarm_primitives.hpp + tests/
-├── bacnet/                — bacnet_objtable.{hpp,cpp}: ghi kx_plc_shm (creator plc_shm = core) + tests/
-├── schedule/               — schedule_runtime.{hpp,cpp} + tests/
-├── safety/                 — safe_state.{hpp,cpp} (fallback IO fault/stale/T6/T7, §5.2),
-│                            safe_state_config.{hpp,cpp} (loader io_safe_state.conf → default mức 6) + tests/
-├── ipc/                    — core ↔ iobus, core ↔ web backend
-│   ├── web_ipc.{hpp,cpp}            — Unix socket /run/mkddc/core.sock, JSON lines (§8)
-│   ├── iobus_reader.{hpp,cpp}       — seqlock reader kx_io_shm
-│   ├── output_writer.{hpp,cpp}      — ghi ao_setpoint[]/do_cmd[]
-│   ├── priority_resolver.{hpp,cpp}  — 6 mức → 1 output cuối/kênh
-│   ├── config_reload.{hpp,cpp}      — SIGHUP reload (COR-008)
-│   └── tests/
-└── diagnostics/
-    ├── core_metrics.{hpp,cpp}      — scan_count, overrun, exec time
-    └── tests/
+├── bootstrap/main.cpp     — init, SCHED_FIFO 80, attach shm (retry), sd_notify, signal
+├── ports/                 — interface giữa các tầng
+│   ├── io_snapshot.hpp · io_snapshot_reader.hpp · output_command.hpp
+├── domain/                — thuần nghiệp vụ, không I/O
+│   ├── json_min.hpp                 — parser JSON đệ quy tối thiểu (dùng chéo nhiều domain)
+│   ├── graph/                       — component graph + point data model
+│   │   ├── point_table.{hpp,cpp}        — 24 IO + AV/BV/MSV, value+quality+ts+source
+│   │   ├── point_quality.{hpp,cpp}      — quality từ fault/stale
+│   │   ├── point_writer.{hpp,cpp}       — đường ghi dùng chung (cấm nguồn tự ghi SHM)
+│   │   ├── graph_runtime.{hpp,cpp}      — load/validate/topo/execute graph.json
+│   │   ├── runtime_point_snapshot.{hpp,cpp} · clock_snapshot.hpp
+│   ├── priority/priority_resolver.{hpp,cpp}  — 6 mức → 1 output cuối/kênh
+│   ├── safety/safe_state.{hpp,cpp}           — fallback IO fault/stale/T6/T7 (§5.2)
+│   ├── safety/overrun_monitor.{hpp,cpp}      — giám sát quá hạn chu kỳ quét
+│   └── alarm/alarm_primitives.hpp
+├── application/           — điều phối use case
+│   ├── runtime/scan_loop.{hpp,cpp}   — vòng quét clock_nanosleep(ABSTIME)
+│   ├── st/                           — ngôn ngữ ST/FBD: parser, semantic, IR, compile, runtime,
+│   │                                   artifact/manifest, io_map, retain, journal, trace, scheduler,
+│   │                                   process image, control API, fuzz/ (entry st_validate_main.cpp,
+│   │                                   st_compile_main.cpp)
+│   ├── programming/                  — program_ipc_server, runtime coordinator, cutover
+│   ├── schedule/                     — schedule_runtime, schedule_clock, schedule_sim_main
+│   └── alarm/alarm_runtime.{hpp,cpp}
+├── adapters/              — I/O, hệ điều hành, giao thức
+│   ├── ipc/                          — web_ipc (Unix socket /run/mkddc/core.sock, JSON lines §8),
+│   │                                   iobus_reader (seqlock reader kx_io_shm),
+│   │                                   output_writer (ao_setpoint[]/do_cmd[]),
+│   │                                   config_reload (SIGHUP, COR-008), program_ipc_unix
+│   ├── bacnet/bacnet_objtable.{hpp,cpp}  — ghi kx_plc_shm (creator plc_shm = core)
+│   ├── persistence/state_snapshot.{hpp,cpp}
+│   ├── config/safe_state_config.{hpp,cpp} — loader io_safe_state.conf → default mức 6
+│   └── diagnostics/core_metrics.{hpp,cpp} — scan_count, overrun, exec time
+└── tests/                 — test gộp; một số domain giữ test cạnh source (vd domain/priority/)
 ```
 
 Test liệt kê ở §5.5/§8 dưới đây tham chiếu theo basename (vd `test_iobus_reader.cpp`) — vị trí
@@ -444,10 +450,10 @@ Rules:
 Evidence commands (WSL/Ninja, Release):
 
 ```bash
-cmake -S services/core -B build/core-release-task5-on -G Ninja -DCMAKE_BUILD_TYPE=Release -DCORE_BUILD_TESTS=ON
+cmake --fresh -S . -B build/core-release-task5-on -G Ninja -DCMAKE_BUILD_TYPE=Release -DCORE_BUILD_TESTS=ON
 cmake --build build/core-release-task5-on -j2
 ctest --test-dir build/core-release-task5-on --output-on-failure
-cmake -S services/core -B build/core-release-task5-off -G Ninja -DCMAKE_BUILD_TYPE=Release -DCORE_BUILD_TESTS=OFF
+cmake --fresh -S . -B build/core-release-task5-off -G Ninja -DCMAKE_BUILD_TYPE=Release -DCORE_BUILD_TESTS=OFF
 cmake --build build/core-release-task5-off -j2
 ```
 
@@ -472,7 +478,9 @@ Trạng thái: **DONE 2026-07-17 cho COR-HIST-001 core/local gates**. Không đ�
 
 ## 9. Build / install / run
 
-**`services/core/CMakeLists.txt` mẫu:**
+**`apps/core/CMakeLists.txt` — trích để tham khảo:**
+
+> Sau `PLAN-ARCH-RESTRUCT-002`, `CMakeLists.txt` **ở gốc repo** là entrypoint duy nhất và `apps/core/CMakeLists.txt` được nạp qua `add_subdirectory`. Đoạn dưới là mẫu lịch sử để hiểu cấu trúc target, **không** còn copy ra dùng độc lập được.
 ```cmake
 cmake_minimum_required(VERSION 3.16)
 project(mkddc-core CXX)
@@ -506,10 +514,13 @@ include(GoogleTest)
 gtest_discover_tests(core_tests)
 ```
 **Build + test local:**
+
+> **Sau `PLAN-ARCH-RESTRUCT-002`:** `CMakeLists.txt` **ở gốc repo** là entrypoint duy nhất; không cấu hình riêng từng service. Giữ `--fresh` để build dir cũ trỏ `services/` không làm ra số đo giả.
+
 ```bash
-cmake -S services/core -B build/core -DCMAKE_BUILD_TYPE=Release
-cmake --build build/core -j
-ctest --test-dir build/core --output-on-failure
+cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release
+cmake --build build/fw -j
+ctest --test-dir build/fw --output-on-failure
 ```
 **Chạy dev không cần board:** chạy `mkddc-iobus` + fake MCU trước (06 §11.1) →
 `./build/core/mkddc-core --log-level debug` → xem point table phản ánh UI ramp của fake MCU.
@@ -634,13 +645,15 @@ bool ExtCache::lookup(const NodeParams& p, ExtPoint* out);
 
 ### 12.5 Files cần tạo/sửa
 
-| File | Thay đổi |
+> **Đối chiếu mã 2026-08-19.** Bảng dưới là kế hoạch gốc của `COR-011` (đường dẫn `services/core/`
+> thời đó). Chỗ đã làm thật, theo cây `apps/core/` hiện hành:
+
+| File kế hoạch | Hiện trạng trong mã |
 |------|---------|
-| `services/core/graph_runtime.cpp` | Thêm 5 Protocol node type parse + tick() |
-| `services/core/graph_runtime.hpp` | Thêm NodeType enum + ProtocolNodeParams struct |
-| `services/core/scan_loop.cpp` | Thêm step 3 ext_cache reader loop |
-| `services/core/ext_cache_reader.hpp` (mới) | Helper lookup RTU+TCP key từ ext_cache |
-| `services/core/tests/test_graph_protocol.cpp` (mới) | Unit test Protocol nodes |
+| `services/core/graph_runtime.{cpp,hpp}` — 5 Protocol node type + NodeType enum | `apps/core/domain/graph/graph_runtime.{cpp,hpp}` — **có** |
+| `services/core/scan_loop.cpp` — step 3 ext_cache reader loop | `apps/core/application/runtime/scan_loop.cpp` — **có** |
+| `services/core/ext_cache_reader.hpp` (mới) | **không tạo** — logic lookup nằm trong `graph_runtime` thay vì tách file riêng |
+| `services/core/tests/test_graph_protocol.cpp` (mới) | `apps/core/domain/graph/tests/test_graph_protocol.cpp` — **có** |
 
 ---
 
@@ -669,5 +682,5 @@ Trạng thái: ĐÃ làm 2026-06-17 — BAC-004 (bacnet_objtable publish+read_ex
 BACnet client persistent connection, audit format cập nhật, rejected "unknown_source" added) ·
 1.5 | 2026-06-13 (S7 #4/#5/#6 docs linked; priority test fixed web/manual=mức 2) ·
 1.4 | 2026-06-12 (web_ipc overridden+audit, SIGHUP reload, packaging/systemd) ·
-1.3 | 2026-06-12 · Freeze: [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) ·
+1.3 | 2026-06-12 · Freeze: [16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md) ·
 DoD: [13_DEFINITION_OF_DONE §4](13_DEFINITION_OF_DONE.md)

@@ -416,7 +416,7 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 | Plan | Quan hệ |
 |---|---|
 | [49_MODBUS_RTU_IMPLEMENTATION_PLAN](49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | 7/15 finding nằm trong phạm vi Modbus RTU; P2 đóng nốt phần `(bus, slave)` mà plan 49 mở ra khi chốt 2 cổng |
-| [50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN](50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | `REV-BE-05` chạm `virtualpoint_scheduler.go`. **Làm FIX-401 trước khi plan 50 vào P1**, nếu không bản viết lại sẽ mang theo lỗi bỏ dở vòng lặp |
+| [50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN](archive/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | `REV-BE-05` chạm `virtualpoint_scheduler.go`. **Làm FIX-401 trước khi plan 50 vào P1**, nếu không bản viết lại sẽ mang theo lỗi bỏ dở vòng lặp |
 | [45_WEB_UX_REMEDIATION_AND_CICD_PLAN](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) | FIX-501 là phần CI/CD còn nợ của plan 45 — ba gate rỗng ghi trong review 2026-07-30; [evidence deploy](../07_records/test-evidence/fw-som/2026-07-30-aarch64-deploy-review-fixes.md) giữ đường kiểm chứng, record gốc phục hồi tại `b69fdf1` |
 | [ENABLE_TTYS1_RS485_2](../08_hardware/foxlinx-som-ddc24/ENABLE_TTYS1_RS485_2.md) | FIX-201 kiểm chứng đầy đủ hai bus **chỉ khi** `ttyS1` được bật; trước đó phải mô phỏng bằng `bus_id` trong `fieldbus.conf` |
 

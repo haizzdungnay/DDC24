@@ -2,7 +2,7 @@
 
 > **Recovery status (2026-07-22): In Review.** Bộ hướng dẫn đã được phục hồi đầy đủ để giữ implementation knowledge. Trạng thái `Active/FROZEN` trong bảng là trạng thái lịch sử; phải đối chiếu với baseline, code và test hiện hành trước khi dùng cho release.
 
-> **Owner:** Dev Lead | **Last Updated:** 2026-08-09
+> **Owner:** Dev Lead | **Last Updated:** 2026-08-19
 
 Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTATION_README.md` trước.
 
@@ -26,22 +26,16 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [13](13_DEFINITION_OF_DONE.md) | Definition of Done | Active |
 | [14](14_BRINGUP_GUIDE.md) | Board bring-up guide | Active |
 | [15](15_RELEASE_HANDOVER_CHECKLIST.md) | Pre-release checklist | Draft |
-| [16](16_CONTRACT_FREEZE.md) | Frozen contract (header wins) | FROZEN |
 | [17](17_QUICK_START_SOM_DEV.md) | Quickstart cho dev mới | Active |
-| [18](18_WEEK1_SOM_BRINGUP_CHECKLIST.md) | 8 mốc tuần đầu SOM | Active |
 | 19–20 — đã loại 2026-08-14 | Audit/checklist tài liệu ngày 2026-06-11 dùng cây source cũ; phục hồi tại `b69fdf1` khi cần điều tra lịch sử | Historical — không còn authority |
 | [21](21_VIRTUAL_COM_DECISION.md) | Virtual COM/PTY decision | Active |
 | [22](22_SOM_SRC_IMPLEMENTATION_PLAN.md) | SOM source S0-S8, gồm coherent historian snapshot + ADR-017 network authority NWC-000..017 | Active; network service target-verified, physical HIL/Web FE migration open |
-| [23](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | Stateful graph components plan | Active |
-| [24](24_SOM_FW_STATUS_REPORT_ISO.md) | FW status report ISO format | Active |
 | [25](25_BACNET_IMPLEMENTATION_PLAN.md) | BACnet/IP implementation plan | IN PROGRESS |
-| [26](26_MODBUS_IMPLEMENTATION_PLAN.md) | Modbus RTU master plan | IN PROGRESS |
 | [27](27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) | Deploy SOM no-MCU runbook | Active |
 | [28](28_IO_CALIBRATION_TEST_PLAN.md) | IO calibration procedure | Active |
 | [29](29_REALTIME_BENCHMARK_PROCEDURE.md) | Realtime jitter benchmark | Active |
 | [30](30_BACNET_BTL_PRETEST_PROCEDURE.md) | BACnet BTL pretest SOP | Active |
 | [31](31_PROTOCOL_LIB_INTEGRATION_PLAN.md) | Protocol lib integration status | IN PROGRESS |
-| [32](32_DEV_TEAM_NEXT_ACTION.md) | Next actions blocking list | IN PROGRESS |
 | [33](33_BACNET_OBJECT_ALIGNMENT_PLAN.md) | BACnet object alignment | Active |
 | 35 — hồ sơ chưa được phục hồi | Root helper contract | Missing — không tạo link giả |
 | 36 — hồ sơ chưa được phục hồi | Immutable generation store design | Missing — không tạo link giả |
@@ -51,16 +45,34 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | 41 — hồ sơ chưa được phục hồi | Settings/Network test plan | Missing — không tạo link giả |
 | [42](42_HISTORIAN_FE_PROTOTYPE_PLAN.md) | SQLite historian, shared point logging, unified Trends | Approved — implementation open |
 | 43 — hồ sơ chưa được phục hồi | Independent point tag/name namespaces + Programming alias | Missing — không tạo link giả |
-| [46](46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md) | Restructure repository theo process-first + bounded modules; source migration, bounded context, nghiệm thu target và rollback đều hoàn tất | **Closed** — G0..G5 PASS; `RST-205` closure review 2026-08-04 |
 | [44](44_TIME_DATE_IEC61131_3_READINESS_PLAN.md) | Time/Date production slice và IEC 61131-3 readiness | In progress — TIME-002/004/005 xong local; gate board/recovery/Rev C còn mở |
 | [45](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) | Dọn blocker Web UI/UX + CI/CD tự động deploy | Approved — Track A xong 2026-08-01; Track B hoãn |
 | [47](47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md) | Runbook nghiệm thu target `RST-202`: build native trên board, install, startup order, crash/restart, provenance và diễn tập rollback | Draft — chờ owner cấp target window |
 | [49](49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | Modbus RTU FE + BE + FW-SOM | Track A + Track B (phần mềm) xong 2026-08-06; treo `G-C`/`G-D` phụ thuộc phần cứng |
-| [50](50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | Scheduler Engine v3.1 — bỏ mô hình thanh ghi `TSx`, chuyển sang Schedule Object (5 pha · 78 task · 63 người-ngày) | **DRAFT — chờ phê duyệt**; P0 là cổng chặn cứng, 6 quyết định treo |
-| [52](52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) | Dashboard và Web UX PA3 — data truth, shell, 12 use case, kiểm chứng trình duyệt và deploy Foxlinx (7 pha · 50 task · 56 người-ngày · mục tiêu 9 tuần) | **DRAFT — chờ duyệt G0**; phân tích source/runtime xong, chưa triển khai PA3 |
+| [51](51_BE_FE_FINDINGS_REMEDIATION_PLAN.md) | Dọn 15 finding review BE/FE ngày 2026-08-06 (6 pha · 35 task · 24,75 người-ngày) | **P1–P4 cài xong trên host** 2026-08-08; còn nợ kiểm chứng trên bo và P5 |
 | [53](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Triển khai Programming theo vertical slice ST/FBD → Check → Commission → Runtime → HIL/release | **M3 — REVIEW READY; G0 RED** |
 | [54](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | Theo dõi tạo, hoàn thiện, review và phê duyệt baseline 22 hồ sơ Programming | **22/22 M3 — REVIEW READY; M4/M5 = 0, chờ người thật** |
 | [55](55_UI_UNIVERSAL_INPUT_REDESIGN_PLAN.md) | Thiết kế lại + triển khai trang cấu hình Universal Input `/eng/inputs` (3 phase: FE-only, mở rộng contract, fault detection per-channel) | **Phase 0+1 DONE** 2026-08-14 (13/13 task, deploy Foxlinx xong); Phase 2/3 NOT STARTED, chờ PM/CTO chốt phạm vi |
 | [56](56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md) | Master Plan Programming Overview/ST/FBD theo Lệnh CTO/Owner 2026-08-15 (Phase 0-5, WP-01..13 + `WP-MULTIPROGRAM-ARCH`); tracker riêng ở [`PROGRAMMING_IMPLEMENTATION_TRACKER.md`](PROGRAMMING_IMPLEMENTATION_TRACKER.md) | **Phase 0+1 DONE** 2026-08-15 (WP-01..04); **Phase 2 FE DONE** 2026-08-15 (WP-05/06/07 — palette/IO/Inspector); WP-08/09 (Mapping+E2E board) tiếp theo |
+| [57](57_WEB_UIUX_UC_UPGRADE_PLAN.md) | Nâng cấp Web UI/UX theo use case, phát hành theo wave | **Wave 0 + Wave 1 APPROVED, đã triển khai**; wave sau còn mở |
+| [TRACKER](PROGRAMMING_IMPLEMENTATION_TRACKER.md) | Bảng theo dõi WP của Master Plan 56 | Sống — cập nhật theo từng WP |
 
-**Archived:** [S7 Hardening Code Review](../review/2026-06-13-s7-hardening-review.md)
+## Đã lưu trữ — [`archive/`](archive/)
+
+Hồ sơ **đã đóng hoặc bị thay thế**, chuyển vào [`archive/`](archive/) ngày 2026-08-19 để bảng
+Index trên chỉ còn việc đang sống. Mỗi file mang một banner ghi lý do đóng và tài liệu đọc thay.
+Danh mục đầy đủ: [`archive/README.md`](archive/README.md).
+
+| File | Lý do đóng |
+|------|-----------|
+| [16 — Contract Freeze](archive/16_CONTRACT_FREEZE.md) | SUPERSEDED — freeze IOP v1.1, thay bằng ADR-010 + `contracts/iop/iop_protocol.h` v2.0 |
+| [18 — Week-1 SOM Bring-up](archive/18_WEEK1_SOM_BRINGUP_CHECKLIST.md) | Mốc tuần đầu đã qua; lệnh build trỏ `services/` đã bị xoá |
+| [23 — Graph Stateful Components](archive/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | `COR-009`/`COR-010` xong, 97/97 test pass 2026-06-13 |
+| [24 — SOM FW Status Report](archive/24_SOM_FW_STATUS_REPORT_ISO.md) | Báo cáo chụp trạng thái 2026-06-13 trên cây `services/` đã xoá |
+| [26 — Modbus Implementation Plan](archive/26_MODBUS_IMPLEMENTATION_PLAN.md) | SUPERSEDED — As-Built v1, thay bằng plan 49 + bộ hồ sơ `MBRTU` |
+| [32 — Dev Team Next Action](archive/32_DEV_TEAM_NEXT_ACTION.md) | SUPERSEDED Rev 2.0 — ba task chặn đã xử lý |
+| [46 — Repository Restructure](archive/46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md) | Closed — G0..G5 PASS, `RST-205` closure 2026-08-04 |
+| [50 — Scheduler v3.1](archive/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | 96/96 task đóng, đã merge + deploy Foxlinx 2026-08-07 |
+| [52 — Web PA3 Dashboard/UX](archive/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) | 50/50 task, G0–G6 đạt, deploy + rollback 2026-08-08 |
+
+**Ngoài thư mục này:** [S7 Hardening Code Review](../review/2026-06-13-s7-hardening-review.md).

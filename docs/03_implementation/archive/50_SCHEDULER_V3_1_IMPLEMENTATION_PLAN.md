@@ -1,10 +1,19 @@
 # Plan 50: Triển khai Scheduler Engine v3.1 — loại bỏ mô hình thanh ghi `TSx`
 
-> **Trạng thái:** **APPROVED và đang thực thi.** PM/CTO duyệt toàn bộ 6 quyết định theo PA-1 ngày 2026-08-07 — xem [ADR-023](../adr/ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md). P0 đã mở khoá.
+> ## 🗄 ĐÃ LƯU TRỮ — 2026-08-19
+>
+> Hồ sơ **đã đóng**, giữ tại `docs/03_implementation/archive/` để truy nguyên.
+> **Không** dùng làm căn cứ mở việc mới hay làm nguồn-chuẩn cho mã hiện hành.
+>
+> **Lý do đóng:** **96/96 task đã đóng** (CHANGELOG 2026-08-07), đã merge `main` và deploy Foxlinx SOM-DDC-24. Đối chiếu mã ngày 2026-08-19: `apps/core/application/schedule/`, `apps/iobus/adapters/bacnet/bacnet_schedule.{hpp,cpp}`, `apps/web-ui/src/features/scheduler/` đều tồn tại. Hai cờ `EXT_PHYSICAL_VERIFIED` và `PHYSICAL_IO_VERIFIED` vẫn `NO` nhưng **không** do plan này giữ — chúng thuộc [ADR-023](../../adr/ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md) và mở khoá bởi plan 49 `G-C`/`G-D`.
+>
+> **Đọc thay bằng:** [ADR-023](../../adr/ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md) · [49_MODBUS_RTU_IMPLEMENTATION_PLAN](../49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) · [P1_EXIT_REVIEW](../../07_records/reviews/SCHEDULER_V3_1_P1_EXIT_REVIEW_2026-08-07.md)
+
+> **Trạng thái:** **ĐÓNG 2026-08-07 — 96/96 task hoàn tất**, đã merge `main` và deploy Foxlinx. (Dòng gốc ghi *"APPROVED và đang thực thi"* là trạng thái lúc lập plan.) PM/CTO duyệt toàn bộ 6 quyết định theo PA-1 ngày 2026-08-07 — xem [ADR-023](../../adr/ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md). P0 đã mở khoá.
 > **Phiên bản:** 1.1 | **Ngày lập:** 2026-08-07 | **Cập nhật:** 2026-08-07
 > **Owner:** Dev Core (C++) + Dev BE (Go) + Dev FE (React) + QA
-> **Nguồn yêu cầu:** [`docs/CHUONG_YEU_CAU/scheduler.md`](../CHUONG_YEU_CAU/scheduler.md) — Product Spec v3.1
-> **Thiết kế nền:** [UIUX-UC-WEB-SCHEDULER-PROPOSAL-001](../04_uiux/KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md) (20 khoảng cách · 6 quyết định · 26 use case · wireframe)
+> **Nguồn yêu cầu:** [`docs/CHUONG_YEU_CAU/scheduler.md`](../../CHUONG_YEU_CAU/scheduler.md) — Product Spec v3.1
+> **Thiết kế nền:** [UIUX-UC-WEB-SCHEDULER-PROPOSAL-001](../../04_uiux/KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md) (20 khoảng cách · 6 quyết định · 26 use case · wireframe)
 > **Baseline mã nguồn:** commit `5fef0b9`, nhánh `main`
 > **Tổng khối lượng:** **64 người-ngày** / **96 task** / 5 pha
 > **Ngoài phạm vi:** panel lịch trên HMI cục bộ 320×240; triển khai broker MQTT thật (xem QĐ-2); chứng nhận BTL (chỉ chuẩn bị đối tượng ở P4).
@@ -218,7 +227,7 @@ Sáu quyết định đã thành văn bản có ngày và người quyết (ADR-
 
 ### 4.1 P1.A · Core runtime C++ — viết lại `ScheduleRuntime` (9 người-ngày)
 
-File: [`apps/core/application/schedule/schedule_runtime.{hpp,cpp}`](../../apps/core/application/schedule/schedule_runtime.cpp) · test: `apps/core/application/schedule/tests/test_schedule_runtime.cpp`
+File: [`apps/core/application/schedule/schedule_runtime.{hpp,cpp}`](../../../apps/core/application/schedule/schedule_runtime.cpp) · test: `apps/core/application/schedule/tests/test_schedule_runtime.cpp`
 
 | Task | Nội dung | Ngày | Đóng gap |
 |---|---|---:|---|
@@ -227,7 +236,7 @@ File: [`apps/core/application/schedule/schedule_runtime.{hpp,cpp}`](../../apps/c
 | SCHD-103 | `evaluate_weekly()` — tìm cặp Time-Value **gần nhất trước thời điểm hiện tại** trong ngày, lùi sang ngày trước nếu ngày nay chưa có event | 1,5 | G-01 | ✅ |
 | SCHD-104 | `evaluate_exception()` — 5 kiểu `date_rule`; chọn theo `event_priority`; **bằng priority ⇒ trả conflict `SCH-CONFIG-003`, không tự chọn** | 2 | G-02 | ✅ |
 | SCHD-105 | `schedule_default` khi không event nào hiệu lực; `effective_period` chặn ngoài khoảng ⇒ `INACTIVE` | 0,75 | G-03 G-04 | ✅ |
-| SCHD-106 | Bỏ hoàn toàn `holiday_active` tắt-toàn-cục ở [:459-482](../../apps/core/application/schedule/schedule_runtime.cpp#L459-L482) | 0,25 | G-02 | ✅ |
+| SCHD-106 | Bỏ hoàn toàn `holiday_active` tắt-toàn-cục ở [:459-482](../../../apps/core/application/schedule/schedule_runtime.cpp#L459-L482) | 0,25 | G-02 | ✅ |
 | SCHD-107 | Ghi ra **danh sách target**; một target lỗi không dừng vòng lặp (N5); lưu `write_result` từng target | 1 | G-06 | ✅ |
 | SCHD-108 | **Phân xử `priority_for_writing` 1..16 bên trong lớp scheduler** — nhiều lịch cùng target thì lịch priority nhỏ hơn thắng; chỉ người thắng được đưa xuống `PRIO_SCHEDULE` (mức 4) của resolver. Phơi `core_priority_level` ra snapshot. Theo ADR-023 | 1,5 | G-07 | ✅ |
 | SCHD-109 | `next_transition_at` — tính thời điểm chuyển trạng thái kế tiếp (spec §10.1 bước 10) | 0,75 | G-01 | ✅ |
@@ -257,7 +266,7 @@ File: `apps/web-api/internal/app/schedule*.go`, `dto.go`, `http.go`
 
 | Task | Nội dung | Ngày | Đóng gap |
 |---|---|---:|---|
-| SCHD-121 | DTO v3.1 thay `ScheduleRow` ở [dto.go:142-162](../../apps/web-api/internal/app/dto.go#L142-L162) | 1 | G-01 | ✅ |
+| SCHD-121 | DTO v3.1 thay `ScheduleRow` ở [dto.go:142-162](../../../apps/web-api/internal/app/dto.go#L142-L162) | 1 | G-01 | ✅ |
 | SCHD-122 | `schedulestore.go` — lưu theo từng lịch + thư mục revision; giữ **≥10 bản gần nhất** | 1,5 | G-09 | ✅ |
 | SCHD-123 | Bộ đếm `revision` + khoá lạc quan; publish revision cũ hơn ⇒ `SCH-VERSION-001` | 1 | G-09 | ✅ |
 | SCHD-124 | Máy trạng thái `DRAFT→VALIDATED→PUBLISHED→ACTIVE/INACTIVE` + `DISABLED`/`ERROR`/`OUT_OF_SYNC` | 1 | G-08 | ✅ |
@@ -266,7 +275,7 @@ File: `apps/web-api/internal/app/schedule*.go`, `dto.go`, `http.go`
 | SCHD-127 | `POST /validate` — trả danh sách lỗi có mã spec §11 kèm JSON path | 1 | G-11 N4 | ✅ |
 | SCHD-128 | `POST /publish` — ACK/NACK, timeout 5 s, retry có trần, idempotent theo `correlation_id`; **hỏng thì revision đang chạy không đổi** (N6) | 1,5 | G-11 G-12 | ✅ |
 | SCHD-129 | `GET /revisions` + `POST /rollback` (bắt buộc lý do) + diff hai revision | 1 | G-09 | ✅ |
-| SCHD-130 | `GET /audit` — audit theo từng lịch, đủ 10 trường spec §20, thay dòng gộp ở [scheduleapi.go:69](../../apps/web-api/internal/app/scheduleapi.go#L69) | 0,75 | G-14 | ✅ |
+| SCHD-130 | `GET /audit` — audit theo từng lịch, đủ 10 trường spec §20, thay dòng gộp ở [scheduleapi.go:69](../../../apps/web-api/internal/app/scheduleapi.go#L69) | 0,75 | G-14 | ✅ |
 | SCHD-131 | Bốn quyền `schedule.publish/rollback/delete/priority` + gate 403 | 0,75 | G-15 | ✅ |
 | SCHD-132 | Kiểm tra target: tồn tại, ghi được, đúng `value_type`, không trùng → `SCH-TARGET-001/002/003` | 1 | G-06 | ✅ |
 | SCHD-133 | `POST /simulate` — **gọi đúng mã đánh giá của core** qua thư viện dùng chung, không cài lại trong Go | 1,5 | G-10 | ✅ |
@@ -328,7 +337,7 @@ Thư mục mới: `apps/web-ui/src/features/scheduler/` (thay `features/operatio
 |---|---|---:|
 | SCHD-201 | Kiểu TS cho hợp đồng v3.1 trong `shared/types.ts`; **xoá `ScheduleRow` cũ** | 0,75 | ✅ |
 | SCHD-202 | 14 hàm gọi API trong `shared/api/client.ts` | 0,75 | ✅ |
-| SCHD-203 | `SchedulerLayout` + route lồng theo khuôn `ModbusRtuLayout` ([App.tsx:128-137](../../apps/web-ui/src/app/App.tsx#L128-L137)) | 1 | ✅ |
+| SCHD-203 | `SchedulerLayout` + route lồng theo khuôn `ModbusRtuLayout` ([App.tsx:128-137](../../../apps/web-ui/src/app/App.tsx#L128-L137)) | 1 | ✅ |
 | SCHD-204 | Component dùng chung: `StatusDot` (8 trạng thái §8.8), `ValueChip`, `TimeValueList`, `RuntimeStrip` | 1 | ✅ |
 | SCHD-205 | i18n vi/en cho toàn bộ chuỗi mới | 0,5 | ✅ |
 
@@ -428,7 +437,7 @@ gọi API, nơi test render component thẳng không bao giờ đi qua.
 
 ### 6.1 P3 · Runtime và đồng bộ thời gian (9 người-ngày)
 
-Hiện core lấy giờ bằng `localtime_r` theo TZ tiến trình ([clock_snapshot.hpp](../../apps/core/domain/graph/clock_snapshot.hpp)) — không có gì trong 8 gạch đầu dòng của spec §10.3.
+Hiện core lấy giờ bằng `localtime_r` theo TZ tiến trình ([clock_snapshot.hpp](../../../apps/core/domain/graph/clock_snapshot.hpp)) — không có gì trong 8 gạch đầu dòng của spec §10.3.
 
 | Task | Nội dung | Ngày | Đóng gap |
 |---|---|---:|---|
@@ -447,14 +456,14 @@ Hiện core lấy giờ bằng `localtime_r` theo TZ tiến trình ([clock_snaps
 
 ### 6.2 P4 · BACnet Schedule và Calendar Object (5 người-ngày)
 
-Object map hiện chỉ có AI/BI/AO/BO/AV/BV/MSV + Device ([bacnet_objects.hpp:4](../../apps/iobus/adapters/bacnet/bacnet_objects.hpp#L4)).
+Object map hiện chỉ có AI/BI/AO/BO/AV/BV/MSV + Device ([bacnet_objects.hpp:4](../../../apps/iobus/adapters/bacnet/bacnet_objects.hpp#L4)).
 
 | Task | Nội dung | Ngày |
 |---|---|---:|
 | SCHD-401 | Object type **17 (Schedule)** trong `bacnet_objects.{hpp,cpp}` | 1,5 | ✅ |
 | SCHD-402 | Object type **6 (Calendar)** cho `CALENDAR_REFERENCE` | 1 | ✅ |
 | SCHD-403 | Thuộc tính bắt buộc: `Weekly_Schedule`, `Exception_Schedule`, `Schedule_Default`, `Effective_Period`, `List_Of_Object_Property_References`, `Priority_For_Writing` | 1,25 | ✅ |
-| SCHD-404 | Nối `Priority_For_Writing` với `PriorityArray[16]` sẵn có ([bacnet_priority.hpp](../../apps/iobus/adapters/bacnet/bacnet_priority.hpp)) | 0,5 | ✅ |
+| SCHD-404 | Nối `Priority_For_Writing` với `PriorityArray[16]` sẵn có ([bacnet_priority.hpp](../../../apps/iobus/adapters/bacnet/bacnet_priority.hpp)) | 0,5 | ✅ |
 | SCHD-405 | Test đọc/ghi thuộc tính qua BACnet | 0,5 | ✅ |
 | SCHD-406 | Cập nhật PICS/EPICS + ma trận BTL | 0,25 | ✅ |
 | SCHD-407 | Cập nhật `33_BACNET_OBJECT_ALIGNMENT_PLAN.md` | — | ✅ |
@@ -463,7 +472,7 @@ Object map hiện chỉ có AI/BI/AO/BO/AV/BV/MSV + Device ([bacnet_objects.hpp:
 
 ## 7. Quyết định cần chốt — **chặn P1**
 
-Đã trình PM/CTO bằng [tờ trình phê duyệt 2026-08-07](../07_records/reviews/SCHEDULER_V3_1_APPROVAL_REQUEST_2026-08-07.md) — tờ trình có đủ hai phương án, chi phí và hệ quả cho từng quyết định. Lý do kỹ thuật ở [proposal §4](../04_uiux/KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md). Tóm tắt để quyết:
+Đã trình PM/CTO bằng [tờ trình phê duyệt 2026-08-07](../../07_records/reviews/SCHEDULER_V3_1_APPROVAL_REQUEST_2026-08-07.md) — tờ trình có đủ hai phương án, chi phí và hệ quả cho từng quyết định. Lý do kỹ thuật ở [proposal §4](../../04_uiux/KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md). Tóm tắt để quyết:
 
 | # | Câu hỏi | Kết quả PM/CTO 2026-08-07 | Chặn task | |
 |---|---|---|---|---|
@@ -606,10 +615,10 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 
 | Plan | Quan hệ |
 |---|---|
-| [33_BACNET_OBJECT_ALIGNMENT_PLAN](33_BACNET_OBJECT_ALIGNMENT_PLAN.md) | P4 bổ sung object type 17 và 6 vào đúng plan này |
-| [44_TIME_DATE_IEC61131_3_READINESS_PLAN](44_TIME_DATE_IEC61131_3_READINESS_PLAN.md) | P3 dùng chung hạ tầng thời gian; **kiểm tra chồng lấn trước khi bắt đầu P3** |
-| [45_WEB_UX_REMEDIATION_AND_CICD_PLAN](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) | P2 kế thừa bộ token và quy ước RBAC đã dựng ở Track A |
-| [49_MODBUS_RTU_IMPLEMENTATION_PLAN](49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | Target `EXT` (điểm Modbus) chỉ dùng được sau khi plan 49 đóng |
+| [33_BACNET_OBJECT_ALIGNMENT_PLAN](../33_BACNET_OBJECT_ALIGNMENT_PLAN.md) | P4 bổ sung object type 17 và 6 vào đúng plan này |
+| [44_TIME_DATE_IEC61131_3_READINESS_PLAN](../44_TIME_DATE_IEC61131_3_READINESS_PLAN.md) | P3 dùng chung hạ tầng thời gian; **kiểm tra chồng lấn trước khi bắt đầu P3** |
+| [45_WEB_UX_REMEDIATION_AND_CICD_PLAN](../45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) | P2 kế thừa bộ token và quy ước RBAC đã dựng ở Track A |
+| [49_MODBUS_RTU_IMPLEMENTATION_PLAN](../49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | Target `EXT` (điểm Modbus) chỉ dùng được sau khi plan 49 đóng |
 
 ---
 

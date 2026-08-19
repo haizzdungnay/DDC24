@@ -1,6 +1,6 @@
 # Plan 57 — Nâng cấp UC/UI/UX Web HMI + đóng finding `REV-FE-UIUX-UC-2026-08-18`
 
-**Trạng thái:** **Wave 0 + Wave 1 — APPROVED, đã triển khai.**
+**Trạng thái:** **Wave 0 + Wave 1 + Wave 2 — APPROVED, đã triển khai.**
 Wave 0 mở bằng `AUTH-WEBUX-2026-08-18-01`; **Wave 1 và phần FE thuần của Wave 2
 mở bằng `AUTH-WEBUX-2026-08-18-02`** (2026-08-18, `docs/00_governance/DECISIONS.md`),
 sau khi **cả tám câu hỏi §12 đã có quyết định** (`ADR-034`…`ADR-039`) và asset
@@ -16,7 +16,7 @@ Wave đó trước khi có phê duyệt riêng, theo `DOC_GOVERNANCE.md` §4 và
 [Design system](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) (`KX-DDC24-UX-SYSTEM-001`) ·
 [Yêu cầu UX PA3](../02_requirements/UX_REQ_PA3_WEB.md) (`UX-REQ-PA3-WEB-001`) ·
 [Quy tắc kiểm soát tài liệu](../00_governance/DOC_GOVERNANCE.md) ·
-[Plan 45](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) · [Plan 52](52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) · [Plan 55](55_UI_UNIVERSAL_INPUT_REDESIGN_PLAN.md)
+[Plan 45](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) · [Plan 52](archive/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) · [Plan 55](55_UI_UNIVERSAL_INPUT_REDESIGN_PLAN.md)
 
 ---
 
@@ -27,7 +27,7 @@ Wave đó trước khi có phê duyệt riêng, theo `DOC_GOVERNANCE.md` §4 và
 | `PLAN_READY` | **PASS** (2026-08-18) | Mở bằng `AUTH-WEBUX-2026-08-18-01` |
 | `IMPLEMENT_READY[Wave 0 Track A/B/C/D]` | **PASS** (2026-08-18) | Mở bằng cùng record; ba track A/B/C không đổi contract, Track D là tài liệu authority |
 | `IMPLEMENT_READY[Wave 1]` | **PASS** (2026-08-18) | Mở bằng `AUTH-WEBUX-2026-08-18-02`. Hai điều kiện chặn đã gỡ: asset trực quan phát hành tại `docs/04_uiux/assets/operations/` và nhúng trong `KX-DDC24-UX-WEB-OPERATIONS-001`; Q2 (`ADR-034`) và Q6 (`ADR-037`) đã trả lời |
-| `IMPLEMENT_READY[Wave 2]` | **PASS** cho phần FE thuần (2026-08-18) | Wave 0 Track C xong + Q4 trả lời (`ADR-035`). **Trừ `T57-2.13`**, đã chuyển sang Wave 3 |
+| `IMPLEMENT_READY[Wave 2]` | **PASS** cho phần FE thuần (2026-08-18) · **đã triển khai xong 2026-08-19** | Wave 0 Track C xong + Q4 trả lời (`ADR-035`). **Trừ `T57-2.13`**, đã chuyển sang Wave 3 |
 | `IMPLEMENT_READY[Wave 3]` | **BLOCKED** | Q5/Q7/Q8 đã trả lời (`ADR-036`/`ADR-038`/`ADR-039`) nhưng còn thiếu **9 ADR theo từng task** + chữ ký Tech Lead. `T57-3.8` chặn thêm bởi điều kiện Track B Modbus RTU |
 | `IMPLEMENT_READY[Wave 4]` | **BLOCKED** | Quyết định sản phẩm Rev A/Rev B chưa có |
 | `RELEASE_READY` | **N/A** | Cổng độc lập, **không** được suy ra từ hai record `AUTH-WEBUX-*` |
@@ -439,24 +439,50 @@ Wave 2–3 lùi sang đợt sau mà không để lại nợ.
 
 ---
 
-## 13b. Trạng thái triển khai (cập nhật 2026-08-18, lần 2)
+## 13b. Trạng thái triển khai (cập nhật 2026-08-19)
 
-**Plan CHƯA đóng được**, nhưng đã qua được mọi cổng quyết định.
+**Plan CHƯA đóng được.** Wave 0–2 đã xong; phần còn lại là Wave 3 (cần ADR theo
+từng task + chữ ký Tech Lead) và Wave 4 (cần quyết định sản phẩm).
 
 | Wave | Task | Trạng thái | Ghi chú |
 |---|---:|---|---|
 | 0 — Đóng nợ + gate | 15 | **XONG 14,5/15** | `T57-0.7` thiếu test hành vi `F-UX-03` (xem dưới) |
 | 1 — An toàn vận hành | 12 | **XONG 12/12** | Mở bằng `AUTH-WEBUX-2026-08-18-02` sau khi phát hành asset trực quan và đóng Q2/Q6 |
-| 2 — Hiệu quả chẩn đoán | 22 | **CHƯA BẮT ĐẦU** | Cổng đã `PASS` cho phần FE thuần (Q4 đóng bằng `ADR-035`); `T57-2.13` chuyển sang Wave 3 vì ngữ nghĩa luật cảnh báo thuộc Core |
-| 3 — Contract/backend mới | 20 | **CHƯA BẮT ĐẦU** | Q5/Q7/Q8 đã trả lời nhưng còn thiếu **9 ADR theo từng task** + chữ ký Tech Lead. **`T57-3.8` chặn riêng**: `ADR-039` đặc tả thiết kế quét bus nhưng KHÔNG cấp phép ghi ra bus RS-485 |
+| 2 — Hiệu quả chẩn đoán | 21 | **XONG 21/21** (2026-08-19) | 22 task ban đầu trừ `T57-2.13` đã chuyển sang Wave 3 theo `ADR-035` (ngữ nghĩa luật cảnh báo thuộc Core, cấm cài lại ở FE) |
+| 3 — Contract/backend mới | 21 | **CHƯA BẮT ĐẦU** | 20 task gốc + `T57-2.13` chuyển sang. Q5/Q7/Q8 đã trả lời nhưng còn thiếu **9 ADR theo từng task** + chữ ký Tech Lead. **`T57-3.8` chặn riêng**: `ADR-039` đặc tả thiết kế quét bus nhưng KHÔNG cấp phép ghi ra bus RS-485 |
 | 4 — Quyết định sản phẩm | 2 | **CHƯA BẮT ĐẦU** | Rev A/Rev B chưa quyết |
-| **Tổng** | **71** | **27/71 (~38%)** | ~28,5/102,5 người-ngày |
+| **Tổng** | **71** | **47,5/71 (~67%)** | ~53/102,5 người-ngày |
 
 **Tám câu hỏi §12: đã đóng cả 8** (Q1/Q3 bằng `AUTH-WEBUX-…-01`; Q2/Q4/Q5/Q6/Q7/Q8
-bằng `ADR-034`…`ADR-039`). Đây là thay đổi lớn nhất so với lần cập nhật trước —
-không còn quyết định nào chặn việc lập kế hoạch tiếp.
+bằng `ADR-034`…`ADR-039`). Không còn quyết định nào chặn việc lập kế hoạch tiếp.
 
-Trong 67 đề xuất UC/UI/UX ở §10, đã chạm **16**. **51 đề xuất còn lại chưa triển khai.**
+Theo ma trận truy vết §10: **mọi đề xuất thuộc Wave 0–2 đã có mã**, trừ §6.13-P1b
+(mô phỏng luật cảnh báo) đã theo `T57-2.13` sang Wave 3. Phần chưa triển khai đúng
+bằng tập đề xuất của Wave 3 và Wave 4.
+
+### Wave 2 — đợt cuối (2026-08-19)
+
+Năm task khép lại Wave 2, cùng lớp giá trị "trả lời một câu hỏi chẩn đoán bằng ít
+thao tác hơn, và bắt lỗi cấu hình trước khi nó ra tới thiết bị":
+
+| Task | Nội dung | Nơi kiểm |
+|---|---|---|
+| `T57-2.3` | Khung nhìn đặt tên cho Giám sát và bộ trend đặt tên cho Xu hướng; mở bằng `?view=` rồi nở thành chính bộ lọc trên URL | `shared/savedViews.test.ts` (12) · `MonitorPage.savedViews.test.tsx` (5) |
+| `T57-2.6` | Dấu sự kiện (ép tay, cảnh báo bật) trên trục thời gian, lấy từ kho Activity và nhật ký cảnh báo thật | `trendMarkers.test.ts` (12) |
+| `T57-2.10` | `BB-8` diff "đang lưu ↔ bản nháp" cho Ngõ vào, đặt trong hộp thoại xác nhận lưu | `inputsDraftDiff.test.ts` (8) |
+| `T57-2.14` | Thống nhất ngôn ngữ nhãn trang Cấu hình cảnh báo; thuật ngữ BACnet và mã trạng thái viết hoa giữ nguyên kèm chú giải | `AlarmSettingsPage.language.test.tsx` (5) |
+| `T57-2.22` | Mã QR địa chỉ truy cập mới, sinh tại chỗ (`shared/qr.ts`), không gọi dịch vụ ngoài | `qr.test.ts` (16) · `NetworkPage.accessQr.test.tsx` (4) |
+
+**Giới hạn đã biết của `T57-2.3`:** khung nhìn nằm trong `localStorage` theo tài
+khoản, **trên trình duyệt đó**. Đi theo người dùng sang máy khác cần `T57-3.2`
+(endpoint tuỳ chọn người dùng) — Wave 3, chưa mở cổng. Giao diện nói rõ giới hạn
+này ngay cạnh thanh khung nhìn thay vì để người dùng tự phát hiện.
+
+**Đo lại thật (2026-08-19):** `npx vitest --run --environment jsdom src` →
+**104 file / 1016 test PASS** (trước đợt này: 97 file / 954 test). `npm run lint`
+PASS. `npm run build:foxlinx` PASS — chunk `index` **989,94 kB** (gzip 257,54 kB)
+so với **967,67 kB** (gzip 249,60 kB) đo trên cùng cây làm việc tại `63f841d`:
+**+22,27 kB** cho cả năm task, trong đó có bộ sinh QR tự viết.
 
 ### Việc còn lại
 
@@ -465,20 +491,20 @@ Trong 67 đề xuất UC/UI/UX ở §10, đã chạm **16**. **51 đề xuất c
 | Test hành vi `F-UX-03` (`/trends?points=`) | Viết rồi nhưng **làm treo vitest ngay lúc import** `TrendsPage`; đã gỡ khỏi repo thay vì để lại test treo. Hiện phủ bằng gate hợp đồng (kiểm có `searchParams.get('points')`), **không** phủ hành vi |
 | Test hành vi `F-UX-13` | Chưa viết; phủ gián tiếp qua bộ test alarm sẵn có |
 | Chặn Back/Forward trong `useDirtyGuard` | Cần `useBlocker` của data router; app dùng `<BrowserRouter>`. Ghi rõ trong docstring là khoảng hở đã biết |
-| Wave 2 (22 task) | Cổng đã mở cho phần FE thuần — **sẵn sàng triển khai**, chưa bắt đầu |
-| Wave 3 (20 task) | Cần 9 ADR theo task + Tech Lead. `T57-3.8` cần thêm quyết định người về việc ghi ra bus |
+| Wave 3 (21 task) | Cần 9 ADR theo task + Tech Lead. `T57-3.8` cần thêm quyết định người về việc ghi ra bus RS-485 |
 | Wave 4 (2 task) | Cần quyết định sản phẩm Rev A/Rev B |
-| **Deploy lên board** | **BỊ CHẶN** — board Foxlinx tạm mất kết nối 2026-08-18, chủ sở hữu chỉ thị để lại. Bản trên board vẫn là bản 03:15Z, **không** gồm Wave 0 lẫn Wave 1 |
+| **Deploy lên board** | **BỊ CHẶN** — board Foxlinx tạm mất kết nối 2026-08-18, chủ sở hữu chỉ thị để lại. Bản trên board vẫn là bản 03:15Z, **không** gồm Wave 0–2 |
 
 ### Điều kiện để đóng plan
 
-Còn **44 task** ở Wave 2–4. Cổng quyết định đã thông; thứ còn thiếu là **năng lực
-triển khai**, 9 ADR theo từng task của Wave 3, và một quyết định người cho
-`T57-3.8` (ghi ra bus RS-485 thật) cùng Wave 4 (Rev A/Rev B).
+Còn **23,5 task** ở Wave 3–4. Cổng quyết định chung đã thông; thứ còn thiếu là
+**9 ADR theo từng task của Wave 3**, chữ ký Tech Lead, một quyết định người cho
+`T57-3.8` (ghi ra bus RS-485 thật) và quyết định sản phẩm Rev A/Rev B cho Wave 4.
 
 ## 14. Revision History
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.2 | 2026-08-19 | Wave 2 hoàn tất 21/21 task (`T57-2.3`, `T57-2.6`, `T57-2.10`, `T57-2.14`, `T57-2.22` khép lại đợt cuối); §13b ghi lại số đo thật 104 file / 1016 test, bundle Foxlinx 989,94 kB (+22,27 kB so với `63f841d`), và giới hạn đã biết của khung nhìn đặt tên (localStorage, chờ `T57-3.2`) |
 | 1.1 | 2026-08-18 | Thêm §13b — trạng thái triển khai thật: Wave 0 xong 14,5/15, Wave 1–4 chưa bắt đầu, tổng 15/71 task; ghi rõ điều kiện đóng plan và bốn việc còn lại của chính Wave 0 (gồm deploy bị chặn do board mất kết nối) |
 | 1.0 | 2026-08-18 | Tạo plan: 67 đề xuất UC/UI/UX (trừ §6.8 theo chỉ thị) + 10 finding còn mở, chia 5 Wave và 8 khối hạ tầng dùng chung; ma trận truy vết 1-1; 8 câu hỏi chặn `IMPLEMENT_READY` |

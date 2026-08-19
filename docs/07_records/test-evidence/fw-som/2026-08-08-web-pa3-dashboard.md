@@ -2,7 +2,7 @@
 
 > **ID:** EV-WEB-PA3-001
 > **Ngày:** 2026-08-08
-> **Plan:** [52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md](../../../03_implementation/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md)
+> **Plan:** [52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md](../../../03_implementation/archive/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md)
 > **Yêu cầu nguồn:** UX-REQ-MKDDC24-PA3-001, UX-DES-MKDDC24-PA3-001
 > **Baseline commit:** `1b02d41`
 > **Bo đích:** `SOM-DDC-24-foxlinx` (RV1126B, Buildroot 2024.02), HTTP nội bộ `8081`

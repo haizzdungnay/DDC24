@@ -1,9 +1,9 @@
 # 17 — Quick Start for SOM Dev
 ## MK-DDC-24 — Từ zero đến code chạy với fake MCU (tối đa 2 trang)
 
-> **Document ID:** IMPL-QUICKSTART-MK-DDC-24-VI · **Phiên bản:** 1.0 | 2026-06-11
+> **Document ID:** IMPL-QUICKSTART-MK-DDC-24-VI · **Phiên bản:** 1.1 | 2026-08-19 (đồng bộ cây nguồn `apps/` và lệnh build gốc sau `PLAN-ARCH-RESTRUCT-002`) · 1.0 | 2026-06-11
 > **Trạng thái:** Active
-> **Đối tượng:** dev C/C++ MỚI vào dự án, phụ trách `services/iobus` + `services/core`.
+> **Đối tượng:** dev C/C++ MỚI vào dự án, phụ trách `apps/iobus` + `apps/core`.
 > Chưa cần board. Đọc xong file này là bắt đầu code được.
 
 ---
@@ -25,7 +25,7 @@
 |------|-------|
 | [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h) | Hợp đồng UART/IOP — **chuẩn cuối**, docs lệch nó là docs sai |
 | [`contracts/shm/mkddc_shm.h`](../../contracts/shm/mkddc_shm.h) | Hợp đồng SHM — **chuẩn cuối** layout/path/ownership |
-| [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) | Bản chốt: FAULT bit, reset reason, CRC vector, rename policy |
+| [16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md) | Bản chốt: FAULT bit, reset reason, CRC vector, rename policy |
 
 Đọc sâu theo việc: iobus → [05](05_IOP_UART_IMPLEMENTATION_GUIDE.md) + [06](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md);
 core → [07](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md). Phase nào làm gì → [03](03_PHASE_PLAN.md).
@@ -43,44 +43,49 @@ core → [07](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md). Phase nào làm gì → [0
 7. iobus = creator + seqlock writer io_shm. Core CHỈ ghi ao_setpoint[]/do_cmd[] (atomic store).
 8. ao_setpoint là ENGINEERING (V/mA); iobus convert eng→raw theo ao_mode. AO safe: raw 0 (0V/4mA).
 9. Reader seqlock: đọc seq chẵn → copy → đọc lại seq, đổi thì retry. Không bao giờ block writer.
-10. Đổi header shared/ = đổi hợp đồng → quy trình 16_CONTRACT_FREEZE §7, không sửa lén.
+10. Đổi header trong contracts/ = đổi hợp đồng → ADR-010 + quy trình review, không sửa lén.
 ```
 
-## 4. Scaffold + build trong 15 phút
+## 4. Build trong 15 phút
+
+> Cây nguồn **đã tồn tại**, không còn bước scaffold. Sau `PLAN-ARCH-RESTRUCT-002` (ADR-025),
+> `CMakeLists.txt` **ở gốc repo** là authority duy nhất; không cấu hình riêng từng service nữa.
 
 ```bash
-# 1. Tạo cây thư mục (đúng tên file — 06 §2 và 07 §1)
-mkdir -p services/iobus/{config,iop,io,bridge,diagnostics,platform,tests}
-mkdir -p services/core/tests tools/fake_mcu
+# 1. Configure một lần, bật cả ba option (mặc định HMI là OFF nên rất dễ bỏ sót gate)
+cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release \
+  -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON
 
-# 2. Chép CMakeLists.txt mẫu từ 06 §10 (iobus) và 07 §9 (core) — copy nguyên văn, build được ngay.
+# 2. Build + test. LUÔN đọc exit code của cả configure lẫn build: build dir cũ còn
+#    CMAKE_HOME_DIRECTORY trỏ services/ sẽ hỏng cấu hình nhưng ctest vẫn chạy binary cũ
+#    và báo "pass" — số đo giả.
+cmake --build build/fw --parallel
+ctest --test-dir build/fw --output-on-failure     # đo ngày 2026-08-19: 1031/1031 PASS, 16,45 s
 
-# 3. Viết file đầu tiên: iop_crc.cpp wrap iop_crc16() + test 12 vector (SWFW spec §10.1)
-cmake -S services/iobus -B build/iobus && cmake --build build/iobus -j
-ctest --test-dir build/iobus --output-on-failure     # CRC 12/12 pass = bạn đã vào guồng
-
-# 4. Thứ tự module (mỗi cái có contract + test trong 06 §3):
-#    iop_crc → iop_frame → iop_parser → iop_port → iop_client → io_scaling → io_cache
-#    → core_bridge/output_command → main.cpp
+# 3. Cây nguồn theo tầng (hexagonal): domain/ ← application/ ← adapters/ ← bootstrap/
+#    apps/iobus/adapters/iop/       — frame, crc, client, parser, port
+#    apps/iobus/adapters/modbus_rtu/— Modbus RTU master (trước đây là fieldbus/)
+#    apps/iobus/adapters/bacnet/    — BACnet/IP server
+#    apps/core/domain/ · apps/core/application/{st,graph,alarm,schedule,...}
 ```
 
 ## 5. Chạy không cần board (fake MCU)
 
 ```bash
-./build/iobus/fake_mcu --pty            # in ra /dev/pts/N
-./build/iobus/mkddc-iobus --uart /dev/pts/N --log-level debug
+./build/fw/iobus/fake_mcu --pty            # in ra /dev/pts/N
+./build/fw/iobus/mkddc-iobus --uart /dev/pts/N --log-level debug
 # Mong đợi: INFO iop.handshake ... status=ok, cap=0x000D, rồi im lặng (poll 500Hz không log spam)
-xxd /dev/shm/mkddc_io_shm | head -4     # 4 byte đầu: 01 44 58 4b (magic LE), ts/seq đổi mỗi giây
-./build/core/mkddc-core --log-level debug   # point table phản ánh UI ramp của fake MCU
+xxd /dev/shm/mkddc_io_shm | head -4         # 4 byte đầu: 01 44 58 4b (magic LE), ts/seq đổi mỗi giây
+./build/fw/core/mkddc-core --log-level debug   # point table phản ánh UI ramp của fake MCU
 ```
 Checklist 10 bước đầy đủ (kể cả negative test): [06 §11.1](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md).
 Làm hết = Phase 0–2 phía SOM xong trước khi có board.
 
 ## 6. Lên board thật
 
-Theo đúng thứ tự [18_WEEK1_SOM_BRINGUP_CHECKLIST](18_WEEK1_SOM_BRINGUP_CHECKLIST.md)
-(8 mốc, mỗi mốc có command + log mong đợi + chỗ debug). Board-level (nguồn, flash MCU):
-[14_BRINGUP_GUIDE](14_BRINGUP_GUIDE.md).
+Board-level (nguồn, flash MCU): [14_BRINGUP_GUIDE](14_BRINGUP_GUIDE.md). Checklist 8 mốc tuần đầu
+[18](archive/18_WEEK1_SOM_BRINGUP_CHECKLIST.md) **đã lưu trữ** — lệnh trong đó trỏ `services/` không
+còn tồn tại; dùng runbook 27 bên dưới.
 
 Nếu board SOM đã có nhưng MCU chưa có: dùng [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md)
 để build/deploy `--no-enable` và chạy `fake_mcu` no-board trên chính SOM.

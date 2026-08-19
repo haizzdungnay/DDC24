@@ -29,7 +29,7 @@
 
 > ⚠️ **CONTRACT FREEZE (2026-06-11).** Giá trị thực thi (SHM layout/path/ownership,
 > IOP opcode/fault/reason/CRC, startup order) lấy theo `shared/iop_protocol.h` +
-> `shared/mkddc_shm.h` + [16_CONTRACT_FREEZE](../03_implementation/16_CONTRACT_FREEZE.md).
+> `shared/mkddc_shm.h` + [16_CONTRACT_FREEZE](../03_implementation/archive/16_CONTRACT_FREEZE.md).
 > File này lệch các nguồn đó → nguồn freeze thắng. Đặc biệt: **boundary đã chốt là
 > `mkddc-iobus` sở hữu UART/IOP + ghi SHM IO** (không phải core) — xem
 > [00_IMPLEMENTATION_README §3](../03_implementation/00_IMPLEMENTATION_README.md).

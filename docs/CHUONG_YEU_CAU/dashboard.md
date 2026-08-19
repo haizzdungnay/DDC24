@@ -9,7 +9,7 @@
 
 > Đây là đầu vào yêu cầu PA3 được giữ nguyên nội dung nghiệp vụ để truy xuất.
 > Hồ sơ triển khai và bằng chứng hiện hành nằm tại
-> `docs/03_implementation/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md` và
+> `docs/03_implementation/archive/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md` và
 > `docs/07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md`.
 
 1. Mục tiêu

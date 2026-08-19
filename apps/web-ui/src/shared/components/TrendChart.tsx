@@ -1,5 +1,15 @@
-import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { Area, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import type { TrendSample } from '../types'
+
+/** Dấu sự kiện vẽ trên trục thời gian — `T57-2.6`. Biểu đồ chỉ VẼ; việc quyết
+ *  định sự kiện nào đáng đánh dấu thuộc về `features/operations/trendMarkers`. */
+export interface TrendChartMarker {
+  ts: number
+  kind: 'override' | 'alarm'
+  label: string
+  pointId: string
+  actor?: string
+}
 
 export interface TrendSeries {
   key: string
@@ -27,6 +37,8 @@ interface TrendChartProps {
   showTable?: boolean
   /** Vẽ dải min–max của mẫu aggregate (PA3-502 / UX-DES §13). */
   showBand?: boolean
+  /** Dấu sự kiện (`T57-2.6`). Rỗng ⇒ không vẽ gì thêm. */
+  markers?: TrendChartMarker[]
   /** Vẽ chấm cho từng mẫu. Cần cho khối xem nhanh trên Landing: ở đó mỗi chuỗi
    *  có nhịp lấy mẫu riêng nên một mẫu đơn lẻ không có hàng xóm để nối thành
    *  đoạn thẳng — với `dot={false}` nó BIẾN MẤT hoàn toàn thay vì hiện ra như
@@ -141,7 +153,7 @@ export function assignSecondAxis(series: Array<{ unit?: string; axis?: 'left' | 
   }
 }
 
-export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true, showBand = false, showDots = false }: TrendChartProps) {
+export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true, showBand = false, showDots = false, markers = [] }: TrendChartProps) {
   const hasTimeAxis = data.every((sample) => typeof sample.__ts === 'number' && Number.isFinite(sample.__ts))
   const bandVisible = showBand && hasMinMaxBand(data, series)
   const hasRightAxis = series.some((item) => item.axis === 'right')
@@ -183,10 +195,52 @@ export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'lo
                 connectNulls={false}
               />
             ))}
+            {/* `T57-2.6` — vạch đứng cho sự kiện, vẽ SAU các đường để nằm trên
+                chúng. Chỉ vẽ khi trục X là thời gian thật: trên trục hạng mục
+                (`category`) không có toạ độ nào để đặt vạch cho đúng chỗ, và
+                đặt sai chỗ thì tệ hơn không vẽ. */}
+            {hasTimeAxis && markers.map((marker) => (
+              <ReferenceLine
+                key={`${marker.kind}-${marker.pointId}-${marker.ts}`}
+                yAxisId="left"
+                x={marker.ts}
+                stroke={marker.kind === 'alarm' ? 'var(--c-fault-fg)' : 'var(--c-force)'}
+                strokeDasharray="4 3"
+                strokeWidth={1.5}
+                label={{
+                  value: marker.kind === 'alarm' ? '!' : '⌾',
+                  position: 'top',
+                  fontSize: 11,
+                  fill: marker.kind === 'alarm' ? 'var(--c-fault-fg)' : 'var(--c-force)'
+                }}
+              />
+            ))}
             {series.map((item) => <Line key={item.key} yAxisId={item.axis === 'right' ? 'right' : 'left'} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={showDots ? { r: 2 } : false} activeDot={{ r: 4 }} connectNulls={false} />)}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {/* Vạch trên biểu đồ nói CÓ sự kiện; bảng này nói sự kiện GÌ và AI làm.
+          Nó cũng là đường duy nhất để người dùng bàn phím hoặc trình đọc màn
+          hình tiếp cận được thông tin đó — biểu đồ SVG bên trên `aria-hidden`. */}
+      {markers.length > 0 && (
+        <ul aria-label="Trend event markers" className="flex flex-wrap gap-2 text-[11px] text-[var(--c-text-dim)]">
+          {markers.map((marker) => (
+            <li
+              key={`${marker.kind}-${marker.pointId}-${marker.ts}`}
+              className="inline-flex items-center gap-1 rounded-[var(--radius)] border px-2 py-0.5"
+              style={{
+                borderColor: marker.kind === 'alarm' ? 'var(--c-fault)' : 'var(--c-force)',
+                color: marker.kind === 'alarm' ? 'var(--c-fault-fg)' : 'var(--c-force)'
+              }}
+              title={`${marker.pointId} · ${marker.label}${marker.actor ? ` · ${marker.actor}` : ''}`}
+            >
+              <span className="mono">{formatTrendTime(marker.ts, timeZone)}</span>
+              <span>{marker.pointId} · {marker.label}</span>
+              {marker.actor && <span>· {marker.actor}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="sr-only" aria-hidden="true">
         {series.map((item) => <span key={item.key} data-testid={`trend-line-${item.key}`} data-connect-nulls="false" data-line-type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} />)}
         {bandVisible && series.map((item) => <span key={`${item.key}-band`} data-testid={`trend-band-${item.key}`} data-connect-nulls="false" />)}

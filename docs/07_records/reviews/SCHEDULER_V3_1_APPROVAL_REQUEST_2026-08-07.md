@@ -363,7 +363,7 @@ Người duyệt **không cần đọc** các tài liệu dưới đây để ra
 |---|---|
 | [Đặc tả sản phẩm v3.1](../../CHUONG_YEU_CAU/scheduler.md) | Yêu cầu gốc, 23 mục |
 | [Phương án UI/UX/UC](../../04_uiux/KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md) | 20 khoảng cách chi tiết, 26 use case, wireframe 7 màn hình |
-| [Plan 50 — Kế hoạch triển khai](../../03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | 78 task có mã, owner, phụ thuộc, bảng theo dõi tiến độ |
+| [Plan 50 — Kế hoạch triển khai](../../03_implementation/archive/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | 78 task có mã, owner, phụ thuộc, bảng theo dõi tiến độ |
 
 ---
 

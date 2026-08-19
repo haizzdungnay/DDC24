@@ -14,6 +14,9 @@ import {
   type BulkPlanRow
 } from './bulkOverride'
 import { OverrideRemaining } from '../../shared/components/OverrideRemaining'
+import { SavedViewBar } from '../../shared/components/SavedViewBar'
+import { useSavedViews } from '../../shared/hooks/useSavedViews'
+import { findSavedView, type SavedView } from '../../shared/savedViews'
 import { useAuth } from '../auth'
 import { roleAtLeast } from '../auth'
 import { displayPointName, normalizePointName, normalizePointTag, pointNameConflicts, pointFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
@@ -64,6 +67,10 @@ function matchesGroupFilter(point: Point, group: MonitorGroupFilter): boolean {
   if (group === 'all') return true
   return GROUP_KINDS[group].includes(point.kind)
 }
+
+/** Khoá bộ lọc thuộc một khung nhìn (`T57-2.3`). `point` cố ý KHÔNG nằm ở đây:
+ *  điểm đang mở là ngữ cảnh thao tác, không phải bộ lọc. */
+const MONITOR_VIEW_KEYS = ['kind', 'quality', 'q', 'state', 'group'] as const
 
 function matchesStateFilter(point: Point, filter: MonitorStateFilter): boolean {
   switch (filter) {
@@ -223,6 +230,49 @@ export function MonitorPage() {
       return next
     }, { replace: true })
   }
+
+  /* `T57-2.3` — khung nhìn đặt tên.
+   *
+   * Khung nhìn chỉ là một tập tham số URL có tên, nên áp nó = ghi lại đúng
+   * những khoá đó. Cố tình KHÔNG đụng tới `point` (điểm đang mở) — đó là ngữ
+   * cảnh của thao tác hiện tại, không phải một phần của bộ lọc. */
+  const savedViews = useSavedViews('monitor')
+  const currentFilterParams: Record<string, string> = { kind, quality, q: query, state: stateFilter, group }
+
+  function applySavedFilters(params: Record<string, string>) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      for (const key of MONITOR_VIEW_KEYS) {
+        const value = params[key] ?? ''
+        if (!value || value === 'all') next.delete(key)
+        else next.set(key, value)
+      }
+      /* Tên khung nhìn KHÔNG ở lại trên thanh địa chỉ: nó chỉ có nghĩa trên
+         trình duyệt đã lưu nó, còn đường dẫn thì phải gửi được cho người khác.
+         Áp xong thì URL mang chính bộ lọc — đó mới là thứ chia sẻ được. */
+      next.delete('view')
+      return next
+    }, { replace: true })
+  }
+
+  /* `?view=<tên>` là lệnh MỞ một lần, đọc ở lần render đầu — cùng mẫu với
+     `?points=` của trang Xu hướng. */
+  const requestedViewRef = useRef<string | null | undefined>(undefined)
+  if (requestedViewRef.current === undefined) requestedViewRef.current = searchParams.get('view')
+  const requestedView = requestedViewRef.current
+  useEffect(() => {
+    if (!requestedView) return
+    const view = findSavedView(savedViews.views, requestedView)
+    if (view) applySavedFilters(view.params)
+    else setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.delete('view')
+      return next
+    }, { replace: true })
+    requestedViewRef.current = null
+    /* Chủ ý chỉ phụ thuộc `requestedView`: đây là lệnh MỞ một lần, chạy lại khi
+       danh sách khung nhìn đổi sẽ áp lại bộ lọc đè lên thao tác của người dùng. */
+  }, [requestedView])
 
   const [selectedId, setSelectedId] = useState<string | null>(deepLinkedPoint)
   const [forceOpen, setForceOpen] = useState(false)
@@ -548,6 +598,15 @@ export function MonitorPage() {
         <StatCard label={pick('Điểm UI/AO bình thường', 'Normal UI/AO points')} value={stats.analogGood} detail={stats.analogTotal ? `${Math.round((stats.analogGood / stats.analogTotal) * 100)}%` : '—'} />
         <StatCard label={pick('Điểm lỗi / mất tín hiệu', 'Fault / signal-loss points')} value={stats.abnormal} detail={stats.total ? `${Math.round((stats.abnormal / stats.total) * 100)}%` : '—'} danger />
       </div>
+
+      <SavedViewBar
+        views={savedViews.views}
+        onApply={(view: SavedView) => applySavedFilters(view.params)}
+        onSave={(name) => savedViews.save(name, currentFilterParams)}
+        onRename={savedViews.rename}
+        onRemove={savedViews.remove}
+        hint={pick('Lưu trên trình duyệt này, theo tài khoản đang đăng nhập.', 'Stored in this browser, under the signed-in account.')}
+      />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[170px_170px_170px_190px_1fr_132px]">
         {/* Bộ chọn `group` phải TỒN TẠI trên giao diện, không chỉ đọc được từ
