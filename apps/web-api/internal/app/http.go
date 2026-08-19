@@ -223,6 +223,9 @@ func (a *App) Router() http.Handler {
 		webRouter.Public("GET /api/v1/ws/monitor", a.requireWSAuth(a.handleMonitorWS)),
 		webRouter.Protected("GET /api/v1/alarms", RoleViewer, a.handleAlarms),
 		webRouter.Protected("GET /api/v1/alarm-history", RoleViewer, a.handleAlarmHistory),
+		// `T57-3.3` (`ADR-044`): chỉ số hệ alarm ISA-18.2 §16, tính tại thời
+		// điểm hỏi từ chính nhật ký cảnh báo.
+		webRouter.Protected("GET /api/v1/alarms/metrics", RoleViewer, a.handleAlarmMetrics),
 		webRouter.Protected("POST /api/v1/alarms/{id}/ack", RoleOperator, a.handleAckAlarm),
 		webRouter.Protected("POST /api/v1/alarms/{id}/suppress", RoleOperator, a.handleSuppressAlarm),
 		webRouter.Protected("POST /api/v1/alarms/{id}/return", RoleOperator, a.handleReturnAlarm),
@@ -271,6 +274,9 @@ func (a *App) Router() http.Handler {
 		// hiểm (publish/rollback/delete/priority) còn qua một lớp quyền riêng
 		// bên trong handler (ADR-023 QĐ-5), vai trò ở đây chỉ là cửa đầu tiên.
 		webRouter.Protected("GET /api/v1/schedules", RoleViewer, a.handleGetSchedules),
+		// `T57-3.5`/`T57-3.6` (`ADR-045`): hiệu lực thực tế trên MỘT điểm khi
+		// nhiều lịch cùng tác động; cảnh báo xung đột dùng chính dữ liệu này.
+		webRouter.Protected("GET /api/v1/schedules/effective", RoleViewer, a.handleScheduleEffective),
 		webRouter.Protected("POST /api/v1/schedules", RoleAdmin, a.handleCreateSchedule),
 		webRouter.Protected("GET /api/v1/schedules/{id}", RoleViewer, a.handleGetSchedule),
 		webRouter.Protected("PUT /api/v1/schedules/{id}", RoleAdmin, a.handleUpdateSchedule),
@@ -286,6 +292,9 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("GET /api/v1/schedules/{id}/audit", RoleViewer, a.handleGetScheduleAudit),
 		webRouter.Protected("GET /api/v1/alarm-settings", RoleViewer, a.handleGetAlarmSettings),
 		webRouter.Protected("PUT /api/v1/alarm-settings", RoleAdmin, a.handlePutAlarmSettings),
+		// `T57-2.13` (`ADR-048`): mô phỏng luật cảnh báo, là VỎ gọi
+		// `mkddc-alarm-sim`. Không chạm cấu hình đang lưu nên `viewer` là đủ.
+		webRouter.Protected("POST /api/v1/alarm-settings/simulate", RoleViewer, a.handleSimulateAlarmSetting),
 	}
 	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, programminghttp.Services{
 		Projects: a.programmingProjects, Checks: a.programmingChecks, Operations: a.programmingOperations,

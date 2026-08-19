@@ -454,6 +454,10 @@ func (a *App) StartSampler(ctx context.Context) {
 			}()
 		}
 		a.StartAlarmHistory(ctx)
+		// `ADR-036` điều kiện tiên quyết: `alarm_history.jsonl` trước đây không
+		// có xoay vòng và không có retention. Bật cắt định kỳ TRƯỚC khi mở màn
+		// hình chỉ số `T57-3.3`, vì chính màn hình đó quét tệp này.
+		a.StartAlarmHistoryPrune(ctx)
 	}
 }
 
