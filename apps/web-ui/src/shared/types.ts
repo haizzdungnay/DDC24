@@ -1146,6 +1146,32 @@ export interface AlarmSimulateResult {
   engine: string
 }
 
+/** Một giao dịch Modbus đã thực hiện — `T57-3.9`.
+ *
+ *  `ADR-046` bản sửa 2026-08-19: Rev A ghi BẢN GHI GIAO DỊCH, không có byte thô.
+ *  Vòng nhớ nằm trong tiến trình iobus nên MẤT khi restart — giao diện phải nói
+ *  ra, không được mô tả như nhật ký lưu trữ. */
+export interface ModbusFrame {
+  at: number
+  bus: number
+  slave: number
+  fc: number
+  addr: number
+  count: number
+  ok: boolean
+  reason: string
+  elapsedUs: number
+  attempt: number
+}
+
+export interface ModbusFramesResponse {
+  schemaVersion: number
+  bus: number
+  frames: ModbusFrame[]
+  volatile: boolean
+  rawBytes: boolean
+}
+
 /** Mẫu thiết bị Modbus dựng sẵn — `T57-3.11`.
  *
  *  `source` là BẮT BUỘC ở backend: mẫu không nói được nó đến từ đâu thì không

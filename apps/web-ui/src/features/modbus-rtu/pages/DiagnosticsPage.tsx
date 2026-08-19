@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { FrameMonitor } from '../components/FrameMonitor'
 import { apiClient } from '../../../shared/api/client'
 import { useI18n } from '../../../shared/i18n'
 import type { ModbusRTUDevice, ModbusRTUDiagnostics } from '../../../shared/types'
@@ -202,6 +203,10 @@ function NeverPolledWarning({ rows, deviceNames }: {
           'This is NOT the same as "offline": an offline device answered before and then stopped, whereas here the bus has never sent it a single frame. The usual cause is configuration rather than wiring — the device profile could not be resolved (the port still opens and the service still runs, but the slave gets no data window), or its bus is enabled while the physical port does not exist. Check alarm E302 modbus.slave_config_error and the iobus log before chasing cables.'
         )}
       </div>
+      {/* `T57-3.9`: bộ đếm ở trên nói CÓ BAO NHIÊU lỗi; bảng dưới nói lỗi xảy
+          ra Ở ĐÂU và LÚC NÀO — hai câu hỏi khác nhau, và câu thứ hai trước nay
+          phải trả lời bằng máy phân tích bus cắm song song. */}
+      <FrameMonitor />
     </div>
   )
 }
