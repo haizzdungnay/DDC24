@@ -61,6 +61,10 @@ type AlarmEstimateResponse struct {
 	Engine         string          `json:"engine"`
 	Downsampled    bool            `json:"downsampled"`
 	UnderestimateS int             `json:"underestimateBelowS"`
+	// HistorySource nói ra ĐÃ HỎI KHO NÀO: `historian-v2`, `legacy-trend` hay
+	// `virtual-point-ring`. Thiếu trường này thì một kết quả rỗng không phân
+	// biệt được "điểm im lặng" với "hỏi nhầm kho" — đúng lỗi đã xảy ra.
+	HistorySource string `json:"historySource"`
 }
 
 func (a *App) handleEstimateAlarmSetting(w http.ResponseWriter, r *http.Request) {
@@ -82,24 +86,18 @@ func (a *App) handleEstimateAlarmSetting(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("tối đa %d ngày", alarmEstimateMaxDays))
 		return
 	}
-	if a.trends == nil {
-		writeError(w, http.StatusServiceUnavailable, "trend store unavailable")
-		return
-	}
-
 	now := time.Now().UTC()
 	fromMs := now.Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
-	raw, err := a.trends.Query(r.Context(), []string{pointID}, fromMs, now.UnixMilli())
+	raw, source, err := a.readPointHistoryForEstimate(r.Context(), pointID, fromMs, now.UnixMilli())
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "không đọc được lịch sử điểm: "+err.Error())
 		return
 	}
-	raw = append(raw, a.virtualPointRing.Query([]string{pointID}, fromMs, now.UnixMilli())...)
 	if len(raw) == 0 {
 		// Không có lịch sử ⇒ KHÔNG ước lượng. Trả 0 lần/ngày ở đây sẽ được đọc
 		// thành "ngưỡng này an toàn", trong khi sự thật là ta không biết gì.
 		writeError(w, http.StatusServiceUnavailable,
-			fmt.Sprintf("không có mẫu lịch sử nào cho %s trong %d ngày; chưa ước lượng được", pointID, days))
+			fmt.Sprintf("không có mẫu lịch sử nào cho %s trong %d ngày (đã hỏi %s); chưa ước lượng được", pointID, days, source))
 		return
 	}
 
@@ -139,7 +137,68 @@ func (a *App) handleEstimateAlarmSetting(w http.ResponseWriter, r *http.Request)
 		Engine:           bin,
 		Downsampled:      len(samples) < len(raw),
 		UnderestimateS:   stepS,
+		HistorySource:    source,
 	})
+}
+
+/*
+readPointHistoryForEstimate đọc lịch sử điểm qua ĐÚNG kho đang được ghi.
+
+BÀI HỌC PHẢI GHI LẠI Ở ĐÂY, VÌ NÓ ĐÃ LÀM TÍNH NĂNG NÀY CHẾT HẲN NGOÀI HIỆN TRƯỜNG
+
+Bản đầu của `T57-3.13` gọi thẳng `a.trends.Query(...)` — kho trend **legacy**.
+Trên máy dev nó không sai rõ ràng vì cả hai kho đều rỗng. Trên board thật thì:
+
+    /data/config/historian-v2.sqlite   6,5 MB   sửa lúc 2026-08-19 12:05
+    /data/mkddc/trend.sqlite           160 kB   sửa lần cuối 2026-08-04 10:53
+
+Historian v2 đã là kho authoritative từ 15 ngày trước; kho legacy chết từ đó.
+Hệ quả: **cả 28 điểm đều trả 503 "không có mẫu lịch sử"** dù dữ liệu vẫn đang
+được ghi đều đặn. Endpoint không sai cú pháp, không crash, test trên host vẫn
+xanh — nó chỉ hỏi nhầm chỗ, và kiểu hỏng đó chỉ lộ ra trên thiết bị thật.
+
+Nay đi cùng đường với `/api/v1/history`: engine hợp nhất trước, legacy chỉ là
+đường lùi khi v2 chưa sẵn sàng. Trả kèm `source` để lần sau ai đọc một kết quả
+lạ còn biết nó đến từ kho nào — không phải đoán như lần này.
+*/
+func (a *App) readPointHistoryForEstimate(ctx context.Context, pointID string, fromMs, toMs int64) ([]Sample, string, error) {
+	if engine, err := a.newHistorianQueryEngine(); err == nil {
+		result, queryErr := engine.Query(ctx, HistorianQueryRequest{
+			PointIDs:  []string{pointID},
+			FromUTCMS: fromMs,
+			ToUTCMS:   toMs,
+			MaxPoints: alarmEstimateMaxSamples,
+		})
+		if queryErr != nil {
+			return nil, "historian-v2", queryErr
+		}
+		samples := make([]Sample, 0, alarmEstimateMaxSamples)
+		for _, series := range result.Series {
+			for _, sample := range series.Samples {
+				samples = append(samples, Sample{TS: sample.TimeUTCMS, PointID: series.PointID, Value: sample.Value})
+			}
+		}
+		if len(samples) > 0 {
+			return samples, "historian-v2", nil
+		}
+		/* v2 chạy nhưng không có mẫu cho điểm này: vẫn thử vòng nhớ điểm ảo
+		   trước khi kết luận, vì VP không đi qua historian. */
+		virtual := a.virtualPointRing.Query([]string{pointID}, fromMs, toMs)
+		if len(virtual) > 0 {
+			return virtual, "virtual-point-ring", nil
+		}
+		return nil, "historian-v2", nil
+	}
+
+	if a.trends == nil {
+		return nil, "legacy-trend", fmt.Errorf("historian v2 chưa sẵn sàng và kho trend legacy không mở được")
+	}
+	raw, err := a.trends.Query(ctx, []string{pointID}, fromMs, toMs)
+	if err != nil {
+		return nil, "legacy-trend", err
+	}
+	raw = append(raw, a.virtualPointRing.Query([]string{pointID}, fromMs, toMs)...)
+	return raw, "legacy-trend", nil
 }
 
 // downsampleForAlarmSim hạ tần chuỗi mẫu xuống trần của engine.
