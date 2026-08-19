@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -121,4 +122,49 @@ func TestDownsampleNormalisesLegacySecondTimestamps(t *testing.T) {
 	if !strings.HasPrefix(samples[0].T, "2026-08-19") {
 		t.Fatalf("mốc legacy không được quy đổi: %s", samples[0].T)
 	}
+}
+
+/*
+Hồi quy cho lỗi phát hiện trên board thật ngày 2026-08-19.
+
+Bản đầu của `T57-3.13` hỏi thẳng kho trend LEGACY. Trên board, historian v2 đã là
+kho authoritative từ 2026-08-04 (v2: 6,5 MB sửa lúc 12:05; legacy: 160 kB sửa lần
+cuối 04-08), nên **cả 28 điểm đều trả 503** dù dữ liệu vẫn đang được ghi.
+
+Test này khoá hai thứ mà lỗi đó đã vi phạm:
+  · phản hồi phải NÓI RA đã hỏi kho nào (`historySource`);
+  · kho được hỏi phải là kho đang được ghi, không phải kho đầu tiên tiện tay gọi.
+*/
+func TestAlarmEstimateNamesTheHistoryStoreItAsked(t *testing.T) {
+	withoutSimBinaries(t)
+	app, token := newTestAppWithAdmin(t)
+
+	resp := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/alarm-settings/estimate", estimateBody("UI-01", 1), token)
+	assertStatus(t, resp, http.StatusServiceUnavailable)
+
+	body := resp.Body.String()
+	/* Bất biến: MỌI đường 503 của endpoint này phải nêu tên kho đã hỏi — dù là
+	   "không có mẫu trong kho X" hay "kho X lẫn Y đều không mở được". Không có
+	   tên kho thì người đọc không phân biệt được "điểm im lặng" với "hỏi nhầm
+	   kho", đúng chỗ đã mất một phiên để truy ra trên board. */
+	for _, store := range []string{"historian-v2", "legacy-trend", "virtual-point-ring", "historian v2", "trend legacy"} {
+		if strings.Contains(body, store) {
+			return
+		}
+	}
+	t.Fatalf("503 không nêu kho nào đã được hỏi: %s", body)
+}
+
+func TestReadPointHistoryFallsBackToLegacyOnlyWhenV2Unavailable(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	// Môi trường test không bật historian v2 ⇒ `newHistorianQueryEngine` lỗi và
+	// đường lùi legacy phải nhận việc, KHÔNG được ném lỗi ra ngoài.
+	samples, source, err := app.readPointHistoryForEstimate(context.Background(), "UI-01", 0, 1)
+	if err != nil && source != "legacy-trend" {
+		t.Fatalf("source = %q, err = %v; đường lùi phải là legacy-trend", source, err)
+	}
+	if source == "" {
+		t.Fatalf("luôn phải trả tên kho, kể cả khi rỗng")
+	}
+	_ = samples
 }

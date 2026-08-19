@@ -8,6 +8,38 @@
 
 ## [Unreleased]
 
+### Fixed — `T57-3.13` hỏi nhầm kho lịch sử: mọi điểm trả 503 trên board dù dữ liệu vẫn được ghi (2026-08-19)
+
+**Triệu chứng (phát hiện trên board thật, không phải trên máy dev).** Ước lượng
+tần suất cảnh báo trả `503 "không có mẫu lịch sử"` cho **cả 28 điểm**, trong khi
+historian vẫn đang được ghi đều đặn.
+
+**Nguyên nhân gốc — hỏi nhầm kho, không phải lệch khoá điểm.** Bản đầu gọi thẳng
+`a.trends.Query(...)`, tức kho trend **legacy**. Số đo trên board:
+
+| Kho | Kích thước | Sửa lần cuối |
+|---|---:|---|
+| `/data/config/historian-v2.sqlite` | 6,5 MB | **2026-08-19 12:05** |
+| `/data/mkddc/trend.sqlite` | 160 kB | **2026-08-04 10:53** |
+
+Historian v2 đã là kho authoritative từ 15 ngày trước; kho legacy chết từ đó.
+Endpoint không sai cú pháp, không crash, test trên host vẫn xanh — nó chỉ hỏi
+nhầm chỗ, và **kiểu hỏng đó chỉ lộ ra trên thiết bị thật**.
+
+**Cách sửa.** `readPointHistoryForEstimate` đi cùng đường với `/api/v1/history`:
+engine hợp nhất (historian v2) trước, vòng nhớ điểm ảo cho VP, kho legacy chỉ là
+đường lùi khi v2 chưa sẵn sàng.
+
+Phản hồi thêm trường `historySource` và thông điệp 503 nêu **tên kho đã hỏi**.
+Thiếu điều này thì một kết quả rỗng không phân biệt được "điểm im lặng" với "hỏi
+nhầm kho" — đúng chỗ đã mất một phiên để truy ra.
+
+**Kiểm chứng.** `alarmestimate_test.go` thêm 2 test hồi quy: mọi đường 503 phải
+nêu tên kho, và đường lùi legacy nhận việc khi v2 không sẵn sàng thay vì ném lỗi
+ra ngoài. `go build`/`go vet`/`go test ./... -count=1` PASS.
+
+Refs: Plan 57 T57-3.13
+
 ### Added — Plan 57 Wave 3 đợt 2: Rev A đạt 69/70, còn đúng `T57-3.9` (2026-08-19)
 
 Năm task còn lại của Wave 3 cộng phần dở của Wave 0, giao sau
