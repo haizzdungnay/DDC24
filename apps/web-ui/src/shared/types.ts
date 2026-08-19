@@ -1146,6 +1146,24 @@ export interface AlarmSimulateResult {
   engine: string
 }
 
+/** Kiểm kết nối sau khi apply mạng — `T57-3.18`.
+ *
+ *  `unknown` KHÁC `unreachable`: gộp hai thứ này lại sẽ khiến người dùng rollback
+ *  một cấu hình hoàn toàn đúng chỉ vì thiết bị thiếu công cụ chẩn đoán. */
+export interface NetworkCheckTarget {
+  kind: 'gateway' | 'dns' | 'dns_resolve' | string
+  host: string
+  state: 'ok' | 'unreachable' | 'unknown'
+  detail?: string
+  rttMs?: number
+}
+
+export interface NetworkCheckResponse {
+  checkedAt: string
+  targets: NetworkCheckTarget[]
+  summary: 'ok' | 'degraded' | 'unknown'
+}
+
 /** Ước lượng tần suất cảnh báo từ lịch sử điểm — `T57-3.13`. */
 export interface AlarmEstimateResult {
   pointId: string

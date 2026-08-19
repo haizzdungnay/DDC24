@@ -11,7 +11,7 @@ import { useToast } from '../../shared/components/Toast'
 import { useApi } from '../../shared/hooks/useApi'
 import { useAuth } from '../auth'
 import { useI18n } from '../../shared/i18n'
-import type { ModbusSlave, NetcfgActive, NetcfgCandidate, NetcfgResponse, NetcfgTransactionAction, NetworkConfig, PollState } from '../../shared/types'
+import type { ModbusSlave, NetcfgActive, NetcfgCandidate, NetcfgResponse, NetcfgTransactionAction, NetworkCheckResponse, NetworkConfig, PollState } from '../../shared/types'
 
 const inputClass = 'mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none transition focus:border-[var(--c-accent)] disabled:cursor-not-allowed disabled:opacity-50'
 
@@ -55,6 +55,12 @@ export function NetworkPage() {
   const [config, setConfig] = useState<NetworkConfig | null>(null)
   const [candidate, setCandidate] = useState<NetcfgCandidate | null>(null)
   const [transaction, setTransaction] = useState<NetcfgResponse | null>(null)
+  /* `T57-3.18`: kết quả kiểm kết nối trong cửa sổ đếm ngược. Ba trạng thái được
+     giữ nguyên tới tận giao diện — gộp "chưa kiểm được" vào "không thông" sẽ đẩy
+     người dùng rollback một cấu hình đúng. */
+  const [connectivity, setConnectivity] = useState<NetworkCheckResponse | null>(null)
+  const [connectivityBusy, setConnectivityBusy] = useState(false)
+  const [connectivityError, setConnectivityError] = useState<string | null>(null)
   const [transactionBusy, setTransactionBusy] = useState<NetcfgTransactionAction | null>(null)
   const [confirmSave, setConfirmSave] = useState(false)
   const [savingConfig, setSavingConfig] = useState(false)
@@ -242,6 +248,19 @@ export function NetworkPage() {
     } finally {
       setSavingNetwork(false)
       await transactionState.refetch()
+    }
+  }
+
+  async function runConnectivityCheck() {
+    setConnectivityBusy(true)
+    setConnectivityError(null)
+    try {
+      setConnectivity(await apiClient.checkNetworkConnectivity())
+    } catch (err) {
+      setConnectivity(null)
+      setConnectivityError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setConnectivityBusy(false)
     }
   }
 
@@ -564,6 +583,50 @@ export function NetworkPage() {
               </div>
             </div>
           )}
+          {/* `T57-3.18` — hỏi chính thiết bị xem cấu hình mới có thông không,
+              thay vì bắt người dùng mở tab khác rồi đoán. */}
+          <div className="mt-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-semibold">{pick('Kiểm kết nối từ thiết bị', 'Check connectivity from the device')}</span>
+              <Button size="sm" loading={connectivityBusy} onClick={() => { void runConnectivityCheck() }}>
+                {pick('Kiểm ngay', 'Check now')}
+              </Button>
+            </div>
+            {connectivityError && (
+              <p role="alert" className="mt-2 text-xs text-[var(--c-warn-fg)]">{connectivityError}</p>
+            )}
+            {connectivity && (
+              <div className="mt-2 space-y-1 text-xs">
+                {connectivity.targets.map((target) => (
+                  <div key={`${target.kind}-${target.host}`} className="flex flex-wrap items-baseline gap-2">
+                    <span className="font-semibold">{connectivityLabel(target.kind, pick)}</span>
+                    <span className="mono text-[var(--c-text-dim)]">{target.host}</span>
+                    <span
+                      className="font-bold"
+                      style={{ color: target.state === 'ok' ? 'var(--c-good-fg)' : target.state === 'unreachable' ? 'var(--c-fault-fg)' : 'var(--c-text-dim)' }}
+                    >
+                      {target.state === 'ok'
+                        ? pick('THÔNG', 'REACHABLE')
+                        : target.state === 'unreachable'
+                          ? pick('KHÔNG THÔNG', 'UNREACHABLE')
+                          : pick('CHƯA KIỂM ĐƯỢC', 'NOT TESTED')}
+                    </span>
+                    {target.rttMs !== undefined && <span className="text-[var(--c-text-dim)]">{target.rttMs} ms</span>}
+                    {target.detail && <span className="text-[var(--c-text-dim)]">— {target.detail}</span>}
+                  </div>
+                ))}
+                {connectivity.summary === 'unknown' && (
+                  <p className="text-[var(--c-warn-fg)]">
+                    {pick(
+                      'Không kiểm được đích nào. Đây KHÔNG phải bằng chứng cấu hình hỏng — hãy tự mở địa chỉ mới ở tab khác trước khi quyết định.',
+                      'Nothing could be tested. This is NOT evidence the configuration is broken — open the new address in another tab before deciding.'
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           <p className="mt-4 text-sm font-semibold">{pick('Bạn vẫn xem được trang này?', 'Can you still see this page?')}</p>
           <p className="mt-1 text-sm text-[var(--c-text-dim)]" aria-live="polite">
             {pick('Nếu mất kết nối, thiết bị tự quay lại cấu hình cũ sau ', 'If you lose connection, the device rolls back automatically in ')}
@@ -598,6 +661,13 @@ export function NetworkPage() {
 /** Địa chỉ mà trình duyệt sẽ phải dùng sau khi đổi IP: giữ nguyên giao thức và
  *  cổng của phiên hiện tại, chỉ thay phần host. Đoán sai cổng là dẫn người dùng
  *  tới một trang không mở được đúng lúc họ không còn đường vào nào khác. */
+function connectivityLabel(kind: string, pick: (vi: string, en: string) => string): string {
+  if (kind === 'gateway') return pick('Cổng ra (gateway)', 'Gateway')
+  if (kind === 'dns') return pick('Máy chủ DNS', 'DNS server')
+  if (kind === 'dns_resolve') return pick('Phân giải tên', 'Name resolution')
+  return kind
+}
+
 function nextAccessUrl(ipv4: string): string {
   const port = window.location.port ? `:${window.location.port}` : ''
   return `${window.location.protocol}//${ipv4}${port}/`
