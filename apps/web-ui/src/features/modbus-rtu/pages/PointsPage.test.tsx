@@ -13,7 +13,9 @@ function renderPage() {
 const api = vi.hoisted(() => ({
   getModbusDevices: vi.fn(), getModbusPoints: vi.fn(), getPoints: vi.fn(),
   createModbusPoint: vi.fn(), updateModbusPoint: vi.fn(), deleteModbusPoint: vi.fn(),
-  writeModbusTest: vi.fn()
+  writeModbusTest: vi.fn(),
+  // `T57-3.11`: trang tải danh sách mẫu thiết bị khi mở.
+  getModbusTemplates: vi.fn()
 }))
 
 vi.mock('../../../shared/api/client', () => ({ apiClient: api }))
@@ -41,6 +43,7 @@ vi.mock('../../auth', async (importOriginal) => {
 
 describe('PointsPage', () => {
   beforeEach(() => {
+  api.getModbusTemplates.mockResolvedValue([])
     localStorage.clear()
     localStorage.setItem('mkddc-lang', 'vi')
     auth.role = 'admin'

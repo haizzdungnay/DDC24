@@ -1146,6 +1146,34 @@ export interface AlarmSimulateResult {
   engine: string
 }
 
+/** Mẫu thiết bị Modbus dựng sẵn — `T57-3.11`.
+ *
+ *  `source` là BẮT BUỘC ở backend: mẫu không nói được nó đến từ đâu thì không
+ *  được hiển thị. Giao diện phải hiện `source` cạnh mẫu, vì người dùng sẽ tin
+ *  mẫu hơn tin tài liệu. */
+export interface ModbusTemplatePoint {
+  name: string
+  fc: number
+  addr: number
+  count: number
+  type: string
+  byte_order?: string
+  scale?: number
+  offset?: number
+  unit?: string
+  writable?: boolean
+}
+
+export interface ModbusTemplate {
+  id: string
+  name: string
+  manufacturer?: string
+  description?: string
+  source: string
+  origin: 'builtin' | 'site' | string
+  points: ModbusTemplatePoint[]
+}
+
 /** Kiểm kết nối sau khi apply mạng — `T57-3.18`.
  *
  *  `unknown` KHÁC `unreachable`: gộp hai thứ này lại sẽ khiến người dùng rollback

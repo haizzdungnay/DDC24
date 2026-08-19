@@ -219,6 +219,9 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("POST /api/v1/modbus/config/apply", RoleAdmin, a.handleApplyModbusConfig),
 		webRouter.Protected("GET /api/v1/modbus/mapping", RoleViewer, a.handleModbusMapping),
 		webRouter.Protected("GET /api/v1/modbus/ports", RoleViewer, a.handleModbusPorts),
+		// `T57-3.11`: mẫu thiết bị dựng sẵn. ĐỌC ⇒ `viewer`; mẫu chỉ điền sẵn
+		// form, người dùng vẫn phải xác nhận và lưu như bình thường.
+		webRouter.Protected("GET /api/v1/modbus/templates", RoleViewer, a.handleListModbusTemplates),
 		webRouter.Protected("GET /api/v1/modbus/export", RoleViewer, a.handleModbusExport),
 		webRouter.Protected("POST /api/v1/modbus/import", RoleAdmin, a.handleModbusImport),
 		webRouter.Protected("PUT /api/v1/modbus/devices/{id}/enabled", RoleAdmin, a.handleModbusDeviceEnabled),
