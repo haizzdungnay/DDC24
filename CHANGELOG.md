@@ -8,6 +8,72 @@
 
 ## [Unreleased]
 
+### Added — Plan 57 Wave 3 (đợt 1) + Wave 4: 14/21 task Wave 3, thẻ thiết bị, và code-splitting (2026-08-19)
+
+Mở bằng `AUTH-WEBUX-2026-08-19-01` — chủ sở hữu chốt hai điều: **mở Wave 3 trừ
+`T57-3.8`** (quét bus Modbus là ghi ra RS-485 thật, giữ chặn chờ quyết định người
+riêng) và **Wave 4 đi đường tối thiểu** (`T57-4.1` nhóm điểm theo thiết bị,
+ISA-101 Level 2 hoãn Rev B; `T57-4.2` code-splitting làm ngay). Tám ADR theo từng
+task: `ADR-042`…`ADR-049`.
+
+Plan 57 nay **63,5/71 task (~89%)**.
+
+**Vùng tài khoản.** `T57-3.17` cưỡng chế đổi mật khẩu tạm Ở BACKEND — phiên có cờ
+chỉ gọi được `/me` và `/me/change-password`, mọi endpoint khác trả `403
+password_change_required`; ẩn màn hình ở FE thì `curl` vẫn đi thẳng. `T57-3.16`
+gộp lần đăng nhập gần nhất (đọc từ kho Activity, không ghi thêm vào `users.conf`
+để khỏi mòn flash), lần sai gần nhất và phiên đang mở, kèm **hai giới hạn tự khai
+báo**: sổ phiên chỉ có từ lần khởi động dịch vụ, vết đăng nhập nằm trong vòng nhớ
+2000 sự kiện. `T57-3.2` đưa tuỳ chọn người dùng lên thiết bị (túi JSON ≤ 16 KB,
+backend không hiểu nội dung), gỡ giới hạn "chỉ trên trình duyệt này" của `T57-2.3`.
+
+**Vùng chẩn đoán.** `T57-3.4` vòng nhớ 60 phút CPU/RAM/nhiệt độ, lấy mẫu ngay
+trên đường `/system/status` sẵn có thay vì dựng goroutine riêng. `T57-3.12` trả
+lời "ai đang dùng điểm ảo này" TRƯỚC khi xoá, kèm phạm vi đã quét — "không có
+tham chiếu" chỉ có nghĩa khi biết đã quét những gì. `T57-3.14` gắn tóm tắt diff
+vào vết sửa cấu hình, che trường nhạy cảm nhưng vẫn cho thấy LÀ CÓ ĐỔI.
+`T57-3.15` điền `lastSyncUtc` (trước nay luôn `null`) từ `chronyc tracking` và
+cảnh báo khi lệch quá 1000 ms.
+
+**Vùng cảnh báo và lịch.** `T57-3.3` chỉ số ISA-18.2 §16 kèm cờ flood, cộng xoay
+vòng + retention 90 ngày cho `alarm_history.jsonl` — điều kiện tiên quyết mà
+`ADR-036` đặt ra. `T57-2.13` và `T57-3.5`/`T57-3.6`/`T57-3.7` là **hai cái vỏ**
+gọi engine của Core (`mkddc-alarm-sim`, `mkddc-schedule-sim --point`); thiếu
+binary ⇒ 503 nêu tên binary còn thiếu, tuyệt đối không có đường rơi về bản tính
+xấp xỉ trong Go hay FE.
+
+**Khoảng hở sản phẩm lớn nhất.** `T57-3.1` thêm thẻ thiết bị công nghệ vào cấu
+hình điểm — TRƯỜNG TRÌNH BÀY, không phải thực thể mới: không bảng thiết bị,
+không khoá ngoại, Core không đọc. Điểm không có thẻ vào nhóm "Chưa gán"; **cấm
+đoán từ tên điểm**. Bộ lọc `?equip=` ở Giám sát là đường tối thiểu đã chốt cho
+`T57-4.1`, và là đường di trú sẵn có khi Rev B làm mô hình thiết bị thật.
+
+**`T57-4.2` code-splitting.** Bốn lô nặng và ít mở tách khỏi chunk chính; bốn màn
+hình mở đầu ca ở lại. Lần chia đầu vô hiệu vì cùng một barrel vừa được import
+tĩnh vừa import động — rollup báo `INEFFECTIVE_DYNAMIC_IMPORT`; sửa bằng cách trỏ
+thẳng vào tệp nguồn.
+
+**Kiểm chứng (đo lại 2026-08-19).**
+
+| Phép đo | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **107 file / 1032 test PASS** |
+| `go build ./...` · `go vet ./...` · `go test ./... -count=1` | PASS |
+| `npm run lint` · `tsc --noEmit` | PASS |
+| `npm run build:foxlinx` chunk `index` | 989,94 kB → **558,49 kB** (gzip 257,54 → 149,20) |
+| Chunk tách riêng | `ProgrammingRoutes` 200,97 · `modbus-rtu` 89,91 · `ScheduleEditorPage` 62,88 · `TrendsPage` 27,58 kB |
+| `python3 scripts/docs_iso_harness.py --expect` | PASS |
+
+**Còn lại 6 task, ghi rõ điều kiện mở khoá từng mục ở Plan 57 §13b:** `T57-3.8`
+(chặn bởi quyết định người về ghi ra bus RS-485), `T57-3.9`/`T57-3.19`/`T57-3.20`
+(cần sửa C++ ở `apps/iobus` và `apps/hmi`), `T57-3.11`/`T57-3.13` (không bị chặn),
+`T57-3.18` (cần sửa `mkddc-netcfg`). `T57-4.2` đã giao code nhưng **chưa nghiệm
+thu** — `ADR-049` đòi số đo thời gian mở trang trên board thật, mà board Foxlinx
+đang mất kết nối.
+
+`T57-3.10` (nhập/xuất CSV bảng ánh xạ điểm Modbus) **đã có sẵn** từ đợt Modbus RTU
+trước; đợt này chỉ xác nhận và ghi lại, không làm lại.
+
 ### Added — Plan 57 Wave 2 (đợt cuối): khung nhìn đặt tên, dấu sự kiện trên xu hướng, diff trước khi lưu, form cảnh báo hết trộn ngôn ngữ, và mã QR địa chỉ mới (2026-08-19)
 
 Năm task khép lại Wave 2 (`T57-2.3`, `T57-2.6`, `T57-2.10`, `T57-2.14`, `T57-2.22`).
