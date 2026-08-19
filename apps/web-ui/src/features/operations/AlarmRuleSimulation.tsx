@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { apiClient } from '../../shared/api/client'
 import { Button } from '../../shared/components/Button'
 import { useI18n } from '../../shared/i18n'
-import type { AlarmSetting, AlarmSimulateResult } from '../../shared/types'
+import type { AlarmEstimateResult, AlarmSetting, AlarmSimulateResult } from '../../shared/types'
 import { formatDateTime } from '../../shared/utils'
 
 /**
@@ -29,6 +29,13 @@ export function AlarmRuleSimulation({ setting }: { setting: AlarmSetting }) {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<AlarmSimulateResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /* `T57-3.13` — ước lượng theo LỊCH SỬ THẬT của điểm, khác với chuỗi gõ tay ở
+     trên. Cùng một engine Core, chỉ khác nguồn mẫu. */
+  const [estimate, setEstimate] = useState<AlarmEstimateResult | null>(null)
+  const [estimateError, setEstimateError] = useState<string | null>(null)
+  const [estimateDays, setEstimateDays] = useState('1')
+  const [estimating, setEstimating] = useState(false)
+  const estimatePointId = setting.sources[0]?.pointId ?? ''
 
   const values = parseSampleValues(raw)
 
@@ -50,6 +57,19 @@ export function AlarmRuleSimulation({ setting }: { setting: AlarmSetting }) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function runEstimate() {
+    setEstimating(true)
+    setEstimateError(null)
+    setEstimate(null)
+    try {
+      setEstimate(await apiClient.estimateAlarmSetting(setting, estimatePointId, Math.max(1, Number(estimateDays) || 1)))
+    } catch (err) {
+      setEstimateError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setEstimating(false)
     }
   }
 
@@ -104,6 +124,67 @@ export function AlarmRuleSimulation({ setting }: { setting: AlarmSetting }) {
           {error}
         </p>
       )}
+
+      {/* `T57-3.13` — ước lượng từ lịch sử thật của điểm nguồn. */}
+      <div className="mt-4 border-t border-[var(--c-border)] pt-3">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold text-[var(--c-text)]">{pick('Ước lượng theo lịch sử thật', 'Estimate from real history')}</h4>
+            <p className="text-xs text-[var(--c-text-dim)]">
+              {estimatePointId
+                ? pick(`Chạy luật đang soạn trên lịch sử của ${estimatePointId} để biết nó sẽ bật bao nhiêu lần mỗi ngày.`, `Runs the rule being edited over the history of ${estimatePointId} to see how often it would raise.`)
+                : pick('Cần ít nhất một nguồn kích hoạt để biết lấy lịch sử của điểm nào.', 'Add a source first so we know whose history to read.')}
+            </p>
+          </div>
+          <div className="flex items-end gap-2">
+            <label className="text-xs">
+              {pick('Số ngày', 'Days')}
+              <input
+                type="number"
+                min={1}
+                max={7}
+                value={estimateDays}
+                aria-label={pick('Số ngày lịch sử', 'History days')}
+                onChange={(event) => setEstimateDays(event.target.value)}
+                className="ml-2 h-9 w-20 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-sm text-[var(--c-text)]"
+              />
+            </label>
+            <Button size="sm" loading={estimating} disabled={!estimatePointId} onClick={() => { void runEstimate() }}>
+              {pick('Ước lượng', 'Estimate')}
+            </Button>
+          </div>
+        </div>
+
+        {/* Không có lịch sử ⇒ backend trả 503. Hiện nguyên văn: biến nó thành
+            "0 lần/ngày" sẽ được đọc thành "ngưỡng này an toàn". */}
+        {estimateError && (
+          <p role="alert" className="mt-2 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
+            {estimateError}
+          </p>
+        )}
+
+        {estimate && (
+          <div className="mt-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm">
+            <div>
+              <span className="mono text-2xl font-bold">{estimate.raisesPerDay.toFixed(1)}</span>{' '}
+              <span className="text-[var(--c-text-dim)]">{pick('lần bật / ngày', 'raises / day')}</span>
+              <span className="ml-2 text-xs text-[var(--c-text-dim)]">
+                {pick(`(${estimate.raises} lần trong ${estimate.days} ngày)`, `(${estimate.raises} in ${estimate.days} days)`)}
+              </span>
+            </div>
+            {/* Hạ tần phải nói ra: đỉnh ngắn hơn bước lấy mẫu không được nhìn
+                thấy, nên con số này thiên về THẤP hơn thực tế. */}
+            {estimate.downsampled && (
+              <p className="mt-1 text-xs text-[var(--c-warn-fg)]">
+                {pick(
+                  `Đã hạ tần ${estimate.samplesAvailable} mẫu xuống ${estimate.samplesUsed} (bước ${estimate.stepS} giây). Đợt vượt ngưỡng ngắn hơn ${estimate.stepS} giây không được nhìn thấy, nên con số thật có thể CAO HƠN.`,
+                  `Downsampled ${estimate.samplesAvailable} samples to ${estimate.samplesUsed} (${estimate.stepS} s step). Excursions shorter than ${estimate.stepS} s are invisible, so the real number may be HIGHER.`
+                )}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       {result && (
         <div className="mt-3">

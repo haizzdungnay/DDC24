@@ -295,6 +295,8 @@ func (a *App) Router() http.Handler {
 		// `T57-2.13` (`ADR-048`): mô phỏng luật cảnh báo, là VỎ gọi
 		// `mkddc-alarm-sim`. Không chạm cấu hình đang lưu nên `viewer` là đủ.
 		webRouter.Protected("POST /api/v1/alarm-settings/simulate", RoleViewer, a.handleSimulateAlarmSetting),
+		// `T57-3.13`: ước lượng tần suất từ lịch sử THẬT của điểm, cùng engine.
+		webRouter.Protected("POST /api/v1/alarm-settings/estimate", RoleViewer, a.handleEstimateAlarmSetting),
 	}
 	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, programminghttp.Services{
 		Projects: a.programmingProjects, Checks: a.programmingChecks, Operations: a.programmingOperations,

@@ -1146,6 +1146,20 @@ export interface AlarmSimulateResult {
   engine: string
 }
 
+/** Ước lượng tần suất cảnh báo từ lịch sử điểm — `T57-3.13`. */
+export interface AlarmEstimateResult {
+  pointId: string
+  days: number
+  samplesAvailable: number
+  samplesUsed: number
+  /** Bước lấy mẫu sau hạ tần: đỉnh ngắn hơn khoảng này KHÔNG được nhìn thấy. */
+  stepS: number
+  raises: number
+  raisesPerDay: number
+  downsampled: boolean
+  engine: string
+}
+
 /** Hiệu lực thực tế của lịch trên một điểm — `T57-3.5`/`T57-3.6`/`T57-3.7`. */
 export interface ScheduleEffectiveSegment {
   from: string

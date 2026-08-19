@@ -18,7 +18,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -109,15 +108,24 @@ func (a *App) handleSimulateAlarmSetting(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	payload, err := json.Marshal(req)
+	events, err := runAlarmSim(r.Context(), bin, req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "không mã hoá được yêu cầu: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "mô phỏng thất bại: "+err.Error())
 		return
 	}
+	writeJSON(w, http.StatusOK, AlarmSimulateResult{SchemaVersion: 1, Events: events, Engine: filepath.Base(bin)})
+}
 
-	ctx, cancel := context.WithTimeout(r.Context(), alarmSimTimeout)
+// runAlarmSimProcess là ĐƯỜNG DUY NHẤT tới binary engine.
+//
+// `T57-2.13` (mô phỏng theo chuỗi gõ tay) và `T57-3.13` (ước lượng theo lịch sử)
+// dùng chung hàm này. Hai đường gọi riêng là hai cơ hội để cờ dòng lệnh, timeout
+// hay cách đọc lỗi trôi khỏi nhau — và khi trôi thì hai màn hình sẽ nói hai điều
+// khác nhau về cùng một luật.
+func runAlarmSimProcess(ctx context.Context, bin string, payload []byte) ([]byte, error) {
+	runCtx, cancel := context.WithTimeout(ctx, alarmSimTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, "--stdin-json")
+	cmd := exec.CommandContext(runCtx, bin, "--stdin-json")
 	cmd.Stdin = strings.NewReader(string(payload))
 	stdout, err := cmd.Output()
 	if err != nil {
@@ -126,17 +134,7 @@ func (a *App) handleSimulateAlarmSetting(w http.ResponseWriter, r *http.Request)
 		if ok := asExitError(err, &exitErr); ok && len(exitErr.Stderr) > 0 {
 			detail = strings.TrimSpace(string(exitErr.Stderr))
 		}
-		writeError(w, http.StatusInternalServerError, "mô phỏng thất bại: "+detail)
-		return
+		return nil, fmt.Errorf("%s", detail)
 	}
-
-	var events []AlarmSimEvent
-	if err := json.Unmarshal(stdout, &events); err != nil {
-		writeError(w, http.StatusInternalServerError, "không đọc được kết quả mô phỏng: "+err.Error())
-		return
-	}
-	if events == nil {
-		events = []AlarmSimEvent{}
-	}
-	writeJSON(w, http.StatusOK, AlarmSimulateResult{SchemaVersion: 1, Events: events, Engine: filepath.Base(bin)})
+	return stdout, nil
 }

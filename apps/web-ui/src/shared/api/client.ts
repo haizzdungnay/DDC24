@@ -35,7 +35,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmMetrics, type AlarmSetting, type AlarmSimulateResult, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type ScheduleEffectiveResponse, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type SystemHistoryResponse, type UserAccessResponse, type UserAccessRow, type VirtualPointUsage, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmEstimateResult, type AlarmMetrics, type AlarmSetting, type AlarmSimulateResult, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type ScheduleEffectiveResponse, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type SystemHistoryResponse, type UserAccessResponse, type UserAccessRow, type VirtualPointUsage, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -1290,6 +1290,16 @@ export const apiClient = {
     return requestJson<AlarmSimulateResult>('/alarm-settings/simulate', {
       method: 'POST',
       body: JSON.stringify({ setting, samples })
+    })
+  },
+
+  /** `T57-3.13` — ước lượng luật này sẽ bật bao nhiêu lần/ngày, dựa trên lịch sử
+   *  THẬT của điểm. Không có lịch sử ⇒ backend trả 503; nơi gọi phải hiện lý do
+   *  chứ không được biến nó thành "0 lần/ngày". */
+  async estimateAlarmSetting(setting: AlarmSetting, pointId: string, days: number): Promise<AlarmEstimateResult> {
+    return requestJson<AlarmEstimateResult>('/alarm-settings/estimate', {
+      method: 'POST',
+      body: JSON.stringify({ setting, pointId, days })
     })
   },
 
