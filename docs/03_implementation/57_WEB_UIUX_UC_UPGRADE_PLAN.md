@@ -1,9 +1,11 @@
 # Plan 57 — Nâng cấp UC/UI/UX Web HMI + đóng finding `REV-FE-UIUX-UC-2026-08-18`
 
-**Trạng thái:** **Phần task Rev A xong 70/70** (Wave 0–2 xong; Wave 3 xong 20/21,
-task còn lại `T57-3.8` đã chuyển sang Rev B; Wave 4 xong 2/2 và đã nghiệm thu).
-**Plan CHƯA đóng:** cổng `RELEASE_READY` vẫn `N/A`, còn chờ hai điều kiện người —
-chữ ký cho `ADR-033`…`ADR-049` và quyết định về CI. Xem §13b.
+**Trạng thái:** **ĐÓNG 2026-08-19** — task Rev A 70/70, gate tài liệu §9.1 đủ,
+ma trận kiểm chứng đã đồng bộ, đã deploy và đo trên board thật.
+`T57-3.8` chuyển sang **Rev B** cùng `T57-4.1` (xem §14).
+**Lưu ý:** đóng plan **không** đồng nghĩa `RELEASE_READY` — cổng đó là việc riêng,
+cần chữ ký người cho `ADR-033`…`ADR-049`, GO của Product/Release/QA và quyết định
+về CI. Xem §13b.
 Wave 0 mở bằng `AUTH-WEBUX-2026-08-18-01`; **Wave 1 và phần FE thuần của Wave 2
 mở bằng `AUTH-WEBUX-2026-08-18-02`** (2026-08-18, `docs/00_governance/DECISIONS.md`),
 sau khi **cả tám câu hỏi §12 đã có quyết định** (`ADR-034`…`ADR-039`) và asset
@@ -287,9 +289,9 @@ Mỗi task ở đây **phải có ADR riêng** trước khi code (`DOC_GOVERNANC
 | `KX-DDC24-UX-SYSTEM-001_VI.md` → v1.8 | Token, §6 nav 4 nhóm, §4 breakpoint, §9 handoff | `T57-0.11..0.14` chặn **toàn bộ** Wave 1–3 (design system là nguồn chuẩn) |
 | `UX_REQ_PA3_WEB.md` → v1.1 | Sửa `F-DOC-03`; thêm requirement ID cho UC mới | `T57-0.15`; mỗi UC mới ở Wave 1–3 phải có ID trước khi code |
 | ADR điều hướng 4 nhóm | Mới, số cấp ở `docs/00_governance/DECISIONS.md` | `T57-0.13` |
-| Hồ sơ UI/UX cho màn hình mới **kèm asset SVG/PNG** | Override registry · Ép tay hàng loạt · Alarm KPI · Modbus scan · Modbus frame monitor · Scheduler effective preview | Chặn `T57-1.2`, `T57-1.4`, `T57-3.3`, `T57-3.8`, `T57-3.9`, `T57-3.5` |
-| `MODBUS_RTU_UI_UX_DESIGN.md` | Bổ sung scan + frame monitor + CSV | `T57-3.8..3.11` |
-| `KX-DDC24-UX-WEB-SCHEDULER-001_VI.md` | Bổ sung effective preview + cảnh báo xung đột | `T57-3.5`, `T57-3.6` |
+| Hồ sơ UI/UX cho màn hình mới **kèm asset SVG/PNG** | Override registry · Ép tay hàng loạt · Alarm KPI · Modbus scan · Modbus frame monitor · Scheduler effective preview | Chặn `T57-1.2`, `T57-1.4`, `T57-3.3`, `T57-3.8`, `T57-3.9`, `T57-3.5`. **ĐÃ ĐÓNG 2026-08-19** cho năm màn hình thuộc Rev A: `OPS-01`/`OPS-02` (v1.0), `OPS-03` (v1.1), `MBR-FRM-01` (`MODBUS_RTU_UI_UX_DESIGN` v0.3 §6.5), `SCH-EFF-01` (`KX-DDC24-UX-WEB-SCHEDULER-001` v1.1 §8b) — **10 asset SVG** desktop + mobile. Modbus scan thuộc `T57-3.8`, theo sang Rev B |
+| `MODBUS_RTU_UI_UX_DESIGN.md` | Bổ sung scan + frame monitor + CSV | `T57-3.8..3.11`. **Frame monitor đóng 2026-08-19** (v0.3 §6.5 + 2 asset); scan theo `T57-3.8` sang Rev B |
+| `KX-DDC24-UX-WEB-SCHEDULER-001_VI.md` | Bổ sung effective preview + cảnh báo xung đột | `T57-3.5`, `T57-3.6`. **ĐÃ ĐÓNG 2026-08-19** — v1.1 §8b + 2 asset |
 | `CONFIG_SCHEMA_MK-DDC-24_VI.md` + `contracts/` | Equipment tag; user preferences | `T57-3.1`, `T57-3.2` |
 | 9 ADR của Wave 3 | Theo bảng §7 | Từng task tương ứng |
 
@@ -748,6 +750,37 @@ sẽ **phát byte ra bus RS-485 thật** — đúng điều `ADR-046` cấm, và
 giới tách `T57-3.9` khỏi `T57-3.8`. Đường ghi được phủ bằng test pty ở
 `BusWorkerFrames` thay vì bằng một lượt phát thật.
 
+### Wave 3 — đợt 5 (2026-08-19): đóng nợ tài liệu trước khi đóng plan
+
+Rà lại §9.1 trước khi tuyên bố đóng và tìm ra **ba gate tài liệu chưa thi hành**.
+Chúng không phải task nên không hiện trong mẫu số 70, nhưng chính plan này tuyên
+bố chúng **chặn** ba task đã giao — đóng plan mà bỏ qua là đóng trên giấy.
+
+| Gate §9.1 | Chặn task | Trạng thái trước rà | Đã làm |
+|---|---|---|---|
+| Hồ sơ UI/UX + asset cho **Alarm KPI** | `T57-3.3` | thiếu hẳn | `KX-DDC24-UX-WEB-OPERATIONS-001` v1.1 §3 (`OPS-03`) + 2 asset SVG |
+| Hồ sơ UI/UX + asset cho **Modbus frame monitor** | `T57-3.9` | thiếu hẳn | `MODBUS_RTU_UI_UX_DESIGN` v0.3 §6.5 (`MBR-FRM-01`) + 2 asset SVG |
+| Hồ sơ UI/UX + asset cho **Scheduler effective preview** | `T57-3.5`/`3.6` | thiếu hẳn | `KX-DDC24-UX-WEB-SCHEDULER-001` v1.1 §8b (`SCH-EFF-01`) + 2 asset SVG |
+
+Sáu asset đều có **desktop 1440 + mobile 390**, mỗi asset dựng đủ các trạng thái
+mà màn hình thật có — gồm cả trạng thái **không đọc được**, vì đó là trạng thái
+hay bị vẽ thiếu nhất và cũng là trạng thái nguy hiểm nhất khi vẽ sai. Mọi dữ liệu
+trong hình ghi rõ là **minh hoạ**, không phải bằng chứng runtime
+(`DOC_GOVERNANCE` §2.2).
+
+Ba mục đặc tả đều viết **sau khi đọc mã đã chạy**, không phải viết theo trí nhớ:
+đây là hồ sơ mô tả thứ đang tồn tại, nên một chi tiết sai ở đây sẽ thành một chi
+tiết sai trong đầu người bảo trì sau này.
+
+**Đồng bộ ma trận kiểm chứng** (`DOC_GOVERNANCE` §7 bước 3):
+`docs/05_verification/UX_PA3_TRACEABILITY.md` v1.1 thêm §5 — 17 năng lực Plan 57,
+11 endpoint mới, số đo gate, và §5.3 ghi **hai mục cố ý vắng mặt** kèm lý do.
+
+**Đóng nốt `F-UX-13`**: `SeverityBadge.test.tsx` (5 test) khoá điều mà
+`contrast.test.ts` không khoá được — năm mức ra năm nhãn khác nhau, không mức nào
+mượn tông "an toàn" của IEC 60073, và mỗi chip luôn có icon + nhãn chữ để người
+không phân biệt được màu vẫn đọc ra mức.
+
 ### Việc còn lại
 
 | Mục | Trạng thái | Điều kiện mở khoá |
@@ -756,34 +789,66 @@ giới tách `T57-3.9` khỏi `T57-3.8`. Đường ghi được phủ bằng tes
 | `T57-3.9` xem khung truyền Modbus | **XONG (2026-08-19)** | Đã sửa `ADR-046` rồi mới thi hành; xem "đợt 4" |
 | `mkddc-alarm-sim` | **XONG (2026-08-19)** | Đã viết, có target build, có ctest `alarm_sim_behaviour`, đã cài lên board |
 | `mkddc-schedule-sim` trên board | **XONG (2026-08-19)** | Đã cài ở `/usr/sbin` và `/opt/mkddc-web/` |
-| Test hành vi `F-UX-13` | Chưa viết | Phủ gián tiếp qua bộ test alarm sẵn có |
-| Chặn Back/Forward trong `useDirtyGuard` | Khoảng hở đã biết | Cần `useBlocker` của data router; app dùng `<BrowserRouter>` |
+| Test hành vi `F-UX-13` | **XONG (2026-08-19)** | `SeverityBadge.test.tsx` (5) |
+| Chặn Back/Forward trong `useDirtyGuard` | **Khoảng hở đã biết — bàn giao Rev B** | Cần `useBlocker` của data router, tức chuyển `<BrowserRouter>` → `createBrowserRouter`. Đây là đổi kiến trúc điều hướng, chạm cả bốn trang cấu hình lẫn ranh giới `lazy` của `T57-4.2` — không làm ở bước đóng plan. Xem §14 |
 | **Deploy lên board** | **XONG (2026-08-19)** | Cả bốn đợt đã lên board: `mkddc-core`, `mkddc-iobus`, `mkddc-web`, `dist/` FE (bản `build:foxlinx`), hai engine sim |
 | **CI GitHub Actions** | **CHƯA QUYẾT** | Lỗi thanh toán tổ chức từ 2026-08-17. Owner: chủ sở hữu sản phẩm (cần quyền billing GitHub). **Chưa đặt mốc** |
 | **Chữ ký `ADR-033`…`ADR-049`** | **Waive có thời hạn** | Giữ `WAIVED FOR IMPLEMENTATION` tới **cổng `RELEASE_READY` Rev A**. Cần chữ ký người thật của Tech Lead/UX Lead/PM trước mốc đó; agent **không** được điền |
+| **Gate tài liệu §9.1** | **XONG (2026-08-19)** | Ba hồ sơ UI/UX còn thiếu đã phát hành kèm 6 asset; xem "đợt 5" |
 
-### Điều kiện để đóng plan
+### Điều kiện để đóng plan — ĐÃ ĐỦ (2026-08-19)
 
-**Phần task của Rev A đã xong: 70/70.** `T57-3.8` không nằm trong mẫu số — đã
-chuyển sang **Rev B** theo `AUTH-WEBUX-2026-08-19-02` quyết định 1.
+| Điều kiện | Trạng thái |
+|---|---|
+| Toàn bộ task trong phạm vi Rev A | **70/70 XONG** |
+| Gate tài liệu §9.1 (hồ sơ UI/UX + asset cho màn hình mới) | **XONG** — 5 màn hình Rev A, 10 asset desktop + mobile |
+| Ma trận kiểm chứng đồng bộ (`DOC_GOVERNANCE` §7 bước 3) | **XONG** — `UX_PA3_TRACEABILITY` v1.1 §5 |
+| Finding còn mở của review nguồn | **XONG** — `F-UX-13` đóng bằng test hành vi; các finding khác đã đóng ở Wave 0–2 |
+| CHANGELOG + `docs_iso_harness --expect` | **XONG** trong cùng phiên |
+| Deploy lên board thật và đo lại | **XONG** — cả bốn đợt binary + FE `build:foxlinx` |
 
-Plan vẫn **chưa đóng ở cổng `RELEASE_READY`**, và hai điều kiện còn lại đều
-**không phải việc kỹ thuật**, nên agent không tự đóng được:
+**Plan 57 ĐÓNG.** `T57-3.8` không nằm trong mẫu số — đã chuyển sang **Rev B**
+theo `AUTH-WEBUX-2026-08-19-02` quyết định 1.
 
-1. **Chữ ký người** cho `ADR-033`…`ADR-049`. Waive `WAIVED FOR IMPLEMENTATION`
-   hết hiệu lực đúng tại cổng đó; agent **không** được điền
-   (`DOC_GOVERNANCE` §6 quy tắc 4). Cần: Tech Lead, UX Lead, PM.
-2. **Quyết định về CI.** Mọi check GitHub Actions fail trong 2–3 giây vì lỗi
-   thanh toán tổ chức từ 2026-08-17 — không phải lỗi mã. Cần chủ sở hữu sản phẩm
-   (người có quyền billing) hoặc một quyết định chấp nhận bằng chứng test cục bộ.
+### Cổng `RELEASE_READY` là việc KHÁC, và nó chưa mở
 
-Hai mục còn mở nhưng **không chặn cổng** (đã ghi ở bảng "Việc còn lại"): test
-hành vi `F-UX-13`, và chặn Back/Forward trong `useDirtyGuard`.
+Đóng plan nghĩa là **phần việc kỹ thuật đã xong và có bằng chứng**. Nó **không**
+đồng nghĩa với "được bật ở site thật" — `DOC_GOVERNANCE` §4 định nghĩa
+`RELEASE_READY` là một cổng riêng với điều kiện riêng, và cổng đó cần **người**:
 
-## 14. Revision History
+1. **Chữ ký** cho `ADR-033`…`ADR-049`. Waive `WAIVED FOR IMPLEMENTATION` hết
+   hiệu lực đúng tại cổng này (`AUTH-WEBUX-2026-08-19-02` quyết định 4) và
+   **không có đường waive lần hai**. Agent không được điền
+   (`DOC_GOVERNANCE` §6 quy tắc 4).
+2. **GO của Product + Release + QA** cùng với việc chấp nhận residual risk —
+   theo đúng bảng §4 của `DOC_GOVERNANCE`.
+3. **Quyết định về CI.** Mọi check GitHub Actions fail trong 2–3 giây vì lỗi
+   thanh toán tổ chức từ 2026-08-17; đây không phải lỗi mã. Cần người có quyền
+   billing xử lý, hoặc một quyết định chấp nhận bằng chứng test cục bộ.
+
+Ghi tách bạch như vậy để không ai đọc "plan đã đóng" thành "đã được phép bật ở
+công trình".
+
+## 14. Bàn giao sang Rev B
+
+Ba mục dưới đây **ra khỏi Rev A có chủ đích**, không phải bị bỏ quên. Ghi ở đây
+để chúng có một chỗ đứng cho tới khi Rev B mở phạm vi.
+
+| Mục | Vì sao ra khỏi Rev A | Điều kiện để làm |
+|---|---|---|
+| `T57-3.8` — quét bus Modbus | Quét là **phát khung ra RS-485 thật** trên một cổng đang chạy. `ADR-039` là **đặc tả**, không phải giấy phép | PM chỉ định **Fieldbus Lead + QA/HIL Lead** (điều kiện Track B từ phê duyệt PM/CTO 2026-08-04), kèm hồ sơ UI/UX + asset cho màn hình quét theo §9.1 |
+| `T57-4.1` — ISA-101 Level 2 process graphic | Rev A không có trình soạn đồ hoạ; đã đi **đường tối thiểu** qua thẻ thiết bị (`T57-3.1`) theo quyết định của chủ sở hữu | Quyết định sản phẩm về trình soạn đồ hoạ, kèm hồ sơ UI/UX riêng với asset đầy đủ |
+| Chặn Back/Forward trong `useDirtyGuard` | Cần `useBlocker` của data router ⇒ phải chuyển `<BrowserRouter>` → `createBrowserRouter`. Đây là đổi **kiến trúc điều hướng**, chạm cả bốn trang cấu hình lẫn ranh giới `lazy` của `T57-4.2` | Làm cùng một đợt có thời gian hồi quy toàn bộ điều hướng; hiện `beforeunload` + chặn `<a href>` đã phủ đóng tab, F5, và mọi liên kết trong ứng dụng |
+
+Hai lớp chặn đang có **không** phủ nút Back/Forward của trình duyệt, và điều đó
+được ghi thẳng trong docstring của `useDirtyGuard` — người bảo trì sau đọc mã sẽ
+thấy giới hạn ngay tại chỗ, không phải suy ra từ hành vi.
+
+## 15. Revision History
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.7 | 2026-08-19 | **ĐÓNG PLAN.** Rà §9.1 trước khi tuyên bố đóng và tìm ra **ba gate tài liệu chưa thi hành** (hồ sơ UI/UX + asset cho Alarm KPI, Modbus frame monitor, Scheduler effective preview) — đã phát hành đủ: `OPS-03`, `MBR-FRM-01`, `SCH-EFF-01` với **6 asset SVG** desktop + mobile. Đồng bộ `UX_PA3_TRACEABILITY` v1.1 §5 (17 năng lực, 11 endpoint, số đo gate). Đóng `F-UX-13` bằng `SeverityBadge.test.tsx`. Thêm §14 bàn giao Rev B cho `T57-3.8`, `T57-4.1` và khoảng hở Back/Forward. Ghi tách bạch: **đóng plan ≠ `RELEASE_READY`** — cổng đó cần chữ ký người, GO của Product/Release/QA và quyết định về CI |
 | 1.6 | 2026-08-19 | **Đóng phần task của Rev A: 70/70.** Đợt 4 thi hành `T57-3.9` sau khi sửa `ADR-046` (byte thô → **bản ghi giao dịch**, vì libmodbus không lộ bộ đệm wire): vòng nhớ 200 khung ở iobus, op `frames`, `GET /api/v1/modbus/frames`, bảng trên trang chẩn đoán. Đóng luôn hai khoảng hở đóng gói: **viết mới `mkddc-alarm-sim`** (vỏ mỏng quanh `AlarmRuntime`, ctest `alarm_sim_behaviour` 13 trường hợp) và cài cả hai engine lên board. Hai lỗi bắt được trong đợt: mốc thời gian khung dùng nhầm `CLOCK_MONOTONIC` (giao diện sẽ hiện giờ năm 1970) và `mkddc-alarm-sim` gắn động chết trên board vì `GLIBCXX_3.4.32`. Số đo: ctest **1049/1049**, FE 110 file / 1056 test, `go vet` + `go test ./...` PASS |
 | 1.5 | 2026-08-19 | Wave 3 đợt 2: giao `T57-3.11`, `T57-3.13`, `T57-3.18`, `T57-3.19`, `T57-3.20` và đóng nốt `T57-0.7`. Rev A đạt **69/70**; còn đúng `T57-3.9`, chặn bởi mâu thuẫn giữa `ADR-046` (hứa byte thô) và libmodbus (không lộ bộ đệm wire) — phải sửa ADR trước khi code. Số đo: FE 109 file / 1047 test, ctest **1036/1036**, `go test ./...` PASS |
 | 1.4 | 2026-08-19 | Bốn quyết định người đóng bằng `AUTH-WEBUX-2026-08-19-02`: `T57-3.8` **hoãn sang Rev B** (mẫu số Rev A 71 → 70), ba task C++ có owner + mốc bắt đầu, uỷ quyền agent truy cập board, và waive chữ ký `ADR-033`…`ADR-049` có **mốc hết hiệu lực tại cổng `RELEASE_READY` Rev A**. §13b ghi deploy Wave 0–3 lên board thật và **số đo nghiệm thu `T57-4.2`** (12 cặp mẫu, byte đường tới hạn −21,1%, FCP −236 ms trung vị theo cặp, 8/12 cặp) kèm hai giới hạn của phép đo; CI ghi rõ là **chưa có quyết định** |

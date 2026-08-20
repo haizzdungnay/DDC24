@@ -3,12 +3,12 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `KX-DDC24-UX-WEB-OPERATIONS-001` |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Trạng thái | **Active** — đủ tư cách làm đầu vào implementation |
-| Ngày | 2026-08-18 |
+| Ngày | 2026-08-19 |
 | Chủ quản | UX Lead (ô chữ ký: `WAIVED FOR IMPLEMENTATION`) |
-| Nguồn | `AUTH-WEBUX-2026-08-18-02`, `ADR-034`, `ADR-037` trong [DECISIONS.md](../00_governance/DECISIONS.md) |
-| Phạm vi | Hai màn hình mới của [Plan 57](../03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md) Wave 1: khối "Ai đang giữ quyền điều khiển" (`T57-1.2`) và hộp thoại ép tay hàng loạt (`T57-1.4`) |
+| Nguồn | `AUTH-WEBUX-2026-08-18-02`, `AUTH-WEBUX-2026-08-19-01`, `ADR-034`, `ADR-036`, `ADR-037`, `ADR-044` trong [DECISIONS.md](../00_governance/DECISIONS.md) |
+| Phạm vi | Ba màn hình mới của [Plan 57](../03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md): khối "Ai đang giữ quyền điều khiển" (`T57-1.2`), hộp thoại ép tay hàng loạt (`T57-1.4`), và bảng chỉ số hệ cảnh báo ISA-18.2 (`T57-3.3`) |
 | Hồ sơ chuẩn kế thừa | [Design system `KX-DDC24-UX-SYSTEM-001`](KX-DDC24-UX-SYSTEM-001_VI.md) — token, breakpoint, `StatusBadge`, `DataTable` |
 
 > [!IMPORTANT]
@@ -22,11 +22,11 @@
 
 | Câu hỏi | Trả lời |
 |---|---|
-| 1. File này dùng để làm gì? | Đặc tả trực quan + hợp đồng dữ liệu cho hai màn hình an toàn vận hành mới, đủ để một dev không tham gia thiết kế biết chính xác phải render gì và khi thiếu dữ liệu thì hiện gì |
-| 2. Ai phải đọc? | Người implement Wave 1, người review, và bất kỳ ai sau này đổi hợp đồng `/points` hoặc `/activity` |
-| 3. Vì sao hai màn hình này cần asset render được? | Cả hai chứa **quyết định an toàn**: một cái trả lời câu hỏi bàn giao ca "còn lệnh tay nào chưa nhả không", một cái phát lệnh ghi ra nhiều cơ cấu chấp hành cùng lúc |
+| 1. File này dùng để làm gì? | Đặc tả trực quan + hợp đồng dữ liệu cho ba màn hình an toàn vận hành mới, đủ để một dev không tham gia thiết kế biết chính xác phải render gì và khi thiếu dữ liệu thì hiện gì |
+| 2. Ai phải đọc? | Người implement Wave 1/Wave 3, người review, và bất kỳ ai sau này đổi hợp đồng `/points`, `/activity` hoặc `/alarms/metrics` |
+| 3. Vì sao ba màn hình này cần asset render được? | Cả ba chứa **quyết định an toàn**: một cái trả lời câu hỏi bàn giao ca "còn lệnh tay nào chưa nhả không", một cái phát lệnh ghi ra nhiều cơ cấu chấp hành cùng lúc, một cái nói người trực có đang ở phía sai của ngưỡng alarm flood hay không |
 | 4. Dữ liệu trong asset là thật hay minh hoạ? | **Minh hoạ.** Mọi tên điểm, giá trị và mốc thời gian trong SVG là dựng để đặc tả bố cục, **không** phải bằng chứng runtime |
-| 5. Còn bị chặn gì? | Không. `IMPLEMENT_READY[Wave 1]` đã `PASS` theo `AUTH-WEBUX-2026-08-18-02` |
+| 5. Còn bị chặn gì? | Không. `IMPLEMENT_READY[Wave 1]` `PASS` theo `AUTH-WEBUX-2026-08-18-02`; `IMPLEMENT_READY[Wave 3]` `PASS` theo `AUTH-WEBUX-2026-08-19-01` |
 
 ## 1. OPS-01 — Khối "Ai đang giữ quyền điều khiển"
 
@@ -178,9 +178,95 @@ MonitorPage
 | §4.1.3 Status Messages | Mỗi dòng kết quả là `role="status"`; dòng thất bại là `role="alert"` |
 | §2.5.8 Target Size | Trên mobile mọi nút cao ≥ 24 px CSS, cách nhau ≥ 8 px |
 
-## 3. Token và breakpoint — kế thừa, không định nghĩa lại
+## 3. OPS-03 — Bảng chỉ số hệ cảnh báo (ISA-18.2 §16)
 
-Hai màn hình dùng **nguyên** bảng token của
+### 3.1 Vì sao khối này tồn tại
+
+Danh sách cảnh báo trả lời "đang có cảnh báo gì". Nó **không** trả lời câu hỏi mà
+ISA-18.2 §16 cho là quan trọng hơn: *"hệ cảnh báo này có còn dùng được không"*.
+
+Một hệ phát 23 cảnh báo trong 10 phút trông **hệt như** một hệ phát 4 cảnh báo
+trên danh sách — vẫn là những dòng đỏ xếp theo thời gian. Khác biệt duy nhất nằm
+ở nhịp, và nhịp thì không có ở đâu trên giao diện hiện tại. ISA-18.2 đặt ngưỡng
+**> 10 cảnh báo / 10 phút** vì đó là điểm người vận hành không đọc kịp nữa và
+bắt đầu bỏ qua cả cảnh báo thật — tức là điểm mà hệ cảnh báo ngừng bảo vệ ai.
+
+"Cảnh báo lặp nhiều nhất" là **danh sách việc cần làm để hạ nhịp**, không phải
+bảng xếp hạng sự cố: mỗi mục ở đó thường là một ngưỡng đặt sát quá hoặc một vùng
+trễ thiếu.
+
+### 3.2 Đặc tả trực quan
+
+**Desktop 1440 — ba trạng thái (nhịp thường, alarm flood, không đọc được nhật ký):**
+
+![OPS-03 desktop](assets/operations/OPS-03_ALARM_METRICS_DESKTOP.svg)
+
+**Mobile 390 × 844 — lưới 2×2, dải flood ngay dưới lưới số:**
+
+![OPS-03 mobile](assets/operations/OPS-03_ALARM_METRICS_MOBILE.svg)
+
+### 3.3 Cây component
+
+```text
+AlarmsPage
+└── AlarmMetricsPanel                 (mới — đặt TRÊN danh sách cảnh báo)
+    ├── Panel                         (dùng lại — action là bộ chọn cửa sổ)
+    ├── Button ×4                      (dùng lại — 10m · 1h · 24h · 7d, mặc định 24h)
+    ├── StateBlock state="loading"    (dùng lại)
+    ├── StateBlock state="error"      (dùng lại — nhánh 503 không đọc được nhật ký)
+    ├── Metric ×4                      (mới — nhịp/10 phút · TB/giờ · tổng · treo)
+    ├── FloodAlert                     (mới — `role="alert"`, chỉ khi `flooding`)
+    ├── TopRepeatingList               (mới)
+    └── ShelvedList                    (mới — chỉ render khi danh sách khác rỗng)
+```
+
+Vị trí trên trang: **trên** danh sách cảnh báo. Một hệ đang flood phải nói ra
+điều đó **trước** khi người trực bắt đầu đọc từng dòng — đọc trước rồi mới biết
+mình đang đọc trong cơn lũ là quá muộn.
+
+Tự làm mới mỗi **30 giây** (`refreshMs: 30_000`). Nhịp cảnh báo là đại lượng đổi
+theo thời gian thực; một con số đứng yên từ lúc mở trang là con số sai.
+
+### 3.4 Bảng ánh xạ vùng → field → API → state → action → RBAC → copy → error → test
+
+| Vùng | Field | API (thật) | State khi thiếu | Action | RBAC | Copy khi rỗng | Test khoá |
+|---|---|---|---|---|---|---|---|
+| Bộ chọn cửa sổ | `window` | `GET /api/v1/alarms/metrics?window=` | mặc định `24h` | đổi cửa sổ ⇒ gọi lại | viewer | — | đổi cửa sổ phải gọi lại API, không lọc phía trình duyệt |
+| Ô nhịp/10 phút | `rate10m`, `flooding` | như trên | `0` **tại đúng ô đó** khi backend thiếu trường | — | viewer | — | `flooding` ⇒ ô đổi tông `--c-critical` |
+| Ô TB/giờ | `ratePerHour` | như trên | `0` | — | viewer | — | `undefined.toFixed()` không được hạ cả trang |
+| Ô tổng | `totalRaised` | như trên | `0` | — | viewer | — | — |
+| Ô đang treo | `shelved.length` | như trên | `0` | — | viewer | — | — |
+| Dải ALARM FLOOD | `flooding` | như trên | không render | — | viewer | — | `role="alert"`; chỉ hiện khi `flooding === true` |
+| Lặp nhiều nhất | `topRepeating[]` | như trên | danh sách rỗng | — | viewer | "Không có cảnh báo nào trong cửa sổ này." | rỗng ≠ lỗi |
+| Đang bị treo | `shelved[]` | như trên | không render mục | — | viewer | — | mục biến mất hoàn toàn khi rỗng |
+
+### 3.5 Ba luật của khối
+
+| Luật | Vì sao |
+|---|---|
+| **Không đọc được nhật ký ⇒ khối lỗi, KHÔNG phải bốn số 0.** Backend trả `503` cho tình huống đó (`ADR-044` điều 3) và giao diện phải giữ nguyên sự phân biệt | Hiện `0` cho một hệ không đọc được nhật ký là khẳng định một điều mình không biết — và điều được khẳng định nhầm ở đây đúng là "hệ đang yên tĩnh" |
+| **Thiếu một trường ⇒ hiện `0` ở đúng ô đó, không đánh sập trang.** `normalizeMetrics` chuẩn hoá phòng thủ trước khi render | Trang Cảnh báo là trang người trực cần nhất đúng lúc hệ đang có vấn đề; một `undefined.toFixed()` sẽ hạ nó đúng lúc đó |
+| **Dải flood nói HẬU QUẢ, không chỉ nói ngưỡng.** Câu chữ là "người trực không đọc kịp và sẽ bỏ sót cảnh báo thật", không phải "rate10m = 23 > 10" | Một con số vượt ngưỡng không tự nói ra phải làm gì; câu hậu quả thì có |
+
+### 3.6 Quyền và nguồn lưu trữ
+
+Khối là **đọc thuần**, `RoleViewer` — cùng mức với danh sách cảnh báo
+(`apps/web-api/internal/app/http.go`). Không có nút ghi nào.
+
+Nguồn số đo là `alarm_history.jsonl` với **xoay vòng + retention 90 ngày**
+(`ADR-036`), không phải historian. Đây là điều kiện tiên quyết của chính `ADR-036`:
+một nhật ký không xoay vòng sẽ tự làm hỏng phép đo nhịp khi file lớn dần.
+
+### 3.7 Trạng thái rỗng phải khác trạng thái không đọc được
+
+| Tình huống | Trình bày | Vì sao phải khác |
+|---|---|---|
+| Đọc được nhật ký, cửa sổ không có cảnh báo nào | Bốn ô hiện số thật (`0`), danh sách lặp hiện "Không có cảnh báo nào trong cửa sổ này." | Đây là một kết luận có căn cứ: hệ **đang** yên tĩnh |
+| Không đọc được nhật ký | Khối **đỏ** + "Không đọc được nhật ký cảnh báo" + nguyên văn lý do + nút Thử lại; **không** vẽ ô số nào | Không biết ≠ yên tĩnh. Đây là cùng một lớp lỗi với `FE-DATA-01` và với `T57-3.9` phía Modbus |
+
+## 4. Token và breakpoint — kế thừa, không định nghĩa lại
+
+Ba màn hình dùng **nguyên** bảng token của
 [`KX-DDC24-UX-SYSTEM-001`](KX-DDC24-UX-SYSTEM-001_VI.md) §2 và ngưỡng bố cục
 `lg = 1024 px` của §4.1. Màu dùng trong asset:
 
@@ -196,12 +282,14 @@ Hai màn hình dùng **nguyên** bảng token của
 | Cảnh báo (sắp hết hạn) | `--c-warn-fg` / `--c-warn-bg` | `#634D00` / `#EEE9DB` |
 | Lỗi | `--c-fault-fg` / `--c-fault-bg` | `#A01017` / `#F7E0E1` |
 | Bình thường | `--c-good-fg` / `--c-good-bg` | `#165B2E` / `#E0ECE5` |
+| Alarm flood | `--c-critical` / `--c-critical-bg` | `#901380` / `#EFDDED` |
 
-Không token mới nào được thêm. Nếu một trong hai màn hình cần màu chưa có, phải
+Không token mới nào được thêm. Nếu một trong ba màn hình cần màu chưa có, phải
 bổ sung vào design system trước — không đặt màu tại chỗ.
 
-## 4. Revision History
+## 5. Revision History
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-08-18 | Phát hành đầu — đặc tả trực quan (4 asset SVG: desktop + mobile cho cả hai màn hình) và hợp đồng dữ liệu cho `T57-1.2` và `T57-1.4`, mở cổng Detailed Design theo `DOC_GOVERNANCE` §2.2. Chữ ký UX Lead: `WAIVED FOR IMPLEMENTATION` theo `AUTH-WEBUX-2026-08-18-02` |
+| 1.1 | 2026-08-19 | Thêm `OPS-03` — bảng chỉ số hệ cảnh báo ISA-18.2 (`T57-3.3`, `ADR-036`/`ADR-044`) kèm 2 asset SVG desktop + mobile, mở cổng Detailed Design cho màn hình thứ ba. Ghi ba luật của khối, trong đó luật quan trọng nhất là **không đọc được nhật ký ⇒ khối lỗi, không phải bốn số 0** |

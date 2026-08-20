@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1010" viewBox="0 0 1440 1010" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
+  <title>MBR-FRM-01 Khối "Khung truyền gần nhất" trên trang chẩn đoán Modbus RTU — desktop 1440, ba trạng thái</title>
+  <desc>Ba artboard đặc tả FrameMonitor: có giao dịch, vòng nhớ rỗng, và không đọc được. Màu lấy từ token LIGHT trong apps/web-ui/src/shared/theme/tokens.ts. Dữ liệu trong hình là MINH HOẠ, không phải dữ liệu runtime.</desc>
+
+  <rect width="1440" height="1010" fill="#C8CCD0"/>
+
+  <!-- ============ ARTBOARD 1 — CÓ GIAO DỊCH ============ -->
+  <text x="24" y="22" font-size="12" font-weight="700" fill="#4A4F55">Artboard 1 — vòng nhớ có giao dịch (trạng thái chính)</text>
+
+  <g transform="translate(24,36)">
+    <rect x="0" y="0" width="1392" height="440" rx="8" fill="#D8DBDE" stroke="#636970"/>
+
+    <text x="20" y="30" font-size="13" font-weight="700" fill="#1C1F23">Khung truyền gần nhất</text>
+    <text x="20" y="50" font-size="11" fill="#4A4F55">Ghi lại giao dịch mà chu kỳ quét bình thường đã thực hiện — màn hình này không tự phát gì ra bus.</text>
+    <rect x="1150" y="16" width="98" height="30" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="1176" y="36" font-size="12" fill="#1C1F23">Tải lại</text>
+    <rect x="1256" y="16" width="116" height="30" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="1272" y="36" font-size="12" fill="#1C1F23">Theo dõi liên tục</text>
+
+    <!-- Dải hai giới hạn: LUÔN hiện khi có dữ liệu, không phải tooltip -->
+    <rect x="20" y="62" width="1352" height="34" rx="6" fill="#E5E6E8" stroke="#636970"/>
+    <text x="34" y="84" font-size="11" fill="#4A4F55">Vòng nhớ nằm trong tiến trình iobus: mất khi dịch vụ khởi động lại, và không có byte thô — cần soi từng byte thì phải dùng máy phân tích bus.</text>
+
+    <!-- Bảng -->
+    <rect x="20" y="108" width="1352" height="312" rx="6" fill="#D8DBDE" stroke="#636970"/>
+    <rect x="20" y="108" width="1352" height="30" rx="6" fill="#C2C6CA"/>
+    <g font-size="10" fill="#4A4F55" letter-spacing="0.4">
+      <text x="34" y="128">THỜI ĐIỂM</text>
+      <text x="150" y="128">BUS</text>
+      <text x="216" y="128">SLAVE</text>
+      <text x="298" y="128">FC</text>
+      <text x="360" y="128">ĐỊA CHỈ</text>
+      <text x="470" y="128">SỐ LƯỢNG</text>
+      <text x="600" y="128">KẾT QUẢ</text>
+      <text x="760" y="128">THỜI LƯỢNG</text>
+      <text x="900" y="128">LẦN PHÁT</text>
+    </g>
+    <line x1="20" y1="138" x2="1372" y2="138" stroke="#636970"/>
+
+    <g font-size="12" font-family="monospace" fill="#1C1F23">
+      <!-- Dòng lỗi CRC: reason viết hoa thay cho OK, tô fault-fg -->
+      <text x="34" y="160">13:21:47</text><text x="150" y="160">1</text><text x="216" y="160">7</text><text x="298" y="160">3</text><text x="360" y="160">100</text><text x="470" y="160">2</text>
+      <text x="600" y="160" font-weight="700" fill="#A01017">CRC</text>
+      <text x="760" y="160">2.5 ms</text>
+      <text x="900" y="160" fill="#634D00">2</text>
+      <line x1="20" y1="170" x2="1372" y2="170" stroke="#636970"/>
+
+      <text x="34" y="192">13:21:47</text><text x="150" y="192">1</text><text x="216" y="192">4</text><text x="298" y="192">4</text><text x="360" y="192">20</text><text x="470" y="192">1</text>
+      <text x="600" y="192" font-weight="700" fill="#165B2E">OK</text>
+      <text x="760" y="192">1.2 ms</text>
+      <text x="900" y="192">1</text>
+      <line x1="20" y1="202" x2="1372" y2="202" stroke="#636970"/>
+
+      <!-- Timeout ba lượt liên tiếp: attempt 1→3, đúng thứ tự mới-nhất-trước -->
+      <text x="34" y="224">13:21:46</text><text x="150" y="224">1</text><text x="216" y="224">9</text><text x="298" y="224">3</text><text x="360" y="224">0</text><text x="470" y="224">4</text>
+      <text x="600" y="224" font-weight="700" fill="#A01017">TIMEOUT</text>
+      <text x="760" y="224">300.4 ms</text>
+      <text x="900" y="224" fill="#634D00">3</text>
+      <line x1="20" y1="234" x2="1372" y2="234" stroke="#636970"/>
+
+      <text x="34" y="256">13:21:46</text><text x="150" y="256">1</text><text x="216" y="256">9</text><text x="298" y="256">3</text><text x="360" y="256">0</text><text x="470" y="256">4</text>
+      <text x="600" y="256" font-weight="700" fill="#A01017">TIMEOUT</text>
+      <text x="760" y="256">300.4 ms</text>
+      <text x="900" y="256" fill="#634D00">2</text>
+      <line x1="20" y1="266" x2="1372" y2="266" stroke="#636970"/>
+
+      <text x="34" y="288">13:21:45</text><text x="150" y="288">1</text><text x="216" y="288">9</text><text x="298" y="288">3</text><text x="360" y="288">0</text><text x="470" y="288">4</text>
+      <text x="600" y="288" font-weight="700" fill="#A01017">TIMEOUT</text>
+      <text x="760" y="288">300.3 ms</text>
+      <text x="900" y="288">1</text>
+      <line x1="20" y1="298" x2="1372" y2="298" stroke="#636970"/>
+
+      <text x="34" y="320">13:21:45</text><text x="150" y="320">2</text><text x="216" y="320">3</text><text x="298" y="320">3</text><text x="360" y="320">40</text><text x="470" y="320">6</text>
+      <text x="600" y="320" font-weight="700" fill="#165B2E">OK</text>
+      <text x="760" y="320">4.8 ms</text>
+      <text x="900" y="320">1</text>
+      <line x1="20" y1="330" x2="1372" y2="330" stroke="#636970"/>
+
+      <text x="34" y="352">13:21:44</text><text x="150" y="352">1</text><text x="216" y="352">7</text><text x="298" y="352">3</text><text x="360" y="352">100</text><text x="470" y="352">2</text>
+      <text x="600" y="352" font-weight="700" fill="#165B2E">OK</text>
+      <text x="760" y="352">2.1 ms</text>
+      <text x="900" y="352">1</text>
+    </g>
+
+    <text x="20" y="404" font-size="10" fill="#4A4F55">Đọc cột LẦN PHÁT trước cột KẾT QUẢ: ba dòng TIMEOUT của slave 9 là MỘT chu kỳ đọc đã phát lại ba lượt, không phải ba lần mất kết nối riêng biệt.</text>
+  </g>
+
+  <!-- ============ ARTBOARD 2 — VÒNG NHỚ RỖNG ============ -->
+  <text x="24" y="508" font-size="12" font-weight="700" fill="#4A4F55">Artboard 2 — vòng nhớ rỗng (bus không có slave nào được poll, hoặc iobus vừa restart)</text>
+
+  <g transform="translate(24,522)">
+    <rect x="0" y="0" width="1392" height="180" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="20" y="30" font-size="13" font-weight="700" fill="#1C1F23">Khung truyền gần nhất</text>
+    <text x="20" y="50" font-size="11" fill="#4A4F55">Ghi lại giao dịch mà chu kỳ quét bình thường đã thực hiện — màn hình này không tự phát gì ra bus.</text>
+    <rect x="1150" y="16" width="98" height="30" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="1176" y="36" font-size="12" fill="#1C1F23">Tải lại</text>
+    <rect x="1256" y="16" width="116" height="30" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="1272" y="36" font-size="12" fill="#1C1F23">Theo dõi liên tục</text>
+
+    <rect x="20" y="62" width="1352" height="34" rx="6" fill="#E5E6E8" stroke="#636970"/>
+    <text x="34" y="84" font-size="11" fill="#4A4F55">Vòng nhớ nằm trong tiến trình iobus: mất khi dịch vụ khởi động lại, và không có byte thô — cần soi từng byte thì phải dùng máy phân tích bus.</text>
+
+    <text x="20" y="130" font-size="13" fill="#4A4F55">Chưa có giao dịch nào được ghi. Bus chưa có slave nào được poll, hoặc iobus vừa khởi động lại.</text>
+    <text x="20" y="158" font-size="10" fill="#4A4F55">Trạng thái này KHÔNG có viền cảnh báo và KHÔNG có role="alert": vòng nhớ rỗng là một câu trả lời hợp lệ, không phải một sự cố.</text>
+  </g>
+
+  <!-- ============ ARTBOARD 3 — KHÔNG ĐỌC ĐƯỢC ============ -->
+  <text x="24" y="734" font-size="12" font-weight="700" fill="#4A4F55">Artboard 3 — không đọc được vòng nhớ (503) — KHÁC HẲN artboard 2</text>
+
+  <g transform="translate(24,748)">
+    <rect x="0" y="0" width="1392" height="224" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="20" y="30" font-size="13" font-weight="700" fill="#1C1F23">Khung truyền gần nhất</text>
+    <text x="20" y="50" font-size="11" fill="#4A4F55">Ghi lại giao dịch mà chu kỳ quét bình thường đã thực hiện — màn hình này không tự phát gì ra bus.</text>
+    <rect x="1150" y="16" width="98" height="30" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="1176" y="36" font-size="12" fill="#1C1F23">Tải lại</text>
+
+    <!-- role=alert, giữ nguyên văn lý do iobus trả về -->
+    <rect x="20" y="70" width="1352" height="58" rx="6" fill="#EEE9DB" stroke="#826500" stroke-width="2"/>
+    <text x="36" y="94" font-size="12" font-weight="700" fill="#634D00">503 iobus không trả được khung: op không được hỗ trợ (unsupported)</text>
+    <text x="36" y="116" font-size="11" fill="#4A4F55">Nguyên văn lý do từ iobus được giữ lại, không rút gọn thành "lỗi tải dữ liệu".</text>
+
+    <text x="20" y="158" font-size="11" font-weight="700" fill="#1C1F23">Bảng KHÔNG được vẽ ở trạng thái này.</text>
+    <text x="20" y="180" font-size="11" fill="#4A4F55">Một bảng rỗng ở đây đọc thành "bus im lặng" — người kỹ thuật sẽ đi tháo dây tìm một sự cố không tồn tại, trong khi sự thật là</text>
+    <text x="20" y="198" font-size="11" fill="#4A4F55">iobus bản cũ chưa có op này. Hai tình trạng đó dẫn tới hai kết luận trái ngược, nên chúng phải trông khác nhau.</text>
+  </g>
+</svg>
