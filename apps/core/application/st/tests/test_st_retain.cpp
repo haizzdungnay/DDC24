@@ -28,7 +28,11 @@ std::vector<uint8_t> build(const std::string& src)
 {
     StIrModule mod;
     StDiagnostic d;
-    EXPECT_TRUE(compile_st_source(src, &mod, &d)) << d.code << ": " << d.message;
+    /* T59-205: harness conformance của ngôn ngữ và runtime, gồm cả PID — xem
+     * chú thích ở test_st_exec.cpp. Đường production giữ mặc định BẬT. */
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    EXPECT_TRUE(compile_st_source(src, &mod, &d, options)) << d.code << ": " << d.message;
     std::vector<uint8_t> bytes;
     std::string err;
     EXPECT_TRUE(serialize_st_ir(mod, &bytes, &err)) << err;

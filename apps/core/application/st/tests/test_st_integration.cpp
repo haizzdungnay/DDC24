@@ -34,7 +34,11 @@ std::vector<uint8_t> build_with_bindings(const std::string& src,
 {
     StIrModule mod;
     StDiagnostic d;
-    EXPECT_TRUE(compile_st_source(src, &mod, &d)) << d.code << ": " << d.message;
+    /* T59-205: harness conformance của ngôn ngữ và runtime, gồm cả PID — xem
+     * chú thích ở test_st_exec.cpp. Đường production giữ mặc định BẬT. */
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    EXPECT_TRUE(compile_st_source(src, &mod, &d, options)) << d.code << ": " << d.message;
     for (StIrIoBinding b : bindings) {
         for (const StIrVariable& v : mod.variables) {
             if (v.slot == b.slot) { b.type = v.type; break; }
@@ -60,7 +64,10 @@ StIrModule compile_only(const std::string& src)
 {
     StIrModule mod;
     StDiagnostic d;
-    EXPECT_TRUE(compile_st_source(src, &mod, &d)) << d.code << ": " << d.message;
+    /* T59-205: xem chú thích ở `build` phía trên — harness conformance. */
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    EXPECT_TRUE(compile_st_source(src, &mod, &d, options)) << d.code << ": " << d.message;
     return mod;
 }
 
