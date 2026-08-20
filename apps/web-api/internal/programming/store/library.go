@@ -625,19 +625,33 @@ func (s *Store) PublishProjectLibrary(ctx context.Context, libraryRevisionID str
 		return LibraryRevision{}, err
 	}
 	defer tx.Rollback()
-	revision, err := getLibraryRevisionTx(ctx, tx, libraryRevisionID)
-	if err != nil {
+	if err := publishProjectLibraryTx(ctx, tx, libraryRevisionID); err != nil {
 		return LibraryRevision{}, err
 	}
+	if err := tx.Commit(); err != nil {
+		return LibraryRevision{}, err
+	}
+	return s.GetLibraryRevision(ctx, libraryRevisionID)
+}
+
+// publishProjectLibraryTx tách ra để Seal Revision publish library trong CÙNG
+// transaction với việc đóng băng Revision. Publish ở transaction riêng cho phép
+// một lần crash để lại library đã publish mà không Revision nào trỏ tới — version
+// bị tiêu mà không ai dùng, và người vận hành không hiểu vì sao số nhảy.
+func publishProjectLibraryTx(ctx context.Context, tx *sql.Tx, libraryRevisionID string) error {
+	revision, err := getLibraryRevisionTx(ctx, tx, libraryRevisionID)
+	if err != nil {
+		return err
+	}
 	if revision.Scope != LibraryScopeProject || revision.State != LibraryStateDraft {
-		return LibraryRevision{}, ErrLibraryImmutable
+		return ErrLibraryImmutable
 	}
 	entries, err := listProjectLibraryEntriesTx(ctx, tx, libraryRevisionID)
 	if err != nil {
-		return LibraryRevision{}, err
+		return err
 	}
 	if len(entries) == 0 {
-		return LibraryRevision{}, fmt.Errorf("PROJECT library không có entry")
+		return fmt.Errorf("PROJECT library không có entry")
 	}
 	canonicalEntries := make([]LibraryEntry, 0, len(entries))
 	for _, entry := range entries {
@@ -648,10 +662,10 @@ func (s *Store) PublishProjectLibrary(ctx context.Context, libraryRevisionID str
 			StateLayout: entry.StateLayout,
 		}, true)
 		if err != nil {
-			return LibraryRevision{}, err
+			return err
 		}
 		if canonical.ContentSHA256 != entry.ContentSHA256 {
-			return LibraryRevision{}, fmt.Errorf("entry %s content checksum mismatch", entry.EntryID)
+			return fmt.Errorf("entry %s content checksum mismatch", entry.EntryID)
 		}
 		canonicalEntries = append(canonicalEntries, canonical)
 	}
@@ -661,21 +675,18 @@ func (s *Store) PublishProjectLibrary(ctx context.Context, libraryRevisionID str
 	// cả entries lẫn manifest.
 	for _, entry := range canonicalEntries {
 		if err := updateLibraryEntryTx(ctx, tx, entry); err != nil {
-			return LibraryRevision{}, fmt.Errorf("canonicalize PROJECT library entry %s: %w", entry.EntryID, err)
+			return fmt.Errorf("canonicalize PROJECT library entry %s: %w", entry.EntryID, err)
 		}
 	}
 	manifest, manifestDigest, err := buildPublishedLibraryManifest(revision, canonicalEntries)
 	if err != nil {
-		return LibraryRevision{}, err
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE library_revisions SET manifest_json=?,manifest_sha256=?,state='PUBLISHED'
 		WHERE library_revision_id=? AND state='DRAFT'`, manifest, manifestDigest[:], libraryRevisionID); err != nil {
-		return LibraryRevision{}, fmt.Errorf("publish PROJECT library: %w", err)
+		return fmt.Errorf("publish PROJECT library: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
-		return LibraryRevision{}, err
-	}
-	return s.GetLibraryRevision(ctx, libraryRevisionID)
+	return nil
 }
 
 func (s *Store) DeprecateProjectLibrary(ctx context.Context, libraryRevisionID string) (LibraryRevision, error) {
@@ -1430,4 +1441,23 @@ func cloneLibraryEntry(input LibraryEntry) LibraryEntry {
 	input.SignatureJSON = append([]byte(nil), input.SignatureJSON...)
 	input.Dependencies = append([]LibraryDependency(nil), input.Dependencies...)
 	return input
+}
+
+// FindProjectLibraryDraft trả library DRAFT đang mở của Project, hoặc rỗng khi
+// chưa có. Seal Revision dùng nó để đóng băng library cùng lúc với Revision.
+func (s *Store) FindProjectLibraryDraft(ctx context.Context, projectID string) (LibraryRevision, error) {
+	if err := validateUUIDs(projectID); err != nil {
+		return LibraryRevision{}, err
+	}
+	var libraryRevisionID string
+	err := s.db.QueryRowContext(ctx, `SELECT library_revision_id FROM library_revisions
+		WHERE scope='PROJECT' AND project_id=? AND state='DRAFT'
+		ORDER BY created_at_utc_ms DESC,library_revision_id LIMIT 1`, projectID).Scan(&libraryRevisionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return LibraryRevision{}, ErrNotFound
+	}
+	if err != nil {
+		return LibraryRevision{}, err
+	}
+	return s.GetLibraryRevision(ctx, libraryRevisionID)
 }

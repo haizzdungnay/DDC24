@@ -317,6 +317,13 @@ func (s *Store) CreateRevision(ctx context.Context, params CreateRevisionParams)
 	if err := tx.QueryRowContext(ctx, `SELECT coalesce(max(sequence),0)+1 FROM revisions WHERE project_id=?`, params.ProjectID).Scan(&sequence); err != nil {
 		return Revision{}, err
 	}
+	// Publish library CÙNG transaction với việc đóng băng Revision: Revision
+	// pin một library còn DRAFT nghĩa là pin một thứ vẫn sửa được.
+	if params.PublishLibraryRevisionID != "" {
+		if err := publishProjectLibraryTx(ctx, tx, params.PublishLibraryRevisionID); err != nil {
+			return Revision{}, err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO revisions(revision_id,project_id,parent_revision_id,sequence,schema_version,target_profile,
 		manifest_json,manifest_sha256,created_by,created_at_utc_ms,document_schema_version,program_count,library_revision_id)
 		VALUES(?,?,?,?,1,'MKDDC24_REVA',?,?,?,?,?,?,?)`,

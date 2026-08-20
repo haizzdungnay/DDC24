@@ -281,9 +281,20 @@ func (s *ProjectService) SealRevision(ctx context.Context, actor Actor, command 
 		return MutationResult{}, err
 	}
 	revisionID, auditID := s.newID(), s.newID()
+	// Draft library được đóng băng CÙNG lúc với Revision. Pin một library còn
+	// DRAFT nghĩa là pin một thứ vẫn sửa được — mọi POU dependency sau đó trỏ
+	// vào một tập entry có thể đổi sau lưng Revision đã "đóng băng".
+	libraryRevisionID, documentSchemaVersion := "", 1
+	if libraryDraft, libraryErr := s.store.FindProjectLibraryDraft(ctx, command.ProjectID); libraryErr == nil {
+		libraryRevisionID, documentSchemaVersion = libraryDraft.LibraryRevisionID, 2
+	} else if !errors.Is(libraryErr, programmingstore.ErrNotFound) {
+		return MutationResult{}, libraryErr
+	}
 	revision, err := s.store.CreateRevision(ctx, programmingstore.CreateRevisionParams{
 		RevisionID: revisionID, ProjectID: command.ProjectID, DraftID: snapshot.Draft.DraftID, ExpectedDraftETag: etag,
 		ParentRevisionID: snapshot.Draft.BaseRevisionID, ManifestJSON: manifest, Objects: objects,
+		DocumentSchemaVersion: documentSchemaVersion, ProgramCount: 1,
+		LibraryRevisionID: libraryRevisionID, PublishLibraryRevisionID: libraryRevisionID,
 		ActorID: actor.ID, Role: actor.Role, AuditID: auditID, CorrelationID: command.CorrelationID,
 		At: s.now(), IdempotencyKeySHA256: keyHash, RequestSHA256: requestHash,
 	})

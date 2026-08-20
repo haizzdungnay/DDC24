@@ -3,10 +3,13 @@ package store
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"mkddc-web/internal/programming/domain"
 )
 
 // ImportProject tạo đúng một Project và một Draft từ bundle đã được lớp
@@ -67,8 +70,15 @@ func (s *Store) ImportProject(ctx context.Context, params ImportProjectParams) (
 		params.DraftID, params.ProjectID, 1, content, digest[:], params.ActorID, at); err != nil {
 		return Project{}, Draft{}, fmt.Errorf("insert imported Draft: %w", err)
 	}
+	// PROJECT Library đi CÙNG transaction với Project/Draft. Tách ra hai lần ghi
+	// sẽ để lại một Project không có library sau một lần crash — và người dùng
+	// không có cách nào biết bản import đó thiếu gì.
+	if err := importProjectLibraryTx(ctx, tx, params, at); err != nil {
+		return Project{}, Draft{}, err
+	}
 	details, _ := json.Marshal(map[string]any{"bundleSha256": params.BundleSHA256, "byteSize": len(content),
-		"draftId": params.DraftID, "sourceProjectId": params.SourceProjectID, "sourceRevisionId": params.SourceRevisionID})
+		"draftId": params.DraftID, "sourceProjectId": params.SourceProjectID, "sourceRevisionId": params.SourceRevisionID,
+		"libraryEntryCount": len(params.LibraryEntries)})
 	if _, err := appendAuditTx(ctx, tx, AuditInput{AuditID: params.AuditID, ActorID: params.ActorID,
 		Role: params.Role, Action: "BUNDLE_IMPORT", TargetType: "PROJECT", TargetID: params.ProjectID,
 		OccurredAtUTCMS: at, ResultCode: "OK", CorrelationID: params.CorrelationID, DetailsJSON: details}); err != nil {
@@ -142,4 +152,56 @@ func (s *Store) RecordBundleExport(ctx context.Context, params RecordBundleExpor
 		return MutationReplay{}, err
 	}
 	return MutationReplay{RevisionID: selected, ETag: 1, AuditID: params.AuditID}, nil
+}
+
+// importProjectLibraryTx dựng lại PROJECT Library ở trạng thái DRAFT, không phải
+// PUBLISHED. Bundle là NGUỒN, không phải bằng chứng đã publish: publish lại là
+// quyết định của người nhận, và chỉ Publish thật mới dựng manifest canonical
+// trong transaction của nó.
+func importProjectLibraryTx(ctx context.Context, tx *sql.Tx, params ImportProjectParams, at int64) error {
+	if params.LibraryRevisionID == "" {
+		if len(params.LibraryEntries) != 0 {
+			return fmt.Errorf("bundle có entry library nhưng thiếu libraryRevisionId")
+		}
+		return nil
+	}
+	if err := validateUUIDs(params.LibraryRevisionID); err != nil {
+		return err
+	}
+	if err := domain.ValidateProjectLibraryVersion(params.LibraryVersion); err != nil {
+		return err
+	}
+	if len(params.LibraryEntries) == 0 {
+		return fmt.Errorf("PROJECT library import không có entry")
+	}
+	manifest, digest, err := buildLibraryManifest(params.LibraryRevisionID, params.ProjectID, params.LibraryVersion, nil)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO library_revisions(
+		library_revision_id,project_id,scope,version,parent_library_revision_id,state,
+		manifest_json,manifest_sha256,created_by,created_at_utc_ms)
+		VALUES(?,?,'PROJECT',?,NULL,'DRAFT',?,?,?,?)`, params.LibraryRevisionID, params.ProjectID,
+		params.LibraryVersion, manifest, digest[:], params.ActorID, at); err != nil {
+		return fmt.Errorf("insert imported PROJECT library: %w", err)
+	}
+	for _, input := range params.LibraryEntries {
+		entry, err := prepareProjectLibraryEntry(UpsertProjectLibraryEntryParams{
+			LibraryRevisionID: params.LibraryRevisionID, EntryID: input.EntryID, Kind: input.Kind,
+			Name: input.Name, Language: input.Language, FeatureState: input.FeatureState,
+			Source: input.Source, InterfaceJSON: input.InterfaceJSON, Dependencies: input.Dependencies,
+			StateLayout: input.StateLayout,
+		}, false)
+		if err != nil {
+			return err
+		}
+		if err := insertLibraryEntryTx(ctx, tx, entry); err != nil {
+			if strings.Contains(err.Error(), "UNIQUE constraint failed") ||
+				strings.Contains(err.Error(), "library_entries_name_idx") {
+				return ErrAlreadyExists
+			}
+			return fmt.Errorf("insert imported library entry: %w", err)
+		}
+	}
+	return refreshLibraryManifestTx(ctx, tx, params.LibraryRevisionID)
 }

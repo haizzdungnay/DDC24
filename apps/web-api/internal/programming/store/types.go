@@ -85,6 +85,9 @@ type ImportProjectParams struct {
 	BundleSHA256         string
 	SourceProjectID      string
 	SourceRevisionID     string
+	LibraryRevisionID    string
+	LibraryVersion       string
+	LibraryEntries       []LibraryEntryImport
 	ActorID              string
 	Role                 string
 	AuditID              string
@@ -139,6 +142,21 @@ type POUObjectInput struct {
 	Dependencies  []LibraryDependency
 }
 
+// LibraryEntryImport là entry PROJECT Library đến từ bundle NGUỒN. Nó không
+// mang content hash của bên gửi: hash được tính lại từ nội dung canonical ở phía
+// nhận, nên một bundle khai hash sai không thể "hợp thức hoá" nội dung của nó.
+type LibraryEntryImport struct {
+	EntryID       string
+	Kind          string
+	Name          string
+	Language      string
+	FeatureState  string
+	Source        []byte
+	InterfaceJSON []byte
+	Dependencies  []LibraryDependency
+	StateLayout   LibraryStateLayout
+}
+
 type CreateRevisionParams struct {
 	RevisionID            string
 	ProjectID             string
@@ -150,14 +168,17 @@ type CreateRevisionParams struct {
 	DocumentSchemaVersion int
 	ProgramCount          int
 	LibraryRevisionID     string
-	POUObjects            []POUObjectInput
-	ActorID               string
-	Role                  string
-	AuditID               string
-	CorrelationID         string
-	At                    time.Time
-	IdempotencyKeySHA256  [32]byte
-	RequestSHA256         [32]byte
+	// PublishLibraryRevisionID buộc library DRAFT chuyển sang PUBLISHED trong
+	// cùng transaction, trước khi Revision pin nó.
+	PublishLibraryRevisionID string
+	POUObjects               []POUObjectInput
+	ActorID                  string
+	Role                     string
+	AuditID                  string
+	CorrelationID            string
+	At                       time.Time
+	IdempotencyKeySHA256     [32]byte
+	RequestSHA256            [32]byte
 }
 
 type Revision struct {
