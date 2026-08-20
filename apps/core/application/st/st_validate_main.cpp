@@ -26,6 +26,7 @@
 #include "st/st_diagnostic.hpp"
 #include "st/st_limits.hpp"
 #include "st/st_parser.hpp"
+#include "st/st_review_gate.hpp"
 #include "st/st_semantic.hpp"
 
 namespace {
@@ -126,6 +127,12 @@ int main(int argc, char** argv)
         return emit_and_exit(make_result(false, {diag}, nullptr, artifact_hash), 1);
 
     if (!core::typecheck_st_program(&program, &diag))
+        return emit_and_exit(make_result(false, {diag}, &program, artifact_hash), 1);
+
+    /* DDD §9: Check chặn feature còn nhãn REVIEW_REQUIRED. Validate CLI là một
+     * trong hai đường Check thật, nên nó phải gate y hệt `compile_st_source`;
+     * bỏ sót ở đây nghĩa là PID "hợp lệ" ở Check nhưng chết ở compile. */
+    if (!core::st_review_gate_check(program, &diag))
         return emit_and_exit(make_result(false, {diag}, &program, artifact_hash), 1);
 
     return emit_and_exit(make_result(true, {}, &program, artifact_hash), 0);

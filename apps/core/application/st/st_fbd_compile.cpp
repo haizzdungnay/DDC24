@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "st/st_compile.hpp"
+#include "st/st_review_gate.hpp"
 #include "st/st_semantic.hpp"
 
 namespace core {
@@ -687,6 +688,13 @@ FbdCompileResult compile_fbd_source(std::string_view source)
     StDiagnostic diagnostic;
     if (!typecheck_st_program(&program, &diagnostic)) {
         add_issue(&result.issues, "FBD-SEM-LOWER-001", "$.lowering." + diagnostic.code);
+        return result;
+    }
+
+    /* FBD đi cùng một chính sách Check với ST. Nếu chỉ ST bị gate thì vẽ PID
+     * bằng FBD trở thành đường vòng hợp lệ. */
+    if (!st_review_gate_check(program, &diagnostic)) {
+        add_issue(&result.issues, diagnostic.code.c_str(), "$.reviewGate");
         return result;
     }
 

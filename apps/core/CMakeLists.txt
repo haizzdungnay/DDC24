@@ -114,7 +114,7 @@ target_link_libraries(core_lib INTERFACE
 add_library(st_compiler_lib STATIC
     application/st/st_parser.cpp application/st/st_pou_registry.cpp
     application/st/st_fb_instance_layout.cpp application/st/st_package_v2.cpp
-    application/st/st_semantic.cpp
+    application/st/st_semantic.cpp application/st/st_review_gate.cpp
     application/st/st_compile.cpp application/st/st_ir.cpp
     application/st/st_artifact_manifest.cpp
     application/st/st_fbd_model.cpp application/st/st_fbd_compile.cpp)
@@ -195,6 +195,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_artifact_manifest.cpp
       application/st/tests/test_st_fbd_model.cpp
       application/st/tests/test_st_library_registry.cpp
+      application/st/tests/test_st_review_gate.cpp
       application/st/tests/test_st_pou_parser.cpp
       application/st/tests/test_st_pou_registry.cpp
       application/st/tests/test_st_function_purity.cpp
