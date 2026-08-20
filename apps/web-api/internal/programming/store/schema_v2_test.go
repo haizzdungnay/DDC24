@@ -79,9 +79,10 @@ func rowCount(t *testing.T, db *sql.DB, table string) int {
 // không có bảng mới nào sót lại, và chạy lại vẫn lên được head.
 func TestSchemaV2MigrationIsAtomicAtEveryFaultPoint(t *testing.T) {
 	newTables := []string{
-		"pou_objects", "library_revisions", "library_entries",
-		"published_signal_defs", "program_runtime_intents",
+		"library_usages",
 	}
+	newColumns := []string{"language", "source_blob", "interface_json", "dependencies_json",
+		"state_layout_version", "state_size_bytes", "state_layout_sha256"}
 	for _, point := range []string{"before_apply", "after_sql", "before_commit"} {
 		t.Run(point, func(t *testing.T) {
 			db := openRawSQLite(t, filepath.Join(t.TempDir(), "atomic.sqlite"))
@@ -115,6 +116,22 @@ func TestSchemaV2MigrationIsAtomicAtEveryFaultPoint(t *testing.T) {
 				if strings.Contains(existing, table) {
 					t.Fatalf("point=%s để lại bảng dở dang %s", point, table)
 				}
+			}
+			for _, column := range newColumns {
+				var count int
+				if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('library_entries') WHERE name=?`, column).Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				if count != 0 {
+					t.Fatalf("point=%s để lại cột dở dang %s", point, column)
+				}
+			}
+			var triggerCount int
+			if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name='library_revisions_no_system_insert'`).Scan(&triggerCount); err != nil {
+				t.Fatal(err)
+			}
+			if triggerCount != 0 {
+				t.Fatalf("point=%s để lại trigger v7", point)
 			}
 
 			// Sau lỗi, chạy lại phải lên được head — không kẹt vĩnh viễn.
