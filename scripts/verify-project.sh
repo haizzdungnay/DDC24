@@ -42,6 +42,12 @@ PY
 }
 
 run_layout() {
+  # Guard đóng gói chạy TRƯỚC: script này dùng `set -e`, nên bất kỳ kiểm nào hỏng
+  # ở trên cũng làm các kiểm phía dưới không bao giờ chạy. Bất biến phát hành
+  # (đúng biến thể FE, không băm firmware chưa boot được) rẻ và độc lập với phần
+  # còn lại, nên nó phải được chạy chứ không phụ thuộc vào việc gate layout có
+  # đang đỏ vì lý do khác hay không.
+  python3 -m unittest "$repo_root/tests/integration/test_release_packaging_guard.py"
   python3 "$repo_root/tools/restructure/verify_repository.py"
   python3 -m unittest "$repo_root/tests/integration/test_repository_contract_guard.py"
   python3 -m unittest "$repo_root/tests/integration/test_repository_dependency_guard.py"
@@ -92,11 +98,32 @@ run_frontend() {
     npm run lint && npm run build)
 }
 
+# Bộ e2e được canh. Mở rộng ngày 2026-08-20: trước đó CHỈ `network-qa.spec.ts`
+# (1 test) chạy trong CI, còn 9 bộ kia — khoảng 59 test — chưa cổng nào đụng tới
+# và đang mục dần đúng theo kịch bản `F-07` mà chính comment trong workflow cảnh
+# báo.
+#
+# `point-names.spec.ts` CỐ Ý nằm ngoài: 14 test trong đó hỏng sẵn, đã kiểm chứng
+# là hỏng độc lập với thay đổi FE (stash toàn bộ, lỗi giữ nguyên). Nó bị cách ly
+# chứ không bị quên — xem `MKDDC_E2E_QUARANTINE` bên dưới. Thêm một job biết
+# chắc đỏ chỉ làm cả cổng mất giá trị tín hiệu.
+MKDDC_E2E_QUARANTINE="e2e/point-names.spec.ts"
+
 run_e2e() {
-  local frontend_dir
+  local frontend_dir specs=()
   frontend_dir="$(active_path web-ui)"
-  (cd "$repo_root/$frontend_dir" && \
-    npx playwright test e2e/network-qa.spec.ts)
+  # Liệt kê động: một spec mới thêm vào thư mục sẽ tự vào cổng, không phải nhớ
+  # sửa script. Đó là cách duy nhất để danh sách này không lại tụt hậu.
+  while IFS= read -r spec; do
+    [ "$spec" = "$MKDDC_E2E_QUARANTINE" ] && continue
+    specs+=("$spec")
+  done < <(cd "$repo_root/$frontend_dir" && find e2e -maxdepth 1 -name '*.spec.ts' | sort)
+  if [ "${#specs[@]}" -eq 0 ]; then
+    printf 'LỖI: không tìm thấy spec e2e nào — kiểm tra lại đường dẫn\n' >&2
+    exit 2
+  fi
+  printf 'e2e: chạy %d spec (cách ly: %s)\n' "${#specs[@]}" "$MKDDC_E2E_QUARANTINE"
+  (cd "$repo_root/$frontend_dir" && npx playwright test "${specs[@]}")
 }
 
 run_firmware() {

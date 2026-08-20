@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "npm run check:programming-contracts && tsc --noEmit && vite build",
-    "build:foxlinx": "VITE_PROGRAMMING_REV_A=1 npm run build",
+    "build:release": "VITE_PROGRAMMING_REV_A=1 npm run build",
+    "build:foxlinx": "npm run build:release",
     "generate:programming-errors": "python3 ../../scripts/generate_programming_errors.py",
     "check:programming-errors": "python3 ../../scripts/generate_programming_errors.py --check",
     "check:programming-contracts": "npm run check:programming-errors && npm run check:programming-api && npm run check:programming-fbd",
