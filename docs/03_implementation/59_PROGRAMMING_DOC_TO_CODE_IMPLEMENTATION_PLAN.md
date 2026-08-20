@@ -439,7 +439,7 @@ chạy.
 | `T59-101` | P0 | Parser/AST cho `FUNCTION` và `FUNCTION_BLOCK`; interface/signature | T59-003/004 | **DONE** | `parse_st_pou()` nhận cả ba loại POU; 12 test (4 positive + 8 negative) khoá kind/name/signature kèm mã lỗi và vị trí; `ctest` 1077/1077; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-102` | P0 | Symbol/call graph, library resolver, recursion/DAG guard | T59-101 | **DONE** | `st_pou_registry.*` mới; 10 test khoá đệ quy trực tiếp/gián tiếp (chu trình dài 2..4), thiếu entry vs lệch version **khác mã**, trùng/mơ hồ tên, và đồ thị **độc lập thứ tự nạp**; `ctest` 1087/1087; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-103` | P0 | FUNCTION purity/type/side-effect enforcement | T59-102 | **DONE** | purity ép ở registry (điểm hội tụ mọi producer, không chỉ parser ST); 10 test dựng AST **không qua parser**; cùng lời gọi sai nhưng người gọi khác nhau cho **mã khác nhau**; bảng chữ ký công bố cho lowering; `ctest` 1097/1097; corpus tương đương ST↔FBD PASS; wave W1 **5/5 PASS**. Chi tiết §3.2. |
-| `T59-104` | P0 | FUNCTION_BLOCK instance state/layout/RETAIN ownership | T59-102 | ORDERED | 100/1024 instance isolation; stable layout/source reorder; corrupt/mismatch cold-init. |
+| `T59-104` | P0 | FUNCTION_BLOCK instance state/layout/RETAIN ownership | T59-102 | **DONE** | `st_fb_instance_layout.*` mới; 13 test: 100 instance trải 2 Program không chồng vùng và identity duy nhất, trần package 1024 chặn dù từng Program dưới trần 64, layout **bất biến khi sắp xếp lại nguồn**, vòng chứa và độ sâu bị chặn; `ctest` 1110/1110; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-105` | P1 | FBD nodes gọi user Function/FB + inspector/pin generation | T59-103/104 | ORDERED | ST/FBD shared typed IR; connect/order/undo/source-map/a11y tests. |
 | `T59-106` | P0 | Artifact v2 writer/loader: POU/program/library/signal/binding/resource sections | T59-103/104/006 | ORDERED | Golden byte/hash stable; loader bounds/fuzz/tamper/wrong profile; v1 LKG load. |
 
@@ -548,6 +548,48 @@ trả về hay không" — hai thứ suy được thẳng từ chữ ký. Kiểu
 **Chiều khẳng định cũng được khoá.** `FUNCTION_BLOCK` **vẫn được** giữ `VAR RETAIN`,
 FB instance và gọi FUNCTION thuần — nếu guard purity lan sang FB thì FB mất đúng
 khả năng làm nên nó. Corpus tương đương ST↔FBD (`fbd/equivalence_v1.json`) vẫn PASS.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-104` — Layout instance FB, quyền sở hữu RETAIN và identity ổn định
+
+**Bất biến đắt giá nhất: ổn định khi sắp xếp lại nguồn.** Nếu đổi thứ tự khai báo
+làm đổi offset hay identity, thì **mỗi lần chỉnh sửa vô hại sẽ gây RETAIN mismatch
+và cold-init toàn bộ state đang chạy**. Cách bảo đảm: layout đi theo **thứ tự tên
+canonical**, không theo thứ tự xuất hiện trong nguồn. Test đầu tiên nạp cùng tập
+instance theo hai thứ tự khai báo ngược nhau và đòi offset + identity + layout
+identity giống hệt.
+
+**Mọi state thuộc đúng một Program owner** (DDD §4.4). Chỉ `PROGRAM` là gốc của
+cây instance. Hai Program dùng **trùng tên** instance vẫn là hai identity khác
+nhau, vì identity tính từ đường dẫn canonical `Program.instance.sub`.
+
+**Đổi tên thì chỉ identity của chính nó đổi**, các instance khác giữ nguyên offset
+— nhưng `layout_identity` tổng **phải đổi**, để runtime cold-init đúng phần đã đổi
+thay vì đọc nhầm state cũ.
+
+**Parser lại chỉ ghi tên, registry mới phân giải.** Kiểu lạ trong `VAR`/`VAR RETAIN`
+ở chế độ POU trở thành instance của FB người dùng (`StFbDecl.user_type_name`).
+Cùng lý do với `USER_CALL` ở `T59-102`: chỉ lớp biết cả Project lẫn library mới
+phân biệt được "chưa có type" (`ST-LIB-001`), "type là FUNCTION/PROGRAM"
+(`ST-POU-001`) và "vòng chứa" (`ST-POU-003`).
+
+**Vòng CHỨA khác vòng GỌI.** `T59-102` bắt vòng gọi; một FB chứa chính mình cần bộ
+nhớ vô hạn nên phải chết ở đây, kể cả gián tiếp `Ping→Pong→Ping`. Cây hợp lệ nhưng
+sâu quá `kMaxNestingDepth` cũng bị chặn.
+
+**Trần package khác trần Program.** Từng `PROGRAM` đều dưới trần 64 mà tổng vẫn có
+thể vượt 1024 — nếu chỉ kiểm cấp Program thì trần package vô nghĩa. Có test riêng
+dựng 17 Program × 64 instance.
+
+**Không đoán số cho state library.** Instance của FB đến từ Control Library được
+chấp nhận với `state_size = 0` và cờ `is_library_type`; kích thước thật đến cùng
+artifact library (`T59-204`). Đoán một con số ở đây sẽ làm **lệch mọi offset phía
+sau** — sai lệch im lặng, tệ hơn là chưa biết.
+
+**Ranh giới trung thực.** Đây là **bộ hoạch định layout**, chưa phải runtime cấp
+phát. Nối vào prepared image và cold-init thật thuộc `T59-106`/`T59-401`/`T59-407`;
+identity mà task này sinh ra chính là thứ hai lane đó dùng để phát hiện mismatch.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

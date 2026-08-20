@@ -370,8 +370,17 @@ private:
                     location_port ? anchor_for_port(*location_port) : nullptr;
                 if (!anchor) return fail("FBD-LIMIT-SOURCEMAP-001", node_path(network, node));
                 fb_instance_.emplace(node.id, instance);
-                program_->fbs.push_back(
-                    {instance, type, retained, anchor->line, anchor->column, 1});
+                /* Khởi tạo theo tên trường: `StFbDecl` có thêm hai trường cho
+                 * instance FB người dùng (T59-104), và initializer theo vị trí sẽ
+                 * âm thầm gán sai khi struct đổi. */
+                StFbDecl decl;
+                decl.name = instance;
+                decl.fb_type = type;
+                decl.retained = retained;
+                decl.line = anchor->line;
+                decl.column = anchor->column;
+                decl.length = 1;
+                program_->fbs.push_back(std::move(decl));
             }
         }
         return true;

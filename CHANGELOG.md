@@ -8,6 +8,42 @@
 
 ## [Unreleased]
 
+### Added — `T59-104` layout instance FB, quyền sở hữu RETAIN và identity ổn định (2026-08-20)
+
+`apps/core/application/st/st_fb_instance_layout.{hpp,cpp}` hoạch định state cho
+toàn bộ instance FUNCTION_BLOCK của các PROGRAM, kèm identity ổn định.
+
+**Bất biến đắt giá nhất: ổn định khi sắp xếp lại nguồn.** Nếu đổi thứ tự khai báo
+làm đổi offset hay identity thì **mỗi lần chỉnh sửa vô hại sẽ gây RETAIN mismatch
+và cold-init toàn bộ state đang chạy**. Cách bảo đảm: layout đi theo **thứ tự tên
+canonical**, không theo thứ tự xuất hiện trong nguồn.
+
+- Mọi state thuộc **đúng một Program owner** (DDD §4.4); identity tính từ đường
+  dẫn canonical `Program.instance.sub`, nên hai Program dùng trùng tên instance
+  vẫn là hai identity khác nhau.
+- Đổi tên một instance chỉ đổi identity của chính nó, nhưng `layout_identity`
+  tổng **phải đổi** để runtime cold-init đúng phần đã đổi.
+- Vòng **chứa** khác vòng **gọi**: `T59-102` bắt vòng gọi; FB chứa chính mình
+  (trực tiếp hoặc `Ping→Pong→Ping`) cần bộ nhớ vô hạn nên chết ở đây. Cây hợp lệ
+  nhưng quá sâu cũng bị chặn.
+- Trần **package** khác trần **Program**: từng PROGRAM dưới trần 64 mà tổng vẫn có
+  thể vượt 1024; có test dựng 17 Program × 64 instance.
+- Kiểu lạ trong `VAR`/`VAR RETAIN` ở chế độ POU thành instance FB người dùng —
+  parser chỉ ghi tên, registry phân giải, cùng lý do với `USER_CALL`.
+
+**Không đoán số cho state library:** instance của FB từ Control Library được chấp
+nhận với `state_size = 0` và cờ `is_library_type`; kích thước thật đến cùng
+artifact library (`T59-204`). Đoán một con số ở đây sẽ làm **lệch mọi offset phía
+sau** — sai lệch im lặng, tệ hơn là chưa biết.
+
+**Ranh giới trung thực:** đây là **bộ hoạch định layout**, chưa phải runtime cấp
+phát. Nối vào prepared image và cold-init thật thuộc `T59-106`/`T59-401`/`T59-407`.
+
+**Kiểm chứng fresh trong phiên (host/local):** 13 test mới, gồm 100 instance trải
+2 Program không chồng vùng và identity duy nhất. C++ Release MODBUS+BACNET+HMI
+`ON`: build PASS, `ctest` **1110/1110 PASS** (từ 1097).
+`verify-project.sh --wave W1` **5/5 PASS**.
+
 ### Added — `T59-103` FUNCTION thuần: state, side-effect và chữ ký (2026-08-20)
 
 Purity của `FUNCTION` được ép ở `st_pou_registry` — **điểm hội tụ của mọi

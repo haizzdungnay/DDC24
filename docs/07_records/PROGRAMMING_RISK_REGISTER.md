@@ -425,6 +425,18 @@ Evidence host/local. Registry kiểm **số đối số** và sự tồn tại k
 kiểu từng biểu thức đối số thuộc `T59-105` và sẽ dùng lại bảng `signatures` chứ
 không dựng bộ thứ hai. 16/16 risk giữ `Open`, 11 Critical, S×L và residual không đổi.
 
+### 5.26 Cập nhật treatment source `T59-104` (Plan59 W1)
+
+| Risk | Control đã có trên nhánh `feat/t59-104-fb-instance-state` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-009` | Layout instance FB đi theo **thứ tự tên canonical**, nên sắp xếp lại khai báo trong nguồn KHÔNG đổi offset hay identity — chặn đúng lớp lỗi "chỉnh sửa vô hại làm cold-init toàn bộ state". Đổi tên/đổi kiểu thì `layout_identity` đổi theo, để runtime cold-init đúng phần đã đổi thay vì đọc nhầm state cũ | Nối vào prepared image và cold-init thật (`T59-401`/`T59-407`), power-cut trên board (`T59-704`) và Test Result `VS-PROG-029/030` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-006` | Vòng **chứa** instance (trực tiếp và gián tiếp) cùng độ sâu lồng nhau bị chặn trước mọi cấp phát; trần package 1024 kiểm tách khỏi trần Program 64 nên từng Program hợp lệ mà tổng vượt vẫn fail-closed | Lowering FBD (`T59-105`), fuzz layout (`T59-601`) và Test Result độc lập | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local. Đây là **bộ hoạch định layout**, chưa phải runtime cấp phát;
+state của instance đến từ Control Library cố ý ghi `0` chờ artifact library
+(`T59-204`) thay vì đoán một con số làm lệch mọi offset phía sau. 16/16 risk giữ
+`Open`, 11 Critical, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -474,6 +486,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 2.7 | 2026-08-20 | Ghi `T59-101` (Plan59 W1) cho treatment partial RSK-006: parser nhận ba loại POU với AST chung và ép quy tắc kind/chữ ký bằng mã riêng. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering, runtime và target chưa có. |
 | 2.8 | 2026-08-20 | Ghi `T59-102` (Plan59 W1) cho treatment partial RSK-006/014: call graph xác định, guard DAG chặn đệ quy trực tiếp/gián tiếp, và ba mã riêng cho ba cách sửa khác nhau. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering/Check production/target chưa có. |
 | 2.9 | 2026-08-20 | Ghi `T59-103` (Plan59 W1) cho treatment partial RSK-006/014: purity FUNCTION ép ở registry nên producer không qua parser cũng bị chặn, và mã lỗi phân biệt theo cách sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering FBD, instance state và target chưa có. |
+| 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
 | 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |

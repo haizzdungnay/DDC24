@@ -583,6 +583,12 @@ private:
         return false;
     }
 
+    static bool scalar_type_name(const std::string& up)
+    {
+        StType ignored = StType::REAL;
+        return scalar_type_from_name(up, &ignored);
+    }
+
     static bool scalar_type_from_name(const std::string& up, StType* out)
     {
         if (up == "BOOL")      { *out = StType::BOOL; return true; }
@@ -694,6 +700,29 @@ private:
                 StFbDecl d;
                 d.name = name_tok.text;
                 d.fb_type = fb;
+                d.retained = (storage == StStorage::VAR_RETAIN);
+                d.line = name_tok.line;
+                d.column = name_tok.column;
+                d.length = name_tok.length;
+                if (out->fbs.size() >= st_limits::kMaxFbInstances) {
+                    set_diag(diag, st_diag_code::kTooManyFbInstances,
+                             "function block instance count exceeds limit of " +
+                                 std::to_string(st_limits::kMaxFbInstances),
+                             d.line, d.column, d.length);
+                    return false;
+                }
+                out->fbs.push_back(std::move(d));
+            } else if (allow_user_calls_ && !scalar_type_name(type_tok.upper) &&
+                       (storage == StStorage::VAR_LOCAL || storage == StStorage::VAR_RETAIN)) {
+                /* Kiểu lạ trong VAR/VAR RETAIN ở chế độ POU = instance của một
+                 * FUNCTION_BLOCK người dùng. Parser chỉ ghi tên kiểu; registry
+                 * phân giải và mới biết được "chưa có type" khác "type là
+                 * FUNCTION" khác "vòng chứa" — ba mã, ba cách sửa. */
+                StFbDecl d;
+                d.name = name_tok.text;
+                d.fb_type = StFbType::NONE;
+                d.is_user_type = true;
+                d.user_type_name = type_tok.text;
                 d.retained = (storage == StStorage::VAR_RETAIN);
                 d.line = name_tok.line;
                 d.column = name_tok.column;

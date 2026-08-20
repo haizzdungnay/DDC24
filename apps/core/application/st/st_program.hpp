@@ -120,6 +120,12 @@ struct StVarDecl {
 struct StFbDecl {
     std::string name;
     StFbType    fb_type = StFbType::NONE;
+    /* T59-104: instance của FUNCTION_BLOCK do người dùng hoặc Control Library
+     * định nghĩa. Cùng lý do với `USER_CALL`: parser không biết tập POU nên nó
+     * chỉ GHI LẠI tên kiểu; registry mới phân giải. `fb_type` giữ `NONE` cho
+     * trường hợp này để không có đường nào nhầm nó với FB dựng sẵn. */
+    bool        is_user_type = false;
+    std::string user_type_name;
     bool        retained = false;
     int         line = 0;
     int         column = 0;
