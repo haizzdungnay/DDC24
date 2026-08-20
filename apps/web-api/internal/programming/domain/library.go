@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -542,6 +543,31 @@ func ValidateProjectLibraryVersion(value string) error {
 		return fmt.Errorf("PROJECT library version phải là SemVer")
 	}
 	return nil
+}
+
+// NextProjectLibraryMinorVersion sinh version Draft kế tiếp từ một bản đã
+// publish. Chỉ tăng MINOR và xoá patch/prerelease/build: một Draft mới mở là
+// tập thay đổi chưa biết trước, nên đoán PATCH sẽ nói sai mức tương thích ngay
+// từ lúc chưa có thay đổi nào.
+func NextProjectLibraryMinorVersion(current string) (string, error) {
+	if err := ValidateProjectLibraryVersion(current); err != nil {
+		return "", err
+	}
+	core := current
+	for _, separator := range []string{"+", "-"} {
+		if index := strings.Index(core, separator); index >= 0 {
+			core = core[:index]
+		}
+	}
+	parts := strings.Split(core, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("PROJECT library version không phải SemVer ba phần: %s", current)
+	}
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil || minor < 0 || minor >= 1<<20 {
+		return "", fmt.Errorf("PROJECT library minor version không hợp lệ: %s", current)
+	}
+	return fmt.Sprintf("%s.%d.0", parts[0], minor+1), nil
 }
 
 // ValidateLibraryDependencies phân giải trên đúng một immutable revision. Tên

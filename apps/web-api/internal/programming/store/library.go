@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"mkddc-web/internal/programming/domain"
@@ -27,6 +28,9 @@ var (
 )
 
 const (
+	actionLibraryEntryUpsert = "LIBRARY_ENTRY_UPSERT"
+	actionLibraryEntryDelete = "LIBRARY_ENTRY_DELETE"
+
 	LibraryScopeSystem  = "SYSTEM"
 	LibraryScopeProject = "PROJECT"
 
@@ -137,6 +141,22 @@ type CreateProjectLibraryDraftParams struct {
 	AtUTCMS                 int64
 }
 
+// LibraryMutationIdentity là phần bắt buộc của MỌI mutation Control Library.
+// Nó không optional: biên nhận idempotency và audit phải nằm trong CÙNG
+// transaction với thay đổi, nếu không một lần crash giữa hai bước sẽ để lại
+// mutation không có dấu vết hoặc biên nhận không có mutation.
+type LibraryMutationIdentity struct {
+	ProjectID            string
+	ExpectedDraftETag    int64
+	ActorID              string
+	Role                 string
+	AuditID              string
+	CorrelationID        string
+	At                   time.Time
+	IdempotencyKeySHA256 [sha256.Size]byte
+	RequestSHA256        [sha256.Size]byte
+}
+
 type UpsertProjectLibraryEntryParams struct {
 	LibraryRevisionID string
 	EntryID           string
@@ -148,6 +168,30 @@ type UpsertProjectLibraryEntryParams struct {
 	InterfaceJSON     []byte
 	Dependencies      []LibraryDependency
 	StateLayout       LibraryStateLayout
+	// NewLibraryRevisionID chỉ dùng khi LibraryRevisionID rỗng và Project chưa
+	// có Draft library nào. Store KHÔNG tự sinh UUID: sinh ID bên trong
+	// transaction làm cùng một request retry ra hai identity khác nhau.
+	NewLibraryRevisionID string
+	Identity             LibraryMutationIdentity
+}
+
+// LibraryEntryMutation trả cả entry lẫn ETag Draft mới. Mutation library đổi
+// working set của Project, nên nó đi CHUNG một lane optimistic-concurrency với
+// tài liệu Draft thay vì có ETag riêng — hai lane song song sẽ cho phép một lần
+// lưu tài liệu và một lần sửa library xen kẽ nhau mà không bên nào thấy.
+type LibraryEntryMutation struct {
+	Entry             LibraryEntry
+	LibraryRevisionID string
+	DraftID           string
+	DraftETag         int64
+	AuditID           string
+	Replay            bool
+}
+
+type DeleteProjectLibraryEntryParams struct {
+	LibraryRevisionID string
+	EntryID           string
+	Identity          LibraryMutationIdentity
 }
 
 type LibrarySearchParams struct {
@@ -280,18 +324,164 @@ func cloneLibraryEntriesTx(ctx context.Context, tx *sql.Tx, fromID, toID, newVer
 	return nil
 }
 
-func (s *Store) UpsertProjectLibraryEntry(ctx context.Context, params UpsertProjectLibraryEntryParams) (LibraryEntry, error) {
-	entry, err := prepareProjectLibraryEntry(params, false)
-	if err != nil {
-		return LibraryEntry{}, err
+// EnsureProjectLibraryDraftTx trả về library revision DRAFT đang mở của Project.
+// Nếu chưa có: Project chưa từng có library thì mở `1.0.0`; đã có bản publish thì
+// mở version minor kế tiếp CLONE từ bản publish mới nhất. Không có route riêng để
+// "tạo library" vì DDD §5.1 chỉ khoá route entry — thêm route ngoài thiết kế là
+// tự chế contract, còn bắt người dùng tạo library thủ công trước khi thêm entry
+// là dựng một bước không có trong luồng nào.
+func ensureProjectLibraryDraftTx(ctx context.Context, tx *sql.Tx, projectID, newRevisionID string, at int64, actorID string) (string, error) {
+	var draftID string
+	err := tx.QueryRowContext(ctx, `SELECT library_revision_id FROM library_revisions
+		WHERE scope='PROJECT' AND project_id=? AND state='DRAFT'
+		ORDER BY created_at_utc_ms DESC,library_revision_id LIMIT 1`, projectID).Scan(&draftID)
+	if err == nil {
+		return draftID, nil
 	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	var parentID, parentVersion string
+	version := "1.0.0"
+	err = tx.QueryRowContext(ctx, `SELECT library_revision_id,version FROM library_revisions
+		WHERE scope='PROJECT' AND project_id=? AND state IN ('PUBLISHED','DEPRECATED')
+		ORDER BY created_at_utc_ms DESC,library_revision_id LIMIT 1`, projectID).Scan(&parentID, &parentVersion)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	if err == nil {
+		version, err = domain.NextProjectLibraryMinorVersion(parentVersion)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		parentID = ""
+	}
+	manifest, digest, err := buildLibraryManifest(newRevisionID, projectID, version, nil)
+	if err != nil {
+		return "", err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO library_revisions(
+		library_revision_id,project_id,scope,version,parent_library_revision_id,state,
+		manifest_json,manifest_sha256,created_by,created_at_utc_ms)
+		VALUES(?,?,'PROJECT',?,?,'DRAFT',?,?,?,?)`, newRevisionID, projectID, version,
+		nullableString(parentID), manifest, digest[:], actorID, at); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return "", ErrAlreadyExists
+		}
+		return "", fmt.Errorf("mở PROJECT library Draft: %w", err)
+	}
+	if parentID != "" {
+		if err := cloneLibraryEntriesTx(ctx, tx, parentID, newRevisionID, version); err != nil {
+			return "", err
+		}
+		if err := refreshLibraryManifestTx(ctx, tx, newRevisionID); err != nil {
+			return "", err
+		}
+	}
+	return newRevisionID, nil
+}
+
+// lockProjectDraftTx ép mutation library đi qua đúng ETag Draft mà caller đã
+// đọc, rồi tăng ETag đó. Không làm vậy thì hai lane (tài liệu và library) sửa
+// xen kẽ nhau mà không lane nào thấy — đúng lớp lỗi mà `If-Match` sinh ra để
+// chặn.
+func lockProjectDraftTx(ctx context.Context, tx *sql.Tx, identity LibraryMutationIdentity, at int64) (string, int64, error) {
+	var draftID string
+	var actualETag int64
+	if err := tx.QueryRowContext(ctx, `SELECT draft_id,etag FROM drafts WHERE project_id=?`, identity.ProjectID).
+		Scan(&draftID, &actualETag); errors.Is(err, sql.ErrNoRows) {
+		return "", 0, ErrNotFound
+	} else if err != nil {
+		return "", 0, err
+	}
+	if actualETag != identity.ExpectedDraftETag {
+		return "", 0, ErrETagConflict
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE drafts SET etag=etag+1,updated_by=?,updated_at_utc_ms=? WHERE draft_id=? AND etag=?`,
+		identity.ActorID, at, draftID, identity.ExpectedDraftETag)
+	if err != nil {
+		return "", 0, fmt.Errorf("tăng ETag Draft sau mutation library: %w", err)
+	}
+	if rows, err := result.RowsAffected(); err != nil {
+		return "", 0, err
+	} else if rows != 1 {
+		return "", 0, ErrETagConflict
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET updated_by=?,updated_at_utc_ms=? WHERE project_id=?`,
+		identity.ActorID, at, identity.ProjectID); err != nil {
+		return "", 0, fmt.Errorf("cập nhật timestamp Project: %w", err)
+	}
+	return draftID, identity.ExpectedDraftETag + 1, nil
+}
+
+func validateLibraryMutationIdentity(identity LibraryMutationIdentity) error {
+	if err := validateUUIDs(identity.ProjectID, identity.AuditID); err != nil {
+		return err
+	}
+	if identity.ExpectedDraftETag < 1 {
+		return fmt.Errorf("expected Draft ETag phải >=1")
+	}
+	if err := validateActorAudit(identity.ActorID, identity.Role, identity.CorrelationID, identity.At.UnixMilli()); err != nil {
+		return err
+	}
+	return validateMutationIdentity(identity.IdempotencyKeySHA256, identity.RequestSHA256)
+}
+
+func (s *Store) UpsertProjectLibraryEntry(ctx context.Context, params UpsertProjectLibraryEntryParams) (LibraryEntryMutation, error) {
+	if err := validateLibraryMutationIdentity(params.Identity); err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	// LibraryRevisionID rỗng nghĩa là "dùng Draft library đang mở của Project".
+	// Khi caller nêu tên tường minh, nó vẫn phải là Draft của đúng Project đó.
+	autoDraftID := params.LibraryRevisionID
+	if autoDraftID == "" {
+		if err := validateUUIDs(params.NewLibraryRevisionID); err != nil {
+			return LibraryEntryMutation{}, err
+		}
+		autoDraftID = params.NewLibraryRevisionID
+	}
+	entryParams := params
+	entryParams.LibraryRevisionID = autoDraftID
+	entry, err := prepareProjectLibraryEntry(entryParams, false)
+	if err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	at := params.Identity.At.UTC().UnixMilli()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return LibraryEntry{}, err
+		return LibraryEntryMutation{}, err
 	}
 	defer tx.Rollback()
-	if err := requireMutableProjectLibraryTx(ctx, tx, params.LibraryRevisionID); err != nil {
-		return LibraryEntry{}, err
+	receipt, found, err := readMutationReceiptTx(ctx, tx, params.Identity.ActorID, actionLibraryEntryUpsert,
+		params.EntryID, params.Identity.IdempotencyKeySHA256, params.Identity.RequestSHA256, at)
+	if err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	if found {
+		if err := tx.Commit(); err != nil {
+			return LibraryEntryMutation{}, err
+		}
+		return LibraryEntryMutation{LibraryRevisionID: receipt.RevisionID, DraftID: receipt.DraftID,
+			DraftETag: receipt.ETag, AuditID: receipt.AuditID, Replay: true}, nil
+	}
+	draftID, nextETag, err := lockProjectDraftTx(ctx, tx, params.Identity, at)
+	if err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	libraryRevisionID := params.LibraryRevisionID
+	if libraryRevisionID == "" {
+		libraryRevisionID, err = ensureProjectLibraryDraftTx(ctx, tx, params.Identity.ProjectID, autoDraftID, at, params.Identity.ActorID)
+		if err != nil {
+			return LibraryEntryMutation{}, err
+		}
+	}
+	if err := requireMutableProjectLibraryOfProjectTx(ctx, tx, libraryRevisionID, params.Identity.ProjectID); err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	entry.LibraryRevisionID = libraryRevisionID
+	if entry.ContentSHA256, err = libraryEntryDigest(entry); err != nil {
+		return LibraryEntryMutation{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO library_entries(
 		library_revision_id,entry_id,kind,name,name_folded,feature_state,signature_json,content_sha256,
@@ -305,62 +495,125 @@ func (s *Store) UpsertProjectLibraryEntry(ctx context.Context, params UpsertProj
 		state_layout_version=excluded.state_layout_version,state_size_bytes=excluded.state_size_bytes,
 		state_layout_sha256=excluded.state_layout_sha256`, libraryEntrySQLArgs(entry)...); err != nil {
 		if strings.Contains(err.Error(), "library_entries_name_idx") || strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			return LibraryEntry{}, ErrAlreadyExists
+			return LibraryEntryMutation{}, ErrAlreadyExists
 		}
-		return LibraryEntry{}, fmt.Errorf("upsert PROJECT library entry: %w", err)
+		return LibraryEntryMutation{}, fmt.Errorf("upsert PROJECT library entry: %w", err)
 	}
-	if err := refreshLibraryManifestTx(ctx, tx, params.LibraryRevisionID); err != nil {
-		return LibraryEntry{}, err
+	if err := refreshLibraryManifestTx(ctx, tx, libraryRevisionID); err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	details, _ := json.Marshal(map[string]any{"libraryRevisionId": libraryRevisionID, "entryId": params.EntryID,
+		"kind": entry.Kind, "language": entry.Language, "contentSha256": hex.EncodeToString(entry.ContentSHA256[:]),
+		"dependencyCount": len(entry.Dependencies)})
+	if _, err := appendAuditTx(ctx, tx, AuditInput{AuditID: params.Identity.AuditID, ActorID: params.Identity.ActorID,
+		Role: params.Identity.Role, Action: actionLibraryEntryUpsert, TargetType: "LIBRARY_ENTRY", TargetID: params.EntryID,
+		OccurredAtUTCMS: at, ResultCode: "OK", CorrelationID: params.Identity.CorrelationID, DetailsJSON: details}); err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	if err := writeMutationReceiptTx(ctx, tx, params.Identity.ActorID, actionLibraryEntryUpsert, params.EntryID,
+		params.Identity.IdempotencyKeySHA256, params.Identity.RequestSHA256,
+		mutationReceiptResult{ProjectID: params.Identity.ProjectID, DraftID: draftID, RevisionID: libraryRevisionID,
+			ETag: nextETag, AuditID: params.Identity.AuditID}, at); err != nil {
+		return LibraryEntryMutation{}, err
 	}
 	if err := tx.Commit(); err != nil {
-		return LibraryEntry{}, err
+		return LibraryEntryMutation{}, err
 	}
-	return s.GetLibraryEntry(ctx, params.LibraryRevisionID, params.EntryID)
+	stored, err := s.GetLibraryEntry(ctx, libraryRevisionID, params.EntryID)
+	if err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	return LibraryEntryMutation{Entry: stored, LibraryRevisionID: libraryRevisionID, DraftID: draftID,
+		DraftETag: nextETag, AuditID: params.Identity.AuditID}, nil
 }
 
-func (s *Store) DeleteProjectLibraryEntry(ctx context.Context, libraryRevisionID, entryID string) error {
-	if err := validateUUIDs(libraryRevisionID); err != nil {
-		return err
+func (s *Store) DeleteProjectLibraryEntry(ctx context.Context, params DeleteProjectLibraryEntryParams) (LibraryEntryMutation, error) {
+	if err := validateLibraryMutationIdentity(params.Identity); err != nil {
+		return LibraryEntryMutation{}, err
 	}
-	if err := validateUUIDs(entryID); err != nil {
-		return err
+	if err := validateUUIDs(params.EntryID); err != nil {
+		return LibraryEntryMutation{}, err
 	}
+	at := params.Identity.At.UTC().UnixMilli()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return LibraryEntryMutation{}, err
 	}
 	defer tx.Rollback()
-	if err := requireMutableProjectLibraryTx(ctx, tx, libraryRevisionID); err != nil {
-		return err
+	receipt, found, err := readMutationReceiptTx(ctx, tx, params.Identity.ActorID, actionLibraryEntryDelete,
+		params.EntryID, params.Identity.IdempotencyKeySHA256, params.Identity.RequestSHA256, at)
+	if err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	if found {
+		if err := tx.Commit(); err != nil {
+			return LibraryEntryMutation{}, err
+		}
+		return LibraryEntryMutation{LibraryRevisionID: receipt.RevisionID, DraftID: receipt.DraftID,
+			DraftETag: receipt.ETag, AuditID: receipt.AuditID, Replay: true}, nil
+	}
+	libraryRevisionID := params.LibraryRevisionID
+	if libraryRevisionID == "" {
+		if err := tx.QueryRowContext(ctx, `SELECT library_revision_id FROM library_revisions
+			WHERE scope='PROJECT' AND project_id=? AND state='DRAFT'
+			ORDER BY created_at_utc_ms DESC,library_revision_id LIMIT 1`, params.Identity.ProjectID).
+			Scan(&libraryRevisionID); errors.Is(err, sql.ErrNoRows) {
+			return LibraryEntryMutation{}, ErrNotFound
+		} else if err != nil {
+			return LibraryEntryMutation{}, err
+		}
+	}
+	if err := requireMutableProjectLibraryOfProjectTx(ctx, tx, libraryRevisionID, params.Identity.ProjectID); err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	draftID, nextETag, err := lockProjectDraftTx(ctx, tx, params.Identity, at)
+	if err != nil {
+		return LibraryEntryMutation{}, err
 	}
 	entries, err := listProjectLibraryEntriesTx(ctx, tx, libraryRevisionID)
 	if err != nil {
-		return err
+		return LibraryEntryMutation{}, err
 	}
 	for _, entry := range entries {
-		if strings.EqualFold(entry.EntryID, entryID) {
+		if strings.EqualFold(entry.EntryID, params.EntryID) {
 			continue
 		}
 		for _, dependency := range entry.Dependencies {
-			if strings.EqualFold(dependency.EntryID, entryID) {
-				return fmt.Errorf("%w: %s <- %s", ErrLibraryReferenced, entry.EntryID, entryID)
+			if strings.EqualFold(dependency.EntryID, params.EntryID) {
+				return LibraryEntryMutation{}, fmt.Errorf("%w: %s <- %s", ErrLibraryReferenced, entry.EntryID, params.EntryID)
 			}
 		}
 	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM library_entries WHERE library_revision_id=? AND entry_id=?`, libraryRevisionID, entryID)
+	result, err := tx.ExecContext(ctx, `DELETE FROM library_entries WHERE library_revision_id=? AND entry_id=?`, libraryRevisionID, params.EntryID)
 	if err != nil {
 		if strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
-			return ErrLibraryReferenced
+			return LibraryEntryMutation{}, ErrLibraryReferenced
 		}
-		return err
+		return LibraryEntryMutation{}, err
 	}
 	if rows, _ := result.RowsAffected(); rows != 1 {
-		return ErrNotFound
+		return LibraryEntryMutation{}, ErrNotFound
 	}
 	if err := refreshLibraryManifestTx(ctx, tx, libraryRevisionID); err != nil {
-		return err
+		return LibraryEntryMutation{}, err
 	}
-	return tx.Commit()
+	details, _ := json.Marshal(map[string]any{"libraryRevisionId": libraryRevisionID, "entryId": params.EntryID})
+	if _, err := appendAuditTx(ctx, tx, AuditInput{AuditID: params.Identity.AuditID, ActorID: params.Identity.ActorID,
+		Role: params.Identity.Role, Action: actionLibraryEntryDelete, TargetType: "LIBRARY_ENTRY", TargetID: params.EntryID,
+		OccurredAtUTCMS: at, ResultCode: "OK", CorrelationID: params.Identity.CorrelationID, DetailsJSON: details}); err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	if err := writeMutationReceiptTx(ctx, tx, params.Identity.ActorID, actionLibraryEntryDelete, params.EntryID,
+		params.Identity.IdempotencyKeySHA256, params.Identity.RequestSHA256,
+		mutationReceiptResult{ProjectID: params.Identity.ProjectID, DraftID: draftID, RevisionID: libraryRevisionID,
+			ETag: nextETag, AuditID: params.Identity.AuditID}, at); err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	return LibraryEntryMutation{LibraryRevisionID: libraryRevisionID, DraftID: draftID,
+		DraftETag: nextETag, AuditID: params.Identity.AuditID}, nil
 }
 
 func (s *Store) PublishProjectLibrary(ctx context.Context, libraryRevisionID string) (LibraryRevision, error) {
@@ -853,14 +1106,22 @@ func libraryEntryDigest(entry LibraryEntry) ([sha256.Size]byte, error) {
 	return domain.ProjectLibraryEntryContentSHA256(toDomainLibraryEntry(entry))
 }
 
-func requireMutableProjectLibraryTx(ctx context.Context, tx *sql.Tx, revisionID string) error {
+// requireMutableProjectLibraryOfProjectTx kiểm CẢ quyền sở hữu Project. Chỉ kiểm
+// "là PROJECT DRAFT" cho phép một admin sửa library Draft của Project khác chỉ
+// bằng cách đoán đúng `libraryRevisionId` — sai lệch quyền im lặng.
+func requireMutableProjectLibraryOfProjectTx(ctx context.Context, tx *sql.Tx, revisionID, projectID string) error {
 	var scope, state string
-	if err := tx.QueryRowContext(ctx, `SELECT scope,state FROM library_revisions WHERE library_revision_id=?`, revisionID).Scan(&scope, &state); errors.Is(err, sql.ErrNoRows) {
+	var owner sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT scope,state,project_id FROM library_revisions WHERE library_revision_id=?`, revisionID).
+		Scan(&scope, &state, &owner); errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	} else if err != nil {
 		return err
 	}
-	if scope != LibraryScopeProject || state != LibraryStateDraft {
+	if scope != LibraryScopeProject || !owner.Valid || owner.String != projectID {
+		return ErrNotFound
+	}
+	if state != LibraryStateDraft {
 		return ErrLibraryImmutable
 	}
 	return nil
