@@ -47,6 +47,54 @@ class DependencyGuardTest(unittest.TestCase):
             "import { useAuth } from '../auth/AuthProvider'\n",
         )
 
+    # --- Web UI ↔ contract C/SHM/IOP -------------------------------------
+    #
+    # Luật này đo PHỤ THUỘC TRONG CODE. Trước 2026-08-20 nó quét toàn văn tệp
+    # nên một dòng chú thích truy vết cũng bị tính là vi phạm — đó là toàn bộ lý
+    # do `features/scheduler/shared.ts` làm gate đỏ. Bốn test dưới đây khoá cả
+    # hai chiều để lần sửa đó không bị hiểu nhầm thành "nới lỏng luật".
+
+    def assert_accepted(self, relative: str, content: str) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / relative
+            path.parent.mkdir(parents=True)
+            path.write_text(content, encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()):
+                VERIFY.validate_dependency_boundaries(root)
+
+    def test_web_ui_import_contract_shm_bi_tu_choi(self) -> None:
+        self.assert_rejected(
+            "apps/web-ui/src/shared/bad.ts",
+            "import { KX_N_UI } from '../../../../contracts/shm/mkddc_shm.h'\n",
+        )
+
+    def test_web_ui_import_dong_toi_contract_bi_tu_choi(self) -> None:
+        # Chuỗi ký tự KHÔNG được bỏ qua: import động/fetch/worker URL vẫn là
+        # phụ thuộc thật và vẫn phải bị bắt.
+        self.assert_rejected(
+            "apps/web-ui/src/shared/bad.ts",
+            "export const load = () => import('../../../../contracts/iop/iop_protocol.h')\n",
+        )
+
+    def test_web_ui_chu_thich_truy_vet_duoc_chap_nhan(self) -> None:
+        # Chú thích trỏ về authority là thứ DOC_GOVERNANCE khuyến khích; nó
+        # không tạo ra phụ thuộc nào và không được làm gate đỏ.
+        self.assert_accepted(
+            "apps/web-ui/src/features/scheduler/shared.ts",
+            "/** Trần kênh theo loại điểm, khớp contracts/shm/mkddc_shm.h. */\n"
+            "export const MAX_UI = 16\n",
+        )
+
+    def test_web_ui_chu_thich_dong_khong_che_duoc_code_that(self) -> None:
+        # Một tệp vừa có chú thích hợp lệ vừa có import thật thì VẪN phải đỏ —
+        # bảo đảm việc bỏ comment không vô tình bỏ qua cả phần code phía sau.
+        self.assert_rejected(
+            "apps/web-ui/src/shared/bad.ts",
+            "// tham chiếu contracts/shm/mkddc_shm.h\n"
+            "import { X } from '../../../../contracts/shm/mkddc_shm.h'\n",
+        )
+
     def test_build_artifact_trong_source_bi_tu_choi(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
