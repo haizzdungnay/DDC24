@@ -27,10 +27,21 @@ struct ProfilePoint {
     bool        writable   = false;
     std::string map_to;
 
-    /* MOD-010: BACnet expose (SW_FIELDBUS_DESIGN §9, FB-Q-002) */
-    bool        expose_bacnet      = false;
-    std::string bacnet_object_type;   /* "AV" / "BV" / "AI" */
-    uint32_t    bacnet_instance    = 0;
+    /* 2026-08-20 — `expose_bacnet` / `bacnet_object_type` / `bacnet_instance`
+     * ĐÃ BỊ GỠ khỏi ProfilePoint (OD-MBRTU-014, quyết định sản phẩm).
+     *
+     * Ba trường này từng được parse vào đây nhưng KHÔNG có một consumer nào
+     * trong toàn bộ apps/ — grep runtime trả về rỗng. Đồng thời BE Go
+     * (`BuildProfile`) chưa bao giờ sinh chúng, nên cũng không có đường cấu
+     * hình nào chạm tới. Kết quả là một tính năng chỉ tồn tại ở lớp parser:
+     * nhận cấu hình, báo lỗi khi thiếu `bacnet_object_type`, rồi không làm gì
+     * cả — đúng thứ tệ nhất, vì nó khiến người vận hành tin rằng đã bật được
+     * BACnet exposure cho Point Modbus RTU.
+     *
+     * Đưa Modbus RTU Point ra BACnet là phạm vi Rev B và phải implement
+     * end-to-end (BE sinh field → iobus map sang object → core publish) TRƯỚC
+     * khi mở lại field. `parse_point()` vẫn ĐỌC khoá cũ để cảnh báo
+     * deprecated/ignored, phục vụ migration cấu hình cũ. */
 };
 
 struct DeviceProfile {

@@ -206,19 +206,20 @@ static bool parse_point(const std::string& obj, ProfilePoint* pt)
 
     jget_str(obj, "map_to", &pt->map_to);
 
-    /* BACnet expose (FB-Q-002) */
-    bool exp = false;
-    jget_bool(obj, "expose_bacnet", &exp);
-    pt->expose_bacnet = exp;
-    if (exp) {
-        jget_str(obj, "bacnet_object_type", &pt->bacnet_object_type);
-        if (pt->bacnet_object_type.empty()) {
-            std::fprintf(stderr, "ERROR profile.expose_bacnet_no_type name=%s — skip bacnet\n",
-                         pt->name.c_str());
-            pt->expose_bacnet = false;
-        }
-        if (jget_num(obj, "bacnet_instance", &v) && v >= 0)
-            pt->bacnet_instance = static_cast<uint32_t>(v);
+    /* `expose_bacnet` — ĐỌC ĐỂ CẢNH BÁO, KHÔNG THỰC THI (OD-MBRTU-014).
+     *
+     * Khoá này từng được parse vào ProfilePoint nhưng chưa bao giờ có consumer
+     * runtime, và BE cũng chưa bao giờ sinh ra nó. Nay nó bị gỡ khỏi phạm vi
+     * Rev A. Vẫn đọc ở đây để cấu hình cũ KHÔNG bị im lặng bỏ qua: người vận
+     * hành phải thấy rõ trường của mình không có tác dụng, thay vì tin rằng
+     * BACnet exposure đang chạy. Đây là đường migration, không phải đường
+     * tính năng — vì vậy chỉ log, không lưu, và không làm Point bị loại. */
+    bool legacy_expose = false;
+    if (jget_bool(obj, "expose_bacnet", &legacy_expose) && legacy_expose) {
+        std::fprintf(stderr,
+                     "WARN profile.expose_bacnet_deprecated name=%s — trường này bị BỎ QUA ở "
+                     "Rev A (OD-MBRTU-014); đưa Point Modbus RTU ra BACnet là phạm vi Rev B\n",
+                     pt->name.c_str());
     }
 
     /* validate block size limits (plan 25 §4) */
