@@ -26,7 +26,8 @@ REQUIRED_FORBID = {
     "automatic-downgrade", "destructive-delete", "commission", "blind-replay"
 }
 REQUIRED_CONTRACT_NAMES = {
-    "openapi", "ipc", "profile", "artifact", "errors", "store", "source-bundle"
+    "openapi", "ipc", "profile", "artifact", "errors", "store", "source-bundle",
+    "library-registry",
 }
 BASELINE_STATE = {
     "schema": 0,
@@ -310,6 +311,50 @@ def validate(join: dict[str, Any]) -> list[str]:
         errors.append(f"store: {error}")
 
     try:
+        registry_item = contract_by_name(join, "library-registry")
+        registry = json.loads(safe_path(registry_item["path"]).read_text())
+        profile_item = contract_by_name(join, "profile")
+        profile = json.loads(safe_path(profile_item["path"]).read_text())
+        require(
+            digest(safe_path(registry_item["schemaPath"])) == registry_item["schemaSha256"],
+            "library registry schema SHA-256 drift",
+        )
+        require(
+            registry["schemaVersion"] == registry_item["schemaVersion"],
+            "library registry schemaVersion drift",
+        )
+        # Registry là nguồn duy nhất của Control Library SYSTEM; profile chỉ giữ
+        # version. Hai bên lệch nghĩa là bản sao danh sách hàm đã quay lại.
+        require(
+            registry["libraryVersion"] == registry_item["libraryVersion"]
+            == profile["coreLibrary"]["version"],
+            "libraryVersion lệch giữa registry/pin/profile",
+        )
+        require(
+            "functions" not in profile["coreLibrary"],
+            "profile không được giữ bản sao danh sách hàm; registry là nguồn duy nhất",
+        )
+        entries = registry["entries"]
+        require(len(entries) == registry_item["entryCount"], "số entry registry lệch pin")
+        for dispatch, key in (("OPERATOR", "operatorCount"),
+                              ("FUNC_TABLE", "funcTableCount"),
+                              ("FB_TYPE", "fbTypeCount")):
+            actual = sum(1 for item in entries if item["dispatch"] == dispatch)
+            require(actual == registry_item[key], f"số entry {dispatch} lệch pin")
+        review = sorted(
+            item["id"] for item in entries if item["featureState"] == "REVIEW_REQUIRED"
+        )
+        require(review == registry_item["reviewRequired"], "danh sách REVIEW_REQUIRED lệch pin")
+        require("PID" in review, "PID phải giữ REVIEW_REQUIRED tới khi có evidence Controls/Safety")
+        ghosts = sorted(
+            item["id"] for item in entries
+            if item["id"] in {"SCALE", "DEADBAND", "CTU", "PI"}
+        )
+        require(not ghosts, f"entry ma quay lại registry: {ghosts}")
+    except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
+        errors.append(f"library-registry: {error}")
+
+    try:
         bundle_item = contract_by_name(join, "source-bundle")
         bundle_schema = json.loads(safe_path(bundle_item["path"]).read_text())
         require(digest(safe_path(bundle_item["path"])) == bundle_item["sha256"], "source bundle schema SHA-256 drift")
@@ -450,6 +495,27 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
     add("profile-integrity-mode-drift", "integrity mode lệch", break_integrity_mode)
     add("required-contract-missing", "thiếu contract bắt buộc", drop_required_contract)
     add("duplicate-contract-name", "tên contract bị trùng", duplicate_contract_name)
+
+    def break_registry_entry_count(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "library-registry")["entryCount"] += 1
+
+    def break_registry_fb_count(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "library-registry")["fbTypeCount"] -= 1
+
+    def break_registry_library_version(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "library-registry")["libraryVersion"] = "khong-khop"
+
+    def clear_review_required(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "library-registry")["reviewRequired"] = []
+
+    def break_registry_schema_hash(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "library-registry")["schemaSha256"] = "0" * 64
+
+    add("registry-entry-count-drift", "số entry registry lệch pin", break_registry_entry_count)
+    add("registry-fb-count-drift", "số entry FB_TYPE lệch pin", break_registry_fb_count)
+    add("registry-library-version-drift", "libraryVersion lệch", break_registry_library_version)
+    add("registry-review-required-cleared", "REVIEW_REQUIRED lệch pin", clear_review_required)
+    add("registry-schema-hash-drift", "library registry schema SHA-256 drift", break_registry_schema_hash)
     return mutations
 
 

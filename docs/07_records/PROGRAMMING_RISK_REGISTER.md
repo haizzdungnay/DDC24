@@ -337,6 +337,19 @@ contract và validator **không** chứng minh runtime chạy được 32 Progra
 thuộc `T59-402`/`T59-702`. Do đó 16/16 risk giữ `Open`, 11 Critical, S×L và
 residual không đổi.
 
+### 5.18 Cập nhật treatment source `T59-003` (Plan59 W0)
+
+| Risk | Control đã có trên nhánh `feat/t59-003-pou-library-registry` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-006` | Allowlist FBD của Core, palette FE và danh sách Control Library cùng sinh từ một registry machine-readable; 4 entry ma `SCALE/DEADBAND/CTU/PI` bị gỡ, `SQRT` + 4 conversion Core từng từ chối được mở; 7 test khoá **hai chiều** registry↔compiler kể cả vector một-trên-trần | Lowering/equivalence cho user POU (`T59-101..105`), fuzz registry-driven (`T59-601`) và Test Result `VS-PROG-006` độc lập | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | G1 ghim contract thứ 8 `library-registry` gồm số đếm theo `dispatch`, `libraryVersion` và danh sách `REVIEW_REQUIRED`; entry ma quay lại bị verifier chặn; profile không còn giữ bản sao danh sách hàm | `VS-PROG-019/024` Test Result được review độc lập | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-004` | `PID` giữ `featureState = REVIEW_REQUIRED` trong chính contract, không phải nhãn UI; G1 từ chối nếu trạng thái đó bị xoá | Policy token chặn Commission (`T59-205`) và evidence Controls/Safety target (`T59-706`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local (`ctest` 1063/1063, Go 18/18 package, FE 1071 test, layout
+exit 0), **không** phải GitHub CI, target hay HIL. Gỡ entry ma **không** chứng
+minh runtime an toàn; nó chỉ đóng khoảng cách "hợp lệ ở FE, chết ở Core". 16/16
+risk giữ `Open`, 11 Critical, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -378,6 +391,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 1.9 | 2026-08-13 | Ghi `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6` cho treatment source RSK-001/003/007/009: durable idempotent operation, verified staging, UDS peer check, exclusive safe-boundary owner, first-output rollback và checkpoint recovery. Giữ 16/16 Open, 11 Critical và mọi residual vì target/HIL/power-cut/Test Result chưa chạy/chưa được chấp nhận. |
 | 2.0 | 2026-08-20 | Ghi `T59-001` (Plan59 W0) cho treatment partial RSK-008/014: re-pin join G1, bỏ hardcode schema/count trong validator, khoá chuỗi migration store và siết self-test theo đúng lý do reject. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime/target/HIL/Test Result chưa chạy. |
 | 2.1 | 2026-08-20 | Ghi `T59-002` (Plan59 W0) cho treatment partial RSK-002/014: profile v2 sinh C++/Go/TS từ một nguồn, capacity 32/16 thay 1/1/1, constraint text suy từ profile và one-over vector ba ngôn ngữ. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime multi-Program, target/HIL và Test Result chưa chạy. |
+| 2.2 | 2026-08-20 | Ghi `T59-003` (Plan59 W0) cho treatment partial RSK-004/006/014: registry POU/library làm nguồn duy nhất, gỡ 4 entry ma, mở SQRT + 4 conversion, khoá hai chiều registry↔compiler và ghim `REVIEW_REQUIRED` của PID vào contract. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering user POU, target/HIL và Test Result chưa chạy. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
 | 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |

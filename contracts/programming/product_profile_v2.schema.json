@@ -20,27 +20,56 @@
     "integrityMode"
   ],
   "properties": {
-    "$schema": { "type": "string" },
-    "profileId": { "const": "revA-1t-1-5-30" },
-    "profileCode": { "const": 1 },
-    "targetAbi": { "const": 3841 },
-    "version": { "$ref": "#/$defs/version" },
+    "$schema": {
+      "type": "string"
+    },
+    "profileId": {
+      "const": "revA-1t-1-5-30"
+    },
+    "profileCode": {
+      "const": 1
+    },
+    "targetAbi": {
+      "const": 3841
+    },
+    "version": {
+      "$ref": "#/$defs/version"
+    },
     "capacity": {
       "description": "Trần cấp package/Revision theo DDD §0 và §4.1. Khác với `resources` vốn là trần cấp một Program/artifact.",
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "maxObjects", "maxProgramsTotal", "maxProgramsEnabled", "maxUserPou",
-        "maxFunctionBlockInstances", "maxSignals", "maxBindings"
+        "maxObjects",
+        "maxProgramsTotal",
+        "maxProgramsEnabled",
+        "maxUserPou",
+        "maxFunctionBlockInstances",
+        "maxSignals",
+        "maxBindings"
       ],
       "properties": {
-        "maxObjects": { "const": 1312 },
-        "maxProgramsTotal": { "const": 32 },
-        "maxProgramsEnabled": { "const": 16 },
-        "maxUserPou": { "const": 256 },
-        "maxFunctionBlockInstances": { "const": 1024 },
-        "maxSignals": { "const": 512 },
-        "maxBindings": { "const": 512 }
+        "maxObjects": {
+          "const": 1312
+        },
+        "maxProgramsTotal": {
+          "const": 32
+        },
+        "maxProgramsEnabled": {
+          "const": 16
+        },
+        "maxUserPou": {
+          "const": 256
+        },
+        "maxFunctionBlockInstances": {
+          "const": 1024
+        },
+        "maxSignals": {
+          "const": 512
+        },
+        "maxBindings": {
+          "const": 512
+        }
       }
     },
     "scheduler": {
@@ -48,21 +77,42 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "maxTasks", "maxProgramsPerTask", "maxProgramsTotal",
-        "allowedPeriodMs", "maxTaskBudgetPercent"
+        "maxTasks",
+        "maxProgramsPerTask",
+        "maxProgramsTotal",
+        "allowedPeriodMs",
+        "maxTaskBudgetPercent"
       ],
       "properties": {
-        "maxTasks": { "const": 3 },
-        "maxProgramsPerTask": { "const": 32 },
-        "maxProgramsTotal": { "const": 32 },
+        "maxTasks": {
+          "const": 3
+        },
+        "maxProgramsPerTask": {
+          "const": 32
+        },
+        "maxProgramsTotal": {
+          "const": 32
+        },
         "allowedPeriodMs": {
           "type": "array",
-          "prefixItems": [{ "const": 1000 }, { "const": 5000 }, { "const": 30000 }],
+          "prefixItems": [
+            {
+              "const": 1000
+            },
+            {
+              "const": 5000
+            },
+            {
+              "const": 30000
+            }
+          ],
           "items": false,
           "minItems": 3,
           "maxItems": 3
         },
-        "maxTaskBudgetPercent": { "const": 20 }
+        "maxTaskBudgetPercent": {
+          "const": 20
+        }
       }
     },
     "resources": {
@@ -70,32 +120,80 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "maxSourceBytes", "maxVariables", "maxStatements", "maxFbdBlocks",
-        "maxFbdConnections", "maxArtifactBytes", "maxInstructions", "maxSlots",
-        "maxWritableSlots", "maxConstants", "maxFunctionBlocks", "maxBindings",
-        "maxRetainVariables", "maxRetainBytes", "maxSections"
+        "maxSourceBytes",
+        "maxVariables",
+        "maxStatements",
+        "maxFbdBlocks",
+        "maxFbdConnections",
+        "maxArtifactBytes",
+        "maxInstructions",
+        "maxSlots",
+        "maxWritableSlots",
+        "maxConstants",
+        "maxFunctionBlocks",
+        "maxBindings",
+        "maxRetainVariables",
+        "maxRetainBytes",
+        "maxSections"
       ],
       "properties": {
-        "maxSourceBytes": { "const": 65536 },
-        "maxVariables": { "const": 512 },
-        "maxStatements": { "const": 4096 },
-        "maxFbdBlocks": { "const": 256 },
-        "maxFbdConnections": { "const": 512 },
-        "maxArtifactBytes": { "const": 1048576 },
-        "maxInstructions": { "const": 4096 },
-        "maxSlots": { "const": 1024 },
-        "maxWritableSlots": { "const": 512 },
-        "maxConstants": { "const": 512 },
-        "maxFunctionBlocks": { "const": 64 },
-        "maxBindings": { "const": 256 },
-        "maxRetainVariables": { "const": 128 },
-        "maxRetainBytes": { "const": 4096 },
-        "maxSections": { "const": 16 }
+        "maxSourceBytes": {
+          "const": 65536
+        },
+        "maxVariables": {
+          "const": 512
+        },
+        "maxStatements": {
+          "const": 4096
+        },
+        "maxFbdBlocks": {
+          "const": 256
+        },
+        "maxFbdConnections": {
+          "const": 512
+        },
+        "maxArtifactBytes": {
+          "const": 1048576
+        },
+        "maxInstructions": {
+          "const": 4096
+        },
+        "maxSlots": {
+          "const": 1024
+        },
+        "maxWritableSlots": {
+          "const": 512
+        },
+        "maxConstants": {
+          "const": 512
+        },
+        "maxFunctionBlocks": {
+          "const": 64
+        },
+        "maxBindings": {
+          "const": 256
+        },
+        "maxRetainVariables": {
+          "const": 128
+        },
+        "maxRetainBytes": {
+          "const": 4096
+        },
+        "maxSections": {
+          "const": 16
+        }
       }
     },
     "languages": {
       "type": "array",
-      "prefixItems": [{ "const": "ST" }, { "const": "FBD" }],
+      "prefixItems": [
+        {
+          "const": "ST"
+        },
+        {
+          "const": "FBD"
+        }
+      ],
       "items": false,
       "minItems": 2,
       "maxItems": 2
@@ -104,11 +202,23 @@
       "type": "array",
       "minItems": 6,
       "maxItems": 6,
-      "items": { "$ref": "#/$defs/typeDescriptor" }
+      "items": {
+        "$ref": "#/$defs/typeDescriptor"
+      }
     },
     "pointKinds": {
       "type": "array",
-      "prefixItems": [{ "const": "LOCAL" }, { "const": "VP" }, { "const": "MB_RTU" }],
+      "prefixItems": [
+        {
+          "const": "LOCAL"
+        },
+        {
+          "const": "VP"
+        },
+        {
+          "const": "MB_RTU"
+        }
+      ],
       "items": false,
       "minItems": 3,
       "maxItems": 3
@@ -116,38 +226,73 @@
     "coreLibrary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["version", "functions"],
+      "required": [
+        "version"
+      ],
       "properties": {
-        "version": { "const": "rev-a.1" },
-        "functions": {
-          "type": "array",
-          "minItems": 20,
-          "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1 }
+        "version": {
+          "const": "rev-a.1"
         }
-      }
+      },
+      "description": "Chỉ giữ version. Danh sách entry Control Library SYSTEM nằm ở `pou_library_registry_v1.json` — giữ bản sao ở đây từng khiến profile khai SCALE/DEADBAND/CTU/PI vốn không tồn tại trong compiler."
     },
-    "integrityMode": { "const": "HASH_ONLY" }
+    "integrityMode": {
+      "const": "HASH_ONLY"
+    }
   },
   "$defs": {
     "version": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["major", "minor"],
+      "required": [
+        "major",
+        "minor"
+      ],
       "properties": {
-        "major": { "const": 2 },
-        "minor": { "const": 0 }
+        "major": {
+          "const": 2
+        },
+        "minor": {
+          "const": 0
+        }
       }
     },
     "typeDescriptor": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "widthBits", "wireCode", "conversion"],
+      "required": [
+        "name",
+        "widthBits",
+        "wireCode",
+        "conversion"
+      ],
       "properties": {
-        "name": { "enum": ["BOOL", "INT", "DINT", "UINT", "REAL", "TIME"] },
-        "widthBits": { "enum": [1, 16, 32, 64] },
-        "wireCode": { "type": "integer", "minimum": 1, "maximum": 255 },
-        "conversion": { "const": "EXPLICIT_FAIL_CLOSED" }
+        "name": {
+          "enum": [
+            "BOOL",
+            "INT",
+            "DINT",
+            "UINT",
+            "REAL",
+            "TIME"
+          ]
+        },
+        "widthBits": {
+          "enum": [
+            1,
+            16,
+            32,
+            64
+          ]
+        },
+        "wireCode": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        },
+        "conversion": {
+          "const": "EXPLICIT_FAIL_CLOSED"
+        }
       }
     }
   }

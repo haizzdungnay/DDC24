@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mekong-hcm.local/contracts/programming/pou_library_registry_v1.schema.json",
+  "title": "Registry POU/Control Library SYSTEM v1",
+  "description": "Nguồn duy nhất cho palette FBD, allowlist FBD của Core và danh sách Control Library SYSTEM. `dispatch` nói compiler nhận diện entry ở đâu: OPERATOR = binop/unop trong st_fbd_compile.cpp; FUNC_TABLE = kFuncs[] trong st_program.cpp; FB_TYPE = st_fb_type_from_name. Entry không có đường dispatch thật là entry ma và bị verifier từ chối.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "registryId", "schemaVersion", "libraryVersion", "scope", "categoryOrder", "entries"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "registryId": { "const": "PROGRAMMING-POU-LIBRARY-REGISTRY-V1" },
+    "schemaVersion": { "const": 1 },
+    "libraryVersion": { "type": "string", "pattern": "^[a-z0-9.-]+$" },
+    "scope": { "const": "SYSTEM" },
+    "categoryOrder": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "labelVi", "labelEn"],
+        "properties": {
+          "id": { "$ref": "#/$defs/category" },
+          "labelVi": { "type": "string", "minLength": 1 },
+          "labelEn": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "dataType": { "enum": ["BOOL", "INT", "DINT", "UINT", "REAL", "TIME"] },
+    "category": {
+      "enum": [
+        "interface", "constants", "logic", "compare", "math",
+        "conversion", "timer", "trigger", "control"
+      ]
+    },
+    "port": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "direction", "dataType"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,15}$" },
+        "direction": { "enum": ["INPUT", "OUTPUT"] },
+        "dataType": { "$ref": "#/$defs/dataType" }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "kind", "dispatch", "category", "labelVi", "labelEn",
+        "polymorphic", "allowedTypes", "defaultType", "typedPortNames",
+        "ports", "featureState"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,31}$" },
+        "kind": { "enum": ["FUNCTION", "FUNCTION_BLOCK", "CONVERSION"] },
+        "dispatch": { "enum": ["OPERATOR", "FUNC_TABLE", "FB_TYPE"] },
+        "category": { "$ref": "#/$defs/category" },
+        "labelVi": { "type": "string", "minLength": 1 },
+        "labelEn": { "type": "string", "minLength": 1 },
+        "polymorphic": { "type": "boolean" },
+        "allowedTypes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/dataType" }
+        },
+        "defaultType": { "$ref": "#/$defs/dataType" },
+        "typedPortNames": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,15}$" }
+        },
+        "ports": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/port" }
+        },
+        "featureState": { "enum": ["AVAILABLE", "REVIEW_REQUIRED"] },
+        "warningVi": { "type": "string", "minLength": 1 },
+        "warningEn": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "featureState": { "const": "REVIEW_REQUIRED" } } },
+          "then": { "required": ["warningVi", "warningEn"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "FUNCTION_BLOCK" } } },
+          "then": { "properties": { "dispatch": { "const": "FB_TYPE" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "CONVERSION" } } },
+          "then": { "properties": { "dispatch": { "const": "FUNC_TABLE" }, "polymorphic": { "const": false } } }
+        }
+      ]
+    }
+  }
+}

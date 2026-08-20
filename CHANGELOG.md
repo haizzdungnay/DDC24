@@ -8,6 +8,55 @@
 
 ## [Unreleased]
 
+### Fixed — `T59-003` registry POU/Control Library single-source, gỡ entry ma (2026-08-20)
+
+Danh sách entry Control Library tồn tại **ba** bản chép tay: allowlist FBD của
+Core (`st_fbd_model.cpp`), palette FE (`palette.ts`) và `coreLibrary.functions`
+trong profile. Không có phép kiểm nào ràng buộc ba bản lại với nhau, nên chúng đã
+trôi khỏi compiler theo **cả hai chiều**:
+
+1. Core cho phép `SCALE`, `DEADBAND`, `CTU`, `PI` — compiler **không có** cả bốn.
+   `CTU` lọt qua lớp model rồi mới chết ở lớp semantic; ba entry còn lại chưa có
+   test nào chạm tới.
+2. Core **từ chối** `SQRT` và bốn conversion `INT_TO_REAL`, `REAL_TO_INT`,
+   `TIME_TO_REAL`, `REAL_TO_TIME` trong khi palette FE vẫn chào người dùng — đúng
+   class lỗi "hợp lệ ở FE, chết ở Core".
+
+- Thêm `contracts/programming/pou_library_registry_v1.json` + schema làm **nguồn
+  duy nhất**: 40 entry (15 `OPERATOR`, 20 `FUNC_TABLE`, 5 `FB_TYPE`) với
+  port/kiểu/nhãn/`featureState`. Trường `dispatch` khai compiler nhận diện entry
+  ở đâu, nên entry không có đường dispatch thật bị chặn ngay ở schema/verifier.
+- `scripts/generate_programming_library_registry.py` sinh allowlist C++ và palette
+  TS; `--check` exact, thêm vào gate `layout`.
+- `st_fbd_model.cpp` dùng allowlist sinh và so `profileId` bằng hằng sinh thay vì
+  literal; `palette.ts` dựng `FBD_PALETTE` từ registry; profile **bỏ hẳn**
+  `coreLibrary.functions`, chỉ còn `version`.
+- G1 ghim contract thứ 8 `library-registry` (số đếm theo `dispatch`,
+  `libraryVersion`, danh sách `REVIEW_REQUIRED`, chặn entry ma quay lại) và thêm
+  5 mutation self-test.
+- `test_st_library_registry.cpp` (7 test) chống tái phát **hai chiều**: mọi entry
+  registry giải được ở compiler, và mọi symbol compiler có trong registry, kể cả
+  vector một-trên-trần. PID giữ `REVIEW_REQUIRED`.
+
+**Sửa kèm — lỗi do `T59-002` để lại trên `main`:** `npm run build` của FE chạy
+`tsc --noEmit`, và bản merge `T59-002` làm bước đó **đỏ** vì
+`api/generated/profile.test.ts` import `node:crypto`/`node:fs` trong khi tsconfig
+FE chỉ khai lib DOM và repo cố ý không cài `@types/node`. Số đo "FE build PASS"
+ghi trong mục `T59-002` ở trên là **sai** — lỗi đọc exit code khi chạy nền. Đã sửa
+bằng cách đọc contract qua import JSON (`resolveJsonModule`); phép bằng nhau chính
+xác của SHA-256 vẫn được ép ở `generate_programming_profile.py --check` (gate
+`layout`) và ở `TestProfileGeneratedMatchesContract` phía Go, nên không mất coverage.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `generate_programming_library_registry.py --check` 40 entry / 2 tệp
+sinh. C++ Release MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1063/1063 PASS**.
+`go vet ./...` sạch, `go test ./... -count=1` **18/18 package ok**. FE `vitest`
+**112 file / 1071 test PASS**, `npm run lint` **exit 0**, `npm run build`
+**exit 0** (đã đọc đúng exit code, có dòng `✓ built`). `verify-project.sh
+--component layout` **exit 0**; G1 `--self-test` **25/25** mutation + 6/6 manifest
+chain + 5/5 deploy order. Golden ST/FBD sinh lại bằng compiler thật, byte `.mkir`
+**không đổi**.
+
 ### Changed — `T59-002` Product profile v2: capacity 32/16 và generator C++/Go/TS (2026-08-20)
 
 Capacity sản phẩm bị khoá ở **một** Program tại mọi lớp: C++ `kMaxProgramsTotal=1`,
@@ -57,7 +106,9 @@ target/HIL):** `generate_programming_profile.py --check` exact **3/3** tệp sin
 C++ Release MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1055/1055 PASS** (thêm
 3 test one-over/capacity). `go vet ./...` sạch, `go test ./... -count=1` **18/18
 package ok** (thêm 9 test capacity/one-over). FE `vitest` **112 file / 1066 test
-PASS** (thêm 5 test contract profile), `lint` PASS, `build` PASS.
+PASS** (thêm 5 test contract profile) và `lint` PASS. **`build` KHÔNG PASS** —
+xem mục `T59-003` phía trên: `tsc --noEmit` trong `npm run build` đỏ vì test mới
+import Node API; đã sửa và đo lại ở `T59-003`.
 `verify-project.sh --component layout` **exit 0**; G1 `--self-test` **20/20**
 mutation + **6/6** manifest chain + **5/5** deploy order, tất cả reject đúng lý do;
 artifact manifest self-test **7/7**; FBD contract PASS. `git diff --check` sạch.

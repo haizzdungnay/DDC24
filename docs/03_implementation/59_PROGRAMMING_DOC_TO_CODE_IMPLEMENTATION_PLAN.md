@@ -98,8 +98,8 @@ W1/W2/W3 có thể chạy song song theo contract boundary. Critical path releas
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
 | `T59-001` | P0 | Re-pin `g1_contract_join_v1.json`, bỏ hardcode store schema version | — | **DONE** | `verify_programming_g1_contracts.py` exit 0; `--self-test` 12/12 mutation + 6/6 manifest chain + 5/5 deploy order; `verify-project.sh --component layout` exit 0; `go vet` sạch + `go test ./... -count=1` 18/18 package ok. Chi tiết §3.1. |
-| `T59-002` | P0 | Tạo Product profile v2 `32/16/256/1024/512/512`, generator C++/Go/TS | — | **DONE** | `generate_programming_profile.py --check` exact 3/3 tệp sinh; one-over vector C++ 3 trục + Go 6 case + FE 5 case; `ctest` 1055/1055; `go test ./... -count=1` 18/18; FE 112 file / 1066 test; G1 self-test 20/20 mutation; layout exit 0. Chi tiết §3.1. |
-| `T59-003` | P0 | FBD/POU/library registry JSON single-source + generator | — | READY | TS/C++/schema/verifier exact equality; bỏ SCALE/DEADBAND/CTU/PI ma, đủ conversion/SQRT. |
+| `T59-002` | P0 | Tạo Product profile v2 `32/16/256/1024/512/512`, generator C++/Go/TS | — | **DONE** | `generate_programming_profile.py --check` exact 3/3 tệp sinh; one-over vector C++ 3 trục + Go 6 case + FE 5 case; `ctest` 1055/1055; `go test ./... -count=1` 18/18; FE 112 file / 1066 test; G1 self-test 20/20 mutation; layout exit 0. **Đính chính:** `npm run build` khi merge thực tế FAIL (`tsc --noEmit`), đã sửa trong `T59-003`. Chi tiết §3.1. |
+| `T59-003` | P0 | FBD/POU/library registry JSON single-source + generator | — | **DONE** | `generate_programming_library_registry.py --check` 40 entry / 2 tệp sinh; 7 test C++ hai chiều chống entry ma; 5 test FE palette↔registry; G1 self-test 25/25; `ctest` 1063/1063; Go 18/18; FE 112 file / 1071 test; layout exit 0. Chi tiết §3.1. |
 | `T59-004` | P0 | Error catalog mới cho POU/library/signal/enable/output owner/PID review | T59-002/003 | ORDERED | C++/Go/TS generated; public/detail count/hash exact; mapping missing build fail. |
 | `T59-005` | P0 | Store schema v2 + backup/migration v1→v2 | T59-002 | ORDERED | SQLite migration atomic/idempotent/restart; không tự Commission; rollback giữ DB. |
 | `T59-006` | P0 | OpenAPI + IPC v2 + artifact/package schema v2, dual-reader policy | T59-002/004 | ORDERED | Schema/golden/codec/client/route contract PASS; action khai phải có handler test. |
@@ -202,6 +202,53 @@ cho người đọc lỗi. Nay `limit` chỉ xuất hiện khi thật sự có t
 
 **Rollback.** Không đổi schema DB, không thêm migration, không chạm Active/LKG.
 Artifact `.mkir` bất biến nên LKG cũ vẫn nạp được. Revert commit là đủ.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-003` — Registry POU/Control Library làm nguồn duy nhất
+
+**Triệu chứng.** Danh sách entry Control Library tồn tại **ba** bản chép tay:
+allowlist FBD của Core (`st_fbd_model.cpp`), palette FE (`palette.ts`) và
+`coreLibrary.functions` trong profile.
+
+**Nguyên nhân gốc và hai lỗi thật đã tồn tại.** Không có phép kiểm nào ràng buộc
+ba bản đó lại với nhau, nên chúng đã trôi khỏi compiler theo **cả hai chiều**:
+
+1. Core cho phép `SCALE`, `DEADBAND`, `CTU`, `PI` — compiler **không có** cả bốn.
+   `CTU` lọt qua lớp model rồi mới chết ở lớp semantic; ba cái còn lại chưa có
+   test nào chạm tới.
+2. Core **từ chối** `SQRT` và bốn conversion `INT_TO_REAL`, `REAL_TO_INT`,
+   `TIME_TO_REAL`, `REAL_TO_TIME` — trong khi palette FE vẫn chào người dùng.
+   Đây là class lỗi "hợp lệ ở FE, chết ở Core".
+
+**Cách sửa.**
+
+- `contracts/programming/pou_library_registry_v1.json` + schema: 40 entry
+  (15 `OPERATOR`, 20 `FUNC_TABLE`, 5 `FB_TYPE`) với port/kiểu/nhãn/`featureState`.
+  Trường `dispatch` khai **compiler nhận diện entry ở đâu**, nên entry không có
+  đường dispatch thật là entry ma và bị chặn ngay ở schema/verifier.
+- `scripts/generate_programming_library_registry.py` sinh allowlist C++ và
+  palette TS; `--check` exact và được thêm vào gate `layout`.
+- `st_fbd_model.cpp` dùng allowlist sinh; `palette.ts` dựng `FBD_PALETTE` từ
+  registry; profile **bỏ hẳn** `coreLibrary.functions` (chỉ còn `version`).
+- G1 ghim contract thứ 8 `library-registry` kèm số đếm theo `dispatch`,
+  `libraryVersion` và danh sách `REVIEW_REQUIRED`; thêm 5 mutation self-test.
+
+**Chống tái phát theo hai chiều.** `test_st_library_registry.cpp` (7 test) kiểm:
+mọi entry registry giải được ở compiler; **và** mọi symbol compiler có mặt trong
+registry, kể cả vector một-trên-trần (`kFuncs[]`/FB type không được nhiều hơn
+registry). PID giữ `REVIEW_REQUIRED` và G1 từ chối nếu ai đó xoá trạng thái đó.
+
+**Finding sửa kèm trong task.** `npm run build` của FE chạy `tsc --noEmit`, và
+bản merge `T59-002` làm nó **đỏ** vì `profile.test.ts` import `node:crypto`/
+`node:fs` trong khi tsconfig FE chỉ khai lib DOM và repo cố ý không cài
+`@types/node`. Đã sửa: test đọc contract bằng import JSON
+(`resolveJsonModule`); phép bằng nhau chính xác của SHA-256 vẫn được ép ở
+`generate_programming_profile.py --check` và ở test Go, nên không mất coverage.
+
+**Rollback.** Không đổi schema DB, không thêm migration, không chạm Active/LKG.
+Byte `.mkir` của cả hai golden **không đổi** sau khi sinh lại, nên LKG cũ vẫn nạp
+được. Revert commit là đủ.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

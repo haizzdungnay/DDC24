@@ -25,12 +25,12 @@
     {
       "name": "profile",
       "path": "contracts/programming/product_profile_v2.json",
-      "sha256": "46bed28b1be3f82689f2094ea8f37e6b3b75e8832a29e65de00460e1839c70e5",
+      "sha256": "9b33db01a150816fc8b67f84e0aafa8750a29d20e9481a9ed8f1d67bbc9e6484",
       "major": 1,
       "minor": 0,
       "profileCode": 1,
       "schemaPath": "contracts/programming/product_profile_v2.schema.json",
-      "schemaSha256": "aac7a83806d621180aabd517418e606593d864680306ca30a0e3d4f97e9f7a6a",
+      "schemaSha256": "f27616855fa809d59181e6f287f14cb08680f537dccbe3cd640c249400e50104",
       "targetAbi": 3841,
       "integrityMode": "HASH_ONLY",
       "documentMajor": 2,
@@ -75,6 +75,23 @@
       "major": 1,
       "schemaVersion": "1.0",
       "maximumArchiveBytes": 4194304
+    },
+    {
+      "name": "library-registry",
+      "path": "contracts/programming/pou_library_registry_v1.json",
+      "sha256": "55c152d6a1456faf130a05a68788c9e15be918be359d9e642c8c215068540885",
+      "schemaPath": "contracts/programming/pou_library_registry_v1.schema.json",
+      "schemaSha256": "17bdaf6bec8fc4f11162de6bbda4dade509fa01b528fd493cdbae2a06129bf0c",
+      "major": 1,
+      "schemaVersion": 1,
+      "libraryVersion": "rev-a.1",
+      "entryCount": 40,
+      "operatorCount": 15,
+      "funcTableCount": 20,
+      "fbTypeCount": 5,
+      "reviewRequired": [
+        "PID"
+      ]
     }
   ],
   "compatibility": {
@@ -119,5 +136,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002 (Plan 59 W0)"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0)"
 }

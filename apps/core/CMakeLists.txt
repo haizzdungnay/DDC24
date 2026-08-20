@@ -189,6 +189,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_lang.cpp application/st/tests/test_st_ir.cpp
       application/st/tests/test_st_artifact_manifest.cpp
       application/st/tests/test_st_fbd_model.cpp
+      application/st/tests/test_st_library_registry.cpp
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp

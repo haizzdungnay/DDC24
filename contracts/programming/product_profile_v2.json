@@ -3,7 +3,10 @@
   "profileId": "revA-1t-1-5-30",
   "profileCode": 1,
   "targetAbi": 3841,
-  "version": { "major": 2, "minor": 0 },
+  "version": {
+    "major": 2,
+    "minor": 0
+  },
   "capacity": {
     "maxObjects": 1312,
     "maxProgramsTotal": 32,
@@ -17,7 +20,11 @@
     "maxTasks": 3,
     "maxProgramsPerTask": 32,
     "maxProgramsTotal": 32,
-    "allowedPeriodMs": [1000, 5000, 30000],
+    "allowedPeriodMs": [
+      1000,
+      5000,
+      30000
+    ],
     "maxTaskBudgetPercent": 20
   },
   "resources": {
@@ -37,24 +44,55 @@
     "maxRetainBytes": 4096,
     "maxSections": 16
   },
-  "languages": ["ST", "FBD"],
-  "types": [
-    { "name": "BOOL", "widthBits": 1, "wireCode": 1, "conversion": "EXPLICIT_FAIL_CLOSED" },
-    { "name": "INT", "widthBits": 16, "wireCode": 5, "conversion": "EXPLICIT_FAIL_CLOSED" },
-    { "name": "DINT", "widthBits": 32, "wireCode": 2, "conversion": "EXPLICIT_FAIL_CLOSED" },
-    { "name": "UINT", "widthBits": 16, "wireCode": 6, "conversion": "EXPLICIT_FAIL_CLOSED" },
-    { "name": "REAL", "widthBits": 32, "wireCode": 3, "conversion": "EXPLICIT_FAIL_CLOSED" },
-    { "name": "TIME", "widthBits": 64, "wireCode": 4, "conversion": "EXPLICIT_FAIL_CLOSED" }
+  "languages": [
+    "ST",
+    "FBD"
   ],
-  "pointKinds": ["LOCAL", "VP", "MB_RTU"],
+  "types": [
+    {
+      "name": "BOOL",
+      "widthBits": 1,
+      "wireCode": 1,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    },
+    {
+      "name": "INT",
+      "widthBits": 16,
+      "wireCode": 5,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    },
+    {
+      "name": "DINT",
+      "widthBits": 32,
+      "wireCode": 2,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    },
+    {
+      "name": "UINT",
+      "widthBits": 16,
+      "wireCode": 6,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    },
+    {
+      "name": "REAL",
+      "widthBits": 32,
+      "wireCode": 3,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    },
+    {
+      "name": "TIME",
+      "widthBits": 64,
+      "wireCode": 4,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    }
+  ],
+  "pointKinds": [
+    "LOCAL",
+    "VP",
+    "MB_RTU"
+  ],
   "coreLibrary": {
-    "version": "rev-a.1",
-    "functions": [
-      "AND", "OR", "XOR", "NOT", "EQ", "NE", "LT", "LE", "GT", "GE",
-      "ADD", "SUB", "MUL", "DIV", "MOD", "ABS", "MIN", "MAX", "LIMIT",
-      "SEL", "TON", "TOF", "R_TRIG", "F_TRIG", "CTU", "SCALE", "DEADBAND",
-      "PI", "PID"
-    ]
+    "version": "rev-a.1"
   },
   "integrityMode": "HASH_ONLY"
 }

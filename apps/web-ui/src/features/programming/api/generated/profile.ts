@@ -4,7 +4,7 @@ export const PROGRAMMING_PROFILE_CODE = 1 as const;
 export const PROGRAMMING_TARGET_ABI = 3841 as const;
 export const PROGRAMMING_PROFILE_MAJOR = 2 as const;
 export const PROGRAMMING_PROFILE_MINOR = 0 as const;
-export const PROGRAMMING_PROFILE_SHA256 = "46bed28b1be3f82689f2094ea8f37e6b3b75e8832a29e65de00460e1839c70e5" as const;
+export const PROGRAMMING_PROFILE_SHA256 = "9b33db01a150816fc8b67f84e0aafa8750a29d20e9481a9ed8f1d67bbc9e6484" as const;
 export const PROGRAMMING_LIBRARY_VERSION = "rev-a.1" as const;
 
 /** Trần cấp package/Revision. */

@@ -369,13 +369,35 @@ TEST(StFbdCompile, PreservesUnitAnchorsWithoutChangingExecutableIr)
 
 TEST(StFbdCompile, RejectsLibraryNodeWithoutCommonRuntimeSemantic)
 {
+    /* Trước T59-003, `CTU` nằm trong allowlist model nhưng KHÔNG có lowering,
+     * nên nó lọt qua lớp model rồi mới bị chặn ở lớp semantic. Nay registry chỉ
+     * chứa entry compiler thật giải được, nên entry ma bị chặn SỚM HƠN ở lớp
+     * model — vẫn fail-closed, và không còn class lỗi "hợp lệ ở FE, chết ở Core".
+     * Test giữ nguyên ý định (typeRef không có runtime semantic bị từ chối) và
+     * khoá luôn việc rejection xảy ra mà KHÔNG sinh code. */
+    const json pair = read_json("/fbd/equivalence_v1.json")["pairs"][0];
+    for (const char* ghost : {"CTU", "PI", "SCALE", "DEADBAND", "KHONG_TON_TAI"}) {
+        json graph = make_pair_graph(pair);
+        graph["networks"][0]["nodes"][2]["kind"] = "FUNCTION_BLOCK";
+        graph["networks"][0]["nodes"][2]["typeRef"] = ghost;
+        const auto result = compile_fbd_source(graph.dump());
+        EXPECT_FALSE(result.ok) << ghost;
+        EXPECT_TRUE(result.module.code.empty()) << ghost;
+        EXPECT_FALSE(result.issues.empty()) << ghost;
+    }
+}
+
+TEST(StFbdCompile, LibraryUnsupportedGuardStillFiresForFunctionKindMismatch)
+{
+    /* Guard `FBD-SEM-LIBRARY-UNSUPPORTED-001` vẫn phải sống: một typeRef hợp lệ
+     * nhưng khai sai kind vẫn phải chạm đúng guard đó, chứ không phải im lặng. */
     const json pair = read_json("/fbd/equivalence_v1.json")["pairs"][0];
     json graph = make_pair_graph(pair);
-    graph["networks"][0]["nodes"][2]["kind"] = "FUNCTION_BLOCK";
-    graph["networks"][0]["nodes"][2]["typeRef"] = "CTU";
+    graph["networks"][0]["nodes"][2]["kind"] = "FUNCTION";
+    graph["networks"][0]["nodes"][2]["typeRef"] = "TON";
     const auto result = compile_fbd_source(graph.dump());
     EXPECT_FALSE(result.ok);
-    EXPECT_TRUE(has_issue(result, "FBD-SEM-LIBRARY-UNSUPPORTED-001"));
+    EXPECT_TRUE(result.module.code.empty());
 }
 
 TEST(StFbdCompile, RejectsHostileVariableIdentifier)

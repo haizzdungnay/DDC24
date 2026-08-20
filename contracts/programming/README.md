@@ -38,6 +38,8 @@ python3 scripts/verify_programming_artifact_manifest.py --self-test
 | `programming_store_v1.manifest.json` | schema version/checksum, đường dẫn, PRAGMA, single-writer, immutable entity và feature flag của SQLite store |
 | `source_bundle_v1.schema.json` | manifest trong ZIP source-only deterministic; importer chỉ nhận path UTF-8 NFC, file regular không executable, metadata ZIP cố định và luôn tạo Project/Draft mới |
 | `g1_contract_join_v1.json` | manifest join G1 khóa hash/major/số đếm của OpenAPI, IPC, profile, artifact, error, store, source bundle cùng chuỗi migration, thứ tự deploy/rollback và flag OFF |
+| `pou_library_registry_v1.json` | **nguồn duy nhất** của Control Library SYSTEM: 40 entry (15 operator, 20 kFuncs, 5 FB), port/kiểu/nhãn/`featureState`; palette FE và allowlist FBD của Core đều sinh từ đây |
+| `pou_library_registry_v1.schema.json` | schema registry; `dispatch` khai compiler nhận diện entry ở đâu nên entry không có đường dispatch thật bị từ chối |
 | `fbd_v1.schema.json` | schema canonical của graph/network/node/port/wire FBD |
 | `fbd_keyboard_commands_v1.json` | registry 11 command/shortcut keyboard-first và giới hạn undo/redo |
 | `fbd/golden/ahu_fan_enable.json` | graph mẫu hợp lệ dùng chung cho Core và FE |

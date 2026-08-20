@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import {
+  PROGRAMMING_LIBRARY_CATEGORY_ORDER,
+  PROGRAMMING_LIBRARY_ENTRIES,
+} from '../api/generated/library_registry'
 import { FBD_DATA_TYPES } from './model'
 import {
   FBD_PALETTE,
@@ -20,6 +24,59 @@ const KFUNCS_ARITY: Record<string, number> = {
   REAL_TO_DINT: 1, REAL_TO_UINT: 1,
 }
 const BINOP_TYPE_REFS = ['AND', 'OR', 'XOR', 'EQ', 'NE', 'LT', 'LE', 'GT', 'GE', 'ADD', 'SUB', 'MUL', 'DIV', 'MOD']
+
+describe('Palette sinh từ registry POU/Control Library (T59-003)', () => {
+  it('không còn entry ma SCALE/DEADBAND/CTU/PI', () => {
+    // Bốn entry này từng nằm trong allowlist FBD của Core mà compiler không hề
+    // có; nay registry là nguồn duy nhất nên chúng không thể quay lại một phía.
+    for (const ghost of ['SCALE', 'DEADBAND', 'CTU', 'PI']) {
+      expect(FBD_PALETTE.some((entry) => entry.id === ghost)).toBe(false)
+      expect(PROGRAMMING_LIBRARY_ENTRIES.some((entry) => entry.id === ghost)).toBe(false)
+    }
+  })
+
+  it('chào đúng những entry Core từng từ chối: SQRT và 4 conversion', () => {
+    for (const id of ['SQRT', 'INT_TO_REAL', 'REAL_TO_INT', 'TIME_TO_REAL', 'REAL_TO_TIME']) {
+      expect(fbdPaletteEntry(id)).toBeDefined()
+    }
+  })
+
+  it('palette bằng đúng registry, không thêm bớt', () => {
+    expect(FBD_PALETTE.map((entry) => entry.id)).toEqual(
+      PROGRAMMING_LIBRARY_ENTRIES.map((entry) => entry.id),
+    )
+    expect(FBD_PALETTE_CATEGORY_ORDER).toEqual(PROGRAMMING_LIBRARY_CATEGORY_ORDER)
+  })
+
+  it('buildPorts chỉ đổi kiểu cho port nằm trong typedPortNames', () => {
+    for (const entry of FBD_PALETTE) {
+      const source = PROGRAMMING_LIBRARY_ENTRIES.find((item) => item.id === entry.id)
+      expect(source).toBeDefined()
+      const probe = entry.polymorphic
+        ? entry.allowedTypes.find((type) => type !== entry.defaultType)
+        : entry.defaultType
+      const ports = entry.buildPorts(probe ?? entry.defaultType)
+      expect(ports.map((port) => port.name)).toEqual(source!.ports.map((port) => port.name))
+      for (const [index, port] of ports.entries()) {
+        const declared = source!.ports[index]
+        if (entry.typedPortNames.includes(port.name)) {
+          expect(port.dataType).toBe(probe ?? entry.defaultType)
+        } else {
+          expect(port.dataType).toBe(declared.dataType)
+        }
+      }
+    }
+  })
+
+  it('PID giữ trạng thái REVIEW_REQUIRED kèm cảnh báo song ngữ', () => {
+    const review = PROGRAMMING_LIBRARY_ENTRIES.filter(
+      (entry) => entry.featureState === 'REVIEW_REQUIRED',
+    )
+    expect(review.map((entry) => entry.id)).toEqual(['PID'])
+    expect(fbdPaletteEntry('PID')?.warning?.vi).toBeTruthy()
+    expect(fbdPaletteEntry('PID')?.warning?.en).toBeTruthy()
+  })
+})
 
 describe('FBD_PALETTE (FBD_EDITOR_DESIGN.md §1)', () => {
   it('mọi typeRef duy nhất và khớp entry.id', () => {

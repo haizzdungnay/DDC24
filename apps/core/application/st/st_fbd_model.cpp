@@ -12,10 +12,12 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <string_view>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include "st/st_library_registry_generated.hpp"
 #include "st/st_limits.hpp"
 #include "st/st_profile_generated.hpp"
 
@@ -121,31 +123,38 @@ const std::unordered_set<std::string>& scalar_types()
     return values;
 }
 
+/* Ba allowlist dưới đây từng được chép tay và đã trôi khỏi compiler thật:
+ * `SCALE`/`DEADBAND`/`CTU`/`PI` được cho phép dù compiler không có, trong khi
+ * `SQRT` và bốn conversion INT_TO_REAL/REAL_TO_INT/TIME_TO_REAL/REAL_TO_TIME bị
+ * từ chối dù FE vẫn chào người dùng. Nay chúng sinh từ registry machine-readable
+ * và có test chứng minh mọi entry giải được ở compiler. */
+template <std::size_t N>
+std::unordered_set<std::string> to_set(const std::array<std::string_view, N>& generated)
+{
+    std::unordered_set<std::string> values;
+    values.reserve(N);
+    for (std::string_view item : generated) values.emplace(item);
+    return values;
+}
+
 const std::unordered_set<std::string>& pure_functions()
 {
-    static const std::unordered_set<std::string> values{
-        "AND", "OR", "XOR", "NOT", "EQ", "NE", "LT", "LE", "GT", "GE",
-        "ADD", "SUB", "MUL", "DIV", "MOD", "ABS", "MIN", "MAX", "LIMIT",
-        "SEL", "SCALE", "DEADBAND",
-    };
+    static const std::unordered_set<std::string> values =
+        to_set(st_library_registry_generated::kPureFunctions);
     return values;
 }
 
 const std::unordered_set<std::string>& stateful_functions()
 {
-    static const std::unordered_set<std::string> values{
-        "TON", "TOF", "R_TRIG", "F_TRIG", "CTU", "PI", "PID",
-    };
+    static const std::unordered_set<std::string> values =
+        to_set(st_library_registry_generated::kFbTypes);
     return values;
 }
 
 const std::unordered_set<std::string>& explicit_conversions()
 {
-    static const std::unordered_set<std::string> values{
-        "INT_TO_DINT", "INT_TO_UINT", "DINT_TO_INT", "DINT_TO_UINT",
-        "UINT_TO_INT", "UINT_TO_DINT", "DINT_TO_REAL", "UINT_TO_REAL",
-        "REAL_TO_DINT", "REAL_TO_UINT",
-    };
+    static const std::unordered_set<std::string> values =
+        to_set(st_library_registry_generated::kExplicitConversions);
     return values;
 }
 
@@ -334,7 +343,7 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
     if (!has_only_keys(root, {"$schema", "schemaVersion", "profileId", "graphId", "name", "networks"}) ||
         !has_string(root, "$schema") || !has_unsigned_in_range(root, "schemaVersion", 1) ||
         root["schemaVersion"].get<uint64_t>() != 1 || !has_string(root, "profileId") ||
-        root["profileId"] != "revA-1t-1-5-30" || !has_string(root, "graphId") ||
+        root["profileId"] != st_profile_generated::kProfileId || !has_string(root, "graphId") ||
         !has_string(root, "name") || !root.contains("networks") || !root["networks"].is_array()) {
         add_issue(&result, "FBD-SCHEMA-ROOT-001", "$");
         return result;

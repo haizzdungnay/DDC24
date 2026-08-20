@@ -1,8 +1,9 @@
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
 import { describe, expect, it } from "vitest";
+
+// Đọc contract bằng import JSON (`resolveJsonModule`) chứ KHÔNG dùng `node:fs`:
+// tsconfig của FE chỉ khai lib DOM và repo cố ý không cài `@types/node`, nên
+// import Node API làm `tsc --noEmit` trong `npm run build` đỏ dù vitest vẫn chạy.
+import contract from "../../../../../../../contracts/programming/product_profile_v2.json";
 
 import {
   PROGRAMMING_ALLOWED_PERIOD_MS,
@@ -20,14 +21,6 @@ import {
   PROGRAMMING_TYPES,
 } from "./profile";
 
-const CONTRACT_PATH = resolve(
-  __dirname,
-  "../../../../../../../contracts/programming/product_profile_v2.json",
-);
-
-const raw = readFileSync(CONTRACT_PATH);
-const contract = JSON.parse(raw.toString("utf8"));
-
 describe("Product profile v2 sinh tự động", () => {
   it("khớp đúng contract machine-readable, kể cả hash nội dung", () => {
     expect(PROGRAMMING_PROFILE_ID).toBe(contract.profileId);
@@ -35,7 +28,11 @@ describe("Product profile v2 sinh tự động", () => {
     expect(PROGRAMMING_TARGET_ABI).toBe(contract.targetAbi);
     expect(PROGRAMMING_PROFILE_MAJOR).toBe(contract.version.major);
     expect(PROGRAMMING_PROFILE_MINOR).toBe(contract.version.minor);
-    expect(PROGRAMMING_PROFILE_SHA256).toBe(createHash("sha256").update(raw).digest("hex"));
+    // Bằng nhau CHÍNH XÁC giữa hằng sinh và SHA-256 nội dung contract được ép ở
+    // `scripts/generate_programming_profile.py --check` (gate `layout`) và ở
+    // `TestProfileGeneratedMatchesContract` phía Go. Ở đây chỉ khoá dạng giá trị
+    // để một chuỗi rác không lọt qua mà không cần kéo Node crypto vào bundle FE.
+    expect(PROGRAMMING_PROFILE_SHA256).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("khóa capacity sản phẩm 32 Program / 16 Enabled", () => {
