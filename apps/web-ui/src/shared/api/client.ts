@@ -32,10 +32,9 @@ import {
   returnDemoAlarm,
   runDemoCommissioning,
   suppressDemoAlarm,
-  updateDemoPointConfig,
-  validateGraphLocal
+  updateDemoPointConfig
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmEstimateResult, type AlarmMetrics, type AlarmSetting, type AlarmSimulateResult, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusFramesResponse, type ModbusRTUPoint, type ModbusTemplate, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkCheckResponse, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type ScheduleEffectiveResponse, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type SystemHistoryResponse, type UserAccessResponse, type UserAccessRow, type VirtualPointUsage, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmEstimateResult, type AlarmMetrics, type AlarmSetting, type AlarmSimulateResult, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusFramesResponse, type ModbusRTUPoint, type ModbusTemplate, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkCheckResponse, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type ScheduleEffectiveResponse, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type SystemHistoryResponse, type UserAccessResponse, type UserAccessRow, type VirtualPointUsage, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -1667,17 +1666,18 @@ export const apiClient = {
       body: JSON.stringify({ value })
     })
     return normalizeCommissioningResult(raw, pointId)
-  },
-
-  async validateGraph(id: string, graph: unknown): Promise<GraphValidationResult> {
-    if (IS_DEMO) return validateGraphLocal(graph)
-    try {
-      return await requestJson<GraphValidationResult>(`/graphs/${encodeURIComponent(id)}/validate`, {
-        method: 'POST',
-        body: JSON.stringify(graph)
-      })
-    } catch {
-      return requestJson<GraphValidationResult>('/graph/validate', { method: 'POST', body: JSON.stringify(graph) })
-    }
   }
 }
+
+// `validateGraph()` đã bị gỡ ngày 2026-08-20 cùng với `/graph/validate` và
+// `/graph/deploy` trong `contracts/openapi/openapi.yaml`.
+//
+// Nó là mã chết đúng nghĩa: không nơi nào gọi (các trang dùng
+// `validateGraphLocal` của simulator), và ở chế độ live cả hai nhánh đều trỏ
+// tới endpoint KHÔNG có handler — `/graphs/{id}/validate` chưa từng tồn tại,
+// còn `/graph/validate` chỉ có trong spec. Nghĩa là nếu từng có ai gọi, nó sẽ
+// thử một 404 rồi nuốt lỗi bằng `catch` và thử tiếp một 404 thứ hai.
+//
+// Canvas lập trình dạng sơ đồ khối thuộc Rev B (REVA_SCOPE_ROADMAP §3). Khi làm
+// thật thì implement handler TRƯỚC, khai vào contract, rồi mới thêm lời gọi —
+// `TestRouteTableMatchesOpenAPI` chặn thứ tự ngược lại.
