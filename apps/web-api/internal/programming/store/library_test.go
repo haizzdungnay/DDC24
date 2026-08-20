@@ -46,15 +46,80 @@ func authoritativeFBLayout(size uint32) LibraryStateLayout {
 
 // ensureProjectFixture giữ FK library_revisions.project_id hợp lệ mà không tạo
 // hai lần khi test đã tự dựng Project để lấy Draft ETag.
-func ensureProjectFixture(t *testing.T, store *Store) {
+func ensureProjectFixture(t *testing.T, store *Store) Draft {
 	t.Helper()
 	var count int
 	if err := store.db.QueryRow(`SELECT count(*) FROM projects WHERE project_id=?`, projectID).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if count == 0 {
-		createProjectFixture(t, store)
+		return createProjectFixture(t, store)
 	}
+	draft, err := store.GetDraft(context.Background(), draftID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return draft
+}
+
+// libraryFixture giữ ETag Draft hiện hành giữa các mutation. Mọi mutation
+// Control Library đi chung lane optimistic-concurrency với tài liệu Draft, nên
+// test cũng phải mang ETag theo thay vì giả vờ rằng nó không đổi.
+type libraryFixture struct {
+	store *Store
+	draft Draft
+	nonce int
+	seq   int
+}
+
+// libraryFixtureNonce giữ khoá idempotency của hai fixture khác nhau không đụng
+// nhau. Không có nó, fixture thứ hai trong cùng test gửi lại đúng cặp
+// key+request của fixture thứ nhất và nhận REPLAY — test sẽ xanh vì lý do sai.
+var libraryFixtureNonce int
+
+func newLibraryFixture(t *testing.T, store *Store) *libraryFixture {
+	t.Helper()
+	libraryFixtureNonce++
+	return &libraryFixture{store: store, draft: ensureProjectFixture(t, store), nonce: libraryFixtureNonce}
+}
+
+func (f *libraryFixture) identity(label string) LibraryMutationIdentity {
+	f.seq++
+	key, request := mutationIdentity(fmt.Sprintf("%s-%d-%d", label, f.nonce, f.seq))
+	return LibraryMutationIdentity{
+		ProjectID: projectID, ExpectedDraftETag: f.draft.ETag, ActorID: actorID, Role: role,
+		AuditID:       fmt.Sprintf("aaaaaaaa-aaaa-4aaa-8aaa-%012d", f.seq),
+		CorrelationID: correlationID, At: fixedNow.Add(time.Duration(f.seq) * time.Second),
+		IdempotencyKeySHA256: key, RequestSHA256: request,
+	}
+}
+
+func (f *libraryFixture) upsert(t *testing.T, params UpsertProjectLibraryEntryParams) LibraryEntryMutation {
+	t.Helper()
+	result, err := f.tryUpsert(params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func (f *libraryFixture) tryUpsert(params UpsertProjectLibraryEntryParams) (LibraryEntryMutation, error) {
+	params.Identity = f.identity("library-upsert")
+	result, err := f.store.UpsertProjectLibraryEntry(context.Background(), params)
+	if err == nil {
+		f.draft.ETag = result.DraftETag
+	}
+	return result, err
+}
+
+func (f *libraryFixture) tryDelete(libraryRevisionID, entryID string) (LibraryEntryMutation, error) {
+	result, err := f.store.DeleteProjectLibraryEntry(context.Background(), DeleteProjectLibraryEntryParams{
+		LibraryRevisionID: libraryRevisionID, EntryID: entryID, Identity: f.identity("library-delete"),
+	})
+	if err == nil {
+		f.draft.ETag = result.DraftETag
+	}
+	return result, err
 }
 
 func createLibraryDraftFixture(t *testing.T, store *Store, revisionID, version string) LibraryRevision {
@@ -74,15 +139,11 @@ func createLibraryDraftFixture(t *testing.T, store *Store, revisionID, version s
 // và một FUNCTION_BLOCK phụ thuộc nó, để test reference/usage có dữ liệu thật.
 func publishedLibraryFixture(t *testing.T, store *Store) LibraryRevision {
 	t.Helper()
-	ctx := context.Background()
+	fixture := newLibraryFixture(t, store)
 	createLibraryDraftFixture(t, store, libraryRevisionA, "1.0.0")
-	if _, err := store.UpsertProjectLibraryEntry(ctx, functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.UpsertProjectLibraryEntry(ctx, functionBlockEntry(libraryRevisionA, entryFilterID, "FILTER_T1", authoritativeFBLayout(16))); err != nil {
-		t.Fatal(err)
-	}
-	revision, err := store.PublishProjectLibrary(ctx, libraryRevisionA)
+	fixture.upsert(t, functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN"))
+	fixture.upsert(t, functionBlockEntry(libraryRevisionA, entryFilterID, "FILTER_T1", authoritativeFBLayout(16)))
+	revision, err := store.PublishProjectLibrary(context.Background(), libraryRevisionA)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,14 +217,15 @@ func TestPublishedProjectLibraryIsImmutableAtStoreAndSchema(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
 	published := publishedLibraryFixture(t, store)
+	fixture := newLibraryFixture(t, store)
 	if published.State != LibraryStatePublished || published.ManifestSHA256 == ([sha256.Size]byte{}) {
 		t.Fatalf("publish không đặt state/manifest: %+v", published)
 	}
 
-	if _, err := store.UpsertProjectLibraryEntry(ctx, functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN")); !errors.Is(err, ErrLibraryImmutable) {
+	if _, err := fixture.tryUpsert(functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN")); !errors.Is(err, ErrLibraryImmutable) {
 		t.Fatalf("upsert sau publish: %v", err)
 	}
-	if err := store.DeleteProjectLibraryEntry(ctx, libraryRevisionA, entryScaleID); !errors.Is(err, ErrLibraryImmutable) {
+	if _, err := fixture.tryDelete(libraryRevisionA, entryScaleID); !errors.Is(err, ErrLibraryImmutable) {
 		t.Fatalf("delete sau publish: %v", err)
 	}
 	if _, err := store.PublishProjectLibrary(ctx, libraryRevisionA); !errors.Is(err, ErrLibraryImmutable) {
@@ -200,8 +262,9 @@ func TestPublishedProjectLibraryIsImmutableAtStoreAndSchema(t *testing.T) {
 func TestPublishRejectsFunctionBlockWithoutAuthoritativeLayout(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
+	fixture := newLibraryFixture(t, store)
 	createLibraryDraftFixture(t, store, libraryRevisionA, "1.0.0")
-	if _, err := store.UpsertProjectLibraryEntry(ctx,
+	if _, err := fixture.tryUpsert(
 		functionBlockEntry(libraryRevisionA, entryFilterID, "FILTER_T1", LibraryStateLayout{})); err != nil {
 		t.Fatalf("Draft phải nhận FB chưa có layout: %v", err)
 	}
@@ -217,14 +280,14 @@ func TestPublishRejectsFunctionBlockWithoutAuthoritativeLayout(t *testing.T) {
 		t.Fatalf("state sau publish lỗi: %s", revision.State)
 	}
 	// Layout nửa vời (có size, thiếu version/hash) cũng bị chặn ngay ở upsert.
-	if _, err := store.UpsertProjectLibraryEntry(ctx, functionBlockEntry(libraryRevisionA, entryFilterID, "FILTER_T1",
+	if _, err := fixture.tryUpsert(functionBlockEntry(libraryRevisionA, entryFilterID, "FILTER_T1",
 		LibraryStateLayout{Authoritative: true, StateSizeBytes: 16})); !errors.Is(err, ErrLibraryStateLayout) {
 		t.Fatalf("layout thiếu version/hash: %v", err)
 	}
 	// FUNCTION không được mang state khác 0.
 	bad := functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN")
 	bad.StateLayout = authoritativeFBLayout(8)
-	if _, err := store.UpsertProjectLibraryEntry(ctx, bad); !errors.Is(err, ErrLibraryStateLayout) {
+	if _, err := fixture.tryUpsert(bad); !errors.Is(err, ErrLibraryStateLayout) {
 		t.Fatalf("FUNCTION mang state: %v", err)
 	}
 }
@@ -234,14 +297,11 @@ func TestPublishRejectsFunctionBlockWithoutAuthoritativeLayout(t *testing.T) {
 func TestCreateProjectLibraryVersionClonesParentAndRepinsDependencies(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
+	fixture := newLibraryFixture(t, store)
 	createLibraryDraftFixture(t, store, libraryRevisionA, "1.0.0")
-	if _, err := store.UpsertProjectLibraryEntry(ctx, functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN")); err != nil {
-		t.Fatal(err)
-	}
-	dependent := functionEntry(libraryRevisionA, entryFilterID, "FILTER_T1", LibraryDependency{EntryID: entryScaleID, Version: "1.0.0"})
-	if _, err := store.UpsertProjectLibraryEntry(ctx, dependent); err != nil {
-		t.Fatal(err)
-	}
+	fixture.upsert(t, functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN"))
+	fixture.upsert(t, functionEntry(libraryRevisionA, entryFilterID, "FILTER_T1",
+		LibraryDependency{EntryID: entryScaleID, Version: "1.0.0"}))
 	parent, err := store.PublishProjectLibrary(ctx, libraryRevisionA)
 	if err != nil {
 		t.Fatal(err)
@@ -313,23 +373,19 @@ func TestCreateProjectLibraryVersionClonesParentAndRepinsDependencies(t *testing
 // dependency thì không xoá được, còn entry tự do vẫn phải xoá được.
 func TestLibraryReferenceGuardBlocksDeleteOfDependedEntry(t *testing.T) {
 	store := openTestStore(t)
-	ctx := context.Background()
+	fixture := newLibraryFixture(t, store)
 	createLibraryDraftFixture(t, store, libraryRevisionA, "1.0.0")
-	if _, err := store.UpsertProjectLibraryEntry(ctx, functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.UpsertProjectLibraryEntry(ctx, functionEntry(libraryRevisionA, entryFilterID, "FILTER_T1",
-		LibraryDependency{EntryID: entryScaleID, Version: "1.0.0"})); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.DeleteProjectLibraryEntry(ctx, libraryRevisionA, entryScaleID); !errors.Is(err, ErrLibraryReferenced) {
+	fixture.upsert(t, functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN"))
+	fixture.upsert(t, functionEntry(libraryRevisionA, entryFilterID, "FILTER_T1",
+		LibraryDependency{EntryID: entryScaleID, Version: "1.0.0"}))
+	if _, err := fixture.tryDelete(libraryRevisionA, entryScaleID); !errors.Is(err, ErrLibraryReferenced) {
 		t.Fatalf("xoá entry đang bị dependency tham chiếu: %v", err)
 	}
 	// Entry không bị ai tham chiếu vẫn xoá được — guard không được chặn tất cả.
-	if err := store.DeleteProjectLibraryEntry(ctx, libraryRevisionA, entryFilterID); err != nil {
+	if _, err := fixture.tryDelete(libraryRevisionA, entryFilterID); err != nil {
 		t.Fatalf("xoá entry tự do: %v", err)
 	}
-	if err := store.DeleteProjectLibraryEntry(ctx, libraryRevisionA, entryScaleID); err != nil {
+	if _, err := fixture.tryDelete(libraryRevisionA, entryScaleID); err != nil {
 		t.Fatalf("xoá entry sau khi hết tham chiếu: %v", err)
 	}
 }
@@ -339,8 +395,14 @@ func TestLibraryReferenceGuardBlocksDeleteOfDependedEntry(t *testing.T) {
 func TestRevisionSealRecordsLibraryUsageAndRejectsWrongPin(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
-	draft := createProjectFixture(t, store)
+	createProjectFixture(t, store)
 	publishedLibraryFixture(t, store)
+	// publishedLibraryFixture đã tăng ETag Draft (mutation library đi chung lane
+	// với tài liệu), nên phải đọc lại thay vì dùng ETag lúc tạo Project.
+	draft, err := store.GetDraft(ctx, draftID)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	pou := POUObjectInput{
 		ObjectID: pouObjectID, Kind: "PROGRAM", Name: "AHU_MAIN", Language: "ST",
@@ -429,10 +491,14 @@ func TestRevisionSealRecordsLibraryUsageAndRejectsWrongPin(t *testing.T) {
 func TestRevisionDocumentV1RejectsV2Payload(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
-	draft := createProjectFixture(t, store)
+	createProjectFixture(t, store)
 	publishedLibraryFixture(t, store)
+	draft, err := store.GetDraft(ctx, draftID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	key, request := mutationIdentity("seal-v1-with-v2")
-	_, err := store.CreateRevision(ctx, CreateRevisionParams{
+	_, err = store.CreateRevision(ctx, CreateRevisionParams{
 		RevisionID: revisionID, ProjectID: projectID, DraftID: draftID, ExpectedDraftETag: draft.ETag,
 		ManifestJSON:      []byte(`{"schemaVersion":1,"objects":["` + pouObjectID + `"]}`),
 		Objects:           []RevisionObjectInput{{ObjectID: pouObjectID, Kind: "PROGRAM", PayloadJSON: []byte(`{"language":"ST","source":"X:=1;"}`)}},
@@ -504,8 +570,10 @@ func TestProjectLibrarySurvivesRestartAndRejectsSilentCorruption(t *testing.T) {
 // Migration v6→v7 dừng fail-closed khi DB đã có hàng library_entries đời v6.
 // Hàng v6 không mang source/interface/layout nên nâng cấp là bịa dữ liệu.
 func TestMigrationV7RefusesLegacyLibraryRowsAndKeepsV6Intact(t *testing.T) {
+	// Migration đang kiểm là v6->v7, không phải head hiện tại, nên phải dừng
+	// đúng ở v6 thay vì "head trừ một".
 	db := openRawSQLite(t, filepath.Join(t.TempDir(), "legacy.sqlite"))
-	migrateToPrevious(t, db)
+	migrateToVersion(t, db, 6)
 
 	if _, err := db.Exec(`INSERT INTO projects(project_id,name,created_by,updated_by,created_at_utc_ms,updated_at_utc_ms)
 		VALUES(?,'legacy','legacy','legacy',1,1)`, projectID); err != nil {
@@ -529,8 +597,8 @@ func TestMigrationV7RefusesLegacyLibraryRowsAndKeepsV6Intact(t *testing.T) {
 	if err := db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatal(err)
 	}
-	if userVersion != CurrentSchemaVersion-1 {
-		t.Fatalf("user_version=%d; want %d", userVersion, CurrentSchemaVersion-1)
+	if userVersion != 6 {
+		t.Fatalf("user_version=%d; want 6", userVersion)
 	}
 	var count int
 	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('library_entries') WHERE name='source_blob'`).Scan(&count); err != nil {
@@ -656,13 +724,10 @@ func TestPublishedManifestIsCanonicalAndCoversEntries(t *testing.T) {
 
 	// Dựng lại cùng nội dung theo thứ tự upsert ngược phải cho đúng cùng hash.
 	other := openTestStore(t)
+	mirror := newLibraryFixture(t, other)
 	createLibraryDraftFixture(t, other, libraryRevisionA, "1.0.0")
-	if _, err := other.UpsertProjectLibraryEntry(ctx, functionBlockEntry(libraryRevisionA, entryFilterID, "FILTER_T1", authoritativeFBLayout(16))); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := other.UpsertProjectLibraryEntry(ctx, functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN")); err != nil {
-		t.Fatal(err)
-	}
+	mirror.upsert(t, functionBlockEntry(libraryRevisionA, entryFilterID, "FILTER_T1", authoritativeFBLayout(16)))
+	mirror.upsert(t, functionEntry(libraryRevisionA, entryScaleID, "SCALE_LIN"))
 	mirrored, err := other.PublishProjectLibrary(ctx, libraryRevisionA)
 	if err != nil {
 		t.Fatal(err)

@@ -10,31 +10,65 @@ import (
 	"testing"
 )
 
-// migrateToPrevious đưa DB tới đúng schema v(N-1) bằng cách chặn migration head
-// ở `before_apply`. Không có đường "apply tới version X" trong production API và
-// test cũng không được tự chế một đường như vậy.
-func migrateToPrevious(t *testing.T, db *sql.DB) {
+// migrateToVersion đưa DB tới đúng schema `target` bằng cách chặn migration kế
+// tiếp ở `before_apply`. Không có đường "apply tới version X" trong production
+// API và test cũng không được tự chế một đường như vậy.
+func migrateToVersion(t *testing.T, db *sql.DB, target int) {
 	t.Helper()
-	stop := errors.New("dừng trước migration head")
+	if target < 1 || target >= CurrentSchemaVersion {
+		t.Fatalf("target=%d phải trong 1..%d", target, CurrentSchemaVersion-1)
+	}
+	stop := errors.New("dừng trước migration kế tiếp")
 	_, err := Migrate(context.Background(), db, MigrationOptions{
 		AppliedAtUTCMS: fixedNow.UnixMilli(),
 		FaultHook: func(point string, version int) error {
-			if point == "before_apply" && version == CurrentSchemaVersion {
+			if point == "before_apply" && version == target+1 {
 				return stop
 			}
 			return nil
 		},
 	})
 	if !errors.Is(err, stop) {
-		t.Fatalf("dừng trước head: err=%v", err)
+		t.Fatalf("dừng trước v%d: err=%v", target+1, err)
 	}
 	var userVersion int
 	if err := db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatal(err)
 	}
-	if userVersion != CurrentSchemaVersion-1 {
-		t.Fatalf("user_version=%d; want %d", userVersion, CurrentSchemaVersion-1)
+	if userVersion != target {
+		t.Fatalf("user_version=%d; want %d", userVersion, target)
 	}
+}
+
+func migrateToPrevious(t *testing.T, db *sql.DB) {
+	t.Helper()
+	migrateToVersion(t, db, CurrentSchemaVersion-1)
+}
+
+// schemaFingerprint là toàn bộ DDL của DB, sắp ổn định. Dùng nó thay vì liệt kê
+// tay từng bảng/cột/trigger mới: danh sách viết tay phải sửa theo mỗi migration
+// và sẽ âm thầm trở thành no-op ngay khi ai đó quên cập nhật — đúng lớp lỗi mà
+// `TestMigrationFaultChecksumPartialAndCorruptFailClosed` từng mắc phải.
+func schemaFingerprint(t *testing.T, db *sql.DB) string {
+	t.Helper()
+	rows, err := db.Query(`SELECT type,name,coalesce(sql,'') FROM sqlite_master
+		WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var lines []string
+	for rows.Next() {
+		var kind, name, ddl string
+		if err := rows.Scan(&kind, &name, &ddl); err != nil {
+			t.Fatal(err)
+		}
+		lines = append(lines, kind+"|"+name+"|"+strings.Join(strings.Fields(ddl), " "))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func verifiedBackup() func(context.Context, int, int) (BackupEvidence, error) {
@@ -75,19 +109,15 @@ func rowCount(t *testing.T, db *sql.DB, table string) int {
 	return count
 }
 
-// Migration v(N-1)->vN phải nguyên tử ở MỌI điểm lỗi: DB giữ đúng schema cũ,
-// không có bảng mới nào sót lại, và chạy lại vẫn lên được head.
+// Migration v(N-1)->vN phải nguyên tử ở MỌI điểm lỗi: DB giữ đúng schema cũ
+// **từng byte DDL**, và chạy lại vẫn lên được head.
 func TestSchemaV2MigrationIsAtomicAtEveryFaultPoint(t *testing.T) {
-	newTables := []string{
-		"library_usages",
-	}
-	newColumns := []string{"language", "source_blob", "interface_json", "dependencies_json",
-		"state_layout_version", "state_size_bytes", "state_layout_sha256"}
 	for _, point := range []string{"before_apply", "after_sql", "before_commit"} {
 		t.Run(point, func(t *testing.T) {
 			db := openRawSQLite(t, filepath.Join(t.TempDir(), "atomic.sqlite"))
 			defer db.Close()
 			migrateToPrevious(t, db)
+			before := schemaFingerprint(t, db)
 
 			injected := errors.New("mô phỏng mất điện")
 			_, err := Migrate(context.Background(), db, MigrationOptions{
@@ -111,27 +141,8 @@ func TestSchemaV2MigrationIsAtomicAtEveryFaultPoint(t *testing.T) {
 			if userVersion != CurrentSchemaVersion-1 {
 				t.Fatalf("point=%s user_version=%d; want %d", point, userVersion, CurrentSchemaVersion-1)
 			}
-			existing := strings.Join(tableNames(t, db), " ")
-			for _, table := range newTables {
-				if strings.Contains(existing, table) {
-					t.Fatalf("point=%s để lại bảng dở dang %s", point, table)
-				}
-			}
-			for _, column := range newColumns {
-				var count int
-				if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('library_entries') WHERE name=?`, column).Scan(&count); err != nil {
-					t.Fatal(err)
-				}
-				if count != 0 {
-					t.Fatalf("point=%s để lại cột dở dang %s", point, column)
-				}
-			}
-			var triggerCount int
-			if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name='library_revisions_no_system_insert'`).Scan(&triggerCount); err != nil {
-				t.Fatal(err)
-			}
-			if triggerCount != 0 {
-				t.Fatalf("point=%s để lại trigger v7", point)
+			if after := schemaFingerprint(t, db); after != before {
+				t.Fatalf("point=%s để lại DDL dở dang:\n--- trước ---\n%s\n--- sau ---\n%s", point, before, after)
 			}
 
 			// Sau lỗi, chạy lại phải lên được head — không kẹt vĩnh viễn.
@@ -140,6 +151,43 @@ func TestSchemaV2MigrationIsAtomicAtEveryFaultPoint(t *testing.T) {
 			})
 			if err != nil || report.ToVersion != CurrentSchemaVersion {
 				t.Fatalf("recovery err=%v report=%+v", err, report)
+			}
+		})
+	}
+}
+
+// Mọi migration trong chuỗi — không chỉ head — phải nguyên tử. Một migration cũ
+// hỏng nửa chừng trên board đang chạy cũng nguy hiểm y hệt head.
+func TestEveryMigrationInChainIsAtomic(t *testing.T) {
+	for target := 1; target < CurrentSchemaVersion; target++ {
+		t.Run(fmt.Sprintf("v%d-to-v%d", target, target+1), func(t *testing.T) {
+			db := openRawSQLite(t, filepath.Join(t.TempDir(), "chain.sqlite"))
+			defer db.Close()
+			migrateToVersion(t, db, target)
+			before := schemaFingerprint(t, db)
+
+			injected := errors.New("mô phỏng mất điện")
+			_, err := Migrate(context.Background(), db, MigrationOptions{
+				AppliedAtUTCMS: fixedNow.UnixMilli(), Backup: verifiedBackup(),
+				FaultHook: func(candidate string, version int) error {
+					if candidate == "after_sql" && version == target+1 {
+						return injected
+					}
+					return nil
+				},
+			})
+			if !errors.Is(err, injected) {
+				t.Fatalf("v%d err=%v", target+1, err)
+			}
+			var userVersion int
+			if err := db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
+				t.Fatal(err)
+			}
+			if userVersion != target {
+				t.Fatalf("v%d user_version=%d; want %d", target+1, userVersion, target)
+			}
+			if after := schemaFingerprint(t, db); after != before {
+				t.Fatalf("v%d để lại DDL dở dang", target+1)
 			}
 		})
 	}
