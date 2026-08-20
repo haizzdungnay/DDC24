@@ -24,11 +24,19 @@
     },
     {
       "name": "profile",
-      "path": "contracts/programming/rev_a_profile_v1.json",
-      "sha256": "94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc",
+      "path": "contracts/programming/product_profile_v2.json",
+      "sha256": "46bed28b1be3f82689f2094ea8f37e6b3b75e8832a29e65de00460e1839c70e5",
       "major": 1,
       "minor": 0,
-      "profileCode": 1
+      "profileCode": 1,
+      "schemaPath": "contracts/programming/product_profile_v2.schema.json",
+      "schemaSha256": "aac7a83806d621180aabd517418e606593d864680306ca30a0e3d4f97e9f7a6a",
+      "targetAbi": 3841,
+      "integrityMode": "HASH_ONLY",
+      "documentMajor": 2,
+      "documentMinor": 0,
+      "maxProgramsTotal": 32,
+      "maxProgramsEnabled": 16
     },
     {
       "name": "artifact",
@@ -37,7 +45,8 @@
       "goldenManifestPath": "contracts/programming/golden/manifest.json",
       "goldenManifestSha256": "2d57473f42de7a4638c581faa04d6e97ae5bdc72c1fc7273dab788bc51aaf681",
       "major": 1,
-      "compilerProfile": 1
+      "compilerProfile": 1,
+      "schemaVersion": 1
     },
     {
       "name": "errors",
@@ -110,5 +119,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001 (Plan 59 W0)"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002 (Plan 59 W0)"
 }

@@ -47,7 +47,7 @@ không chọn thêm capacity, owner, state, API, error, algorithm hay migration.
 
 | Lớp | As-Built tại baseline | Gap target |
 |---|---|---|
-| Profile | `contracts/programming/rev_a_profile_v1.json`; generated `kMaxProgramsTotal=1`. | Profile v2 bounded 32/16, không dùng nhãn release Rev. |
+| Profile | **Đã đóng bởi `T59-002`**: `contracts/programming/product_profile_v2.json`, generated C++/Go/TS, `kMaxProgramsTotal=32`, `kMaxProgramsEnabled=16`. | Token `profileId`/`profileCode`/`targetAbi` giữ giá trị v1 vì là discriminator nằm trong artifact/FBD/build manifest; rotate cùng artifact v2 ở `T59-006`/`T59-106` theo dual-reader §12.1. |
 | Check | `apps/web-api/internal/programming/application/checks.go` từ chối `len(programs) != 1`. | Compile/package graph nhiều POU/Program. |
 | Core bootstrap | `apps/core/bootstrap/main.cpp` tạo `program-main`, period 1000 ms. | Nạp topology/artifact v2 và enable intent từ coordinator. |
 | Compiler | `apps/core/application/st/` parse PROGRAM; built-in FB có state. | User FUNCTION/FB, symbol graph, shared ST/FBD lowering. |

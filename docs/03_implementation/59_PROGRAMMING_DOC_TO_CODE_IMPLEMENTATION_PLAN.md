@@ -98,7 +98,7 @@ W1/W2/W3 có thể chạy song song theo contract boundary. Critical path releas
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
 | `T59-001` | P0 | Re-pin `g1_contract_join_v1.json`, bỏ hardcode store schema version | — | **DONE** | `verify_programming_g1_contracts.py` exit 0; `--self-test` 12/12 mutation + 6/6 manifest chain + 5/5 deploy order; `verify-project.sh --component layout` exit 0; `go vet` sạch + `go test ./... -count=1` 18/18 package ok. Chi tiết §3.1. |
-| `T59-002` | P0 | Tạo Product profile v2 `32/16/256/1024/512/512`, generator C++/Go/TS | — | READY | `--check` exact; one-over vectors; không còn product constant 1 Program. |
+| `T59-002` | P0 | Tạo Product profile v2 `32/16/256/1024/512/512`, generator C++/Go/TS | — | **DONE** | `generate_programming_profile.py --check` exact 3/3 tệp sinh; one-over vector C++ 3 trục + Go 6 case + FE 5 case; `ctest` 1055/1055; `go test ./... -count=1` 18/18; FE 112 file / 1066 test; G1 self-test 20/20 mutation; layout exit 0. Chi tiết §3.1. |
 | `T59-003` | P0 | FBD/POU/library registry JSON single-source + generator | — | READY | TS/C++/schema/verifier exact equality; bỏ SCALE/DEADBAND/CTU/PI ma, đủ conversion/SQRT. |
 | `T59-004` | P0 | Error catalog mới cho POU/library/signal/enable/output owner/PID review | T59-002/003 | ORDERED | C++/Go/TS generated; public/detail count/hash exact; mapping missing build fail. |
 | `T59-005` | P0 | Store schema v2 + backup/migration v1→v2 | T59-002 | ORDERED | SQLite migration atomic/idempotent/restart; không tự Commission; rollback giữ DB. |
@@ -147,6 +147,61 @@ migration cuối 5`. Đã khôi phục nguyên trạng, `git diff` sạch trên 
 
 **Rollback.** Chỉ chạm contract pin + script kiểm + test; không đổi schema DB,
 không migration mới, không chạm Active/LKG. Revert commit là đủ.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-002` — Product profile v2 và generator ba ngôn ngữ
+
+**Triệu chứng.** Capacity sản phẩm bị khoá ở một Program: `kMaxProgramsTotal=1`,
+Go `len(programs) != 1`, diagnostic `"limit": 1`, và FE/Go chép tay `profileId`,
+`profileSha256`, trần FBD.
+
+**Nguyên nhân gốc.** Profile machine-readable chỉ sinh **một** consumer (C++).
+Go và TS đọc cùng contract nhưng bằng literal chép tay, nên ba lớp không có phép
+kiểm nào ràng buộc lại với nhau; đồng thời `task.maxTasks/maxProgramsPerTask/
+maxProgramsTotal` bị khoá `const 1` ngay trong JSON Schema.
+
+**Cách sửa.**
+
+- `contracts/programming/product_profile_v2.json` + schema thay
+  `rev_a_profile_v1.*`: khối `capacity` cấp package `32/16/256/1024/512/512`,
+  khối `scheduler` (3 lớp chu kỳ, 32 Program, budget `<20%`), khối `resources`
+  giữ trần cấp **một** Program, thêm `targetAbi`.
+- `scripts/generate_programming_profile.py` sinh **C++ + Go + TS** từ một nguồn,
+  validate JSON Schema, kiểm bất biến ngoài schema (enabled ≤ total, maxTasks =
+  số lớp chu kỳ, binding Program ≤ binding package, chu kỳ tăng dần) và chạy
+  `gofmt` để `--check` không đối đầu `gofmt -l`.
+- Bỏ literal ở consumer: `st_limits.cpp` (constraint text `range=1..1`,
+  `enum=...`, `exact=3841`), `st_ir.hpp`/`st_limits.hpp` (`0x00000F01`),
+  `st_scheduler.hpp` (budget percent), `runner.go` (`profileId`,
+  `profileSha256`, `libraryVersion`, `integrityMode`, ABI, `MaxArtifactBytes`),
+  `checks.go` (`limit: 1`, `65536`), FE `fbd/model.ts` (`profileId`, trần FBD,
+  danh sách type).
+- G1 join: ghim profile v2 + schema hash + `documentMajor/Minor` +
+  `maxProgramsTotal/Enabled` + `targetAbi` + `integrityMode`; validator bỏ nốt
+  `len(contracts) == 7`, `version == 1.0`, `profileCode == 1`,
+  `integrityMode == "HASH_ONLY"` và chuyển sang bộ tên contract bắt buộc.
+- Golden ST/FBD build manifest được **sinh lại bằng compiler CLI thật**
+  (`mkddc-st-compile`), không sửa tay: chỉ `profile.sha256` và `buildKeySha256`
+  đổi, byte `.mkir` giữ nguyên — xác nhận profile hash không nằm trong artifact.
+
+**Ranh giới có chủ ý.** `profileId`, `profileCode` và `targetAbi` **giữ giá trị
+v1**. Chúng là discriminator nằm trong artifact/FBD document/build manifest;
+xoay chúng ở W0 sẽ vô hiệu hóa mọi golden và phá dual-reader v1/v2 mà DDD §12.1
+yêu cầu. Việc rotate thuộc `T59-006`/`T59-106` cùng artifact v2.
+
+**Giới hạn giai đoạn được nêu rõ, không giấu.** Pipeline compiler hiện dựng được
+một Program mỗi lần chạy. Sau task này, quá 32 Program bị từ chối bằng **trần
+sản phẩm 32**; 2..32 Program bị từ chối bằng **trần pipeline 1** ở nhánh riêng có
+chú thích chủ sở hữu `T59-302`/`T59-305`. Hai con số không còn bị gộp làm một, và
+test khoá đúng sự phân biệt đó.
+
+**Finding sửa kèm trong task.** Diagnostic `PRG-ERR-SCOPE-001` gắn `limit` cho cả
+những từ chối **không** do trần (payload sai dạng), tức là bịa một con số giới hạn
+cho người đọc lỗi. Nay `limit` chỉ xuất hiện khi thật sự có trần bị vượt.
+
+**Rollback.** Không đổi schema DB, không thêm migration, không chạm Active/LKG.
+Artifact `.mkir` bất biến nên LKG cũ vẫn nạp được. Revert commit là đủ.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

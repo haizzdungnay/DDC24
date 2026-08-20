@@ -82,7 +82,7 @@ constexpr std::size_t kMaxDiagnostics = 64u;
  * được kiểm ở lớp sở hữu (parser/FBD validator) trước khi serialize. */
 struct RevAProfileUsage {
     uint16_t profile_code = st_profile_generated::kProfileCode;
-    uint32_t target_abi = 0x00000F01u;
+    uint32_t target_abi = st_profile_generated::kTargetAbi;
     std::size_t task_count = 1;
     uint32_t task_period_ms = 1000;
     std::size_t programs_per_task = 1;

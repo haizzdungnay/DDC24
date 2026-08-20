@@ -1,13 +1,24 @@
 {
-  "$schema": "./rev_a_profile_v1.schema.json",
+  "$schema": "./product_profile_v2.schema.json",
   "profileId": "revA-1t-1-5-30",
   "profileCode": 1,
-  "version": { "major": 1, "minor": 0 },
-  "task": {
-    "maxTasks": 1,
-    "maxProgramsPerTask": 1,
-    "maxProgramsTotal": 1,
-    "allowedPeriodMs": [1000, 5000, 30000]
+  "targetAbi": 3841,
+  "version": { "major": 2, "minor": 0 },
+  "capacity": {
+    "maxObjects": 1312,
+    "maxProgramsTotal": 32,
+    "maxProgramsEnabled": 16,
+    "maxUserPou": 256,
+    "maxFunctionBlockInstances": 1024,
+    "maxSignals": 512,
+    "maxBindings": 512
+  },
+  "scheduler": {
+    "maxTasks": 3,
+    "maxProgramsPerTask": 32,
+    "maxProgramsTotal": 32,
+    "allowedPeriodMs": [1000, 5000, 30000],
+    "maxTaskBudgetPercent": 20
   },
   "resources": {
     "maxSourceBytes": 65536,

@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Trạng thái | Active |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -35,13 +35,13 @@ target, HIL hoặc release.
 | 6 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `0389839909b497b5c180074c88405bcbbc154a678a3a2566d7aa98a8fa14240e` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 7 | `docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md` | `ec57e4b0a9f855977ecd7743faea2152f518d1f7330a683fd1e8606a9eafd97a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 8 | `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | `08821231afc68cb1badc773b2d4ced17a9e5363562285f4d5f98cb90a7ebcb19` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 9 | `docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md` | `4ec888bbdcd3e216eab62126f3b6145faf19993ba2c1bd07e00ce011e3224a9e` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
+| 9 | `docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md` | `ba71b52c0af0b1666ad0fd6c586d7fb9b27f5fb24428e9cd7568dc60dd5406c8` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
 | 10 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `d4992caf7d85275558de9c3e0553c31cbf686a28ddb61082a998edea666fec6d` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 11 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `716344cd9d21e3b32765cc1126418a0013518e86bdf3460f7ed8713d443d2a62` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `2d26255dda3f9431c79a2553e11f37de5641f04d377a8de0075af3a9cb672968` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `ce09fb015cc1f11a29bca4342feeda33868271d3db6de1379e2d7d0e113efbae` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `ce9b1addfb583e3c0e75d8f07d9db6b838b17be64014c26eb98753077ff4228a` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `4db79cf202105b649d273b31384d6fb6d850977fa49e08a4c06c81bcc83701ba` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `bf831f27a0b91447c7fbbf8d7574dc8f899c8a4668ccce5fc42dda14d5983696` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `5759d0e5f0a23ef41ece2861dc33e867923b6e39b08ac8fcd7baa57d4431d0e0` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `d4624e7783a2d7415b37e01ea0bc731b33733cc0a8dfc7808fbe8099c95bc2f1` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `8dd7bd227861ded3a1da3478aec522826dc60716280bdd40b79fa23f7f1ef29a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 
 ## 3. Disposition baseline cũ
@@ -79,3 +79,4 @@ evidence release.
 |---|---|---|
 | 1.0 | 2026-08-20 | Phát hành manifest baseline 16 hồ sơ tại `49a2ad1`. |
 | 1.1 | 2026-08-20 | Re-pin dòng 13/14/15 sau `T59-001`. **Đánh giá impact trước khi re-pin:** dòng 15 là status W0 + ghi chú thực thi §3.1; dòng 13 thêm treatment record §5.16 và lịch sử 2.0, **không** đổi S×L, không đổi lifecycle, không thêm residual accepted (16/16 Open, 11 Critical giữ nguyên); dòng 14 chỉ nối evidence vào ô `BE-110`, cột `D/I/T/P/R` giữ `Y/Y/N/N/N`. Không phát sinh thay đổi SRS/DDD/VVP nên 13 dòng authority còn lại không đổi. Thêm §5 nêu rõ nhịp re-pin của tracker. |
+| 1.2 | 2026-08-20 | Re-pin dòng 9/13/14/15 sau `T59-002`. **Đánh giá impact trước khi re-pin:** dòng 9 (Unified DDD) chỉ đóng ô As-Built của hàng `Profile` §2 — quyết định §0 không đổi, capacity vẫn 32/16, không phát sinh requirement hay scenario mới; dòng 13 thêm treatment record §5.17 và lịch sử 2.1 mà **không** đổi S×L/lifecycle/residual (16/16 Open, 11 Critical giữ nguyên); dòng 14 nối evidence vào `BE-110` và `CORE-102`, cột `D/I/T/P/R` giữ nguyên; dòng 15 là status W0 + ghi chú §3.1. SRS và VVP không đổi. |

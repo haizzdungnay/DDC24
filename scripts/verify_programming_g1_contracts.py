@@ -25,6 +25,9 @@ REQUIRED_PRESERVE = {
 REQUIRED_FORBID = {
     "automatic-downgrade", "destructive-delete", "commission", "blind-replay"
 }
+REQUIRED_CONTRACT_NAMES = {
+    "openapi", "ipc", "profile", "artifact", "errors", "store", "source-bundle"
+}
 BASELINE_STATE = {
     "schema": 0,
     "core": "v0",
@@ -171,8 +174,10 @@ def validate(join: dict[str, Any]) -> list[str]:
     require(join.get("commissionEnabled") is False, "G1 không được bật Commission")
 
     contracts = join.get("contracts", [])
-    require(len(contracts) == 7, "G1 phải ghim đúng 7 contract")
-    require(len({item.get("name") for item in contracts}) == len(contracts), "tên contract bị trùng")
+    names = {item.get("name") for item in contracts}
+    missing = sorted(REQUIRED_CONTRACT_NAMES - names)
+    require(not missing, f"G1 thiếu contract bắt buộc: {missing}")
+    require(len(names) == len(contracts), "tên contract bị trùng")
     accepted_major = join.get("compatibility", {}).get("acceptedMajor")
     require(accepted_major == 1, "acceptedMajor phải là 1")
     for item in contracts:
@@ -220,13 +225,48 @@ def validate(join: dict[str, Any]) -> list[str]:
         artifact_schema = json.loads(safe_path(artifact_item["path"]).read_text())
         artifact_manifest_path = safe_path(artifact_item["goldenManifestPath"])
         artifact_manifest = json.loads(artifact_manifest_path.read_text())
-        require(profile["version"] == {"major": 1, "minor": 0}, "profile version drift")
-        require(profile["profileCode"] == artifact_item["compilerProfile"] == 1, "profile/artifact code lệch")
-        require(artifact_schema["properties"]["schemaVersion"]["const"] == 1, "artifact schema major drift")
-        require(artifact_schema["properties"]["compilerProfile"]["const"] == 1, "artifact compiler profile drift")
+        # `major` của entry là thế hệ tương thích của *bộ* contract G1 (phải bằng
+        # acceptedMajor); `documentMajor/documentMinor` là revision của chính tài
+        # liệu profile. Trộn hai khái niệm này là lý do trước đây version bị viết
+        # cứng thành 1.0 trong validator.
+        require(
+            profile["version"]
+            == {"major": profile_item["documentMajor"], "minor": profile_item["documentMinor"]},
+            f"profile document version drift: file={profile['version']} "
+            f"pin={profile_item['documentMajor']}.{profile_item['documentMinor']}",
+        )
+        require(
+            profile["capacity"]["maxProgramsTotal"] == profile_item["maxProgramsTotal"]
+            and profile["capacity"]["maxProgramsEnabled"] == profile_item["maxProgramsEnabled"],
+            "profile capacity drift so với pin",
+        )
+        require(
+            digest(safe_path(profile_item["schemaPath"])) == profile_item["schemaSha256"],
+            "profile schema SHA-256 drift",
+        )
+        require(
+            profile["profileCode"] == profile_item["profileCode"] == artifact_item["compilerProfile"],
+            "profile/artifact code lệch",
+        )
+        require(profile["targetAbi"] == profile_item["targetAbi"], "profile targetAbi drift")
+        require(
+            artifact_schema["properties"]["schemaVersion"]["const"] == artifact_item["schemaVersion"],
+            "artifact schema major drift",
+        )
+        require(
+            artifact_schema["properties"]["compilerProfile"]["const"] == artifact_item["compilerProfile"],
+            "artifact compiler profile drift",
+        )
         require(digest(artifact_manifest_path) == artifact_item["goldenManifestSha256"], "artifact golden manifest hash drift")
-        require(artifact_manifest["schemaVersion"] == artifact_manifest["compilerProfile"] == 1, "artifact golden version lệch")
-        require(profile["integrityMode"] == artifact_manifest["integrityMode"] == "HASH_ONLY", "integrity mode lệch")
+        require(
+            artifact_manifest["schemaVersion"] == artifact_item["schemaVersion"]
+            and artifact_manifest["compilerProfile"] == artifact_item["compilerProfile"],
+            "artifact golden version lệch",
+        )
+        require(
+            profile["integrityMode"] == artifact_manifest["integrityMode"] == profile_item["integrityMode"],
+            "integrity mode lệch",
+        )
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"profile/artifact: {error}")
 
@@ -374,6 +414,42 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
     add("public-error-count-drift", "public error count lệch", grow_public_count)
     add("openapi-operation-count-drift", "operation lệch pin", grow_operation_count)
     add("openapi-version-drift", "OpenAPI version drift", break_openapi_version)
+
+    def bump_profile_document_major(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "profile")["documentMajor"] += 1
+
+    def shrink_capacity(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "profile")["maxProgramsTotal"] = 1
+
+    def shrink_enabled(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "profile")["maxProgramsEnabled"] = 1
+
+    def break_profile_schema_hash(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "profile")["schemaSha256"] = "0" * 64
+
+    def break_target_abi(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "profile")["targetAbi"] += 1
+
+    def break_integrity_mode(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "profile")["integrityMode"] = "SIGNED"
+
+    def drop_required_contract(candidate: dict[str, Any]) -> None:
+        candidate["contracts"] = [
+            item for item in candidate["contracts"] if item.get("name") != "store"
+        ]
+
+    def duplicate_contract_name(candidate: dict[str, Any]) -> None:
+        clone = copy.deepcopy(contract_by_name(candidate, "profile"))
+        candidate["contracts"].append(clone)
+
+    add("profile-document-major-drift", "document version drift", bump_profile_document_major)
+    add("profile-capacity-total-drift", "capacity drift", shrink_capacity)
+    add("profile-capacity-enabled-drift", "capacity drift", shrink_enabled)
+    add("profile-schema-hash-drift", "profile schema SHA-256 drift", break_profile_schema_hash)
+    add("profile-target-abi-drift", "targetAbi drift", break_target_abi)
+    add("profile-integrity-mode-drift", "integrity mode lệch", break_integrity_mode)
+    add("required-contract-missing", "thiếu contract bắt buộc", drop_required_contract)
+    add("duplicate-contract-name", "tên contract bị trùng", duplicate_contract_name)
     return mutations
 
 
@@ -501,7 +577,12 @@ def main() -> int:
         return 1
     if args.self_test:
         run_self_test(join)
-    print("PASS: 7/7 contract G1 cùng major 1; hash/version/deploy/rollback/flag khớp")
+    total = len(join.get("contracts", []))
+    accepted = join.get("compatibility", {}).get("acceptedMajor")
+    print(
+        f"PASS: {total}/{total} contract G1 cùng major {accepted}; "
+        "hash/version/deploy/rollback/flag khớp"
+    )
     return 0
 
 

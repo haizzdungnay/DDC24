@@ -1,12 +1,20 @@
+import {
+  PROGRAMMING_PROFILE_ID,
+  PROGRAMMING_RESOURCES,
+  PROGRAMMING_TYPES,
+} from '../api/generated/profile'
+
 export const FBD_SCHEMA_VERSION = 1 as const
-export const FBD_PROFILE_ID = 'revA-1t-1-5-30' as const
-export const FBD_MAX_NETWORKS = 256
-export const FBD_MAX_BLOCKS = 256
-export const FBD_MAX_WIRES = 512
+// Định danh profile và trần FBD là contract, không phải hằng của riêng FE.
+// Chép tay các giá trị này từng làm FE và compiler trôi khỏi nhau trong im lặng.
+export const FBD_PROFILE_ID = PROGRAMMING_PROFILE_ID
+export const FBD_MAX_NETWORKS = PROGRAMMING_RESOURCES.maxFbdBlocks
+export const FBD_MAX_BLOCKS = PROGRAMMING_RESOURCES.maxFbdBlocks
+export const FBD_MAX_WIRES = PROGRAMMING_RESOURCES.maxFbdConnections
 export const FBD_MAX_PORTS_PER_NODE = 16
 
-export const FBD_DATA_TYPES = ['BOOL', 'INT', 'DINT', 'UINT', 'REAL', 'TIME'] as const
-export type FbdDataType = (typeof FBD_DATA_TYPES)[number]
+export type FbdDataType = (typeof PROGRAMMING_TYPES)[number]['name']
+export const FBD_DATA_TYPES: readonly FbdDataType[] = PROGRAMMING_TYPES.map((item) => item.name)
 export type FbdNodeKind = 'INPUT' | 'OUTPUT' | 'CONSTANT' | 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
 export type FbdPortDirection = 'INPUT' | 'OUTPUT'
 export type FbdParameterValue = boolean | number | string

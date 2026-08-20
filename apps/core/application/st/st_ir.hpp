@@ -33,7 +33,7 @@ namespace st_ir {
 constexpr char        kMagic[8]        = {'M','K','D','D','C','I','R','1'};
 constexpr uint16_t    kSchemaVersion   = 1;
 constexpr uint16_t    kCompilerProfile = st_profile_generated::kProfileCode;
-constexpr uint32_t    kTargetAbi       = 0x00000F01u;
+constexpr uint32_t    kTargetAbi       = st_profile_generated::kTargetAbi;
 constexpr uint32_t    kHeaderSize      = 128;
 constexpr uint32_t    kMaxArtifactSize = st_profile_generated::kMaxArtifactBytes;
 constexpr uint32_t    kInstructionSize = 16;

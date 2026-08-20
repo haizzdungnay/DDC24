@@ -310,24 +310,34 @@ func compilerInput(revision programmingstore.RevisionSnapshot) (programmingcompi
 		case "PROGRAM":
 			programs = append(programs, object)
 		case "FUNCTION", "FUNCTION_BLOCK":
-			diagnostic := scopeDiagnostic(object.ObjectID)
+			// User POU chưa được compiler nhận: T59-101..105 mở lane này.
+			diagnostic := scopeDiagnostic(object.ObjectID, domain.MaxUserPou)
 			return programmingcompiler.Input{}, &diagnostic
 		}
 	}
+	// Trần capacity sản phẩm lấy từ profile, không phải hằng viết trong code.
+	if len(programs) == 0 || len(programs) > domain.MaxProgramsTotal {
+		diagnostic := scopeDiagnostic("", domain.MaxProgramsTotal)
+		return programmingcompiler.Input{}, &diagnostic
+	}
+	// Trong trần capacity nhưng pipeline compiler hiện chỉ dựng được một Program
+	// mỗi lần chạy; multi-Program package là T59-302/T59-305. Đây là giới hạn
+	// giai đoạn của pipeline, KHÔNG phải capacity sản phẩm — nên nó được báo
+	// riêng và không ghi đè con số 32 ở nhánh trên.
 	if len(programs) != 1 {
-		diagnostic := scopeDiagnostic("")
+		diagnostic := scopeDiagnostic("", 1)
 		return programmingcompiler.Input{}, &diagnostic
 	}
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(programs[0].PayloadJSON, &payload); err != nil {
-		diagnostic := scopeDiagnostic(programs[0].ObjectID)
+		diagnostic := scopeDiagnostic(programs[0].ObjectID, 0)
 		return programmingcompiler.Input{}, &diagnostic
 	}
 	var programID, language string
 	document := payload["document"]
 	if json.Unmarshal(payload["programId"], &programID) != nil || json.Unmarshal(payload["language"], &language) != nil ||
 		programID != programs[0].ObjectID || (language != "ST" && language != "FBD") || len(document) == 0 {
-		diagnostic := scopeDiagnostic(programs[0].ObjectID)
+		diagnostic := scopeDiagnostic(programs[0].ObjectID, 0)
 		return programmingcompiler.Input{}, &diagnostic
 	}
 	var source []byte
@@ -337,16 +347,16 @@ func compilerInput(revision programmingstore.RevisionSnapshot) (programmingcompi
 	} else if language == "FBD" {
 		var value any
 		if json.Unmarshal(document, &value) != nil {
-			diagnostic := scopeDiagnostic(programID)
+			diagnostic := scopeDiagnostic(programID, 0)
 			return programmingcompiler.Input{}, &diagnostic
 		}
 		source, _ = json.Marshal(value)
 	} else {
-		diagnostic := scopeDiagnostic(programID)
+		diagnostic := scopeDiagnostic(programID, 0)
 		return programmingcompiler.Input{}, &diagnostic
 	}
-	if len(source) == 0 || len(source) > 65536 {
-		diagnostic := scopeDiagnostic(programID)
+	if len(source) == 0 || len(source) > domain.MaxSourceBytes {
+		diagnostic := scopeDiagnostic(programID, domain.MaxSourceBytes)
 		return programmingcompiler.Input{}, &diagnostic
 	}
 	ioMap, diagnostic := ioMapFromRevision(revision, programID)
@@ -391,7 +401,7 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 		}
 		if err := json.Unmarshal(object.PayloadJSON, &payload); err != nil || payload.VariableID != object.ObjectID ||
 			payload.Name == "" || payload.Type == "" {
-			diagnostic := scopeDiagnostic(programID)
+			diagnostic := scopeDiagnostic(programID, 0)
 			return nil, &diagnostic
 		}
 		variables[payload.VariableID] = variableInfo{name: payload.Name, programID: payload.ProgramID,
@@ -416,12 +426,12 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 		}
 		if err := json.Unmarshal(object.PayloadJSON, &payload); err != nil || payload.BindingID != object.ObjectID ||
 			payload.Point.PointID == "" || payload.Point.Category == "" || payload.DataType == "" {
-			diagnostic := scopeDiagnostic(programID)
+			diagnostic := scopeDiagnostic(programID, 0)
 			return nil, &diagnostic
 		}
 		variable, found := variables[payload.VariableID]
 		if !found || variable.programID != programID {
-			diagnostic := scopeDiagnostic(programID)
+			diagnostic := scopeDiagnostic(programID, 0)
 			return nil, &diagnostic
 		}
 		var direction string
@@ -431,7 +441,7 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 		case "OUTPUT":
 			direction = "output"
 		default:
-			diagnostic := scopeDiagnostic(programID)
+			diagnostic := scopeDiagnostic(programID, 0)
 			return nil, &diagnostic
 		}
 		entries = append(entries, programmingcompiler.IoMapEntry{
@@ -454,10 +464,18 @@ func compilerDiagnostic(item programmingcompiler.Diagnostic) DiagnosticView {
 	return DiagnosticView{Code: string(code), DetailCode: item.Code, Severity: "ERROR", MessageKey: public.MessageKey, Location: location, Args: domain.SanitizeErrorArgs(code, args)}
 }
 
-func scopeDiagnostic(programID string) DiagnosticView {
+// scopeDiagnostic báo vi phạm capacity. `limit` phải là trần thật bị vượt, lấy
+// từ profile machine-readable — literal `1` cũ nói sai capacity sản phẩm (32).
+// `limit <= 0` nghĩa là từ chối không do trần (payload sai dạng): khi đó bỏ hẳn
+// arg `limit` thay vì bịa một con số cho người đọc lỗi.
+func scopeDiagnostic(programID string, limit int) DiagnosticView {
 	public := domain.NewPublicError(domain.ErrScope)
+	args := map[string]any{"profile": checkTargetProfile}
+	if limit > 0 {
+		args["limit"] = limit
+	}
 	return DiagnosticView{Code: string(domain.ErrScope), DetailCode: "ST-CLI-LIMIT", Severity: "ERROR", MessageKey: public.MessageKey,
-		Location: map[string]any{"programId": programID}, Args: map[string]any{"profile": checkTargetProfile, "limit": 1}}
+		Location: map[string]any{"programId": programID}, Args: args}
 }
 
 func workerDiagnostic(detail string) DiagnosticView {

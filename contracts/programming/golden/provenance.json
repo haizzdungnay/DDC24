@@ -5,7 +5,7 @@
   "artifact": "contracts/programming/golden/rev_a_ahu_fan_control.mkir",
   "artifactFileSha256": "4caa01e6b6e7c3575f775b32ca2df9728d0a2233c9e248c1fa08cd026fe2d538",
   "profile": "contracts/programming/rev_a_profile_v1.json",
-  "profileFileSha256": "94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc",
+  "profileFileSha256": "46bed28b1be3f82689f2094ea8f37e6b3b75e8832a29e65de00460e1839c70e5",
   "generator": "mkddc-st-compile",
   "integrityMode": "HASH_ONLY",
   "buildManifest": "contracts/programming/golden/build_manifest_st_v1.json",

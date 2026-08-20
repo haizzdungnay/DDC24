@@ -19,7 +19,7 @@ BASE = ROOT / "contracts/programming"
 SCHEMA_PATH = BASE / "fbd_v1.schema.json"
 GOLDEN_PATH = BASE / "fbd/golden/ahu_fan_enable.json"
 KEYBOARD_PATH = BASE / "fbd_keyboard_commands_v1.json"
-PROFILE_PATH = BASE / "rev_a_profile_v1.json"
+PROFILE_PATH = BASE / "product_profile_v2.json"
 MANIFEST_PATH = BASE / "fbd/manifest.json"
 EQUIVALENCE_PATH = BASE / "fbd/equivalence_v1.json"
 

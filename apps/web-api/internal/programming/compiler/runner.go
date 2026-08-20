@@ -17,10 +17,13 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"mkddc-web/internal/programming/domain"
 )
 
 const (
-	MaxArtifactBytes = 1 << 20
+	// MaxArtifactBytes phải bằng trần artifact trong profile machine-readable.
+	MaxArtifactBytes = domain.MaxProfileArtifactBytes
 	maxManifestBytes = 256 << 10
 	maxStdoutBytes   = 2 << 20
 	maxStderrBytes   = 64 << 10
@@ -253,7 +256,8 @@ func decodeCLIResponse(raw []byte) (cliResponse, error) {
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return cliResponse{}, fmt.Errorf("%w: nhiều JSON value", ErrInvalidOutput)
 	}
-	if response.CompilerVersion != "fwsom-st-1.2.0" || response.ArtifactSchemaVersion != 1 || response.TargetABI != 3841 {
+	if response.CompilerVersion != "fwsom-st-1.2.0" || response.ArtifactSchemaVersion != 1 ||
+		response.TargetABI != domain.ProfileTargetABI {
 		return cliResponse{}, fmt.Errorf("%w: version/ABI", ErrInvalidOutput)
 	}
 	return response, nil
@@ -267,10 +271,13 @@ func validateSuccess(response cliResponse, artifactPath, manifestPath string, in
 		response.SourceSHA256 == nil || response.BuildKeySHA256 == nil ||
 		response.SourceID == nil || *response.SourceID != input.SourceID || response.Language == nil || *response.Language != input.Language ||
 		response.IoBindingCount == nil || *response.IoBindingCount != int64(len(input.IoMap)) ||
-		*response.CompilerProfile != 1 || *response.ProfileID != "revA-1t-1-5-30" ||
-		*response.ProfileSHA256 != "94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc" ||
-		*response.LibraryVersion != "rev-a.1" ||
-		*response.IntegrityMode != "HASH_ONLY" {
+		// Token profile phải so với hằng sinh từ contract. Trước đây bốn giá trị
+		// này được chép tay, nên profile đổi là runner từ chối mọi artifact hợp lệ
+		// (hoặc tệ hơn, chấp nhận artifact của profile khác nếu ai đó sửa literal).
+		*response.CompilerProfile != domain.ProfileCode || *response.ProfileID != domain.ProfileID ||
+		*response.ProfileSHA256 != domain.ProfileSHA256 ||
+		*response.LibraryVersion != domain.ProfileLibraryVersion ||
+		*response.IntegrityMode != domain.ProfileIntegrityMode {
 		return Result{}, fmt.Errorf("%w: metadata success thiếu/sai", ErrInvalidOutput)
 	}
 	artifact, err := readBoundedRegularFile(artifactPath, MaxArtifactBytes)

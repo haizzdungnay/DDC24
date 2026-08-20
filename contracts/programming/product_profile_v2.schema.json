@@ -1,14 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://mekong-hcm.local/contracts/programming/rev_a_profile_v1.schema.json",
-  "title": "Profile Programming Rev A v1",
+  "$id": "https://mekong-hcm.local/contracts/programming/product_profile_v2.schema.json",
+  "title": "Product profile Programming v2",
+  "description": "Profile sản phẩm thống nhất theo DDD-SW-PROG-UNIFIED-001 §0/§4.1. `profileId`, `profileCode` và `targetAbi` là token phân biệt định dạng nằm trong artifact/FBD document/build manifest; chúng chỉ đổi cùng artifact v2 (T59-006/T59-106) theo dual-reader ở DDD §12.1, nên v2 giữ nguyên giá trị v1 và chỉ nâng `version.major`.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "profileId",
     "profileCode",
+    "targetAbi",
     "version",
-    "task",
+    "capacity",
+    "scheduler",
     "resources",
     "languages",
     "types",
@@ -20,25 +23,50 @@
     "$schema": { "type": "string" },
     "profileId": { "const": "revA-1t-1-5-30" },
     "profileCode": { "const": 1 },
+    "targetAbi": { "const": 3841 },
     "version": { "$ref": "#/$defs/version" },
-    "task": {
+    "capacity": {
+      "description": "Trần cấp package/Revision theo DDD §0 và §4.1. Khác với `resources` vốn là trần cấp một Program/artifact.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["maxTasks", "maxProgramsPerTask", "maxProgramsTotal", "allowedPeriodMs"],
+      "required": [
+        "maxObjects", "maxProgramsTotal", "maxProgramsEnabled", "maxUserPou",
+        "maxFunctionBlockInstances", "maxSignals", "maxBindings"
+      ],
       "properties": {
-        "maxTasks": { "const": 1 },
-        "maxProgramsPerTask": { "const": 1 },
-        "maxProgramsTotal": { "const": 1 },
+        "maxObjects": { "const": 1312 },
+        "maxProgramsTotal": { "const": 32 },
+        "maxProgramsEnabled": { "const": 16 },
+        "maxUserPou": { "const": 256 },
+        "maxFunctionBlockInstances": { "const": 1024 },
+        "maxSignals": { "const": 512 },
+        "maxBindings": { "const": 512 }
+      }
+    },
+    "scheduler": {
+      "description": "Trần release cadence. `maxTasks` là số lớp chu kỳ (mỗi giá trị trong `allowedPeriodMs` một lớp), không phải nhóm do người dùng đặt: DDD §4.1 cấm expose Task order và §7.1 quy định mỗi Program tự release theo deadline riêng.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxTasks", "maxProgramsPerTask", "maxProgramsTotal",
+        "allowedPeriodMs", "maxTaskBudgetPercent"
+      ],
+      "properties": {
+        "maxTasks": { "const": 3 },
+        "maxProgramsPerTask": { "const": 32 },
+        "maxProgramsTotal": { "const": 32 },
         "allowedPeriodMs": {
           "type": "array",
           "prefixItems": [{ "const": 1000 }, { "const": 5000 }, { "const": 30000 }],
           "items": false,
           "minItems": 3,
           "maxItems": 3
-        }
+        },
+        "maxTaskBudgetPercent": { "const": 20 }
       }
     },
     "resources": {
+      "description": "Trần cấp một Program/artifact. Package vẫn bị `capacity` chặn thêm ở mức tổng, nên tích `resources × maxProgramsTotal` không phải capability sản phẩm.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -107,7 +135,7 @@
       "additionalProperties": false,
       "required": ["major", "minor"],
       "properties": {
-        "major": { "const": 1 },
+        "major": { "const": 2 },
         "minor": { "const": 0 }
       }
     },

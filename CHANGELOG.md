@@ -8,6 +8,60 @@
 
 ## [Unreleased]
 
+### Changed — `T59-002` Product profile v2: capacity 32/16 và generator C++/Go/TS (2026-08-20)
+
+Capacity sản phẩm bị khoá ở **một** Program tại mọi lớp: C++ `kMaxProgramsTotal=1`,
+Go `len(programs) != 1`, diagnostic `"limit": 1`, FE/Go chép tay `profileId`,
+`profileSha256` và trần FBD. Nguyên nhân gốc: profile machine-readable chỉ sinh
+**một** consumer (C++); Go và TS đọc cùng contract nhưng bằng literal chép tay,
+nên ba lớp không có phép kiểm nào ràng buộc lại với nhau — và JSON Schema khoá
+thẳng `maxTasks/maxProgramsPerTask/maxProgramsTotal` thành `const 1`.
+
+- Thay `rev_a_profile_v1.*` bằng `contracts/programming/product_profile_v2.*`:
+  khối `capacity` cấp package `32 Program / 16 Enabled / 256 user POU / 1024 FB
+  instance / 512 signal / 512 binding`, khối `scheduler`, khối `resources` giữ
+  trần cấp **một** Program, thêm `targetAbi`.
+- `scripts/generate_programming_profile.py` sinh **C++ + Go + TS** từ một nguồn,
+  validate JSON Schema, kiểm bất biến ngoài schema (Enabled ≤ Total,
+  `maxTasks` = số lớp chu kỳ, binding Program ≤ binding package, chu kỳ tăng dần)
+  và chạy `gofmt` để `--check` không bao giờ đối đầu với `gofmt -l`.
+- Bỏ literal ở consumer: `st_limits.cpp` (`range=1..1`, `enum=…`, `exact=3841`),
+  `st_ir.hpp`/`st_limits.hpp` (`0x00000F01`), `st_scheduler.hpp` (budget percent),
+  `runner.go` (`profileId`/`profileSha256`/`libraryVersion`/`integrityMode`/ABI/
+  `MaxArtifactBytes`), `checks.go` (`limit: 1`, `65536`), FE `fbd/model.ts`
+  (`profileId`, trần FBD, danh sách type).
+- G1 join ghim profile v2 + hash schema + `documentMajor/Minor` +
+  `maxProgramsTotal/Enabled` + `targetAbi` + `integrityMode`; validator bỏ nốt
+  `len(contracts) == 7`, `version == 1.0`, `profileCode == 1` và
+  `integrityMode == "HASH_ONLY"`, chuyển sang bộ tên contract bắt buộc.
+- Golden ST/FBD build manifest được **sinh lại bằng `mkddc-st-compile` thật**,
+  không sửa tay: chỉ `profile.sha256` và `buildKeySha256` đổi, byte `.mkir` giữ
+  nguyên — xác nhận profile hash không nằm trong artifact, nên LKG cũ vẫn nạp được.
+
+**Ranh giới có chủ ý:** `profileId`, `profileCode` và `targetAbi` **giữ giá trị v1**
+vì là discriminator nằm trong artifact/FBD document/build manifest; xoay chúng ở
+W0 sẽ vô hiệu hóa mọi golden và phá dual-reader v1/v2 mà DDD §12.1 yêu cầu. Việc
+rotate thuộc `T59-006`/`T59-106`.
+
+**Giới hạn giai đoạn nêu rõ, không giấu:** pipeline compiler hiện dựng được một
+Program mỗi lần chạy. Quá 32 Program bị từ chối bằng **trần sản phẩm 32**; 2..32
+Program bị từ chối bằng **trần pipeline 1** ở nhánh riêng ghi rõ chủ sở hữu
+`T59-302`/`T59-305`. Test khoá đúng sự phân biệt này.
+
+**Sửa kèm:** `PRG-ERR-SCOPE-001` từng gắn arg `limit` cho cả những từ chối **không**
+do trần (payload sai dạng), tức bịa một con số giới hạn cho người đọc lỗi. Nay
+`limit` chỉ xuất hiện khi thật sự có trần bị vượt.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `generate_programming_profile.py --check` exact **3/3** tệp sinh.
+C++ Release MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1055/1055 PASS** (thêm
+3 test one-over/capacity). `go vet ./...` sạch, `go test ./... -count=1` **18/18
+package ok** (thêm 9 test capacity/one-over). FE `vitest` **112 file / 1066 test
+PASS** (thêm 5 test contract profile), `lint` PASS, `build` PASS.
+`verify-project.sh --component layout` **exit 0**; G1 `--self-test` **20/20**
+mutation + **6/6** manifest chain + **5/5** deploy order, tất cả reject đúng lý do;
+artifact manifest self-test **7/7**; FBD contract PASS. `git diff --check` sạch.
+
 ### Fixed — `T59-001` mở gate G1: re-pin join contract và bỏ hardcode schema version (2026-08-20)
 
 `scripts/verify_programming_g1_contracts.py` báo 10 FAIL và giữ gate `layout` đỏ

@@ -75,7 +75,9 @@ namespace st_base_step {
 constexpr uint32_t kDefaultMs = 1000;
 constexpr uint32_t kMinMs = 500;
 constexpr uint32_t kMaxMs = 2000;
-constexpr uint32_t kMaxTaskBudgetPercent = 20;
+/* Trần budget là quyết định profile, không phải hằng riêng của base step:
+ * giữ hai bản sao thì mỗi lần profile đổi lại có một phía nói số cũ. */
+constexpr uint32_t kMaxTaskBudgetPercent = st_profile_generated::kMaxTaskBudgetPercent;
 } // namespace st_base_step
 
 enum class StSchedulerProfile : uint8_t {

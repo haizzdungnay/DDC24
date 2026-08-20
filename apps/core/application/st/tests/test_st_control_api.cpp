@@ -165,14 +165,18 @@ TEST(StControlApi, CapabilitiesPublishesEverythingBeNeedsToCompile)
     EXPECT_EQ(r["maxArtifactBytes"], st_ir::kMaxArtifactSize);
     EXPECT_TRUE(r.contains("compilerVersion"));
     EXPECT_EQ(r["runtimeProfile"], st_profile_generated::kProfileId);
-    EXPECT_EQ(r["maxTasks"], 1);
-    EXPECT_EQ(r["maxProgramsPerTask"], 1);
-    EXPECT_EQ(r["maxProgramsTotal"], 1);
+    /* Capability phải phát đúng profile machine-readable. Literal 1/1/1 cũ khiến
+     * test khoá capacity As-Built thay vì capacity sản phẩm. */
+    EXPECT_EQ(r["maxTasks"], st_profile_generated::kMaxTasks);
+    EXPECT_EQ(r["maxProgramsPerTask"], st_profile_generated::kMaxProgramsPerTask);
+    EXPECT_EQ(r["maxProgramsTotal"], st_profile_generated::kMaxProgramsTotal);
+    EXPECT_EQ(r["maxProgramsTotal"], 32);
     EXPECT_EQ(r["allowedPeriodMs"], json({1000, 5000, 30000}));
     EXPECT_EQ(r["baseStepMs"], 1000);
     EXPECT_EQ(r["baseStepMinMs"], 500);
     EXPECT_EQ(r["baseStepMaxMs"], 2000);
-    EXPECT_EQ(r["maxTaskBudgetPercentExclusive"], 20);
+    EXPECT_EQ(r["maxTaskBudgetPercentExclusive"],
+              st_profile_generated::kMaxTaskBudgetPercent);
     /* TASK-PROG-305: capability monitor/trace theo OD-PROG-011 — 1 Hz, stale
      * sau 3 kỳ, trace event bounded. */
     EXPECT_EQ(r["monitorPollHz"], 1);
