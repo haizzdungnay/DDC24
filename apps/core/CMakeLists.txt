@@ -193,6 +193,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_library_registry.cpp
       application/st/tests/test_st_pou_parser.cpp
       application/st/tests/test_st_pou_registry.cpp
+      application/st/tests/test_st_function_purity.cpp
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp

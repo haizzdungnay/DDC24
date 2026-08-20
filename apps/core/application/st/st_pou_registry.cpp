@@ -22,6 +22,7 @@ std::string fold(const std::string& value)
 
 struct CallSite {
     std::string name;
+    std::size_t arg_count = 0;
     int line = 0;
     int column = 0;
 };
@@ -32,7 +33,7 @@ void collect_expr(const StExpr* expr, std::vector<CallSite>* out)
 {
     if (expr == nullptr) return;
     if (expr->kind == StExpr::Kind::USER_CALL)
-        out->push_back({expr->user_call_name, expr->line, expr->column});
+        out->push_back({expr->user_call_name, expr->args.size(), expr->line, expr->column});
     collect_expr(expr->lhs.get(), out);
     collect_expr(expr->rhs.get(), out);
     collect_expr(expr->operand.get(), out);
@@ -67,6 +68,35 @@ void collect_stmts(const std::vector<StStmt>& body, std::vector<CallSite>* out)
 /* `set_diag` là helper cục bộ của từng translation unit trong lớp này (parser và
  * semantic mỗi bên có bản riêng), nên registry điền thẳng thay vì kéo thêm phụ
  * thuộc chỉ để dùng một hàm bốn dòng. */
+/* Purity của MỘT FUNCTION, xét trên khai báo của chính nó.
+ *
+ * Parser đã chặn ba thứ này cho nguồn ST, nhưng registry vẫn kiểm lại vì AST còn
+ * đến từ lowering FBD (T59-105). Một producer mới không được phép bỏ qua quy tắc
+ * chỉ vì nó không đi qua parser — đây là điểm hội tụ của mọi producer, không phải
+ * kiểm trùng lặp. */
+const char* function_state_violation(const StProgram& pou, int* line, int* column)
+{
+    for (const StVarDecl& decl : pou.vars) {
+        if (decl.storage == StStorage::VAR_RETAIN) {
+            *line = decl.line; *column = decl.column;
+            return "declares VAR RETAIN; a pure FUNCTION keeps no state between calls";
+        }
+        if (decl.storage == StStorage::VAR_OUTPUT) {
+            *line = decl.line; *column = decl.column;
+            return "declares VAR_OUTPUT; a FUNCTION returns exactly one value";
+        }
+    }
+    if (!pou.fbs.empty()) {
+        *line = pou.fbs.front().line; *column = pou.fbs.front().column;
+        return "declares a function block instance; instances carry state";
+    }
+    if (!pou.has_return_type) {
+        *line = pou.line; *column = pou.column;
+        return "has no return type";
+    }
+    return nullptr;
+}
+
 bool fail(StDiagnostic* diag, const char* code, const std::string& message,
           int line, int column)
 {
@@ -123,6 +153,31 @@ bool st_build_pou_registry(const std::vector<StPouSource>& sources,
 
     for (const auto& item : pou_by_name) out->pou_order.push_back(item.second->name);
 
+    /* Purity theo khai báo, trước khi động tới call graph: lỗi cấu trúc phải báo
+     * trước lỗi quan hệ, nếu không người sửa đuổi theo triệu chứng thứ cấp. */
+    for (const auto& item : pou_by_name) {
+        const StProgram& pou = *item.second;
+        if (pou.kind != StPouKind::FUNCTION) continue;
+        int line = 0, column = 0;
+        if (const char* violation = function_state_violation(pou, &line, &column))
+            return fail(diag, st_diag_code::kPouFunctionNotPure,
+                        "FUNCTION '" + pou.name + "' " + violation, line, column);
+    }
+
+    /* Chữ ký công bố cho lớp lowering dùng lại, thay vì mỗi lớp tự dựng bảng. */
+    for (const auto& item : pou_by_name) {
+        const StProgram& pou = *item.second;
+        StPouSignature signature;
+        signature.name = pou.name;
+        signature.kind = pou.kind;
+        signature.from_library = false;
+        for (const StVarDecl* input : pou.by_storage(StStorage::VAR_INPUT))
+            signature.input_types.push_back(input->type);
+        signature.has_return_type = pou.has_return_type;
+        signature.return_type = pou.return_type;
+        out->signatures.push_back(std::move(signature));
+    }
+
     /* Yêu cầu library: entry phải tồn tại VÀ đúng version đã pin. Hai lỗi này có
      * mã riêng vì cách sửa khác nhau — thêm entry, hay đổi pin. */
     for (const StPouSource& source : sources) {
@@ -163,6 +218,49 @@ bool st_build_pou_registry(const std::vector<StPouSource>& sources,
             const bool is_library = (in_project == pou_by_name.end());
             const std::string callee =
                 is_library ? in_library->second->name : in_project->second->name;
+            const StPouKind callee_kind =
+                is_library ? in_library->second->kind : in_project->second->kind;
+
+            /* PROGRAM là đơn vị lập lịch, không phải hàm — gọi nó không có nghĩa
+             * ở bất kỳ ngữ cảnh nào. */
+            if (callee_kind == StPouKind::PROGRAM)
+                return fail(diag, st_diag_code::kPouSignatureInvalid,
+                            "'" + callee + "' is a PROGRAM and cannot be called",
+                            call.line, call.column);
+
+            if (callee_kind == StPouKind::FUNCTION_BLOCK) {
+                /* Hai người gọi, hai cách sửa khác nhau: FUNCTION thì phải bỏ FB
+                 * đi (nó có state); PROGRAM/FB thì phải khai instance rồi gọi qua
+                 * instance. Cùng một mã lỗi sẽ nói sai việc cần làm. */
+                if (pou.kind == StPouKind::FUNCTION)
+                    return fail(diag, st_diag_code::kPouFunctionNotPure,
+                                "FUNCTION '" + pou.name + "' calls FUNCTION_BLOCK '" + callee +
+                                    "', which carries state",
+                                call.line, call.column);
+                return fail(diag, st_diag_code::kPouSignatureInvalid,
+                            "'" + callee +
+                                "' is a FUNCTION_BLOCK; declare an instance and call it "
+                                "through that instance",
+                            call.line, call.column);
+            }
+
+            /* Số đối số kiểm được ngay từ chữ ký; kiểu của từng đối số thuộc lớp
+             * lowering vì nó cần suy kiểu biểu thức (T59-105). Bảng chữ ký ở trên
+             * là để lớp đó dùng lại, không dựng bảng thứ hai. */
+            if (!is_library) {
+                const std::size_t expected =
+                    in_project->second->by_storage(StStorage::VAR_INPUT).size();
+                if (call.arg_count != expected)
+                    return fail(diag, st_diag_code::kPouSignatureInvalid,
+                                "call to '" + callee + "' passes " +
+                                    std::to_string(call.arg_count) + " argument(s) but it declares " +
+                                    std::to_string(expected),
+                                call.line, call.column);
+                if (!in_project->second->has_return_type)
+                    return fail(diag, st_diag_code::kPouSignatureInvalid,
+                                "'" + callee + "' has no return type and cannot be used in an expression",
+                                call.line, call.column);
+            }
             edges.push_back({pou.name, callee, is_library, call.line, call.column});
             if (!is_library) adjacency[fold(pou.name)].insert(key);
             /* Gọi CHÍNH MÌNH là đệ quy trực tiếp — bắt ngay tại đây để thông điệp

@@ -438,7 +438,7 @@ chạy.
 |---|---|---|---|---|---|
 | `T59-101` | P0 | Parser/AST cho `FUNCTION` và `FUNCTION_BLOCK`; interface/signature | T59-003/004 | **DONE** | `parse_st_pou()` nhận cả ba loại POU; 12 test (4 positive + 8 negative) khoá kind/name/signature kèm mã lỗi và vị trí; `ctest` 1077/1077; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-102` | P0 | Symbol/call graph, library resolver, recursion/DAG guard | T59-101 | **DONE** | `st_pou_registry.*` mới; 10 test khoá đệ quy trực tiếp/gián tiếp (chu trình dài 2..4), thiếu entry vs lệch version **khác mã**, trùng/mơ hồ tên, và đồ thị **độc lập thứ tự nạp**; `ctest` 1087/1087; wave W1 **5/5 PASS**. Chi tiết §3.2. |
-| `T59-103` | P0 | FUNCTION purity/type/side-effect enforcement | T59-102 | ORDERED | Function equivalence ST/FBD; state/RETAIN/I/O/FB stateful call reject. |
+| `T59-103` | P0 | FUNCTION purity/type/side-effect enforcement | T59-102 | **DONE** | purity ép ở registry (điểm hội tụ mọi producer, không chỉ parser ST); 10 test dựng AST **không qua parser**; cùng lời gọi sai nhưng người gọi khác nhau cho **mã khác nhau**; bảng chữ ký công bố cho lowering; `ctest` 1097/1097; corpus tương đương ST↔FBD PASS; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-104` | P0 | FUNCTION_BLOCK instance state/layout/RETAIN ownership | T59-102 | ORDERED | 100/1024 instance isolation; stable layout/source reorder; corrupt/mismatch cold-init. |
 | `T59-105` | P1 | FBD nodes gọi user Function/FB + inspector/pin generation | T59-103/104 | ORDERED | ST/FBD shared typed IR; connect/order/undo/source-map/a11y tests. |
 | `T59-106` | P0 | Artifact v2 writer/loader: POU/program/library/signal/binding/resource sections | T59-103/104/006 | ORDERED | Golden byte/hash stable; loader bounds/fuzz/tamper/wrong profile; v1 LKG load. |
@@ -513,6 +513,41 @@ dùng chung đều bị chặn. Test khoá cả hai chiều: kim cương PASS, c
 `st_compile.cpp` nhận nhánh `USER_CALL` **từ chối tường minh** — `-Wswitch` bắt
 buộc chúng phải xử lý, và từ chối rõ ràng tốt hơn `default` im lặng. Lowering thật
 thuộc `T59-103`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-103` — FUNCTION thuần: state, side-effect và chữ ký
+
+**Vì sao kiểm lại thứ parser đã kiểm.** Parser chỉ thấy **nguồn ST**. AST còn đến
+từ lowering FBD (`T59-105`), và một producer mới không được phép bỏ qua quy tắc
+chỉ vì nó không đi qua parser. Registry là **điểm hội tụ của mọi producer**, nên
+purity phải được ép ở đó. Đây không phải kiểm trùng lặp — và test chứng minh điều
+đó bằng cách dựng AST **thẳng tay, không qua parser**, rồi đòi registry vẫn chặn.
+
+**Cùng một lời gọi sai, người gọi khác nhau thì mã khác nhau.**
+
+- `FUNCTION` gọi `FUNCTION_BLOCK` → `ST-POU-002` "không thuần". Cách sửa: bỏ FB đi.
+- `PROGRAM`/`FUNCTION_BLOCK` gọi `FUNCTION_BLOCK` → `ST-POU-001` kèm chữ
+  "instance". Cách sửa: khai instance rồi gọi qua instance.
+
+Dùng chung một mã sẽ **nói sai việc cần làm**. Có test riêng khoá đúng sự phân biệt.
+
+**Gọi `PROGRAM` luôn bị từ chối.** PROGRAM là đơn vị lập lịch, không phải hàm —
+gọi nó không có nghĩa ở bất kỳ ngữ cảnh nào.
+
+**Chữ ký công bố, không dựng bảng thứ hai.** Registry xuất `signatures` (tên,
+kind, kiểu từng input, kiểu trả về) sắp xếp ổn định, để lớp lowering
+`T59-105`/`T59-106` dùng lại. Hai bảng ký hiệu song song là cách drift bắt đầu —
+đúng cơ chế đã xảy ra ở registry Control Library.
+
+**Ranh giới trung thực về "type".** Registry kiểm **số đối số** và "callee có kiểu
+trả về hay không" — hai thứ suy được thẳng từ chữ ký. Kiểu của **từng biểu thức
+đối số** cần suy kiểu biểu thức, việc đó thuộc lớp lowering (`T59-105`) và sẽ dùng
+đúng bảng `signatures` này. Không tự dựng một bộ suy kiểu thứ hai trong registry.
+
+**Chiều khẳng định cũng được khoá.** `FUNCTION_BLOCK` **vẫn được** giữ `VAR RETAIN`,
+FB instance và gọi FUNCTION thuần — nếu guard purity lan sang FB thì FB mất đúng
+khả năng làm nên nó. Corpus tương đương ST↔FBD (`fbd/equivalence_v1.json`) vẫn PASS.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

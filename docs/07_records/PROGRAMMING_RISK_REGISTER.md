@@ -414,6 +414,17 @@ Evidence host/local. Registry mới chỉ **phân giải và kiểm**; chưa có
 chưa nối vào đường Check production. 16/16 risk giữ `Open`, 11 Critical, S×L và
 residual không đổi.
 
+### 5.25 Cập nhật treatment source `T59-103` (Plan59 W1)
+
+| Risk | Control đã có trên nhánh `feat/t59-103-function-purity` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-006` | Purity `FUNCTION` ép ở registry — điểm hội tụ của MỌI producer, không chỉ parser ST — nên AST đến từ lowering FBD cũng không lách được; test dựng AST không qua parser chứng minh điều đó. State/`VAR_OUTPUT`/FB instance/gọi POU có state đều fail-closed | Lowering FBD gọi user POU (`T59-105`), instance state/RETAIN (`T59-104`), fuzz (`T59-601`) và Test Result `VS-PROG-006` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Cùng một lời gọi sai nhưng người gọi khác nhau cho **mã khác nhau** (`ST-POU-002` "bỏ FB đi" vs `ST-POU-001` "khai instance"), nên thông điệp nói đúng việc cần làm thay vì gộp thành một lỗi chung | Emitter nối vào Check thật và `VS-PROG-019/024` review độc lập | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local. Registry kiểm **số đối số** và sự tồn tại kiểu trả về; suy
+kiểu từng biểu thức đối số thuộc `T59-105` và sẽ dùng lại bảng `signatures` chứ
+không dựng bộ thứ hai. 16/16 risk giữ `Open`, 11 Critical, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -462,6 +473,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 2.6 | 2026-08-20 | Ghi `T59-007` (Plan59 W0) cho treatment partial RSK-015: ma trận cổng theo Wave thành contract có schema/self-test, và runner không thể báo PASS cho cổng cần CI/board/instrument. Giữ 16/16 Open, 11 Critical và mọi residual. |
 | 2.7 | 2026-08-20 | Ghi `T59-101` (Plan59 W1) cho treatment partial RSK-006: parser nhận ba loại POU với AST chung và ép quy tắc kind/chữ ký bằng mã riêng. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering, runtime và target chưa có. |
 | 2.8 | 2026-08-20 | Ghi `T59-102` (Plan59 W1) cho treatment partial RSK-006/014: call graph xác định, guard DAG chặn đệ quy trực tiếp/gián tiếp, và ba mã riêng cho ba cách sửa khác nhau. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering/Check production/target chưa có. |
+| 2.9 | 2026-08-20 | Ghi `T59-103` (Plan59 W1) cho treatment partial RSK-006/014: purity FUNCTION ép ở registry nên producer không qua parser cũng bị chặn, và mã lỗi phân biệt theo cách sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering FBD, instance state và target chưa có. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
 | 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |

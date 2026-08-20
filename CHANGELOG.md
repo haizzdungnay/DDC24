@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### Added — `T59-103` FUNCTION thuần: state, side-effect và chữ ký (2026-08-20)
+
+Purity của `FUNCTION` được ép ở `st_pou_registry` — **điểm hội tụ của mọi
+producer** — chứ không chỉ ở parser. Parser chỉ thấy nguồn ST; AST còn đến từ
+lowering FBD (`T59-105`), và một producer mới không được phép bỏ qua quy tắc chỉ
+vì nó không đi qua parser. 10 test mới dựng AST **thẳng tay, không qua parser**,
+rồi đòi registry vẫn chặn — đó là bằng chứng cho việc này không phải kiểm trùng lặp.
+
+**Cùng một lời gọi sai, người gọi khác nhau thì mã khác nhau:**
+
+- `FUNCTION` gọi `FUNCTION_BLOCK` → `ST-POU-002` "không thuần"; cách sửa là bỏ FB đi.
+- `PROGRAM`/`FUNCTION_BLOCK` gọi `FUNCTION_BLOCK` → `ST-POU-001` kèm chữ
+  "instance"; cách sửa là khai instance rồi gọi qua instance.
+
+Dùng chung một mã sẽ nói sai việc cần làm.
+
+- Gọi `PROGRAM` **luôn** bị từ chối: PROGRAM là đơn vị lập lịch, không phải hàm.
+- Registry công bố bảng `signatures` (tên, kind, kiểu từng input, kiểu trả về) sắp
+  xếp ổn định để lớp lowering **dùng lại** — hai bảng ký hiệu song song là cách
+  drift bắt đầu.
+- Chiều khẳng định cũng khoá: `FUNCTION_BLOCK` **vẫn được** giữ `VAR RETAIN`, FB
+  instance và gọi FUNCTION thuần; nếu guard purity lan sang FB thì FB mất đúng khả
+  năng làm nên nó.
+
+**Ranh giới trung thực về "type":** registry kiểm **số đối số** và "callee có kiểu
+trả về hay không" — hai thứ suy được thẳng từ chữ ký. Kiểu của **từng biểu thức
+đối số** cần suy kiểu biểu thức; việc đó thuộc `T59-105` và sẽ dùng đúng bảng
+`signatures` này thay vì dựng bộ suy kiểu thứ hai.
+
+**Kiểm chứng fresh trong phiên (host/local):** C++ Release MODBUS+BACNET+HMI `ON`:
+build PASS, `ctest` **1097/1097 PASS** (từ 1087). Corpus tương đương ST↔FBD
+(`verify_programming_fbd_contract.py`) PASS. `verify-project.sh --wave W1`
+**5/5 PASS**.
+
 ### Added — `T59-102` registry POU: call graph, library resolver và guard DAG (2026-08-20)
 
 `apps/core/application/st/st_pou_registry.{hpp,cpp}` dựng bảng ký hiệu, call graph,

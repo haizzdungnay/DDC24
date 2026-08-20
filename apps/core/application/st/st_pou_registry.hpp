@@ -52,22 +52,42 @@ struct StCallEdge {
     int         column = 0;
 };
 
+/* Chữ ký đã phân giải của một POU gọi được. Registry công bố bảng này để lớp
+ * lowering (T59-105/T59-106) type-check lời gọi mà KHÔNG phải tự dựng lại bảng ký
+ * hiệu — hai bảng song song là cách drift bắt đầu. */
+struct StPouSignature {
+    std::string name;
+    StPouKind   kind = StPouKind::FUNCTION;
+    bool        from_library = false;
+    std::vector<StType> input_types;
+    bool        has_return_type = false;
+    StType      return_type = StType::REAL;
+};
+
 struct StPouRegistryResult {
     /* Tên POU của Project, sắp xếp case-folded tăng dần. */
     std::vector<std::string> pou_order;
     std::vector<StCallEdge>  edges;
     /* Thứ tự topo của POU Project: callee đứng trước caller. Chỉ điền khi ok. */
     std::vector<std::string> topological_order;
+    /* Chữ ký mọi POU Project, sắp xếp ổn định theo tên case-folded. */
+    std::vector<StPouSignature> signatures;
 };
 
 /* Dựng bảng ký hiệu + call graph, phân giải library và kiểm DAG.
  *
  * false = có vi phạm, `*diag` mang mã ổn định:
- *   ST-POU-001  tên POU trùng nhau hoặc trùng entry SYSTEM library (mơ hồ)
+ *   ST-POU-001  tên/kind/chữ ký sai: trùng tên, trùng entry SYSTEM library (mơ hồ),
+ *               gọi PROGRAM, gọi FUNCTION_BLOCK như hàm, hoặc sai số đối số
+ *   ST-POU-002  FUNCTION không thuần: giữ state, có kênh ra thứ hai, hoặc gọi
+ *               một POU có state
  *   ST-POU-003  đệ quy trực tiếp hoặc gián tiếp (kể cả vòng qua library)
  *   ST-LIB-001  gọi tên không có ở POU Project lẫn library đã pin
  *   ST-LIB-002  entry library tồn tại nhưng lệch version đã pin
- */
+ *
+ * Vì sao kiểm purity Ở ĐÂY dù parser đã kiểm: parser chỉ thấy nguồn ST. AST còn
+ * đến từ lowering FBD (T59-105), và một producer mới không được phép bỏ qua quy
+ * tắc chỉ vì nó không đi qua parser. Registry là điểm hội tụ của MỌI producer. */
 bool st_build_pou_registry(const std::vector<StPouSource>& sources,
                            const std::vector<StLibraryEntry>& library,
                            StPouRegistryResult* out,

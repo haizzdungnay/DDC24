@@ -223,15 +223,15 @@ TEST(StPouRegistry, DuplicateAndAmbiguousNamesAreRejected)
 
 TEST(StPouRegistry, CallsInsideNestedStatementsAreCollected)
 {
-    /* Lời gọi nằm trong nhánh IF hoặc trong đối số FB vẫn phải vào đồ thị —
-     * bỏ sót một nhánh nghĩa là đệ quy lọt qua guard. */
+    /* Lời gọi nằm trong nhánh IF/ELSE vẫn phải vào đồ thị — bỏ sót một nhánh
+     * nghĩa là đệ quy lọt qua guard. Dùng hai FUNCTION để phép kiểm purity không
+     * bắn trước và che mất điều đang cần chứng minh. */
     Fixture fixture;
     fixture.add(
-        "FUNCTION_BLOCK Outer\n"
+        "FUNCTION Outer : REAL\n"
         "VAR_INPUT x : REAL; END_VAR\n"
-        "VAR_OUTPUT y : REAL; END_VAR\n"
-        "IF x > 0.0 THEN\n  y := Inner(x);\nELSE\n  y := 0.0;\nEND_IF;\n"
-        "END_FUNCTION_BLOCK\n");
+        "IF x > 0.0 THEN\n  Outer := Inner(x);\nELSE\n  Outer := 0.0;\nEND_IF;\n"
+        "END_FUNCTION\n");
     fixture.add(fn("Inner", "Inner := Outer(x);\n"));
 
     StPouRegistryResult result;
