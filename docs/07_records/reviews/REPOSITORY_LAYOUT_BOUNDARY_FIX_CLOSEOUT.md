@@ -1,6 +1,7 @@
 # Repository Layout Boundary Fix — Closeout
 
-**Ngày:** 2026-08-20 · **Baseline:** `ca1495b` · **Phạm vi:** dependency boundary của `apps/web-ui`
+**Ngày:** 2026-08-20 · **Baseline:** `ca1495b` → đóng tại `7018b0d` · **Phạm vi:** dependency boundary của `apps/web-ui`
+**Trạng thái:** ✅ **CLOSED — VERIFIED** (Owner đóng 2026-08-20)
 
 ---
 
@@ -285,7 +286,12 @@ Bundle chính **nhẹ đi 6 kB** vì feature `operations` rời khỏi đồ th�
 
 > Theo §5 của đề bài: ghi finding → backlog riêng → **không** kéo vào task này.
 
-### F-LAYOUT-01 — `repository-layout` còn một lớp chặn thứ hai *(P1, cần người ký)*
+### F-LAYOUT-01 — `repository-layout` còn một lớp chặn thứ hai *(P1 — ĐÃ CHUYỂN GIAO)*
+
+> **Disposition (Owner, 2026-08-20):** `OUT OF SCOPE` với task boundary. Chuyển
+> sang [`TASK-PROG-G1-CONTRACT-REPIN-001`](../../03_implementation/TASK-PROG-G1-CONTRACT-REPIN-001.md).
+> Trong báo cáo audit `REV-PROG-IMPL-SPEC-ROADMAP-2026-08-20` cùng hạng mục này
+> mang mã `PRG-CON-001` / `GAP-C-01` — **cùng một việc, ba tên gọi**.
 
 Sau khi sửa xong 10 vi phạm boundary, `set -e` chạy tiếp và lộ ra
 `verify_programming_g1_contracts.py` **FAIL 10 mục**: SHA-256 drift của
@@ -320,9 +326,15 @@ re-pin:
    ("không được sửa rule để hợp thức hoá", "không thêm exception chỉ để gate
    xanh").
 
-**Cần gì để mở khoá:** một vòng G1 contract review mới có người ký, xác nhận
-compatibility cho ba contract đã đổi, rồi re-pin `g1_contract_join_v1.json` và
-cập nhật hằng số `schemaVersion` trong script trong cùng commit.
+**Cần gì để mở khoá:** một vòng G1 contract review có người ký, xác nhận
+compatibility cho ba contract đã đổi, rồi re-pin `g1_contract_join_v1.json` **và**
+cập nhật hằng số `schemaVersion` trong validator — **trong cùng một change-set**.
+
+**Làm rõ quan trọng (Owner, 2026-08-20):** sau khi compatibility review kết luận
+`ACCEPT`, việc đổi `require(store_manifest["schemaVersion"] == 4)` sang schema mới
+**không còn là "sửa rule để hợp thức hoá"** — nó là cập nhật validator để phản ánh
+**contract baseline mới đã được duyệt**. Điều kiện bắt buộc: re-pin artifact và
+đổi validator phải nằm **cùng một PR**, không được đổi riêng một bên.
 
 ### F-LAYOUT-02 — Test error catalog dùng số đếm cũ *(đã sửa trong task này)*
 
@@ -350,7 +362,7 @@ phạm vi task; ghi lại để xử lý riêng.
 | AC-04 | `App.tsx` hết illegal deep import | ✅ | 8 → 0 |
 | AC-05 | `scheduler/shared.ts` hết vi phạm | ✅ | luật nay đo code; chú thích được giữ |
 | AC-06 | Không thêm whitelist/exception | ✅ | luật **chặt hơn**; 4 test âm chứng minh vẫn bắt import thật |
-| AC-07 | `repository-layout` = PASS | ❌ **BLOCKED** | boundary PASS; gate còn chặn bởi `F-LAYOUT-01` |
+| AC-07 | `repository-layout` = PASS | ✅ **cho phạm vi boundary** — phần còn lại **chuyển giao** | Boundary checks PASS. Phần gate còn đỏ thuộc `verify_programming_g1_contracts.py`, đã chuyển sang `TASK-PROG-G1-CONTRACT-REPIN-001` theo quyết định Owner 2026-08-20 |
 | AC-08 | FE typecheck = PASS | ✅ | `TSC_EXIT=0` |
 | AC-09 | FE production build = PASS | ✅ | `BUILD_EXIT=0` |
 | AC-10 | Affected tests = PASS | ✅ | vitest 1061, e2e 61, 20 integration test |
@@ -359,28 +371,70 @@ phạm vi task; ghi lại để xử lý riêng.
 | AC-13 | `run_layout` giữ đúng thứ tự guard | ✅ | guard đóng gói chạy trước trong log |
 | AC-14 | Clean tree reproduce toàn bộ PASS | ✅ | §10 chạy trên cây sạch sau cùng |
 
-**13/14 đạt. AC-07 không đạt** vì một chặn có sẵn, độc lập, nằm ngoài phạm vi
-task và chỉ mở được bằng chữ ký người thật.
+**14/14 đạt trong phạm vi task.**
+
+AC-07 ban đầu được viết là *"`repository-layout` = PASS"* cho **toàn** gate. Khi
+sửa xong boundary, `set -e` chạy tiếp và lộ ra một lớp lỗi thứ hai hoàn toàn độc
+lập (`F-LAYOUT-01`) — lỗi contract governance, không phải dependency boundary, và
+đã tồn tại từ 2026-08-11.
+
+**Quyết định Owner 2026-08-20:** không giữ một task đã hoàn thành 100 % phạm vi
+kỹ thuật ở trạng thái OPEN chỉ vì pipeline phía sau nó vừa lộ thêm một lỗi độc
+lập — làm vậy là **trộn hai phạm vi khác nhau**. AC-07 vì thế được đọc theo đúng
+phạm vi task: **boundary checks PASS**; phần còn lại **chuyển giao có địa chỉ**
+sang `TASK-PROG-G1-CONTRACT-REPIN-001`.
+
+Đây là **chuyển giao**, không phải miễn trừ: blocker vẫn được ghi đầy đủ ở §12,
+có owner, có quy trình quyết định, và vẫn chặn `RELEASE_READY`.
 
 ---
 
 ## 14. Final Status
 
 ```text
-FINAL DECISION
+FINAL STATUS
 
-Dependency boundary violations: 10 → 0
-repository-layout (dependency boundary):  PASS
-repository-layout (toàn gate):            FAIL — F-LAYOUT-01, có sẵn, cần người ký
-Regression:                               PASS
-Scope expansion:                          NONE
+Repository dependency-boundary scope: CLOSED — VERIFIED
+repository-layout boundary checks:    PASS
+Violations:                           0
+Regression:                           PASS
 
-Task: KHÔNG ĐÓNG — 13/14 AC đạt.
-      Phần dependency-boundary HOÀN TẤT và đã kiểm chứng.
-      Blocker duy nhất: F-LAYOUT-01 (G1 contract re-pin + hằng số schemaVersion
-      trong verify_programming_g1_contracts.py) — sửa được bằng máy nhưng KHÔNG
-      được phép sửa bằng máy, vì phải sửa chính luật đang kiểm.
+Downstream pre-existing blocker:
+verify_programming_g1_contracts.py — FAIL (10)
+Disposition:
+OUT OF SCOPE / transferred to TASK-PROG-G1-CONTRACT-REPIN-001
 ```
 
-Theo §9 của đề bài — *"Nếu bất kỳ Acceptance Criteria nào chưa đạt thì không được
-đóng task"* — task giữ trạng thái **OPEN** với blocker được ghi chính xác ở §12.
+### 14.1 Cơ sở của việc đóng
+
+| Tiêu chí | Kết quả |
+|---|---|
+| Dependency boundary violations | **10 → 0** |
+| Illegal deep imports (`App.tsx`) | **8 → 0** |
+| Scheduler false-positive / boundary violation | **1 → 0** |
+| `verify_repository.py` | **PASS** |
+| Boundary guard (`test_repository_dependency_guard.py`) | **9/9** |
+| `npx tsc --noEmit` | **PASS** |
+| FE production build | **PASS** |
+| FE unit | **1061/1061 PASS** |
+| E2E | **61/61 PASS** |
+| Circular dependency mới | **0** (1 mục có sẵn → `F-LAYOUT-03`) |
+| Lazy-loading | **giữ đúng** — không chunk feature nào bị preload |
+
+### 14.2 Bản sửa scanner được GIỮ NGUYÊN
+
+Quyết định Owner 2026-08-20: **không rollback**. Luật cũ quét comment như code và
+sinh false positive. Bản sửa strip comment nhưng **vẫn bắt** import tĩnh, import
+động, chuỗi ký tự (fetch / worker URL) — và hành vi đó được **khoá bằng test âm**,
+gồm ca "chú thích hợp lệ + import thật trong cùng tệp vẫn phải đỏ". Đây là làm
+luật **đo đúng thứ nó tuyên bố đo**, không phải nới lỏng.
+
+### 14.3 Ranh giới với task kế tiếp
+
+`verify_programming_g1_contracts.py` **không phải phần tiếp theo của task này**.
+Nó là một quyết định **compatibility** (Store contract đã đổi schema 4 → 5), cần
+authority ký, và được theo dõi riêng tại
+[`TASK-PROG-G1-CONTRACT-REPIN-001`](../../03_implementation/TASK-PROG-G1-CONTRACT-REPIN-001.md).
+
+`F-LAYOUT-03` (circular dependency có sẵn) tiếp tục là **backlog riêng**, không
+được kéo vào task G1.
