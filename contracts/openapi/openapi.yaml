@@ -257,6 +257,22 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigPutResult" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /virtual-points/{id}/usage:
+    get:
+      summary: Nơi một Virtual Point đang được tham chiếu (viewer+)
+      description: >
+        `incomplete=true` nghĩa là có nguồn không quét được; danh sách khi đó là
+        CHƯA ĐỦ và không được dùng để kết luận "không ai dùng điểm này".
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualPointUsage" }
+        "404": { $ref: "#/components/responses/Error" }
   /health:
     get:
       summary: Health baseline công khai cho installer/systemd
@@ -429,11 +445,47 @@ paths:
                     device_id: { type: string }
                     message: { type: string }
                     level: { type: string, enum: [info, warning] }
+  /modbus/frames:
+    get:
+      summary: Vòng nhớ khung Modbus RTU gần nhất (viewer+)
+      description: >
+        `T57-3.9` (`ADR-046` bản sửa 2026-08-19). Đây là BẢN GHI GIAO DỊCH, không
+        phải byte thô: `rawBytes=false` luôn đúng ở Rev A. `volatile=true` nhắc
+        rằng vòng nhớ nằm trong tiến trình iobus và mất khi restart. Mảng rỗng
+        nghĩa là "chưa có khung", khác hẳn với lỗi đọc — lỗi đọc trả 5xx.
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: bus, in: query, schema: { type: integer }, description: "Bus 1..N; mặc định 1" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModbusFrames" }
+        "503": { $ref: "#/components/responses/Error" }
   /modbus/mapping:
     get:
       summary: Bảng ánh xạ Point → register kèm lỗi validate (viewer+)
       responses:
         "200": { description: OK }
+  /modbus/templates:
+    get:
+      summary: Mẫu thiết bị Modbus RTU dựng sẵn (viewer+)
+      description: >
+        Chỉ đọc. `origin` phân biệt mẫu đóng gói theo firmware với mẫu do người
+        dùng nạp thêm; `source` là đường dẫn hồ sơ gốc để truy nguyên.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  templates:
+                    type: array
+                    items: { $ref: "#/components/schemas/ModbusTemplate" }
   /modbus/config/state:
     get:
       summary: Trạng thái vòng đời cấu hình (viewer+)
@@ -537,12 +589,19 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusProbeResult" } } } }
         "429": { description: "Vượt giới hạn tần suất." }
         "503": { $ref: "#/components/responses/Error" }
-  # SRC-F-02 (2026-08-09): endpoint này ĐÃ hiện thực trong
-  # apps/web-api/internal/app/modbus_rtu.go (handleModbusWriteTest) nhưng trước
-  # nay không có trong spec — chiều ngược lại của bảy path khai mà chưa làm.
-  # Ghi thử là thao tác ghi thật xuống thiết bị hiện trường đang chạy, nên bỏ
-  # sót nó khỏi contract nghĩa là kiểm soát RBAC và rate limit của nó không xuất
-  # hiện ở bất kỳ bản rà soát an ninh nào dựa trên spec.
+  # 2026-08-20 — Quyết định sản phẩm: bảy path /ota/*, /logs/download,
+  # /bacnet/objects, /graph/* ĐÃ ĐƯỢC GỠ khỏi contract Rev A.
+  #
+  # Trước đây (SRC-F-02, 2026-08-09) chúng được giữ lại và dán nhãn
+  # `x-implementation-status: not-implemented`. Nhãn đó không đủ: spec này tự
+  # nhận là "nguồn-chuẩn cho endpoint (D-4)", nên chỉ cần có mặt trong `paths`
+  # là generator vẫn sinh client, phép đếm độ phủ vẫn sai, và FE vẫn viết được
+  # lời gọi vào hư không — đúng thứ đã xảy ra với `client.validateGraph()`.
+  #
+  # Nguyên tắc áp dụng: contract Rev A CHỈ mô tả thứ runtime Rev A thực thi.
+  # OTA và BACnet exposure thuộc Rev B; /graph/* và /logs/download nằm trong
+  # backlog và phải implement TRƯỚC rồi mới khai lại ở đây.
+  # `TestRouteTableMatchesOpenAPI` giữ cho chúng không lặng lẽ quay lại.
   /modbus/write-test:
     post:
       summary: Ghi thử một register phục vụ commissioning (CHỈ admin)
@@ -589,6 +648,21 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SystemStatus" }
+  /system/history:
+    get:
+      summary: Lịch sử 60 phút CPU/RAM/nhiệt độ (viewer+)
+      description: >
+        `T57-3.4`. Vòng nhớ trong tiến trình `mkddc-web`, mất khi service khởi
+        động lại — `sinceRestart` cho biết mốc bắt đầu thật của dữ liệu.
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: windowS, in: query, schema: { type: integer }, description: Cửa sổ giây, mặc định 3600 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemHistory" }
   /network:
     get:
       summary: Dá»¯ liá»‡u trang Network (viewer+)
@@ -670,6 +744,20 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "502": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
+  /network/connectivity-check:
+    post:
+      summary: Kiểm tra kết nối mạng thực tế (operator+)
+      description: >
+        Thực hiện phép thử tới gateway/DNS/upstream và trả trạng thái từng đích.
+        KHÔNG thay đổi cấu hình, không tạo transaction.
+      x-rbac: [operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkCheck" }
+        "503": { $ref: "#/components/responses/Error" }
   /commissioning/points/{id}/test:
     post:
       summary: Test commissioning má»™t point (role operator+)
@@ -703,6 +791,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SystemConfig" }
+    put:
+      summary: Ghi gộp toàn bộ cấu hình — KHÔNG hỗ trợ, luôn trả 405
+      description: >
+        Tồn tại để trả lời dứt khoát thay vì rơi xuống static handler và trả về
+        trang HTML cho một lời gọi API. Ghi cấu hình phải đi qua từng nhóm
+        `/system/config/<group>` để mỗi nhóm được validate riêng.
+      x-rbac: [admin]
+      responses:
+        "405": { $ref: "#/components/responses/Error" }
   /system/config/device:
     get:
       summary: Äá»c cáº¥u hÃ¬nh device (admin)
@@ -1031,6 +1128,21 @@ paths:
         "200": { description: OK }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /users/access:
+    get:
+      summary: Bảng truy cập người dùng và phiên đang mở (admin)
+      description: >
+        `lastLoginAt` là `null` khi KHÔNG tìm thấy vết trong kho Activity — có
+        thể vì chưa từng đăng nhập, cũng có thể vì vết đã bị đẩy khỏi vòng nhớ.
+        Giao diện phải nói "không rõ", không được nói "chưa đăng nhập bao giờ".
+        Danh sách phiên nằm trong bộ nhớ tiến trình nên mất khi `mkddc-web` restart.
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserAccess" }
   /me:
     get:
       summary: Láº¥y thÃ´ng tin user Ä‘ang Ä‘Äƒng nháº­p (role viewer+)
@@ -1059,6 +1171,31 @@ paths:
         "200": { description: OK }
         "400": { $ref: "#/components/responses/Error" }
         "401": { description: "Máº­t kháº©u cÅ© khÃ´ng Ä‘Ãºng" }
+  /me/preferences:
+    get:
+      summary: Đọc tuỳ chọn giao diện của chính người dùng (viewer+)
+      description: >
+        Thân bài là một object JSON tuỳ ý do FE định nghĩa; BE lưu nguyên văn
+        theo từng username và KHÔNG diễn giải nội dung.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+    put:
+      summary: Ghi tuỳ chọn giao diện của chính người dùng (viewer+)
+      x-rbac: [viewer, operator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "204": { description: Đã lưu }
+        "400": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
   /history:
     get:
       summary: Unified historian query by point and explicit UTC range (viewer+)
@@ -1445,6 +1582,24 @@ paths:
                 items: { $ref: "#/components/schemas/ScheduleAuditEntry" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /schedules/effective:
+    get:
+      summary: Giá trị lịch có hiệu lực theo thời gian cho một điểm (viewer+)
+      description: >
+        `scheduleId` rỗng trong một đoạn nghĩa là KHÔNG lịch nào ghi vào đoạn đó
+        — đây là câu trả lời hợp lệ và phải phân biệt được với "chưa tính được".
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: pointId, in: query, required: true, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleEffective" }
+        "400": { $ref: "#/components/responses/Error" }
   /alarm-settings:
     get:
       summary: Read alarm entity settings (viewer+)
@@ -1495,53 +1650,45 @@ paths:
   # phần khai báo vì đây là phạm vi roadmap đã chốt, nhưng đánh dấu tường minh
   # bằng `x-implementation-status` để người và tool đều phân biệt được
   # "đã có" với "sẽ có".
-  /ota/upload:
+  /alarm-settings/simulate:
     post:
-      summary: Upload gói firmware (admin) — CHƯA HIỆN THỰC
-      x-implementation-status: not-implemented
+      summary: Mô phỏng luật cảnh báo trên chuỗi mẫu cho trước (viewer+)
+      description: >
+        `T57-2.13` (`ADR-048`). Là VỎ gọi `mkddc-alarm-sim`; không chạm cấu hình
+        đang lưu nên `viewer` là đủ. `engine` cho biết bản engine đã chạy.
+      x-rbac: [viewer, operator, admin]
       requestBody:
+        required: true
         content:
-          application/octet-stream:
-            schema: { type: string, format: binary }
-      responses: { "202": { description: Accepted } }
-  /ota/apply:
-    post:
-      summary: Kích hoạt OTA + reboot (admin) — CHƯA HIỆN THỰC
-      x-implementation-status: not-implemented
-      responses: { "202": { description: Accepted } }
-  /ota/status:
-    get:
-      summary: Trạng thái + tiến độ OTA — CHƯA HIỆN THỰC
-      x-implementation-status: not-implemented
+          application/json:
+            schema: { $ref: "#/components/schemas/AlarmSimulateRequest" }
       responses:
         "200":
           description: OK
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  state: { type: string, enum: [idle, downloading, verifying, applying, rebooting, success, failed, rolledback] }
-                  progress: { type: integer, minimum: 0, maximum: 100 }
-  /logs/download:
-    get:
-      summary: Tải log (gzip, admin) — CHƯA HIỆN THỰC
-      x-implementation-status: not-implemented
+              schema: { $ref: "#/components/schemas/AlarmSimulateResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /alarm-settings/estimate:
+    post:
+      summary: Ước lượng tần suất cảnh báo từ lịch sử thật của điểm (viewer+)
+      description: >
+        `T57-3.13`. Cùng engine với `/alarm-settings/simulate` nhưng lấy mẫu từ
+        historian. `downsampled=true` nghĩa là chuỗi đã bị thưa hoá; khi đó
+        `underestimateBelowS` cho biết ngưỡng thời lượng mà kết quả ĐẾM THIẾU.
+      x-rbac: [viewer, operator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlarmEstimateRequest" }
       responses:
         "200":
           description: OK
           content:
-            application/gzip:
-              schema: { type: string, format: binary }
-  /bacnet/objects:
-    get:
-      summary: Danh sách object BACnet — CHƯA HIỆN THỰC
-      description: >
-        Bảng object BACnet có thật trong runtime (apps/core/adapters/bacnet/
-        bacnet_objtable.cpp + apps/iobus/adapters/bacnet/bacnet_objects.cpp)
-        nhưng KHÔNG được phơi qua REST; web-api không có handler nào đọc nó.
-      x-implementation-status: not-implemented
-      responses: { "200": { description: OK } }
+            application/json:
+              schema: { $ref: "#/components/schemas/AlarmEstimateResponse" }
+        "400": { $ref: "#/components/responses/Error" }
   /alarms:
     get:
       summary: Runtime alarm list
@@ -1656,6 +1803,20 @@ paths:
   # file nói nó "được tham chiếu bằng x-websocket" trong khi toàn spec không có
   # khoá x-websocket nào. Khai báo tường minh ở đây để đường ghi điểm qua WS —
   # có cả force và override — không nằm ngoài tầm rà soát dựa trên contract.
+  /alarms/metrics:
+    get:
+      summary: Chỉ số cảnh báo theo cửa sổ trượt (viewer+)
+      description: >
+        Tần suất, cờ flooding, nhóm lặp nhiều nhất và danh sách shelve sắp hết hạn.
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: windowS, in: query, schema: { type: integer }, description: Cửa sổ giây, mặc định 600 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlarmMetrics" }
   /ws/monitor:
     get:
       summary: Kênh WebSocket giám sát điểm thời gian thực
@@ -1671,59 +1832,6 @@ paths:
       responses:
         "101": { description: Switching Protocols }
         "401": { $ref: "#/components/responses/Error" }
-        "403": { $ref: "#/components/responses/Error" }
-  /graph/validate:
-    post:
-      summary: Validate graph.json (role operator+) — CHƯA HIỆN THỰC
-      description: >
-        SRC-F-02: web-api không có handler cho path này. Hệ quả trực tiếp là
-        trang Lập trình của FE chỉ validate cục bộ trong trình duyệt
-        (apps/web-ui/src/shared/demo/simulator.ts) và bị khoá sau cờ
-        LEGACY_GRAPH_DEMO_ENABLED, vốn chỉ bật ở chế độ demo. Ở bản live không
-        có đường nào từ giao diện tới graph.json mà mkddc-core thực thi.
-        Thiết kế dự kiến: chạy validator theo GRAPH_SCHEMA; không deploy; trả
-        pass=false kèm errors nếu fail.
-      x-implementation-status: not-implemented
-      x-rbac: [operator, admin]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/Graph" }
-      responses:
-        "200":
-          description: Káº¿t quáº£ validate, schema khá»›p GraphValidationResult cá»§a FE
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/GraphValidationResult" }
-        "400": { $ref: "#/components/responses/Error" }
-        "403": { $ref: "#/components/responses/Error" }
-  /graph/deploy:
-    post:
-      summary: Validate rồi deploy graph.json (role admin) — CHƯA HIỆN THỰC
-      description: >
-        SRC-F-02: web-api không có handler cho path này, và graph.json cũng
-        không nằm trong 8 nhóm cấu hình mà BE quản lý
-        (apps/web-api/internal/app/configapi.go). Hiện chỉ nạp được chương
-        trình điều khiển bằng cách sửa tay /data/config/graph.json trên thiết
-        bị rồi SIGHUP mkddc-core — không qua RBAC, không audit, không rollback.
-        Thiết kế dự kiến: validate graph.json, gửi core build plan và áp dụng
-        atomically nếu pass; nếu validate/build fail thì giữ graph cũ và trả
-        pass=false/deployed=false kèm errors.
-      x-implementation-status: not-implemented
-      x-rbac: [admin]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/Graph" }
-      responses:
-        "200":
-          description: Káº¿t quáº£ deploy hoáº·c lá»—i validate/build
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/GraphDeployResult" }
-        "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
   /programming/capabilities:
     get:
@@ -4896,3 +5004,278 @@ components:
       properties:
         username: { type: string }
         role: { type: string, enum: [admin, operator, viewer] }
+    # ---- 2026-08-20: schema cho 13 endpoint bổ sung ở phần `paths` ----
+    # Tên trường lấy trực tiếp từ struct Go đang phục vụ request, không phải từ
+    # thiết kế mong muốn. Sai lệch giữa hai thứ đó chính là lớp lỗi mà
+    # `TestRouteTableMatchesOpenAPI` và `contract_sync_test.go` cùng canh.
+    SystemHistorySample:
+      type: object
+      required: [at, cpuPercent, ramPercent, tempC]
+      description: "Ba trường số là nullable: `null` = KHÔNG đo được ở mốc đó, khác 0."
+      properties:
+        at: { type: string, format: date-time }
+        cpuPercent: { type: [number, "null"] }
+        ramPercent: { type: [number, "null"] }
+        tempC: { type: [number, "null"] }
+    SystemHistory:
+      type: object
+      required: [schemaVersion, generatedAt, windowS, intervalS, sinceRestart, samples]
+      properties:
+        schemaVersion: { type: integer }
+        generatedAt: { type: string, format: date-time }
+        windowS: { type: integer }
+        intervalS: { type: integer }
+        sinceRestart: { type: string, format: date-time }
+        samples:
+          type: array
+          items: { $ref: "#/components/schemas/SystemHistorySample" }
+    AlarmTopRepeating:
+      type: object
+      required: [alarmId, count]
+      properties:
+        alarmId: { type: string }
+        name: { type: string }
+        count: { type: integer }
+    AlarmShelvedExpiring:
+      type: object
+      required: [alarmId, shelvedAt]
+      properties:
+        alarmId: { type: string }
+        name: { type: string }
+        shelvedAt: { type: string, format: date-time }
+    AlarmMetrics:
+      type: object
+      required: [schemaVersion, generatedAt, window, windowS, rate10m, ratePerHour, totalRaised, flooding, topRepeating, shelved]
+      properties:
+        schemaVersion: { type: integer }
+        generatedAt: { type: string, format: date-time }
+        window: { type: string }
+        windowS: { type: integer }
+        rate10m: { type: integer }
+        ratePerHour: { type: number }
+        totalRaised: { type: integer }
+        flooding: { type: boolean }
+        topRepeating:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmTopRepeating" }
+        shelved:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmShelvedExpiring" }
+    UserAccessEntry:
+      type: object
+      required: [username, role, mustChangePassword, lastLoginAt, lastLoginRemote, lastFailedLoginAt, activeSessions]
+      properties:
+        username: { type: string }
+        role: { type: string, enum: [admin, operator, viewer] }
+        mustChangePassword: { type: boolean }
+        lastLoginAt: { type: [string, "null"], format: date-time }
+        lastLoginRemote: { type: [string, "null"] }
+        lastFailedLoginAt: { type: [string, "null"], format: date-time }
+        activeSessions: { type: integer }
+    UserSession:
+      type: object
+      required: [username, role, issuedAt, lastSeenAt]
+      properties:
+        username: { type: string }
+        role: { type: string, enum: [admin, operator, viewer] }
+        issuedAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        remote: { type: string }
+    UserAccess:
+      type: object
+      required: [schemaVersion, generatedAt, users, sessions, sessionsSince, activityWindow]
+      properties:
+        schemaVersion: { type: integer }
+        generatedAt: { type: string, format: date-time }
+        users:
+          type: array
+          items: { $ref: "#/components/schemas/UserAccessEntry" }
+        sessions:
+          type: array
+          items: { $ref: "#/components/schemas/UserSession" }
+        sessionsSince: { type: string, format: date-time }
+        activityWindow: { type: integer }
+    VirtualPointReference:
+      type: object
+      required: [kind, id]
+      properties:
+        kind: { type: string }
+        id: { type: string }
+        name: { type: string }
+        detail: { type: string }
+    VirtualPointUsage:
+      type: object
+      required: [schemaVersion, pointId, references, scanned, incomplete]
+      properties:
+        schemaVersion: { type: integer }
+        pointId: { type: string }
+        tag: { type: string }
+        references:
+          type: array
+          items: { $ref: "#/components/schemas/VirtualPointReference" }
+        scanned: { type: array, items: { type: string } }
+        incomplete: { type: boolean }
+        errors: { type: array, items: { type: string } }
+    ModbusFrameRecord:
+      type: object
+      required: [at, bus, slave, fc, addr, count, ok, reason, elapsedUs, attempt]
+      properties:
+        at: { type: integer, format: int64, description: epoch ms }
+        bus: { type: integer }
+        slave: { type: integer }
+        fc: { type: integer }
+        addr: { type: integer }
+        count: { type: integer }
+        ok: { type: boolean }
+        reason: { type: string }
+        elapsedUs: { type: integer }
+        attempt: { type: integer }
+    ModbusFrames:
+      type: object
+      required: [schemaVersion, bus, frames, volatile, rawBytes]
+      properties:
+        schemaVersion: { type: integer }
+        bus: { type: integer }
+        frames:
+          type: array
+          items: { $ref: "#/components/schemas/ModbusFrameRecord" }
+        volatile: { type: boolean, description: Vòng nhớ trong tiến trình iobus; mất khi restart }
+        rawBytes: { type: boolean, description: "Rev A luôn `false` — đây là bản ghi giao dịch, không phải byte thô" }
+    ModbusTemplatePoint:
+      type: object
+      required: [name, fc, addr, count, type]
+      properties:
+        name: { type: string }
+        fc: { type: integer }
+        addr: { type: integer }
+        count: { type: integer }
+        type: { type: string }
+        byte_order: { type: string }
+        scale: { type: number }
+        offset: { type: number }
+        unit: { type: string }
+        writable: { type: boolean }
+    ModbusTemplate:
+      type: object
+      required: [id, name, source, origin, points]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        manufacturer: { type: string }
+        description: { type: string }
+        source: { type: string }
+        origin: { type: string }
+        points:
+          type: array
+          items: { $ref: "#/components/schemas/ModbusTemplatePoint" }
+    NetworkCheckTarget:
+      type: object
+      required: [kind, host, state]
+      properties:
+        kind: { type: string }
+        host: { type: string }
+        state: { type: string }
+        detail: { type: string }
+        rttMs: { type: integer }
+    NetworkCheck:
+      type: object
+      required: [schemaVersion, checkedAt, targets, summary]
+      properties:
+        schemaVersion: { type: integer }
+        checkedAt: { type: string, format: date-time }
+        targets:
+          type: array
+          items: { $ref: "#/components/schemas/NetworkCheckTarget" }
+        summary: { type: string }
+    ScheduleEffectiveSegment:
+      type: object
+      required: [from, to, value]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        value: { description: "`null` = không lịch nào ghi trong đoạn" }
+        scheduleId: { type: string, description: Rỗng = đoạn KHÔNG có lịch nào }
+        scheduleName: { type: string }
+        priority: { type: integer }
+        reason: { type: string }
+    ScheduleEffectiveConflict:
+      type: object
+      required: [at, scheduleIds, winnerId]
+      properties:
+        at: { type: string, format: date-time }
+        scheduleIds: { type: array, items: { type: string } }
+        winnerId: { type: string }
+        detail: { type: string }
+    ScheduleEffective:
+      type: object
+      required: [schemaVersion, pointId, from, to, segments, conflicts, engine]
+      properties:
+        schemaVersion: { type: integer }
+        pointId: { type: string }
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        segments:
+          type: array
+          items: { $ref: "#/components/schemas/ScheduleEffectiveSegment" }
+        conflicts:
+          type: array
+          items: { $ref: "#/components/schemas/ScheduleEffectiveConflict" }
+        engine: { type: string }
+    AlarmSimSample:
+      type: object
+      required: [t, value]
+      properties:
+        t: { type: string, format: date-time }
+        value: { type: number }
+    AlarmSimEvent:
+      type: object
+      required: [at, event, value]
+      properties:
+        at: { type: string, format: date-time }
+        event: { type: string }
+        severity: { type: string }
+        value: { type: number }
+        reason: { type: string }
+    AlarmSimulateRequest:
+      type: object
+      required: [setting, samples]
+      properties:
+        setting: { $ref: "#/components/schemas/AlarmSetting" }
+        samples:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmSimSample" }
+    AlarmSimulateResult:
+      type: object
+      required: [schemaVersion, events, engine]
+      properties:
+        schemaVersion: { type: integer }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmSimEvent" }
+        engine: { type: string }
+    AlarmEstimateRequest:
+      type: object
+      required: [setting, pointId, days]
+      properties:
+        setting: { $ref: "#/components/schemas/AlarmSetting" }
+        pointId: { type: string }
+        days: { type: integer }
+    AlarmEstimateResponse:
+      type: object
+      required: [schemaVersion, pointId, days, samplesAvailable, samplesUsed, stepS, raises, raisesPerDay, events, engine, downsampled, underestimateBelowS, historySource]
+      properties:
+        schemaVersion: { type: integer }
+        pointId: { type: string }
+        days: { type: integer }
+        samplesAvailable: { type: integer }
+        samplesUsed: { type: integer }
+        stepS: { type: integer }
+        raises: { type: integer }
+        raisesPerDay: { type: number }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmSimEvent" }
+        engine: { type: string }
+        downsampled: { type: boolean }
+        underestimateBelowS: { type: integer, description: Khi downsampled, kết quả ĐẾM THIẾU với thời lượng dưới ngưỡng này }
+        historySource: { type: string }

@@ -184,7 +184,20 @@ test.describe('Inputs — live mobile không dựng dữ liệu', () => {
 
   test('không mượn điểm demo và không cuộn ngang ở 390 px', async ({ page }) => {
     await navigate(page, '/eng/inputs')
-    await expect(page.getByRole('heading', { name: /Dữ liệu trực tiếp|Live Data/ })).toBeVisible()
+
+    /* Khối biểu đồ live nằm trong tab "Chẩn đoán", KHÔNG phải tab mặc định
+     * (`activeTab` khởi tạo bằng `'electrical'` — `InputsPage.tsx`). Bản cũ của
+     * bài test khẳng định thẳng vào nó ngay sau `navigate()` nên nó tìm một
+     * heading chưa từng được render; heading đó lại còn mang tên sai
+     * ("Dữ liệu trực tiếp"/"Live Data" trong khi trang ghi "Biểu đồ trực
+     * tiếp"/"Live Chart"). Hai lỗi cộng lại làm bài test đỏ vĩnh viễn, và không
+     * cổng CI nào chạy bộ này nên không ai thấy.
+     *
+     * Điều CẦN chứng minh vẫn nguyên vẹn: ở live, kênh không có telemetry phải
+     * NÓI RA là chưa có dữ liệu, tuyệt đối không mượn số của simulator. */
+    await page.getByRole('button', { name: /^Chẩn đoán$|^Diagnostics$/ }).click()
+
+    await expect(page.getByRole('heading', { name: /Biểu đồ trực tiếp|Live Chart/ })).toBeVisible()
     await expect(page.getByText(/Chưa có dữ liệu live cho kênh này\.|No live data for this channel yet\./)).toBeVisible()
     await expect(page.getByText('23.7 C')).toHaveCount(0)
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)

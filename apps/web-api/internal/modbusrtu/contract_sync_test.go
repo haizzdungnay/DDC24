@@ -202,12 +202,27 @@ func TestOpenAPISeparatesRuntimeRoutesFromRoadmap(t *testing.T) {
 		}
 	}
 
+	// 2026-08-20 — ĐẢO CHIỀU khẳng định.
+	//
+	// Trước đây bảy path này được GIỮ trong spec và chỉ dán nhãn
+	// `x-implementation-status: not-implemented` (mitigation SRC-F-02). Quyết
+	// định sản phẩm 2026-08-20 bác cách đó: nhãn không ngăn generator sinh
+	// client, không sửa phép đếm độ phủ, và FE vẫn viết được lời gọi vào hư
+	// không — `client.validateGraph()` đã thật sự tồn tại và chỉ có thể trả 404.
+	//
+	// Hợp đồng Rev A nay CHỈ mô tả thứ runtime Rev A thực thi. OTA và BACnet
+	// object exposure thuộc Rev B; `/graph/*` và `/logs/download` phải implement
+	// trước rồi mới khai lại.
+	//
+	// Khẳng định đầy đủ theo cả hai chiều nằm ở `TestRouteTableMatchesOpenAPI`
+	// và `TestRevBSurfacesStayOutOfRevAContract` (package `app`); kiểm ở đây giữ
+	// tín hiệu ngay trong bộ contract Modbus.
 	for _, path := range []string{
 		"/ota/upload", "/ota/apply", "/ota/status", "/logs/download",
 		"/bacnet/objects", "/graph/validate", "/graph/deploy",
 	} {
-		if !strings.Contains(openAPIPathSection(t, spec, path), "x-implementation-status: not-implemented") {
-			t.Errorf("route roadmap %s chưa được đánh dấu not-implemented", path)
+		if strings.Contains(spec, "\n  "+path+":") {
+			t.Errorf("%s quay lại contract Rev A — bề mặt không có handler phải nằm ngoài spec", path)
 		}
 	}
 }

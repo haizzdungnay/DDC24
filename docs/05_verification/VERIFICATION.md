@@ -2,7 +2,7 @@
 
 **ID:** VVP-001
 **Trạng thái:** Active — hardware gate RED; Programming Rev A production gate RED
-**Cập nhật:** 2026-08-05 (đồng bộ gate Modbus RTU theo quyết định Đ-01..Đ-11 và kết quả Track A tại `eade4e5`)
+**Cập nhật:** 2026-08-20 (đồng bộ lại lý do gate Modbus RTU với mã nguồn thật; đóng `OD-MBRTU-005/014/016/019`)
 
 ## Chiến lược
 
@@ -104,10 +104,10 @@ Design đang `In Review`; bảng này định nghĩa gate, không tuyên bố te
 | ID | Verification Requirement | Acceptance tối thiểu | Gate hiện tại |
 |---|---|---|---|
 | VR-MBRTU-001 | Scope/hardware topology | Inspection Product/HW/Platform chứng minh **01 path RS485 production** (Đ-01) và role master-only; không dùng adapter lab thay thế. Bổ sung: xác nhận cơ chế điều khiển hướng half-duplex (Đ-02). | RED — chờ schematic Hardware Lead (`OD-MBRTU-EXT-04`) |
-| VR-MBRTU-002 | Bus/Device/Point config | Positive/negative cho serial consistency, slave uniqueness, CRUD, import/export, stable ID/tag namespace và capacity; round-trip không mất field. | RED — chưa có import/export (Đ-06); capacity còn 64 thay vì ≥256 (Đ-07) |
+| VR-MBRTU-002 | Bus/Device/Point config | Positive/negative cho serial consistency, slave uniqueness, CRUD, import/export, stable ID/tag namespace và capacity; round-trip không mất field. | PARTIAL — Đ-06 và Đ-07 ĐÃ thi hành: `KX_N_EXT = 256` (`contracts/shm/mkddc_shm.h`), import CSV + export CSV/JSON có endpoint và test host. Còn thiếu: evidence round-trip trên target |
 | VR-MBRTU-003 | Register codec | Golden vectors mọi register/data type/byte-word order/scale/offset/min-max; reject overlap, overflow, NaN/infinity, odd 32-bit. | PARTIAL — host codec pass, target chưa có |
 | VR-MBRTU-004 | Scheduler và isolation | 16 device/bus, admission/load/deadline, retry/offline probe; lỗi bus không chặn IOP/core. Phần hai-bus-đồng-thời hoãn theo Đ-01. | PARTIAL — EDF + offline probe + retry thật đã có và có test host (D-04/D-05); thiếu admission control, counter deadline/duration và toàn bộ evidence target |
-| VR-MBRTU-005 | Quality/timestamp | Fake-clock + target fault chứng minh GOOD→STALE→OFFLINE, BAD/reason, recovery, producer timestamp/sample age; không false-GOOD. | RED — contract hiện tại thiếu bốn trạng thái/timestamp producer |
+| VR-MBRTU-005 | Quality/timestamp | Fake-clock + target fault chứng minh GOOD→STALE→OFFLINE, BAD/reason, recovery, producer timestamp/sample age; không false-GOOD. | PARTIAL — contract ĐÃ đủ: `kx_ext_quality_t` 5 mức + 10 mã `quality_reason` + `sample_utc_ms`/`sample_mono_ns`, producer `bus_worker`/`ext_cache` ghi và `bacnet_objtable` đọc. Còn thiếu: target fault evidence |
 | VR-MBRTU-006 | Typed runtime/Point Catalog | Cross-language ABI/version/sequence/generation; uint32 không mất chính xác; stable point_id không swap sau reorder/reboot; REST/WS đúng source/revision. | RED |
 | VR-MBRTU-007 | Atomic config apply | Crash/power fault ở từng bước stage/apply/ACK/commit; stale revision/idempotency; chỉ old hoặc new revision active, rollback last-known-good. | RED — restart hiện tại không phải applied ACK |
 | VR-MBRTU-008 | Write path | Coil/Holding 16/32-bit, RBAC/type/range/quality/revision, exception/timeout/readback/idempotency/queue-full; zero false-success và zero blind replay. | RED |
@@ -115,8 +115,25 @@ Design đang `In Review`; bảng này định nghĩa gate, không tuyên bố te
 | VR-MBRTU-010 | RBAC/audit/API/FE | Viewer/Operator/Admin positive/negative; operation correlation; FE candidate/apply/result/reconnect; không localStorage authority hoặc arbitrary FC. | PARTIAL — CRUD RBAC host có, transaction v2 chưa có |
 | VR-MBRTU-011 | Real RS485/HIL/recovery | Chạy `MBRTU-HIL-01..12` + `TC-MBRTU-H-16`: một cổng, mọi serial mode, bốn register type, write/readback, CRC/timeout/wiring fault, điều khiển hướng, crash, reboot/power-cycle và 24 h soak. | RED — thiết bị đã duyệt cấp (Đ-08) nhưng chưa về |
 | VR-MBRTU-012 | Provenance/deployment | Commit sạch; artifact/config/ABI version/checksum/toolchain truy được trên target; coordinated install/rollback và mismatch fail rõ. | RED — binary mới chưa deploy |
-| VR-MBRTU-013 | Commissioning và import/export | Test connection, test read, test write trả kết quả giao tiếp thật có audit và không tạo revision; import/export round-trip không mất field, một dòng lỗi làm cả file bị từ chối. | RED — không có endpoint commissioning/import/export |
+| VR-MBRTU-013 | Commissioning và import/export | Test connection, test read, test write trả kết quả giao tiếp thật có audit và không tạo revision; import/export round-trip không mất field, một dòng lỗi làm cả file bị từ chối. | PARTIAL — endpoint ĐÃ có: `/modbus/devices/{id}/test-connection`, `/modbus/read-test`, `/modbus/write-test`, `/modbus/import`, `/modbus/export`. Còn thiếu: kết quả giao tiếp THẬT trên RS-485 (chờ `G-C`) |
 | VR-MBRTU-014 | Ngân sách vận hành và mapping gate | Đo refresh cadence, write rate limit, CPU/RAM fieldbus trên target, bus utilization và ngưỡng cảnh báo quá tải; mapping không hợp lệ bị chặn tại điểm lưu. | RED — mọi số hiện là PROPOSED |
+
+### Vòng đời lệnh ghi — chốt 2026-08-20 (`OD-MBRTU-005`)
+
+Một lệnh ghi Modbus RTU kết thúc khi **TTL 30 s** hoặc **3 lần phát** — điều kiện
+nào tới trước. Hết hạn hoặc hết lượt ⇒ bỏ lệnh, xoá trạng thái pending/dirty,
+ghi diagnostic (`modbus.write_dropped_expired` / `modbus.write_dropped_attempts`)
+và đếm vào `write_dropped`. Muốn ghi lại phải phát sinh command mới.
+
+**Ranh giới phải đọc đúng:** TTL 30 s là **tuổi thọ của lệnh đang chờ/retry**,
+KHÔNG phải "sau 30 s hoàn tác giá trị register". Slave đã ACK ⇒ lệnh hoàn tất và
+giá trị nằm lại trên thiết bị. Cơ chế force/override tạm thời rồi tự trả về là
+một thứ KHÁC, có lease/expiry riêng, và không thuộc đường ghi này.
+
+Hai hằng số được khoá bằng test `WriteLifecycleConstantsMatchProductDecision`;
+quy tắc "lệnh mới cùng giá trị vẫn phải xuống dây sau khi lệnh cũ bị bỏ" được
+khoá bằng `DroppedWriteAllowsResendOfSameValue` (cả hai trong
+`apps/iobus/adapters/modbus_rtu/tests/test_modbus_master_fake.cpp`).
 
 `MODBUS_RTU_POINT_READY = YES` chỉ khi VR-MBRTU-001..014 đều PASS bằng evidence
 hiện hành được review. CTest/Go/FE/simulator pass không được dùng để thay thế

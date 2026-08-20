@@ -28,7 +28,7 @@
 | OD-MBRTU-002 | **Serial format thuộc Bus hay Device?** | FE/BE/data model không thống nhất; hiện BE lưu ở Device và ép "mọi device enabled phải giống nhau". | System + Fieldbus | Đặt ở Bus, Device kế thừa read-only; giữ field trên response Device để không vỡ UI. | DR-MBRTU-002; data model §4 | **CLOSED 2026-08-06:** serial thuộc **Bus**, Device kế thừa **read-only**; response Device vẫn trả các field ở dạng dẫn xuất. Lý do mở lại: `OD-MBRTU-001` chốt 2 bus, nên "hai phương án cho kết quả như nhau" không còn đúng. Kèm ràng buộc giao diện: chỉ trang Cổng RS-485 sửa được tham số serial, form Thiết bị hiển thị read-only |
 | OD-MBRTU-003 | **Có hỗ trợ `bit_index` (trích bit trong register) không?** | Thiếu thì không map được thanh ghi trạng thái dạng bit-field, rất phổ biến ở VFD/meter. Có thì phải mở rộng codec, luật overlap và profile schema. | Product + Fieldbus | Hỗ trợ ở Rev A: chi phí thấp, giá trị thực tế cao; luật overlap đã được định nghĩa ở data model §5.5. | data model §5.2 | **OPEN — P1** |
 | OD-MBRTU-004 | **Có cho phép alias (hai Point cùng register, khác tag)?** | Chưa quyết ⇒ validator phải reject cứng, có thể chặn use case hợp lệ (một register dùng cho hai mục đích hiển thị). | Fieldbus + Product | Rev A **không** hỗ trợ alias; reject overlap. Mở ở Rev B nếu có nhu cầu thật. | data model §5.5 | **OPEN — P2** |
-| OD-MBRTU-005 | **Mức ưu tiên của commissioning write so với logic điều khiển.** | Không rõ ⇒ ghi thử có thể bị logic ghi đè ngay chu kỳ sau, hoặc ngược lại ghi thử chiếm quyền quá lâu. | Controls + Safety + Product | Commissioning write dùng mức `manual` có TTL ngắn (ví dụ 60 s) rồi tự nhả; hiển thị rõ TTL trên UI. | FW design §8.1 | **OPEN — P0** |
+| OD-MBRTU-005 | **Mức ưu tiên của commissioning write so với logic điều khiển.** | Không rõ ⇒ ghi thử có thể bị logic ghi đè ngay chu kỳ sau, hoặc ngược lại ghi thử chiếm quyền quá lâu. | Controls + Safety + Product | Commissioning write dùng mức `manual` có TTL ngắn (ví dụ 60 s) rồi tự nhả; hiển thị rõ TTL trên UI. | FW design §8.1 | **CLOSED 2026-08-20:** vòng đời lệnh ghi hữu hạn — **TTL 30 s HOẶC tối đa 3 lần phát**, điều kiện nào tới trước thì kết thúc; hết hạn/hết lượt ⇒ drop + clear pending/dirty + diagnostic/audit; muốn ghi lại phải phát sinh command mới. **Ranh giới:** TTL là tuổi thọ của LỆNH ĐANG CHỜ, KHÔNG phải hẹn giờ hoàn tác giá trị register — slave đã ACK là lệnh hoàn tất. Force/override tạm thời rồi tự trả về là cơ chế KHÁC, có lease/expiry riêng. Đã có sẵn trong FW (`kWriteTtlMs`/`kMaxWriteAttempts`) và nay được khoá bằng test; sửa kèm bug dedup `last_written_` không xoá sau khi drop |
 | OD-MBRTU-006 | **Ngưỡng tải bus (70 % reject / 50 % warning) và cách tính `t_turnaround`.** | Số hiện là PROPOSED, chưa đo. Đặt sai ⇒ hoặc chặn cấu hình hợp lệ, hoặc cho qua cấu hình trượt deadline. | Performance + QA + Fieldbus | Giữ 70/50 làm giá trị khởi điểm, **bắt buộc** đo lại trên phần cứng thật ở `TC-MBRTU-H-15` rồi chốt. | BE design §5 | **OPEN — P1** |
 | OD-MBRTU-007 | **Chu kỳ refresh FE và giới hạn write rate.** | Refresh quá dày làm tăng tải BE/core; quá thưa làm commissioning khó. Write rate không giới hạn là rủi ro an toàn. | Product + BE + UX | Refresh mặc định 5 s (2/5/15/tắt); write test 2 req/phút/người dùng; read test 5 req/phút. Đo lại khi có target evidence. | UX §6, BE design §6 | **OPEN — P1** |
 | OD-MBRTU-008 | **Có cho phép reset counter diagnostics từ UI không?** | Chưa quyết ⇒ counter chỉ reset khi restart, khó dùng khi commissioning lặp. Nếu cho phép thì mất tính liên tục của bằng chứng. | QA + Ops + Product | **Không** cho reset; thay vào đó hiển thị `producer_boot_id` + `counters_since` và cho phép FE tính delta theo mốc người dùng chọn. | UX §6.2 | **OPEN — P2** |
@@ -37,7 +37,7 @@
 | OD-MBRTU-011 | **Capacity 64 Point là ràng buộc vĩnh viễn hay tạm thời?** | `KX_N_EXT = 64` là hằng số ABI. Nâng lên là ABI change và tăng RAM/thời gian scan. | Product + Performance | Giữ 64 ở Rev A; nếu Product cần cao hơn thì phải có sizing, đo memory/timing và contract version mới — **không** truncate im lặng. | FW design §11 | **CLOSED 2026-08-04 — Đ-07:** nâng lên **tối thiểu 256 Point**, thực hiện cùng đợt đổi interface nội bộ. As-Built còn 64 ⇒ gap `G-DM-12`/`F-FW-20`/`F-BE-21` |
 | OD-MBRTU-012 | **Định dạng import/export chuẩn: CSV, JSON hay cả hai.** | Chưa quyết ⇒ khách hàng/đối tác không có định dạng trao đổi ổn định. | Product + BE | CSV cho Point (dễ dùng Excel tại hiện trường) + JSON cho toàn bộ cấu hình (round-trip đầy đủ). Cả hai đều đi qua candidate. | data model §8 | **CLOSED 2026-08-04 — Đ-06:** bắt buộc có **cả hai** — import CSV, export CSV **và** JSON |
 | OD-MBRTU-013 | **Xoá Device có Point: chặn hay cascade có xác nhận.** | Hiện chặn cứng. Với device nhiều Point, người dùng phải xoá thủ công từng Point. | Product + UX | Giữ chặn mặc định, bổ sung `cascade=true` tường minh kèm hộp thoại liệt kê Point. | API spec §1 | **OPEN — P2** |
-| OD-MBRTU-014 | **Modbus RTU Point có được expose ra BACnet không, và nếu có thì object type/instance do ai cấp.** | Profile hiện có `expose_bacnet`/`bacnet_object_type`/`bacnet_instance` nhưng BE không sinh các field này ⇒ tính năng tồn tại trong iobus mà không có đường cấu hình. | Product + Fieldbus + BACnet | Rev A: **không** expose qua đường Modbus profile; nếu cần thì đi qua cấu hình BACnet object riêng để tránh hai nguồn cấp instance. | `device_profile.hpp`; `persistence.go BuildProfile` | **OPEN — P1** |
+| OD-MBRTU-014 | **Modbus RTU Point có được expose ra BACnet không, và nếu có thì object type/instance do ai cấp.** | Profile hiện có `expose_bacnet`/`bacnet_object_type`/`bacnet_instance` nhưng BE không sinh các field này ⇒ tính năng tồn tại trong iobus mà không có đường cấu hình. | Product + Fieldbus + BACnet | Rev A: **không** expose qua đường Modbus profile; nếu cần thì đi qua cấu hình BACnet object riêng để tránh hai nguồn cấp instance. | `device_profile.hpp`; `persistence.go BuildProfile` | **CLOSED 2026-08-20:** GỠ khỏi đường Rev A. Ba trường đã bị xoá khỏi `ProfilePoint`; `parse_point()` vẫn ĐỌC khoá cũ để cảnh báo `profile.expose_bacnet_deprecated` (đường migration, không phải đường tính năng). KHÔNG nối `BuildProfile`. Đưa Point Modbus RTU ra BACnet là Rev B và phải implement **end-to-end** trước khi mở lại field |
 | OD-MBRTU-015 | **Thay ABI `kx_ext_point_t` v1 → snapshot v2: chiến lược triển khai.** | Đây là ABI change đồng bộ ba binary. Không có kế hoạch ⇒ nguy cơ deploy lệch làm mất dữ liệu Point. | Core + Fieldbus + Web + DevOps | Magic mới + `schema_version`, reject mismatch có thông điệp rõ, deploy đồng bộ trong một package, và test negative mismatch bắt buộc. | DR-MBRTU-005; interface spec §5.3 | **CLOSED 2026-08-04 — Đ-03:** chấp thuận thay đổi giao diện dữ liệu nội bộ Core–IOBus–Web; ba service phải nâng cấp và đóng gói **cùng phiên bản**. Bắt buộc có kịch bản nghiệm thu deploy lệch version |
 
 ## 2. Ánh xạ `DR-MBRTU-*` → `OD-MBRTU-*`
@@ -56,10 +56,10 @@
 
 | ID | Vấn đề | Owner | Khuyến nghị | Trạng thái |
 |---|---|---|---|---|
-| OD-MBRTU-016 | Có thêm `CONFIG_ERROR` vào tập quality (thành 5 trạng thái) không, hay giữ 4 và phân biệt bằng `quality_reason`? | Product + Core + Fieldbus | Thêm `CONFIG_ERROR` vào quality: người vận hành cần phân biệt "thiết bị trả sai" với "cấu hình sai" ngay trên bảng Point, không phải mở tooltip. | **OPEN — P1** |
+| OD-MBRTU-016 | Có thêm `CONFIG_ERROR` vào tập quality (thành 5 trạng thái) không, hay giữ 4 và phân biệt bằng `quality_reason`? | Product + Core + Fieldbus | Thêm `CONFIG_ERROR` vào quality: người vận hành cần phân biệt "thiết bị trả sai" với "cấu hình sai" ngay trên bảng Point, không phải mở tooltip. | **CLOSED 2026-08-20:** đã thi hành — `KX_EXTQ_CONFIG_ERROR = 4` trong `contracts/shm/mkddc_shm.h`, đủ 5 mức quality kèm 10 mã `quality_reason` |
 | OD-MBRTU-017 | **Export danh sách Point là quyền `viewer` hay `admin`?** Đ-04 xếp "Import/Export" vào cột Admin. Nhưng export không phải mutation và chỉ trả đúng dữ liệu mà `viewer` đã đọc được qua `GET /modbus/points`. | Product + Security | Để `GET .../export` ở `viewer` (nhất quán với dữ liệu đã lộ) và giữ `POST .../import` ở `admin`. Nếu Product muốn siết theo đúng chữ trong Đ-04 thì đổi sang `admin` — cần ghi rõ vì nó **thắt chặt** hơn hành vi đọc hiện có. | **OPEN — P2** (mới 2026-08-05) |
 | OD-MBRTU-018 | **Contract machine-readable đang mô tả sai ngữ nghĩa `retry`.** Đ-05 đã đổi `retry` thành "số lần phát lại" ở FW/BE/FE, nhưng `contracts/openapi/openapi.yaml` v1.11.0 giữ mô tả cũ. | Architect + BE + Product | Cho phép một **ngoại lệ có phạm vi**: sửa *mô tả* và *range* của trường `retry` trong OpenAPI, đồng thời bổ sung `offline_after_errors` và `offline_probe_ms`. | **CLOSED 2026-08-05** — Approved by PM/CTO/Architect via `DDC24-MBRTU-REQ-APPROVE-2026-08-05`; updated `openapi.yaml` |
-| OD-MBRTU-019 | **`offline_after_errors` và `offline_probe_ms` có được đưa ra UI/API không, hay là hằng số nội bộ?** Hiện iobus đọc được từ `fieldbus.conf` nhưng BE không bao giờ ghi ⇒ đứt end-to-end (`F-BE-19`/`F-BE-20`). | Product + Fieldbus + BE | Đưa ra API: `offline_after_errors` thuộc Device, `offline_probe_ms` thuộc Bus. Nếu Product quyết định giữ là hằng số nội bộ thì phải **bỏ** khỏi parser để không tạo ảo giác cấu hình được. Không chấp nhận giữ nguyên trạng. | **OPEN — P1** (mới 2026-08-05) |
+| OD-MBRTU-019 | **`offline_after_errors` và `offline_probe_ms` có được đưa ra UI/API không, hay là hằng số nội bộ?** Hiện iobus đọc được từ `fieldbus.conf` nhưng BE không bao giờ ghi ⇒ đứt end-to-end (`F-BE-19`/`F-BE-20`). | Product + Fieldbus + BE | Đưa ra API: `offline_after_errors` thuộc Device, `offline_probe_ms` thuộc Bus. Nếu Product quyết định giữ là hằng số nội bộ thì phải **bỏ** khỏi parser để không tạo ảo giác cấu hình được. Không chấp nhận giữ nguyên trạng. | **CLOSED 2026-08-20:** đã thông suốt end-to-end — Go model + `validate.go` + `persistence.go` ghi vào `fieldbus.conf`, khai trong `openapi.yaml`, iobus đọc; có `persistence_offline_test.go` canh |
 
 ## 3. Quyết định thiếu authority ngoài phạm vi Modbus nhưng chặn Modbus
 
@@ -91,11 +91,28 @@
 | 1.2 | 2026-08-06 | Đóng `OD-MBRTU-EXT-04` (`G-D`): Hardware owner xác nhận cổng RS-485 chỉ có TX/RX, không có DE/RE ⇒ transceiver auto-direction. Cơ chế điều hướng nay là cấu hình tường minh trong `fieldbus.conf` và trạng thái driver được ghi log lúc khởi động |
 | 1.1 | 2026-08-05 | Đóng đúng theo quy tắc §4.3 (đổi Trạng thái, **không xoá dòng**): `OD-MBRTU-001` (Đ-01), `-009` (Đ-04), `-011` (Đ-07), `-012` (Đ-06), `-015` (Đ-03), `-EXT-02` (Đ-08); `-002` chuyển "không áp dụng ở Rev A". Cập nhật §2 ánh xạ DR tương ứng. **Thêm mới:** `OD-MBRTU-017` (mức quyền của export), `OD-MBRTU-018` (OpenAPI mô tả sai ngữ nghĩa `retry` sau Đ-05 — chặn gate interface), `OD-MBRTU-019` (hai tham số offline đứt end-to-end), `OD-MBRTU-EXT-04` (cơ chế điều hướng RS-485, tách khỏi EXT-01 vì owner khác và chặn khác) |
 
-## 5. Trạng thái tổng hợp sau 2026-08-05
+## 5. Trạng thái tổng hợp sau 2026-08-20
 
 | Nhóm | Số lượng | ID |
 |---|---:|---|
-| Đã đóng bằng quyết định có ký | 6 | `-001`, `-009`, `-011`, `-012`, `-015`, `-EXT-02` |
+| Đã đóng bằng quyết định có ký | 10 | `-001`, `-005`, `-009`, `-011`, `-012`, `-014`, `-015`, `-016`, `-019`, `-EXT-02` |
 | Không áp dụng ở Rev A | 1 | `-002` |
-| Còn mở — chặn gate | 3 | `-018` (interface sync), `-EXT-01` (Track B), `-EXT-04` (HIL + `MBR-B101`) |
-| Còn mở — không chặn gate hiện tại | 12 | `-003`..`-008`, `-010`, `-013`, `-014`, `-016`, `-017`, `-019`, `-EXT-03` |
+| Còn mở — chặn gate | 2 | `-EXT-01` (Track B), `-EXT-04` (HIL + `MBR-B101`) |
+| Còn mở — không chặn gate hiện tại | 9 | `-003`, `-004`, `-006`, `-007`, `-008`, `-010`, `-013`, `-017`, `-EXT-03` |
+
+> `-018` đã đóng từ 2026-08-05 nhưng bảng cũ vẫn xếp nó vào "còn mở — chặn gate";
+> sửa luôn ở lần cập nhật này.
+
+### Đợt đóng 2026-08-20
+
+Bốn mục dưới đây được đóng bằng **đối chiếu mã nguồn thật**, không phải bằng
+tranh luận mới. Ba trong số đó đã được thi hành từ trước mà đăng ký không được
+cập nhật — nghĩa là bảng này từng làm dự án trông tụt hậu hơn thực tế và có nguy
+cơ khiến ai đó làm lại việc đã xong:
+
+| ID | Trạng thái thật khi rà 2026-08-20 |
+|---|---|
+| `-005` | Quyết định mới: TTL 30 s **hoặc** 3 lần phát. FW đã có `kWriteTtlMs`/`kMaxWriteAttempts` đúng giá trị; nay khoá bằng test và sửa bug dedup kèm theo |
+| `-014` | Quyết định mới: gỡ khỏi Rev A, giữ đường cảnh báo migration |
+| `-016` | ĐÃ thi hành từ trước — `KX_EXTQ_CONFIG_ERROR` tồn tại |
+| `-019` | ĐÃ thi hành từ trước — hai tham số thông suốt Go → `fieldbus.conf` → iobus, có test |

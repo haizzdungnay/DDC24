@@ -43,25 +43,37 @@ const MODBUS_TABS = [
 
 /* Mỗi trang đọc dữ liệu phải NÓI RA là không đọc được, chứ không im lặng hiện
  * bảng rỗng hay — tệ hơn — số đo bịa (FE-DATA-01/02). */
+/* Mỗi mục khai CẢ HAI ngôn ngữ và so bằng regex.
+ *
+ * Vì sao không seed `mkddc-lang`: spec này cố ý pha hai thứ tiếng — phần Modbus
+ * bám chuỗi tiếng Việt thật của trang (`Lọc theo trạng thái`, `Bỏ lọc`), còn
+ * phần FE-DATA trước đây bám tiếng Anh. Ghim một ngôn ngữ ở `beforeEach` sẽ làm
+ * đổ nửa còn lại. Khớp hai chiều cũng bền hơn: đổi `locale` trong
+ * `playwright.config.ts` sau này không làm cả bộ đỏ.
+ *
+ * Nguyên nhân gốc của đợt hỏng này: từ khi config khai `locale: 'vi-VN'` (theo
+ * BUG-001 — `I18nProvider` đọc `navigator.language` thay vì hard-code 'vi'),
+ * giao diện render tiếng Việt trong khi bảng dưới đây chỉ có tiếng Anh. Không
+ * cổng CI nào chạy bộ này nên nó đỏ âm thầm — đúng kịch bản `F-07`. */
 const ERROR_STATE_PAGES = [
   /* PA3: Landing nay đọc read model `/overview` chứ không tự ghép ba endpoint,
      nên thông điệp lỗi cũng đổi theo nguồn thật của nó. */
-  { path: '/', title: 'System overview unavailable' },
-  { path: '/monitor', title: 'Could not load I/O points' },
-  { path: '/alarms', title: 'Could not load alarms' },
-  { path: '/settings/users', title: 'Could not load users' },
-  { path: '/settings/network', title: 'Could not load network settings' },
-  { path: '/settings/time', title: 'Could not load time settings' },
-  { path: '/settings/device', title: 'Could not load device configuration' },
-  { path: '/eng/commissioning', title: 'Could not load outputs' },
-  { path: '/eng/inputs', title: 'Could not load input configuration' },
-  { path: '/eng/outputs', title: 'Could not load output configuration' },
-  { path: '/eng/virtual-points', title: 'Could not load virtual points' },
+  { path: '/', title: /Không đọc được tổng quan hệ thống|System overview unavailable/ },
+  { path: '/monitor', title: /Không tải được điểm I\/O|Could not load I\/O points/ },
+  { path: '/alarms', title: /Không tải được cảnh báo|Could not load alarms/ },
+  { path: '/settings/users', title: /Không tải được danh sách người dùng|Could not load users/ },
+  { path: '/settings/network', title: /Không tải được cấu hình mạng|Could not load network settings/ },
+  { path: '/settings/time', title: /Không tải được cấu hình thời gian|Could not load time settings/ },
+  { path: '/settings/device', title: /Không tải được cấu hình thiết bị|Could not load device configuration/ },
+  { path: '/eng/commissioning', title: /Không tải được danh sách output|Could not load outputs/ },
+  { path: '/eng/inputs', title: /Không tải được cấu hình ngõ vào|Could not load input configuration/ },
+  { path: '/eng/outputs', title: /Không tải được cấu hình ngõ ra|Could not load output configuration/ },
+  { path: '/eng/virtual-points', title: /Không tải được danh sách Virtual Point|Could not load virtual points/ },
   /* Các trang Scheduler v3.1 ship chuỗi tiếng Việt viết thẳng, không qua i18n
      (xem `SchedulerGridPage.tsx`), nên khẳng định tiếng Anh ở đây chưa bao giờ
      đúng — bài test này vàng giả từ lúc viết. Bám vào chuỗi THẬT của trang. */
-  { path: '/eng/scheduler', title: 'Không tải được danh sách lịch' },
-  { path: '/eng/alarm-settings', title: 'Could not load alarm settings' }
+  { path: '/eng/scheduler', title: /Không tải được danh sách lịch/ },
+  { path: '/eng/alarm-settings', title: /Không tải được cấu hình cảnh báo|Could not load alarm settings/ }
 ]
 
 const ALL_ROUTES = [
@@ -135,7 +147,7 @@ test.describe('Sức khoẻ trang FE (review 2026-08-05)', () => {
     await expect(diagram).toContainText('— Modbus')
     await expect(diagram).toContainText('— WARN | — FAULT')
     await expect(diagram).not.toContainText('192.168.1.100')
-    await expect(page.getByText(/returned no I\/O points/i)).toBeVisible()
+    await expect(page.getByText(/chưa trả điểm I\/O nào|returned no I\/O points/i)).toBeVisible()
   })
 
   test('/monitor không khẳng định 100% bình thường khi không đọc được điểm nào', async ({ page }) => {

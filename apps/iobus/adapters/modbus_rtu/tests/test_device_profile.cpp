@@ -78,18 +78,51 @@ TEST_F(ProfileTest, Float32MissingByteOrderRejected)
     EXPECT_EQ(prof.points.size(), 0u);
 }
 
-TEST_F(ProfileTest, ExposeBacnetFields)
+/* OD-MBRTU-014: cấu hình CŨ còn `expose_bacnet` phải nạp được và Point vẫn hoạt
+ * động bình thường — gỡ tính năng không được biến file cấu hình đang chạy thành
+ * file hỏng. Nhưng nó KHÔNG được im lặng: người vận hành phải thấy cảnh báo
+ * deprecated, nếu không họ sẽ tin BACnet exposure đang chạy trong khi không.
+ *
+ * Test khoá đúng hai điều đó: Point vẫn được nhận, và stderr có cảnh báo. */
+TEST_F(ProfileTest, LegacyExposeBacnetIsIgnoredWithDeprecationWarning)
 {
     write_profile(R"({"points":[
       {"name":"kWh","fc":4,"addr":1000,"count":2,"type":"float32",
        "byte_order":"ABCD","expose_bacnet":true,"bacnet_object_type":"AV","bacnet_instance":100}
     ]})");
+
+    testing::internal::CaptureStderr();
     DeviceProfile prof;
     ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    const std::string diagnostics = testing::internal::GetCapturedStderr();
+
+    /* Point vẫn hợp lệ: mọi trường CÒN trong phạm vi Rev A phải giữ nguyên. */
     ASSERT_EQ(prof.points.size(), 1u);
-    EXPECT_TRUE(prof.points[0].expose_bacnet);
-    EXPECT_EQ(prof.points[0].bacnet_object_type, "AV");
-    EXPECT_EQ(prof.points[0].bacnet_instance, 100u);
+    EXPECT_EQ(prof.points[0].name, "kWh");
+    EXPECT_EQ(prof.points[0].addr, 1000u);
+    EXPECT_EQ(prof.points[0].count, 2u);
+
+    EXPECT_NE(diagnostics.find("profile.expose_bacnet_deprecated"), std::string::npos)
+        << "nạp cấu hình cũ có expose_bacnet mà không cảnh báo — người vận hành sẽ "
+           "tưởng BACnet exposure đang chạy. stderr: "
+        << diagnostics;
+}
+
+/* Không có `expose_bacnet` là đường đi thường gặp; nó tuyệt đối không được sinh
+ * cảnh báo, nếu không log vận hành sẽ đầy nhiễu và cảnh báo thật bị chìm. */
+TEST_F(ProfileTest, ProfileWithoutLegacyBacnetFieldStaysQuiet)
+{
+    write_profile(R"({"points":[
+      {"name":"kWh","fc":4,"addr":1000,"count":2,"type":"float32","byte_order":"ABCD"}
+    ]})");
+
+    testing::internal::CaptureStderr();
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    const std::string diagnostics = testing::internal::GetCapturedStderr();
+
+    ASSERT_EQ(prof.points.size(), 1u);
+    EXPECT_EQ(diagnostics.find("expose_bacnet"), std::string::npos) << diagnostics;
 }
 
 TEST_F(ProfileTest, FileNotFound)
