@@ -1,7 +1,7 @@
 # Modbus RTU — UI/UX Design (Web) DDC-24 Rev A
 
 **ID:** UX-WEB-MBRTU-001
-**Phiên bản:** 0.2
+**Phiên bản:** 0.3
 **Trạng thái:** Active (Phê duyệt 2026-08-05 theo Tờ trình `DDC24-MBRTU-REQ-APPROVE-2026-08-05`)
 **Ngày:** 2026-08-05
 **Chủ quản đề xuất:** UX Lead + Product Owner
@@ -494,6 +494,91 @@ counter đã bị reset do restart hay không, và mọi so sánh đều sai.
 - AC-E4: `Poll ms` phân biệt rõ last và max, không gộp một số.
 - AC-E5: `Xuất CSV` chứa đúng số liệu đang hiển thị và mốc thời gian.
 
+### 6.5 Khối "Khung truyền gần nhất" (`MBR-FRM-01`) — `T57-3.9`
+
+Nguồn: [`ADR-046`](../00_governance/DECISIONS.md) **bản sửa 2026-08-19**. Đây là
+màn hình duy nhất trong hồ sơ này có **asset render được**, vì `DOC_GOVERNANCE`
+§2.2 đòi hỏi điều đó cho màn hình mới chạm tới quyết định an toàn.
+
+#### 6.5.1 Vì sao khối này tồn tại — và vì sao nó KHÔNG có byte thô
+
+Bảng đếm ở §6.1 nói **có bao nhiêu** lỗi. Nó không nói lỗi xảy ra **ở đâu** và
+**lúc nào**. Ba câu hỏi hiện trường mà người kỹ thuật đứng trước tủ phải trả lời
+trước khi quyết định có tháo dây ra đo hay không:
+
+| Câu hỏi | Đọc ở đâu trong khối |
+|---|---|
+| Khung có ra dây không? | có bản ghi; cột `LẦN PHÁT` > 1 nghĩa là đã phát lại |
+| Slave có trả lời không? | cột `KẾT QUẢ` |
+| CRC có đúng không? | `KẾT QUẢ` = `CRC` |
+
+`ADR-046` bản ban hành hứa "byte thô hiện dạng hex". **Không làm được**:
+libmodbus không lộ bộ đệm wire, muốn có byte thô phải thay lớp transport của
+chính thư viện đang điều khiển bus RS-485 thật. ADR đã được sửa (điều đó
+`SUPERSEDED`) và Rev A ghi **bản ghi giao dịch**. Giao diện phải **nói ra** điều
+này, không để người dùng chờ một thứ màn hình không có.
+
+#### 6.5.2 Đặc tả trực quan
+
+**Desktop 1440 — ba trạng thái (có giao dịch, vòng nhớ rỗng, không đọc được):**
+
+![MBR-FRM-01 desktop](assets/modbus/MBR-FRM-01_FRAME_MONITOR_DESKTOP.svg)
+
+**Mobile 390 × 844 — bảng cuộn ngang, không rút gọn cột:**
+
+![MBR-FRM-01 mobile](assets/modbus/MBR-FRM-01_FRAME_MONITOR_MOBILE.svg)
+
+#### 6.5.3 Cây component
+
+```text
+ModbusDiagnosticsPage
+└── FrameMonitor                      (mới — đặt DƯỚI bảng đếm theo thiết bị)
+    ├── Button ×2                     (Tải lại · Theo dõi liên tục)
+    ├── LimitsNote                    (nội tuyến — hai giới hạn, luôn hiện khi có dữ liệu)
+    ├── ErrorAlert                    (`role="alert"` — giữ nguyên văn lý do từ iobus)
+    ├── EmptyNote                     (nội tuyến — KHÔNG có viền cảnh báo)
+    └── FrameTable                    (mới — overflow-x-auto, min-width 720)
+```
+
+Theo dõi liên tục poll **2 giây**, và **mặc định TẮT**. Một panel chẩn đoán tự
+poll ngầm sẽ giữ tải lên iobus ngay cả khi không ai nhìn màn hình.
+
+#### 6.5.4 Bảng ánh xạ vùng → field → API → state → action → RBAC → copy → error → test
+
+| Vùng | Field | API (thật) | State khi thiếu | Action | RBAC | Copy khi rỗng | Test khoá |
+|---|---|---|---|---|---|---|---|
+| THỜI ĐIỂM | `frames[].at` | `GET /api/v1/modbus/frames?bus=&limit=` | hàng không render | — | viewer | — | `at` là **đồng hồ tường** (epoch ms), không phải uptime |
+| BUS · SLAVE · FC | `bus`, `slave`, `fc` | như trên | — | — | viewer | — | — |
+| ĐỊA CHỈ · SỐ LƯỢNG | `addr`, `count` | như trên | — | — | viewer | — | address là `zero-based` như §1 |
+| KẾT QUẢ | `ok`, `reason` | như trên | — | — | viewer | — | `crc` ≠ `timeout` ≠ `error`; **không** gộp thành "lỗi" |
+| THỜI LƯỢNG | `elapsedUs` | như trên | — | — | viewer | — | hiện theo ms, một chữ số thập phân |
+| LẦN PHÁT | `attempt` | như trên | — | — | viewer | — | `> 1` tô `--c-warn-fg` |
+| Dải giới hạn | `volatile`, `rawBytes` | như trên | — | — | viewer | — | luôn hiện khi có dữ liệu |
+
+#### 6.5.5 Ba luật của khối
+
+| Luật | Vì sao |
+|---|---|
+| **Lỗi đọc KHÔNG bao giờ hiện thành bảng rỗng.** `503` (iobus `unsupported`, socket chết) ⇒ khối cảnh báo giữ nguyên văn lý do, và bảng **không** được vẽ | Bảng rỗng đọc thành "bus im lặng"; người kỹ thuật sẽ đi tháo dây tìm một sự cố không tồn tại. Hai tình trạng đó dẫn tới hai kết luận trái ngược nên phải trông khác nhau |
+| **Hai giới hạn in thẳng lên màn hình**: vòng nhớ mất khi iobus restart, và Rev A không có byte thô | Giấu giới hạn trong tài liệu nghĩa là người đọc màn hình — đúng người sẽ kết luận sai — không bao giờ thấy nó |
+| **Không rút gọn cột ở mobile.** Bảng cuộn ngang thay vì bỏ cột | Bỏ cột `LẦN PHÁT` sẽ khiến ba dòng `TIMEOUT` liên tiếp đọc thành ba lần mất kết nối, trong khi thật ra là **một** chu kỳ đọc đã phát lại ba lượt |
+
+#### 6.5.6 Ranh giới với `T57-3.8` (quét bus)
+
+Khối này **CHỈ ĐỌC**: nó chỉ chụp lại giao dịch mà chu kỳ poll bình thường đã
+thực hiện, và **không một byte nào được phát thêm vì mục đích quan sát**
+(`ADR-046` điều 1). Đó chính là ranh giới tách nó khỏi chức năng quét thiết bị
+(`T57-3.8`) — quét là **ghi ra RS-485 thật**, nên task đó giữ
+`IMPLEMENT_READY BLOCKED` và đã chuyển sang Rev B.
+
+#### 6.5.7 Acceptance criteria
+
+- AC-E6: iobus trả `unsupported` ⇒ `503` và khối cảnh báo, **không** phải mảng rỗng.
+- AC-E7: vòng nhớ rỗng ⇒ câu chữ riêng, **không** có viền cảnh báo, **không** có `role="alert"`.
+- AC-E8: `crc`, `timeout`, `error` hiện nguyên phân loại, không gộp.
+- AC-E9: cột thời điểm dùng đồng hồ tường; một giá trị uptime sẽ hiện ra giờ năm 1970 và phải bị test chặn.
+- AC-E10: theo dõi liên tục mặc định TẮT.
+
 ---
 
 ## 7. Ma trận quyền theo hành động
@@ -577,3 +662,4 @@ quyết định cuối. FE không được nới lỏng hơn server (ADR-021).
 |---|---|---|---|
 | 0.1 | 2026-08-04 | In Review | Tạo UI/UX spec 5 page, wireframe, validation, state, quyền và gap FE |
 | 0.2 | 2026-08-05 | In Review | Đồng bộ Đ-01/Đ-04/Đ-05/Đ-06 và đối chiếu lại với `eade4e5`. **Thay thế:** (a) §1.1 `G-UX-01` phần quyền đã đóng; (b) §2 Overview render thẻ bus từ `GET /modbus/buses`, Rev A một thẻ, bỏ wireframe hai bus; (c) §3 Device Manager bỏ tab/radio chọn RS485-1/RS485-2, đổi nhãn `Retry` → "Số lần phát lại" và thêm trường "Chuyển OFFLINE sau N lượt" (Đ-05); (d) §3.2 thêm ràng buộc `rs485_port` chọn từ capability, `retry_count` cho phép 0; (e) §6.1 bỏ bộ lọc hai bus; (f) §7 ma trận quyền bốn vai trò → **ba** vai trò (Đ-04) kèm cảnh báo Operator hiện bị gộp vào Viewer ở FE; (g) §9 tách 9.1/9.2: đóng G-UX-08/G-UX-09, hạ G-UX-01 xuống P1, thêm G-UX-11/12/13 |
+| 0.3 | 2026-08-19 | Active | Thêm §6.5 `MBR-FRM-01` — khối "Khung truyền gần nhất" trên Page E (`T57-3.9`, `ADR-046` **bản sửa 2026-08-19**) kèm **2 asset SVG** desktop + mobile, mở cổng Detailed Design theo `DOC_GOVERNANCE` §2.2. Ghi rõ Rev A **không có byte thô** (libmodbus không lộ bộ đệm wire) và ranh giới CHỈ-ĐỌC tách khối này khỏi `T57-3.8` (quét bus, hoãn Rev B). Thêm AC-E6…AC-E10 |

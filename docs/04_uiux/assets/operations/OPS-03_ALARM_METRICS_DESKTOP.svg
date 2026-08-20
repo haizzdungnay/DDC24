@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1000" viewBox="0 0 1440 1000" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
+  <title>OPS-03 Bảng chỉ số hệ cảnh báo ISA-18.2 — desktop 1440, ba trạng thái</title>
+  <desc>Ba artboard đặc tả AlarmMetricsPanel: nhịp bình thường, alarm flood vượt ngưỡng ISA-18.2, và không đọc được nhật ký. Màu lấy từ token LIGHT trong apps/web-ui/src/shared/theme/tokens.ts. Dữ liệu trong hình là MINH HOẠ, không phải dữ liệu runtime.</desc>
+
+  <rect width="1440" height="1000" fill="#C8CCD0"/>
+
+  <!-- ============ ARTBOARD 1 — NHỊP BÌNH THƯỜNG ============ -->
+  <text x="24" y="22" font-size="12" font-weight="700" fill="#4A4F55">Artboard 1 — nhịp dưới ngưỡng (trạng thái thường gặp)</text>
+
+  <g transform="translate(24,36)">
+    <rect x="0" y="0" width="1392" height="392" rx="8" fill="#D8DBDE" stroke="#636970"/>
+
+    <text x="20" y="30" font-size="13" font-weight="700" fill="#26527C" letter-spacing="0.6">CHỈ SỐ HỆ CẢNH BÁO (ISA-18.2)</text>
+    <!-- Bộ chọn cửa sổ: 10m / 1h / 24h / 7d — 24h là mặc định -->
+    <g>
+      <rect x="1128" y="14" width="56" height="28" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="1146" y="33" font-size="12" fill="#1C1F23">10m</text>
+      <rect x="1190" y="14" width="46" height="28" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="1204" y="33" font-size="12" fill="#1C1F23">1h</text>
+      <rect x="1242" y="14" width="56" height="28" rx="6" fill="#26527C" stroke="#26527C"/>
+      <text x="1258" y="33" font-size="12" font-weight="700" fill="#FFFFFF">24h</text>
+      <rect x="1304" y="14" width="48" height="28" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="1318" y="33" font-size="12" fill="#1C1F23">7d</text>
+    </g>
+    <line x1="20" y1="54" x2="1372" y2="54" stroke="#636970"/>
+
+    <!-- Bốn ô chỉ số -->
+    <g>
+      <rect x="20" y="70" width="330" height="86" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="36" y="92" font-size="10" fill="#4A4F55" letter-spacing="0.4">CẢNH BÁO MỚI / 10 PHÚT</text>
+      <text x="36" y="128" font-size="30" font-weight="700" fill="#1C1F23">4</text>
+      <text x="36" y="146" font-size="10" fill="#4A4F55">Ngưỡng ISA-18.2: &gt; 10</text>
+
+      <rect x="362" y="70" width="330" height="86" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="378" y="92" font-size="10" fill="#4A4F55" letter-spacing="0.4">TRUNG BÌNH / GIỜ</text>
+      <text x="378" y="128" font-size="30" font-weight="700" fill="#1C1F23">2.75</text>
+
+      <rect x="704" y="70" width="330" height="86" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="720" y="92" font-size="10" fill="#4A4F55" letter-spacing="0.4">TỔNG TRONG CỬA SỔ</text>
+      <text x="720" y="128" font-size="30" font-weight="700" fill="#1C1F23">66</text>
+
+      <rect x="1046" y="70" width="326" height="86" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="1062" y="92" font-size="10" fill="#4A4F55" letter-spacing="0.4">ĐANG BỊ TREO</text>
+      <text x="1062" y="128" font-size="30" font-weight="700" fill="#1C1F23">2</text>
+    </g>
+
+    <!-- Danh sách lặp nhiều nhất -->
+    <text x="20" y="188" font-size="10" font-weight="700" fill="#4A4F55" letter-spacing="0.4">CẢNH BÁO LẶP NHIỀU NHẤT</text>
+    <g font-size="12">
+      <line x1="20" y1="198" x2="1372" y2="198" stroke="#636970"/>
+      <text x="24" y="220" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-014</text>
+      <text x="140" y="220" fill="#4A4F55">Áp suất ống gió cao</text>
+      <text x="1340" y="220" font-weight="700" fill="#1C1F23" text-anchor="end">18×</text>
+      <text x="24" y="246" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-003</text>
+      <text x="140" y="246" fill="#4A4F55">Nhiệt độ gió hồi cao</text>
+      <text x="1340" y="246" font-weight="700" fill="#1C1F23" text-anchor="end">11×</text>
+      <text x="24" y="272" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-021</text>
+      <text x="140" y="272" fill="#4A4F55">Bơm 2 quá giờ bảo trì</text>
+      <text x="1340" y="272" font-weight="700" fill="#1C1F23" text-anchor="end">6×</text>
+    </g>
+    <text x="20" y="300" font-size="10" fill="#4A4F55">Mục lặp nhiều thường là ngưỡng đặt sát quá hoặc thiếu vùng trễ, không phải một sự cố lặp lại.</text>
+
+    <!-- Danh sách treo -->
+    <text x="20" y="332" font-size="10" font-weight="700" fill="#4A4F55" letter-spacing="0.4">ĐANG BỊ TREO</text>
+    <g font-size="12">
+      <text x="24" y="356" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-009</text>
+      <text x="140" y="356" fill="#4A4F55">treo lúc 19/08/2026 09:12</text>
+      <text x="24" y="378" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-017</text>
+      <text x="140" y="378" fill="#4A4F55">treo lúc 19/08/2026 10:45</text>
+    </g>
+  </g>
+
+  <!-- ============ ARTBOARD 2 — ALARM FLOOD ============ -->
+  <text x="24" y="460" font-size="12" font-weight="700" fill="#4A4F55">Artboard 2 — nhịp vượt ngưỡng ISA-18.2 (alarm flood)</text>
+
+  <g transform="translate(24,474)">
+    <rect x="0" y="0" width="1392" height="238" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="20" y="30" font-size="13" font-weight="700" fill="#26527C" letter-spacing="0.6">CHỈ SỐ HỆ CẢNH BÁO (ISA-18.2)</text>
+    <rect x="1128" y="14" width="56" height="28" rx="6" fill="#26527C" stroke="#26527C"/>
+    <text x="1144" y="33" font-size="12" font-weight="700" fill="#FFFFFF">10m</text>
+    <line x1="20" y1="54" x2="1372" y2="54" stroke="#636970"/>
+
+    <!-- Ô nhịp chuyển tông critical: con số vừa là số vừa là cảnh báo -->
+    <rect x="20" y="70" width="330" height="86" rx="6" fill="#EFDDED" stroke="#901380" stroke-width="2"/>
+    <text x="36" y="92" font-size="10" fill="#4A4F55" letter-spacing="0.4">CẢNH BÁO MỚI / 10 PHÚT</text>
+    <text x="36" y="128" font-size="30" font-weight="700" fill="#901380">23</text>
+    <text x="36" y="146" font-size="10" fill="#901380">Ngưỡng ISA-18.2: &gt; 10</text>
+
+    <rect x="362" y="70" width="330" height="86" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="378" y="92" font-size="10" fill="#4A4F55" letter-spacing="0.4">TRUNG BÌNH / GIỜ</text>
+    <text x="378" y="128" font-size="30" font-weight="700" fill="#1C1F23">138.00</text>
+
+    <rect x="704" y="70" width="330" height="86" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="720" y="92" font-size="10" fill="#4A4F55" letter-spacing="0.4">TỔNG TRONG CỬA SỔ</text>
+    <text x="720" y="128" font-size="30" font-weight="700" fill="#1C1F23">23</text>
+
+    <rect x="1046" y="70" width="326" height="86" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="1062" y="92" font-size="10" fill="#4A4F55" letter-spacing="0.4">ĐANG BỊ TREO</text>
+    <text x="1062" y="128" font-size="30" font-weight="700" fill="#1C1F23">0</text>
+
+    <!-- Dải role=alert: nói HẬU QUẢ, không chỉ nói ngưỡng -->
+    <rect x="20" y="172" width="1352" height="48" rx="6" fill="#EFDDED" stroke="#901380" stroke-width="2"/>
+    <text x="40" y="194" font-size="13" font-weight="700" fill="#901380">ALARM FLOOD — nhịp cảnh báo vượt ngưỡng ISA-18.2.</text>
+    <text x="40" y="212" font-size="12" fill="#901380">Ở nhịp này người trực không đọc kịp và sẽ bỏ sót cảnh báo thật.</text>
+  </g>
+
+  <!-- ============ ARTBOARD 3 — KHÔNG ĐỌC ĐƯỢC NHẬT KÝ ============ -->
+  <text x="24" y="744" font-size="12" font-weight="700" fill="#4A4F55">Artboard 3 — không đọc được nhật ký (KHÁC HẲN "hệ đang yên tĩnh")</text>
+
+  <g transform="translate(24,758)">
+    <rect x="0" y="0" width="1392" height="210" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="20" y="30" font-size="13" font-weight="700" fill="#26527C" letter-spacing="0.6">CHỈ SỐ HỆ CẢNH BÁO (ISA-18.2)</text>
+    <line x1="20" y1="54" x2="1372" y2="54" stroke="#636970"/>
+
+    <rect x="20" y="72" width="1352" height="118" rx="6" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+    <circle cx="52" cy="104" r="12" fill="none" stroke="#A01017" stroke-width="2"/>
+    <text x="48" y="109" font-size="14" font-weight="700" fill="#A01017">!</text>
+    <text x="76" y="100" font-size="13" font-weight="700" fill="#A01017">Không đọc được nhật ký cảnh báo</text>
+    <text x="76" y="122" font-size="12" fill="#4A4F55">503 alarm_history.jsonl không mở được — chưa đọc được nhật ký thì KHÔNG kết luận được hệ đang yên tĩnh.</text>
+    <rect x="76" y="140" width="104" height="32" rx="6" fill="#26527C" stroke="#26527C"/>
+    <text x="98" y="161" font-size="12" font-weight="700" fill="#FFFFFF">Thử lại</text>
+    <text x="200" y="161" font-size="11" fill="#4A4F55">Bốn ô chỉ số KHÔNG hiện "0": số 0 là một khẳng định, còn ở đây ta không biết.</text>
+  </g>
+</svg>

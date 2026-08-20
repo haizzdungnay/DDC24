@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="960" viewBox="0 0 800 960" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
+  <title>OPS-03 Bảng chỉ số hệ cảnh báo ISA-18.2 — mobile 390, hai trạng thái</title>
+  <desc>Hai artboard mobile của AlarmMetricsPanel: nhịp bình thường (lưới 2 cột) và alarm flood. Màu lấy từ token LIGHT trong apps/web-ui/src/shared/theme/tokens.ts. Dữ liệu trong hình là MINH HOẠ, không phải dữ liệu runtime.</desc>
+
+  <rect width="800" height="960" fill="#C8CCD0"/>
+
+  <text x="24" y="22" font-size="12" font-weight="700" fill="#4A4F55">Artboard 1 — mobile 390 · nhịp dưới ngưỡng</text>
+  <text x="424" y="22" font-size="12" font-weight="700" fill="#4A4F55">Artboard 2 — mobile 390 · alarm flood</text>
+
+  <!-- ============ MOBILE 1 ============ -->
+  <g transform="translate(24,36)">
+    <rect x="0" y="0" width="390" height="880" rx="8" fill="#D8DBDE" stroke="#636970"/>
+
+    <text x="16" y="28" font-size="12" font-weight="700" fill="#26527C" letter-spacing="0.5">CHỈ SỐ HỆ CẢNH BÁO</text>
+    <text x="16" y="44" font-size="10" fill="#4A4F55">(ISA-18.2)</text>
+    <!-- Bộ chọn cửa sổ xuống dòng riêng ở mobile, không nhồi vào hàng tiêu đề -->
+    <g>
+      <rect x="16" y="56" width="80" height="32" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="46" y="77" font-size="12" fill="#1C1F23">10m</text>
+      <rect x="104" y="56" width="80" height="32" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="137" y="77" font-size="12" fill="#1C1F23">1h</text>
+      <rect x="192" y="56" width="80" height="32" rx="6" fill="#26527C" stroke="#26527C"/>
+      <text x="220" y="77" font-size="12" font-weight="700" fill="#FFFFFF">24h</text>
+      <rect x="280" y="56" width="80" height="32" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="311" y="77" font-size="12" fill="#1C1F23">7d</text>
+    </g>
+    <line x1="16" y1="100" x2="374" y2="100" stroke="#636970"/>
+
+    <!-- Lưới 2 cột (grid-cols-2 ở dưới md) -->
+    <rect x="16" y="114" width="172" height="82" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="28" y="134" font-size="9" fill="#4A4F55">CẢNH BÁO MỚI / 10 PHÚT</text>
+    <text x="28" y="168" font-size="26" font-weight="700" fill="#1C1F23">4</text>
+    <text x="28" y="186" font-size="9" fill="#4A4F55">Ngưỡng: &gt; 10</text>
+
+    <rect x="200" y="114" width="174" height="82" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="212" y="134" font-size="9" fill="#4A4F55">TRUNG BÌNH / GIỜ</text>
+    <text x="212" y="168" font-size="26" font-weight="700" fill="#1C1F23">2.75</text>
+
+    <rect x="16" y="206" width="172" height="82" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="28" y="226" font-size="9" fill="#4A4F55">TỔNG TRONG CỬA SỔ</text>
+    <text x="28" y="260" font-size="26" font-weight="700" fill="#1C1F23">66</text>
+
+    <rect x="200" y="206" width="174" height="82" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="212" y="226" font-size="9" fill="#4A4F55">ĐANG BỊ TREO</text>
+    <text x="212" y="260" font-size="26" font-weight="700" fill="#1C1F23">2</text>
+
+    <text x="16" y="320" font-size="10" font-weight="700" fill="#4A4F55" letter-spacing="0.4">CẢNH BÁO LẶP NHIỀU NHẤT</text>
+    <line x1="16" y1="330" x2="374" y2="330" stroke="#636970"/>
+    <g font-size="12">
+      <text x="20" y="352" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-014</text>
+      <text x="360" y="352" font-weight="700" fill="#1C1F23" text-anchor="end">18×</text>
+      <text x="20" y="370" font-size="10" fill="#4A4F55">Áp suất ống gió cao</text>
+
+      <text x="20" y="398" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-003</text>
+      <text x="360" y="398" font-weight="700" fill="#1C1F23" text-anchor="end">11×</text>
+      <text x="20" y="416" font-size="10" fill="#4A4F55">Nhiệt độ gió hồi cao</text>
+
+      <text x="20" y="444" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-021</text>
+      <text x="360" y="444" font-weight="700" fill="#1C1F23" text-anchor="end">6×</text>
+      <text x="20" y="462" font-size="10" fill="#4A4F55">Bơm 2 quá giờ bảo trì</text>
+    </g>
+    <text x="16" y="492" font-size="9" fill="#4A4F55">Mục lặp nhiều thường là ngưỡng đặt sát quá</text>
+    <text x="16" y="506" font-size="9" fill="#4A4F55">hoặc thiếu vùng trễ, không phải sự cố lặp lại.</text>
+
+    <text x="16" y="540" font-size="10" font-weight="700" fill="#4A4F55" letter-spacing="0.4">ĐANG BỊ TREO</text>
+    <g font-size="12">
+      <text x="20" y="564" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-009</text>
+      <text x="20" y="582" font-size="10" fill="#4A4F55">19/08/2026 09:12</text>
+      <text x="20" y="608" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-017</text>
+      <text x="20" y="626" font-size="10" fill="#4A4F55">19/08/2026 10:45</text>
+    </g>
+
+    <text x="16" y="672" font-size="9" fill="#4A4F55">Ở mobile bốn ô xếp 2×2; thứ tự KHÔNG đổi —</text>
+    <text x="16" y="686" font-size="9" fill="#4A4F55">ô nhịp/10 phút luôn ở vị trí đầu vì nó là ô</text>
+    <text x="16" y="700" font-size="9" fill="#4A4F55">duy nhất có ngưỡng an toàn gắn kèm.</text>
+  </g>
+
+  <!-- ============ MOBILE 2 — FLOOD ============ -->
+  <g transform="translate(424,36)">
+    <rect x="0" y="0" width="390" height="880" rx="8" fill="#D8DBDE" stroke="#636970"/>
+
+    <text x="16" y="28" font-size="12" font-weight="700" fill="#26527C" letter-spacing="0.5">CHỈ SỐ HỆ CẢNH BÁO</text>
+    <text x="16" y="44" font-size="10" fill="#4A4F55">(ISA-18.2)</text>
+    <rect x="16" y="56" width="80" height="32" rx="6" fill="#26527C" stroke="#26527C"/>
+    <text x="44" y="77" font-size="12" font-weight="700" fill="#FFFFFF">10m</text>
+    <line x1="16" y1="100" x2="374" y2="100" stroke="#636970"/>
+
+    <rect x="16" y="114" width="172" height="82" rx="6" fill="#EFDDED" stroke="#901380" stroke-width="2"/>
+    <text x="28" y="134" font-size="9" fill="#4A4F55">CẢNH BÁO MỚI / 10 PHÚT</text>
+    <text x="28" y="168" font-size="26" font-weight="700" fill="#901380">23</text>
+    <text x="28" y="186" font-size="9" fill="#901380">Ngưỡng: &gt; 10</text>
+
+    <rect x="200" y="114" width="174" height="82" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="212" y="134" font-size="9" fill="#4A4F55">TRUNG BÌNH / GIỜ</text>
+    <text x="212" y="168" font-size="24" font-weight="700" fill="#1C1F23">138.00</text>
+
+    <rect x="16" y="206" width="172" height="82" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="28" y="226" font-size="9" fill="#4A4F55">TỔNG TRONG CỬA SỔ</text>
+    <text x="28" y="260" font-size="26" font-weight="700" fill="#1C1F23">23</text>
+
+    <rect x="200" y="206" width="174" height="82" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="212" y="226" font-size="9" fill="#4A4F55">ĐANG BỊ TREO</text>
+    <text x="212" y="260" font-size="26" font-weight="700" fill="#1C1F23">0</text>
+
+    <!-- Dải flood chiếm trọn bề ngang, ngay dưới lưới số -->
+    <rect x="16" y="300" width="358" height="96" rx="6" fill="#EFDDED" stroke="#901380" stroke-width="2"/>
+    <text x="28" y="324" font-size="12" font-weight="700" fill="#901380">ALARM FLOOD</text>
+    <text x="28" y="344" font-size="10" fill="#901380">Nhịp cảnh báo vượt ngưỡng ISA-18.2.</text>
+    <text x="28" y="362" font-size="10" fill="#901380">Ở nhịp này người trực không đọc kịp</text>
+    <text x="28" y="378" font-size="10" fill="#901380">và sẽ bỏ sót cảnh báo thật.</text>
+
+    <text x="16" y="428" font-size="10" font-weight="700" fill="#4A4F55" letter-spacing="0.4">CẢNH BÁO LẶP NHIỀU NHẤT</text>
+    <line x1="16" y1="438" x2="374" y2="438" stroke="#636970"/>
+    <g font-size="12">
+      <text x="20" y="460" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-014</text>
+      <text x="360" y="460" font-weight="700" fill="#1C1F23" text-anchor="end">9×</text>
+      <text x="20" y="486" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-003</text>
+      <text x="360" y="486" font-weight="700" fill="#1C1F23" text-anchor="end">7×</text>
+      <text x="20" y="512" font-weight="700" fill="#1C1F23" font-family="monospace">ALM-021</text>
+      <text x="360" y="512" font-weight="700" fill="#1C1F23" text-anchor="end">4×</text>
+    </g>
+
+    <text x="16" y="560" font-size="9" fill="#4A4F55">Dải flood đặt NGAY dưới lưới số, không đẩy</text>
+    <text x="16" y="574" font-size="9" fill="#4A4F55">xuống cuối trang: ở mobile phần cuối nằm</text>
+    <text x="16" y="588" font-size="9" fill="#4A4F55">ngoài màn hình đầu tiên, và một cảnh báo</text>
+    <text x="16" y="602" font-size="9" fill="#4A4F55">phải cuộn mới thấy là một cảnh báo bị bỏ lỡ.</text>
+  </g>
+</svg>
