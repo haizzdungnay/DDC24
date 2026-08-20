@@ -2,7 +2,7 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-19 (`AUTH-WEBUX-2026-08-19-02` — bốn quyết định người: `T57-3.8` **hoãn sang Rev B**, chủ sở hữu ba task C++, uỷ quyền truy cập board Foxlinx, và **mốc hết hiệu lực của `WAIVED FOR IMPLEMENTATION`**; không cấp ADR mới; trước đó: `ADR-042`…`ADR-049` `Accepted` — chín quyết định theo từng task để mở Wave 3 của Plan 57, ban hành cùng `AUTH-WEBUX-2026-08-19-01`; trước đó: `ADR-034`…`ADR-039` `Accepted` — sáu câu hỏi chặn còn lại của Plan 57 §12: annunciation, chủ sở hữu ngữ nghĩa mô phỏng cảnh báo, kho chỉ số ISA-18.2, chính sách mật khẩu, chủ sở hữu "hiệu lực thực tế" của lịch, và **an toàn quét bus Modbus**; `ADR-033`/`ADR-032` `Accepted` — cách ly route và điều hướng web 4 nhóm)
+**Cập nhật:** 2026-08-20 (phê duyệt Product Owner/CTO — bốn quyết định phạm vi: hoãn STM32 BSP nhưng gỡ firmware provenance giả, OTA → Rev B, gỡ `expose_bacnet` khỏi Rev A, chốt vòng đời lệnh ghi Modbus RTU; không cấp ADR mới. Trước đó: 2026-08-19 `AUTH-WEBUX-2026-08-19-02` — bốn quyết định người: `T57-3.8` **hoãn sang Rev B**, chủ sở hữu ba task C++, uỷ quyền truy cập board Foxlinx, và **mốc hết hiệu lực của `WAIVED FOR IMPLEMENTATION`**; không cấp ADR mới; trước đó: `ADR-042`…`ADR-049` `Accepted` — chín quyết định theo từng task để mở Wave 3 của Plan 57, ban hành cùng `AUTH-WEBUX-2026-08-19-01`; trước đó: `ADR-034`…`ADR-039` `Accepted` — sáu câu hỏi chặn còn lại của Plan 57 §12: annunciation, chủ sở hữu ngữ nghĩa mô phỏng cảnh báo, kho chỉ số ISA-18.2, chính sách mật khẩu, chủ sở hữu "hiệu lực thực tế" của lịch, và **an toàn quét bus Modbus**; `ADR-033`/`ADR-032` `Accepted` — cách ly route và điều hướng web 4 nhóm)
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa; **bản 2026-08-19 sửa lại lần chuẩn hoá
 2026-07-22**: EasySet parity thành **`ADR-040`** (không phải `ADR-013`) và raw SHM thành **`ADR-041`**
@@ -1352,3 +1352,36 @@ Số ADR tiếp theo còn trống: **`ADR-050`** (record này không cấp ADR m
   contract trước khi code P1; simulation dùng **chung** evaluation engine với
   controller (cấm cài lại thuật toán trong Go); và không tuyên bố
   production-ready khi chưa có kiểm chứng I/O vật lý.
+- **Phê duyệt Product Owner/CTO ngày 2026-08-20** — bốn quyết định phạm vi sau
+  đợt rà toàn ứng dụng. Nguyên tắc chung xuyên suốt cả bốn: **hợp đồng Rev A chỉ
+  được mô tả thứ runtime Rev A thực thi**; một bề mặt được khai mà không có
+  handler còn tệ hơn là không khai, vì nó sinh client gọi vào hư không và làm mọi
+  phép đếm độ phủ API sai.
+  1. **STM32 BSP: hoãn** cho tới khi có phần cứng — không CubeMX/startup/linker/
+     ADC/DAC/GPIO thật. **Nhưng `firmware.elf` phải bị gỡ khỏi
+     `checksums.sha256` và release artifact NGAY**: ELF hiện tại có entry
+     `0x811d` và không có bảng vector nên không boot được trên STM32G0B1RBT6,
+     và phát hành checksum cho nó là phát hành provenance sai. Compile check vẫn
+     giữ ở CI job `mcu-firmware`. Khoá bằng
+     `tests/integration/test_release_packaging_guard.py`.
+  2. **OTA → Rev B.** Gỡ toàn bộ `/ota/*` khỏi OpenAPI Rev A, route table,
+     generated client và FE capability. Requirement/design/backlog giữ dưới
+     Rev B. Cùng nguyên tắc, ba path không có handler khác cũng bị gỡ:
+     `/graph/validate`, `/graph/deploy`, `/logs/download` (phải implement trước
+     rồi mới khai lại) và `/bacnet/objects` (đi cùng quyết định 3).
+  3. **`expose_bacnet` gỡ khỏi đường Rev A** (`OD-MBRTU-014`). Không nối
+     `BuildProfile`. Cấu hình cũ vẫn nạp được nhưng phải báo deprecated/ignored,
+     không được giả là functional. Đưa Point Modbus RTU ra BACnet là Rev B và
+     phải implement **end-to-end** trước khi mở lại field.
+  4. **Vòng đời lệnh ghi Modbus RTU** (`OD-MBRTU-005`): **TTL 30 s hoặc tối đa
+     3 retry**, điều kiện nào tới trước thì kết thúc. TTL là tuổi thọ của lệnh
+     đang chờ/retry, **không** phải hẹn giờ hoàn tác giá trị register — slave đã
+     ACK là lệnh hoàn tất. Force/override tạm thời là cơ chế khác, có lease/
+     expiry riêng. Chi tiết ở
+     [VERIFICATION.md §Vòng đời lệnh ghi](../05_verification/VERIFICATION.md).
+
+  Không cấp ADR mới cho đợt này: cả bốn đều thu hẹp phạm vi về đúng ADR đang có
+  hiệu lực (`REVA_SCOPE_ROADMAP` §3 vốn đã xếp OTA vào Rev B), không mở kiến trúc
+  mới. Bất biến chống tái phát nằm ở
+  `TestRouteTableMatchesOpenAPI`, `TestRevBSurfacesStayOutOfRevAContract` và
+  `test_release_packaging_guard.py`.

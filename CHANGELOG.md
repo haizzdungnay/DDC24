@@ -8,6 +8,169 @@
 
 ## [Unreleased]
 
+### Changed — Thi hành 8 quyết định phạm vi sau đợt rà toàn ứng dụng (2026-08-20)
+
+Đợt rà đối chiếu **mã nguồn thật** với tài liệu gate và hợp đồng API. Kết quả
+chia làm ba nhóm: bề mặt được quảng cáo mà không có runtime, cổng kiểm không
+chạy, và tài liệu nói sai hiện trạng. Tám quyết định sản phẩm được ký ngày
+2026-08-20 (`DECISIONS.md`) và thi hành trọn trong đợt này.
+
+**Nguyên tắc xuyên suốt:** hợp đồng Rev A chỉ mô tả thứ runtime Rev A thực thi.
+Một bề mặt khai mà không có handler còn tệ hơn không khai — nó sinh client gọi
+vào hư không và làm mọi phép đếm độ phủ API sai.
+
+#### 1. Gói phát hành ship sai biến thể FE — `P0`
+
+*Triệu chứng:* mọi gói phát hành thiếu hẳn bốn workspace Programming, không kèm
+lỗi build nào; chỉ lộ ra khi mở giao diện trên board. Đã tái diễn hai lần
+(2026-08-14, 2026-08-17).
+
+*Nguyên nhân gốc:* `build-release.sh` gọi `npm run build` trần ⇒
+`VITE_PROGRAMMING_REV_A` rỗng ⇒ `PROGRAMMING_REV_A_ENABLED = false` ⇒ route và
+NavRail ẩn toàn bộ nhóm Programming. Công thức đúng chỉ tồn tại dưới cái tên
+board-specific `build:foxlinx`, nên script phát hành chung không ai nghĩ tới nó.
+
+*Cách sửa:* thêm `npm run build:release` làm công thức phát hành chuẩn
+(`build:foxlinx` giữ làm alias để không vỡ thói quen cũ); `build-release.sh` gọi
+nó. Khoá bằng `tests/integration/test_release_packaging_guard.py`, chạy **đầu
+tiên** trong gate `layout`.
+
+#### 2. Không có cổng nào canh route ↔ OpenAPI — `P0`
+
+*Triệu chứng:* 7 path khai trong spec mà **không có handler nào**
+(`/ota/*`, `/graph/validate`, `/graph/deploy`, `/bacnet/objects`,
+`/logs/download`), và 13 endpoint **đang chạy** mà không hề có trong spec
+(`/modbus/frames`, `/modbus/templates`, `/alarms/metrics`, `/me/preferences`,
+`/system/history`, `/users/access`, `/schedules/effective`,
+`/virtual-points/{id}/usage`, `/alarm-settings/simulate|estimate`,
+`/network/connectivity-check`, `PUT /system/config`).
+
+*Nguyên nhân gốc:* `contract_sync_test.go` canh **tên field của schema** nhưng
+không canh **danh sách path**. Khoảng trống đó câm ở cả build lẫn runtime.
+Hệ quả thật: `client.validateGraph()` gọi `POST /graph/validate` — một lời gọi
+chỉ có thể trả 404; nó không nổ vì tình cờ không ai gọi hàm đó.
+
+*Cách sửa:* `apps/web-api/internal/app/http.go` tách `routeTable()` khỏi
+`Router()` để test liệt kê được bề mặt thật mà không phải chép lại danh sách.
+Thêm `TestRouteTableMatchesOpenAPI` (đối chiếu hai chiều, kèm allowlist đúng một
+alias `GET /health`) và `TestRevBSurfacesStayOutOfRevAContract`. Bổ sung 13
+endpoint + 24 schema vào `openapi.yaml`, tên trường lấy trực tiếp từ struct Go
+đang phục vụ request.
+
+#### 3. 9/10 bộ Playwright chưa bao giờ vào CI
+
+*Nguyên nhân gốc:* `verify-project.sh` hard-code đúng `e2e/network-qa.spec.ts`
+(1 test). Khoảng 59 test còn lại mục dần đúng theo kịch bản `F-07` mà chính
+comment trong workflow cảnh báo — và đúng như dự đoán, **3 test đã đỏ sẵn**:
+
+| Test | Nguyên nhân |
+|---|---|
+| `fe-pages-health` × 2 | Khẳng định chuỗi tiếng Anh, trong khi config khai `locale: 'vi-VN'` từ bản sửa `BUG-001` ⇒ giao diện render tiếng Việt |
+| `pa3-dashboard` × 1 | Khẳng định heading `Dữ liệu trực tiếp`/`Live Data` không tồn tại (trang ghi `Biểu đồ trực tiếp`/`Live Chart`), và khối đó nằm trong tab `Chẩn đoán` chứ không phải tab mặc định |
+
+Cả ba đã kiểm chứng là **đỏ độc lập với đợt thay đổi này** (stash toàn bộ, lỗi
+giữ nguyên). Sản phẩm không sai — bài test sai.
+
+*Cách sửa:* liệt kê spec **động** (spec mới tự vào cổng), `point-names.spec.ts`
+tiếp tục cách ly qua `MKDDC_E2E_QUARANTINE`. Sửa ba test: khớp song ngữ bằng
+regex thay vì ghim một ngôn ngữ (bền hơn khi đổi `locale`), và mở đúng tab trước
+khi khẳng định. Thêm `page.bringToFront()` cho hai test bàn phím của `pa3-a11y` —
+chúng flake khi chạy tuần tự cả bộ vì trang chưa giành được tiêu điểm cửa sổ.
+
+#### 4. Tài liệu gate nói sai hiện trạng
+
+`VERIFICATION.md` và `MODBUS_RTU_OPEN_DECISIONS.md` ghi `RED`/`OPEN` cho những
+việc **đã làm xong**, khiến dự án trông tụt hậu hơn thực tế và có nguy cơ khiến
+ai đó làm lại việc đã có:
+
+| Mục | Tài liệu ghi | Thực tế trong mã |
+|---|---|---|
+| `VR-MBRTU-002` | "capacity còn 64" | `KX_N_EXT = 256` — Đ-07 đã thi hành |
+| `VR-MBRTU-002/013` | "chưa có import/export", "không có endpoint commissioning" | `/modbus/import|export`, `test-connection`, `read-test`, `write-test` đều có |
+| `VR-MBRTU-005` | "contract thiếu bốn trạng thái/timestamp producer" | `kx_ext_quality_t` 5 mức + 10 mã reason + `sample_utc_ms`/`sample_mono_ns` |
+| `OD-MBRTU-019` | "đứt end-to-end" | Thông suốt Go → `fieldbus.conf` → iobus, có test |
+| `OD-MBRTU-016` | "có thêm `CONFIG_ERROR` không?" | `KX_EXTQ_CONFIG_ERROR = 4` đã tồn tại |
+
+Gate được sửa **lý do** cho đúng và hạ từ `RED` xuống `PARTIAL`; phần còn thiếu
+thật (evidence trên target) giữ nguyên — không tự ý chuyển sang `PASS`.
+
+#### 5. Gỡ `firmware.elf` khỏi provenance phát hành
+
+STM32 BSP **hoãn** cho tới khi có phần cứng. Nhưng release không được phát hành
+checksum cho một artifact chưa tồn tại thật: ELF hiện tại có entry `0x811d`,
+`.text` ở `0x800c` (layout mặc định newlib nosys, không phải flash base
+`0x08000000` của STM32G0), **không có `Reset_Handler` và không có bảng vector** —
+nó không boot được trên STM32G0B1RBT6. Gỡ khỏi `checksums.sha256`, thêm
+`"mcu_firmware": "not-included"` vào `provenance.json`. Compile check giữ nguyên
+ở CI job `mcu-firmware`.
+
+#### 6. OTA → Rev B
+
+Gỡ toàn bộ `/ota/*` khỏi `openapi.yaml`. Cùng nguyên tắc, gỡ luôn `/graph/*`,
+`/bacnet/objects`, `/logs/download` — không path nào có handler. Gỡ mã chết
+`client.validateGraph()` ở FE (hai nhánh của nó đều trỏ tới endpoint không tồn
+tại; nếu từng có ai gọi, nó sẽ nuốt một 404 rồi thử tiếp một 404 thứ hai).
+Mitigation cũ `x-implementation-status: not-implemented` bị bác: nhãn không ngăn
+generator sinh client. `TestOpenAPISeparatesRuntimeRoutesFromRoadmap` được **đảo
+chiều** — nay khẳng định bảy path đó VẮNG MẶT.
+
+#### 7. Gỡ `expose_bacnet` khỏi đường Rev A
+
+`ProfilePoint` bỏ ba trường `expose_bacnet`/`bacnet_object_type`/
+`bacnet_instance`. Chúng chưa từng có consumer runtime nào trong `apps/`, và BE
+cũng chưa bao giờ sinh ra chúng — một tính năng chỉ tồn tại ở lớp parser: nhận
+cấu hình, báo lỗi khi thiếu type, rồi không làm gì cả. `parse_point()` vẫn ĐỌC
+khoá cũ để cảnh báo `profile.expose_bacnet_deprecated`, phục vụ migration; cấu
+hình cũ vẫn nạp được và Point vẫn hoạt động. Hai test khoá cả hai chiều (có
+cảnh báo khi còn khoá cũ, im lặng khi không có).
+
+#### 8. Vòng đời lệnh ghi Modbus RTU — chốt và khoá `OD-MBRTU-005`
+
+**TTL 30 s hoặc tối đa 3 lần phát**, điều kiện nào tới trước thì lệnh kết thúc.
+FW đã có sẵn đúng hai giá trị này; nay khoá bằng
+`WriteLifecycleConstantsMatchProductDecision` để đổi chúng phải đi kèm quyết định
+sản phẩm.
+
+**Ranh giới ghi rõ trong spec:** TTL là tuổi thọ của **lệnh đang chờ/retry**,
+KHÔNG phải hẹn giờ hoàn tác giá trị register — slave đã ACK là lệnh hoàn tất.
+Force/override tạm thời rồi tự trả về là cơ chế khác, có lease/expiry riêng.
+
+### Fixed — Lệnh ghi mới cùng giá trị bị nuốt sau khi lệnh cũ bị bỏ (2026-08-20)
+
+*Triệu chứng:* kỹ thuật viên đặt setpoint 50.0 trong lúc biến tần mất điện ⇒ lệnh
+bị bỏ theo TTL. Biến tần có điện lại, họ đặt **lại** 50.0 — UI báo đã nhận, thiết
+bị không bao giờ nhận. Không log, không lỗi.
+
+*Nguyên nhân gốc:* `ModbusMaster` chống phát trùng bằng `last_written_`, đặt ngay
+lúc **enqueue** chứ không phải khi ghi thành công. Lệnh bị bỏ vẫn để lại dấu vết
+đó, nên lệnh mới mang đúng giá trị cũ bị coi là trùng và không bao giờ xuống dây.
+Đây đúng là lớp lỗi false-success mà thiết kế cấm, và nó vô hiệu hoá quy tắc
+"muốn ghi lại phải phát sinh command mới" của `OD-MBRTU-005`.
+
+*Cách sửa:* `BusWorker` ghi nhận ext slot của mọi lệnh kết thúc mà không áp được
+(quá hạn TTL, hết lượt thử, giá trị không encode được) và cho `ModbusMaster` lấy
+qua `take_dropped_write_slots()`; master xoá `has_last_written_` tương ứng ở đầu
+`drain_ext_writes()`. Khoá bằng `DroppedWriteAllowsResendOfSameValue` — đã kiểm
+chứng test này FAIL khi tắt bản sửa (`write_dropped` đứng ở 1 thay vì 2).
+
+**Kiểm chứng (đo lại trong phiên, không dẫn số cũ):**
+
+| Bộ | Lệnh | Kết quả |
+|---|---|---|
+| C++ | `cmake --fresh` + build + `ctest` (MODBUS+BACNET+HMI ON) | configure/build/ctest **exit 0**, **1052/1052 pass** |
+| Go | `go vet ./...` + `go test ./... -count=1` | vet sạch, **0 FAIL** |
+| FE unit | `npx vitest --run --environment jsdom src` | **1061/1061 pass**, 111 file |
+| FE lint/build | `npm run lint`, `npm run build` | exit 0 / exit 0 |
+| E2E | `verify-project.sh --component e2e` | **8 spec, 61 passed**, exit 0 |
+| Guard đóng gói | `test_release_packaging_guard.py` | 3/3 pass; đã kiểm chứng FAIL khi cố tình hồi quy |
+
+**Còn mở, KHÔNG thuộc phạm vi đợt này:** gate `layout` đang đỏ sẵn trên `main`
+với 10 vi phạm dependency boundary (`App.tsx` import sâu vào `features/*`,
+`scheduler/shared.ts` chạm contract C/SHM/IOP). Đã kiểm chứng là đỏ trên cây sạch
+trước mọi thay đổi của đợt này. Guard đóng gói mới được đặt **trước** các kiểm đó
+trong `run_layout` để `set -e` không che mất nó.
+
+
 ### Added — Đóng Plan 57: ba hồ sơ UI/UX còn thiếu + 6 asset, và test hành vi `F-UX-13` (2026-08-19)
 
 Rà `§9.1` của Plan 57 **trước khi** tuyên bố đóng, và tìm ra ba gate tài liệu

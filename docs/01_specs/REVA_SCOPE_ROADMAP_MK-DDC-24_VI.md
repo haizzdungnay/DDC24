@@ -81,6 +81,8 @@
 ✗ Audit log đầy đủ, component versioning          → Rev B
 ✗ MQTT/agent, cloud                               → Rev B+
 ✗ OTA update                                       → Rev B
+✗ Expose Point Modbus RTU ra BACnet object         → Rev B (OD-MBRTU-014)
+✗ REST graph validate/deploy, logs/download        → backlog, implement trước khi khai contract
 ✗ BACnet/SC, scripted component, multi-DDC        → Rev C
 ✓ IEC 61131-3-aligned ST+FBD Program Runtime         → Rev A.0 roadmap (ADR-020, đang C0, chưa release)
 ✗ LD/SFC, online change, IEC certified/compliant claim → ngoài Rev A.0
