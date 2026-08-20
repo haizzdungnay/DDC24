@@ -1,17 +1,18 @@
 {
   "contractId": "PROGRAMMING-STORE-V1",
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "databasePath": "${CONFIG_DIR}/programming/programming-v1.sqlite",
   "backupPath": "${CONFIG_DIR}/programming/programming-backups/",
-  "migrationFile": "0006_product_model_v2.sql",
-  "migrationSha256": "18a608e76ed3490f9a19697841a4ce7097a311106710dc159cf4d8ed72bd8abb",
+  "migrationFile": "0007_control_library_domain.sql",
+  "migrationSha256": "08f6784c3b4882a6943882c8e9024bba330ed83070c4a9f7d695912b73546a2b",
   "migrations": [
     {"version": 1, "file": "0001_programming_v1.sql", "sha256": "427c21772586a8ca3f885f41103d31ee1983071c0e1499ff1d97199a891c3db9"},
     {"version": 2, "file": "0002_mutation_receipts.sql", "sha256": "8ae5e0df06d9735727de6809c24565bf6e4e0c0fbcbe0f3e10b5d76365c53fe3"},
     {"version": 3, "file": "0003_check_worker.sql", "sha256": "f182f622b097ec7bea65a172fa8a0efdbe36291c3c35a7eed5cbf6e0f7a89ec3"},
     {"version": 4, "file": "0004_bundle_receipts.sql", "sha256": "430a1ea77912e90f8f8972e5656178d405e7e29425d85534ac6484dbf42fb49e"},
     {"version": 5, "file": "0005_operation_coordinator.sql", "sha256": "e0e2020afced4fe9c88fd17df5c27d2779ec6c4ddf0c516b15af7bf370f802dc"},
-    {"version": 6, "file": "0006_product_model_v2.sql", "sha256": "18a608e76ed3490f9a19697841a4ce7097a311106710dc159cf4d8ed72bd8abb"}
+    {"version": 6, "file": "0006_product_model_v2.sql", "sha256": "18a608e76ed3490f9a19697841a4ce7097a311106710dc159cf4d8ed72bd8abb"},
+    {"version": 7, "file": "0007_control_library_domain.sql", "sha256": "08f6784c3b4882a6943882c8e9024bba330ed83070c4a9f7d695912b73546a2b"}
   ],
   "foreignKeys": true,
   "journalMode": "WAL",
@@ -26,10 +27,14 @@
     "commission_records",
     "audit_records",
     "pou_objects",
-    "library_entries",
-    "published_signal_defs"
+    "published_signal_defs",
+    "library_usages"
+  ],
+  "draftMutableEntities": [
+    {"table": "library_revisions", "mutableWhile": "scope=PROJECT AND state=DRAFT"},
+    {"table": "library_entries", "mutableWhile": "parent library_revisions scope=PROJECT AND state=DRAFT"}
   ],
   "featureDefaultOff": true,
   "owner": "BE/Core",
-  "generatedBy": "TASK-PROG-104; migration v2 by TASK-PROG-204; Check lease/idempotency v3 by TASK-PROG-205; bundle receipt v4 by TASK-PROG-206; operation coordinator v5 by TASK-PROG-403; Product model v2 by T59-005"
+  "generatedBy": "TASK-PROG-104; migration v2 by TASK-PROG-204; Check lease/idempotency v3 by TASK-PROG-205; bundle receipt v4 by TASK-PROG-206; operation coordinator v5 by TASK-PROG-403; Product model v2 by T59-005; Control Library domain v7 by T59-201"
 }

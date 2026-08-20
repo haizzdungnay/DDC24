@@ -404,6 +404,26 @@ def validate(join: dict[str, Any]) -> list[str]:
             == profile["coreLibrary"]["version"],
             "libraryVersion lệch giữa registry/pin/profile",
         )
+        history = registry_item["versionHistory"]
+        require(
+            isinstance(history, list) and len(history) > 0,
+            "library registry thiếu versionHistory",
+        )
+        history_versions = [item["libraryVersion"] for item in history]
+        require(
+            len(history_versions) == len(set(history_versions)),
+            "library registry versionHistory trùng version",
+        )
+        current_history = next(
+            (item for item in history
+             if item["libraryVersion"] == registry["libraryVersion"]),
+            None,
+        )
+        require(
+            current_history is not None
+            and current_history["sha256"] == registry_item["sha256"],
+            "library registry tái sử dụng version với content hash khác",
+        )
         require(
             "functions" not in profile["coreLibrary"],
             "profile không được giữ bản sao danh sách hàm; registry là nguồn duy nhất",
@@ -585,11 +605,15 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
     def break_registry_schema_hash(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "library-registry")["schemaSha256"] = "0" * 64
 
+    def break_registry_version_history(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "library-registry")["versionHistory"][0]["sha256"] = "0" * 64
+
     add("registry-entry-count-drift", "số entry registry lệch pin", break_registry_entry_count)
     add("registry-fb-count-drift", "số entry FB_TYPE lệch pin", break_registry_fb_count)
     add("registry-library-version-drift", "libraryVersion lệch", break_registry_library_version)
     add("registry-review-required-cleared", "REVIEW_REQUIRED lệch pin", clear_review_required)
     add("registry-schema-hash-drift", "library registry schema SHA-256 drift", break_registry_schema_hash)
+    add("registry-version-history-drift", "tái sử dụng version", break_registry_version_history)
 
     def drop_v1_readable(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "dual-reader")["readableSchemaVersions"] = [2]

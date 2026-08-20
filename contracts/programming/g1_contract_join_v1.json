@@ -61,11 +61,11 @@
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "ac724b11ca6cd3ca8f5d3d8508b845398efc7589029f588f1043cd4e93e2f754",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0006_product_model_v2.sql",
-      "migrationSha256": "18a608e76ed3490f9a19697841a4ce7097a311106710dc159cf4d8ed72bd8abb",
+      "sha256": "37d99b8a5ff5d8dfc6a37d803d0333e73e8472ed090cd01ef5ab747f68e4b4f1",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0007_control_library_domain.sql",
+      "migrationSha256": "08f6784c3b4882a6943882c8e9024bba330ed83070c4a9f7d695912b73546a2b",
       "major": 1,
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {
@@ -85,6 +85,12 @@
       "major": 1,
       "schemaVersion": 1,
       "libraryVersion": "rev-a.1",
+      "versionHistory": [
+        {
+          "libraryVersion": "rev-a.1",
+          "sha256": "55c152d6a1456faf130a05a68788c9e15be918be359d9e642c8c215068540885"
+        }
+      ],
       "entryCount": 40,
       "operatorCount": 15,
       "funcTableCount": 20,

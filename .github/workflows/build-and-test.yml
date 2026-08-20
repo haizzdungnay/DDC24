@@ -32,6 +32,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Layout gate chạy generator registry C++/Go/TS và dùng gofmt để byte Go
+      # sinh ra ổn định. Không dựa vào Go ambient của runner.
+      - name: Setup Go cho generator contract
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/web-api/go.mod
+          cache: false
+
       - name: Kiểm authority, dependency và build artifact
         run: scripts/verify-project.sh --component layout
 
