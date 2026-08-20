@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "a2fc10a8d1e8e286057301df27774ce93c495fc16803e2c0e4edd0c72634ce01" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.5.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "28093d2490144d036293bbb80355010f3039f870b66ecf56083728ac08f40f4c" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.6.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
@@ -23,6 +23,12 @@ export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-IMPACT-UNAVAILABLE-001": { ownerComponent: "api", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.impactUnavailable", allowedArgs: ["key"] },
   "PRG-ERR-IMPACT-STALE-001": { ownerComponent: "api", statusClass: "CONFLICT", httpStatuses: [409], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.impactStale", allowedArgs: ["expected", "actual"] },
   "PRG-ERR-UNAVAILABLE-001": { ownerComponent: "runtime", statusClass: "UNAVAILABLE", httpStatuses: [503, 504, 429], retryable: true, keepsRunningRevision: false, messageKey: "programming.error.unavailable", allowedArgs: ["retryAfterSeconds"] },
+  "PRG-ERR-POU-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.pou", allowedArgs: ["objectId", "kind", "expected", "actual"] },
+  "PRG-ERR-LIBRARY-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.library", allowedArgs: ["entryId", "expected", "actual"] },
+  "PRG-ERR-SIGNAL-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.signal", allowedArgs: ["signalId", "expected", "actual", "limit"] },
+  "PRG-ERR-OUTPUT-OWNER-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.outputOwner", allowedArgs: ["pointId", "ownerProgramId", "conflictProgramId"] },
+  "PRG-ERR-ENABLE-001": { ownerComponent: "runtime", statusClass: "CONFLICT", httpStatuses: [409, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.enable", allowedArgs: ["programId", "state", "limit"] },
+  "PRG-ERR-PID-REVIEW-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.pidReview", allowedArgs: ["entryId", "featureState"] },
 } as const;
 
 export type ProgrammingErrorCode = keyof typeof PROGRAMMING_ERROR_CATALOG;
@@ -60,6 +66,9 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-LEX-001": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-LEX-002": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-LEX-003": "PRG-ERR-CHECK-001",
+  "compiler\u0000ST-LIB-001": "PRG-ERR-LIBRARY-001",
+  "compiler\u0000ST-LIB-002": "PRG-ERR-LIBRARY-001",
+  "compiler\u0000ST-LIB-003": "PRG-ERR-LIBRARY-001",
   "compiler\u0000ST-LIM-001": "PRG-ERR-SCOPE-001",
   "compiler\u0000ST-LIM-002": "PRG-ERR-SCOPE-001",
   "compiler\u0000ST-LIM-003": "PRG-ERR-SCOPE-001",
@@ -68,6 +77,12 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-LIM-006": "PRG-ERR-SCOPE-001",
   "compiler\u0000ST-LIM-007": "PRG-ERR-SCOPE-001",
   "compiler\u0000ST-LIM-008": "PRG-ERR-SCOPE-001",
+  "compiler\u0000ST-OWN-001": "PRG-ERR-OUTPUT-OWNER-001",
+  "compiler\u0000ST-PID-001": "PRG-ERR-PID-REVIEW-001",
+  "compiler\u0000ST-POU-001": "PRG-ERR-POU-001",
+  "compiler\u0000ST-POU-002": "PRG-ERR-POU-001",
+  "compiler\u0000ST-POU-003": "PRG-ERR-POU-001",
+  "compiler\u0000ST-POU-004": "PRG-ERR-POU-001",
   "compiler\u0000ST-SEM-001": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SEM-002": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SEM-003": "PRG-ERR-CHECK-001",
@@ -82,6 +97,10 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-SEM-012": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SEM-013": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SEM-014": "PRG-ERR-CHECK-001",
+  "compiler\u0000ST-SIG-001": "PRG-ERR-SIGNAL-001",
+  "compiler\u0000ST-SIG-002": "PRG-ERR-SIGNAL-001",
+  "compiler\u0000ST-SIG-003": "PRG-ERR-SIGNAL-001",
+  "compiler\u0000ST-SIG-004": "PRG-ERR-SIGNAL-001",
   "compiler\u0000ST-SYN-001": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SYN-002": "PRG-ERR-SCOPE-001",
   "compiler\u0000ST-WORKER-CRASH": "PRG-ERR-UNAVAILABLE-001",
@@ -132,6 +151,7 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "st-control-api\u0000API-E-005": "PRG-ERR-ARTIFACT-001",
   "st-control-api\u0000API-E-006": "PRG-ERR-ARTIFACT-001",
   "st-control-api\u0000API-E-007": "PRG-ERR-UNAVAILABLE-001",
+  "st-control-api\u0000API-E-008": "PRG-ERR-ENABLE-001",
 };
 
 export function mapComponentError(component: string, detailCode: string): ProgrammingErrorCode {

@@ -31,6 +31,10 @@ constexpr const char* kBadTransition    = "API-E-004";  /* lệnh không hợp l
 constexpr const char* kBadArtifact      = "API-E-005";  /* base64 hỏng hoặc quá lớn */
 constexpr const char* kActivationFailed = "API-E-006";  /* loader từ chối; kèm mã IR-E-* */
 constexpr const char* kInternal         = "API-E-007";
+/* T59-004: Enable/Disable bị từ chối vì precondition hoặc trần 16 Program
+ * Enabled. Tách khỏi API-E-004 vì đây là quyết định capacity/lifecycle của
+ * sản phẩm, không phải transition sai của một instance. */
+constexpr const char* kEnableRejected   = "API-E-008";
 } // namespace st_api_error
 
 constexpr int kStApiVersion = 1;

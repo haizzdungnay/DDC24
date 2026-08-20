@@ -11,8 +11,10 @@ import (
 )
 
 func TestErrorCatalogGeneratedSurface(t *testing.T) {
-	if len(errorMetadataByCode) != 20 {
-		t.Fatalf("public error count = %d; want 20", len(errorMetadataByCode))
+	// T59-004: 20 -> 26 public code (POU/library/signal/output owner/enable/
+	// PID review). Con số là ảnh chụp có chủ ý để catalog không lớn lên lặng lẽ.
+	if len(errorMetadataByCode) != 26 {
+		t.Fatalf("public error count = %d; want 26", len(errorMetadataByCode))
 	}
 	if got := MapComponentError("artifact-loader", "IR-E-004"); got != ErrTarget {
 		t.Fatalf("IR-E-004 = %s; want %s", got, ErrTarget)
@@ -28,6 +30,34 @@ func TestErrorCatalogGeneratedSurface(t *testing.T) {
 	}
 	if !IsRetryable(ErrUnavailable) || IsRetryable(ErrCommission) {
 		t.Fatal("retryable metadata mismatch")
+	}
+}
+
+// Sáu miền mới phải ánh xạ về đúng mã riêng, không gộp vào một mã chung.
+func TestNewDomainDetailCodesMapToOwnPublicCode(t *testing.T) {
+	cases := map[string]struct {
+		component string
+		detail    string
+		want      ErrorCode
+	}{
+		"pou-purity":    {"compiler", "ST-POU-002", ErrPou},
+		"pou-recursion": {"compiler", "ST-POU-003", ErrPou},
+		"library-drift": {"compiler", "ST-LIB-002", ErrLibrary},
+		"signal-dup":    {"compiler", "ST-SIG-001", ErrSignal},
+		"output-owner":  {"compiler", "ST-OWN-001", ErrOutputOwner},
+		"pid-review":    {"compiler", "ST-PID-001", ErrPidReview},
+		"enable":        {"st-control-api", "API-E-008", ErrEnable},
+	}
+	for name, item := range cases {
+		if got := MapComponentError(item.component, item.detail); got != item.want {
+			t.Fatalf("%s: %s/%s = %s; want %s", name, item.component, item.detail, got, item.want)
+		}
+	}
+	// Mã cùng họ nhưng chưa khai vẫn fail-safe, không đoán sang miền khác.
+	for _, detail := range []string{"ST-POU-099", "ST-LIB-099", "ST-SIG-099"} {
+		if got := MapComponentError("compiler", detail); got != ErrUnavailable {
+			t.Fatalf("%s = %s; want fail-safe %s", detail, got, ErrUnavailable)
+		}
 	}
 }
 

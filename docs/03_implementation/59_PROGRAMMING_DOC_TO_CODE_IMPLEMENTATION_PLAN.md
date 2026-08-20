@@ -100,7 +100,7 @@ W1/W2/W3 có thể chạy song song theo contract boundary. Critical path releas
 | `T59-001` | P0 | Re-pin `g1_contract_join_v1.json`, bỏ hardcode store schema version | — | **DONE** | `verify_programming_g1_contracts.py` exit 0; `--self-test` 12/12 mutation + 6/6 manifest chain + 5/5 deploy order; `verify-project.sh --component layout` exit 0; `go vet` sạch + `go test ./... -count=1` 18/18 package ok. Chi tiết §3.1. |
 | `T59-002` | P0 | Tạo Product profile v2 `32/16/256/1024/512/512`, generator C++/Go/TS | — | **DONE** | `generate_programming_profile.py --check` exact 3/3 tệp sinh; one-over vector C++ 3 trục + Go 6 case + FE 5 case; `ctest` 1055/1055; `go test ./... -count=1` 18/18; FE 112 file / 1066 test; G1 self-test 20/20 mutation; layout exit 0. **Đính chính:** `npm run build` khi merge thực tế FAIL (`tsc --noEmit`), đã sửa trong `T59-003`. Chi tiết §3.1. |
 | `T59-003` | P0 | FBD/POU/library registry JSON single-source + generator | — | **DONE** | `generate_programming_library_registry.py --check` 40 entry / 2 tệp sinh; 7 test C++ hai chiều chống entry ma; 5 test FE palette↔registry; G1 self-test 25/25; `ctest` 1063/1063; Go 18/18; FE 112 file / 1071 test; layout exit 0. Chi tiết §3.1. |
-| `T59-004` | P0 | Error catalog mới cho POU/library/signal/enable/output owner/PID review | T59-002/003 | ORDERED | C++/Go/TS generated; public/detail count/hash exact; mapping missing build fail. |
+| `T59-004` | P0 | Error catalog mới cho POU/library/signal/enable/output owner/PID review | T59-002/003 | **DONE** | catalog v1.6.0 **26 public / 118 detail**, sinh Go/C++/TS + manifest exact; guard detail **hai chiều** và catalog được validate theo schema; `ctest` 1064/1064; Go 18/18; FE 113 file / 1073 test; layout exit 0. Chi tiết §3.1. |
 | `T59-005` | P0 | Store schema v2 + backup/migration v1→v2 | T59-002 | ORDERED | SQLite migration atomic/idempotent/restart; không tự Commission; rollback giữ DB. |
 | `T59-006` | P0 | OpenAPI + IPC v2 + artifact/package schema v2, dual-reader policy | T59-002/004 | ORDERED | Schema/golden/codec/client/route contract PASS; action khai phải có handler test. |
 | `T59-007` | P1 | Local CI parity wrapper và gate matrix cho từng Wave | T59-001 | ORDERED | Một command chạy layout/C++/Go/FE/contract; không gọi local PASS là GitHub CI. |
@@ -249,6 +249,44 @@ bản merge `T59-002` làm nó **đỏ** vì `profile.test.ts` import `node:cryp
 **Rollback.** Không đổi schema DB, không thêm migration, không chạm Active/LKG.
 Byte `.mkir` của cả hai golden **không đổi** sau khi sinh lại, nên LKG cũ vẫn nạp
 được. Revert commit là đủ.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-004` — Error catalog cho sáu miền mới và guard hai chiều
+
+**Việc chính.** Catalog lên **v1.6.0: 26 public code / 118 detail mapping**. Sáu
+public code mới: `PRG-ERR-POU-001`, `PRG-ERR-LIBRARY-001`, `PRG-ERR-SIGNAL-001`,
+`PRG-ERR-OUTPUT-OWNER-001`, `PRG-ERR-ENABLE-001`, `PRG-ERR-PID-REVIEW-001`.
+14 detail mapping mới (`ST-POU-*`, `ST-LIB-*`, `ST-SIG-*`, `ST-OWN-001`,
+`ST-PID-001`, `API-E-008`) khai trong `st_diagnostic.hpp` và `st_control_api.hpp`.
+
+**Contract đi trước consumer.** Emitter của các mã này nằm ở W1..W4. Khai ở W0 là
+đúng Plan 59 §1.2 quy tắc 1, và vì guard nay kiểm hai chiều nên **không** emitter
+nào có thể xuất hiện sau này mà thiếu ánh xạ public code.
+
+**Hai khoảng hở của gate, phát hiện và đóng trong task.**
+
+1. `error_catalog_v1.schema.json` trước đây chỉ được **băm** chứ chưa bao giờ
+   được thi hành. Nó đã drift thật: `statusClass = "NOT_FOUND"` được
+   `PRG-ERR-NOT-FOUND-001` dùng nhưng **thiếu trong enum** của schema qua nhiều
+   revision. Generator nay validate catalog theo schema; enum được bổ sung.
+2. Guard detail chỉ kiểm **một chiều** (source → catalog) và chỉ quét source C++,
+   nên `ST-CLI-LIMIT`, `ST-WORKER-CRASH`, `ST-WORKER-TIMEOUT` do BE Go phát nằm
+   ngoài tầm quét — thêm mã Go mới mà quên map sẽ không làm build đỏ. Nay guard
+   quét thêm `checks.go` và kiểm **hai chiều**: mapping không có emitter nào khai
+   cũng làm build fail, trừ khi đánh dấu `contractOnly` tường minh
+   (`IPC-CONTRACT-ONLY` là sentinel test codec hai phía).
+
+**Finding sửa kèm.** `programmingErrorCopy` không có test phủ, nên mã public mới
+sẽ rơi vào nhánh `default` và hiển thị mã thô cho người dùng — đúng lớp lỗi
+`RSK-PROG-014`. Đã thêm copy VI/EN cho cả sáu mã và `errorCopy.test.ts` bắt buộc
+**mọi** mã trong catalog có copy riêng ở cả hai ngôn ngữ.
+
+**Consumer cùng boundary.** OpenAPI lên `1.21.0` (enum lỗi + client TS sinh lại),
+G1 re-pin `openapi`/`errors`; test đếm ở Go, C++ và TS cập nhật cùng commit.
+
+**Rollback.** Không đổi schema DB, không migration, không chạm Active/LKG. Mã mới
+chưa có emitter nên hành vi runtime không đổi. Revert commit là đủ.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

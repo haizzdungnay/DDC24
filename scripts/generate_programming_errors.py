@@ -12,6 +12,8 @@ import subprocess
 import sys
 from typing import Any
 
+from jsonschema import Draft202012Validator
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "contracts/programming/error_catalog_v1.json"
@@ -45,6 +47,21 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
     raw = CATALOG.read_bytes()
     schema_raw = SCHEMA.read_bytes()
     catalog = json.loads(raw)
+    # Trước T59-004 schema chỉ được BĂM chứ không được thi hành, nên nó đã trôi
+    # khỏi catalog thật (`NOT_FOUND` bị dùng mà thiếu trong enum) suốt nhiều
+    # revision mà không gate nào bắt.
+    schema = json.loads(schema_raw)
+    Draft202012Validator.check_schema(schema)
+    schema_problems = sorted(
+        Draft202012Validator(schema).iter_errors(catalog),
+        key=lambda item: list(item.absolute_path),
+    )
+    if schema_problems:
+        joined = "; ".join(
+            f"{'/'.join(str(part) for part in item.absolute_path) or '<root>'}: {item.message}"
+            for item in schema_problems
+        )
+        raise ValueError(f"catalog không khớp schema: {joined}")
     if catalog.get("schemaVersion") != 1:
         raise ValueError("schemaVersion catalog phải bằng 1")
     if not re.fullmatch(r"1\.[0-9]+\.[0-9]+", str(catalog.get("catalogVersion", ""))):
@@ -121,14 +138,36 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
         )),
     }
     diagnostic_source = (ROOT / "apps/core/application/st/st_diagnostic.hpp").read_text()
-    expected_details["compiler"] = set(re.findall(r"ST-(?:LEX|SYN|SEM|LIM|IOMAP)-[0-9]{3}", diagnostic_source))
+    expected_details["compiler"] = set(re.findall(
+        r"ST-(?:LEX|SYN|SEM|LIM|IOMAP|POU|LIB|SIG|OWN|PID)-[0-9]{3}", diagnostic_source))
     for source in ("st_compile_main.cpp", "st_validate_main.cpp"):
         expected_details["compiler"].update(re.findall(r"ST-CLI-[A-Z0-9-]+", (ROOT / "apps/core/application/st" / source).read_text()))
+    # Một phần detail code do BE Go phát (`ST-CLI-LIMIT`, `ST-WORKER-*`). Trước
+    # đây chúng không được quét nên guard chỉ đúng một nửa: mã Go thêm mới mà
+    # quên map sẽ không làm build đỏ.
+    go_source = (ROOT / "apps/web-api/internal/programming/application/checks.go").read_text()
+    expected_details["compiler"].update(re.findall(r"ST-(?:CLI|WORKER)-[A-Z0-9-]+", go_source))
     expected_details["runtime"] = set(re.findall(r"ST-RT-[0-9]{3}", diagnostic_source))
+
+    contract_only = {
+        (item["component"], item["detailCode"])
+        for item in details if item.get("contractOnly")
+    }
     for component, expected in expected_details.items():
         mapped = {detail for mapped_component, detail in detail_keys if mapped_component == component}
-        if not expected.issubset(mapped):
-            raise ValueError(f"detail source chưa map cho {component}: {sorted(expected - mapped)}")
+        missing = expected - mapped
+        if missing:
+            raise ValueError(f"detail source chưa map cho {component}: {sorted(missing)}")
+        # Chiều ngược lại: ánh xạ không có emitter nào khai là mapping ma. Chỉ
+        # được miễn khi đánh dấu `contractOnly` tường minh trong catalog.
+        orphan = sorted(
+            detail for detail in mapped - expected
+            if (component, detail) not in contract_only
+        )
+        if orphan:
+            raise ValueError(
+                f"detail map cho {component} nhưng không source nào khai: {orphan}"
+            )
 
     return catalog, raw, schema_raw
 

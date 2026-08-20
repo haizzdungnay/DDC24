@@ -7,9 +7,9 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "a4452d091ee30a44790126d6ba7cd515cf03ac4074d762067e00537417dd6a1b",
+      "sha256": "3db330fae7f5d964a9f65a7930f3d048ea04670b0f714fc3c0f23ce2c9ff68da",
       "major": 1,
-      "version": "1.20.0",
+      "version": "1.21.0",
       "operationCount": 25
     },
     {
@@ -51,12 +51,12 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "a2fc10a8d1e8e286057301df27774ce93c495fc16803e2c0e4edd0c72634ce01",
+      "sha256": "28093d2490144d036293bbb80355010f3039f870b66ecf56083728ac08f40f4c",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "35baa28e8ea8b66d29fea7d5e9da1f377e1df0f654cea37dbd9691cbc80ad2a7",
+      "manifestSha256": "1f2d5a4e339675f5c3f24b38046c8e6b1ed0df60ada78bcf7f3f07ab72d9988a",
       "major": 1,
-      "publicErrorCount": 20,
-      "componentDetailCount": 104
+      "publicErrorCount": 26,
+      "componentDetailCount": 118
     },
     {
       "name": "store",
@@ -136,5 +136,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0)"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004"
 }

@@ -48,14 +48,62 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # `set -e` cắt luôn phần còn lại — nó chỉ lộ ra sau khi 10 vi phạm
         # dependency boundary được sửa.
         #
+        # Cập nhật `T59-004`: 20→26 public và 104→118 detail. Sáu public code mới
+        # phủ POU/library/signal/output owner/enable/PID review; 14 detail mapping
+        # mới được khai trong `st_diagnostic.hpp` và `st_control_api.hpp` cùng
+        # commit, nên guard hai chiều vẫn đóng.
+        #
         # Bất biến THẬT (catalog ↔ mã sinh ra khớp nhau) do
         # `generate_programming_errors.py --check` canh, chạy ngay phía trên
         # trong cùng gate.
         catalog, raw, schema_raw = GENERATOR.load_and_validate()
-        self.assertEqual(len(catalog["publicErrors"]), 20)
-        self.assertEqual(len(catalog["componentDetails"]), 104)
+        self.assertEqual(len(catalog["publicErrors"]), 26)
+        self.assertEqual(len(catalog["componentDetails"]), 118)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
+
+    def test_rejects_orphan_detail_mapping(self):
+        """Mapping không có emitter nào khai là mapping ma — phải fail-closed.
+
+        Trước T59-004 guard chỉ kiểm một chiều (source -> catalog), nên một ánh xạ
+        trỏ detail code không tồn tại vẫn qua gate và FE có thể hiển thị một mã
+        không bao giờ xảy ra.
+        """
+        self.assert_rejected(
+            lambda catalog: catalog["componentDetails"].append(
+                {
+                    "component": "artifact-loader",
+                    "detailCode": "IR-E-999",
+                    "publicCode": "PRG-ERR-ARTIFACT-001",
+                }
+            )
+        )
+
+    def test_rejects_catalog_violating_its_own_schema(self):
+        """Schema từng chỉ được băm chứ không thi hành nên nó đã drift thật."""
+        self.assert_rejected(
+            lambda catalog: catalog["publicErrors"][0].__setitem__(
+                "statusClass", "KHONG_TON_TAI"
+            )
+        )
+
+    def test_new_domain_codes_are_present_and_mapped(self):
+        catalog, _, _ = GENERATOR.load_and_validate()
+        codes = {item["code"] for item in catalog["publicErrors"]}
+        for code in (
+            "PRG-ERR-POU-001",
+            "PRG-ERR-LIBRARY-001",
+            "PRG-ERR-SIGNAL-001",
+            "PRG-ERR-OUTPUT-OWNER-001",
+            "PRG-ERR-ENABLE-001",
+            "PRG-ERR-PID-REVIEW-001",
+        ):
+            self.assertIn(code, codes)
+            mapped = [
+                item for item in catalog["componentDetails"]
+                if item["publicCode"] == code
+            ]
+            self.assertTrue(mapped, f"{code} không có detail mapping nào")
 
     def test_rejects_unknown_major(self):
         self.assert_rejected(lambda catalog: catalog.__setitem__("catalogVersion", "2.0.0"))

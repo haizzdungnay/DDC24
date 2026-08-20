@@ -350,6 +350,17 @@ exit 0), **không** phải GitHub CI, target hay HIL. Gỡ entry ma **không** c
 minh runtime an toàn; nó chỉ đóng khoảng cách "hợp lệ ở FE, chết ở Core". 16/16
 risk giữ `Open`, 11 Critical, S×L và residual không đổi.
 
+### 5.19 Cập nhật treatment source `T59-004` (Plan59 W0)
+
+| Risk | Control đã có trên nhánh `feat/t59-004-error-catalog-v2` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-014` | Catalog v1.6.0 26 public/118 detail phủ đủ POU/library/signal/output owner/enable/PID review; schema catalog **được thi hành** (trước đây chỉ băm nên `NOT_FOUND` drift im lặng); guard detail **hai chiều** kể cả source Go; `errorCopy.test.ts` bắt buộc mọi mã có copy VI/EN riêng nên FE không thể hiện mã thô | Emitter thật ở W1..W4 và `VS-PROG-019/024` Test Result được review độc lập | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-004` | `PRG-ERR-PID-REVIEW-001` + `ST-PID-001` cho phép Check từ chối PID thiếu approval token bằng một mã ổn định, thay vì gộp vào lỗi scope chung | Policy token và nhánh chặn Commission (`T59-205`); evidence Controls/Safety target (`T59-706`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local. Sáu mã mới **chưa có emitter** — đây là contract đi trước
+consumer, không phải hành vi runtime mới; do đó không risk nào được hạ. 16/16 giữ
+`Open`, 11 Critical, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -392,6 +403,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 2.0 | 2026-08-20 | Ghi `T59-001` (Plan59 W0) cho treatment partial RSK-008/014: re-pin join G1, bỏ hardcode schema/count trong validator, khoá chuỗi migration store và siết self-test theo đúng lý do reject. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime/target/HIL/Test Result chưa chạy. |
 | 2.1 | 2026-08-20 | Ghi `T59-002` (Plan59 W0) cho treatment partial RSK-002/014: profile v2 sinh C++/Go/TS từ một nguồn, capacity 32/16 thay 1/1/1, constraint text suy từ profile và one-over vector ba ngôn ngữ. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime multi-Program, target/HIL và Test Result chưa chạy. |
 | 2.2 | 2026-08-20 | Ghi `T59-003` (Plan59 W0) cho treatment partial RSK-004/006/014: registry POU/library làm nguồn duy nhất, gỡ 4 entry ma, mở SQRT + 4 conversion, khoá hai chiều registry↔compiler và ghim `REVIEW_REQUIRED` của PID vào contract. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering user POU, target/HIL và Test Result chưa chạy. |
+| 2.3 | 2026-08-20 | Ghi `T59-004` (Plan59 W0) cho treatment partial RSK-004/014: catalog v1.6.0 26/118, schema catalog được thi hành, guard detail hai chiều gồm source Go, copy FE phủ đủ mã. Giữ 16/16 Open, 11 Critical và mọi residual vì emitter W1..W4, target/HIL và Test Result chưa chạy. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
 | 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |

@@ -84,6 +84,38 @@ constexpr const char* kIoMapDuplicateBinding = "ST-IOMAP-007";
  * hiện chỉ LOCAL được hỗ trợ. Tách khỏi ST-IOMAP-004 (identity sai format)
  * vì đây là "đúng nhưng chưa hỗ trợ", không phải "sai cú pháp". */
 constexpr const char* kIoMapUnsupportedCategory = "ST-IOMAP-008";
+
+/* ---- T59-004: họ mã cho POU, Control Library, Published Signal, output owner
+ * và PID review.
+ *
+ * Contract đi trước consumer (Plan 59 §1.2 quy tắc 1): các hằng này là bảng liệt
+ * kê dùng chung, được ghim vào catalog ngay ở W0 để mọi emitter thêm sau ở
+ * W1..W4 không thể xuất hiện mà thiếu ánh xạ public code. Generator kiểm HAI
+ * CHIỀU: mã có trong source mà thiếu trong catalog -> build fail; mã có trong
+ * catalog mà không emitter nào khai -> build fail. */
+
+/* POU: quy tắc kind/purity/recursion/state (DDD §0, §6). */
+constexpr const char* kPouSignatureInvalid   = "ST-POU-001";
+constexpr const char* kPouFunctionNotPure    = "ST-POU-002";
+constexpr const char* kPouRecursion          = "ST-POU-003";
+constexpr const char* kPouInstanceLayout     = "ST-POU-004";
+
+/* Control Library: resolve/version/dependency (DDD §0, §6). */
+constexpr const char* kLibraryEntryMissing   = "ST-LIB-001";
+constexpr const char* kLibraryVersionDrift   = "ST-LIB-002";
+constexpr const char* kLibraryDependencyCycle = "ST-LIB-003";
+
+/* Published Signal: publisher/type/freshness (DDD §4.5, §7.3). */
+constexpr const char* kSignalDuplicatePublisher = "ST-SIG-001";
+constexpr const char* kSignalTypeMismatch       = "ST-SIG-002";
+constexpr const char* kSignalFreshnessRange     = "ST-SIG-003";
+constexpr const char* kSignalConsumerMissing    = "ST-SIG-004";
+
+/* Output ownership: một binding output chỉ có một Program owner (DDD §4.6). */
+constexpr const char* kOutputOwnerConflict   = "ST-OWN-001";
+
+/* PID chỉ dùng được khi có approval token Controls/Safety (DDD §9). */
+constexpr const char* kPidApprovalMissing    = "ST-PID-001";
 } // namespace st_diag_code
 
 struct StDiagnostic {

@@ -8,6 +8,45 @@
 
 ## [Unreleased]
 
+### Added — `T59-004` error catalog v1.6.0 cho sáu miền mới, guard hai chiều (2026-08-20)
+
+Catalog lên **26 public code / 118 detail mapping**. Sáu mã mới phủ POU
+(`PRG-ERR-POU-001`), Control Library (`PRG-ERR-LIBRARY-001`), Published Signal
+(`PRG-ERR-SIGNAL-001`), output owner (`PRG-ERR-OUTPUT-OWNER-001`), Enable/Disable
+(`PRG-ERR-ENABLE-001`) và PID review (`PRG-ERR-PID-REVIEW-001`); 14 detail mapping
+mới khai trong `st_diagnostic.hpp` và `st_control_api.hpp`. Emitter nằm ở W1..W4 —
+khai contract trước consumer đúng Plan 59 §1.2 quy tắc 1, và guard hai chiều bảo
+đảm không emitter nào xuất hiện sau này mà thiếu ánh xạ.
+
+**Hai khoảng hở của gate được phát hiện và đóng trong task:**
+
+1. `error_catalog_v1.schema.json` trước đây chỉ được **băm** chứ chưa bao giờ
+   được thi hành, nên nó đã drift thật: `statusClass = "NOT_FOUND"` được
+   `PRG-ERR-NOT-FOUND-001` dùng nhưng thiếu trong enum của schema qua nhiều
+   revision. Generator nay validate catalog theo schema; enum được bổ sung.
+2. Guard detail chỉ kiểm **một chiều** (source → catalog) và chỉ quét source C++,
+   nên `ST-CLI-LIMIT`, `ST-WORKER-CRASH`, `ST-WORKER-TIMEOUT` do BE Go phát nằm
+   ngoài tầm quét. Nay guard quét thêm `checks.go` và kiểm **hai chiều**: mapping
+   không có emitter nào khai cũng làm build fail, trừ khi đánh dấu `contractOnly`
+   tường minh (`IPC-CONTRACT-ONLY` là sentinel test codec hai phía).
+
+**Sửa kèm:** `programmingErrorCopy` không có test phủ nên mã public mới sẽ rơi vào
+nhánh `default` và hiển thị mã thô cho người dùng — đúng lớp lỗi `RSK-PROG-014`.
+Đã thêm copy VI/EN cho cả sáu mã và `errorCopy.test.ts` bắt buộc **mọi** mã trong
+catalog có copy riêng ở cả hai ngôn ngữ.
+
+**Consumer cùng boundary:** OpenAPI lên `1.21.0` (enum lỗi + client TS sinh lại);
+G1 re-pin `openapi`/`errors`; test đếm ở Go, C++ và TS cập nhật cùng commit.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `generate_programming_errors.py --check` **26 public / 118 detail**
+exact. C++ Release MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1064/1064 PASS**.
+`go vet ./...` sạch, `go test ./... -count=1` **18/18 package ok**. FE `vitest`
+**113 file / 1073 test PASS**, `lint` exit 0, `build` exit 0 (`✓ built`).
+`verify-project.sh --component layout` **exit 0**; G1 `--self-test` 25/25.
+`tests/integration/test_programming_error_catalog.py` **9 test OK**, gồm negative
+mới cho mapping ma và cho catalog vi phạm chính schema của nó.
+
 ### Fixed — `T59-003` registry POU/Control Library single-source, gỡ entry ma (2026-08-20)
 
 Danh sách entry Control Library tồn tại **ba** bản chép tay: allowlist FBD của
