@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 3.6 |
+| Phiên bản | 3.7 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -512,6 +512,18 @@ Hai finding thuộc phạm vi đã sửa: Seal Revision trước đây **không*
 library, và phép đếm descriptor của bundle lệch ngay khi có file library. Trust
 vẫn là `HASH_ONLY` — bundle chưa ký; **22/22 risk giữ Open**, residual không đổi.
 
+### 5.33 Cập nhật treatment source `T59-203` (Plan59 W2 — đóng Wave)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-005` | PGM-04 hiển thị nhãn review-gate ở danh sách và chi tiết, nói thẳng rằng Check sẽ từ chối; **không có** checkbox hay nút duyệt nào ở UI (có test khẳng định không tồn tại `role="checkbox"`) | Evidence Controls/Safety thật (`T59-706`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | `stateLayoutKnown=false` hiển thị "chưa biết" chứ không phải `0 B`; lỗi tải dùng copy theo mã public; permission tách khỏi lỗi | E2E real-backend (`T59-505`), usability người thật | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | ETag Draft mới được dùng lại ngay cho thao tác kế tiếp, có test khoá chuỗi hai mutation liên tiếp | E2E real-backend (`T59-505`) | `OPEN — PARTIAL SOURCE` |
+
+Wave W2 đóng với 5/5 task DONE. Evidence vẫn là host/local (vitest + jsdom) —
+**không** phải E2E trình duyệt thật, không phải target/HIL. `22/22` risk giữ
+Open, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -564,6 +576,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 3.7 | 2026-08-20 | Ghi `T59-203` (Plan59 W2, **đóng Wave 5/5**) cho treatment partial RSK-005/008/014: PGM-04 chỉ hiển thị review-gate mà không có ô tick duyệt, phân biệt state chưa biết với 0, và dùng lại ETag mới. Giữ 22/22 Open vì E2E real-backend và evidence Controls/Safety chưa có. |
 | 3.6 | 2026-08-20 | Ghi `T59-204` (Plan59 W2) cho treatment partial RSK-017/020: Control Library đi trong bundle nguồn có sẵn, export tất định không mang artifact, corpus thù địch 10 biến thể 0 mutation, lệch version registry SYSTEM có mã riêng, Seal publish+pin library cùng transaction. Giữ 22/22 Open vì bundle chưa ký (`T59-602`) và chưa có Test Result. |
 | 3.5 | 2026-08-20 | Ghi `T59-205` (Plan59 W2) cho treatment partial RSK-005/020: review gate PID ép ở ba đường Check và độc lập producer; token phê duyệt suy ra từ contract profile, generator từ chối token bịa, G1 ghim riêng danh sách đã duyệt. Giữ 22/22 Open và mọi residual vì evidence Controls/Safety thật (`VS-PROG-U12`/`T59-706`) chưa có. |
 | 3.4 | 2026-08-20 | Ghi `T59-202` (Plan59 W2) cho treatment partial RSK-008/014/020: ba route Control Library admin-only theo DDD §5.1, `If-Match`+idempotency+audit cùng transaction, cursor ký HMAC ràng buộc filter, ba mã lỗi phân giải giữ riêng. Hai finding thật (handler nuốt route Project, actor rỗng cho 503 retryable) đã sửa. Giữ 22/22 Open và mọi residual vì FE/import/signature/target/Test Result còn thiếu. |

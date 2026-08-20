@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Added — `T59-203` FE PGM-04 Control Library (đóng Wave W2) (2026-08-20)
+
+Route `eng/programming/projects/{id}/library` + mục nav desktop; trang tìm kiếm,
+lọc, xem chi tiết, tạo và xoá khối PROJECT.
+
+**Trang chỉ HIỂN THỊ review-gate, không có ô tick duyệt.** PID mang nhãn "chờ
+review Controls/Safety" ở cả danh sách lẫn chi tiết, kèm câu nói thẳng rằng Check
+sẽ từ chối mọi Program dùng nó. Token phê duyệt suy ra từ contract profile và chỉ
+generator dựng được (`T59-205`); một ô tick ở UI sẽ đúng là thứ DDD §9 cấm. Có
+test khẳng định trang **không tồn tại** `role="checkbox"`.
+
+**`stateLayoutKnown=false` hiển thị "chưa biết", không phải `0 B`** — đây là chỗ
+dễ nhất để làm hỏng ý nghĩa mà `T59-201` bỏ công tách; hiện `0 B` sẽ làm người
+dùng tin một con số chưa ai tính.
+
+**Đổi bộ lọc là tải lại từ server**, không lọc phía client trên một trang đã bị
+cắt ở 100 item — lọc cục bộ cho kết quả *đúng một phần* mà không có gì báo thiếu.
+
+**ETag Draft mới được dùng lại ngay** cho thao tác kế tiếp; giữ ETag cũ làm lần
+bấm thứ hai bị 409 vô cớ.
+
+**Permission tách khỏi lỗi:** viewer/operator đọc được nhưng không thấy form tạo
+khối và trang nói rõ lý do, thay vì để nút chết hoặc báo lỗi sau khi bấm.
+
+**Kiểm chứng (host/local):** FE **115 file / 1088 test**; `npm run build`
+(`tsc --noEmit`) sạch; `verify-project.sh --wave W2` **6/6 PASS**.
+
+**Ranh giới:** E2E real-backend cho vòng đời library thuộc `T59-505`. Evidence ở
+đây là vitest + jsdom, **không** phải trình duyệt thật.
+
 ### Added — `T59-204` Control Library trong bundle nguồn: hostile corpus và version compatibility (2026-08-20)
 
 **Không thêm route export/import library.** DDD §5.1 khoá đúng ba route library,

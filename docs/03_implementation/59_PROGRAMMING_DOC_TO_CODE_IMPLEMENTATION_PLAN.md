@@ -692,7 +692,7 @@ công cụ sinh, **không phải** mã đã biên dịch từ nguồn thật —
 |---|---|---|---|---|---|
 | `T59-201` | P0 | Domain/store SYSTEM+PROJECT library revision/entry/usage | T59-005/102 | **DONE** | SYSTEM là snapshot **virtual** sinh từ registry (0 hàng SQLite, trigger chặn cả SQL trực tiếp); PROJECT có Draft→Publish→Deprecate bất biến ở **hai lớp** store+trigger; migration `0007` schema v6→v7 **dừng fail-closed** khi còn hàng library đời v6; 11 test domain + 10 test store gồm reference guard, clone version re-pin dependency, usage seal nguyên tử, restart và fail-closed SYSTEM provider; `go vet` sạch + `go test ./... -count=1` 18/18 package ok; G1 10/10 + self-test 32/32; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 | `T59-202` | P0 | Library REST/OpenAPI/RBAC/idempotency/audit | T59-201/006 | **DONE** | 3 route DDD §5.1 (`GET /libraries`, `POST|DELETE /projects/{id}/library/entries[/{entryId}]`); OpenAPI `1.23.0` **28 operation** ↔ 28 route Go ↔ client TS sinh lại, cả ba khoá bằng test exact; RBAC kiểm bằng authorizer thật (viewer/operator đọc được, mutation 403); idempotency+audit nằm CÙNG transaction với mutation (migration `0008` mở enum receipt); mutation library dùng chung lane `If-Match` với Draft; 6 test application + 6 test transport gồm cursor ràng buộc filter và regression route-stealing; `go test ./... -count=1` 18/18; G1 10/10; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
-| `T59-203` | P1 | FE PGM-04 library search/filter/detail/create/edit/version/usage | T59-202 | ORDERED | Desktop/mobile visual mapping; loading/empty/error/permission; component/a11y/E2E. |
+| `T59-203` | P1 | FE PGM-04 library search/filter/detail/create/edit/version/usage | T59-202 | **DONE** | Route `projects/{id}/library` + mục nav desktop; lọc theo scope/kind/từ khoá **tải lại từ server** (không lọc trên trang đã cắt); loading/empty/error/permission tách bạch; `stateLayoutKnown=false` hiện **"chưa biết"** chứ không phải `0 B`; PID hiện cảnh báo review-gate và **không có ô tick duyệt**; ETag Draft mới được dùng lại cho thao tác kế tiếp; 8 test component/a11y; FE 115 file / **1088 test**; `--wave W2` 6/6 PASS. **Còn thiếu:** E2E real-backend thuộc `T59-505`. Chi tiết §3.3. |
 | `T59-204` | P1 | Library import/export/signature/version compatibility | T59-201/106 | **DONE** | Control Library đi trong **bundle nguồn có sẵn** (DDD không mở route export library riêng); manifest thêm `systemLibraryVersion` + khối `library`; export tất định (hai lần cùng byte) và **không** mang artifact/IR/cache; import dựng lại library ở `DRAFT` với identity mới, hash entry khớp từng cái; lệch version registry SYSTEM cho **mã lỗi riêng**; corpus thù địch 10 biến thể đều bị từ chối và **0 mutation**; Seal nay publish+pin library trong cùng transaction; `go test ./... -count=1` 18/18; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 | `T59-205` | P0 | PID registry trạng thái `REVIEW_REQUIRED` + policy token | T59-003/004 | **DONE** | `reviewGatedFeatures` vào profile v2 + schema; token suy ra từ chính contract (`featureId`+`libraryVersion`+`evidenceRef`), generator từ chối token bịa; gate ép ở **cả ba** đường Check (`compile_st_source` mặc định BẬT, validate CLI, `compile_fbd_source`) và độc lập producer; 8 test C++ + 1 test Go + 1 test FE + self-test generator 7/7 + G1 ghim `reviewGatedFeatures` và `approvedReviewGatedFeatures` (2 mutation mới); `ctest` 1138/1138; `go test ./... -count=1` 18/18; FE 114 file / 1080 test; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 
@@ -950,6 +950,43 @@ cùng key custody/rotation thuộc `T59-602`. Seal đa Program (nhiều POU, nhi
 Program) thuộc `T59-301`/`T59-305`; task này chỉ đóng băng library cùng Revision.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-203` — FE PGM-04 Control Library
+
+**Trang chỉ HIỂN THỊ review-gate, không có ô tick duyệt.** PID hiện nhãn "chờ
+review Controls/Safety" ở cả danh sách lẫn chi tiết, kèm câu nói thẳng rằng Check
+sẽ từ chối mọi Program dùng nó. Không có checkbox, không có nút "đánh dấu đã
+duyệt" — token phê duyệt suy ra từ contract profile và chỉ generator dựng được
+(`T59-205`). Có test khẳng định **không tồn tại** `role="checkbox"` trên trang.
+
+**`stateLayoutKnown=false` hiển thị là "chưa biết", không phải `0 B`.** Đây là
+chỗ dễ nhất để làm hỏng ý nghĩa mà `T59-201` bỏ công tách: hiện `0 B` sẽ làm
+người dùng tin một con số chưa ai tính. Test khoá cả hai chiều — thấy "chưa biết"
+và **không** thấy `0 B`.
+
+**Đổi bộ lọc là tải lại từ server.** Bộ lọc nằm trong dependency của `load`, nên
+`scope/kind/q` đi thẳng vào query. Lọc phía client trên một trang đã bị cắt ở 100
+item sẽ cho kết quả *đúng một phần* mà không có gì báo là thiếu.
+
+**ETag mới được dùng lại ngay.** Mutation library đi chung lane concurrency với
+tài liệu Draft (`T59-202`), nên hook trả ETag mới và trang giữ nó cho thao tác kế
+tiếp. Giữ ETag cũ sẽ làm lần bấm thứ hai bị 409 mà người dùng không hiểu vì sao —
+có test khoá đúng chuỗi hai mutation liên tiếp.
+
+**Permission tách khỏi lỗi.** Viewer/operator đọc được danh sách và chi tiết
+nhưng không thấy form tạo khối; trang nói rõ lý do thay vì để nút chết hoặc trả
+lỗi sau khi bấm. Khối SYSTEM luôn chỉ đọc, kể cả với admin.
+
+**Finding nhỏ, sửa trong task.** Test bản đầu đỏ vì `I18nProvider` chọn ngôn ngữ
+theo `navigator.language`, nên một test khoá chuỗi tiếng Việt sẽ xanh hay đỏ tuỳ
+locale của máy chạy. Đã ghim `mkddc-lang` trong `beforeEach`.
+
+**Ranh giới trung thực.** E2E real-backend cho vòng đời library thuộc `T59-505`
+(không có `page.route` mock). Trang này dùng **client sinh từ OpenAPI**, không tự
+viết fetch, nên hợp đồng route/role đã được khoá ở lớp generated.
+
+**Evidence level.** Host/local (vitest + jsdom). Không phải GitHub CI, không phải
+target/HIL, và **không phải** E2E trình duyệt thật.
 
 ### W3 — Multi-Program Project, Check và Mapping
 
