@@ -4,6 +4,7 @@ import { OverviewPage } from './overview/OverviewPage'
 import { DesignWorkspacePage } from './design/DesignWorkspacePage'
 import { CheckCommissionPage } from './commission/CheckCommissionPage'
 import { RuntimeServicePage } from './runtime/RuntimeServicePage'
+import { LibraryPage } from './library/LibraryPage'
 import { LegacyTabRedirect } from './shared/LegacyTabRedirect'
 
 /**
@@ -23,6 +24,7 @@ export function ProgrammingRoutes() {
         <Route index element={<OverviewPage />} />
         <Route path="projects/:projectId/design" element={<DesignWorkspacePage />} />
         <Route path="projects/:projectId/commission" element={<CheckCommissionPage />} />
+        <Route path="projects/:projectId/library" element={<LibraryPage />} />
         <Route path="runtime" element={<RuntimeServicePage />} />
 
         {/* UX-WEB-PROG-001 §11.1 — route cũ của IA sáu trang */}

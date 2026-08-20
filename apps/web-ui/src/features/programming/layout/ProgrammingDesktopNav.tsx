@@ -1,4 +1,4 @@
-import { Activity, ClipboardCheck, Home, PencilRuler } from 'lucide-react'
+import { Activity, ClipboardCheck, Home, Library, PencilRuler } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
 
@@ -23,6 +23,7 @@ export function ProgrammingDesktopNav({ projectId }: { projectId: string | null 
   const items: NavItem[] = [
     { key: 'overview', label: ['Tổng quan', 'Overview'], to: '/eng/programming', icon: Home, end: true },
     { key: 'design', label: ['Thiết kế', 'Design'], to: projectId ? `/eng/programming/projects/${projectId}/design` : null, icon: PencilRuler },
+    { key: 'library', label: ['Thư viện', 'Library'], to: projectId ? `/eng/programming/projects/${projectId}/library` : null, icon: Library },
     { key: 'check', label: ['Kiểm tra', 'Check'], to: projectId ? `/eng/programming/projects/${projectId}/commission` : null, icon: ClipboardCheck },
     { key: 'runtime', label: ['Runtime', 'Runtime'], to: '/eng/programming/runtime', icon: Activity }
   ]

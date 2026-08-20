@@ -10,6 +10,7 @@ import type {
   ProgrammingOperationPage,
   ProgrammingOverridePage,
   ProgrammingPointCatalogPage,
+  ProgrammingLibraryPage,
   ProgrammingProjectPage,
   ProgrammingRevisionChanges,
   ProgrammingRuntime,
@@ -227,3 +228,27 @@ export function useProgrammingRuntimeMonitor(): RemoteState<ProgrammingMonitorPa
   const load = useCallback(() => client.request<ProgrammingMonitorPage>('getProgrammingRuntimeMonitor'), [client])
   return useProgrammingResource(load, 1000)
 }
+
+export interface LibrarySearchFilters {
+  projectId?: string
+  scope?: 'SYSTEM' | 'PROJECT'
+  kind?: 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
+  query?: string
+}
+
+/** `GET /libraries` — PGM-04. Bộ lọc nằm trong dependency của `load` nên đổi
+ * filter là tải lại, không phải lọc phía client trên một trang đã cắt. */
+export function useProgrammingLibrary(filters: LibrarySearchFilters): RemoteState<ProgrammingLibraryPage> {
+  const client = useProgrammingApiClient()
+  const { projectId, scope, kind, query } = filters
+  const load = useCallback(() => {
+    const search: Record<string, string | number> = { limit: 100 }
+    if (projectId) search.projectId = projectId
+    if (scope) search.scope = scope
+    if (kind) search.kind = kind
+    if (query) search.q = query
+    return client.request<ProgrammingLibraryPage>('searchProgrammingLibraries', { query: search })
+  }, [client, projectId, scope, kind, query])
+  return useProgrammingResource(load, 0)
+}
+

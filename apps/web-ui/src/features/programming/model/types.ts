@@ -402,3 +402,29 @@ export interface RemoteState<T> {
   error: string | null
   refresh: () => void
 }
+
+/** T59-202/203 — entry Control Library. `scope` phân biệt SYSTEM (registry chỉ
+ * đọc) với PROJECT (do người dùng định nghĩa). */
+export interface ProgrammingLibraryEntry {
+  scope: 'SYSTEM' | 'PROJECT'
+  libraryRevisionId: string
+  libraryVersion: string
+  libraryState: 'DRAFT' | 'PUBLISHED' | 'DEPRECATED'
+  entryId: string
+  kind: 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
+  name: string
+  language?: 'ST' | 'FBD'
+  featureState: 'AVAILABLE' | 'REVIEW_REQUIRED'
+  contentSha256: string
+  interface?: unknown
+  dependencies: { entryId: string; version: string }[]
+  /** `false` nghĩa là layout CHƯA BIẾT, không phải bằng 0. */
+  stateLayoutKnown: boolean
+  stateSizeBytes: number
+}
+
+export interface ProgrammingLibraryPage {
+  items: ProgrammingLibraryEntry[]
+  nextCursor?: string | null
+}
+
