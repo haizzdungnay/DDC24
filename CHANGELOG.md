@@ -8,6 +8,59 @@
 
 ## [Unreleased]
 
+### Added — Đóng Plan 57: ba hồ sơ UI/UX còn thiếu + 6 asset, và test hành vi `F-UX-13` (2026-08-19)
+
+Rà `§9.1` của Plan 57 **trước khi** tuyên bố đóng, và tìm ra ba gate tài liệu
+chưa thi hành. Chúng không phải task nên không hiện trong mẫu số 70 — nhưng chính
+plan tuyên bố chúng **chặn** ba task đã giao, nên đóng plan mà bỏ qua là đóng
+trên giấy.
+
+| Gate | Chặn task | Đã phát hành |
+|---|---|---|
+| Hồ sơ + asset **Alarm KPI** | `T57-3.3` | `KX-DDC24-UX-WEB-OPERATIONS-001` v1.1 §3 — `OPS-03` |
+| Hồ sơ + asset **Modbus frame monitor** | `T57-3.9` | `MODBUS_RTU_UI_UX_DESIGN` v0.3 §6.5 — `MBR-FRM-01` |
+| Hồ sơ + asset **Scheduler effective preview** | `T57-3.5`/`3.6` | `KX-DDC24-UX-WEB-SCHEDULER-001` v1.1 §8b — `SCH-EFF-01` |
+
+**Sáu asset SVG** (desktop 1440 + mobile 390 cho mỗi màn hình), mỗi asset dựng đủ
+các trạng thái mà màn hình thật có — **gồm cả trạng thái không đọc được**, vì đó
+là trạng thái hay bị vẽ thiếu nhất và cũng là trạng thái nguy hiểm nhất khi vẽ
+sai. Dữ liệu trong hình ghi rõ là **minh hoạ** theo `DOC_GOVERNANCE` §2.2.
+
+Ba mục đặc tả viết **sau khi đọc mã đã chạy**, không viết theo trí nhớ: đây là hồ
+sơ mô tả thứ đang tồn tại, nên một chi tiết sai ở đây sẽ thành một chi tiết sai
+trong đầu người bảo trì sau này.
+
+**Đồng bộ ma trận kiểm chứng** (`DOC_GOVERNANCE` §7 bước 3):
+`docs/05_verification/UX_PA3_TRACEABILITY.md` v1.1 thêm §5 — 17 năng lực Plan 57,
+11 endpoint mới, số đo gate, và §5.3 ghi hai mục **cố ý** vắng mặt kèm lý do.
+
+**`F-UX-13` đóng bằng test hành vi.** `SeverityBadge.test.tsx` (5 test) khoá thứ
+mà `contrast.test.ts` không khoá được: năm mức ra năm nhãn khác nhau, không mức
+nào mượn tông "an toàn" của IEC 60073, và mỗi chip luôn có icon + nhãn chữ để
+người không phân biệt được màu vẫn đọc ra mức.
+
+### Changed — Plan 57 chuyển trạng thái ĐÓNG (2026-08-19)
+
+Task Rev A **70/70**, gate tài liệu đủ, ma trận kiểm chứng đã đồng bộ, đã deploy
+và đo trên board thật. Thêm §14 bàn giao **Rev B** cho ba mục ra khỏi Rev A **có
+chủ đích**: `T57-3.8` (quét bus — phát byte ra RS-485 thật), `T57-4.1` (ISA-101
+Level 2), và khoảng hở Back/Forward của `useDirtyGuard` (cần chuyển sang data
+router — đổi kiến trúc điều hướng, không làm ở bước đóng plan).
+
+Ghi **tách bạch** trong plan: đóng plan **không** đồng nghĩa `RELEASE_READY`.
+Cổng đó là việc riêng theo `DOC_GOVERNANCE` §4 và cần người — chữ ký cho
+`ADR-033`…`ADR-049` (waive hết hiệu lực đúng tại cổng, không có lần hai), GO của
+Product + Release + QA, và một quyết định về CI đang chặn vì billing tổ chức.
+
+### Verification (2026-08-19, đợt 5)
+
+| Bộ | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **111 file / 1061 test PASS** |
+| `npm run lint` | PASS |
+| `python3 scripts/docs_iso_harness.py --expect` | PASS |
+| SVG mới | 6/6 parse được bằng `xml.dom.minidom` |
+
 ### Added — `T57-3.9` xem khung truyền Modbus RTU, và `mkddc-alarm-sim` (2026-08-19)
 
 Đóng nốt phần task của Rev A Plan 57 (**70/70**) cùng hai khoảng hở đóng gói ghi
