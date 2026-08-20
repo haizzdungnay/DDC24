@@ -8,6 +8,59 @@
 
 ## [Unreleased]
 
+### Fixed — Dependency boundary `apps/web-ui`: 10 vi phạm → 0 (2026-08-20)
+
+Gate `repository-layout` đỏ sẵn trên `main`. Hai nguyên nhân độc lập.
+
+**1) Xung đột thật giữa hai bất biến (8/10 vi phạm).** Luật kiến trúc buộc import
+chéo feature đi qua barrel; nhưng cùng một barrel vừa import tĩnh vừa import động
+sẽ bị rollup gộp chunk và `lazy()` mất tác dụng (`INEFFECTIVE_DYNAMIC_IMPORT`).
+Tác giả trước né bằng deep-import và **đã ghi rõ lý do trong `App.tsx`** — cách né
+đúng về bundling nhưng phá ranh giới, và bất biến kiến trúc là bên thua trong im
+lặng.
+
+*Cách sửa:* không chọn bên, mà bỏ điều kiện gây xung đột — **mỗi feature ở ranh
+giới `app/` phải toàn bộ tĩnh hoặc toàn bộ động**. Khi không còn import tĩnh,
+barrel chỉ có đường động nên chunk riêng được giữ: `lazy()` chạy VÀ ranh giới
+được tôn trọng. Đây đúng mô hình `modbus-rtu` đã dùng từ trước. Ba trang Cảnh báo
+chuyển eager→lazy (có sẵn `<Suspense>`), bundle chính **giảm 573.22 → 567.21 kB**.
+
+**2) Luật đo sai thứ nó tuyên bố đo (1/10).** Luật "Web UI không chạm contract
+C/SHM/IOP" quét toàn văn tệp nên bắt cả **chú thích truy vết**:
+`scheduler/shared.ts` chỉ ghi `khớp contracts/shm/mkddc_shm.h` — thứ
+`DOC_GOVERNANCE` khuyến khích. Phần thưởng ngược: cách "sửa" duy nhất là xoá chú
+thích.
+
+*Cách sửa:* bỏ comment TRƯỚC khi so khớp (`strip_ts_comments`). **Không phải nới
+lỏng** — chuỗi ký tự vẫn giữ nên import động/fetch/worker URL tới contract vẫn bị
+bắt. 4 test âm khoá cả hai chiều, gồm ca "chú thích hợp lệ + import thật" vẫn phải
+đỏ.
+
+Vi phạm thứ 10: `route-menu-contract.test.ts` deep-import `../features/auth/roles`
+trong khi barrel đã export — bỏ sót thuần tuý.
+
+Thêm `features/programming/index.ts` (public API duy nhất còn thiếu), chỉ export
+`ProgrammingRoutes`; cố ý không dùng `export *` để barrel là ranh giới thật.
+
+**Kiểm chứng:** dependency boundary 10→0; `tsc` exit 0; vitest **1061/1061**;
+lint/build exit 0, **0 cảnh báo `INEFFECTIVE_DYNAMIC_IMPORT`**; e2e **8 spec /
+61 passed**; guard boundary **9/9**; madge: 1 circular **có sẵn**, không mới;
+không chunk feature nào bị preload (lazy còn nguyên).
+
+**Gate `repository-layout` VẪN ĐỎ** vì một chặn thứ hai, độc lập, có sẵn — xem
+`F-LAYOUT-01` trong
+[REPOSITORY_LAYOUT_BOUNDARY_FIX_CLOSEOUT](docs/07_records/reviews/REPOSITORY_LAYOUT_BOUNDARY_FIX_CLOSEOUT.md):
+`g1_contract_join_v1.json` ghim ngày 2026-08-11 nhưng bốn commit 13–15/08 đổi
+contract mà không re-pin. Đã kiểm chứng cho **y hệt 10 dòng FAIL** trên worktree
+tại `1abbff6`. Không sửa vì muốn gate xanh phải đổi hằng số `schemaVersion == 4`
+nằm trong **chính script kiểm** — đúng thứ "sửa rule để hợp thức hoá" bị cấm; nó
+cần một vòng G1 contract review có người ký.
+
+Kèm theo: sửa `test_programming_error_catalog.py` ghim `19/77` trong khi thực tế
+`20/104` (catalog lớn lên hợp lệ qua `37a9d41`/`d118f7a`). Lỗi này chỉ lộ ra sau
+khi sửa xong boundary — trước đó `set -e` cắt mất.
+
+
 ### Changed — Thi hành 8 quyết định phạm vi sau đợt rà toàn ứng dụng (2026-08-20)
 
 Đợt rà đối chiếu **mã nguồn thật** với tài liệu gate và hợp đồng API. Kết quả
