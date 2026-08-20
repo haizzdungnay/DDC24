@@ -8,6 +8,37 @@
 
 ## [Unreleased]
 
+### Changed — Đóng task dependency boundary; tách G1 contract thành task riêng (2026-08-20)
+
+Quyết định Owner: **không giữ một task đã hoàn thành 100 % phạm vi kỹ thuật ở
+trạng thái OPEN chỉ vì pipeline phía sau nó vừa lộ thêm một lỗi độc lập** — làm
+vậy là trộn hai phạm vi khác nhau.
+
+`REPOSITORY_LAYOUT_BOUNDARY_FIX` → **`CLOSED — VERIFIED`**: 10→0 violation, 8→0
+illegal deep import, 1→0 vi phạm ở `scheduler/shared.ts`, `verify_repository.py`
+PASS, boundary guard 9/9, `tsc`/build/1061 unit/61 e2e đều PASS, không sinh
+circular mới, lazy-loading giữ đúng.
+
+**Bản sửa scanner comment được GIỮ NGUYÊN.** Luật cũ quét comment như code và sinh
+false positive; bản sửa vẫn bắt import tĩnh/động và chuỗi ký tự (fetch, worker
+URL), có test âm khoá hành vi — kể cả ca "chú thích hợp lệ + import thật trong
+cùng tệp vẫn phải đỏ". Đây là làm luật đo đúng thứ nó tuyên bố đo.
+
+Phần gate còn đỏ (`verify_programming_g1_contracts.py`, 10 FAIL) **chuyển giao**
+sang task mới [`TASK-PROG-G1-CONTRACT-REPIN-001`](docs/03_implementation/TASK-PROG-G1-CONTRACT-REPIN-001.md)
+— cùng hạng mục mang mã `PRG-CON-001`/`GAP-C-01`/`F-LAYOUT-01` ở các tài liệu
+khác. Đây là **quyết định compatibility** (Store contract đổi schema 4→5), cần
+authority ký, không phải cleanup script.
+
+Làm rõ được ghi vào task: **sau** khi compatibility review kết luận `ACCEPT`, việc
+cập nhật hằng `require(store_manifest["schemaVersion"] == 4)` sang schema mới
+KHÔNG còn là "sửa rule để hợp thức hoá" — nhưng re-pin artifact và đổi validator
+**bắt buộc nằm cùng một change-set**.
+
+`F-LAYOUT-03` (circular dependency có sẵn) tiếp tục backlog riêng, không kéo vào
+task G1.
+
+
 ### Fixed — Dependency boundary `apps/web-ui`: 10 vi phạm → 0 (2026-08-20)
 
 Gate `repository-layout` đỏ sẵn trên `main`. Hai nguyên nhân độc lập.
