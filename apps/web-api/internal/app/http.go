@@ -161,6 +161,31 @@ func isAllowedOrigin(origin, configured string, allowLoopback bool) bool {
 }
 
 func (a *App) Router() http.Handler {
+	mux, err := webRouter.New(a.auth, a.routeTable(), http.HandlerFunc(a.handleStatic))
+	if err != nil {
+		panic(err)
+	}
+
+	a.logCORSMode()
+	var handler http.Handler = mux
+	handler = corsMiddleware(a.cfg.CORSOrigin, a.cfg.CORSAllowLoopback, handler)
+	handler = recoverMiddleware(a.logger, handler)
+	handler = loggingMiddleware(a.logger, handler)
+	return handler
+}
+
+// routeTable là NGUỒN CHÂN LÝ DUY NHẤT về bề mặt HTTP của Rev A.
+//
+// Tách khỏi `Router()` để `TestRouteTableMatchesOpenAPI` liệt kê được bề mặt
+// thật mà không phải chép lại danh sách. Một bản chép sẽ trôi cùng lúc với thứ
+// nó phải canh gác — đúng lỗi đã để `/modbus/frames` và `/modbus/templates` vào
+// code mà không có trong `openapi.yaml`, và để bảy endpoint chỉ tồn tại trong
+// spec (`/ota/*`, `/graph/*`, `/bacnet/objects`, `/logs/download`) suốt nhiều
+// tháng mà không cổng nào bắt được.
+//
+// Hàm này CHỈ được đọc `a.cfg`; mọi handler là method value nên không
+// dereference receiver. Nhờ vậy test dựng được bảng route từ một `App` rỗng.
+func (a *App) routeTable() []webRouter.Route {
 	routes := []webRouter.Route{
 		webRouter.PublicFunc("GET /health", a.handleHealth),
 		webRouter.PublicFunc("GET /api/v1/health", a.handleHealth),
@@ -311,17 +336,7 @@ func (a *App) Router() http.Handler {
 	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, programminghttp.Services{
 		Projects: a.programmingProjects, Checks: a.programmingChecks, Operations: a.programmingOperations,
 		Runtime: a.programmingRuntime})
-	mux, err := webRouter.New(a.auth, routes, http.HandlerFunc(a.handleStatic))
-	if err != nil {
-		panic(err)
-	}
-
-	a.logCORSMode()
-	var handler http.Handler = mux
-	handler = corsMiddleware(a.cfg.CORSOrigin, a.cfg.CORSAllowLoopback, handler)
-	handler = recoverMiddleware(a.logger, handler)
-	handler = loggingMiddleware(a.logger, handler)
-	return handler
+	return routes
 }
 
 func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
