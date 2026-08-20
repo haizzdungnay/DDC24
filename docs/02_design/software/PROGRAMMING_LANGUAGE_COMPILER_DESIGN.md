@@ -3,18 +3,17 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LANG-PROG-001` |
-| Phiên bản | 0.9 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; ST/FBD common typed IR, provenance và BE compiler worker có source/host; user POU/target còn mở** |
-| Ngày | 2026-08-13 |
+| Phiên bản | 1.0 |
+| Trạng thái | **Active — IMPLEMENT_READY; user POU/library semantics đã khóa** |
+| Ngày | 2026-08-20 |
 | Chủ quản | Compiler Lead + Controls Lead |
 | Người review | Core Lead, FE Lead, Verification Lead, Security Lead |
 | Người phê duyệt | System Architect + Product Owner |
-| Nguồn | `SRS-PROG-001`, Product Spec v2.2, `ARCH-PROG-001`, `PROG-OD-001` |
-| Phạm vi | Target Rev A ST/FBD → common typed IR; compiler chạy ngoài RT |
+| Nguồn | `SRS-PROG-001` v1.0, Product v3.0, ADR-050, `DDD-SW-PROG-UNIFIED-001` |
+| Phạm vi | ST/FBD PROGRAM/FUNCTION/FUNCTION_BLOCK → common typed IR; compiler ngoài RT |
 
-> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
-> `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
-> không còn chặn viết/merge code. Review và evidence chưa có vẫn thực hiện trong task.
+> **Normative update.** Unified DDD §4–§7 là authority cho Product Target. Review discipline được waive khỏi entry theo
+> `AUTH-PROG-2026-08-20-04`; target evidence vẫn bắt buộc cho release.
 
 ## 0. Đọc nhanh
 
@@ -29,7 +28,7 @@
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-200..203`: Task 203 có build lặp 100 lần, targeted `35/35`, manifest mutation `7/7`, CTest `927/927` và Go/FE regression PASS. Đây là evidence host; `VS-PROG-003/005/006/023` chưa PASS vì worker/target và independent review chưa đủ. |
 
 Lưu ý thẩm quyền: `ST_SUBSET_SPEC_MK-DDC-24_VI.md` chỉ **mô tả cái đang có**. Khi
-nó khác Product Spec v2.2 hoặc file này, lấy Product/SRS/decision đã duyệt làm
+nó khác Product Spec v3.0 hoặc file này, lấy Product/SRS/decision đã duyệt làm
 chuẩn — không được mở rộng phạm vi sản phẩm bằng cách viện dẫn code cũ.
 
 ## 1. Mục tiêu, actor và tiêu chí thành công
@@ -44,7 +43,7 @@ artifact byte-for-byte; input ngoài subset bị reject có vị trí; compile k
 tranh CPU với scan; FBD và ST hạ xuống cùng typed IR; mọi giới hạn được kiểm ở
 server và loader.
 
-Ngoài phạm vi Rev A: online source edit trong Core, JIT/native code, thư viện bên
+Ngoài phạm vi Product hiện hành: online source edit trong Core, JIT/native code, thư viện bên
 thứ ba, pointer/dynamic allocation/recursion, multi-controller distributed task.
 
 ## 2. Authority và As-Built có dẫn chứng
@@ -53,15 +52,15 @@ thứ ba, pointer/dynamic allocation/recursion, multi-controller distributed tas
 |---|---|---|
 | Parser/semantic/compiler | `apps/core/application/st/st_parser.cpp`, `st_semantic.cpp`, `st_compile.cpp`; `st_fbd_model.*`; `st_fbd_compile.*`; `st_artifact_manifest.*` tại `2c2bfb4` | ST và FBD đều đi qua `StProgram` typed, semantic checker, IR và manifest chung trong thư viện compiler non-RT; local POU còn target |
 | CLI | `mkddc-st-validate`, `mkddc-st-compile` từ `apps/core/CMakeLists.txt` | BE worker gọi API/CLI bounded, không gọi trong scan |
-| ST unit | `PROGRAM` duy nhất; assignment, `IF/ELSIF/ELSE`, FB call | Product v2.2 yêu cầu thêm local `FUNCTION`/`FUNCTION_BLOCK`; đang `TARGET-PENDING` |
-| Type | `BOOL`, `INT=int16`, `DINT=int32`, `UINT=uint16`, `REAL=float32`, `TIME=int64`; VAR input/output/local/retain | Sáu type scalar Rev A đã khớp profile/wire code; bounded ENUM không thuộc phạm vi hiện hành |
-| FB/function | TON, TOF, R/F_TRIG; ABS/MIN/MAX/LIMIT/SEL/SQRT/conversion | Thư viện Rev A phải được decision duyệt |
+| ST unit | `PROGRAM` duy nhất; assignment, `IF/ELSIF/ELSE`, FB call | Target bắt buộc `PROGRAM/FUNCTION/FUNCTION_BLOCK`; implementation theo T59-101..105 |
+| Type | `BOOL`, `INT=int16`, `DINT=int32`, `UINT=uint16`, `REAL=float32`, `TIME=int64`; VAR input/output/local/retain | Sáu type scalar là baseline; bounded ENUM không thuộc phạm vi hiện hành |
+| FB/function | TON, TOF, R/F_TRIG; ABS/MIN/MAX/LIMIT/SEL/SQRT/conversion | Built-in registry + user POU registry được sinh từ nguồn chung theo T59-003 |
 | FBD | schema/golden/keyboard + `fbd/equivalence_v1.json`; `st_fbd_model.*`, `st_fbd_compile.*`; FE `features/programming/fbd/*` | Lowerer `fwsom-fbd-1.0.0`, 20 cặp equivalence và source map `pc→networkId/nodeId/portId/unit` đã có; library semantic chưa hỗ trợ vẫn reject fail-closed |
 | Giới hạn | `st_limits.hpp`, `st_ir.hpp`, generated profile; parser kiểm source UTF-8/NUL/64 KiB và full consumption | Tiếp tục lấy min(client capability, target capability, policy) ở worker/consumer |
 | Runtime wiring | `st_compiler_lib` không link vào `mkddc-core`; bootstrap/coordinator nạp verified artifact, symbol scan giữ parser/compiler ngoài runtime | Đúng boundary compiler non-RT; target timing/HIL thuộc lifecycle/release |
 
 `ST_SUBSET_SPEC_MK-DDC-24_VI.md` là mô tả As-Built hỗ trợ. Khi khác Product
-Spec v2.2 hoặc hồ sơ này, target dùng Product/SRS/decision đã phê duyệt; không
+Spec v3.0 hoặc hồ sơ này, target dùng Product/SRS/decision đã phê duyệt; không
 tự mở rộng từ code cũ.
 
 ## 3. Target ownership và pipeline
@@ -87,20 +86,20 @@ Revision canonical source
   compiler ID/version/lowerer, profile ID/code/hash/library version và target ABI.
   Không chứa timestamp, random hay path host; cùng key được cache immutable.
 
-## 4. Subset ST Target Rev A
+## 4. Subset ST Product Target
 
 ### 4.1 Đơn vị chương trình
 
 | POU | Cho phép | Interface | Ràng buộc |
 |---|---|---|---|
-| `PROGRAM` | có | `VAR_INPUT/OUTPUT/VAR/VAR_RETAIN` | ít nhất một, chạy theo order Task |
-| `FUNCTION` local | `TARGET-PENDING` | input + một return scalar | pure; không I/O, RETAIN, FB state, recursion |
-| `FUNCTION_BLOCK` local | `TARGET-PENDING` | input/output/local state | instance tĩnh; không recursion/dynamic instance |
+| `PROGRAM` | bắt buộc | `VAR_INPUT/OUTPUT/VAR/VAR_RETAIN` | 1..32/package; sở hữu cycle/lifecycle/mapping/signal/output |
+| `FUNCTION` | bắt buộc | input + một return scalar | pure; không I/O, RETAIN, FB state, recursion |
+| `FUNCTION_BLOCK` | bắt buộc | input/output/local/private state | instance tĩnh; state owner Program; không recursion/dynamic instance |
 
 Không cho: global mutable variable, pointer/reference, dynamic array/string,
 file/network/system call, direct address `%I/%Q`, recursion, unbounded loop.
-`CASE`, `FOR`, `WHILE`, `REPEAT`, array và user POU chỉ Active khi decision có
-limit/WCET rule; parser hiện tại reject rõ ràng thay vì bỏ qua.
+`CASE`, `FOR`, `WHILE`, `REPEAT` và dynamic array vẫn ngoài subset vì không có
+bounded WCET rule; parser reject rõ. User POU đã Active theo ADR-050.
 
 ### 4.2 Type và literal
 
@@ -111,7 +110,7 @@ limit/WCET rule; parser hiện tại reject rõ ràng thay vì bỏ qua.
 | `DINT` | signed 32-bit, wire `2` | `0` | −2^31..2^31−1 | overflow fault; thay vai trò integer 32-bit As-Built cũ |
 | `UINT` | unsigned 16-bit, wire `6` | `0` | 0..65.535 | literal âm/underflow/conversion ngoài miền fault |
 | `REAL` | IEEE-754 binary32 | `0.0` | finite | NaN/Inf input hoặc kết quả → Program fault |
-| `TIME` | signed 64-bit ns trong model, bounded khi serialize | `T#0ms` | 0..24 h Rev A | không âm; arithmetic bounded |
+| `TIME` | signed 64-bit ns trong model, bounded khi serialize | `T#0ms` | 0..24 h | không âm; arithmetic bounded |
 
 Không có conversion ngầm giữa các type số. Conversion chỉ qua các hàm tường minh
 được khóa ở §13; narrowing, signedness, overflow và non-finite đều fail-closed.
@@ -132,7 +131,7 @@ không được thay bằng unitless.
 
 ## 5. FBD canonical model
 
-FBD Rev A là structured editor, không phải canvas tự do. JSON canonical thuộc
+FBD Product hiện hành là structured editor, không phải canvas tự do. JSON canonical thuộc
 Revision, thứ tự key không có nghĩa; `nodeId/portId/wireId` UUID ổn định.
 
 **As-Built Task 201.** Authority machine-readable nằm tại
@@ -161,7 +160,7 @@ tổ hợp bị `ST-SEM-FBD-CYCLE`. Compiler sinh source map từ instruction t�
 
 ## 6. Thư viện chuẩn và semantic control
 
-| Nhóm | Rev A baseline | Quy tắc trạng thái |
+| Nhóm | Product baseline | Quy tắc trạng thái |
 |---|---|---|
 | Timer | `TON`, `TOF` | elapsed từ monotonic task time; reset xác định |
 | Edge | `R_TRIG`, `F_TRIG` | state per instance, cold-init FALSE |
@@ -298,7 +297,7 @@ unary_expr    = ["NOT"|"-"|"+"] primary ;
 | `DINT/UINT` → `REAL` | không | `DINT_TO_REAL`, `UINT_TO_REAL` | kết quả không hữu hạn bị fault |
 | `REAL` → `DINT/UINT` | không | `REAL_TO_DINT`, `REAL_TO_UINT` | NaN/Inf/out-of-range reject; truncate về 0 |
 | `INT/DINT/UINT` qua lại | không | các hàm `*_TO_*` ở §6 | âm/out-of-range reject; không wrap |
-| BOOL ↔ numeric/TIME | không | không trong Rev A | compile error |
+| BOOL ↔ numeric/TIME | không | ngoài Product hiện hành | compile error |
 | unit A ↔ unit B | không | conversion block khai báo | unit unknown/mismatch compile error |
 
 Lexer/parser phải ghi exact token range; semantic phase không emit message text
@@ -318,9 +317,9 @@ không có semantic riêng ở FE.
 
 | Blocker | Owner | Gate | Điều kiện mở |
 |---|---|---|---|
-| User FUNCTION/FB chưa implement | Compiler + Controls | `G2` | hoàn tất task compiler/library tương ứng và artifact evidence |
-| Unit/conversion/PID semantic chưa khóa | Controls + Safety | implementation G0 | review Control Semantics và V&V |
-| Target WCET chưa đo | Core + QA | release | target load/HIL evidence PASS |
+| User FUNCTION/FB chưa implement | Compiler + Controls | implementation | T59-101..105; **không phải decision blocker** |
+| PID end-user label chưa có evidence | Controls + Safety | release label | T59-205/T59-706; implementation registry vẫn tiếp tục |
+| Target WCET chưa đo | Core + QA | release | T59-702 target load/soak evidence PASS |
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
 |---|---|---|---|
@@ -333,6 +332,7 @@ không có semantic riêng ở FE.
 | 0.7 | 2026-08-11 | Đồng bộ `TASK-PROG-203` tại `2c2bfb4`: SHA-256 canonical, manifest/build key deterministic, source map ST/FBD giữ UUID/unit, CLI ST/FBD và verifier fail-closed; chuyển Project/Revision store sang Task 204 | Compiler + Core Lead |
 | 0.8 | 2026-08-13 | Đồng bộ As-Built tới P4: compiler worker sandbox Task 205 đã gọi CLI bounded; P3/P4 nạp artifact verified qua loader/coordinator nhưng `st_compiler_lib` vẫn không link vào `mkddc-core`. Giữ local POU và target WCET/HIL/Test Result còn mở. | Compiler + Core + BE |
 | 0.9 | 2026-08-15 | **WP-04 (D-06, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15` §7.3/§7.4).** §6: sửa `PID` từ "block target" (ngụ ý chưa build) thành **Implemented** — xác nhận trực tiếp `StFbType::PID` có thật trong `st_program.cpp` với port shape đầy đủ; giữ nguyên blocker "Unit/conversion/PID semantic chưa khóa" §14 (semantics vẫn chưa qua Controls+Safety review, chỉ sửa nhầm lẫn "chưa tồn tại" thành đúng "tồn tại nhưng chưa duyệt"). Không sửa §4.2 (type/conversion table) — đã khớp source từ trước, chỉ `ST_SUBSET_SPEC_MK-DDC-24_VI.md` (tài liệu As-Built khác) từng sai. | System Engineering |
+| 1.0 | 2026-08-20 | ADR-050/Unified DDD khóa PROGRAM/FUNCTION/FUNCTION_BLOCK, library DAG, kind rule và artifact v2; bỏ TARGET-PENDING/Rev split; PID giữ evidence gate riêng. | Product + System/Compiler |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

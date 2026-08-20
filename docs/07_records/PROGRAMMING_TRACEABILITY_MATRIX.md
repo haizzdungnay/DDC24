@@ -1,11 +1,11 @@
-# Ma trận truy vết Programming MK-DDC-24 Rev A
+# Ma trận truy vết Programming MK-DDC-24
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.22 |
-| Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32`. §12 (mới) thêm cross-reference cho Master Plan 56 `WP-01..13` + `WP-MULTIPROGRAM-ARCH` — không đổi 60 dòng canonical §6 |
-| Cập nhật | 2026-08-15 |
+| Phiên bản | 4.0 |
+| Trạng thái | **Active — 60 requirement legacy + 22 unified requirement; 0 Open Decision; release evidence chưa đủ** |
+| Cập nhật | 2026-08-20 |
 | Chủ quản | Verification Lead |
 | Người review | Document Control, Product, Architect và tất cả discipline lead |
 | Người phê duyệt | Verification Lead + Document Control |
@@ -14,16 +14,31 @@
 
 | Câu hỏi | Trả lời |
 |---|---|
-| 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
+| 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối Product v3.0 → 82 requirement → Unified DDD → Plan 59 task → scenario/evidence/release. Legacy matrix phía dưới giữ history. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
 | 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có design/source target/scenario. Baseline merged có 22/60 `I=Y`. Corrective 508..510 đã qua full host gate và supporting target/browser evidence `EV-PROG-P5-510`; vòng live HTTP cuối bổ sung auth deep-link, ST save/restore, export/import fault, safe-state/RETAIN fail-closed và responsive/a11y. Source corrective **chưa merge**, nên theo §8 chưa được đổi `I`. Hai record `BLOCKED`, 30 scenario `NOT_RUN`, 0/32 PASS; mọi `T/P/R=N`. |
-| 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
+| 4. Thiết kế mới thay đổi điều gì? | ADR-050 thêm 22 requirement và 12 scenario unified; Plan 59 thay Plan 53/56. Evidence legacy không tự kế thừa sang contract v2. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
-| 6. Điều gì còn bị chặn? | Không còn approval hoặc SSH/deploy blocker. Corrective source cần merge để nâng thêm ba trục `I`; positive Monitor/Trace có Variable Binding target, reviewer accessibility độc lập, usability và HIL vẫn mở. Toàn bộ `T/P/R` còn `N` tới khi Test Result đủ acceptance và reviewer độc lập ký. |
+| 6. Điều gì còn bị chặn? | Không còn decision/document blocker cho implementation. Target/HIL/physical I/O/soak/CI/provenance còn thiếu chỉ chặn Release. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với bản thân ma trận: 60/60 dòng giải được về ID canonical, không trùng ID, không có dòng vi phạm `P=Y khi T=N` hay `R=Y khi P=N` — kiểm bằng harness ở [`PROG-REV-2026-08-09`](reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §2. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
 nghĩa code tồn tại, cũng không nghĩa test đã PASS.
+
+## Unified Product crosswalk — authority cho công việc tương lai
+
+| Requirement mới | Design/contract owner | Plan 59 | Scenario | Evidence hiện tại |
+|---|---|---|---|---|
+| `SYS-REQ-PROG-109..110` | Unified DDD §4–§6; Language/registry v2 | T59-003, T59-101..205 | U01..U03 | NOT_RUN |
+| `SYS-REQ-PROG-111` | Unified DDD §4.1/§7; profile v2 | T59-002, T59-301/305/402 | U04/U05 | NOT_RUN |
+| `SYS-REQ-PROG-112` | Unified DDD §4.5/§7.3 | T59-304/404 | U05/U06 | NOT_RUN |
+| `SYS-REQ-PROG-113` | Unified DDD §4.3/§5.1–5.2/§7.2 | T59-405/501/503 | U07/U08/U10 | NOT_RUN |
+| `SYS-REQ-PROG-114` | Unified DDD §4.6/§7/§9 | T59-303/304/406 | U07/U09 | NOT_RUN |
+| `SYS-REQ-PROG-115` | Unified DDD §7 | T59-402/403/702 | U05/U11 | NOT_RUN |
+| `SWR-REQ-PROG-FE-116..118` | Unified DDD §8; UX unified section | T59-203/503/504/506 | U03/U06/U07/U10 | NOT_RUN |
+| `SWR-REQ-PROG-BE-111..115` | Unified DDD §4–§6 | T59-005/006/201/202/302/405/408 | U03/U04/U07/U10 | NOT_RUN |
+| `SWR-REQ-PROG-CORE-111..116` | Unified DDD §5.3/§7 | T59-401..408/501 | U02/U05..U09/U11 | NOT_RUN |
+| `NFR-REQ-PROG-111` | Unified DDD §11–§12 | T59-606/702/707 | U05/U11 | NOT_RUN |
 
 ## 1. Quy tắc đọc
 
@@ -358,7 +373,10 @@ qua journey hoặc qua kịch bản xuyên suốt tương ứng.
 
 Ma trận này theo dõi trạng thái; nó **không** tạo ra bằng chứng.
 
-## 12. Cross-reference — Master Plan 56 Work Package (`WP-01..13`, `WP-MULTIPROGRAM-ARCH`)
+## 12. Cross-reference lịch sử — Master Plan 56 Work Package
+
+Master Plan 56 và các WP dưới đây đã `Superseded`; giữ bảng để truy nguyên commit
+cũ. Product Target và mọi công việc tương lai dùng crosswalk Plan59 ở §13.
 
 Master Plan 56 ([`56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md`](../03_implementation/56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md))
 là một effort triển khai tiếp nối, phát sinh sau khi matrix này đã
@@ -384,7 +402,7 @@ biết về `WP-XX`). Theo dõi chi tiết/số đo thật nằm ở
 | WP-11 PGM-02 3-column Layout | `PROGRAMMING_UI_UX_DESIGN.md` §16.2 | Master Plan 56 §4 | PR #178 (grid `lg:grid-cols-[280px_1fr_308px]`) | `DesignWorkspacePage.test.tsx` test bố cục 3 cột | Vitest PASS; deploy Foxlinx | `DONE` |
 | WP-12 RETAIN Reset | G-9, D-05/§VI | `PROGRAMMING_RETAIN_RESET_DESIGN.md` Rev 1.0 (PR #179); CTO/Owner approval §7-10 chọn Phương án B (runtime-coordinated) | Đang thực hiện Sprint D | TC-RETAIN-01..05 (chưa chạy) | Đang thực hiện | `IN_PROGRESS` — xem Tracker |
 | WP-13 Artifact Trust | D-05, G-10 | `PROGRAMMING_ARTIFACT_TRUST_SECURITY_DESIGN.md` Rev 1.0 (PR #180); CTO/Owner approval §11-14 chốt SIGNED production target + key policy + lab profile | Đang thực hiện Sprint E | Đang thực hiện | Đang thực hiện | `IN_PROGRESS` — xem Tracker |
-| `WP-MULTIPROGRAM-ARCH` | Product Spec `V2.2 Hybrid candidate.2` — CTO/Owner approval §15 duyệt làm Product Target Authority | 14 tài liệu Architecture Package (§20 approval) — đang viết | N/A (study, không code) | N/A | N/A | `DESIGN` — Document Gate #1 đã mở theo approval §19, không tự implement `kMaxProgramsTotal` trước khi Architecture Gate đạt |
+| `WP-MULTIPROGRAM-ARCH` | **Superseded bởi Product v3.0 + ADR-050** | `DDD-SW-PROG-UNIFIED-001` | Chuyển thành `T59-002/301/305/401..407` | `VS-PROG-U01/U04/U05/U06/U07` | Plan59 + manifest unified | `MIGRATED` — không còn study/blocker riêng |
 
 Bảng trên là **snapshot tại thời điểm ghi** — với các dòng `IN_PROGRESS`,
 tra `PROGRAMMING_IMPLEMENTATION_TRACKER.md` §1 để biết trạng thái mới nhất;

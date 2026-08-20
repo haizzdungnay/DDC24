@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">PGM-05 Check và Commission desktop</title>
+  <desc id="desc">Đặc tả trực quan state machine, diagnostics, impact và authoritative read-back</desc>
+  <rect width="1440" height="900" fill="#f5f7fa"/><rect width="1440" height="72" fill="#132238"/>
+  <text x="32" y="44" fill="#fff" font-family="sans-serif" font-size="22" font-weight="700">MK-DDC-24 · Programming</text>
+  <rect y="72" width="224" height="828" fill="#1d304a"/>
+  <g fill="#cbd7e6" font-family="sans-serif" font-size="15"><text x="28" y="126">Tổng quan</text><text x="28" y="174">Chương trình</text><text x="28" y="222">Điểm &amp; Tín hiệu</text><text x="28" y="270">Thư viện</text><text x="28" y="318" fill="#fff" font-weight="700">Commission</text><text x="28" y="366">Runtime</text></g>
+  <text x="256" y="118" fill="#132238" font-family="sans-serif" font-size="28" font-weight="700">Kiểm tra và đưa vào vận hành</text>
+  <text x="256" y="148" fill="#526274" font-family="sans-serif" font-size="15">Draft r18 · Active r16 · LKG r15 · Core connected</text>
+  <rect x="256" y="178" width="1152" height="92" rx="8" fill="#fff" stroke="#c7d0dc"/>
+  <g font-family="sans-serif" font-size="13" text-anchor="middle">
+    <g fill="#1e7b46"><circle cx="324" cy="220" r="16"/><text x="324" y="250" fill="#263544">DRAFT</text></g>
+    <path d="M342 220H446" stroke="#6d7c8d" stroke-width="2"/><g fill="#1e7b46"><circle cx="464" cy="220" r="16"/><text x="464" y="250" fill="#263544">CHECKING</text></g>
+    <path d="M482 220H586" stroke="#6d7c8d" stroke-width="2"/><g fill="#1e7b46"><circle cx="604" cy="220" r="16"/><text x="604" y="250" fill="#263544">READY</text></g>
+    <path d="M622 220H726" stroke="#6d7c8d" stroke-width="2"/><g fill="#1e7b46"><circle cx="744" cy="220" r="16"/><text x="744" y="250" fill="#263544">STAGING</text></g>
+    <path d="M762 220H866" stroke="#6d7c8d" stroke-width="2"/><g fill="#1e7b46"><circle cx="884" cy="220" r="16"/><text x="884" y="250" fill="#263544">ACTIVATING</text></g>
+    <path d="M902 220H1006" stroke="#6d7c8d" stroke-width="2"/><g fill="#1565a8"><circle cx="1024" cy="220" r="16"/><text x="1024" y="250" fill="#263544">VERIFYING</text></g>
+    <path d="M1042 220H1146" stroke="#6d7c8d" stroke-width="2"/><g fill="#9aa6b2"><circle cx="1164" cy="220" r="16"/><text x="1164" y="250" fill="#263544">SUCCEEDED</text></g>
+  </g>
+  <rect x="256" y="292" width="544" height="436" rx="8" fill="#fff" stroke="#c7d0dc"/>
+  <text x="278" y="330" fill="#132238" font-family="sans-serif" font-size="18" font-weight="700">Kết quả Check</text>
+  <rect x="278" y="350" width="500" height="64" rx="6" fill="#eaf8ef" stroke="#39975b"/>
+  <text x="294" y="378" fill="#18552f" font-family="sans-serif" font-size="14" font-weight="700">PASSED · package 12 POU / 8 Program</text><text x="294" y="400" fill="#526274" font-family="sans-serif" font-size="13">Artifact signed · profile product-v2 · 0 error</text>
+  <text x="278" y="452" fill="#132238" font-family="sans-serif" font-size="16" font-weight="700">Impact</text>
+  <g fill="#263544" font-family="sans-serif" font-size="14"><text x="294" y="486">• 3 Program code changed</text><text x="294" y="516">• 1 Library version changed</text><text x="294" y="546">• 2 output owners changed</text><text x="294" y="576">• 1 RETAIN layout cold-init required</text><text x="294" y="606">• Enable intent preserved for 6 Program</text></g>
+  <rect x="278" y="640" width="22" height="22" rx="3" fill="#fff" stroke="#657587"/>
+  <text x="312" y="657" fill="#263544" font-family="sans-serif" font-size="14">Tôi đã đọc output/RETAIN/rollback impact</text>
+  <rect x="824" y="292" width="584" height="436" rx="8" fill="#fff" stroke="#c7d0dc"/>
+  <text x="846" y="330" fill="#132238" font-family="sans-serif" font-size="18" font-weight="700">Operation read-back</text>
+  <g font-family="sans-serif" font-size="14"><text x="846" y="374" fill="#526274">Operation</text><text x="1010" y="374" fill="#132238" font-weight="700">op-0182 · VERIFYING</text><text x="846" y="414" fill="#526274">Expected active</text><text x="1010" y="414" fill="#132238">revision-r18</text><text x="846" y="454" fill="#526274">Core active</text><text x="1010" y="454" fill="#c77816" font-weight="700">revision-r16</text><text x="846" y="494" fill="#526274">LKG</text><text x="1010" y="494" fill="#132238">revision-r15</text></g>
+  <rect x="846" y="530" width="540" height="94" rx="6" fill="#fff4e5" stroke="#c77816"/>
+  <text x="862" y="558" fill="#824d0f" font-family="sans-serif" font-size="14" font-weight="700">Chưa xác định kết quả — đang đối soát</text><text x="862" y="584" fill="#824d0f" font-family="sans-serif" font-size="13">Không gửi lại Commission. UI tiếp tục đọc Core authority.</text>
+  <rect x="1130" y="658" width="256" height="48" rx="7" fill="#1565a8"/><text x="1160" y="688" fill="#fff" font-family="sans-serif" font-size="15" font-weight="700">Đưa vào vận hành</text>
+  <text x="256" y="860" fill="#6a7786" font-family="sans-serif" font-size="13">Dữ liệu minh họa · timeout không được trình bày như thành công</text>
+</svg>

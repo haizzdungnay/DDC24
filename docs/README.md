@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-14 (đã loại bản Markdown trùng/lịch sử và corpus AHUHP candidate chưa triển khai; Programming vẫn `APPROVED FOR IMPLEMENTATION`; audit As-Built xác nhận UC-PROG-03 NO-GO và `RELEASE_READY BLOCKED`)
+**Cập nhật:** 2026-08-20 (Programming Product v3.0 thống nhất, Unified DDD và Plan59 Active; plan/tracker cũ Superseded; `RELEASE_READY` vẫn NO-GO chờ evidence)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -10,8 +10,8 @@
 | [Control](00_governance/CONTROL.md) | quản trị, thẩm quyền, trạng thái và quy tắc thay đổi |
 | [Quy tắc kiểm soát tài liệu](00_governance/DOC_GOVERNANCE.md) | `DOC-GOV-001`: cấu trúc bắt buộc `DD-01..DD-13`, thang `M0..M5`, ba cổng `PLAN_READY`/`IMPLEMENT_READY`/`RELEASE_READY`, harness và quy tắc trung thực |
 | [Decision log](00_governance/DECISIONS.md) | quyết định kiến trúc hiện hành, gồm các ADR đã hợp nhất |
-| [Product](01_product/PRODUCT.md) | định vị, baseline và phạm vi Rev A |
-| [Product Spec Programming Rev A](01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | capability, product requirement, thuật ngữ và scope Programming Rev A |
+| [Product](01_product/PRODUCT.md) | định vị và baseline sản phẩm toàn hệ thống |
+| [Product Spec Programming thống nhất](01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | đa Program, POU, Control Library, Published Signal, lifecycle, safety và sáu workspace |
 | [Requirements](02_requirements/REQUIREMENTS.md) | yêu cầu có ID và tiêu chí chấp nhận |
 | [System](03_architecture/SYSTEM.md) | kiến trúc hệ thống và deployment topology |
 | [Interfaces](04_design/INTERFACES.md) | IOP, SHM, cấu hình và API contracts |
@@ -23,11 +23,12 @@
 | [Traceability](07_records/TRACEABILITY.md) | ánh xạ yêu cầu → thiết kế → code → bằng chứng |
 | [Chỉ mục hồ sơ rà soát](07_records/reviews/README.md) | trạng thái từng record rà soát/phê duyệt/triển khai, đã đối chiếu mã nguồn; kèm bảng ánh xạ đường dẫn trước/sau tái cấu trúc |
 | [Programming Traceability Matrix](07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
-| [Programming Open Decisions](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định: `17 DECIDED`, `0 OPEN`, `0 CLOSED`; baseline đã duyệt |
-| [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào bộ 22 hồ sơ yêu cầu, thiết kế, kiểm chứng và delivery Programming Rev A |
-| [Programming Documentation Roadmap](03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | v3.37: P0..P4 source/host DONE; P5 `8/11`; P6 `0/3`; `RELEASE_READY BLOCKED` |
-| [Programming Implementation Plan](03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | v0.55: tổng `43/53`; P5 corrective đang thực hiện; team vẫn được viết/merge code, release chưa được mở |
-| [Programming Risk Register](07_records/PROGRAMMING_RISK_REGISTER.md) | 16 rủi ro, design control, owner, evidence gate và residual |
+| [Programming Decision Register](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 12 quyết định đã khóa, 0 Open Decision; không còn decision blocker implementation |
+| [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào Product/SRS/Unified DDD/UX/VVP/Trace/Risk/Plan authority |
+| [Programming Unified Detailed Design](02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | data/contract/state/algorithm/error/source/test/deploy/rollback đủ DD-01..DD-13 |
+| [Programming Plan 59](03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | execution/tracker authority: 51 task, 8 Wave từ contract đến release; PLAN/IMPLEMENT READY |
+| [Prompt tự động Plan59](03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | hướng dẫn agent chọn task, implement, test, cập nhật tracker và commit/PR sạch |
+| [Programming Risk Register](07_records/PROGRAMMING_RISK_REGISTER.md) | 22 rủi ro, design control, owner, evidence gate và residual |
 | [Programming Docs Sync Report](07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record đồng bộ docs theo ADR-023 ngày 2026-08-03 |
 | [Programming — Báo cáo As-Built/gap PM-CTO 2026-08-14](07_records/reviews/PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md) | hiện trạng source đa lớp, 15 finding (Rev 1.3: đóng 5 finding UC-PROG-03 + D-01/02/04; D-07 Binding Manifest đã triển khai + kiểm chứng target cho `LOCAL`; còn mở `F-005/006/008/009`, VP/UI-dry); quyết định cần PM/CTO và NO-GO release |
 | [DDC-24 Baseline Source Fix Report](07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | kết quả CI, Point Model, Config Apply, health/recovery và readiness trước Programming Design |
@@ -76,20 +77,16 @@
   được loại khỏi cây Markdown ngày 2026-08-14. Khi cần truy nguyên, phục hồi từ
   commit `b69fdf152fd1b424bb4ab2239b5cf97b0e86b554`; chúng **không phải nguồn chuẩn**.
 
-Luồng đọc khuyến nghị cho Programming: Product baseline → Product Spec
-Programming → Requirements → Open Decisions → Design Index → Documentation
-Roadmap → hồ sơ thiết kế theo vai trò → Verification → Risk → Traceability →
-Implementation Plan. Baseline 2026-08-09 có đủ 22/22 file và 22/22 đạt `M3 —
-Review Ready`: checklist theo loại đã đủ, mọi `TBD/BLOCKED` có owner/ảnh hưởng/
-gate/điều kiện mở, link nội bộ sạch — bằng chứng tại
-[`PROG-REV-2026-08-09`](07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md).
-Maturity đo được vẫn 22/22 M3, 0/22 M4/M5 vì không giả chữ ký/evidence; vòng
-review kỹ thuật đã đóng `9/9` finding, 8 chữ ký được `WAIVED FOR IMPLEMENTATION`;
-Open Decisions hiện `17 DECIDED / 0 OPEN / 0 CLOSED`. `PLAN_READY` và mọi
-`IMPLEMENT_READY[*]` đã `PASS`; evidence vẫn `0/32` và được tạo trong task. Với
-chủ đề khác, luồng đọc là Product → Requirements → System → baseline Design →
-Detailed design → Verification. Tài liệu `In Review` phải được đối chiếu
-baseline/code trước khi dùng cho release.
+Luồng đọc khuyến nghị cho Programming: Product Spec v3.0 → ADR-050/Decision
+Register → SRS → Design Index → Unified Detailed Design → UI/UX/Verification →
+Risk/Traceability → Plan59 → Prompt thi hành. Authority set được ghim trong
+manifest 2026-08-20 và kiểm bằng `candidate_pin_check.py`; `PLAN_READY` và
+`IMPLEMENT_READY` đã PASS, 0 Open Decision. Plan53/54/56, tracker WP và manifest
+P0 cũ chỉ dùng truy nguyên. Release evidence được tạo ở W7 và không được suy từ
+host test, browser mock hoặc trạng thái tài liệu. Với chủ đề khác, luồng đọc là
+Product → Requirements → System → baseline Design → Detailed design →
+Verification. Tài liệu `In Review` phải được đối chiếu baseline/code trước khi
+dùng cho release.
 
 Hồ sơ lịch sử không phải nguồn chuẩn. Snapshot trước tái cấu trúc nằm tại
 `archives/markdown-before-restructure-2026-07-22.tar.gz`; các bản Markdown bị

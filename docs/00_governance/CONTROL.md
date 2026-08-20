@@ -3,7 +3,7 @@
 **ID:** DOC-CTRL-001
 **Trạng thái:** Active
 **Chủ quản:** Project Engineering
-**Cập nhật:** 2026-08-14 (loại Markdown trùng/lịch sử có đường phục hồi Git; Programming candidate hiện hành v2.41, authority phê duyệt nền v2.8 tiếp tục hiệu lực; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`; `17 DECIDED/0 OPEN/0 CLOSED`)
+**Cập nhật:** 2026-08-20 (Programming Product v3.0 thống nhất; Plan59 Active; `PLAN_READY PASS`; `IMPLEMENT_READY PASS`; `12 DECIDED/0 OPEN`)
 
 ## Mục tiêu
 
@@ -29,7 +29,7 @@ Product Requirement.
 
 Sai khác giữa code và yêu cầu không tự động làm code đúng: phải mở finding, xác định baseline được phê duyệt, rồi sửa code hoặc hồ sơ và test trong cùng thay đổi.
 
-Riêng Programming Rev A, host unit test ST/IR/cyclic component chỉ là As-Built
+Riêng Programming, host unit test ST/IR/cyclic component chỉ là As-Built
 development evidence. Nó không được dùng làm bằng chứng runtime production,
 Activation, RETAIN, FBD, I/O Mapping end-to-end hoặc Online Monitor.
 
@@ -51,26 +51,26 @@ Không được tuyên bố chứng nhận ISO/IEC, BTL, EMC hoặc release read
 
 Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cần thiết để tái tạo, review, verify hoặc manufacture sản phẩm. Chỉ được loại bỏ tài liệu sau khi chứng minh nội dung đã được hợp nhất và có đường dẫn phục hồi.
 
-### Register Programming Rev A
+### Register Programming thống nhất
 
 | Hồ sơ | Lớp/trách nhiệm |
 |---|---|
-| [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | Product Spec authority; §1–§7 `Active`, §8–§9 là **Amendment A1 `PROPOSED`** (bốn workspace + tám journey + benchmark) chờ `OD-PROG-016` |
+| [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | `PROD-PROG-001` v3.0 Active — một Product, đa Program, POU, Control Library, Published Signal, Enable/Disable và sáu workspace |
 | [Quy tắc kiểm soát tài liệu](DOC_GOVERNANCE.md) | `DOC-GOV-001` Active — ISO-aligned, `DD-01..DD-13`, thang `M0..M5`, ba cổng quyền hạn, harness và bảy quy tắc trung thực |
-| [Programming Open Decisions](PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định: `17 DECIDED`, `0 OPEN`, `0 CLOSED`; approved for implementation |
-| [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | System/software/hardware/NFR requirements và acceptance Programming Rev A |
-| [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | register chủ quản: 22/22 hồ sơ đạt M3 — Review Ready. Vòng consumer review **kỹ thuật** đã chạy (`9/9` finding đóng) nhưng **`0/22` đạt `M4`** — `M4` đòi chữ ký người thật, xem `DOC-GOV-001` §3 |
-| [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | ownership, process/failure boundary, lifecycle và cutover target |
-| [Programming Documentation Roadmap](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | v3.37: P0..P4 source/host DONE; P5 `8/11`; P6 `0/3`; nằm ngoài mẫu số 22 |
-| [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | v0.55: tổng `43/53`; P5 corrective đang thực hiện; mọi implementation gate PASS, release gate BLOCKED |
+| [Programming Decision Register](PROGRAMMING_OPEN_DECISIONS.md) | `DEC-PROG-REGISTER-001` Active — 12 quyết định khóa, 0 Open Decision, không còn decision blocker implementation |
+| [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | `SRS-PROG-001` v1.0 — 82 requirement gồm migration baseline và Product Target thống nhất |
+| [Programming Unified Product Detailed Design](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | `DDD-SW-PROG-UNIFIED-001` Active — authority về data/contract/state/algorithm/error/source/test/deploy/rollback |
+| [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | `PROG-DOCSET-001` v4.0 — register và thứ tự đọc authority hiện hành |
+| [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | ownership, process/failure boundary, package lifecycle và cutover target |
+| [Programming Document Readiness Matrix](PROGRAMMING_DOCUMENT_READINESS_MATRIX.md) | v2.0 — `PLAN_READY=PASS`, `IMPLEMENT_READY=PASS`; resource ngoài được quản bằng evidence queue |
+| [Programming Plan 59](../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | `PLAN-PROG-059` v2.0 Active — execution/tracker authority duy nhất, 51 task/8 Wave đến release |
+| [Prompt tự động Plan59](../03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | Prompt thi hành task Ready/Ordered, kiểm chứng và cập nhật Plan59; không tự nâng evidence host thành release |
 | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | risk/control/owner/evidence/residual gate |
 | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
-| [Programming Docs Sync Report](../07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record của lần đồng bộ 2026-08-03 |
-| [Programming Design Set Review 2026-08-09](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | record rà 22 hồ sơ + finding register `F-PROG-001..012`; căn cứ nâng M3 |
-| [Gói review cổng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | v2.0 — `ACCEPT ALL`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` |
-| [Manifest candidate P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | v3.53 — candidate hiện hành v2.41 định danh bằng **22 SHA-256**; source corrective chưa merge; authority phê duyệt nền v2.8 tiếp tục hiệu lực |
-| [Consumer review liên chức năng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | v1.6 — `9/9` finding đóng; `0/8` chữ ký thật nhưng `8/8 WAIVED FOR IMPLEMENTATION`; không chặn code |
-| [ADR-026..031](DECISIONS.md) | 6/6 **`Accepted`** theo `AUTH-PROG-2026-08-11-03`; evidence thu trong implementation |
+| [Programming Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | v2.0 — 32 scenario migration + 12 scenario Product thống nhất; release vẫn cần target/HIL record |
+| [Programming Unified Baseline Manifest](../07_records/reviews/PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md) | SHA-256 của authority set Product/SRS/DDD/UX/VVP/Trace/Risk/Plan/Prompt |
+| [ADR-050](DECISIONS.md) | Quyết định hợp nhất một Product và supersede mô hình phạm vi Rev cũ |
+| [Plan 53/54/56 và WP tracker](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | `Superseded` — chỉ dùng truy nguyên As-Built/task/commit cũ; Plan59 sở hữu công việc tương lai |
 | [DDC-24 Baseline Source Fix Report](../07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | record tổng hợp thay đổi source, test và readiness |
 | [Modbus RTU Point As-Built Report](../07_records/reviews/MODBUS_RTU_POINT_AS_BUILT_REPORT.md) | record implementation/test host và blocker RS485 thật |
 | [Physical I/O HIL Report](../07_records/reviews/PHYSICAL_IO_HIL_REPORT.md) | record firmware evidence và các gate HIL còn mở |
@@ -78,8 +78,10 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 | [Modbus RTU Point Detailed Design](../02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md) | Design `In Review`; proposal trước Programming, chưa phải Active/As-Built |
 | [Modbus RTU Point Design Review Proposal](../07_records/reviews/MODBUS_RTU_POINT_DESIGN_REVIEW_PROPOSAL.md) | review record/finding/decision request; không thay design authority |
 
-Các plan C0/C1–C10 và detailed design Programming có trước ADR-023 không phải
-authority cho Product Spec mới cho tới khi được reconcile và phê duyệt lại.
+Các plan C0/C1–C10 và hồ sơ trước ADR-050 không phải authority cho Product
+Programming thống nhất. Nội dung còn đúng được giữ làm supporting evidence;
+mọi xung đột về POU, số Program, workspace, library, signal hoặc lifecycle phải
+theo Product v3.0 và Unified DDD.
 
 ADR-024 và `DDD-SW-MBRTU-POINT-001` đang `Proposed/In Review`. Chúng không đổi
 trạng thái Programming Design tổng thể, không chứng minh implementation và

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="t d">
+  <title id="t">PGM-02 Chương trình, Function và Function Block — desktop</title>
+  <desc id="d">Bản đặc tả trực quan dữ liệu minh họa, không phải bằng chứng runtime.</desc>
+  <style>.bg{fill:#f5f7fa}.nav{fill:#14263d}.card{fill:#fff;stroke:#c5cfda}.sel{fill:#e7f1ff;stroke:#2878d0}.txt{font:14px sans-serif;fill:#172536}.mut{font:12px sans-serif;fill:#516171}.h{font:bold 20px sans-serif;fill:#172536}.nh{font:bold 14px sans-serif;fill:#fff}.code{font:14px monospace;fill:#1a2938}.btn{fill:#1769aa}.warn{fill:#fff4d6;stroke:#c98a00}</style>
+  <rect class="bg" width="1440" height="900"/>
+  <rect class="nav" width="230" height="900"/><text class="nh" x="28" y="44">MK-DDC-24 · Programming</text>
+  <g class="mut" fill="#dce7f3"><text x="28" y="100">Tổng quan</text><text x="28" y="145" fill="#fff">Chương trình</text><text x="28" y="190">Điểm &amp; Ánh xạ</text><text x="28" y="235">Thư viện điều khiển</text><text x="28" y="280">Kiểm tra &amp; Vận hành</text><text x="28" y="325">Runtime &amp; Bảo trì</text></g>
+  <text class="h" x="265" y="48">Chương trình</text><text class="mut" x="265" y="75">AHU-01 · Draft r27 · Active r24 · Chưa lưu</text>
+  <rect class="card" x="265" y="98" width="285" height="760" rx="8"/><text class="txt" x="285" y="130">Cây POU</text>
+  <rect class="sel" x="280" y="150" width="255" height="48" rx="5"/><text class="txt" x="295" y="179">PROGRAM  SupplyAir</text>
+  <text class="txt" x="295" y="230">PROGRAM  FreezeProtect</text><text class="mut" x="315" y="260">FUNCTIONS</text>
+  <text class="txt" x="330" y="292">ScaleSensor</text><text class="txt" x="330" y="325">ClampPercent</text>
+  <text class="mut" x="315" y="368">FUNCTION BLOCKS</text><text class="txt" x="330" y="400">FanSequencer</text><text class="txt" x="330" y="433">PIDLoop</text>
+  <rect class="btn" x="285" y="795" width="240" height="40" rx="5"/><text class="nh" x="315" y="821">+ Tạo PROGRAM / FUNCTION / FB</text>
+  <rect class="card" x="570" y="98" width="575" height="760" rx="8"/><text class="txt" x="590" y="130">ST · SupplyAir</text>
+  <rect x="590" y="150" width="535" height="600" rx="5" fill="#0f1c2a"/>
+  <g class="code" fill="#d9e6f2"><text x="610" y="185">PROGRAM SupplyAir</text><text x="610" y="215">VAR</text><text x="630" y="245">pid : PIDLoop;</text><text x="610" y="275">END_VAR</text><text x="610" y="320">pid(SP := ZoneSetpoint, PV := SatTemp);</text><text x="610" y="350">FanCmd := ClampPercent(pid.OUT);</text><text x="610" y="380">PUBLISH SupplyDemand := FanCmd;</text><text x="610" y="425">END_PROGRAM</text></g>
+  <rect class="warn" x="590" y="770" width="535" height="62" rx="5"/><text class="txt" x="610" y="795">PIDLoop · REVIEW_REQUIRED</text><text class="mut" x="610" y="817">Check chặn Commission tới khi profile Controls/Safety hợp lệ.</text>
+  <rect class="card" x="1165" y="98" width="245" height="760" rx="8"/><text class="txt" x="1185" y="130">Thuộc tính PROGRAM</text>
+  <g class="mut"><text x="1185" y="175">Chu kỳ</text><text x="1185" y="202">1 giây</text><text x="1185" y="245">Enable intent</text><text x="1185" y="272">Enabled</text><text x="1185" y="315">Runtime</text><text x="1185" y="342">RUNNING · 0,7 s trước</text><text x="1185" y="385">Signals publish</text><text x="1185" y="412">SupplyDemand : REAL %</text><text x="1185" y="455">Output owner</text><text x="1185" y="482">AO-1 FanSpeed</text></g>
+</svg>

@@ -8,6 +8,38 @@
 
 ## [Unreleased]
 
+### Added — Product Programming thống nhất, Unified DDD và Plan59 (2026-08-20)
+
+Hợp nhất Product Programming thành **một** authority, không chia phạm vi A/B:
+đa Program, `PROGRAM`/`FUNCTION`/`FUNCTION_BLOCK`, Control Library, Published
+Signal, Enable/Disable, independent scheduling, output safety, RETAIN, monitor,
+rollback và sáu workspace. `PROD-PROG-001` v3.0, `ADR-050`, SRS 82 requirement,
+Unified Detailed Design `DD-01..DD-13`, VVP 44 scenario, Trace và Risk được đồng
+bộ thành một chuỗi Product → Design → Code → Evidence.
+
+Thêm Plan59 v2.0 làm execution/tracker authority duy nhất với **51 task / 8
+Wave**, cùng prompt tự động chọn task Ready/Ordered, chạy test, cập nhật hồ sơ,
+commit/PR. Mọi quyết định thiết kế cần cho implementation đã khóa; tài nguyên CI,
+board, credential và HIL được quản bằng `EVIDENCE_QUEUE`, không làm dừng code
+khác nhưng vẫn giữ `RELEASE_READY=NO-GO` khi thiếu bằng chứng.
+
+Thêm bảy asset UX cho POU tree, Mapping/Signal, Control Library, Commission và
+Runtime; cập nhật harness cho baseline thống nhất, 82 requirement, 44 scenario,
+22 risk, 12 quyết định và 14 SVG. Plan53/54/56/tracker được đánh dấu Superseded. Candidate Product Hybrid,
+audit chưa kiểm soát và task G1 rời được loại; nội dung còn đúng đã hợp nhất vào
+authority mới, `T59-001` sở hữu G1 re-pin.
+
+**Kiểm chứng fresh trong phiên:** pin baseline **16/16 PASS**; harness tài liệu
+**PASS** (82 requirement, 44 scenario, 22 risk, 12 quyết định, 14 SVG, 0 link/
+anchor/ID/trace violation); `git diff --check` và `py_compile` PASS. C++ Release
+bật Modbus + BACnet + HMI build PASS, `ctest` **1052/1052 PASS**. Go `vet` PASS,
+`go test ./... -count=1` **18/18 package PASS**. FE **111 file / 1061 test PASS**,
+lint và production build PASS; Programming contract checks PASS. Không chạy
+Chrome/Playwright vì change-set chỉ sửa tài liệu, SVG đặc tả và script kiểm hồ
+sơ, không đổi hành vi FE runtime. Gate `layout` vẫn fail đúng 10 drift G1 có sẵn;
+đây là acceptance đầu tiên của `T59-001`, không bị che hoặc gọi là PASS.
+
+
 ### Changed — Đóng task dependency boundary; tách G1 contract thành task riêng (2026-08-20)
 
 Quyết định Owner: **không giữ một task đã hoàn thành 100 % phạm vi kỹ thuật ở
@@ -25,15 +57,13 @@ URL), có test âm khoá hành vi — kể cả ca "chú thích hợp lệ + imp
 cùng tệp vẫn phải đỏ". Đây là làm luật đo đúng thứ nó tuyên bố đo.
 
 Phần gate còn đỏ (`verify_programming_g1_contracts.py`, 10 FAIL) **chuyển giao**
-sang task mới [`TASK-PROG-G1-CONTRACT-REPIN-001`](docs/03_implementation/TASK-PROG-G1-CONTRACT-REPIN-001.md)
+sang `T59-001` trong [`PLAN-PROG-059`](docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md)
 — cùng hạng mục mang mã `PRG-CON-001`/`GAP-C-01`/`F-LAYOUT-01` ở các tài liệu
-khác. Đây là **quyết định compatibility** (Store contract đổi schema 4→5), cần
-authority ký, không phải cleanup script.
+khác. ADR-050 và Unified DDD đã khóa compatibility/dual-reader; `T59-001` vì vậy
+`READY`, không còn chờ authority ký.
 
-Làm rõ được ghi vào task: **sau** khi compatibility review kết luận `ACCEPT`, việc
-cập nhật hằng `require(store_manifest["schemaVersion"] == 4)` sang schema mới
-KHÔNG còn là "sửa rule để hợp thức hoá" — nhưng re-pin artifact và đổi validator
-**bắt buộc nằm cùng một change-set**.
+Re-pin artifact và đổi validator **bắt buộc nằm cùng một change-set**; negative
+self-test tiếp tục chứng minh cổng bắt drift thật.
 
 `F-LAYOUT-03` (circular dependency có sẵn) tiếp tục backlog riêng, không kéo vào
 task G1.

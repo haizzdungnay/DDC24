@@ -17,6 +17,15 @@ thật**: dev đọc vào biết bắt đầu từ file nào, viết module nào
 Nếu bạn chỉ có 5 phút: đọc §1 → §5 → §6 → §7 của file này, rồi mở
 [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md) cho phần việc của bạn.
 
+### Entry point riêng cho Programming
+
+Programming dùng một Product thống nhất, không chia phạm vi A/B. Trước khi sửa
+Programming, đọc theo thứ tự: [Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md)
+→ [Unified Detailed Design](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md)
+→ [Plan59](59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) →
+[Prompt thi hành](PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md). Plan53/54/56 và WP
+tracker chỉ còn giá trị truy nguyên, không được dùng để chọn task mới.
+
 ---
 
 ## 1. Dự án đang ở giai đoạn nào

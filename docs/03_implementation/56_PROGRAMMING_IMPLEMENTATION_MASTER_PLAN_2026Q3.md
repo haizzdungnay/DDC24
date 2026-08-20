@@ -1,20 +1,27 @@
 # Plan 56 — Programming Implementation Master Plan 2026 Q3
 
-**Trạng thái:** **Phase 0 DONE, Phase 1 DONE (WP-01..04) — Phase 2+ NOT STARTED, chờ Document Gate #6/#7**
-**Ngày:** 2026-08-15
+**Trạng thái:** **Superseded 2026-08-20 — giữ để truy nguyên WP/commit cũ; không quản task tương lai**
+**Ngày:** 2026-08-15 · **Cập nhật trạng thái:** 2026-08-20
 **Tác giả:** Agent kỹ thuật, theo Lệnh triển khai CTO/Owner 2026-08-15
 **Nguồn:** [`PROGRAMMING_OVERVIEW_DESIGN_FEATURE_GAP_REPORT_2026-08-15.md`](../07_records/reviews/PROGRAMMING_OVERVIEW_DESIGN_FEATURE_GAP_REPORT_2026-08-15.md)
 (10 gap G-1..G-10) + [`PROGRAMMING_DOCUMENT_READINESS_MATRIX.md`](../00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md)
 (Document Gate)
 
+**Authority hiện hành:** [Plan 59](59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md)
+(`Active — PLAN_READY / IMPLEMENT_READY`). Product v3.0 và ADR-050 thay toàn bộ
+quyết định một Program/bốn workspace/ẩn user POU của nội dung lịch sử bên dưới.
+
 ---
 
 ## 0. Đọc nhanh
 
+> Chỉ dùng file này để tìm evidence của `WP-01..13`. Không mở, đóng hoặc tạo WP
+> mới tại đây; mọi execution status nằm trong bảng task Plan59 §3.
+
 | Câu hỏi | Trả lời |
 |---|---|
 | File này dùng để làm gì? | Roadmap thực thi cho toàn bộ finding G-1..G-10 của gap report Overview/ST/FBD, theo đúng cấu trúc Phase 0-5 + WP-01..13 + `WP-MULTIPROGRAM-ARCH` mà CTO/Owner đã ra lệnh 2026-08-15. |
-| Trạng thái hiện tại? | Phase 0 (Document Gate) và Phase 1 (WP-01..04, "Truthful UI/Low-risk corrective") đã **DONE trong cùng phiên ra lệnh**. Phase 2 trở đi **chưa bắt đầu** — đúng roadmap, không nhảy cóc, và bị chặn bởi Document Gate #6/#7 (xem Readiness Matrix). |
+| Trạng thái hiện tại? | Tracker hiện hành xác nhận WP-01..08 và WP-10..12 `DONE`; WP-09 `BLOCKED` bởi target credential; WP-13 ở `DESIGN`; multi-Program `BLOCKED`. Release closure chuyển sang Plan 59 để không dùng snapshot ngày 2026-08-15 làm trạng thái hiện hành. |
 | Ai cần đọc? | PM, CTO, Dev Lead (FE/BE/Compiler), UX Lead, Verification Lead, Security. Mỗi WP ghi rõ owner. |
 | Track tiến độ ở đâu? | [`PROGRAMMING_IMPLEMENTATION_TRACKER.md`](PROGRAMMING_IMPLEMENTATION_TRACKER.md) — bảng WP × Requirement/Design/FE/BE/FW/Test/Evidence/Status/Owner/Blocker, cập nhật sau mỗi iteration. |
 
@@ -68,34 +75,38 @@ không còn im lặng về Check state (WP-01); UI không còn cho chọn loại
 backend chưa hỗ trợ (WP-02); registry FBD FE khớp compiler thật (WP-03); tài
 liệu ngôn ngữ khớp implementation (WP-04).
 
-### Phase 2 — FBD End-to-End — **NOT STARTED, chặn Document Gate #6**
+### Phase 2 — FBD End-to-End — **FE WP-05..08 DONE; WP-09 BLOCKED target**
 
-WP-05..09. Không bắt đầu code cho tới khi UX + FE Lead viết đặc tả tối thiểu
-cho `FBD_EDITOR_DESIGN` (palette, Inspector field theo node kind, luồng tạo
-INPUT/OUTPUT/CONSTANT) — xem Readiness Matrix #6. Đây là ưu tiên chức năng
-cao nhất theo D-02 nhưng **không được bỏ qua Document Gate chỉ vì ưu tiên
-cao** — cùng nguyên tắc §1.
+`FBD_EDITOR_DESIGN` đã mở Gate #6; WP-05..08 đã triển khai và có evidence host/
+browser theo Tracker. WP-09 vẫn `BLOCKED`: chưa có FBD Check/Commission/Runtime
+với OUTPUT trên target và Test Result có thẩm quyền.
 
-### Phase 3 — ST Engineering Experience — **NOT STARTED**
+### Phase 3 — ST Engineering Experience — **DONE cho WP-10/11**
 
-WP-10, WP-11. Không phụ thuộc tài liệu MISSING; có thể bắt đầu sau Phase 1
-nếu PM chọn chạy song song Phase 2, nhưng roadmap mặc định tuần tự theo đúng
-thứ tự Lệnh CTO/Owner §V (không tự ý đảo trừ khi PM quyết định khác).
+WP-10/11 đã triển khai theo Technical Selection Record và UX design. Evidence
+chi tiết và giới hạn nằm trong Tracker; runtime-value overlay/undo history nâng
+cao không được suy thành release blocker nếu chưa có requirement authority.
 
-### Phase 4 — Runtime/Security Corrective — **NOT STARTED**
+### Phase 4 — Runtime/Security Corrective — **WP-12 DONE; WP-13 DESIGN**
 
-WP-12, WP-13. WP-13 chặn bởi Document Gate #12 (`SECURITY_RBAC_AUDIT_SPEC`
-cần mở rộng phần Artifact Trust theo D-05).
+WP-12 RETAIN Reset đã triển khai Core/BE/FE và có host/target supporting evidence;
+HIL power-fault vẫn mở. WP-13 đã có design nhưng chưa được Security Architecture
+duyệt để đổi integrity mode; Rev A hiện giữ `HASH_ONLY` theo `ADR-031`.
 
-### Phase 5 — Multi-Program Architecture — **NOT STARTED**
+### Phase 5 — Multi-Program Architecture — **BLOCKED, ngoài release Rev A đề xuất**
 
-`WP-MULTIPROGRAM-ARCH` — chặn bởi Document Gate #1 (PM/CTO chưa chọn Product
-Spec authority giữa Rev A hiện hành và candidate V2.2 Hybrid). Không trộn
-phase này vào patch UI hiện tại — đúng chỉ đạo §VII.
+`WP-MULTIPROGRAM-ARCH` chờ Product authority cho Rev B. Plan 59 đề xuất không
+đưa multi-Program vào critical path release Rev A.
 
 ---
 
-## 4. Chi tiết Work Package
+## 4. Chi tiết Work Package — task card gốc ngày 2026-08-15
+
+> Các bảng dưới đây giữ task card gốc để truy nguyên ý định thiết kế tại thời điểm
+> lập Plan 56. **Không dùng các nhãn `NOT STARTED` hoặc dòng “chưa có evidence”
+> bên trong task card làm trạng thái hiện hành.** Trạng thái/evidence authority là
+> [`PROGRAMMING_IMPLEMENTATION_TRACKER.md`](PROGRAMMING_IMPLEMENTATION_TRACKER.md);
+> việc còn lại để release nằm trong Plan 59.
 
 Mỗi WP: objective · dependency · documents · design · implementation · test ·
 evidence · owner · sequence · exit criteria — đúng cấu trúc Lệnh CTO/Owner
@@ -341,3 +352,4 @@ DoD đầy đủ 15 mục nằm ở Lệnh CTO/Owner §XII, không lặp lại �
 | Revision | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-08-15 | Tạo mới theo Lệnh CTO/Owner. Phase 0 + Phase 1 (WP-01..04) DONE trong cùng phiên; Phase 2-5 lập kế hoạch đầy đủ, NOT STARTED, có điều kiện mở rõ ràng theo Document Readiness Matrix. |
+| 1.1 | 2026-08-20 | Đồng bộ header/phase với Tracker: WP-01..08, WP-10..12 DONE; WP-09 BLOCKED; WP-13 DESIGN; multi-Program BLOCKED. Gắn Plan 59 làm candidate doc→code/release và đánh dấu §4 là task card lịch sử, không phải status authority. |

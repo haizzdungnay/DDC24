@@ -289,7 +289,7 @@ Bundle chính **nhẹ đi 6 kB** vì feature `operations` rời khỏi đồ th�
 ### F-LAYOUT-01 — `repository-layout` còn một lớp chặn thứ hai *(P1 — ĐÃ CHUYỂN GIAO)*
 
 > **Disposition (Owner, 2026-08-20):** `OUT OF SCOPE` với task boundary. Chuyển
-> sang [`TASK-PROG-G1-CONTRACT-REPIN-001`](../../03_implementation/TASK-PROG-G1-CONTRACT-REPIN-001.md).
+> sang [`T59-001` trong Plan59](../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md).
 > Trong báo cáo audit `REV-PROG-IMPL-SPEC-ROADMAP-2026-08-20` cùng hạng mục này
 > mang mã `PRG-CON-001` / `GAP-C-01` — **cùng một việc, ba tên gọi**.
 
@@ -362,7 +362,7 @@ phạm vi task; ghi lại để xử lý riêng.
 | AC-04 | `App.tsx` hết illegal deep import | ✅ | 8 → 0 |
 | AC-05 | `scheduler/shared.ts` hết vi phạm | ✅ | luật nay đo code; chú thích được giữ |
 | AC-06 | Không thêm whitelist/exception | ✅ | luật **chặt hơn**; 4 test âm chứng minh vẫn bắt import thật |
-| AC-07 | `repository-layout` = PASS | ✅ **cho phạm vi boundary** — phần còn lại **chuyển giao** | Boundary checks PASS. Phần gate còn đỏ thuộc `verify_programming_g1_contracts.py`, đã chuyển sang `TASK-PROG-G1-CONTRACT-REPIN-001` theo quyết định Owner 2026-08-20 |
+| AC-07 | `repository-layout` = PASS | ✅ **cho phạm vi boundary** — phần còn lại **chuyển giao** | Boundary checks PASS. Phần gate còn đỏ thuộc `verify_programming_g1_contracts.py`, đã chuyển sang `T59-001` trong Plan59 theo quyết định Owner 2026-08-20 |
 | AC-08 | FE typecheck = PASS | ✅ | `TSC_EXIT=0` |
 | AC-09 | FE production build = PASS | ✅ | `BUILD_EXIT=0` |
 | AC-10 | Affected tests = PASS | ✅ | vitest 1061, e2e 61, 20 integration test |
@@ -382,7 +382,7 @@ lập (`F-LAYOUT-01`) — lỗi contract governance, không phải dependency bo
 kỹ thuật ở trạng thái OPEN chỉ vì pipeline phía sau nó vừa lộ thêm một lỗi độc
 lập — làm vậy là **trộn hai phạm vi khác nhau**. AC-07 vì thế được đọc theo đúng
 phạm vi task: **boundary checks PASS**; phần còn lại **chuyển giao có địa chỉ**
-sang `TASK-PROG-G1-CONTRACT-REPIN-001`.
+sang `T59-001` trong Plan59.
 
 Đây là **chuyển giao**, không phải miễn trừ: blocker vẫn được ghi đầy đủ ở §12,
 có owner, có quy trình quyết định, và vẫn chặn `RELEASE_READY`.
@@ -402,7 +402,7 @@ Regression:                           PASS
 Downstream pre-existing blocker:
 verify_programming_g1_contracts.py — FAIL (10)
 Disposition:
-OUT OF SCOPE / transferred to TASK-PROG-G1-CONTRACT-REPIN-001
+OUT OF SCOPE / transferred to Plan59 T59-001
 ```
 
 ### 14.1 Cơ sở của việc đóng
@@ -434,7 +434,7 @@ luật **đo đúng thứ nó tuyên bố đo**, không phải nới lỏng.
 `verify_programming_g1_contracts.py` **không phải phần tiếp theo của task này**.
 Nó là một quyết định **compatibility** (Store contract đã đổi schema 4 → 5), cần
 authority ký, và được theo dõi riêng tại
-[`TASK-PROG-G1-CONTRACT-REPIN-001`](../../03_implementation/TASK-PROG-G1-CONTRACT-REPIN-001.md).
+[`T59-001` trong Plan59](../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md).
 
 `F-LAYOUT-03` (circular dependency có sẵn) tiếp tục là **backlog riêng**, không
 được kéo vào task G1.
