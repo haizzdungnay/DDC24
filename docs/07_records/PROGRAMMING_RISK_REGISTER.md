@@ -448,6 +448,21 @@ Evidence host/local. Lowering đúng nhưng **codegen chưa liên kết** lời 
 đó là ranh giới được nêu rõ và có test khoá. 16/16 risk giữ `Open`, 11 Critical,
 S×L và residual không đổi.
 
+### 5.28 Cập nhật treatment source `T59-106` (Plan59 W1, đóng Wave)
+
+| Risk | Control đã có trên nhánh `feat/t59-106-artifact-v2` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-006` | Loader package v2 kiểm toàn bộ offset/count/overflow trên **64 bit**, bảng section phải đơn điệu, section lạ bị từ chối chứ không bỏ qua, vùng chữ ký reserved phải bằng 0, hash toàn artifact phải khớp. **Fuzz lật từng byte 1314 biến thể, 0 lần chấp nhận nhầm, không crash** | Fuzz dài hạn trong CI (`T59-601`), loader chạy trên target (`T59-702`) và Test Result `VS-PROG-006/023` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-004` | Hai bất biến an toàn cấp package được kiểm **ở loader**, không chỉ ở writer: một output binding có đúng một Program owner, một signal có đúng một publisher. Artifact tới từ nguồn khác cũng không lách được | Resolver/interlock/safe-state runtime (`T59-406`) và evidence I/O vật lý (`T59-703`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-003` | Dual-reader nhận cả v1 lẫn v2 nên **LKG v1 hiện hữu không mất hiệu lực khi nâng cấp** (DDD §12.1); golden do chính writer production sinh, byte-stable, ghim hash/kích thước/số Program trong G1 | Nạp prepared image và kích hoạt (`T59-401`), rollback rehearsal trên board (`T59-705`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local. Đây là **container**: nó mang và kiểm khung. Lắp nội dung
+package thuộc `T59-305`, nạp và kích hoạt thuộc `T59-401`. Blob IR trong golden là
+dữ liệu tất định do công cụ sinh, **không phải** mã biên dịch từ nguồn thật —
+điều này được ghi rõ trong công cụ lẫn test và **không** được dùng như bằng chứng
+rằng compiler đã sinh được package thật. 16/16 risk giữ `Open`, 11 Critical, S×L
+và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -499,6 +514,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 2.9 | 2026-08-20 | Ghi `T59-103` (Plan59 W1) cho treatment partial RSK-006/014: purity FUNCTION ép ở registry nên producer không qua parser cũng bị chặn, và mã lỗi phân biệt theo cách sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering FBD, instance state và target chưa có. |
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
+| 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
 | 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |

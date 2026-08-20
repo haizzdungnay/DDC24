@@ -353,6 +353,34 @@ def validate(join: dict[str, Any]) -> list[str]:
             sorted(readable) == sorted(policy_item["readableSchemaVersions"]),
             "readableSchemaVersions lệch pin",
         )
+
+        # Golden v2 do writer production sinh (T59-106). Ghim cả file lẫn manifest:
+        # golden mà không ghim thì mọi tuyên bố "byte ổn định" chỉ là lời nói.
+        golden_path = safe_path(artifact_v2_item["goldenPath"])
+        require(golden_path.is_file(), "golden artifact v2 không tồn tại")
+        if golden_path.is_file():
+            require(digest(golden_path) == artifact_v2_item["goldenSha256"],
+                    "golden artifact v2 SHA-256 drift")
+            require(golden_path.stat().st_size == artifact_v2_item["goldenArtifactBytes"],
+                    "golden artifact v2 kích thước lệch pin")
+        golden_manifest_path = safe_path(artifact_v2_item["goldenManifestPath"])
+        require(digest(golden_manifest_path) == artifact_v2_item["goldenManifestSha256"],
+                "golden manifest v2 SHA-256 drift")
+        golden_manifest = json.loads(golden_manifest_path.read_text())
+        require(
+            golden_manifest["schemaVersion"] == artifact_v2_item["schemaVersion"]
+            and golden_manifest["magic"] == artifact_v2_item["magic"],
+            "golden manifest v2 lệch schema/magic đã pin",
+        )
+        require(
+            golden_manifest["artifactBytes"] == artifact_v2_item["goldenArtifactBytes"],
+            "golden manifest v2 lệch kích thước artifact",
+        )
+        require(
+            golden_manifest["capacity"]["programCount"]
+            == artifact_v2_item["goldenProgramCount"],
+            "golden manifest v2 lệch số Program đã pin",
+        )
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"artifact-v2/dual-reader: {error}")
 
@@ -575,6 +603,19 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
     add("dual-reader-drops-v1", "readableSchemaVersions lệch pin", drop_v1_readable)
     add("artifact-v2-schema-version-drift", "artifact v2 schemaVersion drift", break_artifact_v2_pin)
     add("dual-reader-schema-hash-drift", "dual-reader schema SHA-256 drift", break_policy_schema_hash)
+
+    def break_golden_v2_hash(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "artifact-v2")["goldenSha256"] = "0" * 64
+
+    def break_golden_v2_size(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "artifact-v2")["goldenArtifactBytes"] += 1
+
+    def break_golden_v2_program_count(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "artifact-v2")["goldenProgramCount"] += 1
+
+    add("golden-v2-hash-drift", "golden artifact v2 SHA-256 drift", break_golden_v2_hash)
+    add("golden-v2-size-drift", "kích thước lệch pin", break_golden_v2_size)
+    add("golden-v2-program-count-drift", "số Program đã pin", break_golden_v2_program_count)
     return mutations
 
 

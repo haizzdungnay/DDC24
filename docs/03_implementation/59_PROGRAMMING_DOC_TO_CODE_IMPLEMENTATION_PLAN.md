@@ -441,7 +441,7 @@ chạy.
 | `T59-103` | P0 | FUNCTION purity/type/side-effect enforcement | T59-102 | **DONE** | purity ép ở registry (điểm hội tụ mọi producer, không chỉ parser ST); 10 test dựng AST **không qua parser**; cùng lời gọi sai nhưng người gọi khác nhau cho **mã khác nhau**; bảng chữ ký công bố cho lowering; `ctest` 1097/1097; corpus tương đương ST↔FBD PASS; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-104` | P0 | FUNCTION_BLOCK instance state/layout/RETAIN ownership | T59-102 | **DONE** | `st_fb_instance_layout.*` mới; 13 test: 100 instance trải 2 Program không chồng vùng và identity duy nhất, trần package 1024 chặn dù từng Program dưới trần 64, layout **bất biến khi sắp xếp lại nguồn**, vòng chứa và độ sâu bị chặn; `ctest` 1110/1110; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-105` | P1 | FBD nodes gọi user Function/FB + inspector/pin generation | T59-103/104 | **DONE** | node FBD gọi user POU lower thành **đúng cùng nút `USER_CALL`** mà ST sinh — có test so trực tiếp hai bên; 7 test C++ + 6 test FE (thứ tự pin, kết nối, undo/redo, chỉ-đọc, a11y announcement); `ctest` 1117/1117; FE 114 file / 1079 test; wave W2 **6/6 PASS**. Chi tiết §3.2. |
-| `T59-106` | P0 | Artifact v2 writer/loader: POU/program/library/signal/binding/resource sections | T59-103/104/006 | ORDERED | Golden byte/hash stable; loader bounds/fuzz/tamper/wrong profile; v1 LKG load. |
+| `T59-106` | P0 | Artifact v2 writer/loader: POU/program/library/signal/binding/resource sections | T59-103/104/006 | **DONE** | `st_package_v2.*` + `mkddc-st-package-golden`; golden do **writer production** sinh, byte-stable qua 2 lần chạy, ghim trong G1 (hash + kích thước + số Program); 14 test gồm **fuzz lật từng byte** (1314 biến thể, 0 false-accept), tràn số offset, section lạ, sai profile/ABI, trùng output owner, trùng publisher, và **dual-reader v1**; `ctest` 1131/1131; G1 self-test 31/31; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 
 ### 3.2 Ghi chú thực thi W1
 
@@ -632,6 +632,57 @@ kiểu trả về, FB thừa kiểu trả về, trùng tên cổng, dùng `OUT` 
 trong cây Project thuộc `T59-306`. Test FE đi qua **reducer thật** nên kết nối,
 undo/redo, chặn chỉ-đọc và announcement cho trình đọc màn hình đều là hành vi thật,
 không phải mô phỏng.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-106` — Container package v2: writer, loader và dual-reader
+
+**Vì sao container riêng thay vì mở rộng v1.** Artifact v1 mô tả **một** Program.
+Package v2 phải mang nhiều Program cùng bảng POU, khóa thư viện, định nghĩa
+signal, manifest binding và ngân sách tài nguyên. Nhồi chúng vào v1 sẽ làm **mọi
+loader v1 hiện có đọc sai một cách im lặng**.
+
+**Không viết lại codegen.** Section `CODE_IR` chứa **đúng** các blob v1 do
+`serialize_st_ir` sinh ra. Viết lại codegen chỉ để đổi vỏ chứa là cách chắc chắn
+nhất để hai bộ ngữ nghĩa trôi khỏi nhau.
+
+**Loader là ranh giới tin cậy cuối trước khi mã lạ vào bộ điều khiển đang chạy.**
+Mọi trường độ dài, offset và số đếm trong file đều là dữ liệu **bên ngoài kiểm
+soát**, nên bộ test tấn công đúng chỗ đó:
+
+- **Tràn số 32 bit** ở `offset + size`: cộng trên 64 bit rồi mới so, vì cộng trên
+  32 bit cho phép một section "vượt biên mà vẫn nằm trong".
+- Bảng section phải **tăng dần theo type** — bảng lộn xộn là dấu hiệu artifact bị
+  ghép tay, và tính đơn điệu phát hiện điều đó rẻ tiền.
+- **Section lạ không được bỏ qua im lặng**: nó có thể mang ngữ nghĩa mà runtime
+  này không biết, và bỏ qua nghĩa là chạy thiếu một phần gói.
+- Vùng chữ ký reserved phải bằng 0 khi chưa ký.
+- **Fuzz lật từng byte**: 1314 biến thể (mỗi byte × 2 mask), **0 lần chấp nhận
+  nhầm**, không crash.
+
+**Hai bất biến cấp package kiểm ở loader, không chỉ ở writer.** Một output binding
+có đúng một Program owner; một signal có đúng một publisher. Kiểm ở loader vì
+artifact có thể tới từ nơi khác chứ **không chỉ** từ writer trong repo này.
+
+**Profile phải khớp chính xác.** "Gần đúng profile" nghĩa là chạy mã biên dịch cho
+một trần tài nguyên khác — đúng loại sai lệch không báo lỗi.
+
+**Golden do chính writer production sinh.** `mkddc-st-package-golden` gọi đúng
+`WritePackageV2()` mà sản phẩm dùng, rồi **đọc lại bằng chính loader** trước khi
+ghi ra đĩa — golden mà loader từ chối là golden vô nghĩa. Viết tay một file rồi gọi
+nó là golden chỉ chứng minh ai đó biết định dạng, không chứng minh writer sinh ra
+đúng định dạng đó. Byte-stable đã kiểm bằng hai lần sinh liên tiếp; G1 ghim hash,
+kích thước và số Program, kèm 3 mutation self-test.
+
+**Dual-reader theo DDD §12.1.** `ProbePackageFormat()` nhận cả v1 lẫn v2. Nếu
+probe từ chối v1 thì **một lần nâng cấp là mất bản chạy được cuối cùng** — có test
+riêng cho điều đó.
+
+**Ranh giới trung thực.** Đây là **container**: nó mang và kiểm khung. Việc *lắp
+nội dung* (chọn Program nào, từ Revision nào) thuộc `T59-305`; nạp vào prepared
+image và kích hoạt thuộc `T59-401`. Blob IR trong golden là dữ liệu tất định do
+công cụ sinh, **không phải** mã đã biên dịch từ nguồn thật — nó kiểm vỏ chứa, và
+điều đó được ghi rõ ngay trong công cụ lẫn test.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

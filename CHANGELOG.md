@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+### Added — `T59-106` container package v2: writer, loader và dual-reader (2026-08-20)
+
+`apps/core/application/st/st_package_v2.{hpp,cpp}` cùng công cụ
+`mkddc-st-package-golden`. **Đóng Wave W1 (6/6 task).**
+
+**Vì sao container riêng thay vì mở rộng v1:** artifact v1 mô tả **một** Program.
+Package v2 phải mang nhiều Program cùng bảng POU, khóa thư viện, định nghĩa
+signal, manifest binding và ngân sách tài nguyên. Nhồi chúng vào v1 sẽ làm **mọi
+loader v1 hiện có đọc sai một cách im lặng**.
+
+**Không viết lại codegen:** section `CODE_IR` chứa **đúng** các blob v1 do
+`serialize_st_ir` sinh ra. Viết lại codegen chỉ để đổi vỏ chứa là cách chắc chắn
+nhất để hai bộ ngữ nghĩa trôi khỏi nhau.
+
+Loader là ranh giới tin cậy cuối trước khi mã lạ vào bộ điều khiển đang chạy; mọi
+trường độ dài/offset/số đếm là dữ liệu bên ngoài kiểm soát, nên test tấn công đúng
+chỗ đó:
+
+- **Tràn số 32 bit** ở `offset + size` — cộng trên 64 bit rồi mới so.
+- Bảng section phải **tăng dần theo type**; lộn xộn là dấu hiệu artifact ghép tay.
+- **Section lạ không bỏ qua im lặng** — bỏ qua nghĩa là chạy thiếu một phần gói.
+- **Fuzz lật từng byte**: 1314 biến thể, **0 lần chấp nhận nhầm**, không crash.
+- Sai profile/ABI, hash không khớp, vùng chữ ký reserved khác 0: đều fail-closed.
+
+**Hai bất biến cấp package kiểm ở loader, không chỉ ở writer** — một output
+binding có đúng một Program owner, một signal có đúng một publisher — vì artifact
+có thể tới từ nơi khác chứ không chỉ từ writer trong repo này.
+
+**Golden do chính writer production sinh:** `mkddc-st-package-golden` gọi đúng
+`WritePackageV2()` và **đọc lại bằng chính loader** trước khi ghi ra đĩa. Byte-
+stable qua hai lần sinh; G1 ghim hash + kích thước + số Program kèm 3 mutation
+self-test. Đây là golden v2 mà `T59-006` cố ý chưa tạo vì lúc đó chưa có writer.
+
+**Dual-reader theo DDD §12.1:** `ProbePackageFormat()` nhận cả v1 lẫn v2 — nếu
+probe từ chối v1 thì một lần nâng cấp là mất bản chạy được cuối cùng.
+
+**Ranh giới trung thực:** đây là **container** — nó mang và kiểm khung. Lắp nội
+dung (chọn Program nào, từ Revision nào) thuộc `T59-305`; nạp vào prepared image
+và kích hoạt thuộc `T59-401`. Blob IR trong golden là dữ liệu tất định do công cụ
+sinh, **không phải** mã biên dịch từ nguồn thật — nó kiểm vỏ chứa, và điều đó được
+ghi rõ trong cả công cụ lẫn test.
+
+**Kiểm chứng fresh trong phiên (host/local):** 14 test mới. C++ Release
+MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1131/1131 PASS** (từ 1117).
+G1 **10/10** contract, `--self-test` **31/31** mutation.
+`verify-project.sh --wave W1` **5/5 PASS**.
+
 ### Added — `T59-105` FBD gọi user POU, bằng chứng dùng chung typed IR (2026-08-20)
 
 **"Dùng chung typed IR" được cho một nghĩa kiểm được:** cùng một logic viết bằng

@@ -113,7 +113,7 @@ target_link_libraries(core_lib INTERFACE
 # Chiều phụ thuộc: st_compiler_lib -> core_lib (không bao giờ ngược lại).
 add_library(st_compiler_lib STATIC
     application/st/st_parser.cpp application/st/st_pou_registry.cpp
-    application/st/st_fb_instance_layout.cpp
+    application/st/st_fb_instance_layout.cpp application/st/st_package_v2.cpp
     application/st/st_semantic.cpp
     application/st/st_compile.cpp application/st/st_ir.cpp
     application/st/st_artifact_manifest.cpp
@@ -130,6 +130,9 @@ add_executable(mkddc-st-validate application/st/st_validate_main.cpp)
 target_link_libraries(mkddc-st-validate PRIVATE st_compiler_lib)
 
 # ACTION 15: công cụ CHÍNH THỨC để BE sinh artifact đã ký.
+add_executable(mkddc-st-package-golden application/st/st_package_golden_main.cpp)
+target_link_libraries(mkddc-st-package-golden PRIVATE st_compiler_lib)
+
 add_executable(mkddc-st-compile application/st/st_compile_main.cpp)
 target_link_libraries(mkddc-st-compile PRIVATE st_compiler_lib)
 
@@ -197,6 +200,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_function_purity.cpp
       application/st/tests/test_st_fb_instance_layout.cpp
       application/st/tests/test_st_fbd_user_pou.cpp
+      application/st/tests/test_st_package_v2.cpp
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp

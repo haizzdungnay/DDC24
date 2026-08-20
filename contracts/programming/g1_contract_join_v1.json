@@ -99,7 +99,13 @@
       "sha256": "7d6a7272883220fa2dda4030f745a217d059977acc270740a347e2cf7a4c91b5",
       "major": 1,
       "schemaVersion": 2,
-      "magic": "MKDDCIR2"
+      "magic": "MKDDCIR2",
+      "goldenPath": "contracts/programming/golden/package_v2_ahu.mkpkg",
+      "goldenSha256": "69cb1dfef9259aa833b692170709131bb681beb5d0bf71d74a34ff13ff5ecb04",
+      "goldenManifestPath": "contracts/programming/golden/package_v2_manifest.json",
+      "goldenManifestSha256": "cc227d86c61629305974baa1111f0aa8c33d9d9dbcb7f94f49829c8c56fd97f5",
+      "goldenArtifactBytes": 657,
+      "goldenProgramCount": 2
     },
     {
       "name": "dual-reader",
@@ -156,5 +162,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106"
 }
