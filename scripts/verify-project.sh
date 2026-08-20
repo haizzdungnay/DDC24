@@ -4,14 +4,19 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 component="all"
 profile="full"
+wave=""
+repeat=1
 build_root="${MKDDC_BUILD_ROOT:-$repo_root/build/verify}"
 
 usage() {
   printf '%s\n' \
     'Dùng: scripts/verify-project.sh [--component NAME] [--profile NAME]' \
+    '     scripts/verify-project.sh --wave W0..W7 [--repeat N]' \
     '' \
     'Component: layout | cpp | go | frontend | e2e | firmware | release | all' \
     'Profile C++: baseline | modbus | bacnet | modbus-bacnet | full (mặc định)' \
+    'Wave: chạy đúng bộ cổng bắt buộc của một Wave Plan 59 và in bảng tổng kết.' \
+    '      Cổng cần CI/board/instrument hiện NOT_RUN kèm runbook, không bao giờ PASS.' \
     '' \
     'Script không xóa SHM, dữ liệu người dùng hoặc build tree ngoài build_root.'
 }
@@ -19,6 +24,8 @@ usage() {
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --component) component="${2:?thiếu component}"; shift 2 ;;
+    --wave) wave="${2:?thiếu wave}"; shift 2 ;;
+    --repeat) repeat="${2:?thiếu số lần lặp}"; shift 2 ;;
     --profile) profile="${2:?thiếu profile}"; shift 2 ;;
     --build-root) build_root="${2:?thiếu build root}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -56,6 +63,7 @@ run_layout() {
   python3 "$repo_root/scripts/generate_programming_errors.py" --check
   python3 -m unittest "$repo_root/tests/integration/test_programming_error_catalog.py"
   python3 "$repo_root/scripts/verify_programming_ipc_actions.py" --self-test
+  python3 "$repo_root/scripts/verify_wave_gates.py" --self-test
   python3 "$repo_root/scripts/verify_programming_g1_contracts.py" --self-test
   python3 "$repo_root/scripts/verify_programming_artifact_manifest.py" --self-test
 }
@@ -136,6 +144,13 @@ run_release() {
   "$repo_root/$(active_path packaging)/build-release.sh"
   (cd "$repo_root" && sha256sum --check build/release/checksums.sha256)
 }
+
+# `--wave` là đường đi MỘT LỆNH cho cả ma trận cổng. Nó cố ý KHÔNG dùng `set -e`
+# của script này: runner chạy hết mọi cổng rồi mới kết luận, vì dừng ở cổng hỏng
+# đầu tiên chính là lý do lỗi phía sau nằm im rất lâu.
+if [ -n "$wave" ]; then
+  exec python3 "$repo_root/scripts/verify_wave_gates.py" --wave "$wave" --repeat "$repeat"
+fi
 
 case "$component" in
   layout) run_layout ;;

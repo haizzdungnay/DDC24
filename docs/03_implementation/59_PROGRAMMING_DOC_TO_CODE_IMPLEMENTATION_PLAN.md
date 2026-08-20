@@ -103,7 +103,7 @@ W1/W2/W3 có thể chạy song song theo contract boundary. Critical path releas
 | `T59-004` | P0 | Error catalog mới cho POU/library/signal/enable/output owner/PID review | T59-002/003 | **DONE** | catalog v1.6.0 **26 public / 118 detail**, sinh Go/C++/TS + manifest exact. **Đính chính:** sáu mã gộp ở task này tự đặt sai bộ tên `DDD` §5.2 đã khóa; `T59-006` thay bằng đúng mười mã.  guard detail **hai chiều** và catalog được validate theo schema; `ctest` 1064/1064; Go 18/18; FE 113 file / 1073 test; layout exit 0. Chi tiết §3.1. |
 | `T59-005` | P0 | Store schema v2 + backup/migration v1→v2 | T59-002 | **DONE** | migration `0006_product_model_v2.sql`, schema v5→v6, 5 bảng mới + 3 cột Revision; atomic ở **3/3** điểm lỗi, idempotent qua **3** vòng restart, 0 hàng Commission/intent sau migration, 5 nhóm bất biến bảng mới; Go 18/18; G1 8/8 + self-test 25/25; layout exit 0. Chi tiết §3.1. |
 | `T59-006` | P0 | OpenAPI + IPC v2 + artifact/package schema v2, dual-reader policy | T59-002/004 | **DONE** | artifact v2 schema + dual-reader policy thành contract G1 thứ 9/10; guard action IPC **hai chiều** (self-test 4/4); catalog v1.7.0 **30/120** theo đúng bộ tên DDD §5.2; OpenAPI v1.22; `ctest` 1065/1065; Go 18/18; FE 113 file / 1073 test; G1 10/10 + self-test 28/28; layout exit 0. Chi tiết §3.1. |
-| `T59-007` | P1 | Local CI parity wrapper và gate matrix cho từng Wave | T59-001 | ORDERED | Một command chạy layout/C++/Go/FE/contract; không gọi local PASS là GitHub CI. |
+| `T59-007` | P1 | Local CI parity wrapper và gate matrix cho từng Wave | T59-001 | **DONE** | `verify-project.sh --wave W0..W7` chạy đúng bộ cổng và in bảng tổng kết; ma trận là contract có schema + self-test 8/8; cổng CI/target/HIL luôn `NOT_RUN` kèm runbook và chủ; W0 **4/4 PASS**, W7 **8 PASS / 4 NOT_RUN**. Chi tiết §3.1. |
 
 ### 3.1 Ghi chú thực thi W0
 
@@ -391,6 +391,46 @@ nhắc tên mã đã gỡ cũng làm gate đỏ, và ngược lại một mã ch
 xuôi vẫn "thỏa" gate mà không có dòng authority nào. Nay chỉ đọc dòng bảng.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-007` — Wrapper cổng cục bộ và ma trận theo Wave
+
+**Ba vấn đề đã cắn thật, và cách đóng từng cái.**
+
+1. `verify-project.sh` dùng `set -e`, nên cổng đầu tiên hỏng làm các cổng sau
+   **không bao giờ chạy**. Chính vì thế `test_programming_error_catalog.py` từng
+   đếm sai 19/77 rất lâu mà không ai thấy — `verify_repository.py` đỏ trước nó.
+   Runner mới chạy **hết** mọi cổng rồi mới kết luận.
+2. Không có nơi nào ghi Wave nào cần cổng nào. Nay
+   `contracts/ci/wave_gate_matrix_v1.json` + schema là contract: mỗi cổng khai
+   `evidenceLevel`, và cổng ngoài HOST bắt buộc có `requiresResource`, `runbook`,
+   `owner`. Schema chặn cả hai chiều — cổng HOST không được có
+   `requiresResource`, cổng CI/TARGET/HIL không được có `command`.
+3. Kết quả cục bộ dễ bị chép vào báo cáo như thể là GitHub CI. Runner **không có
+   đường nào** báo PASS cho cổng ngoài HOST: chúng luôn `NOT_RUN` kèm runbook và
+   chủ sở hữu, và mỗi lần chạy đều in cảnh báo mức bằng chứng.
+
+**Self-test.** 8 phép kiểm: bốn cổng ngoài HOST đều phải trả `NOT_RUN` kèm lý do,
+và bốn ma trận sai (wave trỏ cổng lạ, cổng mồ côi không Wave nào dùng, trùng id,
+lệnh không tồn tại) đều phải bị từ chối. Chạy trong gate `layout`.
+
+**Finding phát hiện ngay khi dùng runner.** Lần chạy `--wave W7` đầu tiên, cổng
+`cpp` **đỏ một lần** (`Errors while running CTest`) rồi **không tái hiện**: chạy
+lại đơn lẻ PASS, xoá `build/verify/cpp-full` dựng lại từ đầu PASS 1065/1065, và
+6 lần `ctest` liên tiếp đều 100%. Không đủ cơ sở để kết luận cổng hỏng, cũng
+không được kết luận nó ổn định.
+
+Vấn đề thật lộ ra là **bản đầu của runner vứt output đi**, chỉ giữ một dòng cuối
+— nên một cổng chập chờn không thể điều tra. Đã sửa: mỗi cổng ghi toàn bộ
+stdout/stderr vào `build/wave-gates/<gate>.log` và đường dẫn log được in kèm khi
+FAIL. Thêm `--repeat N` để soi cổng chập chờn; PASS chỉ được tính khi **mọi** lần
+đều PASS, vì một cổng đỏ 1/5 lần vẫn là cổng hỏng.
+
+**Ranh giới.** Ma trận **không** được ghim vào G1: G1 là join contract của
+Programming, còn đây là contract hạ tầng kiểm thử. Nó được canh bằng schema +
+self-test trong gate `layout`.
+
+**Evidence level.** Host/local. Chính script này là thứ nói rõ điều đó ở mỗi lần
+chạy.
 
 ### W1 — POU, compiler và artifact v2
 

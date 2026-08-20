@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### Added — `T59-007` wrapper cổng cục bộ và ma trận theo Wave (2026-08-20)
+
+`scripts/verify-project.sh --wave W0..W7` chạy đúng bộ cổng bắt buộc của một Wave
+bằng **một lệnh** và in bảng tổng kết. Ba vấn đề đã cắn thật được đóng:
+
+1. `verify-project.sh` dùng `set -e`, nên cổng đầu tiên hỏng làm các cổng sau
+   **không bao giờ chạy** — chính vì thế `test_programming_error_catalog.py` từng
+   đếm sai 19/77 rất lâu mà không ai thấy. Runner mới chạy **hết** mọi cổng rồi
+   mới kết luận.
+2. Không có nơi nào ghi Wave nào cần cổng nào. Nay
+   `contracts/ci/wave_gate_matrix_v1.json` + schema là contract: mỗi cổng khai
+   `evidenceLevel`, và cổng ngoài HOST bắt buộc có `requiresResource`, `runbook`,
+   `owner`. Schema chặn hai chiều — cổng HOST không được có `requiresResource`,
+   cổng CI/TARGET/HIL không được có `command`.
+3. Kết quả cục bộ dễ bị chép vào báo cáo như thể là GitHub CI. Runner **không có
+   đường nào** báo PASS cho cổng ngoài HOST: chúng luôn `NOT_RUN` kèm runbook và
+   chủ sở hữu, và mỗi lần chạy đều in cảnh báo mức bằng chứng.
+
+`--repeat N` soi cổng chập chờn; PASS chỉ tính khi **mọi** lần đều PASS. Mỗi cổng
+ghi toàn bộ stdout/stderr vào `build/wave-gates/<gate>.log`, đường dẫn in kèm khi FAIL.
+
+**Quan sát cần ghi lại, chưa kết luận:** lần chạy `--wave W7` đầu tiên, cổng `cpp`
+đỏ **một lần** (`Errors while running CTest`) rồi **không tái hiện** — chạy lại
+đơn lẻ PASS, xoá `build/verify/cpp-full` dựng lại từ đầu PASS **1065/1065**, và 6
+lần `ctest` liên tiếp đều 100%. Không đủ cơ sở kết luận cổng hỏng, cũng không
+được kết luận nó ổn định. Điều sửa được ngay là khả năng điều tra: bản đầu của
+runner vứt output đi nên không có gì để lần.
+
+**Kiểm chứng fresh trong phiên (host/local):** `verify_wave_gates.py --self-test`
+**8/8**; `--wave W0` **4/4 PASS**; `--wave W0 --repeat 2` PASS;
+`--wave W7` **8 PASS / 1 FAIL(flake nêu trên) / 4 NOT_RUN** trên 13 cổng;
+`verify-project.sh --component layout` **exit 0**;
+`verify-project.sh --component cpp --profile full` từ build dir sạch **1065/1065**.
+
 ### Changed — `T59-006` contract v2, dual-reader và guard action ma (2026-08-20)
 
 **Đính chính quyết định của `T59-004`.** `DDD-SW-PROG-UNIFIED-001` §5.2 đã khóa
