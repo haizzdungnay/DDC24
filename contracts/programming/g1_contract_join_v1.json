@@ -7,10 +7,10 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "08fe3078a91f57352e91416b3b6d0569818fe868367e6b4b576f3d98943be4ae",
+      "sha256": "bd78d9ec677ff8da4b64fbf0ed88eb87f38ad4b3252ea652170c90a8df7ad161",
       "major": 1,
-      "version": "1.22.0",
-      "operationCount": 25
+      "version": "1.23.0",
+      "operationCount": 28
     },
     {
       "name": "ipc",
@@ -61,11 +61,11 @@
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "37d99b8a5ff5d8dfc6a37d803d0333e73e8472ed090cd01ef5ab747f68e4b4f1",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0007_control_library_domain.sql",
-      "migrationSha256": "08f6784c3b4882a6943882c8e9024bba330ed83070c4a9f7d695912b73546a2b",
+      "sha256": "ccc4205f06e770470fd53f14d39e508be4243693dd7ec3cd0b4a878adccd11dc",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0008_library_mutation_receipts.sql",
+      "migrationSha256": "c9f19b4213601aa760385a72345e88fde018e18cc600f84abbfe01e17f0ebe9c",
       "major": 1,
-      "schemaVersion": 7,
+      "schemaVersion": 8,
       "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {

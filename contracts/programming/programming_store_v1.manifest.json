@@ -1,10 +1,10 @@
 {
   "contractId": "PROGRAMMING-STORE-V1",
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "databasePath": "${CONFIG_DIR}/programming/programming-v1.sqlite",
   "backupPath": "${CONFIG_DIR}/programming/programming-backups/",
-  "migrationFile": "0007_control_library_domain.sql",
-  "migrationSha256": "08f6784c3b4882a6943882c8e9024bba330ed83070c4a9f7d695912b73546a2b",
+  "migrationFile": "0008_library_mutation_receipts.sql",
+  "migrationSha256": "c9f19b4213601aa760385a72345e88fde018e18cc600f84abbfe01e17f0ebe9c",
   "migrations": [
     {"version": 1, "file": "0001_programming_v1.sql", "sha256": "427c21772586a8ca3f885f41103d31ee1983071c0e1499ff1d97199a891c3db9"},
     {"version": 2, "file": "0002_mutation_receipts.sql", "sha256": "8ae5e0df06d9735727de6809c24565bf6e4e0c0fbcbe0f3e10b5d76365c53fe3"},
@@ -12,7 +12,8 @@
     {"version": 4, "file": "0004_bundle_receipts.sql", "sha256": "430a1ea77912e90f8f8972e5656178d405e7e29425d85534ac6484dbf42fb49e"},
     {"version": 5, "file": "0005_operation_coordinator.sql", "sha256": "e0e2020afced4fe9c88fd17df5c27d2779ec6c4ddf0c516b15af7bf370f802dc"},
     {"version": 6, "file": "0006_product_model_v2.sql", "sha256": "18a608e76ed3490f9a19697841a4ce7097a311106710dc159cf4d8ed72bd8abb"},
-    {"version": 7, "file": "0007_control_library_domain.sql", "sha256": "08f6784c3b4882a6943882c8e9024bba330ed83070c4a9f7d695912b73546a2b"}
+    {"version": 7, "file": "0007_control_library_domain.sql", "sha256": "08f6784c3b4882a6943882c8e9024bba330ed83070c4a9f7d695912b73546a2b"},
+    {"version": 8, "file": "0008_library_mutation_receipts.sql", "sha256": "c9f19b4213601aa760385a72345e88fde018e18cc600f84abbfe01e17f0ebe9c"}
   ],
   "foreignKeys": true,
   "journalMode": "WAL",
@@ -36,5 +37,5 @@
   ],
   "featureDefaultOff": true,
   "owner": "BE/Core",
-  "generatedBy": "TASK-PROG-104; migration v2 by TASK-PROG-204; Check lease/idempotency v3 by TASK-PROG-205; bundle receipt v4 by TASK-PROG-206; operation coordinator v5 by TASK-PROG-403; Product model v2 by T59-005; Control Library domain v7 by T59-201"
+  "generatedBy": "TASK-PROG-104; migration v2 by TASK-PROG-204; Check lease/idempotency v3 by TASK-PROG-205; bundle receipt v4 by TASK-PROG-206; operation coordinator v5 by TASK-PROG-403; Product model v2 by T59-005; Control Library domain v7 by T59-201; library mutation receipt v8 by T59-202"
 }

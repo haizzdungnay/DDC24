@@ -10,8 +10,21 @@ import {
 import impactGolden from "../../../../../../../contracts/openapi/testdata/programming-impact.json";
 
 describe("Programming API client sinh từ OpenAPI", () => {
-  it("khóa đủ 25 operation và contract Commission", () => {
-    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(25);
+  it("khóa đủ 28 operation và contract Commission", () => {
+    // 25 operation Rev A + 3 operation Control Library (T59-202).
+    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(28);
+    expect(PROGRAMMING_ENDPOINTS.searchProgrammingLibraries).toEqual({
+      method: "GET",
+      path: "/api/v1/programming/libraries",
+      roles: ["viewer", "operator", "admin"],
+    });
+    // Mutation library là admin-only ở CHÍNH contract sinh ra, không chỉ ở BE.
+    expect(PROGRAMMING_ENDPOINTS.upsertProgrammingLibraryEntry.roles).toEqual(["admin"]);
+    expect(PROGRAMMING_ENDPOINTS.deleteProgrammingLibraryEntry).toEqual({
+      method: "DELETE",
+      path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}",
+      roles: ["admin"],
+    });
     expect(PROGRAMMING_ENDPOINTS.commissionProgrammingRevision).toEqual({
       method: "POST",
       path: "/api/v1/programming/operations/commission",

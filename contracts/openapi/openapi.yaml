@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.22.0"
+  version: "1.23.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -2070,6 +2070,96 @@ paths:
         "403": { $ref: "#/components/responses/ProgrammingError" }
         "404": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/libraries:
+    get:
+      operationId: searchProgrammingLibraries
+      summary: Tìm entry Control Library SYSTEM và PROJECT
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-202
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingCursor" }
+        - { $ref: "#/components/parameters/ProgrammingLimit" }
+        - name: projectId
+          in: query
+          description: Bắt buộc khi cần entry PROJECT; thiếu nó thì chỉ SYSTEM được trả.
+          schema: { type: string, format: uuid }
+        - name: scope
+          in: query
+          schema: { type: string, enum: [SYSTEM, PROJECT] }
+        - name: kind
+          in: query
+          schema: { type: string, enum: [FUNCTION, FUNCTION_BLOCK, CONVERSION] }
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Trang entry Control Library đã trộn SYSTEM và PROJECT theo thứ tự ổn định
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingLibraryPage" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/library/entries:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    post:
+      operationId: upsertProgrammingLibraryEntry
+      summary: Tạo hoặc sửa Function/FB người dùng trong PROJECT Library Draft
+      x-rbac: [admin]
+      x-implementation-status: t59-202
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingLibraryEntryRequest" }
+      responses:
+        "200":
+          description: Entry đã ghi vào Draft library; ETag Draft của Project tăng
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/library/entries/{entryId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+      - { $ref: "#/components/parameters/ProgrammingLibraryEntryId" }
+    delete:
+      operationId: deleteProgrammingLibraryEntry
+      summary: Xoá entry Control Library; từ chối khi còn tham chiếu
+      x-rbac: [admin]
+      x-implementation-status: t59-202
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      responses:
+        "200":
+          description: Entry đã xoá khỏi Draft library; không có cascade ngầm
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/point-catalog:
     get:
       operationId: getProgrammingPointCatalog
@@ -2406,6 +2496,11 @@ components:
         example: "VP1"
     ProgrammingProjectId:
       name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProgrammingLibraryEntryId:
+      name: entryId
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -3081,6 +3176,76 @@ components:
     ProgrammingResource:
       type: object
       additionalProperties: true
+    ProgrammingLibraryDependency:
+      type: object
+      additionalProperties: false
+      required: [entryId, version]
+      properties:
+        entryId: { type: string, format: uuid }
+        version: { type: string, minLength: 1, maxLength: 64 }
+    ProgrammingLibraryEntry:
+      type: object
+      additionalProperties: false
+      required: [scope, libraryRevisionId, libraryVersion, libraryState, entryId, kind, name, featureState, contentSha256, dependencies, stateLayoutKnown, stateSizeBytes]
+      properties:
+        scope: { type: string, enum: [SYSTEM, PROJECT] }
+        libraryRevisionId: { type: string, minLength: 1, maxLength: 128 }
+        libraryVersion: { type: string, minLength: 1, maxLength: 64 }
+        libraryState: { type: string, enum: [DRAFT, PUBLISHED, DEPRECATED] }
+        entryId: { type: string, minLength: 1, maxLength: 128 }
+        kind: { type: string, enum: [FUNCTION, FUNCTION_BLOCK, CONVERSION] }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        language: { type: string, enum: [ST, FBD] }
+        featureState: { type: string, enum: [AVAILABLE, REVIEW_REQUIRED] }
+        contentSha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        interface: { type: object }
+        dependencies:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/ProgrammingLibraryDependency" }
+        # `stateLayoutKnown=false` nghĩa là layout CHƯA BIẾT, không phải bằng 0.
+        # Consumer không được coi `stateSizeBytes=0` là sự thật khi cờ này false.
+        stateLayoutKnown: { type: boolean }
+        stateSizeBytes: { type: integer, minimum: 0, maximum: 1048576 }
+    ProgrammingLibraryPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/ProgrammingLibraryEntry" }
+        nextCursor: { type: [string, "null"] }
+    ProgrammingLibraryStateLayout:
+      type: object
+      additionalProperties: false
+      required: [version, stateSizeBytes, sha256]
+      properties:
+        version: { type: integer, minimum: 1, maximum: 4294967295 }
+        stateSizeBytes: { type: integer, minimum: 0, maximum: 1048576 }
+        sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+    ProgrammingLibraryEntryRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, entryId, kind, name, language, source, interface]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        entryId: { type: string, format: uuid }
+        kind: { type: string, enum: [FUNCTION, FUNCTION_BLOCK] }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        language: { type: string, enum: [ST, FBD] }
+        # featureState chỉ nhận AVAILABLE. REVIEW_REQUIRED là cờ Controls/Safety
+        # của registry SYSTEM, không phải nhãn client tự dán cho POU của mình.
+        featureState: { type: string, enum: [AVAILABLE] }
+        source: { type: string, minLength: 1, maxLength: 65536 }
+        interface: { type: object }
+        dependencies:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/ProgrammingLibraryDependency" }
+        # Vắng mặt nghĩa là layout chưa biết. FUNCTION không được mang khối này.
+        stateLayout: { $ref: "#/components/schemas/ProgrammingLibraryStateLayout" }
     ProgrammingResourcePage:
       type: object
       additionalProperties: false
