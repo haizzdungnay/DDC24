@@ -126,35 +126,55 @@ type RevisionObjectInput struct {
 	PayloadJSON []byte
 }
 
+// POUObjectInput là phần canonical tối thiểu để seal POU + library usage
+// cùng Revision v2. Mô hình Project đa Program đầy đủ thuộc T59-301;
+// store chỉ bảo đảm snapshot/pin nguyên tử tại đây.
+type POUObjectInput struct {
+	ObjectID      string
+	Kind          string
+	Name          string
+	Language      string
+	InterfaceJSON []byte
+	SourceBlob    []byte
+	Dependencies  []LibraryDependency
+}
+
 type CreateRevisionParams struct {
-	RevisionID           string
-	ProjectID            string
-	DraftID              string
-	ExpectedDraftETag    int64
-	ParentRevisionID     string
-	ManifestJSON         []byte
-	Objects              []RevisionObjectInput
-	ActorID              string
-	Role                 string
-	AuditID              string
-	CorrelationID        string
-	At                   time.Time
-	IdempotencyKeySHA256 [32]byte
-	RequestSHA256        [32]byte
+	RevisionID            string
+	ProjectID             string
+	DraftID               string
+	ExpectedDraftETag     int64
+	ParentRevisionID      string
+	ManifestJSON          []byte
+	Objects               []RevisionObjectInput
+	DocumentSchemaVersion int
+	ProgramCount          int
+	LibraryRevisionID     string
+	POUObjects            []POUObjectInput
+	ActorID               string
+	Role                  string
+	AuditID               string
+	CorrelationID         string
+	At                    time.Time
+	IdempotencyKeySHA256  [32]byte
+	RequestSHA256         [32]byte
 }
 
 type Revision struct {
-	RevisionID       string
-	ProjectID        string
-	ParentRevisionID string
-	Sequence         int64
-	ManifestJSON     []byte
-	ManifestSHA256   [32]byte
-	CreatedBy        string
-	CreatedAtUTCMS   int64
-	DraftETag        int64
-	AuditID          string
-	Replay           bool
+	RevisionID            string
+	ProjectID             string
+	ParentRevisionID      string
+	Sequence              int64
+	DocumentSchemaVersion int
+	ProgramCount          int
+	LibraryRevisionID     string
+	ManifestJSON          []byte
+	ManifestSHA256        [32]byte
+	CreatedBy             string
+	CreatedAtUTCMS        int64
+	DraftETag             int64
+	AuditID               string
+	Replay                bool
 }
 
 type RevisionObject struct {

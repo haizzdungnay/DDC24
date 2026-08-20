@@ -89,9 +89,13 @@ func (s *Store) GetRevision(ctx context.Context, revisionID string) (RevisionSna
 	}
 	var snapshot RevisionSnapshot
 	var parent sql.NullString
+	var libraryRevision sql.NullString
 	var manifestDigest []byte
-	err := s.db.QueryRowContext(ctx, `SELECT revision_id,project_id,parent_revision_id,sequence,manifest_json,manifest_sha256,created_by,created_at_utc_ms FROM revisions WHERE revision_id=?`, revisionID).
+	err := s.db.QueryRowContext(ctx, `SELECT revision_id,project_id,parent_revision_id,sequence,
+		document_schema_version,program_count,library_revision_id,
+		manifest_json,manifest_sha256,created_by,created_at_utc_ms FROM revisions WHERE revision_id=?`, revisionID).
 		Scan(&snapshot.Revision.RevisionID, &snapshot.Revision.ProjectID, &parent, &snapshot.Revision.Sequence,
+			&snapshot.Revision.DocumentSchemaVersion, &snapshot.Revision.ProgramCount, &libraryRevision,
 			&snapshot.Revision.ManifestJSON, &manifestDigest, &snapshot.Revision.CreatedBy, &snapshot.Revision.CreatedAtUTCMS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RevisionSnapshot{}, ErrNotFound
@@ -101,6 +105,9 @@ func (s *Store) GetRevision(ctx context.Context, revisionID string) (RevisionSna
 	}
 	if parent.Valid {
 		snapshot.Revision.ParentRevisionID = parent.String
+	}
+	if libraryRevision.Valid {
+		snapshot.Revision.LibraryRevisionID = libraryRevision.String
 	}
 	if len(manifestDigest) != sha256.Size {
 		return RevisionSnapshot{}, fmt.Errorf("Revision manifest checksum hỏng")
