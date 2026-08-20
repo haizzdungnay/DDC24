@@ -34,7 +34,10 @@ constexpr const char* kInternal         = "API-E-007";
 /* T59-004: Enable/Disable bị từ chối vì precondition hoặc trần 16 Program
  * Enabled. Tách khỏi API-E-004 vì đây là quyết định capacity/lifecycle của
  * sản phẩm, không phải transition sai của một instance. */
-constexpr const char* kEnableRejected   = "API-E-008";
+constexpr const char* kEnableNotCommissioned = "API-E-008";
+/* T59-006: DDD §5.2 tách "chưa Commission" khỏi "sai trạng thái/đủ trần
+ * Enabled" thành hai mã public riêng, nên detail cũng phải tách. */
+constexpr const char* kProgramStateRejected  = "API-E-009";
 } // namespace st_api_error
 
 constexpr int kStApiVersion = 1;

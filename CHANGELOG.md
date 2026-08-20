@@ -8,6 +8,57 @@
 
 ## [Unreleased]
 
+### Changed — `T59-006` contract v2, dual-reader và guard action ma (2026-08-20)
+
+**Đính chính quyết định của `T59-004`.** `DDD-SW-PROG-UNIFIED-001` §5.2 đã khóa
+**mười** mã public tối thiểu, nhưng `T59-004` tự đặt sáu mã gộp
+(`PRG-ERR-POU-001`, `PRG-ERR-LIBRARY-001`, `PRG-ERR-SIGNAL-001`,
+`PRG-ERR-ENABLE-001`) — tức chọn lại một quyết định đã chốt. `T59-006` thay chúng
+bằng đúng bộ tên DDD nêu; catalog lên **v1.7.0 (30 public / 120 detail)**, OpenAPI
+lên `1.22.0`, `checks.go` báo vượt trần package bằng `PRG-ERR-PROGRAM-LIMIT-001` +
+`ST-LIM-009` thay vì gộp vào `PRG-ERR-SCOPE-001`. Hai lựa chọn ánh xạ ghi rõ:
+`ST-SIG-002` (type/unit) dùng lại `PRG-ERR-MAP-004`, `ST-LIB-003` (vòng phụ thuộc)
+dùng `PRG-ERR-POU-RECURSION-001` vì vòng phụ thuộc chính là đệ quy.
+
+**Action ma của IPC biến thành thứ đo được.** `TRACE_START` nằm trong enum wire,
+trong codec C++ **và** codec Go, nhưng Core không có nhánh dispatch — nó rơi vào
+`else` và trả `IPC-ACTION-NOT-IMPLEMENTED`, không gate nào phát hiện.
+
+- Schema IPC thêm `x-mkddc-actions` khai `handlerStatus` từng action; action chưa
+  có handler phải ghi `implementedBy`. Enum wire giữ nguyên vì gỡ giá trị enum là
+  breaking change cho cả hai codec.
+- `scripts/verify_programming_ipc_actions.py` kiểm **hai chiều**: `IMPLEMENTED`
+  phải có nhánh dispatch thật, `NOT_IMPLEMENTED` **không được** có nhánh. Guard
+  chạy trong gate `layout`; self-test **4/4**.
+- `ProgramIpcServer.NotImplementedActionFailsClosedWithStableDetail` khoá hành vi:
+  không bao giờ trả `Ok`, detail ổn định, lặp cùng `requestId` cho đúng byte cũ.
+
+**Contract package v2.** `artifact_v2.schema.json` (magic `MKDDCIR2`, 12 loại
+section theo DDD §5.3, `libraryLock`, khối `capacity` chặn theo profile) và
+`package_dual_reader_policy_v1.json` biến chính sách DDD §12.1 thành contract máy
+đọc được: đọc `{1,2}`, ghi `{2}`, đúng một package Active, version/magic lạ
+`REJECT_NO_MUTATION`, cấm hạ cấp Active. G1 ép **mọi version từng ghi được vẫn
+phải đọc được** — nếu không, LKG cũ mất hiệu lực ngay khi nâng cấp. G1 nay ghim
+**10** contract.
+
+**Có chủ ý chưa làm, đã ghi chủ sở hữu:** chưa có golden artifact v2 (golden cần
+writer thật, thuộc `T59-106`) và chưa thêm tám route OpenAPI ở DDD §5.1 (chưa có
+handler — khai bây giờ sẽ tạo đúng lớp lỗi task này đang đóng; thuộc
+`T59-202`/`T59-301`/`T59-405`).
+
+**Sửa kèm:** guard IFSPEC §9 quét toàn bộ văn xuôi §9, nên một câu nhắc tên mã đã
+gỡ cũng làm gate đỏ, và ngược lại một mã chỉ nhắc trong văn xuôi vẫn "thỏa" gate
+mà không có dòng authority nào. Nay chỉ đọc dòng bảng.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `generate_programming_errors.py --check` **30 public / 120 detail**
+exact; `verify_programming_ipc_actions.py --self-test` **4/4**. C++ Release
+MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1065/1065 PASS**. `go vet ./...`
+sạch, `go test ./... -count=1` **18/18 package ok**. FE `vitest` **113 file /
+1073 test PASS**, lint exit 0, build exit 0 (`✓ built`).
+`verify-project.sh --component layout` **exit 0**; G1 **10/10** contract,
+`--self-test` **28/28** mutation. `test_programming_error_catalog.py` 9 test OK.
+
 ### Added — `T59-005` store schema v2: migration v5→v6 cho Product model (2026-08-20)
 
 `0006_product_model_v2.sql` tạo năm bảng theo `DDD-SW-PROG-UNIFIED-001` §4.7 —
@@ -50,6 +101,9 @@ sách bảng không đổi; **0 hàng** ở `operations`/`commission_records`/
 Migration **chưa** chạy trên board thật — điều đó thuộc `T59-705`.
 
 ### Added — `T59-004` error catalog v1.6.0 cho sáu miền mới, guard hai chiều (2026-08-20)
+
+**Đính chính (xem `T59-006` phía trên):** sáu mã dưới đây tự đặt sai bộ tên mà
+`DDD` §5.2 đã khóa và đã được thay bằng đúng mười mã DDD ở `T59-006`.
 
 Catalog lên **26 public code / 118 detail mapping**. Sáu mã mới phủ POU
 (`PRG-ERR-POU-001`), Control Library (`PRG-ERR-LIBRARY-001`), Published Signal

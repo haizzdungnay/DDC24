@@ -27,7 +27,7 @@ REQUIRED_FORBID = {
 }
 REQUIRED_CONTRACT_NAMES = {
     "openapi", "ipc", "profile", "artifact", "errors", "store", "source-bundle",
-    "library-registry",
+    "library-registry", "artifact-v2", "dual-reader",
 }
 BASELINE_STATE = {
     "schema": 0,
@@ -311,6 +311,52 @@ def validate(join: dict[str, Any]) -> list[str]:
         errors.append(f"store: {error}")
 
     try:
+        artifact_v2_item = contract_by_name(join, "artifact-v2")
+        artifact_v2 = json.loads(safe_path(artifact_v2_item["path"]).read_text())
+        policy_item = contract_by_name(join, "dual-reader")
+        policy = json.loads(safe_path(policy_item["path"]).read_text())
+        require(
+            digest(safe_path(policy_item["schemaPath"])) == policy_item["schemaSha256"],
+            "dual-reader schema SHA-256 drift",
+        )
+        require(
+            artifact_v2["properties"]["schemaVersion"]["const"] == artifact_v2_item["schemaVersion"],
+            "artifact v2 schemaVersion drift",
+        )
+        require(
+            artifact_v2["properties"]["magic"]["const"] == artifact_v2_item["magic"],
+            "artifact v2 magic drift",
+        )
+        artifact_item_v1 = contract_by_name(join, "artifact")
+        v1_version = json.loads(safe_path(artifact_item_v1["path"]).read_text())
+        readable = policy["readableSchemaVersions"]
+        writable = policy["writableSchemaVersions"]
+        # Bất biến sống còn của dual-reader: mọi version từng ghi được vẫn phải
+        # đọc được, nếu không thì LKG cũ mất hiệu lực ngay khi nâng cấp.
+        require(
+            v1_version["properties"]["schemaVersion"]["const"] in readable,
+            "chính sách dual-reader không còn đọc được artifact v1",
+        )
+        require(
+            artifact_v2["properties"]["schemaVersion"]["const"] in readable,
+            "chính sách dual-reader không đọc được artifact v2",
+        )
+        require(set(writable) <= set(readable), "writable không phải tập con của readable")
+        require(len(writable) == 1, "chỉ được đúng một version ghi được")
+        require(policy["activePackageCount"] == 1, "không được có package Active hỗn hợp")
+        require(policy["downgradeActive"] == "FORBIDDEN", "không được tự hạ cấp package Active")
+        require(
+            policy["unknownSchemaVersion"] == policy["unknownMagic"] == "REJECT_NO_MUTATION",
+            "package lạ phải reject no-mutation",
+        )
+        require(
+            sorted(readable) == sorted(policy_item["readableSchemaVersions"]),
+            "readableSchemaVersions lệch pin",
+        )
+    except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
+        errors.append(f"artifact-v2/dual-reader: {error}")
+
+    try:
         registry_item = contract_by_name(join, "library-registry")
         registry = json.loads(safe_path(registry_item["path"]).read_text())
         profile_item = contract_by_name(join, "profile")
@@ -516,6 +562,19 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
     add("registry-library-version-drift", "libraryVersion lệch", break_registry_library_version)
     add("registry-review-required-cleared", "REVIEW_REQUIRED lệch pin", clear_review_required)
     add("registry-schema-hash-drift", "library registry schema SHA-256 drift", break_registry_schema_hash)
+
+    def drop_v1_readable(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "dual-reader")["readableSchemaVersions"] = [2]
+
+    def break_artifact_v2_pin(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "artifact-v2")["schemaVersion"] = 3
+
+    def break_policy_schema_hash(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "dual-reader")["schemaSha256"] = "0" * 64
+
+    add("dual-reader-drops-v1", "readableSchemaVersions lệch pin", drop_v1_readable)
+    add("artifact-v2-schema-version-drift", "artifact v2 schemaVersion drift", break_artifact_v2_pin)
+    add("dual-reader-schema-hash-drift", "dual-reader schema SHA-256 drift", break_policy_schema_hash)
     return mutations
 
 

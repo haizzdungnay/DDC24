@@ -35,8 +35,12 @@ func TestCompilerInputRejectsOneOverProductCapacity(t *testing.T) {
 	if diagnostic == nil {
 		t.Fatalf("%d Program phải bị từ chối", domain.MaxProgramsTotal+1)
 	}
-	if diagnostic.DetailCode != "ST-CLI-LIMIT" {
-		t.Fatalf("detailCode = %s; want ST-CLI-LIMIT", diagnostic.DetailCode)
+	// DDD §5.2 dành mã riêng cho trần package; không được gộp vào scope chung.
+	if diagnostic.Code != string(domain.ErrProgramLimit) || diagnostic.DetailCode != "ST-LIM-009" {
+		t.Fatalf("code/detail = %s/%s; want %s/ST-LIM-009", diagnostic.Code, diagnostic.DetailCode, domain.ErrProgramLimit)
+	}
+	if actual, ok := diagnostic.Args["actual"].(int); !ok || actual != domain.MaxProgramsTotal+1 {
+		t.Fatalf("actual báo về = %v; want %d", diagnostic.Args["actual"], domain.MaxProgramsTotal+1)
 	}
 	limit, ok := diagnostic.Args["limit"].(int)
 	if !ok || limit != domain.MaxProgramsTotal {

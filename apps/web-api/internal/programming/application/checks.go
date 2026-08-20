@@ -316,8 +316,10 @@ func compilerInput(revision programmingstore.RevisionSnapshot) (programmingcompi
 		}
 	}
 	// Trần capacity sản phẩm lấy từ profile, không phải hằng viết trong code.
+	// DDD §5.2 dành riêng `PRG-ERR-PROGRAM-LIMIT-001` cho vi phạm trần package —
+	// không gộp vào `PRG-ERR-SCOPE-001` như trước.
 	if len(programs) == 0 || len(programs) > domain.MaxProgramsTotal {
-		diagnostic := scopeDiagnostic("", domain.MaxProgramsTotal)
+		diagnostic := programLimitDiagnostic(len(programs), domain.MaxProgramsTotal)
 		return programmingcompiler.Input{}, &diagnostic
 	}
 	// Trong trần capacity nhưng pipeline compiler hiện chỉ dựng được một Program
@@ -468,6 +470,16 @@ func compilerDiagnostic(item programmingcompiler.Diagnostic) DiagnosticView {
 // từ profile machine-readable — literal `1` cũ nói sai capacity sản phẩm (32).
 // `limit <= 0` nghĩa là từ chối không do trần (payload sai dạng): khi đó bỏ hẳn
 // arg `limit` thay vì bịa một con số cho người đọc lỗi.
+// programLimitDiagnostic báo vượt trần capacity cấp PACKAGE. `ST-LIM-009` là
+// detail code riêng cho trần này, tách khỏi `ST-CLI-LIMIT` vốn là trần cấp một
+// Program, để người đọc log phân biệt được hai loại "quá lớn" khác nhau.
+func programLimitDiagnostic(actual, limit int) DiagnosticView {
+	public := domain.NewPublicError(domain.ErrProgramLimit)
+	return DiagnosticView{Code: string(domain.ErrProgramLimit), DetailCode: "ST-LIM-009", Severity: "ERROR",
+		MessageKey: public.MessageKey, Location: map[string]any{},
+		Args: map[string]any{"profile": checkTargetProfile, "limit": limit, "actual": actual}}
+}
+
 func scopeDiagnostic(programID string, limit int) DiagnosticView {
 	public := domain.NewPublicError(domain.ErrScope)
 	args := map[string]any{"profile": checkTargetProfile}

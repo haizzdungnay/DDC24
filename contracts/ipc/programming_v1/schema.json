@@ -1,80 +1,261 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://mkddc.local/contracts/ipc/programming_v1/schema.json",
-  "title": "MK-DDC-24 Programming IPC v1",
-  "description": "Schema logic cho CBOR array sau length-prefix uint32 little-endian.",
-  "oneOf": [
-    { "$ref": "#/$defs/request" },
-    { "$ref": "#/$defs/response" }
-  ],
-  "$defs": {
-    "uuidBytes": {
-      "type": "string",
-      "contentEncoding": "base64",
-      "x-cbor-type": "byte-string",
-      "x-byte-length": 16
-    },
-    "nullableUuidBytes": {
-      "type": ["string", "null"],
-      "contentEncoding": "base64",
-      "x-cbor-type": "byte-string",
-      "x-byte-length": 16
-    },
-    "sha256Bytes": {
-      "type": "string",
-      "contentEncoding": "base64",
-      "x-cbor-type": "byte-string",
-      "x-byte-length": 32
-    },
-    "payloadBytes": {
-      "type": "string",
-      "contentEncoding": "base64",
-      "x-cbor-type": "byte-string",
-      "maxLength": 43692,
-      "description": "CBOR canonical action payload, tối đa 32 KiB trước base64."
-    },
-    "request": {
-      "type": "array",
-      "minItems": 12,
-      "maxItems": 12,
-      "prefixItems": [
-        { "type": "integer", "const": 1, "title": "protocolMajor" },
-        { "type": "integer", "minimum": 0, "maximum": 65535, "title": "protocolMinor" },
-        { "type": "string", "const": "1.0", "title": "schemaVersion" },
-        { "$ref": "#/$defs/uuidBytes", "title": "requestId" },
-        { "$ref": "#/$defs/nullableUuidBytes", "title": "operationId" },
-        { "type": "string", "minLength": 1, "maxLength": 64, "title": "controllerId" },
-        { "type": "string", "maxLength": 128, "title": "actorId" },
-        { "type": "integer", "minimum": 1, "title": "deadlineMonoNs" },
-        { "$ref": "#/$defs/sha256Bytes", "title": "payloadHash" },
-        {
-          "type": "string",
-          "enum": ["CAPABILITIES", "STATUS", "STAGE", "ACTIVATE", "OPERATION_STATUS", "RESTORE", "TRACE_START", "RETAIN_RESET"],
-          "title": "action"
-        },
-        { "type": "string", "minLength": 16, "maxLength": 64, "pattern": "^[A-Za-z0-9._-]+$", "title": "correlationId" },
-        { "$ref": "#/$defs/payloadBytes", "title": "payload" }
-      ]
-    },
-    "response": {
-      "type": "array",
-      "minItems": 13,
-      "maxItems": 13,
-      "prefixItems": [
-        { "type": "integer", "const": 1, "title": "protocolMajor" },
-        { "type": "integer", "minimum": 0, "maximum": 65535, "title": "protocolMinor" },
-        { "type": "string", "const": "1.0", "title": "schemaVersion" },
-        { "$ref": "#/$defs/uuidBytes", "title": "requestId" },
-        { "$ref": "#/$defs/nullableUuidBytes", "title": "operationId" },
-        { "type": "string", "minLength": 16, "maxLength": 64, "title": "correlationId" },
-        { "type": "string", "enum": ["OK", "STAGED", "ACCEPTED", "REJECTED", "UNAVAILABLE", "BUSY"], "title": "result" },
-        { "type": ["string", "null"], "maxLength": 128, "title": "activeRevisionId" },
-        { "type": ["string", "null"], "maxLength": 128, "title": "lkgRevisionId" },
-        { "type": "boolean", "title": "keepsRunning" },
-        { "type": ["string", "null"], "maxLength": 128, "title": "detailCode" },
-        { "type": "string", "maxLength": 128, "title": "component" },
-        { "$ref": "#/$defs/payloadBytes", "title": "payload" }
-      ]
-    }
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://mkddc.local/contracts/ipc/programming_v1/schema.json",
+ "title": "MK-DDC-24 Programming IPC v1",
+ "description": "Schema logic cho CBOR array sau length-prefix uint32 little-endian.",
+ "oneOf": [
+  {
+   "$ref": "#/$defs/request"
+  },
+  {
+   "$ref": "#/$defs/response"
   }
+ ],
+ "$defs": {
+  "uuidBytes": {
+   "type": "string",
+   "contentEncoding": "base64",
+   "x-cbor-type": "byte-string",
+   "x-byte-length": 16
+  },
+  "nullableUuidBytes": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "contentEncoding": "base64",
+   "x-cbor-type": "byte-string",
+   "x-byte-length": 16
+  },
+  "sha256Bytes": {
+   "type": "string",
+   "contentEncoding": "base64",
+   "x-cbor-type": "byte-string",
+   "x-byte-length": 32
+  },
+  "payloadBytes": {
+   "type": "string",
+   "contentEncoding": "base64",
+   "x-cbor-type": "byte-string",
+   "maxLength": 43692,
+   "description": "CBOR canonical action payload, tối đa 32 KiB trước base64."
+  },
+  "request": {
+   "type": "array",
+   "minItems": 12,
+   "maxItems": 12,
+   "prefixItems": [
+    {
+     "type": "integer",
+     "const": 1,
+     "title": "protocolMajor"
+    },
+    {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 65535,
+     "title": "protocolMinor"
+    },
+    {
+     "type": "string",
+     "const": "1.0",
+     "title": "schemaVersion"
+    },
+    {
+     "$ref": "#/$defs/uuidBytes",
+     "title": "requestId"
+    },
+    {
+     "$ref": "#/$defs/nullableUuidBytes",
+     "title": "operationId"
+    },
+    {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 64,
+     "title": "controllerId"
+    },
+    {
+     "type": "string",
+     "maxLength": 128,
+     "title": "actorId"
+    },
+    {
+     "type": "integer",
+     "minimum": 1,
+     "title": "deadlineMonoNs"
+    },
+    {
+     "$ref": "#/$defs/sha256Bytes",
+     "title": "payloadHash"
+    },
+    {
+     "type": "string",
+     "enum": [
+      "CAPABILITIES",
+      "STATUS",
+      "STAGE",
+      "ACTIVATE",
+      "OPERATION_STATUS",
+      "RESTORE",
+      "TRACE_START",
+      "RETAIN_RESET"
+     ],
+     "title": "action"
+    },
+    {
+     "type": "string",
+     "minLength": 16,
+     "maxLength": 64,
+     "pattern": "^[A-Za-z0-9._-]+$",
+     "title": "correlationId"
+    },
+    {
+     "$ref": "#/$defs/payloadBytes",
+     "title": "payload"
+    }
+   ]
+  },
+  "response": {
+   "type": "array",
+   "minItems": 13,
+   "maxItems": 13,
+   "prefixItems": [
+    {
+     "type": "integer",
+     "const": 1,
+     "title": "protocolMajor"
+    },
+    {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 65535,
+     "title": "protocolMinor"
+    },
+    {
+     "type": "string",
+     "const": "1.0",
+     "title": "schemaVersion"
+    },
+    {
+     "$ref": "#/$defs/uuidBytes",
+     "title": "requestId"
+    },
+    {
+     "$ref": "#/$defs/nullableUuidBytes",
+     "title": "operationId"
+    },
+    {
+     "type": "string",
+     "minLength": 16,
+     "maxLength": 64,
+     "title": "correlationId"
+    },
+    {
+     "type": "string",
+     "enum": [
+      "OK",
+      "STAGED",
+      "ACCEPTED",
+      "REJECTED",
+      "UNAVAILABLE",
+      "BUSY"
+     ],
+     "title": "result"
+    },
+    {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 128,
+     "title": "activeRevisionId"
+    },
+    {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 128,
+     "title": "lkgRevisionId"
+    },
+    {
+     "type": "boolean",
+     "title": "keepsRunning"
+    },
+    {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 128,
+     "title": "detailCode"
+    },
+    {
+     "type": "string",
+     "maxLength": 128,
+     "title": "component"
+    },
+    {
+     "$ref": "#/$defs/payloadBytes",
+     "title": "payload"
+    }
+   ]
+  }
+ },
+ "x-mkddc-actions": {
+  "description": "Trạng thái handler của từng action. Enum wire phải giữ ổn định (gỡ giá trị enum là breaking change cho cả hai codec), nên action chưa có handler được khai NOT_IMPLEMENTED kèm chủ sở hữu và detail code trả về. `scripts/verify_programming_ipc_actions.py` kiểm hai chiều: IMPLEMENTED phải có nhánh dispatch thật trong Core, NOT_IMPLEMENTED thì không được có.",
+  "notImplementedDetailCode": "IPC-ACTION-NOT-IMPLEMENTED",
+  "entries": [
+   {
+    "action": "CAPABILITIES",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": false,
+    "owner": "Core"
+   },
+   {
+    "action": "STATUS",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": false,
+    "owner": "Core"
+   },
+   {
+    "action": "STAGE",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": true,
+    "owner": "Core"
+   },
+   {
+    "action": "ACTIVATE",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": true,
+    "owner": "Core"
+   },
+   {
+    "action": "OPERATION_STATUS",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": false,
+    "owner": "Core"
+   },
+   {
+    "action": "RESTORE",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": true,
+    "owner": "Core"
+   },
+   {
+    "action": "RETAIN_RESET",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": true,
+    "owner": "Core"
+   },
+   {
+    "action": "TRACE_START",
+    "handlerStatus": "NOT_IMPLEMENTED",
+    "mutation": true,
+    "owner": "Core",
+    "implementedBy": "T59-408"
+   }
+  ]
+ }
 }

@@ -100,9 +100,9 @@ W1/W2/W3 có thể chạy song song theo contract boundary. Critical path releas
 | `T59-001` | P0 | Re-pin `g1_contract_join_v1.json`, bỏ hardcode store schema version | — | **DONE** | `verify_programming_g1_contracts.py` exit 0; `--self-test` 12/12 mutation + 6/6 manifest chain + 5/5 deploy order; `verify-project.sh --component layout` exit 0; `go vet` sạch + `go test ./... -count=1` 18/18 package ok. Chi tiết §3.1. |
 | `T59-002` | P0 | Tạo Product profile v2 `32/16/256/1024/512/512`, generator C++/Go/TS | — | **DONE** | `generate_programming_profile.py --check` exact 3/3 tệp sinh; one-over vector C++ 3 trục + Go 6 case + FE 5 case; `ctest` 1055/1055; `go test ./... -count=1` 18/18; FE 112 file / 1066 test; G1 self-test 20/20 mutation; layout exit 0. **Đính chính:** `npm run build` khi merge thực tế FAIL (`tsc --noEmit`), đã sửa trong `T59-003`. Chi tiết §3.1. |
 | `T59-003` | P0 | FBD/POU/library registry JSON single-source + generator | — | **DONE** | `generate_programming_library_registry.py --check` 40 entry / 2 tệp sinh; 7 test C++ hai chiều chống entry ma; 5 test FE palette↔registry; G1 self-test 25/25; `ctest` 1063/1063; Go 18/18; FE 112 file / 1071 test; layout exit 0. Chi tiết §3.1. |
-| `T59-004` | P0 | Error catalog mới cho POU/library/signal/enable/output owner/PID review | T59-002/003 | **DONE** | catalog v1.6.0 **26 public / 118 detail**, sinh Go/C++/TS + manifest exact; guard detail **hai chiều** và catalog được validate theo schema; `ctest` 1064/1064; Go 18/18; FE 113 file / 1073 test; layout exit 0. Chi tiết §3.1. |
+| `T59-004` | P0 | Error catalog mới cho POU/library/signal/enable/output owner/PID review | T59-002/003 | **DONE** | catalog v1.6.0 **26 public / 118 detail**, sinh Go/C++/TS + manifest exact. **Đính chính:** sáu mã gộp ở task này tự đặt sai bộ tên `DDD` §5.2 đã khóa; `T59-006` thay bằng đúng mười mã.  guard detail **hai chiều** và catalog được validate theo schema; `ctest` 1064/1064; Go 18/18; FE 113 file / 1073 test; layout exit 0. Chi tiết §3.1. |
 | `T59-005` | P0 | Store schema v2 + backup/migration v1→v2 | T59-002 | **DONE** | migration `0006_product_model_v2.sql`, schema v5→v6, 5 bảng mới + 3 cột Revision; atomic ở **3/3** điểm lỗi, idempotent qua **3** vòng restart, 0 hàng Commission/intent sau migration, 5 nhóm bất biến bảng mới; Go 18/18; G1 8/8 + self-test 25/25; layout exit 0. Chi tiết §3.1. |
-| `T59-006` | P0 | OpenAPI + IPC v2 + artifact/package schema v2, dual-reader policy | T59-002/004 | ORDERED | Schema/golden/codec/client/route contract PASS; action khai phải có handler test. |
+| `T59-006` | P0 | OpenAPI + IPC v2 + artifact/package schema v2, dual-reader policy | T59-002/004 | **DONE** | artifact v2 schema + dual-reader policy thành contract G1 thứ 9/10; guard action IPC **hai chiều** (self-test 4/4); catalog v1.7.0 **30/120** theo đúng bộ tên DDD §5.2; OpenAPI v1.22; `ctest` 1065/1065; Go 18/18; FE 113 file / 1073 test; G1 10/10 + self-test 28/28; layout exit 0. Chi tiết §3.1. |
 | `T59-007` | P1 | Local CI parity wrapper và gate matrix cho từng Wave | T59-001 | ORDERED | Một command chạy layout/C++/Go/FE/contract; không gọi local PASS là GitHub CI. |
 
 ### 3.1 Ghi chú thực thi W0
@@ -338,6 +338,59 @@ Bảng mới rỗng sau migration nên binary v5 chạy lại đọc đủ dữ 
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 Migration **chưa** chạy trên board thật — điều đó thuộc `T59-705`.
+
+#### `T59-006` — Contract v2, dual-reader và guard action ma
+
+**Đính chính quyết định của `T59-004`.** `DDD-SW-PROG-UNIFIED-001` §5.2 đã khóa
+**mười** mã public tối thiểu. `T59-004` lại tự đặt sáu mã gộp
+(`PRG-ERR-POU-001`, `PRG-ERR-LIBRARY-001`, `PRG-ERR-SIGNAL-001`,
+`PRG-ERR-ENABLE-001`) — tức **chọn lại một quyết định đã chốt**, đúng thứ prompt
+cấm. `T59-006` thay chúng bằng đúng bộ tên DDD nêu; catalog lên **v1.7.0
+(30 public / 120 detail)**, OpenAPI lên `1.22.0`.
+
+Hai lựa chọn ánh xạ được ghi rõ để không mở nhánh công khai thừa:
+
+- `ST-SIG-002` (type/unit) trỏ `PRG-ERR-MAP-004` sẵn có, không tạo mã signal thứ ba.
+- `ST-LIB-003` (vòng phụ thuộc thư viện) trỏ `PRG-ERR-POU-RECURSION-001`, vì vòng
+  phụ thuộc **chính là** đệ quy.
+
+`checks.go` nay báo vượt trần package bằng `PRG-ERR-PROGRAM-LIMIT-001` +
+`ST-LIM-009` thay vì gộp vào `PRG-ERR-SCOPE-001`.
+
+**Action ma của IPC được biến thành thứ đo được.** `TRACE_START` nằm trong enum
+wire, trong codec C++ **và** codec Go, nhưng Core không có nhánh dispatch nào — nó
+rơi vào `else` và trả `IPC-ACTION-NOT-IMPLEMENTED`. Không gate nào phát hiện.
+
+- Schema IPC thêm khối `x-mkddc-actions` khai `handlerStatus` từng action; action
+  chưa có handler phải ghi `implementedBy`. Enum wire **giữ nguyên** vì gỡ giá trị
+  enum là breaking change cho cả hai codec.
+- `scripts/verify_programming_ipc_actions.py` kiểm **hai chiều**: `IMPLEMENTED`
+  phải có nhánh dispatch thật; `NOT_IMPLEMENTED` **không được** có nhánh (khai
+  thấp hơn sự thật cũng sai). Guard cũng kiểm codec Go có đủ hằng và
+  `IPC-ACTION-NOT-IMPLEMENTED` được map trong catalog. Self-test 4/4.
+- `ProgramIpcServer.NotImplementedActionFailsClosedWithStableDetail` khoá hành vi:
+  **không bao giờ** trả `Ok`, detail ổn định, và lặp cùng `requestId` cho đúng byte cũ.
+
+**Contract package v2.** `artifact_v2.schema.json` khóa header/magic `MKDDCIR2`,
+12 loại section theo DDD §5.3, `libraryLock` và khối `capacity` chặn trên theo
+profile. `package_dual_reader_policy_v1.json` biến chính sách §12.1 thành contract
+máy đọc được: đọc `{1,2}`, ghi `{2}`, đúng một package Active, version/magic lạ
+`REJECT_NO_MUTATION`, cấm hạ cấp Active. G1 ép **mọi version từng ghi được vẫn
+phải đọc được** — nếu không, LKG cũ mất hiệu lực ngay khi nâng cấp.
+
+**Vì sao chưa có golden artifact v2.** Golden cần một writer thật sinh ra; khai
+golden trước khi có writer là bằng chứng giả. Writer/loader thuộc `T59-106`, và
+chính sách đã ghi chủ sở hữu ngay trong contract.
+
+**Vì sao chưa thêm route OpenAPI mới.** Acceptance của task là "action khai phải
+có handler test". Tám route ở DDD §5.1 chưa có handler, nên khai chúng bây giờ sẽ
+tạo đúng lớp lỗi mà task này đang đóng. Chúng đi cùng `T59-202`/`T59-301`/`T59-405`.
+
+**Finding sửa kèm.** Guard IFSPEC §9 quét **toàn bộ** văn xuôi §9, nên một câu
+nhắc tên mã đã gỡ cũng làm gate đỏ, và ngược lại một mã chỉ được nhắc trong văn
+xuôi vẫn "thỏa" gate mà không có dòng authority nào. Nay chỉ đọc dòng bảng.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
 ### W1 — POU, compiler và artifact v2
 

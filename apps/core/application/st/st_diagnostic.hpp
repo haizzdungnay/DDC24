@@ -70,6 +70,9 @@ constexpr const char* kIdentifierTooLong  = "ST-LIM-005";
 constexpr const char* kDiagnosticsTruncated = "ST-LIM-006";
 constexpr const char* kTooManyFbInstances   = "ST-LIM-007";
 constexpr const char* kTooManyRetainVars    = "ST-LIM-008";
+/* T59-006: số Program trong package vượt trần profile (32). Tách khỏi
+ * ST-LIM-003/004 vì đây là trần cấp PACKAGE, không phải cấp Program. */
+constexpr const char* kTooManyPrograms      = "ST-LIM-009";
 
 /* IO map validation (st_io_map.hpp) */
 constexpr const char* kIoMapUnknownVar      = "ST-IOMAP-001";

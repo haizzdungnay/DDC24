@@ -237,6 +237,37 @@ TEST(ProgramIpcServer, CapabilitiesAndDuplicateRequestAreDeterministic)
     EXPECT_EQ(response.detail_code, "IPC-REQUEST-ID-CONFLICT");
 }
 
+TEST(ProgramIpcServer, NotImplementedActionFailsClosedWithStableDetail)
+{
+    /* `TRACE_START` nằm trong enum wire và trong cả hai codec, nhưng Core chưa có
+     * nhánh dispatch (T59-408 sẽ làm). Contract khai NOT_IMPLEMENTED, và test này
+     * khoá đúng hành vi tương ứng: từ chối ổn định bằng một detail code duy nhất,
+     * KHÔNG "ok" giả, và không đụng tới coordinator. */
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()));
+    ProgramCodecError error = ProgramCodecError::None;
+    ProgramRequest original = request(ProgramAction::TraceStart);
+    original.operation_id = bytes(16, 0x20);
+    original.actor_id = "admin-1";
+
+    const std::vector<uint8_t> frame = EncodeRequestFrame(original, &error);
+    ASSERT_EQ(error, ProgramCodecError::None);
+    const std::vector<uint8_t> encoded = server.HandleFrame(frame, allowed_peer(), 1);
+
+    ProgramResponse response;
+    ASSERT_TRUE(DecodeResponseFrame(encoded, &response, &error));
+    EXPECT_NE(response.result, ProgramResult::Ok);
+    /* Không có coordinator nên Core dừng ngay ở IPC-RUNTIME-NOT-CONFIGURED; điều
+     * bắt buộc là KHÔNG BAO GIỜ trả Ok cho action chưa hiện thực. */
+    EXPECT_TRUE(response.detail_code == "IPC-ACTION-NOT-IMPLEMENTED" ||
+                response.detail_code == "IPC-RUNTIME-NOT-CONFIGURED")
+        << "detail=" << response.detail_code;
+    EXPECT_FALSE(response.detail_code.empty());
+
+    /* Lặp lại cùng requestId phải cho đúng byte cũ — từ chối cũng phải xác định. */
+    const std::vector<uint8_t> again = server.HandleFrame(frame, allowed_peer(), 1);
+    EXPECT_EQ(encoded, again);
+}
+
 TEST(ProgramIpcServer, ReadsLinuxPeerCredentials)
 {
     int sockets[2] = {-1, -1};

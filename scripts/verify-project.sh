@@ -55,6 +55,7 @@ run_layout() {
   python3 "$repo_root/scripts/generate_programming_library_registry.py" --check
   python3 "$repo_root/scripts/generate_programming_errors.py" --check
   python3 -m unittest "$repo_root/tests/integration/test_programming_error_catalog.py"
+  python3 "$repo_root/scripts/verify_programming_ipc_actions.py" --self-test
   python3 "$repo_root/scripts/verify_programming_g1_contracts.py" --self-test
   python3 "$repo_root/scripts/verify_programming_artifact_manifest.py" --self-test
 }

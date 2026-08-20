@@ -13,8 +13,8 @@ import (
 func TestErrorCatalogGeneratedSurface(t *testing.T) {
 	// T59-004: 20 -> 26 public code (POU/library/signal/output owner/enable/
 	// PID review). Con số là ảnh chụp có chủ ý để catalog không lớn lên lặng lẽ.
-	if len(errorMetadataByCode) != 26 {
-		t.Fatalf("public error count = %d; want 26", len(errorMetadataByCode))
+	if len(errorMetadataByCode) != 30 {
+		t.Fatalf("public error count = %d; want 30", len(errorMetadataByCode))
 	}
 	if got := MapComponentError("artifact-loader", "IR-E-004"); got != ErrTarget {
 		t.Fatalf("IR-E-004 = %s; want %s", got, ErrTarget)
@@ -40,13 +40,20 @@ func TestNewDomainDetailCodesMapToOwnPublicCode(t *testing.T) {
 		detail    string
 		want      ErrorCode
 	}{
-		"pou-purity":    {"compiler", "ST-POU-002", ErrPou},
-		"pou-recursion": {"compiler", "ST-POU-003", ErrPou},
-		"library-drift": {"compiler", "ST-LIB-002", ErrLibrary},
-		"signal-dup":    {"compiler", "ST-SIG-001", ErrSignal},
-		"output-owner":  {"compiler", "ST-OWN-001", ErrOutputOwner},
-		"pid-review":    {"compiler", "ST-PID-001", ErrPidReview},
-		"enable":        {"st-control-api", "API-E-008", ErrEnable},
+		"pou-kind":      {"compiler", "ST-POU-002", ErrPouKind},
+		"pou-recursion": {"compiler", "ST-POU-003", ErrPouRecursion},
+		// Vòng phụ thuộc thư viện CHÍNH LÀ đệ quy, không phải chuyện version.
+		"library-cycle": {"compiler", "ST-LIB-003", ErrPouRecursion},
+		"library-drift": {"compiler", "ST-LIB-002", ErrLibVersion},
+		"program-limit": {"compiler", "ST-LIM-009", ErrProgramLimit},
+		"signal-dup":    {"compiler", "ST-SIG-001", ErrSignalPublisher},
+		"signal-fresh":  {"compiler", "ST-SIG-003", ErrSignalFreshness},
+		// Type/unit dùng lại mã sẵn có thay vì mở nhánh công khai thứ hai.
+		"signal-type":     {"compiler", "ST-SIG-002", ErrMapType},
+		"output-owner":    {"compiler", "ST-OWN-001", ErrOutputOwner},
+		"pid-review":      {"compiler", "ST-PID-001", ErrPidReview},
+		"enable-not-comm": {"st-control-api", "API-E-008", ErrEnableNotCommissioned},
+		"program-state":   {"st-control-api", "API-E-009", ErrProgramState},
 	}
 	for name, item := range cases {
 		if got := MapComponentError(item.component, item.detail); got != item.want {

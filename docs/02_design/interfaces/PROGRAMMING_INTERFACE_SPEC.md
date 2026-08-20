@@ -334,11 +334,15 @@ có actor/correlation để audit đối chiếu.
 | `PRG-ERR-IMPACT-UNAVAILABLE-001` | có nhóm impact `UNAVAILABLE`, thiếu field hoặc `null` | 422 fail-closed, **chặn Commission/Restore** |
 | `PRG-ERR-IMPACT-STALE-001` | `impactRef` không khớp impact hiện tại | 409, client đọc lại impact và xác nhận lại |
 | `PRG-ERR-UNAVAILABLE-001` | core/compiler tạm unavailable | 503, retry hint/query |
-| `PRG-ERR-POU-001` | POU vi phạm quy tắc kind/purity/recursion/state | 422, Active/LKG không đổi |
-| `PRG-ERR-LIBRARY-001` | entry Control Library thiếu, lệch version hoặc dependency vòng | 422, không stage candidate |
-| `PRG-ERR-SIGNAL-001` | Published Signal trùng publisher, sai type/unit, freshness ngoài khoảng hoặc consumer trỏ signal không tồn tại | 422, không mutation runtime |
+| `PRG-ERR-POU-KIND-001` | POU vi phạm quy tắc kind/purity/signature | 422, Active/LKG không đổi |
+| `PRG-ERR-POU-RECURSION-001` | đệ quy POU trực tiếp/gián tiếp, hoặc dependency vòng trong Control Library | 422, Active/LKG không đổi |
+| `PRG-ERR-LIB-VERSION-001` | entry Control Library thiếu hoặc lệch version đã pin | 422, không stage candidate |
+| `PRG-ERR-PROGRAM-LIMIT-001` | vượt trần capacity cấp package (Program, FB instance) | 422, nêu `limit` từ profile |
+| `PRG-ERR-SIGNAL-PUBLISHER-001` | Published Signal trùng publisher hoặc consumer trỏ signal không có publisher | 422, không mutation runtime |
+| `PRG-ERR-SIGNAL-FRESHNESS-001` | `freshnessMs` ngoài khoảng hoặc không tương thích chu kỳ producer | 422, không mutation runtime |
 | `PRG-ERR-OUTPUT-OWNER-001` | một binding output có nhiều hơn một Program owner | 422, Check từ chối trước Commission |
-| `PRG-ERR-ENABLE-001` | Enable/Disable sai precondition hoặc vượt trần 16 Program Enabled | 409/422, intent không đổi |
+| `PRG-ERR-ENABLE-NOT-COMMISSIONED-001` | Enable Program chưa Commission hoặc không có trong package Active | 409, intent không đổi |
+| `PRG-ERR-PROGRAM-STATE-001` | Enable/Disable sai trạng thái hiện tại hoặc đã đủ trần 16 Program Enabled | 409, intent không đổi |
 | `PRG-ERR-PID-REVIEW-001` | package dùng PID mà thiếu approval token Controls/Safety | 422, chặn Commission |
 
 Các mã component hiện hữu `API-E-*`, `IR-E-*`, `ST-*`, `RT-RETAIN-*` là detail
@@ -361,6 +365,14 @@ nhưng chưa đồng bộ catalog, sửa cùng phiên theo nguyên tắc "làm h
 As-Built `TASK-PROG-404/405`: catalog v1.4.0 có **20 public code / 99 detail
 mapping**, bổ sung detail operation/journal/checkpoint/IPC mới từ cả server và
 coordinator; generator quét cả hai source để không tái diễn drift.
+
+As-Built `T59-006`: catalog v1.7.0 có **30 public code / 120 detail mapping**.
+`T59-004` đã đặt sáu mã gộp tự chọn (`PRG-ERR-POU-001`, `PRG-ERR-LIBRARY-001`,
+`PRG-ERR-SIGNAL-001`, `PRG-ERR-ENABLE-001`) thay vì dùng đúng bộ tên mà
+`DDD-SW-PROG-UNIFIED-001` §5.2 đã khóa. Đó là **chọn lại một quyết định đã chốt**,
+nên `T59-006` thay chúng bằng đúng mười mã DDD nêu; `ST-SIG-002` (type/unit) trỏ
+về `PRG-ERR-MAP-004` sẵn có thay vì mở nhánh công khai thứ hai, và `ST-LIB-003`
+(vòng phụ thuộc) trỏ `PRG-ERR-POU-RECURSION-001` vì vòng phụ thuộc chính là đệ quy.
 
 As-Built `T59-004`: catalog v1.6.0 có **26 public code / 118 detail mapping**.
 Sáu public code mới phủ POU, Control Library, Published Signal, output owner,

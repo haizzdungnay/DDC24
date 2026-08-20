@@ -7,17 +7,17 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "3db330fae7f5d964a9f65a7930f3d048ea04670b0f714fc3c0f23ce2c9ff68da",
+      "sha256": "08fe3078a91f57352e91416b3b6d0569818fe868367e6b4b576f3d98943be4ae",
       "major": 1,
-      "version": "1.21.0",
+      "version": "1.22.0",
       "operationCount": 25
     },
     {
       "name": "ipc",
       "path": "contracts/ipc/programming_v1/schema.json",
-      "sha256": "d18702bc1f699b9fc90d05f41ae0dd4dee4444a1025dcb45c9f559cfb6409342",
+      "sha256": "81aa88c6a68ca563929f73fbb34889eb3f3e47f1a19e0ac6fcc425842e3c7e16",
       "goldenManifestPath": "contracts/ipc/programming_v1/golden/manifest.json",
-      "goldenManifestSha256": "9c1b6a826f2f4b735d317f073a9a2f6e94f21ea3b276941e1c026b05c7aebae5",
+      "goldenManifestSha256": "d1c44e344568e86f10dd890f4dd2ce4daba9a7e3a10dc51ca48bf2b3b25a41dd",
       "major": 1,
       "minor": 0,
       "version": "1.0"
@@ -51,12 +51,12 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "28093d2490144d036293bbb80355010f3039f870b66ecf56083728ac08f40f4c",
+      "sha256": "1b6e96ef9ec0f1e8679a76d3f55660eae586b9d7cbd25efdd0f242c3f1df36c2",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "1f2d5a4e339675f5c3f24b38046c8e6b1ed0df60ada78bcf7f3f07ab72d9988a",
+      "manifestSha256": "cdf2430c94cd9d89725cb07d79ed525f1a89de457c279773eaa0deee7b939c6d",
       "major": 1,
-      "publicErrorCount": 26,
-      "componentDetailCount": 118
+      "publicErrorCount": 30,
+      "componentDetailCount": 120
     },
     {
       "name": "store",
@@ -91,6 +91,26 @@
       "fbTypeCount": 5,
       "reviewRequired": [
         "PID"
+      ]
+    },
+    {
+      "name": "artifact-v2",
+      "path": "contracts/programming/artifact_v2.schema.json",
+      "sha256": "7d6a7272883220fa2dda4030f745a217d059977acc270740a347e2cf7a4c91b5",
+      "major": 1,
+      "schemaVersion": 2,
+      "magic": "MKDDCIR2"
+    },
+    {
+      "name": "dual-reader",
+      "path": "contracts/programming/package_dual_reader_policy_v1.json",
+      "sha256": "a595b9344a584aa10b22f1b42cb7e6b47caa97f8273dab3cc9361b4755db3384",
+      "schemaPath": "contracts/programming/package_dual_reader_policy_v1.schema.json",
+      "schemaSha256": "bd40332e693e9e77c17f1fa6768b5c77eaec180f3146febaa8d4e5e519d82e64",
+      "major": 1,
+      "readableSchemaVersions": [
+        1,
+        2
       ]
     }
   ],
@@ -136,5 +156,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006"
 }

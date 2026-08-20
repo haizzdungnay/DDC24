@@ -2,7 +2,7 @@
   "protocolMajor": 1,
   "protocolMinor": 0,
   "schemaVersion": "1.0",
-  "schemaSha256": "d18702bc1f699b9fc90d05f41ae0dd4dee4444a1025dcb45c9f559cfb6409342",
+  "schemaSha256": "81aa88c6a68ca563929f73fbb34889eb3f3e47f1a19e0ac6fcc425842e3c7e16",
   "files": {
     "request_capabilities.hex": {
       "sha256": "8d302dcad135b0b3e1e2529ff4d942c9ae936e1c08e34aef155cface79167c2d",

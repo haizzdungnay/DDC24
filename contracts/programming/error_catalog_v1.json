@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.6.0",
+  "catalogVersion": "1.7.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     {
@@ -334,59 +334,6 @@
       ]
     },
     {
-      "symbol": "ErrPou",
-      "code": "PRG-ERR-POU-001",
-      "ownerComponent": "compiler",
-      "statusClass": "VALIDATION",
-      "httpStatuses": [
-        422
-      ],
-      "retryable": false,
-      "keepsRunningRevision": true,
-      "messageKey": "programming.error.pou",
-      "allowedArgs": [
-        "objectId",
-        "kind",
-        "expected",
-        "actual"
-      ]
-    },
-    {
-      "symbol": "ErrLibrary",
-      "code": "PRG-ERR-LIBRARY-001",
-      "ownerComponent": "compiler",
-      "statusClass": "VALIDATION",
-      "httpStatuses": [
-        422
-      ],
-      "retryable": false,
-      "keepsRunningRevision": true,
-      "messageKey": "programming.error.library",
-      "allowedArgs": [
-        "entryId",
-        "expected",
-        "actual"
-      ]
-    },
-    {
-      "symbol": "ErrSignal",
-      "code": "PRG-ERR-SIGNAL-001",
-      "ownerComponent": "compiler",
-      "statusClass": "VALIDATION",
-      "httpStatuses": [
-        422
-      ],
-      "retryable": false,
-      "keepsRunningRevision": true,
-      "messageKey": "programming.error.signal",
-      "allowedArgs": [
-        "signalId",
-        "expected",
-        "actual",
-        "limit"
-      ]
-    },
-    {
       "symbol": "ErrOutputOwner",
       "code": "PRG-ERR-OUTPUT-OWNER-001",
       "ownerComponent": "compiler",
@@ -404,24 +351,6 @@
       ]
     },
     {
-      "symbol": "ErrEnable",
-      "code": "PRG-ERR-ENABLE-001",
-      "ownerComponent": "runtime",
-      "statusClass": "CONFLICT",
-      "httpStatuses": [
-        409,
-        422
-      ],
-      "retryable": false,
-      "keepsRunningRevision": true,
-      "messageKey": "programming.error.enable",
-      "allowedArgs": [
-        "programId",
-        "state",
-        "limit"
-      ]
-    },
-    {
       "symbol": "ErrPidReview",
       "code": "PRG-ERR-PID-REVIEW-001",
       "ownerComponent": "compiler",
@@ -435,6 +364,141 @@
       "allowedArgs": [
         "entryId",
         "featureState"
+      ]
+    },
+    {
+      "symbol": "ErrPouKind",
+      "code": "PRG-ERR-POU-KIND-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.pouKind",
+      "allowedArgs": [
+        "objectId",
+        "kind",
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrPouRecursion",
+      "code": "PRG-ERR-POU-RECURSION-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.pouRecursion",
+      "allowedArgs": [
+        "objectId",
+        "cycleLength"
+      ]
+    },
+    {
+      "symbol": "ErrLibVersion",
+      "code": "PRG-ERR-LIB-VERSION-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.libVersion",
+      "allowedArgs": [
+        "entryId",
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrProgramLimit",
+      "code": "PRG-ERR-PROGRAM-LIMIT-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.programLimit",
+      "allowedArgs": [
+        "profile",
+        "limit",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrSignalPublisher",
+      "code": "PRG-ERR-SIGNAL-PUBLISHER-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.signalPublisher",
+      "allowedArgs": [
+        "signalId",
+        "ownerProgramId",
+        "conflictProgramId"
+      ]
+    },
+    {
+      "symbol": "ErrSignalFreshness",
+      "code": "PRG-ERR-SIGNAL-FRESHNESS-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.signalFreshness",
+      "allowedArgs": [
+        "signalId",
+        "expected",
+        "actual",
+        "limit"
+      ]
+    },
+    {
+      "symbol": "ErrEnableNotCommissioned",
+      "code": "PRG-ERR-ENABLE-NOT-COMMISSIONED-001",
+      "ownerComponent": "runtime",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.enableNotCommissioned",
+      "allowedArgs": [
+        "programId"
+      ]
+    },
+    {
+      "symbol": "ErrProgramState",
+      "code": "PRG-ERR-PROGRAM-STATE-001",
+      "ownerComponent": "runtime",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.programState",
+      "allowedArgs": [
+        "programId",
+        "state",
+        "limit"
       ]
     }
   ],
@@ -963,57 +1027,57 @@
     {
       "component": "compiler",
       "detailCode": "ST-POU-001",
-      "publicCode": "PRG-ERR-POU-001"
+      "publicCode": "PRG-ERR-POU-KIND-001"
     },
     {
       "component": "compiler",
       "detailCode": "ST-POU-002",
-      "publicCode": "PRG-ERR-POU-001"
+      "publicCode": "PRG-ERR-POU-KIND-001"
     },
     {
       "component": "compiler",
       "detailCode": "ST-POU-003",
-      "publicCode": "PRG-ERR-POU-001"
+      "publicCode": "PRG-ERR-POU-RECURSION-001"
     },
     {
       "component": "compiler",
       "detailCode": "ST-POU-004",
-      "publicCode": "PRG-ERR-POU-001"
+      "publicCode": "PRG-ERR-PROGRAM-LIMIT-001"
     },
     {
       "component": "compiler",
       "detailCode": "ST-LIB-001",
-      "publicCode": "PRG-ERR-LIBRARY-001"
+      "publicCode": "PRG-ERR-LIB-VERSION-001"
     },
     {
       "component": "compiler",
       "detailCode": "ST-LIB-002",
-      "publicCode": "PRG-ERR-LIBRARY-001"
+      "publicCode": "PRG-ERR-LIB-VERSION-001"
     },
     {
       "component": "compiler",
       "detailCode": "ST-LIB-003",
-      "publicCode": "PRG-ERR-LIBRARY-001"
+      "publicCode": "PRG-ERR-POU-RECURSION-001"
     },
     {
       "component": "compiler",
       "detailCode": "ST-SIG-001",
-      "publicCode": "PRG-ERR-SIGNAL-001"
+      "publicCode": "PRG-ERR-SIGNAL-PUBLISHER-001"
     },
     {
       "component": "compiler",
       "detailCode": "ST-SIG-002",
-      "publicCode": "PRG-ERR-SIGNAL-001"
+      "publicCode": "PRG-ERR-MAP-004"
     },
     {
       "component": "compiler",
       "detailCode": "ST-SIG-003",
-      "publicCode": "PRG-ERR-SIGNAL-001"
+      "publicCode": "PRG-ERR-SIGNAL-FRESHNESS-001"
     },
     {
       "component": "compiler",
       "detailCode": "ST-SIG-004",
-      "publicCode": "PRG-ERR-SIGNAL-001"
+      "publicCode": "PRG-ERR-SIGNAL-PUBLISHER-001"
     },
     {
       "component": "compiler",
@@ -1028,7 +1092,17 @@
     {
       "component": "st-control-api",
       "detailCode": "API-E-008",
-      "publicCode": "PRG-ERR-ENABLE-001"
+      "publicCode": "PRG-ERR-ENABLE-NOT-COMMISSIONED-001"
+    },
+    {
+      "component": "st-control-api",
+      "detailCode": "API-E-009",
+      "publicCode": "PRG-ERR-PROGRAM-STATE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-009",
+      "publicCode": "PRG-ERR-PROGRAM-LIMIT-001"
     }
   ]
 }

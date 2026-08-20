@@ -48,6 +48,9 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # `set -e` cắt luôn phần còn lại — nó chỉ lộ ra sau khi 10 vi phạm
         # dependency boundary được sửa.
         #
+        # Cập nhật `T59-006`: 26→30 public và 118→120 detail — thay sáu mã gộp
+        # mà T59-004 tự đặt bằng đúng mười mã `DDD` §5.2 đã khóa.
+        #
         # Cập nhật `T59-004`: 20→26 public và 104→118 detail. Sáu public code mới
         # phủ POU/library/signal/output owner/enable/PID review; 14 detail mapping
         # mới được khai trong `st_diagnostic.hpp` và `st_control_api.hpp` cùng
@@ -57,8 +60,8 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # `generate_programming_errors.py --check` canh, chạy ngay phía trên
         # trong cùng gate.
         catalog, raw, schema_raw = GENERATOR.load_and_validate()
-        self.assertEqual(len(catalog["publicErrors"]), 26)
-        self.assertEqual(len(catalog["componentDetails"]), 118)
+        self.assertEqual(len(catalog["publicErrors"]), 30)
+        self.assertEqual(len(catalog["componentDetails"]), 120)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
 
@@ -91,11 +94,15 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         catalog, _, _ = GENERATOR.load_and_validate()
         codes = {item["code"] for item in catalog["publicErrors"]}
         for code in (
-            "PRG-ERR-POU-001",
-            "PRG-ERR-LIBRARY-001",
-            "PRG-ERR-SIGNAL-001",
+            "PRG-ERR-POU-KIND-001",
+            "PRG-ERR-POU-RECURSION-001",
+            "PRG-ERR-LIB-VERSION-001",
+            "PRG-ERR-PROGRAM-LIMIT-001",
+            "PRG-ERR-SIGNAL-PUBLISHER-001",
+            "PRG-ERR-SIGNAL-FRESHNESS-001",
             "PRG-ERR-OUTPUT-OWNER-001",
-            "PRG-ERR-ENABLE-001",
+            "PRG-ERR-ENABLE-NOT-COMMISSIONED-001",
+            "PRG-ERR-PROGRAM-STATE-001",
             "PRG-ERR-PID-REVIEW-001",
         ):
             self.assertIn(code, codes)

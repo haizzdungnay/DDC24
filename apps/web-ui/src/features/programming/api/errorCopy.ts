@@ -51,16 +51,24 @@ export function programmingErrorCopy(
       return pick('Ảnh hưởng đã đổi kể từ lúc đọc; hãy tải lại và xác nhận lại.', 'Impact changed since it was last read; reload and re-confirm.')
     case 'PRG-ERR-UNAVAILABLE-001':
       return pick('Tính năng tạm thời chưa sẵn sàng.', 'This capability is temporarily unavailable.')
-    case 'PRG-ERR-POU-001':
-      return pick('Khối chương trình vi phạm quy tắc (kiểu khối, tính thuần, gọi đệ quy hoặc trạng thái).', 'The program organisation unit breaks a rule (kind, purity, recursion or state).')
-    case 'PRG-ERR-LIBRARY-001':
-      return pick('Thư viện điều khiển: thiếu khối, lệch phiên bản hoặc phụ thuộc vòng.', 'Control library: missing entry, version mismatch or circular dependency.')
-    case 'PRG-ERR-SIGNAL-001':
-      return pick('Tín hiệu công bố không hợp lệ (trùng nguồn phát, sai kiểu hoặc độ tươi ngoài khoảng).', 'Published signal is invalid (duplicate publisher, wrong type or freshness out of range).')
+    case 'PRG-ERR-POU-KIND-001':
+      return pick('Khối chương trình vi phạm quy tắc loại khối, tính thuần hoặc chữ ký.', 'The program organisation unit breaks a kind, purity or signature rule.')
+    case 'PRG-ERR-POU-RECURSION-001':
+      return pick('Có gọi vòng giữa các khối hoặc phụ thuộc vòng trong thư viện.', 'There is a call cycle between blocks, or a circular library dependency.')
+    case 'PRG-ERR-LIB-VERSION-001':
+      return pick('Thư viện điều khiển: thiếu khối hoặc lệch phiên bản đã ghim.', 'Control library: missing entry or version mismatch against the pinned version.')
+    case 'PRG-ERR-PROGRAM-LIMIT-001':
+      return pick('Vượt giới hạn dung lượng của gói (số chương trình hoặc số khối chức năng).', 'The package capacity limit was exceeded (program or function block count).')
+    case 'PRG-ERR-SIGNAL-PUBLISHER-001':
+      return pick('Tín hiệu công bố phải có đúng một chương trình phát; hãy sửa nguồn phát.', 'A published signal must have exactly one producing program; fix the publisher.')
+    case 'PRG-ERR-SIGNAL-FRESHNESS-001':
+      return pick('Độ tươi của tín hiệu ngoài khoảng cho phép hoặc không hợp với chu kỳ chương trình phát.', 'Signal freshness is out of range or incompatible with the producing program cycle.')
     case 'PRG-ERR-OUTPUT-OWNER-001':
       return pick('Một đầu ra đang bị nhiều chương trình cùng ghi; mỗi đầu ra chỉ có một chủ sở hữu.', 'One output is written by more than one program; each output has exactly one owner.')
-    case 'PRG-ERR-ENABLE-001':
-      return pick('Không bật/tắt được chương trình: sai điều kiện hoặc vượt số chương trình được bật.', 'The program could not be enabled or disabled: precondition failed or the enabled-program limit was reached.')
+    case 'PRG-ERR-ENABLE-NOT-COMMISSIONED-001':
+      return pick('Chương trình chưa được đưa vào vận hành nên chưa thể bật.', 'The program has not been commissioned yet, so it cannot be enabled.')
+    case 'PRG-ERR-PROGRAM-STATE-001':
+      return pick('Không đổi được trạng thái chương trình: sai trạng thái hiện tại hoặc đã đủ số chương trình được bật.', 'The program state could not be changed: wrong current state, or the enabled-program limit is already reached.')
     case 'PRG-ERR-PID-REVIEW-001':
       return pick('Khối PID chưa được Controls và An toàn phê duyệt; không thể đưa vào vận hành.', 'The PID block is not approved by Controls and Safety; it cannot be commissioned.')
     default:

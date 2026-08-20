@@ -120,7 +120,10 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
     # §9 là authority con người đọc; catalog không được âm thầm bỏ/thêm mã.
     spec = INTERFACE_SPEC.read_text()
     section9 = spec.split("## 9.", 1)[1].split("## 10.", 1)[0]
-    spec_codes = set(re.findall(r"PRG-ERR-[A-Z0-9-]+", section9))
+    # CHỈ đọc dòng đầu của bảng authority. Trước đây quét toàn bộ §9 nên một câu
+    # văn xuôi nhắc tên mã đã gỡ cũng làm gate đỏ, và ngược lại một mã chỉ được
+    # nhắc trong văn xuôi vẫn "thỏa" gate mà không hề có dòng authority nào.
+    spec_codes = set(re.findall(r"^\|\s*`(PRG-ERR-[A-Z0-9-]+)`\s*\|", section9, re.M))
     if codes != spec_codes:
         raise ValueError(
             "catalog lệch IFSPEC §9: thiếu=" + str(sorted(spec_codes - codes)) +

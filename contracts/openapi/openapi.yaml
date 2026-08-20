@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.21.0"
+  version: "1.22.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -2520,11 +2520,15 @@ components:
             - PRG-ERR-IMPACT-UNAVAILABLE-001
             - PRG-ERR-IMPACT-STALE-001
             - PRG-ERR-UNAVAILABLE-001
-            - PRG-ERR-POU-001
-            - PRG-ERR-LIBRARY-001
-            - PRG-ERR-SIGNAL-001
+            - PRG-ERR-POU-KIND-001
+            - PRG-ERR-POU-RECURSION-001
+            - PRG-ERR-LIB-VERSION-001
+            - PRG-ERR-PROGRAM-LIMIT-001
+            - PRG-ERR-SIGNAL-PUBLISHER-001
+            - PRG-ERR-SIGNAL-FRESHNESS-001
             - PRG-ERR-OUTPUT-OWNER-001
-            - PRG-ERR-ENABLE-001
+            - PRG-ERR-ENABLE-NOT-COMMISSIONED-001
+            - PRG-ERR-PROGRAM-STATE-001
             - PRG-ERR-PID-REVIEW-001
         messageKey:
           type: string
