@@ -691,7 +691,7 @@ công cụ sinh, **không phải** mã đã biên dịch từ nguồn thật —
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
 | `T59-201` | P0 | Domain/store SYSTEM+PROJECT library revision/entry/usage | T59-005/102 | **DONE** | SYSTEM là snapshot **virtual** sinh từ registry (0 hàng SQLite, trigger chặn cả SQL trực tiếp); PROJECT có Draft→Publish→Deprecate bất biến ở **hai lớp** store+trigger; migration `0007` schema v6→v7 **dừng fail-closed** khi còn hàng library đời v6; 11 test domain + 10 test store gồm reference guard, clone version re-pin dependency, usage seal nguyên tử, restart và fail-closed SYSTEM provider; `go vet` sạch + `go test ./... -count=1` 18/18 package ok; G1 10/10 + self-test 32/32; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
-| `T59-202` | P0 | Library REST/OpenAPI/RBAC/idempotency/audit | T59-201/006 | ORDERED | Route↔OpenAPI↔client exact; admin mutation, viewer/operator read, negative direct API. |
+| `T59-202` | P0 | Library REST/OpenAPI/RBAC/idempotency/audit | T59-201/006 | **DONE** | 3 route DDD §5.1 (`GET /libraries`, `POST|DELETE /projects/{id}/library/entries[/{entryId}]`); OpenAPI `1.23.0` **28 operation** ↔ 28 route Go ↔ client TS sinh lại, cả ba khoá bằng test exact; RBAC kiểm bằng authorizer thật (viewer/operator đọc được, mutation 403); idempotency+audit nằm CÙNG transaction với mutation (migration `0008` mở enum receipt); mutation library dùng chung lane `If-Match` với Draft; 6 test application + 6 test transport gồm cursor ràng buộc filter và regression route-stealing; `go test ./... -count=1` 18/18; G1 10/10; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 | `T59-203` | P1 | FE PGM-04 library search/filter/detail/create/edit/version/usage | T59-202 | ORDERED | Desktop/mobile visual mapping; loading/empty/error/permission; component/a11y/E2E. |
 | `T59-204` | P1 | Library import/export/signature/version compatibility | T59-201/106 | ORDERED | Source-only hostile corpus; no executable/cache/path traversal; no Active mutation. |
 | `T59-205` | P0 | PID registry trạng thái `REVIEW_REQUIRED` + policy token | T59-003/004 | ORDERED | Commission blocked without controlled approval token; cannot bypass from FE payload. |
@@ -765,6 +765,70 @@ và thêm khối `draftMutableEntities` — sau v7, entry chỉ bất biến khi
 `T59-202`, UI thuộc `T59-203`, import/export nguồn thù địch thuộc `T59-204`, và
 layout FB authoritative do compiler sinh vẫn chưa có — store chỉ từ chối những gì
 không authoritative chứ không tự tính được.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-202` — REST Control Library, RBAC, idempotency và audit
+
+**Chỉ ba route, đúng bằng DDD §5.1.** `GET /programming/libraries`,
+`POST /programming/projects/{id}/library/entries`,
+`DELETE .../entries/{entryId}`. Không thêm route "tạo library" hay "publish
+library": DDD khoá đúng ba dòng này, và tự thêm route thứ tư là tự chế contract.
+Hệ quả kéo theo được xử lý ở dưới.
+
+**Entry đầu tiên tự mở Draft library.** Nếu Project chưa có PROJECT Library nào,
+entry đầu tiên mở `1.0.0`; nếu đã có bản publish và chưa có Draft, hệ thống mở
+version **minor kế tiếp** clone từ bản publish mới nhất. Đây là hệ quả trực tiếp
+của việc chỉ có route entry: bắt người dùng "tạo library" trước khi thêm entry là
+dựng một bước không tồn tại trong luồng nào. Version mới chỉ tăng MINOR và bỏ
+patch/prerelease — một Draft vừa mở là tập thay đổi chưa biết, đoán PATCH sẽ nói
+sai mức tương thích ngay khi chưa có thay đổi nào.
+
+**Mutation library đi CHUNG lane concurrency với tài liệu Draft.** `If-Match` là
+ETag Draft của Project, và mutation library **tăng** ETag đó. Hai lane riêng sẽ
+cho phép một lần lưu tài liệu và một lần sửa library xen kẽ nhau mà không bên nào
+thấy — đúng lớp lỗi mà `If-Match` sinh ra để chặn. Test khoá cả chiều khẳng định
+(Project view thấy đúng ETag mới) lẫn chiều phủ định (ETag cũ bị 409).
+
+**Idempotency và audit nằm trong CÙNG transaction với thay đổi.** Migration
+`0008` mở enum `mutation_receipts.action` cho `LIBRARY_ENTRY_UPSERT/DELETE`. Enum
+đó đóng có chủ ý: nó ngăn một action tự chế lọt vào bảng biên nhận rồi "replay"
+một thứ không ai định nghĩa — nên thêm action mới bắt buộc là migration, không
+phải sửa hằng ở lớp Go.
+
+**`REVIEW_REQUIRED` không nhận từ payload.** Nó là cờ Controls/Safety của registry
+SYSTEM. Cho client tự dán nhãn review lên POU của mình sẽ làm nhoè ý nghĩa cờ đó
+ở đúng chỗ nó cần rõ nhất. Schema OpenAPI chỉ cho `AVAILABLE`, và service từ chối
+mọi giá trị khác.
+
+**Ba nguyên nhân phân giải giữ ba mã public tới tận HTTP.** `LibraryPublicError`
+dịch `ST-LIB-001/002` và `ST-POU-003` qua đúng catalog; reference guard trả
+`PRG-ERR-CONFLICT-001`. Gộp chúng vào một mã chung sẽ xoá đúng thông tin người
+vận hành cần để biết phải sửa gì.
+
+**Cursor ràng buộc luôn bộ lọc.** Trang sau phải cùng `scope/kind/q/projectId`
+với trang đầu; nếu không, một client đổi filter mà giữ cursor sẽ nhận trang có
+phạm vi khác mà không hay. Cursor ký HMAC, hết hạn 15 phút, sửa một ký tự là hỏng.
+
+**Hai finding thật, cả hai do test bắt.**
+
+1. *Handler library nuốt route Project khác.* Bản đầu nhận diện route bằng sự có
+   mặt của `PathValue("projectId")`. Nhiều route Project khác cũng mang biến đó,
+   nên `POST /projects/{id}/draft/revisions` rơi vào handler library và **seal
+   Revision trả lỗi request thay vì chạy** — `TestProgrammingProjectDraftRevisionHTTPAndRestart`
+   ở `internal/app` bắt được. Đã đổi sang khớp đường dẫn tường minh và thêm test
+   hồi quy riêng.
+2. *Actor rỗng cho 503 "retryable".* Khi middleware auth chưa gắn principal,
+   store từ chối bằng một lỗi không có sentinel và lớp HTTP dịch thành
+   `PRG-ERR-UNAVAILABLE-001` retryable — tức **bảo client thử lại một thứ không
+   bao giờ thành công**. Service library nay từ chối actor rỗng bằng lỗi REQUEST.
+   Các service Project/Check/Operation có cùng khoảng hở này; nó thuộc ma trận
+   RBAC/security đầy đủ của `T59-603` và được ghi ở đây để không rơi mất.
+
+**Ranh giới trung thực.** Đây là **BE**. UI PGM-04 thuộc `T59-203`; import/export
+nguồn thù địch thuộc `T59-204`; publish library gắn với seal Revision đa Program
+thuộc `T59-301`/`T59-305`. Layout FB authoritative vẫn phải do compiler cấp —
+API chỉ nhận hoặc từ chối, không tự tính.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

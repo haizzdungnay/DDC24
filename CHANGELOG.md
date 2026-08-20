@@ -8,6 +8,65 @@
 
 ## [Unreleased]
 
+### Added — `T59-202` REST Control Library: RBAC, idempotency và audit (2026-08-20)
+
+Ba route đúng bằng `DDD-SW-PROG-UNIFIED-001` §5.1: `GET /programming/libraries`,
+`POST /programming/projects/{id}/library/entries`,
+`DELETE .../entries/{entryId}`. **Không** thêm route "tạo library" hay "publish
+library" — DDD khoá đúng ba dòng đó, tự thêm route thứ tư là tự chế contract.
+
+**Entry đầu tiên tự mở Draft library.** Chưa có PROJECT Library thì mở `1.0.0`;
+đã có bản publish thì mở **minor kế tiếp** clone từ bản mới nhất. Bắt người dùng
+"tạo library" trước khi thêm entry là dựng một bước không tồn tại trong luồng
+nào. Chỉ tăng MINOR: một Draft vừa mở là tập thay đổi chưa biết, đoán PATCH sẽ
+nói sai mức tương thích ngay khi chưa có thay đổi nào.
+
+**Mutation library đi chung lane concurrency với tài liệu Draft** — `If-Match` là
+ETag Draft của Project và mutation library tăng ETag đó. Hai lane riêng sẽ cho
+phép một lần lưu tài liệu và một lần sửa library xen kẽ nhau mà không bên nào
+thấy.
+
+**Idempotency + audit nằm CÙNG transaction với thay đổi**; migration `0008` mở
+enum `mutation_receipts.action`. Enum đó đóng có chủ ý nên thêm action mới bắt
+buộc là migration, không phải sửa hằng ở lớp Go.
+
+**`featureState=REVIEW_REQUIRED` không nhận từ payload** — đó là cờ
+Controls/Safety của registry SYSTEM, không phải nhãn client tự dán cho POU của
+mình.
+
+**Contract ba chiều:** OpenAPI lên `1.23.0` với **28 operation**; route Go và
+client TS sinh lại; cả ba bị khoá bằng test exact, G1 re-pin `openapi` + `store`.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; FE 114 file / 1079 test; G1 10/10 + self-test 32/32;
+`verify-project.sh --wave W2` **6/6 PASS**.
+
+### Fixed — `T59-202` handler Control Library nuốt route Project khác (2026-08-20)
+
+**Triệu chứng.** `POST /programming/projects/{id}/draft/revisions` trả
+`PRG-ERR-REQ-001` thay vì niêm phong Revision.
+
+**Nguyên nhân gốc.** Handler library nhận diện route bằng sự có mặt của
+`PathValue("projectId")`. Nhiều route Project khác cũng mang biến đó, nên chúng
+rơi vào handler library. `TestProgrammingProjectDraftRevisionHTTPAndRestart` ở
+`internal/app` bắt được ngay trong lần chạy full.
+
+**Cách sửa.** Khớp đường dẫn tường minh (`/library/entries`), kèm test hồi quy
+riêng khoá đúng việc seal Revision vẫn đi đúng handler của nó.
+
+### Fixed — `T59-202` mutation thiếu principal trả `503 retryable` (2026-08-20)
+
+**Triệu chứng.** Khi middleware auth chưa gắn principal, mutation Control Library
+trả `PRG-ERR-UNAVAILABLE-001` với `retryable=true`.
+
+**Nguyên nhân gốc.** Actor rỗng làm store từ chối bằng một lỗi không có sentinel;
+`writeMappedError` mặc định về UNAVAILABLE. Client được bảo thử lại một thứ không
+bao giờ thành công.
+
+**Cách sửa.** `LibraryService` từ chối actor rỗng bằng lỗi REQUEST. Các service
+Project/Check/Operation có cùng khoảng hở; nó thuộc ma trận RBAC/security đầy đủ
+của `T59-603` và đã được ghi vào Plan 59 §3.3 để không rơi mất.
+
 ### Added — `T59-201` Control Library: domain, store schema v7 và SYSTEM virtual (2026-08-20)
 
 `apps/web-api/internal/programming/domain/library.go`,

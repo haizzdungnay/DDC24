@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 3.3 |
+| Phiên bản | 3.4 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -475,6 +475,20 @@ Evidence mới chỉ ở host/local cho domain, migration/store, restart và fau
 injection. Chưa có REST/FE/compiler package/runtime/target/HIL/Test Result; vì vậy
 **22/22 risk vẫn Open**, S×L và residual không đổi.
 
+### 5.30 Cập nhật treatment source `T59-202` (Plan59 W2)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-020` | Ba route Control Library theo đúng DDD §5.1; mutation là **admin-only** kiểm bằng authorizer thật (viewer/operator đọc được nhưng 403 khi ghi); `If-Match` + idempotency bắt buộc và bị từ chối TRƯỚC khi chạm store; biên nhận idempotency và audit nằm cùng transaction với thay đổi; `featureState=REVIEW_REQUIRED` không nhận từ payload | UI (`T59-203`), import/export nguồn thù địch (`T59-204`), signed library (`T59-602`), ma trận security/RBAC đầy đủ (`T59-603`) và Test Result `U03` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | `LibraryPublicError` giữ `ST-LIB-001`/`ST-LIB-002`/`ST-POU-003` thành ba mã public khác nhau tới tận lớp HTTP; cursor tìm kiếm ký HMAC và ràng buộc luôn bộ lọc nên trang sau không đổi phạm vi âm thầm | Nối emitter vào Check thật (`T59-302`), copy FE (`T59-203`) và Test Result `VS-PROG-019/024` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Mutation library tăng ETag Draft của Project nên hai lane (tài liệu và library) không sửa xen kẽ nhau mà không bên nào thấy; ETag cũ bị 409 | E2E real-backend (`T59-505`) và ma trận concurrency (`T59-603`) | `OPEN — PARTIAL SOURCE` |
+
+Hai finding thật được sửa trong task: handler library nuốt route Project khác
+(làm seal Revision hỏng), và actor rỗng cho `503 retryable` thay vì lỗi REQUEST.
+Khoảng hở actor rỗng còn tồn tại ở Project/Check/Operation service và được ghi
+sang `T59-603`. Evidence vẫn chỉ ở host/local, chưa có FE/target/HIL/Test Result;
+**22/22 risk giữ Open**, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -527,6 +541,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 3.4 | 2026-08-20 | Ghi `T59-202` (Plan59 W2) cho treatment partial RSK-008/014/020: ba route Control Library admin-only theo DDD §5.1, `If-Match`+idempotency+audit cùng transaction, cursor ký HMAC ràng buộc filter, ba mã lỗi phân giải giữ riêng. Hai finding thật (handler nuốt route Project, actor rỗng cho 503 retryable) đã sửa. Giữ 22/22 Open và mọi residual vì FE/import/signature/target/Test Result còn thiếu. |
 | 3.3 | 2026-08-20 | Ghi `T59-201` (Plan59 W2) cho treatment partial RSK-009/014/020: SYSTEM registry virtual/content-addressed có lịch sử version→hash; PROJECT Library versioned, Published bất biến, canonical source/interface/dependency hash, DAG/reference/layout guard và migration/restart fail-closed. Giữ 22/22 Open và mọi residual vì REST/import/signature/compiler/runtime/target/Test Result còn thiếu. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
