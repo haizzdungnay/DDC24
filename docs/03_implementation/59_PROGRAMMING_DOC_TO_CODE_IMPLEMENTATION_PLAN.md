@@ -97,13 +97,58 @@ W1/W2/W3 có thể chạy song song theo contract boundary. Critical path releas
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-001` | P0 | Re-pin `g1_contract_join_v1.json`, bỏ hardcode store schema version | — | READY | G1 thường+self-test+layout exit 0; negative self-test vẫn bắt drift. |
+| `T59-001` | P0 | Re-pin `g1_contract_join_v1.json`, bỏ hardcode store schema version | — | **DONE** | `verify_programming_g1_contracts.py` exit 0; `--self-test` 12/12 mutation + 6/6 manifest chain + 5/5 deploy order; `verify-project.sh --component layout` exit 0; `go vet` sạch + `go test ./... -count=1` 18/18 package ok. Chi tiết §3.1. |
 | `T59-002` | P0 | Tạo Product profile v2 `32/16/256/1024/512/512`, generator C++/Go/TS | — | READY | `--check` exact; one-over vectors; không còn product constant 1 Program. |
 | `T59-003` | P0 | FBD/POU/library registry JSON single-source + generator | — | READY | TS/C++/schema/verifier exact equality; bỏ SCALE/DEADBAND/CTU/PI ma, đủ conversion/SQRT. |
 | `T59-004` | P0 | Error catalog mới cho POU/library/signal/enable/output owner/PID review | T59-002/003 | ORDERED | C++/Go/TS generated; public/detail count/hash exact; mapping missing build fail. |
 | `T59-005` | P0 | Store schema v2 + backup/migration v1→v2 | T59-002 | ORDERED | SQLite migration atomic/idempotent/restart; không tự Commission; rollback giữ DB. |
 | `T59-006` | P0 | OpenAPI + IPC v2 + artifact/package schema v2, dual-reader policy | T59-002/004 | ORDERED | Schema/golden/codec/client/route contract PASS; action khai phải có handler test. |
 | `T59-007` | P1 | Local CI parity wrapper và gate matrix cho từng Wave | T59-001 | ORDERED | Một command chạy layout/C++/Go/FE/contract; không gọi local PASS là GitHub CI. |
+
+### 3.1 Ghi chú thực thi W0
+
+#### `T59-001` — Re-pin join G1 và bỏ hardcode schema version
+
+**Triệu chứng.** `scripts/verify_programming_g1_contracts.py` báo 10 FAIL và giữ
+gate `layout` đỏ, trong khi mọi contract bị tố "drift" đều là bản hợp lệ đã merge.
+
+**Nguyên nhân gốc.** Hai lớp khác nhau bị trộn vào cùng một verifier:
+
+1. *Pin lạc hậu* — `g1_contract_join_v1.json` còn ghim OpenAPI `1.19.0`, error
+   catalog 80 componentDetail, store head migration `0004`, golden manifest cũ.
+2. *Hardcode trong code kiểm* — `store_manifest["schemaVersion"] == 4`,
+   `publicErrorCount == 20`, `componentDetailCount == 80`, `operationCount == 25`.
+   Những literal này nhân bản pin vào validator, nên mọi thay đổi contract hợp lệ
+   đều làm gate đỏ và buộc sửa code kiểm thay vì sửa dữ liệu ghim.
+
+**Cách sửa.**
+
+- Re-pin toàn bộ 7 contract trong `contracts/programming/g1_contract_join_v1.json`;
+  thêm `schemaVersion` và `migrationDir` cho contract `store`.
+- Validator lấy mọi số đếm/version từ pin trong join, không còn literal; error
+  count so ba chiều catalog ↔ manifest ↔ pin.
+- Thêm `validate_migration_chain()`: chuỗi migration phải liên tục `1..N`, mọi file
+  khai báo tồn tại đúng SHA-256, head trùng cả pin lẫn `migrationFile`, và thư mục
+  không chứa `.sql` nằm ngoài manifest.
+- Self-test đổi từ "có bị reject không" sang "bị reject **đúng lý do**" (khoá mảnh
+  thông điệp), thêm 7 mutation mới cho đúng các giá trị vừa bỏ hardcode.
+
+**Finding sửa kèm trong task.** `TestProgrammingStoreContractManifest`
+(`apps/web-api/internal/programming/store/store_test.go`) hardcode tên head
+migration `"0005_operation_coordinator.sql"` và **không** so `schemaVersion` của
+manifest với `CurrentSchemaVersion` — cùng lớp lỗi, cho phép contract manifest và
+code Go trôi khỏi nhau mà test vẫn xanh. Đã đổi sang suy ra head từ
+`embeddedMigrations()` và đối chiếu từng entry manifest với checksum embed.
+
+**Kiểm chứng negative thật (host).** Sửa tạm `schemaVersion` 5 → 4 trong contract
+manifest: Go báo `schema version lệch: manifest=4 code=5`, Python báo
+`store schema version drift: manifest=4 pin=5` + `schemaVersion 4 không bằng
+migration cuối 5`. Đã khôi phục nguyên trạng, `git diff` sạch trên file đó.
+
+**Rollback.** Chỉ chạm contract pin + script kiểm + test; không đổi schema DB,
+không migration mới, không chạm Active/LKG. Revert commit là đủ.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
 ### W1 — POU, compiler và artifact v2
 

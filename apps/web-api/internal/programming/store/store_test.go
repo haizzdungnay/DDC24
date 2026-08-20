@@ -831,19 +831,44 @@ func TestProgrammingStoreContractManifest(t *testing.T) {
 		Synchronous       string `json:"synchronous"`
 		SingleWriter      bool   `json:"singleWriter"`
 		FeatureDefaultOff bool   `json:"featureDefaultOff"`
+		Migrations        []struct {
+			Version int    `json:"version"`
+			File    string `json:"file"`
+			SHA256  string `json:"sha256"`
+		} `json:"migrations"`
 	}
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		t.Fatal(err)
 	}
+	// Contract manifest và code phải cùng một schema version. Trước đây test chỉ
+	// so tên file head bằng literal nên hai bên có thể trôi khỏi nhau mà vẫn xanh.
+	if manifest.SchemaVersion != CurrentSchemaVersion {
+		t.Fatalf("schema version lệch: manifest=%d code=%d", manifest.SchemaVersion, CurrentSchemaVersion)
+	}
+	embedded, err := embeddedMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Migrations) != len(embedded) {
+		t.Fatalf("số migration lệch: manifest=%d embed=%d", len(manifest.Migrations), len(embedded))
+	}
+	for index, declared := range manifest.Migrations {
+		actual := embedded[index]
+		if declared.Version != actual.Version || declared.File != actual.Name ||
+			declared.SHA256 != hex.EncodeToString(actual.Checksum[:]) {
+			t.Fatalf("migration %d lệch: manifest=%+v embed=%s/%s", index+1, declared, actual.Name, hex.EncodeToString(actual.Checksum[:]))
+		}
+	}
+	head := embedded[len(embedded)-1]
 	checksum, ok := MigrationChecksum(manifest.SchemaVersion)
 	if !ok {
 		t.Fatalf("schema version không được hỗ trợ: %d", manifest.SchemaVersion)
 	}
-	if manifest.MigrationFile != "0005_operation_coordinator.sql" ||
+	if manifest.MigrationFile != head.Name ||
 		manifest.MigrationSHA256 != hex.EncodeToString(checksum[:]) ||
 		!manifest.ForeignKeys || manifest.JournalMode != "WAL" ||
 		manifest.Synchronous != "FULL" || !manifest.SingleWriter || !manifest.FeatureDefaultOff {
-		t.Fatalf("Programming store manifest lệch code: %+v", manifest)
+		t.Fatalf("Programming store manifest lệch code: %+v (head=%s)", manifest, head.Name)
 	}
 }
 

@@ -8,6 +8,45 @@
 
 ## [Unreleased]
 
+### Fixed — `T59-001` mở gate G1: re-pin join contract và bỏ hardcode schema version (2026-08-20)
+
+`scripts/verify_programming_g1_contracts.py` báo 10 FAIL và giữ gate `layout` đỏ
+dù mọi contract bị tố "drift" đều là bản hợp lệ đã merge. Nguyên nhân gồm hai lớp:
+pin trong `contracts/programming/g1_contract_join_v1.json` lạc hậu (OpenAPI
+`1.19.0`, error catalog 80 componentDetail, store head migration `0004`, golden
+manifest artifact cũ), và validator nhân bản chính các giá trị đó thành literal
+(`schemaVersion == 4`, `publicErrorCount == 20`, `componentDetailCount == 80`,
+`operationCount == 25`), khiến mọi thay đổi contract hợp lệ đều làm gate đỏ và
+buộc sửa code kiểm thay vì sửa dữ liệu ghim.
+
+- Re-pin đủ 7 contract G1; thêm `schemaVersion` + `migrationDir` cho contract
+  `store` để số schema là **dữ liệu ghim có review**, không phải hằng trong code.
+- Validator lấy mọi số đếm/version từ pin; error count đối chiếu ba chiều
+  catalog ↔ manifest ↔ pin nên không thể sửa một phía mà vẫn xanh.
+- Thêm `validate_migration_chain()`: chuỗi migration liên tục `1..N`, mọi file khai
+  báo tồn tại đúng SHA-256, head trùng cả pin lẫn `migrationFile`, thư mục không
+  chứa `.sql` ngoài manifest, và đường dẫn đi qua guard chống path traversal.
+- Self-test siết từ "có bị reject không" thành "bị reject **đúng lý do**", thêm 7
+  mutation phủ đúng các giá trị vừa bỏ hardcode.
+- Sửa cùng lớp lỗi ở `TestProgrammingStoreContractManifest`
+  (`apps/web-api/internal/programming/store/store_test.go`): bỏ literal tên head
+  migration, suy ra head từ `embeddedMigrations()`, và bổ sung so sánh
+  `manifest.schemaVersion == CurrentSchemaVersion` cùng đối chiếu từng entry
+  manifest với checksum embed — trước đó contract manifest và code Go có thể trôi
+  khỏi nhau mà test vẫn xanh.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `verify_programming_g1_contracts.py` exit 0; `--self-test` **12/12**
+mutation join + **6/6** manifest chain + **5/5** thứ tự deploy lỗi, tất cả reject
+đúng lý do. `scripts/verify-project.sh --component layout` **exit 0** (trước đó
+exit 1 với 10 FAIL). `go vet ./...` sạch; `go test ./... -count=1` **18/18 package
+ok**. Kiểm chứng negative thật: sửa tạm `schemaVersion` 5 → 4 trong contract
+manifest thì Go báo `schema version lệch: manifest=4 code=5` và Python báo
+`store schema version drift: manifest=4 pin=5`; đã khôi phục nguyên trạng.
+
+Không đổi schema DB, không thêm migration, không chạm Active/LKG; rollback bằng
+revert commit.
+
 ### Added — Product Programming thống nhất, Unified DDD và Plan59 (2026-08-20)
 
 Hợp nhất Product Programming thành **một** authority, không chia phạm vi A/B:

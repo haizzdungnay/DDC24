@@ -7,9 +7,9 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "0941b7f11014394699f9fdaf7a0987c9839caffff9a7ceb84a73add4b8328ac3",
+      "sha256": "a4452d091ee30a44790126d6ba7cd515cf03ac4074d762067e00537417dd6a1b",
       "major": 1,
-      "version": "1.19.0",
+      "version": "1.20.0",
       "operationCount": 25
     },
     {
@@ -35,27 +35,29 @@
       "path": "contracts/programming/artifact_v1.schema.json",
       "sha256": "f39ede1fce04d5f13e657268635cc909194d3f1c32c086f5bc2551942e50a417",
       "goldenManifestPath": "contracts/programming/golden/manifest.json",
-      "goldenManifestSha256": "eade4e7cc7b7f3b4cb05da1ff2272b5861bf1fc7802373398143dcb28aa52a5a",
+      "goldenManifestSha256": "2d57473f42de7a4638c581faa04d6e97ae5bdc72c1fc7273dab788bc51aaf681",
       "major": 1,
       "compilerProfile": 1
     },
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "9b6337a0ed180c7a493774eaf1ad105c9a2b2a52e26abaf50120e1f8459e663e",
+      "sha256": "a2fc10a8d1e8e286057301df27774ce93c495fc16803e2c0e4edd0c72634ce01",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "3d7e8bf7a668f8b66e4db259221f7229abd5ac994952587d87e0e61a92da250b",
+      "manifestSha256": "35baa28e8ea8b66d29fea7d5e9da1f377e1df0f654cea37dbd9691cbc80ad2a7",
       "major": 1,
       "publicErrorCount": 20,
-      "componentDetailCount": 80
+      "componentDetailCount": 104
     },
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "9eeb7cc0e39e2fac7f341639c14361a4c9ed6a96a44423edfd9610d97127ac81",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0004_bundle_receipts.sql",
-      "migrationSha256": "430a1ea77912e90f8f8972e5656178d405e7e29425d85534ac6484dbf42fb49e",
-      "major": 1
+      "sha256": "4381c0c04fe1db408fa639edfca62f31c599fda9776364403bd7857b9e5a4729",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0005_operation_coordinator.sql",
+      "migrationSha256": "e0e2020afced4fe9c88fd17df5c27d2779ec6c4ddf0c516b15af7bf370f802dc",
+      "major": 1,
+      "schemaVersion": 5,
+      "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {
       "name": "source-bundle",
@@ -108,5 +110,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001 (Plan 59 W0)"
 }
