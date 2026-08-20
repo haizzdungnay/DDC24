@@ -1,6 +1,9 @@
 # Plan 57 — Nâng cấp UC/UI/UX Web HMI + đóng finding `REV-FE-UIUX-UC-2026-08-18`
 
-**Trạng thái:** **Wave 0–2 xong; Wave 3 xong 14/21; Wave 4 xong 2/2.**
+**Trạng thái:** **Phần task Rev A xong 70/70** (Wave 0–2 xong; Wave 3 xong 20/21,
+task còn lại `T57-3.8` đã chuyển sang Rev B; Wave 4 xong 2/2 và đã nghiệm thu).
+**Plan CHƯA đóng:** cổng `RELEASE_READY` vẫn `N/A`, còn chờ hai điều kiện người —
+chữ ký cho `ADR-033`…`ADR-049` và quyết định về CI. Xem §13b.
 Wave 0 mở bằng `AUTH-WEBUX-2026-08-18-01`; **Wave 1 và phần FE thuần của Wave 2
 mở bằng `AUTH-WEBUX-2026-08-18-02`** (2026-08-18, `docs/00_governance/DECISIONS.md`),
 sau khi **cả tám câu hỏi §12 đã có quyết định** (`ADR-034`…`ADR-039`) và asset
