@@ -693,7 +693,7 @@ công cụ sinh, **không phải** mã đã biên dịch từ nguồn thật —
 | `T59-201` | P0 | Domain/store SYSTEM+PROJECT library revision/entry/usage | T59-005/102 | **DONE** | SYSTEM là snapshot **virtual** sinh từ registry (0 hàng SQLite, trigger chặn cả SQL trực tiếp); PROJECT có Draft→Publish→Deprecate bất biến ở **hai lớp** store+trigger; migration `0007` schema v6→v7 **dừng fail-closed** khi còn hàng library đời v6; 11 test domain + 10 test store gồm reference guard, clone version re-pin dependency, usage seal nguyên tử, restart và fail-closed SYSTEM provider; `go vet` sạch + `go test ./... -count=1` 18/18 package ok; G1 10/10 + self-test 32/32; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 | `T59-202` | P0 | Library REST/OpenAPI/RBAC/idempotency/audit | T59-201/006 | **DONE** | 3 route DDD §5.1 (`GET /libraries`, `POST|DELETE /projects/{id}/library/entries[/{entryId}]`); OpenAPI `1.23.0` **28 operation** ↔ 28 route Go ↔ client TS sinh lại, cả ba khoá bằng test exact; RBAC kiểm bằng authorizer thật (viewer/operator đọc được, mutation 403); idempotency+audit nằm CÙNG transaction với mutation (migration `0008` mở enum receipt); mutation library dùng chung lane `If-Match` với Draft; 6 test application + 6 test transport gồm cursor ràng buộc filter và regression route-stealing; `go test ./... -count=1` 18/18; G1 10/10; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 | `T59-203` | P1 | FE PGM-04 library search/filter/detail/create/edit/version/usage | T59-202 | ORDERED | Desktop/mobile visual mapping; loading/empty/error/permission; component/a11y/E2E. |
-| `T59-204` | P1 | Library import/export/signature/version compatibility | T59-201/106 | ORDERED | Source-only hostile corpus; no executable/cache/path traversal; no Active mutation. |
+| `T59-204` | P1 | Library import/export/signature/version compatibility | T59-201/106 | **DONE** | Control Library đi trong **bundle nguồn có sẵn** (DDD không mở route export library riêng); manifest thêm `systemLibraryVersion` + khối `library`; export tất định (hai lần cùng byte) và **không** mang artifact/IR/cache; import dựng lại library ở `DRAFT` với identity mới, hash entry khớp từng cái; lệch version registry SYSTEM cho **mã lỗi riêng**; corpus thù địch 10 biến thể đều bị từ chối và **0 mutation**; Seal nay publish+pin library trong cùng transaction; `go test ./... -count=1` 18/18; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 | `T59-205` | P0 | PID registry trạng thái `REVIEW_REQUIRED` + policy token | T59-003/004 | **DONE** | `reviewGatedFeatures` vào profile v2 + schema; token suy ra từ chính contract (`featureId`+`libraryVersion`+`evidenceRef`), generator từ chối token bịa; gate ép ở **cả ba** đường Check (`compile_st_source` mặc định BẬT, validate CLI, `compile_fbd_source`) và độc lập producer; 8 test C++ + 1 test Go + 1 test FE + self-test generator 7/7 + G1 ghim `reviewGatedFeatures` và `approvedReviewGatedFeatures` (2 mutation mới); `ctest` 1138/1138; `go test ./... -count=1` 18/18; FE 114 file / 1080 test; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 
 ### 3.3 Ghi chú thực thi W2
@@ -889,6 +889,65 @@ hai), xác nhận profile hash không nằm trong artifact.
 **Ranh giới trung thực.** Đây là **cổng**, không phải phê duyệt. PID vẫn
 `REVIEW_REQUIRED` vì `VS-PROG-U12` chưa chạy; task mở nhãn là `T59-706`. UI cảnh
 báo PID thuộc `T59-203`/`T59-506`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-204` — Control Library trong bundle nguồn: hostile corpus và version compatibility
+
+**Không thêm route export/import library.** DDD §5.1 khoá đúng ba route library
+và đã có sẵn `/programming/bundles/export|import` cho trao đổi **nguồn**. Control
+Library *là* nguồn của Project, nên nó đi trong bundle đó. Dựng một kênh trao đổi
+thứ hai sẽ tạo hai định dạng, hai bộ kiểm và hai cách hỏng.
+
+**Bundle mang gì và không mang gì.** `library/entries/<entryId>.json` chứa
+source, interface, dependency và — chỉ với FUNCTION_BLOCK có layout
+authoritative — khối `stateLayout`. Nó **không** mang `contentSha256` của bên
+gửi: hash được tính lại từ nội dung canonical ở phía nhận, nên một bundle khai
+hash sai không thể tự hợp thức hoá nội dung của chính nó. FUNCTION không mang
+`stateLayout`; khai lại "0" ở đó sẽ biến *0 vì đúng là 0* thành *0 vì bundle nói
+thế*.
+
+**Version compatibility là mã lỗi RIÊNG.** `systemLibraryVersion` phải khớp
+**chính xác** registry của controller. Bundle không hỏng — nó chỉ được xuất trên
+một registry khác — nên gộp vào `ErrInvalidBundle` sẽ bảo người vận hành đi tìm
+file hỏng thay vì xuất lại. Entry SYSTEM có thể đổi semantics giữa hai version;
+"gần đúng" nghĩa là chạy nguồn cũ trên ngữ nghĩa mới.
+
+**Import cấp identity MỚI cho library.** Giữ nguyên `libraryRevisionId` của bên
+gửi sẽ làm hai controller khác nhau có hai nội dung khác nhau dưới **cùng một
+identity**, và mọi pin sau đó trỏ mập mờ. Library nhập về ở trạng thái `DRAFT`,
+không phải `PUBLISHED`: bundle là nguồn, không phải bằng chứng đã publish.
+
+**Guard hai chiều giữa manifest và file set.** Có `library` thì phải có đúng số
+file; **không** có `library` thì không được có file library nào. Bỏ chiều thứ hai
+nghĩa là bundle có thể chở theo entry mà manifest không khai — đúng lối giấu nội
+dung.
+
+**Corpus thù địch, mỗi biến thể kiểm một luật.** Path traversal, đường dẫn tuyệt
+đối, file thực thi, entry không có trong manifest, đổi nội dung giữ hash cũ, tự
+dán `REVIEW_REQUIRED`, FUNCTION mang `stateLayout`, `entryCount` lệch, manifest
+xoá khối `library` mà vẫn còn file, dependency trỏ version khác. Với các biến thể
+nhắm vào luật *sau* phép so hash, test cập nhật lại descriptor để corpus kiểm
+đúng luật đang nhắm chứ không dừng sớm. Mỗi lần đều xác nhận **0 Project mới** và
+library nguồn không bị đụng.
+
+**Finding thuộc phạm vi, sửa trong task: Seal Revision không đóng băng library.**
+Trước task này, `SealRevision` không pin library nào — nghĩa là POU dependency
+của một Revision "đã đóng băng" trỏ vào một library **vẫn sửa được**. Nay Seal
+tìm Draft library của Project, publish nó và pin, **trong cùng một transaction**
+với việc đóng băng Revision (`publishProjectLibraryTx` tách ra cho đúng mục đích
+đó). Publish ở transaction riêng cho phép một lần crash để lại library đã publish
+mà không Revision nào trỏ tới — version bị tiêu mà không ai dùng.
+
+**Finding thứ hai: phép đếm descriptor.** `validateRevisionManifests` đếm mọi
+descriptor mang `revisionId` của Revision. File library cũng mang `revisionId`
+của Revision được chọn, nên phép đếm luôn lệch ngay khi bundle có library. Đã sửa
+để chỉ đếm object thật của Revision.
+
+**Ranh giới trung thực.** "Signature" ở tên task vẫn là `HASH_ONLY`: bundle có
+manifest hash đầy đủ và được xác minh, nhưng **chưa ký**. Artifact/library SIGNED
+cùng key custody/rotation thuộc `T59-602`. Seal đa Program (nhiều POU, nhiều
+Program) thuộc `T59-301`/`T59-305`; task này chỉ đóng băng library cùng Revision.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

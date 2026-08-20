@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 4.3 |
+| Phiên bản | 4.4 |
 | Trạng thái | **Active — 60 requirement legacy + 22 unified requirement; 0 Open Decision; release evidence chưa đủ** |
 | Cập nhật | 2026-08-20 |
 | Chủ quản | Verification Lead |
@@ -30,7 +30,7 @@ nghĩa code tồn tại, cũng không nghĩa test đã PASS.
 | Requirement mới | Design/contract owner | Plan 59 | Scenario | Evidence hiện tại |
 |---|---|---|---|---|
 | `SYS-REQ-PROG-109` | Unified DDD §4–§6; Language/registry v2 | T59-003, T59-101..106 | U01/U02 | `T59-101..106`: parser/model/registry/package host-local; compile package thật/runtime/target còn thiếu; U01/U02 NOT_RUN |
-| `SYS-REQ-PROG-110` | Unified DDD §4–§6; Control Library | T59-003, T59-201..205 | U03/U12 | `T59-205`: review gate PID ép ở ba đường Check, token từ contract, G1 ghim trạng thái chưa duyệt — `U12` vẫn NOT_RUN vì evidence Controls/Safety thuộc `T59-706`. `T59-201`: SYSTEM virtual immutable + PROJECT revision/entry/usage store, canonical hash/DAG/layout/reference/migration/restart host-local. `T59-202`: REST/RBAC/idempotency/audit host-local. FE/import/compiler/runtime/target còn thiếu; U03 NOT_RUN |
+| `SYS-REQ-PROG-110` | Unified DDD §4–§6; Control Library | T59-003, T59-201..205 | U03/U12 | `T59-205`: review gate PID ép ở ba đường Check, token từ contract, G1 ghim trạng thái chưa duyệt — `U12` vẫn NOT_RUN vì evidence Controls/Safety thuộc `T59-706`. `T59-201`: SYSTEM virtual immutable + PROJECT revision/entry/usage store, canonical hash/DAG/layout/reference/migration/restart host-local. `T59-202`: REST/RBAC/idempotency/audit host-local. `T59-204`: export/import nguồn có Control Library, corpus thù địch và version compatibility host-local; bundle vẫn `HASH_ONLY`. FE/import/compiler/runtime/target còn thiếu; U03 NOT_RUN |
 | `SYS-REQ-PROG-111` | Unified DDD §4.1/§7; profile v2 | T59-002, T59-301/305/402 | U04/U05 | NOT_RUN |
 | `SYS-REQ-PROG-112` | Unified DDD §4.5/§7.3 | T59-304/404 | U05/U06 | NOT_RUN |
 | `SYS-REQ-PROG-113` | Unified DDD §4.3/§5.1–5.2/§7.2 | T59-405/501/503 | U07/U08/U10 | NOT_RUN |

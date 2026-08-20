@@ -8,6 +8,60 @@
 
 ## [Unreleased]
 
+### Added — `T59-204` Control Library trong bundle nguồn: hostile corpus và version compatibility (2026-08-20)
+
+**Không thêm route export/import library.** DDD §5.1 khoá đúng ba route library,
+và `/programming/bundles/export|import` đã là kênh trao đổi **nguồn**. Control
+Library *là* nguồn của Project nên nó đi trong bundle đó; dựng kênh thứ hai sẽ
+tạo hai định dạng, hai bộ kiểm và hai cách hỏng.
+
+**Bundle mang gì, không mang gì.** Mỗi entry có source/interface/dependency, và
+chỉ FUNCTION_BLOCK có layout authoritative mới mang `stateLayout`. Bundle **không**
+mang `contentSha256` của bên gửi — hash tính lại từ nội dung canonical ở phía
+nhận, nên bundle không tự hợp thức hoá nội dung của mình. Export tất định: hai
+lần cùng nội dung cho đúng cùng byte.
+
+**Version compatibility có mã lỗi RIÊNG.** `systemLibraryVersion` phải khớp chính
+xác registry của controller. Bundle không hỏng — nó chỉ được xuất trên registry
+khác — nên gộp vào lỗi "bundle hỏng" sẽ bảo người vận hành đi tìm file hỏng thay
+vì xuất lại.
+
+**Import cấp identity MỚI, trạng thái `DRAFT`.** Giữ identity của bên gửi sẽ làm
+hai controller có hai nội dung khác nhau dưới cùng một identity. Bundle là nguồn,
+không phải bằng chứng đã publish.
+
+**Corpus thù địch 10 biến thể** — path traversal, đường dẫn tuyệt đối, file thực
+thi, entry ngoài manifest, sửa nội dung giữ hash cũ, tự dán `REVIEW_REQUIRED`,
+FUNCTION mang `stateLayout`, `entryCount` lệch, manifest giấu library, dependency
+lệch version — đều bị từ chối và để lại **0 mutation**.
+
+**Ranh giới:** "signature" vẫn là `HASH_ONLY`. Bundle có manifest hash đầy đủ và
+được xác minh, nhưng **chưa ký**; SIGNED + key custody thuộc `T59-602`.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18;
+`verify-project.sh --wave W2` **6/6 PASS**.
+
+### Fixed — `T59-204` Seal Revision không đóng băng Control Library (2026-08-20)
+
+**Triệu chứng.** Revision đã niêm phong vẫn pin một PROJECT Library ở trạng thái
+`DRAFT`.
+
+**Nguyên nhân gốc.** `SealRevision` chưa bao giờ chạm tới library, nên POU
+dependency của một Revision "đã đóng băng" trỏ vào tập entry **vẫn sửa được**.
+
+**Cách sửa.** Seal tìm Draft library của Project, publish và pin nó **trong cùng
+transaction** với việc đóng băng Revision (`publishProjectLibraryTx` tách riêng
+cho đúng mục đích đó). Publish ở transaction riêng cho phép một lần crash để lại
+library đã publish mà không Revision nào trỏ tới — version bị tiêu mà không ai
+dùng, và người vận hành không hiểu vì sao số nhảy.
+
+### Fixed — `T59-204` phép đếm descriptor bundle lệch khi có file library (2026-08-20)
+
+`validateRevisionManifests` đếm mọi descriptor mang `revisionId` của Revision.
+File library cũng mang `revisionId` của Revision được chọn, nên phép đếm luôn
+lệch ngay khi bundle có library và mọi import đều bị từ chối. Nay chỉ đếm object
+thật của Revision.
+
 ### Added — `T59-205` review gate PID: token từ contract, không từ checkbox (2026-08-20)
 
 `product_profile_v2.json` thêm `reviewGatedFeatures`; `st_review_gate.{hpp,cpp}`
