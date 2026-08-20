@@ -25,18 +25,22 @@
     {
       "name": "profile",
       "path": "contracts/programming/product_profile_v2.json",
-      "sha256": "9b33db01a150816fc8b67f84e0aafa8750a29d20e9481a9ed8f1d67bbc9e6484",
+      "sha256": "17d2eb86cb7a2a025c0675104d0da19dfc0f062cc0cd17c0c861835e735ce288",
       "major": 1,
       "minor": 0,
       "profileCode": 1,
       "schemaPath": "contracts/programming/product_profile_v2.schema.json",
-      "schemaSha256": "f27616855fa809d59181e6f287f14cb08680f537dccbe3cd640c249400e50104",
+      "schemaSha256": "74eecbd26d319031d90b879032099dd18090412553fc8449d6d568365de6fae7",
       "targetAbi": 3841,
       "integrityMode": "HASH_ONLY",
       "documentMajor": 2,
       "documentMinor": 0,
       "maxProgramsTotal": 32,
-      "maxProgramsEnabled": 16
+      "maxProgramsEnabled": 16,
+      "reviewGatedFeatures": [
+        "PID"
+      ],
+      "approvedReviewGatedFeatures": []
     },
     {
       "name": "artifact",

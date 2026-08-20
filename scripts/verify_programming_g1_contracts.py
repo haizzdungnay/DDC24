@@ -424,6 +424,23 @@ def validate(join: dict[str, Any]) -> list[str]:
             and current_history["sha256"] == registry_item["sha256"],
             "library registry tái sử dụng version với content hash khác",
         )
+        gated = [item["featureId"] for item in profile["reviewGatedFeatures"]]
+        approved = [
+            item["featureId"] for item in profile["reviewGatedFeatures"]
+            if item["approvalToken"] is not None
+        ]
+        require(
+            gated == profile_item["reviewGatedFeatures"],
+            f"reviewGatedFeatures lệch pin: profile={gated} pin={profile_item['reviewGatedFeatures']}",
+        )
+        # Danh sách feature ĐÃ DUYỆT được ghim riêng. Mở một feature
+        # REVIEW_REQUIRED là quyết định Controls/Safety, không phải một dòng sửa
+        # contract lặng lẽ — nên nó phải làm gate đỏ cho tới khi pin đổi theo.
+        require(
+            approved == profile_item["approvedReviewGatedFeatures"],
+            f"approvedReviewGatedFeatures lệch pin: profile={approved} "
+            f"pin={profile_item['approvedReviewGatedFeatures']}",
+        )
         require(
             "functions" not in profile["coreLibrary"],
             "profile không được giữ bản sao danh sách hàm; registry là nguồn duy nhất",
@@ -601,6 +618,15 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
 
     def clear_review_required(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "library-registry")["reviewRequired"] = []
+
+    def approve_review_gated_feature(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "profile")["approvedReviewGatedFeatures"] = ["PID"]
+
+    def drop_review_gated_feature(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "profile")["reviewGatedFeatures"] = []
+
+    add("review-gate-approved-drift", "approvedReviewGatedFeatures lệch pin", approve_review_gated_feature)
+    add("review-gate-list-drift", "reviewGatedFeatures lệch pin", drop_review_gated_feature)
 
     def break_registry_schema_hash(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "library-registry")["schemaSha256"] = "0" * 64

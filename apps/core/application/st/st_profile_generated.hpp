@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 namespace core::st_profile_generated {
 inline constexpr const char* kProfileId = "revA-1t-1-5-30";
@@ -12,7 +13,7 @@ inline constexpr uint16_t kProfileCode = 1u;
 inline constexpr uint32_t kTargetAbi = 3841u;
 inline constexpr uint16_t kProfileMajor = 2u;
 inline constexpr uint16_t kProfileMinor = 0u;
-inline constexpr const char* kProfileSha256 = "9b33db01a150816fc8b67f84e0aafa8750a29d20e9481a9ed8f1d67bbc9e6484";
+inline constexpr const char* kProfileSha256 = "17d2eb86cb7a2a025c0675104d0da19dfc0f062cc0cd17c0c861835e735ce288";
 inline constexpr const char* kLibraryVersion = "rev-a.1";
 inline constexpr const char* kIntegrityMode = "HASH_ONLY";
 inline constexpr uint8_t kBoolWireCode = 1u;
@@ -53,6 +54,28 @@ inline constexpr std::size_t kMaxBindings = 256u;
 inline constexpr std::size_t kMaxRetainVariables = 128u;
 inline constexpr std::size_t kMaxRetainBytes = 4096u;
 inline constexpr std::size_t kMaxSections = 16u;
+
+/* Feature giữ nhãn REVIEW_REQUIRED trong registry POU/Control Library.
+ * `approved=false` nghĩa là Check PHẢI từ chối mọi Program dùng feature này.
+ * Token không đến từ payload hay UI: nó suy ra từ chính contract profile và
+ * generator từ chối mọi token không suy ra đúng. */
+struct ReviewGatedFeature {
+    std::string_view feature_id;
+    bool approved;
+    std::string_view approval_token;
+};
+inline constexpr std::array<ReviewGatedFeature, 1> kReviewGatedFeatures = {{
+    ReviewGatedFeature{"PID", false, ""},
+}};
+
+/* Trả true khi feature bị chặn Check. Tên không có trong bảng là feature không
+ * bị gate — mặc định KHÔNG chặn, vì chặn một thứ chưa ai khai là chặn mù. */
+inline constexpr bool review_gate_blocks(std::string_view feature_id)
+{
+    for (const ReviewGatedFeature& item : kReviewGatedFeatures)
+        if (item.feature_id == feature_id) return !item.approved;
+    return false;
+}
 } // namespace core::st_profile_generated
 
 #endif // CORE_ST_PROFILE_GENERATED_HPP

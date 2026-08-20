@@ -17,7 +17,8 @@
     "types",
     "pointKinds",
     "coreLibrary",
-    "integrityMode"
+    "integrityMode",
+    "reviewGatedFeatures"
   ],
   "properties": {
     "$schema": {
@@ -238,6 +239,45 @@
     },
     "integrityMode": {
       "const": "HASH_ONLY"
+    },
+    "reviewGatedFeatures": {
+      "description": "Feature giữ nhãn REVIEW_REQUIRED trong registry POU/Control Library (DDD §9). Check CHẶN mọi Program dùng chúng cho tới khi có approval token Controls/Safety. Token KHÔNG đến từ payload FE hay checkbox UI: nó được suy ra từ chính contract này (`featureId` + `coreLibrary.version` + `approvalEvidenceRef`) và generator từ chối mọi token không suy ra đúng, nên không thể bịa một token hợp lệ ở lớp ngoài.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "featureId",
+          "registryEntryId",
+          "policy",
+          "approvalEvidenceRef",
+          "approvalToken"
+        ],
+        "properties": {
+          "featureId": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,31}$"
+          },
+          "registryEntryId": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,31}$"
+          },
+          "policy": {
+            "const": "BLOCK_CHECK"
+          },
+          "approvalEvidenceRef": {
+            "type": ["string", "null"],
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "approvalToken": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
     }
   },
   "$defs": {
