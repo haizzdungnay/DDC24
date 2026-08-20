@@ -45,6 +45,20 @@ struct FbdCompileResult {
 // rỗng; consumer không được stage partial IR.
 FbdCompileResult compile_fbd_source(std::string_view source);
 
+// T59-105: chỉ parse + validate + lower, DỪNG trước typecheck và codegen.
+//
+// Vì sao cần đường riêng: node FBD gọi POU người dùng lower thành `USER_CALL` —
+// đúng cùng nút AST mà ST sinh ra — nhưng codegen chưa liên kết được lời gọi đó
+// (T59-106 mới làm). Trả `StProgram` ở đây cho phép CHỨNG MINH hai ngôn ngữ dùng
+// chung một typed IR mà không phải giả vờ rằng codegen đã chạy được.
+struct FbdLowerResult {
+    bool ok = false;
+    StProgram program;
+    std::vector<FbdIssue> issues;
+};
+
+FbdLowerResult lower_fbd_source_to_program(std::string_view source);
+
 // So sánh phần executable semantic của hai module. Provenance riêng của ngôn
 // ngữ nguồn (source_hash và source_map) bị loại có chủ ý trước khi serialize;
 // phần còn lại phải byte-identical. `reason` chỉ nhận mã ổn định, không chứa

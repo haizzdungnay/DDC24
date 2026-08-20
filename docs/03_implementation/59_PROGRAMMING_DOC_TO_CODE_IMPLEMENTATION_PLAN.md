@@ -440,7 +440,7 @@ chạy.
 | `T59-102` | P0 | Symbol/call graph, library resolver, recursion/DAG guard | T59-101 | **DONE** | `st_pou_registry.*` mới; 10 test khoá đệ quy trực tiếp/gián tiếp (chu trình dài 2..4), thiếu entry vs lệch version **khác mã**, trùng/mơ hồ tên, và đồ thị **độc lập thứ tự nạp**; `ctest` 1087/1087; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-103` | P0 | FUNCTION purity/type/side-effect enforcement | T59-102 | **DONE** | purity ép ở registry (điểm hội tụ mọi producer, không chỉ parser ST); 10 test dựng AST **không qua parser**; cùng lời gọi sai nhưng người gọi khác nhau cho **mã khác nhau**; bảng chữ ký công bố cho lowering; `ctest` 1097/1097; corpus tương đương ST↔FBD PASS; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-104` | P0 | FUNCTION_BLOCK instance state/layout/RETAIN ownership | T59-102 | **DONE** | `st_fb_instance_layout.*` mới; 13 test: 100 instance trải 2 Program không chồng vùng và identity duy nhất, trần package 1024 chặn dù từng Program dưới trần 64, layout **bất biến khi sắp xếp lại nguồn**, vòng chứa và độ sâu bị chặn; `ctest` 1110/1110; wave W1 **5/5 PASS**. Chi tiết §3.2. |
-| `T59-105` | P1 | FBD nodes gọi user Function/FB + inspector/pin generation | T59-103/104 | ORDERED | ST/FBD shared typed IR; connect/order/undo/source-map/a11y tests. |
+| `T59-105` | P1 | FBD nodes gọi user Function/FB + inspector/pin generation | T59-103/104 | **DONE** | node FBD gọi user POU lower thành **đúng cùng nút `USER_CALL`** mà ST sinh — có test so trực tiếp hai bên; 7 test C++ + 6 test FE (thứ tự pin, kết nối, undo/redo, chỉ-đọc, a11y announcement); `ctest` 1117/1117; FE 114 file / 1079 test; wave W2 **6/6 PASS**. Chi tiết §3.2. |
 | `T59-106` | P0 | Artifact v2 writer/loader: POU/program/library/signal/binding/resource sections | T59-103/104/006 | ORDERED | Golden byte/hash stable; loader bounds/fuzz/tamper/wrong profile; v1 LKG load. |
 
 ### 3.2 Ghi chú thực thi W1
@@ -590,6 +590,48 @@ sau** — sai lệch im lặng, tệ hơn là chưa biết.
 **Ranh giới trung thực.** Đây là **bộ hoạch định layout**, chưa phải runtime cấp
 phát. Nối vào prepared image và cold-init thật thuộc `T59-106`/`T59-401`/`T59-407`;
 identity mà task này sinh ra chính là thứ hai lane đó dùng để phát hiện mismatch.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-105` — FBD gọi user POU và bằng chứng dùng chung typed IR
+
+**"Dùng chung typed IR" được cho một nghĩa kiểm được.** Cùng một logic viết bằng
+ST và vẽ bằng FBD phải sinh ra **đúng cùng một nút AST**: `USER_CALL`, cùng tên,
+cùng thứ tự đối số. Test so **trực tiếp** hai nút đó. Nếu hai ngôn ngữ có hai
+đường lowering riêng thì sẽ có hai bộ ngữ nghĩa để trôi khỏi nhau — đúng cơ chế
+đã sinh ra drift ở registry Control Library.
+
+**Một seam mới, có lý do rõ.** `lower_fbd_source_to_program()` dừng **trước**
+typecheck và codegen. Cần nó vì lowering đã đúng nhưng codegen chưa liên kết được
+lời gọi POU (`T59-106` mới làm). Có seam này thì chứng minh được bất biến mà
+**không phải giả vờ** rằng codegen đã chạy được — và test
+`CodegenStillRefusesUnlinkedUserCall` khoá luôn việc nó fail-closed, không sinh
+artifact thiếu thân hàm.
+
+**Sai kind khác POU người dùng.** Bản đầu của tôi coi mọi typeRef lạ là POU người
+dùng, làm `TON` trên node `FUNCTION` lọt qua lớp model — một test có sẵn bắt được
+ngay. Đã sửa: tên **có** trong registry nhưng thuộc kind khác vẫn là
+`FBD-SEM-TYPE-REF-001`; chỉ tên registry **hoàn toàn không biết** mới được coi là
+POU người dùng.
+
+**Thứ tự đối số theo `order` của cổng, không theo thứ tự dây.** Có test đảo thứ tự
+dây và đòi đối số giữ nguyên — nếu ngữ nghĩa bám thứ tự dây thì vẽ lại cùng một sơ
+đồ sẽ đổi nghĩa, loại lỗi im lặng tệ nhất trong FBD.
+
+**FB người dùng: chuyển đúng trách nhiệm, không bỏ kiểm.** `validate_fb_ports` đối
+chiếu với bảng FB dựng sẵn nên không có gì để đối chiếu với FB người dùng. Đối số
+`FB_CALL` đi theo **tên cổng**, để `st_pou_registry` — lớp duy nhất giữ interface —
+kiểm với `VAR_INPUT` thật.
+
+**FE: sinh pin từ interface, một phép biến đổi thuần.** `userPou.ts` biến
+`UserPouInterface` (gương của `StPouSignature` phía Core) thành pin và entry
+palette. Interface mâu thuẫn bị **từ chối** thay vì sinh pin sai: FUNCTION thiếu
+kiểu trả về, FB thừa kiểu trả về, trùng tên cổng, dùng `OUT` cho cổng vào.
+
+**Ranh giới trung thực.** Đây là **bộ sinh pin**; UI duyệt/chọn POU người dùng
+trong cây Project thuộc `T59-306`. Test FE đi qua **reducer thật** nên kết nối,
+undo/redo, chặn chỉ-đọc và announcement cho trình đọc màn hình đều là hành vi thật,
+không phải mô phỏng.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

@@ -196,6 +196,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_pou_registry.cpp
       application/st/tests/test_st_function_purity.cpp
       application/st/tests/test_st_fb_instance_layout.cpp
+      application/st/tests/test_st_fbd_user_pou.cpp
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp

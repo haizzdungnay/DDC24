@@ -316,11 +316,15 @@ private:
             for (const auto& node : network.nodes) {
                 if (node.kind != FbdNodeKind::FUNCTION_BLOCK) continue;
                 const StFbType type = st_fb_type_from_name(node.type_ref);
-                if (type == StFbType::NONE) {
+                if (type == StFbType::NONE && !node.user_type_ref) {
                     return fail("FBD-SEM-LIBRARY-UNSUPPORTED-001",
                                 node_path(network, node) + ".typeRef");
                 }
-                if (!validate_fb_ports(network, node, type)) return false;
+                /* Với FB người dùng, chữ ký nằm ở POU chứ không ở bảng dựng sẵn,
+                 * nên `validate_fb_ports` không có gì để đối chiếu. Việc kiểm
+                 * cổng thuộc `st_pou_registry` — lớp duy nhất giữ interface. Bỏ
+                 * qua ở đây là chuyển đúng trách nhiệm, không phải bỏ kiểm. */
+                if (!node.user_type_ref && !validate_fb_ports(network, node, type)) return false;
                 if (node.parameters.size() > 2) {
                     return fail("FBD-SEM-PARAM-001", node_path(network, node) + ".parameters");
                 }
@@ -376,6 +380,8 @@ private:
                 StFbDecl decl;
                 decl.name = instance;
                 decl.fb_type = type;
+                decl.is_user_type = node.user_type_ref;
+                if (node.user_type_ref) decl.user_type_name = node.type_ref;
                 decl.retained = retained;
                 decl.line = anchor->line;
                 decl.column = anchor->column;
@@ -451,6 +457,18 @@ private:
             return expression;
         }
 
+        if (node.user_type_ref) {
+            /* T59-105: node FBD gọi FUNCTION người dùng lower thành ĐÚNG cùng một
+             * nút IR mà ST sinh ra (`USER_CALL`). Đây chính là nghĩa cụ thể của
+             * "ST và FBD dùng chung typed IR": không có hai đường lowering, nên
+             * không có hai bộ ngữ nghĩa để trôi khỏi nhau. Số đối số và kiểu do
+             * `st_pou_registry` kiểm, vì chỉ nó biết chữ ký POU. */
+            auto expression = std::make_unique<StExpr>();
+            expression->kind = StExpr::Kind::USER_CALL;
+            expression->user_call_name = node.type_ref;
+            expression->args = std::move(arguments);
+            return expression;
+        }
         StFunc function;
         if (!st_func_from_name(node.type_ref, &function)) {
             fail("FBD-SEM-LIBRARY-UNSUPPORTED-001", node_path(network, node) + ".typeRef");
@@ -632,6 +650,23 @@ private:
 };
 
 } // namespace
+
+FbdLowerResult lower_fbd_source_to_program(std::string_view source)
+{
+    FbdLowerResult result;
+    const FbdValidationResult validated = validate_and_canonicalize_fbd(source);
+    if (!validated.ok) {
+        result.issues = validated.issues;
+        return result;
+    }
+    Lowerer lowerer(validated.document);
+    if (!lowerer.run(&result.program)) {
+        result.issues = lowerer.issues();
+        return result;
+    }
+    result.ok = true;
+    return result;
+}
 
 FbdCompileResult compile_fbd_source(std::string_view source)
 {

@@ -158,19 +158,46 @@ const std::unordered_set<std::string>& explicit_conversions()
     return values;
 }
 
-bool node_type_ref_matches_kind(const FbdNode& node)
+/* Tên có mặt ở BẤT KỲ bảng registry nào. Dùng để phân biệt "sai kind" với "POU
+ * người dùng": hai thứ này có hai cách sửa khác nhau. */
+bool known_to_registry(const std::string& type_ref)
 {
-    switch (node.kind) {
+    return scalar_types().count(type_ref) != 0 || pure_functions().count(type_ref) != 0 ||
+           stateful_functions().count(type_ref) != 0 ||
+           explicit_conversions().count(type_ref) != 0;
+}
+
+/* Trả false nếu `type_ref` chắc chắn sai. Với FUNCTION/FUNCTION_BLOCK, một
+ * identifier không thuộc registry dựng sẵn CHƯA chắc sai — nó có thể là POU của
+ * Project hoặc Control Library. Lớp model không biết tập POU nên nó đánh dấu
+ * `user_type_ref` và để lớp compile phân giải; ở đó mã lỗi mới nói được "chưa có
+ * POU" khác "sai kind" khác "vòng gọi".
+ *
+ * Đánh đổi được ghi rõ: một typo như `ADDD` nay lọt qua lớp model và chết ở lớp
+ * compile. Đó là cùng đánh đổi đã chọn cho `USER_CALL` ở ST, và nó đúng vì lớp
+ * model KHÔNG có dữ liệu để phán — báo sai lý do còn tệ hơn báo muộn một lớp. */
+bool node_type_ref_matches_kind(FbdNode* node)
+{
+    switch (node->kind) {
     case FbdNodeKind::INPUT:
     case FbdNodeKind::OUTPUT:
     case FbdNodeKind::CONSTANT:
-        return scalar_types().count(node.type_ref) != 0;
+        return scalar_types().count(node->type_ref) != 0;
     case FbdNodeKind::FUNCTION:
-        return pure_functions().count(node.type_ref) != 0;
+        if (pure_functions().count(node->type_ref) != 0) return true;
+        /* Tên CÓ trong registry nhưng thuộc kind khác là SAI KIND, không phải POU
+         * người dùng — `TON` trên node FUNCTION phải chết ngay ở lớp model. Chỉ
+         * tên registry hoàn toàn không biết mới được coi là POU người dùng. */
+        if (known_to_registry(node->type_ref)) return false;
+        node->user_type_ref = true;
+        return true;
     case FbdNodeKind::FUNCTION_BLOCK:
-        return stateful_functions().count(node.type_ref) != 0;
+        if (stateful_functions().count(node->type_ref) != 0) return true;
+        if (known_to_registry(node->type_ref)) return false;
+        node->user_type_ref = true;
+        return true;
     case FbdNodeKind::CONVERSION:
-        return explicit_conversions().count(node.type_ref) != 0;
+        return explicit_conversions().count(node->type_ref) != 0;
     }
     return false;
 }
@@ -419,7 +446,7 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
                 !is_identifier(node.type_ref) || !execution_orders.emplace(node.execution_order).second) {
                 add_issue(&result, "FBD-SEM-NODE-001", node_path);
             }
-            if (!node_type_ref_matches_kind(node)) {
+            if (!node_type_ref_matches_kind(&node)) {
                 add_issue(&result, "FBD-SEM-TYPE-REF-001", node_path + ".typeRef");
             }
             for (const auto& parameter : node_json["parameters"].items()) {

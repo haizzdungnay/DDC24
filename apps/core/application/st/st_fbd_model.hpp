@@ -39,6 +39,12 @@ struct FbdNode {
     std::string id;
     FbdNodeKind kind = FbdNodeKind::FUNCTION;
     std::string type_ref;
+    /* T59-105: `type_ref` không thuộc registry dựng sẵn — nó trỏ một POU của
+     * Project hoặc Control Library. Lớp model KHÔNG biết tập POU nên nó chỉ đánh
+     * dấu; phân giải thuộc lớp compile/registry, đúng cùng một lối đã dùng cho
+     * `USER_CALL` ở ST. Chỉ FUNCTION và FUNCTION_BLOCK được phép; INPUT/OUTPUT/
+     * CONSTANT/CONVERSION vẫn phải là kiểu vô hướng hoặc conversion đã khai. */
+    bool user_type_ref = false;
     uint16_t execution_order = 0;
     std::map<std::string, FbdParameterValue> parameters;
     std::vector<FbdPort> ports;

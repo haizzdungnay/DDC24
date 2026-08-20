@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### Added — `T59-105` FBD gọi user POU, bằng chứng dùng chung typed IR (2026-08-20)
+
+**"Dùng chung typed IR" được cho một nghĩa kiểm được:** cùng một logic viết bằng
+ST và vẽ bằng FBD sinh ra **đúng cùng một nút AST** — `USER_CALL`, cùng tên, cùng
+thứ tự đối số — và test so **trực tiếp** hai nút đó. Hai đường lowering riêng sẽ
+tạo hai bộ ngữ nghĩa để trôi khỏi nhau.
+
+- Thêm seam `lower_fbd_source_to_program()` dừng **trước** typecheck/codegen. Cần
+  nó vì lowering đã đúng nhưng codegen chưa liên kết được lời gọi POU (`T59-106`).
+  Có seam thì chứng minh được bất biến mà **không phải giả vờ** codegen đã chạy;
+  test `CodegenStillRefusesUnlinkedUserCall` khoá việc nó fail-closed.
+- Lớp model FBD chấp nhận typeRef lạ cho `FUNCTION`/`FUNCTION_BLOCK` và đánh dấu
+  `user_type_ref` — cùng lối đã dùng cho `USER_CALL` ở ST. **Sai kind vẫn bị
+  chặn**: tên có trong registry nhưng thuộc kind khác (ví dụ `TON` trên node
+  `FUNCTION`) vẫn là `FBD-SEM-TYPE-REF-001`.
+- Thứ tự đối số theo `order` của **cổng**, không theo thứ tự **dây**; có test đảo
+  dây và đòi đối số giữ nguyên.
+- FB người dùng: `validate_fb_ports` không có bảng dựng sẵn để đối chiếu, nên đối
+  số `FB_CALL` đi theo **tên cổng** để `st_pou_registry` — lớp giữ interface —
+  kiểm với `VAR_INPUT` thật. Chuyển đúng trách nhiệm, không bỏ kiểm.
+- FE `fbd/userPou.ts`: sinh pin và entry palette từ `UserPouInterface` (gương của
+  `StPouSignature` phía Core). Interface mâu thuẫn bị **từ chối** thay vì sinh pin
+  sai — FUNCTION thiếu kiểu trả về, FB thừa kiểu trả về, trùng tên cổng, dùng
+  `OUT` cho cổng vào.
+
+**Sửa trong chính task:** bản đầu coi **mọi** typeRef lạ là POU người dùng, làm
+`TON` trên node `FUNCTION` lọt qua lớp model. Một test có sẵn bắt được ngay và đã
+sửa để phân biệt "sai kind" với "POU người dùng".
+
+**Ranh giới trung thực:** đây là **bộ sinh pin**; UI duyệt/chọn POU trong cây
+Project thuộc `T59-306`. Test FE đi qua **reducer thật** nên kết nối, undo/redo,
+chặn chỉ-đọc và announcement cho trình đọc màn hình đều là hành vi thật.
+
+**Kiểm chứng fresh trong phiên (host/local):** 7 test C++ + 6 test FE.
+`ctest` **1117/1117 PASS** (từ 1110). FE `vitest` **114 file / 1079 test PASS**,
+lint exit 0, build exit 0 (`✓ built`). `verify-project.sh --wave W2` **6/6 PASS**.
+
 ### Added — `T59-104` layout instance FB, quyền sở hữu RETAIN và identity ổn định (2026-08-20)
 
 `apps/core/application/st/st_fb_instance_layout.{hpp,cpp}` hoạch định state cho
