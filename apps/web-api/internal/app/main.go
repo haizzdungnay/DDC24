@@ -73,6 +73,7 @@ type App struct {
 	commissionLimit       commissionLimiter
 	programmingStore      *programmingstore.Store
 	programmingProjects   *programmingapplication.ProjectService
+	programmingLibrary    *programmingapplication.LibraryService
 	programmingChecks     *programmingapplication.CheckService
 	programmingOperations *programmingapplication.OperationService
 	programmingRuntime    *programmingapplication.RuntimeService
@@ -145,7 +146,13 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming Runtime service: %w", runtimeErr)
 		}
+		library, libraryErr := programmingapplication.NewLibraryService(store, []byte(cfg.JWTSecret))
+		if libraryErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming Library service: %w", libraryErr)
+		}
 		app.programmingStore = store
+		app.programmingLibrary = library
 		app.programmingProjects = projects
 		app.programmingChecks = checks
 		app.programmingOperations = operations

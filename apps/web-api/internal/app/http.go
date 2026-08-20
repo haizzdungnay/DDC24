@@ -334,7 +334,8 @@ func (a *App) routeTable() []webRouter.Route {
 		webRouter.Protected("POST /api/v1/alarm-settings/estimate", RoleViewer, a.handleEstimateAlarmSetting),
 	}
 	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, programminghttp.Services{
-		Projects: a.programmingProjects, Checks: a.programmingChecks, Operations: a.programmingOperations,
+		Library: a.programmingLibrary, Projects: a.programmingProjects,
+		Checks: a.programmingChecks, Operations: a.programmingOperations,
 		Runtime: a.programmingRuntime})
 	return routes
 }

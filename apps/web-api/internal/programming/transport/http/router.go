@@ -39,6 +39,9 @@ var routeDefinitions = []routeDefinition{
 	{method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", role: auth.RoleViewer},
 	{method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/checks/{checkId}", role: auth.RoleViewer},
+	{method: "GET", path: "/api/v1/programming/libraries", role: auth.RoleViewer},
+	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", role: auth.RoleAdmin, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "GET", path: "/api/v1/programming/point-catalog", role: auth.RoleViewer},
 	{method: "GET", path: "/api/v1/programming/runtime", role: auth.RoleViewer},
 	{method: "GET", path: "/api/v1/programming/runtime/monitor", role: auth.RoleViewer},
@@ -60,6 +63,7 @@ var routeDefinitions = []routeDefinition{
 // fallback API hiện hữu trả 404, nên deploy binary trước không làm lộ capability
 // giả hoặc mutation chưa nối Core.
 type Services struct {
+	Library    *programmingapplication.LibraryService
 	Projects   *programmingapplication.ProjectService
 	Checks     *programmingapplication.CheckService
 	Operations *programmingapplication.OperationService
@@ -92,6 +96,9 @@ func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition
 	}
 	if status, public := validateContractRequest(w, r, definition); public != nil {
 		WriteProgrammingError(w, status, *public, correlationID)
+		return
+	}
+	if services.Library != nil && handleLibraryRequest(w, r, correlationID, services.Library) {
 		return
 	}
 	if services.Runtime != nil && handleRuntimeRequest(w, r, correlationID, services.Runtime) {
