@@ -160,6 +160,12 @@ struct StExpr {
         BINOP,
         UNOP,
         CALL,         /* hàm chuẩn */
+        /* T59-102: gọi FUNCTION do người dùng hoặc Control Library định nghĩa.
+         * Parser KHÔNG tự phán tên nào hợp lệ — nó chỉ ghi lại tên; việc phân
+         * giải là của `st_pou_registry`, nơi biết cả tập POU của Project lẫn
+         * library đã pin. Tách hai việc này là điều kiện để có được thông điệp
+         * "thiếu entry" khác với "sai version" khác với "đệ quy". */
+        USER_CALL,
     };
 
     Kind kind = Kind::LITERAL;
@@ -182,6 +188,7 @@ struct StExpr {
     std::unique_ptr<StExpr> operand;
 
     StFunc      func = StFunc::ABS;
+    std::string user_call_name;          /* USER_CALL: tên POU/entry được gọi */
     std::vector<std::unique_ptr<StExpr>> args;
 
     StType      result_type = StType::REAL;   /* điền bởi st_semantic */

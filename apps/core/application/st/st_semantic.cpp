@@ -291,6 +291,17 @@ private:
     bool check_expr(StExpr& e, TypeInfo* out, const StType* expected = nullptr)
     {
         switch (e.kind) {
+        /* T59-102: đường compile hiện tại (`parse_st_program`) không sinh
+         * USER_CALL, nên nhánh này chỉ chạy khi ai đó nối AST POU vào thẳng lớp
+         * semantic mà chưa qua phân giải registry. Từ chối tường minh thay vì để
+         * `-Wswitch` bị tắt hoặc rơi vào `default` im lặng. Lowering thật thuộc
+         * T59-103. */
+        case StExpr::Kind::USER_CALL:
+            return fail(st_diag_code::kUnknownFunction,
+                        "call to '" + e.user_call_name +
+                            "' must be resolved by the POU registry before type checking",
+                        e.line, e.column, e.length);
+
         case StExpr::Kind::LITERAL:
             if (e.literal_polymorphic) {
                 *out = TypeInfo::make_poly();

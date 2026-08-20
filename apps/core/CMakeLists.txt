@@ -112,7 +112,8 @@ target_link_libraries(core_lib INTERFACE
 # mkddc-core không liên kết st_compiler_lib nên không thể vô tình gọi parser.
 # Chiều phụ thuộc: st_compiler_lib -> core_lib (không bao giờ ngược lại).
 add_library(st_compiler_lib STATIC
-    application/st/st_parser.cpp application/st/st_semantic.cpp
+    application/st/st_parser.cpp application/st/st_pou_registry.cpp
+    application/st/st_semantic.cpp
     application/st/st_compile.cpp application/st/st_ir.cpp
     application/st/st_artifact_manifest.cpp
     application/st/st_fbd_model.cpp application/st/st_fbd_compile.cpp)
@@ -191,6 +192,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_fbd_model.cpp
       application/st/tests/test_st_library_registry.cpp
       application/st/tests/test_st_pou_parser.cpp
+      application/st/tests/test_st_pou_registry.cpp
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp

@@ -437,7 +437,7 @@ chạy.
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
 | `T59-101` | P0 | Parser/AST cho `FUNCTION` và `FUNCTION_BLOCK`; interface/signature | T59-003/004 | **DONE** | `parse_st_pou()` nhận cả ba loại POU; 12 test (4 positive + 8 negative) khoá kind/name/signature kèm mã lỗi và vị trí; `ctest` 1077/1077; wave W1 **5/5 PASS**. Chi tiết §3.2. |
-| `T59-102` | P0 | Symbol/call graph, library resolver, recursion/DAG guard | T59-101 | ORDERED | Direct/indirect recursion, ambiguous/missing/version drift reject; deterministic graph. |
+| `T59-102` | P0 | Symbol/call graph, library resolver, recursion/DAG guard | T59-101 | **DONE** | `st_pou_registry.*` mới; 10 test khoá đệ quy trực tiếp/gián tiếp (chu trình dài 2..4), thiếu entry vs lệch version **khác mã**, trùng/mơ hồ tên, và đồ thị **độc lập thứ tự nạp**; `ctest` 1087/1087; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-103` | P0 | FUNCTION purity/type/side-effect enforcement | T59-102 | ORDERED | Function equivalence ST/FBD; state/RETAIN/I/O/FB stateful call reject. |
 | `T59-104` | P0 | FUNCTION_BLOCK instance state/layout/RETAIN ownership | T59-102 | ORDERED | 100/1024 instance isolation; stable layout/source reorder; corrupt/mismatch cold-init. |
 | `T59-105` | P1 | FBD nodes gọi user Function/FB + inspector/pin generation | T59-103/104 | ORDERED | ST/FBD shared typed IR; connect/order/undo/source-map/a11y tests. |
@@ -480,6 +480,39 @@ Test khoá đúng hành vi thật (`ST-LIM-005` tại 65 ký tự, PASS tại 64
 **Chưa mở cửa nửa vời.** `compile_st_source()` vẫn đi qua `parse_st_program()`,
 nên `FUNCTION`/`FUNCTION_BLOCK` **chưa** compile được. Symbol/call graph là
 `T59-102`, purity là `T59-103`, instance state là `T59-104`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-102` — Registry POU: symbol table, call graph và guard DAG
+
+**Vì sao parser không tự phán.** Parser chỉ ghi `USER_CALL` kèm tên; nó không biết
+tập POU của Project hay library đã pin. Tách hai việc này là **điều kiện** để phân
+biệt ba tình huống có ba cách sửa hoàn toàn khác nhau: thêm entry
+(`ST-LIB-001`), đổi pin version (`ST-LIB-002`), phá vòng gọi (`ST-POU-003`). Gộp
+chúng vào một mã là bỏ rơi người vận hành ở đúng chỗ họ cần biết phải làm gì.
+
+**Tính xác định là yêu cầu, không phải may mắn.** Bảng ký hiệu sắp theo tên
+case-folded, cạnh sắp theo `(caller, callee, line, column)`, Kahn duyệt theo
+`std::set` có thứ tự. Test nạp cùng một tập POU theo **hai thứ tự ngược nhau** và
+đòi `pou_order`, `edges` và `topological_order` **giống hệt** — nếu thứ tự nạp làm
+đổi diagnostic thì người dùng thấy lỗi "nhảy" giữa hai lần Check cùng nguồn.
+
+**Guard DAG phân biệt chia sẻ với đệ quy.** Sơ đồ kim cương (`Top → Left/Right →
+Shared`) **phải được chấp nhận**; nếu guard nhầm nó là chu trình thì mọi thư viện
+dùng chung đều bị chặn. Test khoá cả hai chiều: kim cương PASS, chu trình dài
+2/3/4 đều bị chặn.
+
+**Gọi chính mình bắt riêng.** Đệ quy trực tiếp báo ngay tại **dòng gọi** thay vì
+để Kahn báo một chu trình dài khó đọc.
+
+**Không bỏ sót nhánh.** Lời gọi trong nhánh `IF`/`ELSE` và trong đối số FB đều vào
+đồ thị — bỏ sót một nhánh nghĩa là đệ quy lọt qua guard. Có test riêng cho việc này.
+
+**Ranh giới giữ nguyên.** `parse_st_program()` (đường compile hiện tại) vẫn **tắt**
+`USER_CALL`, nên hành vi compile không đổi. Hai `switch` ở `st_semantic.cpp` và
+`st_compile.cpp` nhận nhánh `USER_CALL` **từ chối tường minh** — `-Wswitch` bắt
+buộc chúng phải xử lý, và từ chối rõ ràng tốt hơn `default` im lặng. Lowering thật
+thuộc `T59-103`.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

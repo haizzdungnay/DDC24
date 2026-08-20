@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Added — `T59-102` registry POU: call graph, library resolver và guard DAG (2026-08-20)
+
+`apps/core/application/st/st_pou_registry.{hpp,cpp}` dựng bảng ký hiệu, call graph,
+phân giải Control Library và kiểm DAG cho tập POU của một Project.
+
+**Vì sao parser không tự phán.** Parser chỉ ghi `USER_CALL` kèm tên; nó không biết
+tập POU của Project hay library đã pin. Tách hai việc này là điều kiện để phân
+biệt ba tình huống có ba cách sửa hoàn toàn khác nhau: thêm entry (`ST-LIB-001`),
+đổi pin version (`ST-LIB-002`), phá vòng gọi (`ST-POU-003`). Gộp chúng vào một mã
+là bỏ rơi người vận hành ở đúng chỗ họ cần biết phải làm gì.
+
+- **Xác định**: bảng ký hiệu sắp theo tên case-folded, cạnh sắp theo
+  `(caller, callee, line, column)`, Kahn duyệt theo `std::set` có thứ tự. Test nạp
+  cùng tập POU theo **hai thứ tự ngược nhau** và đòi kết quả **giống hệt**.
+- **Guard DAG phân biệt chia sẻ với đệ quy**: sơ đồ kim cương phải được chấp nhận
+  (nếu không thì mọi thư viện dùng chung đều bị chặn); chu trình dài 2/3/4 đều bị chặn.
+- **Đệ quy trực tiếp** báo ngay tại **dòng gọi**, không để Kahn báo chu trình dài.
+- **Không bỏ sót nhánh**: lời gọi trong `IF`/`ELSE` và trong đối số FB đều vào đồ thị.
+- **Tên mơ hồ**: POU Project trùng tên entry SYSTEM library bị từ chối — "ưu tiên
+  bên nào" là loại quy ước ngầm gây sai lệch điều khiển im lặng.
+
+**Ranh giới giữ nguyên:** `parse_st_program()` vẫn **tắt** `USER_CALL` nên hành vi
+compile không đổi. Hai `switch` ở `st_semantic.cpp`/`st_compile.cpp` nhận nhánh
+`USER_CALL` **từ chối tường minh** — `-Wswitch` buộc chúng phải xử lý, và từ chối
+rõ ràng tốt hơn `default` im lặng. Lowering thật thuộc `T59-103`.
+
+**Kiểm chứng fresh trong phiên (host/local):** 10 test mới. C++ Release
+MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1087/1087 PASS** (từ 1077).
+`verify-project.sh --wave W1` **5/5 PASS**.
+
 ### Added — `T59-101` parser/AST cho FUNCTION và FUNCTION_BLOCK (2026-08-20)
 
 Mở Wave W1. `parse_st_pou()` nhận cả ba loại POU; `StProgram` thêm `kind`,

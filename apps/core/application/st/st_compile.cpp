@@ -328,6 +328,12 @@ private:
     bool emit_expr(const StExpr& e, uint16_t* out_slot)
     {
         switch (e.kind) {
+        /* T59-102: xem chú thích cùng tên ở st_semantic.cpp. Không có lowering
+         * cho USER_CALL ở W1 sớm; inline/lowering thuộc T59-103. Từ chối tường
+         * minh để `-Wswitch` tiếp tục là lưới an toàn khi thêm kind mới. */
+        case StExpr::Kind::USER_CALL:
+            return false;
+
         case StExpr::Kind::LITERAL:
             *out_slot = const_slot(e.literal);
             return true;

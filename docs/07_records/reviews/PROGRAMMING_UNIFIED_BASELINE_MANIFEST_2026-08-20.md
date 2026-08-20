@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.8 |
+| Phiên bản | 1.9 |
 | Trạng thái | Active |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -39,9 +39,9 @@ target, HIL hoặc release.
 | 10 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `d4992caf7d85275558de9c3e0553c31cbf686a28ddb61082a998edea666fec6d` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 11 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `716344cd9d21e3b32765cc1126418a0013518e86bdf3460f7ed8713d443d2a62` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `2d26255dda3f9431c79a2553e11f37de5641f04d377a8de0075af3a9cb672968` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `6e6b64022a883464f650729d20b35be8870c7b47c2b55ad028798d1ff25dceda` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `6752c678673772736155416d353250c8c168ba58583c2d16c6d1946e6fd5121a` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `e67e549dd3e72c849bc4686926db67b443591d87ff52930d7b2ec7f7412127a4` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `6ed311dc55de76c4c547fd2604e05d18cc999bb77a3972f3e61fbc7cd5afaf81` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `07fd1ce13ed29b0859161e55dc995bc1bdbd196099a9c03d2859907f5676b1c9` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `ef4f793e7749ea8b34748ed30a94be28204700e44b89e7469b7d4770eb3011c1` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `8dd7bd227861ded3a1da3478aec522826dc60716280bdd40b79fa23f7f1ef29a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 
 ## 3. Disposition baseline cũ
@@ -86,3 +86,4 @@ evidence release.
 | 1.6 | 2026-08-20 | Re-pin dòng 13/14/15 sau `T59-006`. **Đánh giá impact:** dòng 13 thêm §5.21 và lịch sử 2.5, không đổi S×L/lifecycle/residual; dòng 14 nối evidence vào `BE-110`; dòng 15 là status W0, ghi chú §3.1 và **đính chính bộ mã lỗi của `T59-004`** cho khớp DDD §5.2. Unified DDD không đổi vì §5.2 vốn đã đúng — chính catalog trước đó lệch khỏi nó. SRS và VVP không đổi. |
 | 1.7 | 2026-08-20 | Re-pin dòng 13/15 sau `T59-007`. **Đánh giá impact:** dòng 13 thêm §5.22 và lịch sử 2.6, không đổi S×L/lifecycle/residual; dòng 15 là status W0 + ghi chú §3.1 (đóng W0 7/7 task). Trace không đổi vì T59-007 là hạ tầng kiểm thử, không gắn requirement sản phẩm. Unified DDD, SRS và VVP không đổi. |
 | 1.8 | 2026-08-20 | Re-pin dòng 13/14/15 sau `T59-101` (mở Wave W1). **Đánh giá impact:** dòng 13 thêm §5.23 và lịch sử 2.7, không đổi S×L/lifecycle/residual; dòng 14 nối evidence vào `CORE-101`, `D/I/T/P/R` giữ nguyên; dòng 15 là status W1 + ghi chú §3.2. Unified DDD, SRS và VVP không đổi. |
+| 1.9 | 2026-08-20 | Re-pin dòng 13/14/15 sau `T59-102`. **Đánh giá impact:** dòng 13 thêm §5.24 và lịch sử 2.8, không đổi S×L/lifecycle/residual; dòng 14 nối evidence vào `CORE-101`; dòng 15 là status W1 + ghi chú §3.2. Unified DDD, SRS và VVP không đổi. |

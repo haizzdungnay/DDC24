@@ -443,7 +443,8 @@ static_assert(st_limits::kMaxIdentifierLength <= kMaxPouNameLength,
 
 class Parser {
 public:
-    explicit Parser(std::vector<Token> tokens) : tok_(std::move(tokens)) {}
+    explicit Parser(std::vector<Token> tokens, bool allow_user_calls = false)
+        : tok_(std::move(tokens)) { allow_user_calls_ = allow_user_calls; }
 
     /* T59-101: một entry cho cả ba loại POU. Thân của chúng là cùng một ngôn
      * ngữ; chỉ chữ ký và quyền hạn khác nhau, nên tách ba parser sẽ nhân bản
@@ -514,6 +515,9 @@ private:
     std::vector<Token> tok_;
     std::size_t pos_ = 0;
 
+    /* Mặc định TẮT: `parse_st_program()` giữ đúng hành vi cũ là từ chối hàm lạ
+     * ngay tại parser. Chỉ đường POU mới bật, nên không có cửa nửa vời. */
+    bool        allow_user_calls_ = false;
     int         expr_depth_ = 0;
     int         stmt_depth_ = 0;
     std::size_t stmt_count_ = 0;
@@ -1135,14 +1139,22 @@ private:
             if (peek().kind == Token::Kind::LParen) {
                 advance();
                 StFunc f;
-                if (!st_func_from_name(t.upper, &f)) {
+                auto n = std::make_unique<StExpr>();
+                if (st_func_from_name(t.upper, &f)) {
+                    n->kind = StExpr::Kind::CALL;
+                    n->func = f;
+                } else if (allow_user_calls_) {
+                    /* Chỉ GHI LẠI tên. Parser không biết tập POU của Project hay
+                     * library đã pin, nên nó không thể phân biệt "chưa tồn tại"
+                     * với "sai version" với "đệ quy" — ba thứ có ba mã lỗi và ba
+                     * cách sửa khác nhau. Việc phân giải thuộc st_pou_registry. */
+                    n->kind = StExpr::Kind::USER_CALL;
+                    n->user_call_name = t.text;
+                } else {
                     set_diag(diag, st_diag_code::kUnknownFunction,
                              "unknown function '" + t.text + "'", t.line, t.column, t.length);
                     return false;
                 }
-                auto n = std::make_unique<StExpr>();
-                n->kind = StExpr::Kind::CALL;
-                n->func = f;
                 n->line = t.line; n->column = t.column;
                 n->length = t.length;
                 if (peek().kind != Token::Kind::RParen) {
@@ -1178,7 +1190,7 @@ bool parse_st_pou(const std::string& source, StProgram* out, StDiagnostic* diag)
 {
     std::vector<Token> tokens;
     if (!tokenize(source, &tokens, diag)) return false;
-    Parser parser(std::move(tokens));
+    Parser parser(std::move(tokens), /*allow_user_calls=*/true);
     *out = StProgram{};
     return parser.parse_pou(out, diag);
 }
@@ -1188,7 +1200,11 @@ bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* d
     /* Giữ nguyên hợp đồng cũ cho mọi call site hiện có: entry này CHỈ nhận
      * PROGRAM. Nếu nguồn là FUNCTION/FUNCTION_BLOCK thì nó parse được nhưng bị
      * từ chối ở đây bằng mã kind — thông tin hữu ích hơn "expected PROGRAM". */
-    if (!parse_st_pou(source, out, diag)) return false;
+    std::vector<Token> tokens;
+    if (!tokenize(source, &tokens, diag)) return false;
+    Parser parser(std::move(tokens), /*allow_user_calls=*/false);
+    *out = StProgram{};
+    if (!parser.parse_pou(out, diag)) return false;
     if (out->kind != StPouKind::PROGRAM) {
         set_diag(diag, st_diag_code::kPouSignatureInvalid,
                  std::string("expected PROGRAM but source declares ") +
