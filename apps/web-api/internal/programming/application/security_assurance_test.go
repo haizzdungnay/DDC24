@@ -328,7 +328,7 @@ func TestSourceBundleHostileCorpusRejectsWithoutMutation(t *testing.T) {
 
 func TestInspectSourceBundleRejectsArchiveByteLimitOneOver(t *testing.T) {
 	raw := bytes.Repeat([]byte("x"), maxBundleBytes+1)
-	_, _, err := inspectSourceBundle(raw, "71111111-1111-4111-8111-111111111111", "bounded")
+	_, _, _, err := inspectSourceBundle(raw, "71111111-1111-4111-8111-111111111111", "bounded")
 	if !errors.Is(err, ErrBundleTooLarge) {
 		t.Fatalf("archive one-over err=%v", err)
 	}
@@ -342,6 +342,6 @@ func FuzzInspectSourceBundleBounded(f *testing.F) {
 		if len(raw) > maxBundleBytes+1 {
 			raw = raw[:maxBundleBytes+1]
 		}
-		_, _, _ = inspectSourceBundle(raw, "72222222-2222-4222-8222-222222222222", "fuzz")
+		_, _, _, _ = inspectSourceBundle(raw, "72222222-2222-4222-8222-222222222222", "fuzz")
 	})
 }
