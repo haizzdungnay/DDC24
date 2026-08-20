@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Added — `T59-005` store schema v2: migration v5→v6 cho Product model (2026-08-20)
+
+`0006_product_model_v2.sql` tạo năm bảng theo `DDD-SW-PROG-UNIFIED-001` §4.7 —
+`pou_objects`, `library_revisions`, `library_entries`, `published_signal_defs`,
+`program_runtime_intents` — và thêm ba cột cho `revisions`
+(`document_schema_version`, `program_count`, `library_revision_id`).
+
+Bất biến được đặt vào **chính schema**, không để lớp application tự giữ:
+
+- `published_signal_defs`: `UNIQUE(revision_id, name_folded)` khoá **một
+  publisher** cho mỗi signal; `CHECK` buộc `USE_FALLBACK` phải có giá trị dự phòng
+  và ba chính sách còn lại **không** được mang fallback — chặn đúng lối "im lặng
+  thay bằng 0" mà DDD §10 cấm; `freshness_ms` giới hạn `1000..90000`.
+- `program_runtime_intents`: `desired_enabled` mặc định **0** vì Program mới sau
+  Commission luôn Disabled (DDD §0); trigger buộc `generation` chỉ tăng nên intent
+  cũ tới muộn không ghi đè intent mới.
+- `library_revisions`: `SYSTEM` không thuộc Project nào, `PROJECT` bắt buộc có
+  `project_id`; revision đã rời `DRAFT` là bất biến.
+
+Dùng `ALTER TABLE ADD COLUMN` thay vì rebuild `revisions` vì bảng này được sáu
+bảng khác tham chiếu và `RENAME` sẽ viết lại các FK đó sang tên tạm. Cột mới có
+`DEFAULT` giữ nguyên nghĩa hàng cũ, binary v5 bỏ qua cột nó không biết.
+
+**Sửa kèm:** `TestMigrationFaultChecksumPartialAndCorruptFailClosed/user-version`
+viết cứng `PRAGMA user_version=6` để mô phỏng "schema tương lai"; ngay khi schema
+lên đúng 6 thì test đó thành **no-op** và không còn kiểm gì. Đã đổi sang
+`CurrentSchemaVersion+1`.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `schema_v2_test.go` — **atomic 3/3** điểm lỗi (`before_apply`,
+`after_sql`, `before_commit`): mỗi lần `user_version` giữ 5, không sót bảng mới,
+chạy lại vẫn lên head; **idempotent 3 vòng** mở lại DB, `Applied` rỗng và danh
+sách bảng không đổi; **0 hàng** ở `operations`/`commission_records`/
+`program_runtime_intents`/bốn bảng mới sau migration; dữ liệu v1 nguyên vẹn và
+`DEFAULT` cột mới đúng `1/1`; **5 nhóm bất biến** bảng mới đều fail-closed.
+`go vet ./...` sạch, `go test ./... -count=1` **18/18 package ok**.
+`verify-project.sh --component layout` **exit 0**; G1 **8/8** contract,
+`--self-test` **25/25** mutation + **6/6** chuỗi migration.
+
+Migration **chưa** chạy trên board thật — điều đó thuộc `T59-705`.
+
 ### Added — `T59-004` error catalog v1.6.0 cho sáu miền mới, guard hai chiều (2026-08-20)
 
 Catalog lên **26 public code / 118 detail mapping**. Sáu mã mới phủ POU

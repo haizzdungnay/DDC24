@@ -101,7 +101,7 @@ W1/W2/W3 có thể chạy song song theo contract boundary. Critical path releas
 | `T59-002` | P0 | Tạo Product profile v2 `32/16/256/1024/512/512`, generator C++/Go/TS | — | **DONE** | `generate_programming_profile.py --check` exact 3/3 tệp sinh; one-over vector C++ 3 trục + Go 6 case + FE 5 case; `ctest` 1055/1055; `go test ./... -count=1` 18/18; FE 112 file / 1066 test; G1 self-test 20/20 mutation; layout exit 0. **Đính chính:** `npm run build` khi merge thực tế FAIL (`tsc --noEmit`), đã sửa trong `T59-003`. Chi tiết §3.1. |
 | `T59-003` | P0 | FBD/POU/library registry JSON single-source + generator | — | **DONE** | `generate_programming_library_registry.py --check` 40 entry / 2 tệp sinh; 7 test C++ hai chiều chống entry ma; 5 test FE palette↔registry; G1 self-test 25/25; `ctest` 1063/1063; Go 18/18; FE 112 file / 1071 test; layout exit 0. Chi tiết §3.1. |
 | `T59-004` | P0 | Error catalog mới cho POU/library/signal/enable/output owner/PID review | T59-002/003 | **DONE** | catalog v1.6.0 **26 public / 118 detail**, sinh Go/C++/TS + manifest exact; guard detail **hai chiều** và catalog được validate theo schema; `ctest` 1064/1064; Go 18/18; FE 113 file / 1073 test; layout exit 0. Chi tiết §3.1. |
-| `T59-005` | P0 | Store schema v2 + backup/migration v1→v2 | T59-002 | ORDERED | SQLite migration atomic/idempotent/restart; không tự Commission; rollback giữ DB. |
+| `T59-005` | P0 | Store schema v2 + backup/migration v1→v2 | T59-002 | **DONE** | migration `0006_product_model_v2.sql`, schema v5→v6, 5 bảng mới + 3 cột Revision; atomic ở **3/3** điểm lỗi, idempotent qua **3** vòng restart, 0 hàng Commission/intent sau migration, 5 nhóm bất biến bảng mới; Go 18/18; G1 8/8 + self-test 25/25; layout exit 0. Chi tiết §3.1. |
 | `T59-006` | P0 | OpenAPI + IPC v2 + artifact/package schema v2, dual-reader policy | T59-002/004 | ORDERED | Schema/golden/codec/client/route contract PASS; action khai phải có handler test. |
 | `T59-007` | P1 | Local CI parity wrapper và gate matrix cho từng Wave | T59-001 | ORDERED | Một command chạy layout/C++/Go/FE/contract; không gọi local PASS là GitHub CI. |
 
@@ -289,6 +289,55 @@ G1 re-pin `openapi`/`errors`; test đếm ở Go, C++ và TS cập nhật cùng 
 chưa có emitter nên hành vi runtime không đổi. Revert commit là đủ.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-005` — Store schema v2 và migration v5→v6
+
+**Việc chính.** `0006_product_model_v2.sql` tạo năm bảng theo DDD §4.7 —
+`pou_objects`, `library_revisions`, `library_entries`, `published_signal_defs`,
+`program_runtime_intents` — và thêm ba cột cho `revisions`
+(`document_schema_version`, `program_count`, `library_revision_id`).
+
+**Bất biến được đặt vào chính schema, không để lớp application tự giữ.**
+
+- `published_signal_defs`: `UNIQUE(revision_id, name_folded)` khoá **một
+  publisher** cho mỗi signal; `CHECK` bắt `USE_FALLBACK` phải có giá trị dự phòng
+  và ba chính sách còn lại **không** được mang fallback — chặn đúng lối "im lặng
+  thay bằng 0" mà DDD §10 cấm; `freshness_ms BETWEEN 1000 AND 90000`.
+- `program_runtime_intents`: `desired_enabled` mặc định **0** vì Program mới sau
+  Commission luôn Disabled (DDD §0); trigger buộc `generation` chỉ tăng nên intent
+  cũ tới muộn không ghi đè intent mới.
+- `library_revisions`: `CHECK` buộc `SYSTEM` không thuộc Project nào và `PROJECT`
+  phải có `project_id`; revision đã rời `DRAFT` là bất biến.
+- `pou_objects`, `library_entries`: `UNIQUE` theo `name_folded` cho name
+  case-folded unique (DDD §4.2).
+
+**Vì sao dùng `ADD COLUMN` thay vì rebuild `revisions`.** `revisions` được sáu
+bảng khác tham chiếu; `ALTER TABLE ... RENAME` sẽ viết lại các FK đó sang tên
+tạm. Cột mới có `DEFAULT` giữ nguyên nghĩa hàng cũ, và binary v5 bỏ qua cột nó
+không biết — rollback an toàn theo DDD §12.4.
+
+**Kiểm chứng đúng acceptance.** `schema_v2_test.go`:
+
+- **Atomic**: bơm lỗi ở cả ba điểm `before_apply` / `after_sql` / `before_commit`;
+  mỗi lần `user_version` giữ **5**, không sót bảng mới nào, và chạy lại vẫn lên
+  được head — không kẹt vĩnh viễn.
+- **Idempotent/restart**: mở lại DB **3 vòng**, mỗi vòng `Applied` rỗng và danh
+  sách bảng không đổi.
+- **Không tự Commission**: sau migration, `operations`, `commission_records`,
+  `program_runtime_intents` và cả bốn bảng mới đều **0 hàng**.
+- **Rollback giữ DB**: dữ liệu v1 nguyên vẹn; `DEFAULT` của hai cột mới đúng `1/1`.
+
+**Finding sửa kèm.** `TestMigrationFaultChecksumPartialAndCorruptFailClosed/user-version`
+viết cứng `PRAGMA user_version=6` để mô phỏng "schema tương lai". Ngay khi schema
+lên đúng 6, test đó trở thành **no-op** — nó không còn kiểm gì. Đã đổi sang
+`CurrentSchemaVersion+1`. Tương tự, một nhánh test bất biến ban đầu dùng `UPDATE`
+trên bảng rỗng (luôn thành công) nên phải đổi sang `INSERT` thật.
+
+**Rollback.** Migration chỉ thêm bảng/cột, không xoá và không sửa dữ liệu cũ.
+Bảng mới rỗng sau migration nên binary v5 chạy lại đọc đủ dữ liệu v1.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+Migration **chưa** chạy trên board thật — điều đó thuộc `T59-705`.
 
 ### W1 — POU, compiler và artifact v2
 

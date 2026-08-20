@@ -61,11 +61,11 @@
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "4381c0c04fe1db408fa639edfca62f31c599fda9776364403bd7857b9e5a4729",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0005_operation_coordinator.sql",
-      "migrationSha256": "e0e2020afced4fe9c88fd17df5c27d2779ec6c4ddf0c516b15af7bf370f802dc",
+      "sha256": "ac724b11ca6cd3ca8f5d3d8508b845398efc7589029f588f1043cd4e93e2f754",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0006_product_model_v2.sql",
+      "migrationSha256": "18a608e76ed3490f9a19697841a4ce7097a311106710dc159cf4d8ed72bd8abb",
       "major": 1,
-      "schemaVersion": 5,
+      "schemaVersion": 6,
       "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {
@@ -136,5 +136,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005"
 }

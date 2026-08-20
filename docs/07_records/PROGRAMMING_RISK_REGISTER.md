@@ -361,6 +361,18 @@ Evidence host/local. Sáu mã mới **chưa có emitter** — đây là contract
 consumer, không phải hành vi runtime mới; do đó không risk nào được hạ. 16/16 giữ
 `Open`, 11 Critical, S×L và residual không đổi.
 
+### 5.20 Cập nhật treatment source `T59-005` (Plan59 W0)
+
+| Risk | Control đã có trên nhánh `feat/t59-005-store-schema-v2` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-007` | Migration v5→v6 nguyên tử ở cả ba điểm lỗi, idempotent qua restart, backup verified bắt buộc trước khi đổi schema; **không** tự Commission và **không** bật Program nào (`desired_enabled` mặc định 0) | Chạy migration trên board thật kèm cắt điện (`T59-705`) và Test Result độc lập | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | `program_runtime_intents.generation` chỉ tăng theo trigger, nên intent cũ tới muộn không ghi đè intent mới — chống đúng lớp double-activation ở tầng lưu trữ | Reconcile Core single-flight và E2E fault chống double activation | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-010` | `published_signal_defs` buộc `USE_FALLBACK` có giá trị dự phòng và cấm ba chính sách còn lại mang fallback, chặn lối "im lặng thay bằng 0" ngay ở schema | Runtime signal double-buffer/freshness (`T59-404`) và Test Result target | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local. Schema chỉ là **chỗ chứa**: chưa có API, chưa có runtime đọc
+các bảng này, và migration chưa chạy trên board. 16/16 risk giữ `Open`, 11
+Critical, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -404,6 +416,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 2.1 | 2026-08-20 | Ghi `T59-002` (Plan59 W0) cho treatment partial RSK-002/014: profile v2 sinh C++/Go/TS từ một nguồn, capacity 32/16 thay 1/1/1, constraint text suy từ profile và one-over vector ba ngôn ngữ. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime multi-Program, target/HIL và Test Result chưa chạy. |
 | 2.2 | 2026-08-20 | Ghi `T59-003` (Plan59 W0) cho treatment partial RSK-004/006/014: registry POU/library làm nguồn duy nhất, gỡ 4 entry ma, mở SQRT + 4 conversion, khoá hai chiều registry↔compiler và ghim `REVIEW_REQUIRED` của PID vào contract. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering user POU, target/HIL và Test Result chưa chạy. |
 | 2.3 | 2026-08-20 | Ghi `T59-004` (Plan59 W0) cho treatment partial RSK-004/014: catalog v1.6.0 26/118, schema catalog được thi hành, guard detail hai chiều gồm source Go, copy FE phủ đủ mã. Giữ 16/16 Open, 11 Critical và mọi residual vì emitter W1..W4, target/HIL và Test Result chưa chạy. |
+| 2.4 | 2026-08-20 | Ghi `T59-005` (Plan59 W0) cho treatment partial RSK-007/008/010: store schema v6, migration atomic/idempotent/không tự Commission, generation intent chỉ tăng và chính sách fallback signal bị ràng buộc ở schema. Giữ 16/16 Open, 11 Critical và mọi residual vì API/runtime/board chưa có. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
 | 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |

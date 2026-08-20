@@ -91,7 +91,9 @@ func TestOpenProgrammingStoreFreshSchemaPolicyAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedTables := []string{"artifacts", "audit_records", "check_requests", "checks", "commission_records", "drafts", "mutation_receipts", "operations", "projects", "revision_objects", "revisions", "schema_migrations"}
+	// T59-005 thêm năm bảng Product v2; danh sách này là ảnh chụp có chủ ý để
+	// schema không lớn lên lặng lẽ.
+	expectedTables := []string{"artifacts", "audit_records", "check_requests", "checks", "commission_records", "drafts", "library_entries", "library_revisions", "mutation_receipts", "operations", "pou_objects", "program_runtime_intents", "projects", "published_signal_defs", "revision_objects", "revisions", "schema_migrations"}
 	rows, err := store.db.Query(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 	if err != nil {
 		t.Fatal(err)
@@ -607,7 +609,9 @@ func TestMigrationFaultChecksumPartialAndCorruptFailClosed(t *testing.T) {
 	})
 	t.Run("user-version", func(t *testing.T) {
 		store := openTestStore(t)
-		if _, err := store.db.Exec(`PRAGMA user_version=6`); err != nil {
+		// Phải LỚN HƠN CurrentSchemaVersion mới là "tương lai"; hằng số cứng ở
+		// đây từng biến test thành no-op ngay khi schema lên đúng con số đó.
+		if _, err := store.db.Exec(fmt.Sprintf("PRAGMA user_version=%d", CurrentSchemaVersion+1)); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := Migrate(context.Background(), store.db, MigrationOptions{}); !errors.Is(err, ErrSchemaFuture) {
