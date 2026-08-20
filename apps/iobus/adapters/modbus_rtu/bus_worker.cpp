@@ -640,6 +640,15 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
 #endif
 }
 
+void BusWorker::note_dropped_write_slot(uint16_t ext_idx)
+{
+    std::lock_guard<std::mutex> lock(queue_mu_);
+    /* Trùng lặp vô hại nhưng tốn bộ nhớ nếu một slot hỏng liên tục; chặn ngay. */
+    for (uint16_t existing : dropped_write_slots_)
+        if (existing == ext_idx) return;
+    dropped_write_slots_.push_back(ext_idx);
+}
+
 void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metrics)
 {
 #ifndef MKDDC_ENABLE_MODBUS
@@ -679,6 +688,7 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
                          static_cast<unsigned long long>(now_ms - w.enqueued_ms));
             metrics.record_write_dropped(binding.global_idx);
             emit_result(w.request_id, "timeout", "deadline_exceeded", 0);
+            note_dropped_write_slot(w.ext_idx);
             w.submitted = true;
             continue;
         }
@@ -703,6 +713,7 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
                              static_cast<double>(w.value));
                 metrics.record_write_dropped(binding.global_idx);
                 emit_result(w.request_id, "rejected", "value_not_encodable", 0);
+                note_dropped_write_slot(w.ext_idx);
                 w.submitted = true;
                 continue;
             }
@@ -731,6 +742,7 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
                 emit_result(w.request_id,
                             (saved_errno == ETIMEDOUT) ? "timeout" : "rejected",
                             "write_failed_after_max_attempts", exc);
+                note_dropped_write_slot(w.ext_idx);
                 w.submitted = true;
             } else {
                 std::fprintf(stderr, "WARN  modbus.write_fail bus=%u slave=%s fc=%u addr=%u"

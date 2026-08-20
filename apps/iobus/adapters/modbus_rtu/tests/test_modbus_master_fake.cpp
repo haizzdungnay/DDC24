@@ -7,6 +7,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
+#include <memory>
 #include <fcntl.h>
 #include <fstream>
 #include <thread>
@@ -606,6 +608,77 @@ TEST(ModbusMasterWriteLifecycle, ExpiredWriteIsDroppedWithoutTransmitting)
 
     EXPECT_EQ(metrics.get(0).write_dropped, 1u);
     EXPECT_EQ(metrics.get(0).write_failed, 0u);
+}
+
+/* OD-MBRTU-005 — KHOÁ hai hằng số vòng đời lệnh ghi.
+ *
+ * Đây là giá trị được quyết định ở cấp sản phẩm (2026-08-20), không phải hằng số
+ * kỹ thuật tuỳ chỉnh: TTL 30 s HOẶC tối đa 3 lần phát, điều kiện nào tới trước
+ * thì lệnh kết thúc. Đổi một trong hai mà không đổi quyết định là đổi hành vi an
+ * toàn của đường ghi, nên nó phải làm test đỏ chứ không được lặng lẽ trôi. */
+TEST(ModbusMasterWriteLifecycle, WriteLifecycleConstantsMatchProductDecision)
+{
+    EXPECT_EQ(kWriteTtlMs, 30000u)
+        << "TTL lệnh ghi là 30 s theo OD-MBRTU-005; đổi phải đi kèm quyết định sản phẩm";
+    EXPECT_EQ(kMaxWriteAttempts, 3u)
+        << "tối đa 3 lần phát theo OD-MBRTU-005; đổi phải đi kèm quyết định sản phẩm";
+}
+
+/* OD-MBRTU-005 — sau khi một lệnh ghi bị bỏ, lệnh MỚI mang ĐÚNG giá trị đó phải
+ * xuống được dây.
+ *
+ * Lỗi được chặn ở đây: `ModbusMaster` chống phát trùng bằng `last_written_`,
+ * đặt ngay lúc ENQUEUE chứ không phải khi ghi thành công. Trước bản sửa
+ * 2026-08-20, một lệnh bị bỏ vẫn để lại dấu vết đó, nên kịch bản rất đời thường
+ * sau đây làm setpoint biến mất trong im lặng:
+ *
+ *   1. Kỹ thuật viên đặt 50.0 trong lúc biến tần mất điện ⇒ lệnh bị bỏ.
+ *   2. Biến tần có điện lại.
+ *   3. Họ đặt LẠI 50.0 — `last_written_` vẫn là 50.0 ⇒ coi là trùng, không
+ *      enqueue, không log, không lỗi. UI báo đã nhận; thiết bị không bao giờ nhận.
+ *
+ * Quan sát bằng `write_dropped`: nếu lệnh thứ hai thật sự được phát lại thì nó
+ * cũng sẽ bị bỏ (PTY không có ai trả lời) và bộ đếm lên 2. Nếu dedup nuốt mất
+ * thì bộ đếm đứng ở 1. */
+TEST(ModbusMasterWriteLifecycle, DroppedWriteAllowsResendOfSameValue)
+{
+    SilentPtyMaster h;
+    h.start("wr_resend");
+
+    ExtCache cache;
+    FieldbusMetrics metrics;
+
+    /* plc_shm tối thiểu: seq chẵn (không có writer đang ghi) + magic hợp lệ. */
+    auto shm = std::make_unique<kx_plc_shm_t>();
+    std::memset(shm.get(), 0, sizeof(kx_plc_shm_t));
+    shm->magic     = KX_SHM_MAGIC;
+    shm->seq       = 2;
+    shm->ext_count = 1;
+    shm->ext[0].dirty    = 1;
+    shm->ext[0].setpoint = 50.0;
+
+    uint64_t now = 1000;
+    h.master.drain_ext_writes(shm.get(), now);
+    h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+
+    /* Đẩy quá TTL để lệnh thứ nhất chắc chắn kết thúc. */
+    now += kWriteTtlMs + 1;
+    h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+    ASSERT_EQ(metrics.get(0).write_dropped, 1u)
+        << "lệnh thứ nhất phải kết thúc trước khi kiểm lệnh thứ hai";
+
+    /* Lệnh MỚI, cùng giá trị. Đây là một command mới theo đúng nghĩa của
+     * OD-MBRTU-005 và bắt buộc phải được phát. */
+    shm->ext[0].dirty = 1;
+    h.master.drain_ext_writes(shm.get(), now);
+    now += 1;
+    h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+    now += kWriteTtlMs + 1;
+    h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+
+    EXPECT_EQ(metrics.get(0).write_dropped, 2u)
+        << "lệnh mới cùng giá trị bị dedup nuốt sau khi lệnh cũ bị bỏ — setpoint "
+           "biến mất im lặng, đúng lớp lỗi false-success mà thiết kế cấm";
 }
 
 /* D-01 nối với D-03: giá trị không encode được phải bị bỏ và ĐẾM được, thay vì

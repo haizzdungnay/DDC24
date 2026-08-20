@@ -188,11 +188,33 @@ public:
         return pending_writes_.size();
     }
 
+    /* Lấy VÀ XOÁ danh sách ext slot có lệnh ghi vừa kết thúc mà KHÔNG ghi được
+     * (quá hạn TTL, hết lượt thử, hoặc giá trị không encode được).
+     *
+     * Vì sao cần: `ModbusMaster` chống phát trùng bằng `last_written_`, được đặt
+     * ngay lúc ENQUEUE. Nếu lệnh sau đó bị bỏ, `last_written_` vẫn giữ giá trị
+     * cũ, nên người vận hành đặt LẠI ĐÚNG giá trị đó sẽ bị coi là trùng và lệnh
+     * mới không bao giờ xuống dây — setpoint biến mất trong im lặng. Đó chính là
+     * lớp lỗi "false success" mà thiết kế cấm, và nó vô hiệu hoá quy tắc "muốn
+     * ghi lại thì phát sinh command mới" của OD-MBRTU-005.
+     *
+     * Trả về ext_idx để master xoá dấu vết dedup tương ứng. */
+    std::vector<uint16_t> take_dropped_write_slots()
+    {
+        std::lock_guard<std::mutex> lock(queue_mu_);
+        std::vector<uint16_t> out;
+        out.swap(dropped_write_slots_);
+        return out;
+    }
+
 private:
     void set_state(BusState s, FieldbusMetrics* metrics);
     void build_blocks(BusSlaveBinding* binding);
     void read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusMetrics& metrics);
     void flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metrics);
+    /* Ghi nhận một ext slot có lệnh ghi kết thúc mà không áp được. Tự lấy
+     * `queue_mu_`; chỉ được gọi từ `flush_pending` ở đoạn ĐÃ nhả khoá. */
+    void note_dropped_write_slot(uint16_t ext_idx);
     void mark_bus_down(ExtCache& cache, FieldbusMetrics& metrics);
     void emit_result(const std::string& request_id, const char* status,
                      const char* reason, uint8_t exception_code);
@@ -223,6 +245,9 @@ private:
     BusConfig                    bus_{};
     std::vector<BusSlaveBinding> slaves_;
     std::vector<PendingWrite>    pending_writes_;
+    /* ext slot của các lệnh ghi kết thúc mà không áp được; xem
+     * `take_dropped_write_slots()`. Bảo vệ bởi `queue_mu_`. */
+    std::vector<uint16_t>        dropped_write_slots_;
     void*    ctx_ = nullptr;    /* modbus_t* */
     BusState state_ = BusState::CLOSED;
     uint16_t ext_base_ = 0;
