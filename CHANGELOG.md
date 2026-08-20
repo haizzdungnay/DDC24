@@ -8,6 +8,60 @@
 
 ## [Unreleased]
 
+### Added — `T59-201` Control Library: domain, store schema v7 và SYSTEM virtual (2026-08-20)
+
+`apps/web-api/internal/programming/domain/library.go`,
+`apps/web-api/internal/programming/store/library.go` và migration
+`0007_control_library_domain.sql`. **Mở Wave W2 của Plan 59.**
+
+**SYSTEM Library không nằm trong SQLite.** Nó là snapshot chỉ đọc sinh từ
+`pou_library_registry_v1.json`. Seed nó vào DB sẽ tạo ngay một đường đặc quyền để
+ghi thêm entry SYSTEM sau khi DB đã mở, và khi đã có đường đó thì "SYSTEM
+read-only" chỉ còn là quy ước ở lớp application. Hai trigger
+`library_revisions_no_system_insert/update` chặn cả SQL trực tiếp. Snapshot hỏng
+hoặc provider lỗi thì `OpenProgrammingStore` **fail-closed** — mở store rồi phân
+giải tên bằng dữ liệu không ai kiểm là cách hỏng im lặng nhất.
+
+**PROJECT Library có version thật.** `CreateProjectLibraryVersion` clone snapshot
+parent đã publish và **re-pin dependency nội revision sang version mới**; parent
+không bị chạm. Publish dựng manifest canonical từ chính entries **trong cùng
+transaction** (caller không truyền manifest vào), nên không thể ký một manifest
+khác với tập entry thực sự bị đóng băng. Published/Deprecated bất biến ở **hai
+lớp**: store và trigger DB.
+
+**`0 byte authoritative` khác `chưa biết`.** FUNCTION/CONVERSION có
+`state_size=0` authoritative; FUNCTION_BLOCK được ở Draft khi chưa biết layout
+nhưng **không publish được** nếu thiếu version/size/hash. Đoán một con số ở đây
+làm lệch mọi offset RETAIN phía sau.
+
+**Migration v6→v7 dừng trước `ALTER`** khi DB còn hàng `library_entries` đời v6:
+hàng v6 không mang source/interface/layout nên nâng cấp nó là bịa dữ liệu.
+Migration thất bại giữ `user_version=6`, không để lại cột/trigger v7 nào.
+
+**Contract:** `programming_store_v1.manifest.json` lên `schemaVersion` 7;
+G1 re-pin `store`. `immutableEntities` bỏ `library_entries` và thêm
+`draftMutableEntities` — sau v7 entry chỉ bất biến khi revision cha đã rời
+`DRAFT`, khai bất biến vô điều kiện là khai sai.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; G1 10/10 contract + `--self-test` 32/32 mutation; `candidate_pin_check`
+16/16; `verify-project.sh --wave W2` **6/6 PASS**.
+
+### Fixed — `T59-201` entry Control Library không có dependency ghi `null` thay vì `[]` (2026-08-20)
+
+**Triệu chứng.** Mọi PROJECT library entry không khai dependency đều bị SQLite từ
+chối với `invalid PROJECT library entry`.
+
+**Nguyên nhân gốc.** `normalizeLibraryDependencies` trả `nil` cho input rỗng, nên
+`json.Marshal` ghi `null` xuống `dependencies_json`, trong khi hash canonical của
+entry đã canonicalize thành mảng rỗng `[]` và schema bắt
+`json_type(dependencies_json) = 'array'`. Đường phổ biến nhất của tính năng không
+chạy được, và không test nào chạm tới nó cho tới khi bộ test store được viết.
+
+**Cách sửa.** Chuẩn hoá tại đúng một điểm để cả `library_entries` lẫn
+`pou_objects` cùng ghi `[]`. Content hash **không đổi** vì nó vốn đã dùng mảng
+rỗng, nên không có golden/pin nào phải sinh lại.
+
 ### Added — `T59-106` container package v2: writer, loader và dual-reader (2026-08-20)
 
 `apps/core/application/st/st_package_v2.{hpp,cpp}` cùng công cụ

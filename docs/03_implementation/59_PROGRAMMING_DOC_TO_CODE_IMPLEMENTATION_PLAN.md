@@ -690,11 +690,83 @@ công cụ sinh, **không phải** mã đã biên dịch từ nguồn thật —
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-201` | P0 | Domain/store SYSTEM+PROJECT library revision/entry/usage | T59-005/102 | ORDERED | Immutable system, project versioning, reference guard, migration/restart tests. |
+| `T59-201` | P0 | Domain/store SYSTEM+PROJECT library revision/entry/usage | T59-005/102 | **DONE** | SYSTEM là snapshot **virtual** sinh từ registry (0 hàng SQLite, trigger chặn cả SQL trực tiếp); PROJECT có Draft→Publish→Deprecate bất biến ở **hai lớp** store+trigger; migration `0007` schema v6→v7 **dừng fail-closed** khi còn hàng library đời v6; 11 test domain + 10 test store gồm reference guard, clone version re-pin dependency, usage seal nguyên tử, restart và fail-closed SYSTEM provider; `go vet` sạch + `go test ./... -count=1` 18/18 package ok; G1 10/10 + self-test 32/32; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 | `T59-202` | P0 | Library REST/OpenAPI/RBAC/idempotency/audit | T59-201/006 | ORDERED | Route↔OpenAPI↔client exact; admin mutation, viewer/operator read, negative direct API. |
 | `T59-203` | P1 | FE PGM-04 library search/filter/detail/create/edit/version/usage | T59-202 | ORDERED | Desktop/mobile visual mapping; loading/empty/error/permission; component/a11y/E2E. |
 | `T59-204` | P1 | Library import/export/signature/version compatibility | T59-201/106 | ORDERED | Source-only hostile corpus; no executable/cache/path traversal; no Active mutation. |
 | `T59-205` | P0 | PID registry trạng thái `REVIEW_REQUIRED` + policy token | T59-003/004 | ORDERED | Commission blocked without controlled approval token; cannot bypass from FE payload. |
+
+### 3.3 Ghi chú thực thi W2
+
+#### `T59-201` — Domain/store Control Library SYSTEM và PROJECT
+
+**Quyết định lớn nhất: SYSTEM Library không nằm trong SQLite.** Nó là snapshot
+chỉ đọc sinh từ `pou_library_registry_v1.json` cùng compiler/firmware profile.
+Seed nó vào DB sẽ tạo ngay một đường đặc quyền để ghi thêm entry SYSTEM sau khi
+DB đã mở — và một khi tồn tại đường đó, mọi lời hứa "SYSTEM là read-only" chỉ còn
+là quy ước ở lớp application. Store nạp snapshot lúc mở, **validate** rồi giữ bản
+sao; `GetLibraryRevision`/`ListLibraryEntries`/`SearchLibraryEntries` trộn nó với
+PROJECT trong DB. Hai trigger `library_revisions_no_system_insert/update` chặn cả
+SQL trực tiếp, nên test khoá được cả hai chiều: đọc được, và không tạo được bản
+SYSTEM song song.
+
+**Snapshot hỏng thì store không mở.** Provider lỗi hoặc snapshot không hợp lệ đều
+làm `OpenProgrammingStore` fail-closed. Mở store rồi phân giải tên bằng dữ liệu
+không ai kiểm là cách hỏng tệ nhất — nó im lặng.
+
+**Version mới là revision mới, không phải sửa tại chỗ.**
+`CreateProjectLibraryVersion` clone snapshot parent đã publish, **re-pin
+dependency nội revision sang version mới** rồi tính lại content hash. Test khoá
+đúng hệ quả: entry không có dependency giữ **nguyên** content hash, entry có
+dependency **phải đổi** hash, và parent giữ nguyên state/manifest. Nếu clone
+không re-pin thì revision mới sẽ mang pin trỏ về version cũ — một tham chiếu chéo
+version mà không lớp nào phía sau phát hiện được.
+
+**Publish dựng manifest từ chính entries trong transaction.** Caller không được
+truyền manifest vào; nhờ vậy không thể ký một manifest khác với tập entry thực sự
+sắp bị đóng băng. Manifest tất định theo nội dung: dựng lại cùng tập entry theo
+thứ tự upsert **ngược lại** cho đúng cùng SHA-256 — có test riêng.
+
+**Trạng thái layout FB: `0 byte authoritative` khác `chưa biết`.**
+FUNCTION/CONVERSION có `state_size=0` authoritative. FUNCTION_BLOCK được phép ở
+Draft khi chưa biết layout, nhưng **không publish được** nếu thiếu
+version/size/hash. Đoán một con số ở đây sẽ **làm lệch mọi offset RETAIN phía
+sau** — sai lệch im lặng, tệ hơn hẳn là chưa biết. `CHECK` của schema và
+`validateLibraryStateLayout` khoá cùng một bất biến ở hai lớp.
+
+**Reference guard ở hai lớp khác nhau.** Trong Draft: entry đang bị entry khác
+khai dependency thì không xoá được (`ErrLibraryReferenced`), còn entry tự do vẫn
+xoá được — guard chặn tất cả cũng là guard sai. Sau khi Revision seal:
+`library_usages` giữ FK `RESTRICT` và trigger no-update/no-delete, nên usage của
+một Revision immutable không xoá được kể cả bằng SQL trực tiếp.
+
+**Migration v6→v7 dừng trước `ALTER` khi còn hàng library đời v6.** Một hàng v6
+không mang source, interface hay layout, nên nâng cấp nó là **bịa dữ liệu**.
+Preflight `CHECK (legacy_entry_count = 0)` bắt operator phục hồi/điều tra từ
+backup thay vì mở DB rồi hỏng muộn ở lần đọc đầu tiên. Test xác nhận migration
+thất bại giữ `user_version` ở 6, **không** để lại cột/trigger v7 nào, và dữ liệu
+v6 nguyên vẹn.
+
+**Finding sửa kèm trong task.** `normalizeLibraryDependencies` trả `nil` khi entry
+không có dependency, nên `json.Marshal` ghi `null` xuống `dependencies_json`
+trong khi hash canonical của entry đã dùng mảng rỗng `[]`. Hệ quả: **mọi** PROJECT
+library entry không có dependency đều bị `json_type(...)='array'` của schema từ
+chối — tức là đường phổ biến nhất của tính năng không chạy được, và không test nào
+chạm tới nó trước khi bộ test store này được viết. Đã sửa tại đúng điểm chuẩn hoá
+để cả `library_entries` lẫn `pou_objects` cùng ghi `[]`; content hash **không
+đổi** vì nó vốn đã canonicalize thành mảng rỗng.
+
+**Contract đi cùng code.** `programming_store_v1.manifest.json` lên `schemaVersion`
+7 với migration `0007`; G1 re-pin `store`. `immutableEntities` bỏ `library_entries`
+và thêm khối `draftMutableEntities` — sau v7, entry chỉ bất biến khi revision cha
+đã rời `DRAFT`, nên khai nó bất biến vô điều kiện là khai sai.
+
+**Ranh giới trung thực.** Đây là **domain + store**. REST/RBAC/audit thuộc
+`T59-202`, UI thuộc `T59-203`, import/export nguồn thù địch thuộc `T59-204`, và
+layout FB authoritative do compiler sinh vẫn chưa có — store chỉ từ chối những gì
+không authoritative chứ không tự tính được.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
 ### W3 — Multi-Program Project, Check và Mapping
 

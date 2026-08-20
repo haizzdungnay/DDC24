@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 4.0 |
+| Phiên bản | 4.1 |
 | Trạng thái | **Active — 60 requirement legacy + 22 unified requirement; 0 Open Decision; release evidence chưa đủ** |
 | Cập nhật | 2026-08-20 |
 | Chủ quản | Verification Lead |
@@ -29,14 +29,16 @@ nghĩa code tồn tại, cũng không nghĩa test đã PASS.
 
 | Requirement mới | Design/contract owner | Plan 59 | Scenario | Evidence hiện tại |
 |---|---|---|---|---|
-| `SYS-REQ-PROG-109..110` | Unified DDD §4–§6; Language/registry v2 | T59-003, T59-101..205 | U01..U03 | NOT_RUN |
+| `SYS-REQ-PROG-109` | Unified DDD §4–§6; Language/registry v2 | T59-003, T59-101..106 | U01/U02 | `T59-101..106`: parser/model/registry/package host-local; compile package thật/runtime/target còn thiếu; U01/U02 NOT_RUN |
+| `SYS-REQ-PROG-110` | Unified DDD §4–§6; Control Library | T59-003, T59-201..205 | U03 | `T59-201`: SYSTEM virtual immutable + PROJECT revision/entry/usage store, canonical hash/DAG/layout/reference/migration/restart host-local; REST/FE/import/compiler/runtime/target còn thiếu; U03 NOT_RUN |
 | `SYS-REQ-PROG-111` | Unified DDD §4.1/§7; profile v2 | T59-002, T59-301/305/402 | U04/U05 | NOT_RUN |
 | `SYS-REQ-PROG-112` | Unified DDD §4.5/§7.3 | T59-304/404 | U05/U06 | NOT_RUN |
 | `SYS-REQ-PROG-113` | Unified DDD §4.3/§5.1–5.2/§7.2 | T59-405/501/503 | U07/U08/U10 | NOT_RUN |
 | `SYS-REQ-PROG-114` | Unified DDD §4.6/§7/§9 | T59-303/304/406 | U07/U09 | NOT_RUN |
 | `SYS-REQ-PROG-115` | Unified DDD §7 | T59-402/403/702 | U05/U11 | NOT_RUN |
 | `SWR-REQ-PROG-FE-116..118` | Unified DDD §8; UX unified section | T59-203/503/504/506 | U03/U06/U07/U10 | NOT_RUN |
-| `SWR-REQ-PROG-BE-111..115` | Unified DDD §4–§6 | T59-005/006/201/202/302/405/408 | U03/U04/U07/U10 | NOT_RUN |
+| `SWR-REQ-PROG-BE-111` | Unified DDD §4–§6 | T59-005/201/202 | U03 | `T59-201`: domain/store + schema v7 có immutable/version/reference guard; API/RBAC/audit thuộc T59-202, U03 NOT_RUN |
+| `SWR-REQ-PROG-BE-112..115` | Unified DDD §4–§6 | T59-006/302/405/408 | U04/U07/U10 | NOT_RUN |
 | `SWR-REQ-PROG-CORE-111..116` | Unified DDD §5.3/§7 | T59-401..408/501 | U02/U05..U09/U11 | NOT_RUN |
 | `NFR-REQ-PROG-111` | Unified DDD §11–§12 | T59-606/702/707 | U05/U11 | NOT_RUN |
 

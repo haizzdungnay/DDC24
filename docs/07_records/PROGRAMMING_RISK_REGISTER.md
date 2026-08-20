@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 3.0 |
+| Phiên bản | 3.3 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -463,6 +463,18 @@ dữ liệu tất định do công cụ sinh, **không phải** mã biên dịch
 rằng compiler đã sinh được package thật. 16/16 risk giữ `Open`, 11 Critical, S×L
 và residual không đổi.
 
+### 5.29 Cập nhật treatment source `T59-201` (Plan59 W2)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-020` | SYSTEM Library là snapshot **virtual read-only** sinh từ đúng registry, revision ID content-addressed và G1 giữ lịch sử `version→hash`, nên sửa semantics mà tái dùng version bị generator/gate từ chối. PROJECT Library có Draft mutable, Publish dựng manifest canonical trong transaction, Published/Deprecated bất biến ở cả store lẫn trigger; version mới clone từ parent đã publish. Hash entry phủ canonical source+interface+dependency, không dùng hash signature rút gọn | REST/RBAC/audit (`T59-202`), hostile source-only import/export (`T59-204`), signed library/artifact (`T59-602`), full API/security matrix (`T59-603`) và Test Result `U03` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-009` | FUNCTION có `state_size=0` authoritative; PROJECT FUNCTION_BLOCK chỉ được Publish khi version/size/hash layout đủ. Trạng thái unknown bắt buộc mọi field bằng zero/null, nên không thể mang số đoán hoặc stale rồi làm lệch offset phía sau | Compiler sinh layout authoritative và bundle compatibility (`T59-204`), runtime cold-init/RETAIN (`T59-407`) cùng power-cut target (`T59-704`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Resolver domain giữ riêng missing entry `ST-LIB-001`, version drift `ST-LIB-002` và dependency/POU cycle `ST-POU-003`; store gọi cùng validator thay vì gộp thành lỗi “unknown function” | Nối emitter vào Check/API thật (`T59-202/302`) và Test Result `U03`/`VS-PROG-019/024` | `OPEN — PARTIAL SOURCE` |
+
+Evidence mới chỉ ở host/local cho domain, migration/store, restart và fault
+injection. Chưa có REST/FE/compiler package/runtime/target/HIL/Test Result; vì vậy
+**22/22 risk vẫn Open**, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -515,6 +527,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 3.3 | 2026-08-20 | Ghi `T59-201` (Plan59 W2) cho treatment partial RSK-009/014/020: SYSTEM registry virtual/content-addressed có lịch sử version→hash; PROJECT Library versioned, Published bất biến, canonical source/interface/dependency hash, DAG/reference/layout guard và migration/restart fail-closed. Giữ 22/22 Open và mọi residual vì REST/import/signature/compiler/runtime/target/Test Result còn thiếu. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
 | 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |
