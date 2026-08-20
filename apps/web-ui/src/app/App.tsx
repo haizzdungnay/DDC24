@@ -36,21 +36,37 @@ const ModbusPointsPage = lazy(() => import('../features/modbus-rtu').then((modul
 const ModbusPortsPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.PortsPage })))
 // Modbus RTU không có import tĩnh nào ở đây nên barrel dùng được.
 import { DisplaySettingsPage, NetworkPage, SettingsPage, TimeSettingsPage } from '../features/network'
-/* Import THẲNG tệp nguồn thay vì barrel: barrel `operations/index.ts` cũng
-   re-export `TrendsPage`, nên chạm vào barrel là kéo luôn thư viện biểu đồ vào
-   chunk chính và `lazy` của Xu hướng mất tác dụng. */
-import { AlarmHistoryPage, AlarmsPage } from '../features/operations/AlarmsPage'
-import { AlarmSettingsPage } from '../features/operations/AlarmSettingsPage'
+/* QUY TẮC MỘT CHIỀU CHO MỖI FEATURE: hoặc TOÀN BỘ tĩnh, hoặc TOÀN BỘ động —
+   không trộn trên cùng một barrel.
+ *
+ * Trước 2026-08-20, ba trang Cảnh báo được import TĨNH thẳng vào tệp nguồn còn
+ * Xu hướng import ĐỘNG, với lý do ghi ngay tại đây: chạm barrel bằng import tĩnh
+ * sẽ kéo `TrendsPage` (và thư viện biểu đồ) vào chunk chính và làm `lazy` mất
+ * tác dụng — rollup báo đúng điều đó bằng `INEFFECTIVE_DYNAMIC_IMPORT`.
+ *
+ * Cách né đó đúng về bundling nhưng phá ranh giới feature, và
+ * `verify_repository.py` bắt được: 8 trong 10 vi phạm dependency boundary trên
+ * `main` sinh ra từ chính chỗ này. Hai bất biến xung đột thật, và bất biến kiến
+ * trúc là bên thua trong im lặng.
+ *
+ * Lời giải không phải chọn một bên mà là bỏ điều kiện gây xung đột: khi feature
+ * KHÔNG còn import tĩnh nào ở đây, barrel chỉ được chạm qua `import()` động nên
+ * rollup giữ nguyên chunk riêng — `lazy` hoạt động VÀ ranh giới được tôn trọng.
+ * Đây đúng là mô hình Modbus RTU ở trên đã dùng từ trước.
+ *
+ * Hệ quả có chủ ý: ba trang Cảnh báo chuyển từ eager sang lazy. Chúng nằm trong
+ * `<Suspense fallback={<RouteLoading />}>` bên dưới nên hành vi điều hướng không
+ * đổi, và chunk chính nhẹ đi vì cả feature rời khỏi đồ thị khởi động. */
+const AlarmsPage = lazy(() => import('../features/operations').then((module) => ({ default: module.AlarmsPage })))
+const AlarmHistoryPage = lazy(() => import('../features/operations').then((module) => ({ default: module.AlarmHistoryPage })))
+const AlarmSettingsPage = lazy(() => import('../features/operations').then((module) => ({ default: module.AlarmSettingsPage })))
 /* Xu hướng kéo theo cả thư viện biểu đồ (407 kB) — lô nặng nhất, và không phải
    màn hình mở đầu ca. */
-/* Trỏ THẲNG vào tệp nguồn, không qua barrel `index.ts`: cùng một barrel vừa
-   được import tĩnh (AlarmsPage) vừa import động sẽ khiến bundler gộp lại và
-   `lazy` mất tác dụng — rollup báo đúng điều đó bằng INEFFECTIVE_DYNAMIC_IMPORT. */
-const TrendsPage = lazy(() => import('../features/operations/TrendsPage').then((module) => ({ default: module.TrendsPage })))
-const SchedulerLayout = lazy(() => import('../features/scheduler/SchedulerLayout').then((module) => ({ default: module.SchedulerLayout })))
-const SchedulerGridPage = lazy(() => import('../features/scheduler/SchedulerGridPage').then((module) => ({ default: module.SchedulerGridPage })))
-const ScheduleEditorPage = lazy(() => import('../features/scheduler/ScheduleEditorPage').then((module) => ({ default: module.ScheduleEditorPage })))
-const SchedulerRuntimePage = lazy(() => import('../features/scheduler/SchedulerRuntimePage').then((module) => ({ default: module.SchedulerRuntimePage })))
+const TrendsPage = lazy(() => import('../features/operations').then((module) => ({ default: module.TrendsPage })))
+const SchedulerLayout = lazy(() => import('../features/scheduler').then((module) => ({ default: module.SchedulerLayout })))
+const SchedulerGridPage = lazy(() => import('../features/scheduler').then((module) => ({ default: module.SchedulerGridPage })))
+const ScheduleEditorPage = lazy(() => import('../features/scheduler').then((module) => ({ default: module.ScheduleEditorPage })))
+const SchedulerRuntimePage = lazy(() => import('../features/scheduler').then((module) => ({ default: module.SchedulerRuntimePage })))
 import { CommissioningPage, InputsPage, MonitorPage, OutputsPage, UserParametersPage, VirtualPointsPage } from '../features/points'
 import { AppShell } from '../shared/components/AppShell'
 import { RequireRole } from '../shared/components/RequireRole'
@@ -58,7 +74,7 @@ import { useI18n } from '../shared/i18n'
 import { OverviewProvider } from '../shared/overview/OverviewProvider'
 import { RealtimeProvider } from '../shared/realtime'
 import { LEGACY_GRAPH_DEMO_ENABLED, PROGRAMMING_REV_A_ENABLED } from '../shared/config'
-const ProgrammingRoutes = lazy(() => import('../features/programming/ProgrammingRoutes').then((module) => ({ default: module.ProgrammingRoutes })))
+const ProgrammingRoutes = lazy(() => import('../features/programming').then((module) => ({ default: module.ProgrammingRoutes })))
 
 function ProtectedShell() {
   const { isAuthenticated, session } = useAuth()

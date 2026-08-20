@@ -43,7 +43,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import appSource from './App.tsx?raw'
-import { ROUTE_MIN_ROLE } from '../features/auth/roles'
+import { ROUTE_MIN_ROLE } from '../features/auth'
 import { NAV_GROUPS } from '../shared/components/NavRail'
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..')
