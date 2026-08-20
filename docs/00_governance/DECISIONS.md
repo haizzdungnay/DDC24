@@ -1385,3 +1385,69 @@ Số ADR tiếp theo còn trống: **`ADR-050`** (record này không cấp ADR m
   mới. Bất biến chống tái phát nằm ở
   `TestRouteTableMatchesOpenAPI`, `TestRevBSurfacesStayOutOfRevAContract` và
   `test_release_packaging_guard.py`.
+
+## ADR-050 — Một Product Programming thống nhất, không chia Rev A/Rev B
+
+**Trạng thái:** Accepted
+**Ngày:** 2026-08-20
+**Authority record:** `AUTH-PROG-2026-08-20-04`
+**Người quyết định:** Phạm Đình Chương — Product Owner/CTO + System Architect
+
+### Bối cảnh
+
+Programming tồn tại đồng thời Product Spec hẹp theo profile một Program và một
+candidate Program-centric. Plan 59 bản nháp tiếp tục chia việc thành Rev A/Rev B,
+trong khi Owner xác nhận sản phẩm cần giao không có cách chia đó. Kết quả là
+multi-Program, user `FUNCTION`/`FUNCTION_BLOCK`, Control Library, Published
+Signal và Enable/Disable bị đẩy khỏi implementation dù là capability cốt lõi.
+
+### Quyết định
+
+1. MK-DDC-24 có **một** Product Programming authority tại
+   `docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md` v3.0. Mọi phân loại
+   Programming “Rev A/Rev B” trước đây là lịch sử/migration, không còn quyết định
+   phạm vi.
+2. Product bắt buộc multi-Program, `PROGRAM/FUNCTION/FUNCTION_BLOCK` bằng ST/FBD,
+   SYSTEM/PROJECT Control Library, Published Signal typed, Enable/Disable từng
+   Program, per-Program RETAIN/diagnostics và full Output Candidate→physical I/O
+   safety path.
+3. Capacity Product Target: 32 Program/Revision, tối đa 16 Enabled, period
+   `1/5/30 s`, 256 user POU, 1024 FB instance, 512 signal và 512 binding.
+4. `FUNCTION` là pure/stateless/no I/O; `FUNCTION_BLOCK` có private state theo
+   instance nhưng không có cycle/Point Mapping; chỉ `PROGRAM` sở hữu lifecycle,
+   cycle, mapping, RETAIN, publish và output candidate.
+5. Published Signal là runtime primitive single-publisher trên committed
+   snapshot, không phải Point type thứ tư. Không shared writable memory.
+6. Output binding dùng single Program owner; conflict bị Check reject. Disable
+   rút candidate tại safe boundary; resolver/interlock/safe-state chọn giá trị
+   tiếp theo.
+7. Scheduler không tạo dependency theo creation/display order; fault/Disable một
+   Program không mặc định dừng Program độc lập. Multicore là optimization giữ
+   cùng semantics, không phải điều kiện để code single-core path.
+8. Sáu workspace Product là Tổng quan, Chương trình, Điểm & Ánh xạ, Thư viện
+   điều khiển, Kiểm tra & Đưa vào vận hành, Runtime & Bảo trì.
+9. `TRACE_START` được implement bằng Core ring buffer bounded thay vì xóa khỏi
+   Product contract. PID được implement trong registry nhưng chỉ quảng bá
+   end-user-ready sau Controls/Safety evidence.
+10. `PLAN_READY` và toàn bộ `IMPLEMENT_READY` được mở ngay. Review discipline là
+    hậu kiểm và finding phải sửa trong task; không được dùng làm blocker code.
+    `RELEASE_READY` không được waive: target/HIL/physical I/O/power/soak/
+    provenance/rollback vẫn phải có evidence thật.
+
+### Hệ quả và migration
+
+- Product Spec candidate Hybrid được hợp nhất rồi loại khỏi cây; Git giữ đường
+  phục hồi.
+- `DDD-SW-PROG-UNIFIED-001` là design authority khi hồ sơ cũ xung đột.
+- Profile/artifact/store/OpenAPI/IPC nâng version theo Plan 59; Core giữ dual
+  reader artifact v1/v2 trong migration window.
+- Package cũ một Program migrate thành Draft v2; không tự Commission. Active/LKG
+  v1 tiếp tục rollback được tới khi v2 qua target gate.
+- Plan 53/54/56 và Tracker trở thành hồ sơ lịch sử/superseded; Plan 59 là execution
+  authority duy nhất.
+
+### Rollback quyết định
+
+Chỉ Product Owner có thể supersede ADR này bằng decision record mới. Rollback
+code không được âm thầm thu hẹp Product Spec; nếu v2 fail, giữ active v1/LKG và
+tiếp tục implementation/fix theo cùng Product Target.

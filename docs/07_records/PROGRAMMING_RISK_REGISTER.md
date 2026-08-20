@@ -3,15 +3,15 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 2.2 |
-| Trạng thái | **M3 — Review Ready** — treatment/evidence/acceptance đủ; 16/16 Open |
-| Ngày | 2026-08-13 |
+| Phiên bản | 3.0 |
+| Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
+| Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
 | Người review | Risk owners, Safety, Security, Operations Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
-| Review kế tiếp | Khi R2/R3 được phê duyệt hoặc có Test Result/incident/change mới |
+| Review kế tiếp | Sau mỗi Wave Plan 59 và trước `RELEASE_READY` |
 
-> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
+> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-20-04`.** Mọi ô
 > `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
 > không còn chặn viết/merge code. Risk control/evidence vẫn được theo dõi trong task.
 
@@ -19,11 +19,11 @@
 
 | Câu hỏi | Trả lời |
 |---|---|
-| 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **16 rủi ro có thể gây hỏng thiết bị, mất điều khiển hoặc sai cam kết**, kèm biện pháp kiểm soát, chủ sở hữu và bằng chứng cần có để hạ mức. Đây là căn cứ để nói “chưa được phép cutover”. |
+| 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **22 rủi ro** gồm 16 baseline và 6 rủi ro unified Product, kèm control/task/evidence để hạ mức. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 `Critical`. P4 đã hiện thực thêm treatment source cho RSK-001/003/007/009: exclusive owner, durable operation/reconcile, first-output rollback, verified staging và checkpoint recovery. Hai Test Result vẫn `BLOCKED`, **0/16 evidence target được chấp nhận**, nên không giảm điểm. |
+| 3. Hệ thống hiện tại đang có gì? | 22/22 Open; source baseline có một phần treatment cho atomic/LKG/RETAIN, nhưng contract mới chưa có Test Result; không giảm residual. |
 | 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Nó gắn từng rủi ro với biện pháp cụ thể, kịch bản kiểm chứng và mức tồn dư **mục tiêu** — mục tiêu, chưa phải kết quả. |
-| 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan 53. Bốn rủi ro nặng nhất (20 điểm): `RSK-PROG-002` watchdog restart, `RSK-PROG-003` IOP gap, `RSK-PROG-005` compiler tranh CPU, `RSK-PROG-013` nhầm skeleton là HIL-ready. |
+| 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan59. Các rủi ro 20 điểm gồm runtime/IOP/compiler/HIL baseline và sáu rủi ro mới về signal, scheduler, POU, library, output, power-loss. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Cột “Scenario/evidence authority” ở §3 gắn từng rủi ro với `VS-PROG-*`. Hiện 2/32 record đều `BLOCKED`, 0/32 PASS, nên **không rủi ro nào được hạ mức**. |
 
@@ -51,6 +51,12 @@ Thang: Severity/Likelihood `1..5`, Risk = S×L. Residual chỉ giảm sau eviden
 | `RSK-PROG-014` | Error namespace/spec cũ xung đột, FE xử lý sai | 3×4=12 | IFSPEC authority, mapping detail code, contract tests | BE/Core/FE | VS-019/024 | 12 Open |
 | `RSK-PROG-015` | Claim IEC/ISO/certified không có evidence | 3×3=9 | claim guardrail, review/sign-off, trace | Product/QA | G0/G6 | 9 Open |
 | `RSK-PROG-016` | Đơn giản hóa UI làm mất một bước an toàn: xác nhận theo rủi ro bị hiểu thành bỏ xác nhận, hoặc impact `UNAVAILABLE` bị coi là `NONE` | 5×3=15 | fail-closed ba nhánh impact, giữ re-auth + read-back + rollback bất kể số ô xác nhận, test âm bắt buộc | UX/FE/BE/QA | VS-031/011/019 | 15 Open |
+| `RSK-PROG-017` | Cross-Program shared state/race hoặc signal torn-read làm logic không deterministic | 5×4=20 | cấm shared writable, signal double-buffer committed snapshot, TSan/stress | Core | U05/U06/U11; T59-404/702 | 20 Open |
+| `RSK-PROG-018` | Creation order/worker lane tạo dependency ngầm hoặc starvation | 5×3=15 | absolute-deadline due queue, semantics độc lập worker count, 10-Program reorder fixture | Core/QA | U05/U11; T59-402/403/702 | 15 Open |
+| `RSK-PROG-019` | Function/FB recursion, side effect hoặc state alias vượt resource/WCET | 5×3=15 | kind rules, call DAG, static layout/budget, one-over/fuzz | Compiler/Core | U01/U02/U04; T59-101..106 | 15 Open |
+| `RSK-PROG-020` | Library version/supply-chain drift khiến cùng source chạy khác hoặc nạp payload độc hại | 5×3=15 | immutable lock, source-only import, signed artifact/library, hostile corpus | Compiler/BE/Security | U03; T59-201..205/602/603 | 15 Open |
+| `RSK-PROG-021` | Hai Program tranh cùng output hoặc Disable giữ candidate bí mật | 5×4=20 | single owner Check guard, safe-boundary withdrawal, resolver/interlock/safe-state HIL | Core/Controls | U07/U09; T59-304/406/703 | 20 Open |
+| `RSK-PROG-022` | Package multi-Program active một phần hoặc intent/RETAIN/LKG lệch sau power loss | 5×4=20 | first-cycle package barrier, journal/checkpoint/dual-reader, power matrix | Core/BE/Ops | U08; T59-501/704/705 | 20 Open |
 
 ## Quy tắc xử lý
 
@@ -115,15 +121,15 @@ OPEN → TREATMENT_IMPLEMENTED → EVIDENCE_REVIEW → ACCEPTED | REOPENED
 
 ## 5. Trạng thái control/evidence hiện tại
 
-| Chỉ số | Giá trị 2026-08-09 |
+| Chỉ số | Giá trị 2026-08-20 |
 |---|---:|
-| Risk Open | 16/16 |
-| Critical ≥15 | 11/16 |
-| Treatment có thiết kế ở mức M3 | 16/16 |
-| Treatment implemented end-to-end | 0/16 cho feature/Target |
-| Treatment source/target partial | 11/16 (`RSK-PROG-001/002/003/005/006/007/008/009/011/012/014`); P5 đã deploy đầy đủ FE/Web/compiler/Core, Check/Commission/read-back happy path PASS; timing/power/IOP/HIL/Test Result độc lập còn thiếu nên chưa đủ đổi lifecycle/residual |
-| Evidence accepted | 0/16 |
-| Residual accepted | 0/16 |
+| Risk Open | 22/22 |
+| Critical ≥15 | 17/22 |
+| Treatment có thiết kế | 22/22 |
+| Treatment implemented end-to-end | 0/22 cho Product Target |
+| Treatment source/target partial | 11/22 ở baseline cũ; sáu risk unified mới ở trạng thái design control |
+| Evidence accepted | 0/22 |
+| Residual accepted | 0/22 |
 
 Vòng nội dung chi tiết làm rõ control nhưng không giảm risk. Production gate vẫn RED.
 
@@ -314,7 +320,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 
 | Trigger | Hành động bắt buộc |
 |---|---|
-| Requirement/design/contract đổi | impact 16 risk; reopen risk liên quan; invalidate evidence |
+| Requirement/design/contract đổi | impact 22 risk; reopen risk liên quan; invalidate evidence |
 | Source/control merge | chuyển tối đa `TREATMENT_IMPLEMENTED`, chưa giảm residual |
 | Test FAIL/INVALIDATED | `REOPENED`, liên kết defect/change và giữ raw evidence |
 | Test PASS đúng baseline | risk owner đề xuất residual; độc lập review trước acceptance |
@@ -347,17 +353,18 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
 | 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |
+| 3.0 | 2026-08-20 | ADR-050 hợp nhất một Product; thêm RSK-017..022 cho signal race, scheduler dependency, POU recursion, library supply chain, output ownership và package/power loss; 22/22 Open, Plan59 sở hữu treatment/evidence. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
 | Risk owners + Safety/Security/Ops | Chờ review | — |
-| Product + Architect + Verification | **WAIVED FOR IMPLEMENTATION; RESIDUAL NOT ACCEPTED** | 0/16 evidence/residual accepted; vẫn chặn release/cutover |
+| Product + Architect + Verification | **WAIVED FOR IMPLEMENTATION; RESIDUAL NOT ACCEPTED** | 0/22 evidence/residual accepted; vẫn chặn release/cutover |
 
 ## 8. Phụ lục — Tự kiểm cổng M3 (loại: Risk)
 
 | Cổng | Kết quả | Bằng chứng trong file / lý do |
 |---|---|---|
-| Cause → event → impact | PASS | §3 cột đầu tách đủ ba khâu cho cả 16 rủi ro |
+| Cause → event → impact | PASS | §3 cột đầu tách đủ ba khâu cho cả 22 rủi ro |
 | Severity và Likelihood | PASS | Bảng chính có `S×L`; §2 định nghĩa thang 1..5 cho từng trục |
 | Biện pháp kiểm soát | PASS | §3 cột “Control cần implement/verify” và “Requirement / thiết kế kiểm soát” |
 | Owner | PASS | §3 cột cuối, kèm điều kiện kích hoạt review lại |
@@ -365,7 +372,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | Residual | PASS | Bảng chính giữ nguyên `S×L` gốc; §2 nêu rõ residual **chỉ giảm sau khi có bằng chứng** |
 | Thẩm quyền chấp nhận | PASS | §6 schema bản ghi treatment/acceptance đủ trường; thiếu một trường thì giữ `OPEN` |
 | Ngày review lại | PASS | Metadata đầu file và §6 bảng trigger |
-| `BLOCKED` có owner/gate | **BLOCKED** | 0/16 evidence và 0/16 residual được chấp nhận. Owner: Product Owner + System Architect + Verification Lead, cùng từng risk owner. Ảnh hưởng: 11 rủi ro `Critical` chặn cutover production. Gate: `G5`/`G6`. Điều kiện mở: chạy các `VS-PROG-*` tương ứng, risk owner đề xuất residual, reviewer độc lập xác nhận, rồi ba vai trò trên ký |
+| Evidence queue có owner/gate | **OPEN FOR RELEASE** | 0/22 evidence và 0/22 residual được chấp nhận. Owner: Product Owner + System Architect + Verification Lead, cùng từng risk owner. Ảnh hưởng: 17 rủi ro `Critical` chặn cutover production, không chặn implementation. Gate: Plan59 W7. Điều kiện mở: chạy các `VS-PROG-*`/`VS-PROG-U*` tương ứng, risk owner đề xuất residual, reviewer độc lập xác nhận, rồi ba vai trò trên ký |
 
 Vòng chi tiết này làm rõ biện pháp kiểm soát nhưng **không giảm rủi ro nào**.
 Gate production vẫn `RED`.

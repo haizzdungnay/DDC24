@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" role="img" aria-labelledby="t d">
+  <title id="t">PGM-02 POU — mobile read and operate light</title><desc id="d">Dữ liệu minh họa, không phải bằng chứng runtime.</desc>
+  <style>.bg{fill:#f5f7fa}.top{fill:#14263d}.card{fill:#fff;stroke:#c5cfda}.txt{font:14px sans-serif;fill:#172536}.mut{font:12px sans-serif;fill:#516171}.h{font:bold 18px sans-serif;fill:#fff}.chip{fill:#e7f1ff}.warn{fill:#fff4d6;stroke:#c98a00}</style>
+  <rect class="bg" width="390" height="844"/><rect class="top" width="390" height="70"/><text class="h" x="20" y="42">Chương trình</text><text class="h" x="350" y="42">☰</text>
+  <text class="mut" x="18" y="96">AHU-01 · Draft r27 · Active r24</text>
+  <rect class="card" x="14" y="116" width="362" height="245" rx="8"/><text class="txt" x="30" y="145">POU trong Project</text>
+  <rect class="chip" x="28" y="162" width="330" height="42" rx="5"/><text class="txt" x="40" y="188">PROGRAM · SupplyAir · RUNNING</text>
+  <text class="txt" x="40" y="228">PROGRAM · FreezeProtect · RUNNING</text><text class="txt" x="40" y="266">FUNCTION · ClampPercent</text><text class="txt" x="40" y="304">FUNCTION_BLOCK · PIDLoop</text>
+  <rect class="card" x="14" y="378" width="362" height="218" rx="8"/><text class="txt" x="30" y="410">SupplyAir</text><text class="mut" x="30" y="442">Chu kỳ</text><text class="txt" x="210" y="442">1 giây</text><text class="mut" x="30" y="478">Enable intent</text><text class="txt" x="210" y="478">Enabled</text><text class="mut" x="30" y="514">Runtime</text><text class="txt" x="210" y="514">RUNNING</text><text class="mut" x="30" y="550">Output</text><text class="txt" x="210" y="550">AO-1 FanSpeed</text>
+  <rect class="warn" x="14" y="614" width="362" height="86" rx="8"/><text class="txt" x="30" y="646">PID cần review Controls/Safety</text><text class="mut" x="30" y="672">Mobile chỉ đọc source; sửa ST/FBD trên desktop/tablet.</text>
+  <rect class="card" x="14" y="718" width="362" height="70" rx="8"/><text class="txt" x="30" y="760">Mở Runtime · Enable/Disable</text>
+</svg>

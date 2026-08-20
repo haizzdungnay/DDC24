@@ -4,15 +4,19 @@
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
 | Phiên bản | 3.37 |
-| Trạng thái | **IMPLEMENTATION IN PROGRESS — P0..P4 DONE về source/host; P5 `8/11`; P6 `0/3`; tổng `43/53`; `RELEASE_READY BLOCKED`** |
+| Trạng thái | **Superseded 2026-08-20 — snapshot roadmap hồ sơ cũ; Plan59 là authority hiện hành** |
 | Ngày baseline | 2026-08-14 |
 | Chủ quản | System Engineering + Document Control |
 | Người phê duyệt | Product Owner, System Architect, Verification Lead |
-| Phạm vi | 22 hồ sơ điều khiển yêu cầu, thiết kế, kiểm chứng và triển khai Programming Rev A |
-| Kế hoạch triển khai phụ thuộc | [`PLAN-PROG-053`](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) |
+| Phạm vi lịch sử | 22 hồ sơ của baseline cũ; không quản Product Programming thống nhất |
+| Authority thay thế | [`PLAN-PROG-059`](59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) |
 | Chu kỳ cập nhật | Cuối mỗi phiên sửa tài liệu và tại mỗi cổng `DOC-G0..DOC-G4` |
 
-## 1. Mục tiêu và ranh giới
+> **Không dùng bảng trạng thái dưới đây để chọn việc mới.** Product v3.0 và
+> ADR-050 đã thay mô hình một Program/bốn workspace. Hồ sơ này chỉ giữ mốc tiến
+> độ và bằng chứng cũ để truy nguyên; Plan59 sở hữu toàn bộ task tương lai.
+
+## 1. Mục tiêu và ranh giới lịch sử
 
 Roadmap này là bảng điều khiển duy nhất để theo dõi việc **tạo, viết đủ nội
 dung, review và phê duyệt** bộ hồ sơ Programming. Nó trả lời bốn câu hỏi:

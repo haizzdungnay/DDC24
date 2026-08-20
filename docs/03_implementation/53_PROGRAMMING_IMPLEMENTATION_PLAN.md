@@ -5,16 +5,22 @@
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
 | Phiên bản | 0.55 |
-| Trạng thái | **APPROVED FOR IMPLEMENTATION — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`.** Team được viết và merge code production ngay; `RELEASE_READY` được đánh giá riêng sau implementation |
+| Trạng thái | **Superseded 2026-08-20 — giữ để truy nguyên các task/commit cũ; công việc tương lai theo Plan 59** |
 | Ngày phát hành | 2026-08-13 |
 | Chủ quản | Dev Lead + System Architect |
 | Người review | Product, FE/BE/Core/FW/HW/Security/QA/Ops Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
 | Khung trình bày | ISO/IEC/IEEE 16326 — nội dung kế hoạch quản lý dự án phần mềm; ánh xạ điều khoản ở §11 |
-| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate v2.41 ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v3.53 — kiểm bằng `python3 scripts/candidate_pin_check.py`; authority phê duyệt nền tiếp tục hiệu lực |
+| Authority thay thế | [`PLAN-PROG-059`](59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) + [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
 | Quy tắc tài liệu | [`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) |
 
-> ## ✅ APPROVED FOR IMPLEMENTATION — được viết và merge code production
+> ## LƯU Ý TRUY NGUYÊN — KHÔNG DÙNG LÀM PLAN HIỆN HÀNH
+>
+> Nội dung dưới đây là snapshot của lần triển khai cũ. Mọi phát biểu về một
+> Program, bốn workspace, scope theo Rev hoặc task còn mở đã bị Product v3.0,
+> ADR-050 và Plan59 thay thế. Không tạo task mới hoặc cập nhật tiến độ tại đây.
+>
+> ## Phê duyệt lịch sử của baseline cũ
 >
 > `AUTH-PROG-2026-08-11-03` của Product Owner/CTO + System Architect Phạm Đình
 > Chương phê duyệt toàn bộ Programming Rev A **không kèm điều kiện approval bổ

@@ -2,7 +2,7 @@
 
 **ID:** REC-REVIEW-INDEX-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-14 (đã loại record trùng/lịch sử khỏi cây Markdown; Programming P5 `8/11`; audit UC-PROG-03 NO-GO; 2 record BLOCKED, 0/32 PASS)
+**Cập nhật:** 2026-08-20 (Programming Product v3.0 thống nhất; manifest authority mới; record theo phạm vi cũ chỉ còn giá trị lịch sử/As-Built)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -62,13 +62,14 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | Hồ sơ | Ngày | Trạng thái | Nội dung |
 |---|---|---|---|
 | [Baseline Source Fix Report](DDC24_BASELINE_SRC_FIX_REPORT.md) | 2026-08-03 | Record | CI, Point Model, Config Apply, health/recovery trước Programming Design |
-| [Programming Docs Sync Report](PROGRAMMING_DOCS_SYNC_REPORT.md) | 2026-08-03 | Complete | Đồng bộ docs theo Product Spec Programming Rev A |
+| [Programming Docs Sync Report](PROGRAMMING_DOCS_SYNC_REPORT.md) | 2026-08-03 | Historical record | Đồng bộ baseline cũ; Product v3.0/ADR-050/Unified DDD hiện là authority |
 | [Programming As-Built/gap trình PM/CTO](PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md) | 2026-08-14 | **Active — NO-GO release** (Rev 1.3) | Tổng kết source Core/BE/FE/contract; 15 finding, đóng 5 (`F-001/002/003/004/007`) + D-01/02/04; Binding Variable↔Point (F-013/D-07) đã triển khai + target-verify cho `LOCAL`; mở `F-005/006/008/009/014/015` |
 | [Audit FE/UI/UX Programming Plan 53](PROGRAMMING_FE_UX_IMPLEMENTATION_AUDIT_2026-08-13.md) | 2026-08-14 | **v1.4 — UC-PROG-03 KHÔNG ĐẠT** | Live source rỗng/diagnostic thiếu location/ETag-base stale; Draft đã hoàn nguyên, Active không đổi |
-| [Hiện trạng & GAP Overview + ST/FBD editor trình PM/CTO/end-user](PROGRAMMING_OVERVIEW_DESIGN_FEATURE_GAP_REPORT_2026-08-15.md) | 2026-08-15 | Active review record | Feature inventory từ source FE/BE/FW-SOM cho `PGM-01` + `PGM-02` (ST/FBD); Rev A khoá 1 Program/controller ở cả 3 tầng; FBD chỉ tạo được block AND qua UI, không tạo được node INPUT/OUTPUT; Check chỉ biên dịch 1 Program/Revision; 10 gap, 6 câu hỏi cần quyết định |
+| [Hiện trạng & GAP Overview + ST/FBD editor](PROGRAMMING_OVERVIEW_DESIGN_FEATURE_GAP_REPORT_2026-08-15.md) | 2026-08-15 | Historical As-Built record | Snapshot trước ADR-050; finding còn đúng đã chuyển vào Unified DDD/Plan59, các câu hỏi Product cũ không còn là Open Decision |
 | [Programming Design Set Review](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | 2026-08-09 | Complete | Rà 22 hồ sơ Programming: 12 finding tài liệu đã đóng, 22/22 đạt M3; M4/M5 chờ người thật |
 | [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-11 | **v2.0 — APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; P0 7/7 DONE; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` PASS |
-| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.32 — candidate v2.23** | Candidate định danh bằng **22 SHA-256**; PR #155 merge `424367a`, tree `7b81f79`; P3 1/8 |
+| [Manifest baseline Programming thống nhất](PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md) | 2026-08-20 | **Active** | Ghim SHA-256 authority set Product/SRS/DDD/UX/VVP/Trace/Risk/Plan/Prompt; kiểm bằng `candidate_pin_check.py` |
+| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Superseded** | Snapshot 22 hồ sơ baseline cũ; chỉ dùng truy nguyên, không phải pin hiện hành |
 | [Rà soát môi trường P0 Programming](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | 2026-08-11 | **v1.2 — implementation entry approved** | CI/target/HIL chưa có evidence nhưng được loại khỏi entry condition; không chặn code |
 | [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-11 | **v1.6 — `8/8 WAIVED FOR IMPLEMENTATION`** | `9/9` finding đóng; không giả 8 chữ ký; maturity vẫn 0/22 M4 nhưng không chặn implementation |
 | [Review triển khai G1 Programming](PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **P1 DONE 6/6 — G1 GO** | `TASK-PROG-100..105 DONE`; join/deploy/rollback PASS; 2 record BLOCKED, 0/32 PASS |

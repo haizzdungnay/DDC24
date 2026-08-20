@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">PGM-03 Mapping và Published Signal desktop</title>
+  <desc id="desc">Đặc tả trực quan ba vùng variable, Point Catalog và binding output owner</desc>
+  <rect width="1440" height="900" fill="#f5f7fa"/>
+  <rect width="1440" height="72" fill="#132238"/>
+  <text x="32" y="44" fill="#fff" font-family="sans-serif" font-size="22" font-weight="700">MK-DDC-24 · Programming</text>
+  <text x="1040" y="44" fill="#d9e4f2" font-family="sans-serif" font-size="15">AHU-East · Draft r18 · Active r16</text>
+  <rect y="72" width="224" height="828" fill="#1d304a"/>
+  <g fill="#cbd7e6" font-family="sans-serif" font-size="15">
+    <text x="28" y="126">Tổng quan</text><text x="28" y="174">Chương trình</text>
+    <text x="28" y="222" fill="#fff" font-weight="700">Điểm &amp; Tín hiệu</text>
+    <text x="28" y="270">Thư viện</text><text x="28" y="318">Commission</text><text x="28" y="366">Runtime</text>
+  </g>
+  <text x="256" y="118" fill="#132238" font-family="sans-serif" font-size="28" font-weight="700">Điểm, ánh xạ và Published Signal</text>
+  <text x="256" y="148" fill="#526274" font-family="sans-serif" font-size="15">Hai output cùng Point hoặc hai publisher cùng Signal bị chặn trước Check</text>
+  <rect x="256" y="178" width="330" height="640" rx="8" fill="#fff" stroke="#c7d0dc"/>
+  <text x="278" y="214" fill="#132238" font-family="sans-serif" font-size="18" font-weight="700">Variable / Signal</text>
+  <rect x="278" y="234" width="286" height="42" rx="6" fill="#eef3f8"/>
+  <text x="292" y="260" fill="#526274" font-family="sans-serif" font-size="14">Tìm tên, kiểu, Program…</text>
+  <g font-family="sans-serif" font-size="14">
+    <rect x="278" y="296" width="286" height="74" rx="6" fill="#e8f2ff" stroke="#3d7fc2"/>
+    <text x="292" y="322" fill="#123c66" font-weight="700">AHU_Main.SupplyFanCmd</text><text x="292" y="348" fill="#526274">BOOL · OUTPUT · owner pending</text>
+    <rect x="278" y="382" width="286" height="74" rx="6" fill="#fff" stroke="#d5dce5"/>
+    <text x="292" y="408" fill="#132238" font-weight="700">AHU_Main.ZoneTemp</text><text x="292" y="434" fill="#526274">REAL · INPUT</text>
+    <rect x="278" y="468" width="286" height="88" rx="6" fill="#fff" stroke="#d5dce5"/>
+    <text x="292" y="494" fill="#132238" font-weight="700">Signal.SupplyDemand</text><text x="292" y="520" fill="#526274">REAL · publisher AHU_Main</text><text x="292" y="542" fill="#526274">freshness 2 s · fallback 0</text>
+  </g>
+  <rect x="606" y="178" width="390" height="640" rx="8" fill="#fff" stroke="#c7d0dc"/>
+  <text x="628" y="214" fill="#132238" font-family="sans-serif" font-size="18" font-weight="700">Point Catalog</text>
+  <rect x="628" y="234" width="346" height="42" rx="6" fill="#eef3f8"/>
+  <text x="642" y="260" fill="#526274" font-family="sans-serif" font-size="14">LOCAL · VP · MB_RTU | Writable</text>
+  <g font-family="sans-serif" font-size="14">
+    <rect x="628" y="296" width="346" height="80" rx="6" fill="#eaf8ef" stroke="#39975b"/>
+    <text x="644" y="322" fill="#18552f" font-weight="700">LOCAL.DO-01 · Supply Fan</text><text x="644" y="348" fill="#526274">BOOL · WRITE · GOOD</text>
+    <rect x="628" y="390" width="346" height="80" rx="6" fill="#fff" stroke="#d5dce5"/>
+    <text x="644" y="416" fill="#132238" font-weight="700">MB_RTU.AHU1.Coil001</text><text x="644" y="442" fill="#526274">BOOL · READ_WRITE · STALE</text>
+    <rect x="628" y="484" width="346" height="80" rx="6" fill="#fff" stroke="#d5dce5"/>
+    <text x="644" y="510" fill="#132238" font-weight="700">VP.ZoneDemand</text><text x="644" y="536" fill="#526274">REAL · READ · GOOD</text>
+  </g>
+  <rect x="1016" y="178" width="392" height="640" rx="8" fill="#fff" stroke="#c7d0dc"/>
+  <text x="1038" y="214" fill="#132238" font-family="sans-serif" font-size="18" font-weight="700">Binding &amp; ownership</text>
+  <g font-family="sans-serif" font-size="14" fill="#132238">
+    <text x="1038" y="260">Variable</text><text x="1038" y="284" font-weight="700">AHU_Main.SupplyFanCmd</text>
+    <text x="1038" y="330">Point</text><text x="1038" y="354" font-weight="700">LOCAL.DO-01</text>
+    <text x="1038" y="400">Direction</text><text x="1220" y="400" font-weight="700">WRITE</text>
+    <text x="1038" y="440">Output owner</text><text x="1220" y="440" fill="#247844" font-weight="700">AHU_Main</text>
+  </g>
+  <rect x="1038" y="478" width="348" height="88" rx="6" fill="#fff4e5" stroke="#c77816"/>
+  <text x="1054" y="506" fill="#824d0f" font-family="sans-serif" font-size="14" font-weight="700">Conflict bị chặn</text>
+  <text x="1054" y="532" fill="#824d0f" font-family="sans-serif" font-size="13">SmokeControl.FanCmd đang yêu cầu cùng Point.</text>
+  <text x="1054" y="552" fill="#824d0f" font-family="sans-serif" font-size="13">Chọn Point khác hoặc bỏ binding cũ.</text>
+  <rect x="1218" y="748" width="168" height="48" rx="7" fill="#1565a8"/>
+  <text x="1250" y="778" fill="#fff" font-family="sans-serif" font-size="15" font-weight="700">Lưu mapping</text>
+  <text x="256" y="860" fill="#6a7786" font-family="sans-serif" font-size="13">Dữ liệu minh họa · server/compiler là authority validation</text>
+</svg>
