@@ -694,7 +694,7 @@ công cụ sinh, **không phải** mã đã biên dịch từ nguồn thật —
 | `T59-202` | P0 | Library REST/OpenAPI/RBAC/idempotency/audit | T59-201/006 | **DONE** | 3 route DDD §5.1 (`GET /libraries`, `POST|DELETE /projects/{id}/library/entries[/{entryId}]`); OpenAPI `1.23.0` **28 operation** ↔ 28 route Go ↔ client TS sinh lại, cả ba khoá bằng test exact; RBAC kiểm bằng authorizer thật (viewer/operator đọc được, mutation 403); idempotency+audit nằm CÙNG transaction với mutation (migration `0008` mở enum receipt); mutation library dùng chung lane `If-Match` với Draft; 6 test application + 6 test transport gồm cursor ràng buộc filter và regression route-stealing; `go test ./... -count=1` 18/18; G1 10/10; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 | `T59-203` | P1 | FE PGM-04 library search/filter/detail/create/edit/version/usage | T59-202 | ORDERED | Desktop/mobile visual mapping; loading/empty/error/permission; component/a11y/E2E. |
 | `T59-204` | P1 | Library import/export/signature/version compatibility | T59-201/106 | ORDERED | Source-only hostile corpus; no executable/cache/path traversal; no Active mutation. |
-| `T59-205` | P0 | PID registry trạng thái `REVIEW_REQUIRED` + policy token | T59-003/004 | ORDERED | Commission blocked without controlled approval token; cannot bypass from FE payload. |
+| `T59-205` | P0 | PID registry trạng thái `REVIEW_REQUIRED` + policy token | T59-003/004 | **DONE** | `reviewGatedFeatures` vào profile v2 + schema; token suy ra từ chính contract (`featureId`+`libraryVersion`+`evidenceRef`), generator từ chối token bịa; gate ép ở **cả ba** đường Check (`compile_st_source` mặc định BẬT, validate CLI, `compile_fbd_source`) và độc lập producer; 8 test C++ + 1 test Go + 1 test FE + self-test generator 7/7 + G1 ghim `reviewGatedFeatures` và `approvedReviewGatedFeatures` (2 mutation mới); `ctest` 1138/1138; `go test ./... -count=1` 18/18; FE 114 file / 1080 test; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
 
 ### 3.3 Ghi chú thực thi W2
 
@@ -829,6 +829,66 @@ phạm vi khác mà không hay. Cursor ký HMAC, hết hạn 15 phút, sửa m�
 nguồn thù địch thuộc `T59-204`; publish library gắn với seal Revision đa Program
 thuộc `T59-301`/`T59-305`. Layout FB authoritative vẫn phải do compiler cấp —
 API chỉ nhận hoặc từ chối, không tự tính.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-205` — Review gate PID: token từ contract, không từ checkbox
+
+**Nguyên văn DDD §9 là ràng buộc, không phải gợi ý.** "Check blocks Commission
+unless profile includes Controls/Safety approval token generated from controlled
+contract — **not a UI checkbox**." Ba mệnh đề đó dẫn tới ba quyết định:
+
+1. *Token nằm trong profile contract.* `product_profile_v2.json` thêm
+   `reviewGatedFeatures`; mỗi mục có `approvalEvidenceRef` và `approvalToken`,
+   **cùng có hoặc cùng rỗng**.
+2. *Token phải suy ra được.* Nó là
+   `sha256("mkddc-controls-safety-approval:v1" + featureId + libraryVersion + evidenceRef)`.
+   Generator tính lại và từ chối mọi token không khớp, nên **không thể bịa** một
+   token hợp lệ ở lớp ngoài. `libraryVersion` nằm trong miền băm có chủ ý: đổi
+   semantics của entry mà giữ nguyên tên sẽ làm token cũ mất hiệu lực, thay vì
+   âm thầm áp phê duyệt của bản cũ cho bản mới.
+3. *Không có đường payload.* Không có trường request, header hay cờ CLI nào đặt
+   được token. Consumer FE chỉ nhận `PROGRAMMING_REVIEW_GATED_FEATURES` để
+   **hiển thị** trạng thái.
+
+**Gate KHÔNG nằm trong typecheck — và đây là điểm dễ làm sai nhất.** Bản đầu đặt
+nó trong `typecheck_st_program`, kết quả là 12 test đỏ: toàn bộ bộ conformance
+của **chính PID** (`StExec.Pid*`, `StIntegration.Pid*`, `StRetain.*`) không
+compile được nữa. Mà bộ đó chính là nơi dựng evidence Controls/Safety
+(`VS-PROG-U12`) — thứ duy nhất mở khoá được gate. Đặt gate ở typecheck là **khoá
+luôn cái chìa**.
+
+Gate vì vậy là **chính sách sản phẩm ở biên Check**: `st_review_gate_check()`
+riêng, được gọi ở `compile_st_source` (mặc định BẬT), ở validate CLI và ở
+`compile_fbd_source`. Bộ conformance PID gọi `StCompileOptions{enforce_review_gate=false}`
+với chú thích nêu đúng lý do. Mặc định là BẬT có test riêng khoá — mặc định tắt
+sẽ làm mọi call site production mất gate trừ khi ai đó "nhớ bật", và nhớ bật
+không phải là biện pháp an toàn.
+
+**Ba đường Check, không hai.** Nếu chỉ gate `compile_st_source` thì validate CLI
+cho PID "hợp lệ" rồi chết ở compile, còn vẽ PID bằng FBD trở thành đường vòng
+hoàn toàn hợp lệ. Cả ba gọi **cùng một hàm**, và có test chứng minh gate độc lập
+producer bằng cách dựng AST thẳng tay không qua parser.
+
+**Guard hai chiều giữa profile và registry.** Entry `REVIEW_REQUIRED` trong
+registry **phải** được khai trong `reviewGatedFeatures`, và feature đã khai
+**phải** thật sự là `REVIEW_REQUIRED`. Bỏ chiều thứ nhất thì một feature gated
+mới lọt qua mà không ai chặn; bỏ chiều thứ hai thì một feature đã duyệt bị chặn
+vĩnh viễn.
+
+**G1 ghim cả trạng thái đã duyệt.** `reviewGatedFeatures: ["PID"]` và
+`approvedReviewGatedFeatures: []`. Mở PID là quyết định Controls/Safety, không
+phải một dòng sửa contract lặng lẽ — nên nó làm gate đỏ cho tới khi pin đổi theo.
+Test C++/Go/FE đều khoá **sự thật hiện tại**: PID đang bị chặn.
+
+**Golden sinh lại bằng compiler thật, không sửa tay.** Profile đổi nội dung nên
+`profile.sha256` và `buildKeySha256` của hai golden build manifest đổi theo. Chúng
+được sinh lại bằng `mkddc-st-compile`; byte `.mkir` **không đổi** (`cmp` khớp cả
+hai), xác nhận profile hash không nằm trong artifact.
+
+**Ranh giới trung thực.** Đây là **cổng**, không phải phê duyệt. PID vẫn
+`REVIEW_REQUIRED` vì `VS-PROG-U12` chưa chạy; task mở nhãn là `T59-706`. UI cảnh
+báo PID thuộc `T59-203`/`T59-506`.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

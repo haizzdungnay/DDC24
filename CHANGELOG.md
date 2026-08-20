@@ -8,6 +8,44 @@
 
 ## [Unreleased]
 
+### Added — `T59-205` review gate PID: token từ contract, không từ checkbox (2026-08-20)
+
+`product_profile_v2.json` thêm `reviewGatedFeatures`; `st_review_gate.{hpp,cpp}`
+ép chính sách ở biên Check.
+
+**Ba mệnh đề của DDD §9 thành ba quyết định.** Token nằm trong profile contract;
+token phải **suy ra được** từ `featureId` + `libraryVersion` + `approvalEvidenceRef`
+(generator từ chối token bịa); và không có trường request, header hay cờ CLI nào
+đặt được nó. `libraryVersion` nằm trong miền băm có chủ ý — đổi semantics của
+entry mà giữ nguyên tên sẽ làm token cũ mất hiệu lực thay vì âm thầm áp phê duyệt
+của bản cũ cho bản mới.
+
+**Gate KHÔNG nằm trong typecheck.** Bản đầu đặt nó ở đó và làm 12 test đỏ: toàn
+bộ bộ conformance của **chính PID** không compile được nữa — mà đó là nơi dựng
+evidence Controls/Safety (`VS-PROG-U12`), thứ duy nhất mở khoá được gate. Đặt gate
+ở typecheck là khoá luôn cái chìa. Gate vì vậy là chính sách sản phẩm ở biên
+Check, được gọi ở **cả ba** đường: `compile_st_source` (mặc định BẬT), validate
+CLI và `compile_fbd_source`. Gate chỉ hai đường thì vẽ PID bằng FBD là đường vòng
+hợp lệ.
+
+**Guard hai chiều giữa profile và registry:** entry `REVIEW_REQUIRED` phải được
+khai, và feature đã khai phải thật sự `REVIEW_REQUIRED`.
+
+**G1 ghim cả trạng thái đã duyệt** (`approvedReviewGatedFeatures: []`). Mở PID là
+quyết định Controls/Safety, không phải một dòng sửa contract lặng lẽ.
+
+**Golden sinh lại bằng compiler thật:** profile đổi nên `profile.sha256` và
+`buildKeySha256` của hai build manifest đổi theo; byte `.mkir` **không đổi**
+(`cmp` khớp cả hai), xác nhận profile hash không nằm trong artifact.
+
+**Kiểm chứng (host/local):** `ctest` **1138/1138**; `go vet ./...` sạch;
+`go test ./... -count=1` 18/18 package ok; FE 114 file / 1080 test; generator
+`--self-test` 7/7 + 1 chiều khẳng định; G1 10/10 + self-test **34/34**;
+`verify-project.sh --wave W2` **6/6 PASS**.
+
+**Ranh giới:** đây là **cổng**, không phải phê duyệt. PID vẫn `REVIEW_REQUIRED`;
+mở nhãn thuộc `T59-706`.
+
 ### Added — `T59-202` REST Control Library: RBAC, idempotency và audit (2026-08-20)
 
 Ba route đúng bằng `DDD-SW-PROG-UNIFIED-001` §5.1: `GET /programming/libraries`,
