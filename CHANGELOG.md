@@ -8,6 +8,39 @@
 
 ## [Unreleased]
 
+### Added — `T59-101` parser/AST cho FUNCTION và FUNCTION_BLOCK (2026-08-20)
+
+Mở Wave W1. `parse_st_pou()` nhận cả ba loại POU; `StProgram` thêm `kind`,
+`has_return_type`, `return_type` và vị trí tên cho source map.
+
+Ba loại dùng **chung** một AST vì thân của chúng là cùng một ngôn ngữ — chỉ chữ ký
+và quyền hạn khác nhau. Tách ba struct riêng sẽ nhân bản toàn bộ statement/
+expression grammar, đúng thứ đã sinh ra drift ở registry library.
+
+Quy tắc chữ ký được ép ở parser, không phải quy ước ngầm:
+
+- `FUNCTION` **bắt buộc** có kiểu trả về; `PROGRAM`/`FUNCTION_BLOCK` **không được**
+  có. Cả hai chiều đều là `ST-POU-001` (→ `PRG-ERR-POU-KIND-001`).
+- `FUNCTION` không được khai `VAR_OUTPUT`, `VAR RETAIN` hay FB instance. Kiểm
+  **sau** khi đọc hết khối VAR để lỗi trỏ đúng khai báo vi phạm.
+- Kiểu trả về lạ dùng `ST-SEM-005`, không gộp vào mã kind — hai lỗi này dẫn tới
+  hai hành động sửa khác nhau.
+- Từ khóa kết thúc phải khớp loại đã mở.
+
+`parse_st_program()` **giữ nguyên hợp đồng cũ** (chỉ nhận `PROGRAM`), nên
+`st_compile.cpp` và `st_validate_main.cpp` không đổi hành vi;
+`FUNCTION`/`FUNCTION_BLOCK` **chưa** compile được — đó là `T59-102..104`.
+
+**Finding trong chính task:** bản đầu có nhánh kiểm độ dài tên POU trong parser.
+Nó là **code chết** — lexer đã chặn identifier dài hơn `kMaxIdentifierLength` bằng
+`ST-LIM-005`, và trần đó bằng đúng trần tên POU của DDD §4.2. Đã gỡ nhánh, thay
+bằng `static_assert` giữ hai con số dính nhau; test khoá hành vi thật.
+
+**Kiểm chứng fresh trong phiên (host/local):** 12 test mới (4 positive + 8
+negative) khoá kind/name/signature kèm **mã lỗi và vị trí**. C++ Release
+MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1077/1077 PASS** (từ 1065).
+`verify-project.sh --wave W1` **5/5 PASS**.
+
 ### Added — `T59-007` wrapper cổng cục bộ và ma trận theo Wave (2026-08-20)
 
 `scripts/verify-project.sh --wave W0..W7` chạy đúng bộ cổng bắt buộc của một Wave

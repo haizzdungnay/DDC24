@@ -185,6 +185,26 @@ StType st_fb_output_type(StFbType t, int idx)
     return (idx >= 0 && idx < s.n_out) ? s.out[idx].type : StType::BOOL;
 }
 
+/* ---- T59-101: loại POU ---- */
+
+const char* st_pou_kind_name(StPouKind kind)
+{
+    switch (kind) {
+    case StPouKind::PROGRAM:        return "PROGRAM";
+    case StPouKind::FUNCTION:       return "FUNCTION";
+    case StPouKind::FUNCTION_BLOCK: return "FUNCTION_BLOCK";
+    }
+    return "?";
+}
+
+bool st_pou_kind_from_keyword(const std::string& upper, StPouKind* out)
+{
+    if (upper == "PROGRAM")             { *out = StPouKind::PROGRAM;        return true; }
+    if (upper == "FUNCTION")            { *out = StPouKind::FUNCTION;       return true; }
+    if (upper == "FUNCTION_BLOCK")      { *out = StPouKind::FUNCTION_BLOCK; return true; }
+    return false;
+}
+
 /* ---- Hàm chuẩn ---- */
 
 namespace {

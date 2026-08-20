@@ -15,8 +15,14 @@
 
 namespace core {
 
-/* true  = parse OK, *out điền đầy đủ (chưa type-check — xem st_semantic.hpp).
- * false = syntax/lex error, *diag mô tả vị trí/lý do; *out không xác định. */
+/* Parse một POU bất kỳ: PROGRAM, FUNCTION hoặc FUNCTION_BLOCK (T59-101).
+ * `out->kind` cho biết loại đã đọc; `out->has_return_type` chỉ true với FUNCTION.
+ * true  = parse OK, *out điền đầy đủ (chưa type-check — xem st_semantic.hpp).
+ * false = lex/syntax/kind error, *diag mô tả vị trí/lý do; *out không xác định. */
+bool parse_st_pou(const std::string& source, StProgram* out, StDiagnostic* diag);
+
+/* Như trên nhưng CHỈ nhận PROGRAM. Giữ nguyên hợp đồng cho call site hiện có;
+ * nguồn khai FUNCTION/FUNCTION_BLOCK bị từ chối bằng mã kind `ST-POU-001`. */
 bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* diag);
 
 } // namespace core

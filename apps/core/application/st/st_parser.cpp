@@ -437,24 +437,76 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
 
 /* ============================ Parser ============================ */
 
+/* Trần tên POU (DDD §4.2) phải được lexer bao trọn — xem `parse_pou`. */
+static_assert(st_limits::kMaxIdentifierLength <= kMaxPouNameLength,
+              "trần identifier của lexer vượt trần tên POU: tên quá dài sẽ lọt");
+
 class Parser {
 public:
     explicit Parser(std::vector<Token> tokens) : tok_(std::move(tokens)) {}
 
-    bool parse_program(StProgram* out, StDiagnostic* diag)
+    /* T59-101: một entry cho cả ba loại POU. Thân của chúng là cùng một ngôn
+     * ngữ; chỉ chữ ký và quyền hạn khác nhau, nên tách ba parser sẽ nhân bản
+     * toàn bộ statement/expression grammar. */
+    bool parse_pou(StProgram* out, StDiagnostic* diag)
     {
-        if (!expect_kw("PROGRAM", diag)) return false;
-        if (!at_ident()) return fail("expected program name", diag);
-        if (is_keyword(peek().upper)) return fail("program name cannot be a keyword", diag);
+        StPouKind kind = StPouKind::PROGRAM;
+        if (!at_ident() || !st_pou_kind_from_keyword(peek().upper, &kind))
+            return fail("expected PROGRAM, FUNCTION or FUNCTION_BLOCK", diag);
+        advance();
+        out->kind = kind;
+
+        if (!at_ident()) return pou_signature_fail("expected POU name", diag);
+        if (is_keyword(peek().upper))
+            return pou_signature_fail("POU name cannot be a keyword", diag);
+        /* Không kiểm lại độ dài ở đây: lexer đã chặn mọi identifier dài hơn
+         * `kMaxIdentifierLength` bằng `ST-LIM-005`, và giới hạn đó bằng đúng
+         * trần tên POU của DDD §4.2. Thêm một nhánh nữa sẽ là code chết — thứ
+         * không test nào chạm tới được và sẽ mục dần. `static_assert` dưới đây
+         * giữ hai con số dính nhau: nếu ai nâng trần lexer lên trên trần tên POU
+         * thì build đỏ ngay, chứ không âm thầm cho qua tên quá dài. */
+        const Token name_tok = peek();
         out->name = advance().text;
+        out->line = name_tok.line;
+        out->column = name_tok.column;
+        out->length = name_tok.length;
+
+        /* Chữ ký: đúng FUNCTION mới có kiểu trả về, và nó BẮT BUỘC có. Hai loại
+         * còn lại mang `: TYPE` là sai kind chứ không phải sai cú pháp chung. */
+        if (at(Token::Kind::Colon)) {
+            if (kind != StPouKind::FUNCTION)
+                return pou_signature_fail(
+                    std::string(st_pou_kind_name(kind)) + " must not declare a return type", diag);
+            advance();
+            if (!at_ident()) return pou_signature_fail("expected return type name", diag);
+            const Token type_tok = advance();
+            StType return_type = StType::REAL;
+            if (!scalar_type_from_name(type_tok.upper, &return_type)) {
+                set_diag(diag, st_diag_code::kUnknownType,
+                         "unknown return type '" + type_tok.text + "'",
+                         type_tok.line, type_tok.column, type_tok.length);
+                return false;
+            }
+            out->has_return_type = true;
+            out->return_type = return_type;
+        } else if (kind == StPouKind::FUNCTION) {
+            return pou_signature_fail("FUNCTION must declare a return type", diag);
+        }
 
         while (at_var_block_start()) {
             if (!parse_var_block(out, diag)) return false;
         }
 
-        if (!parse_stmt_list({"END_PROGRAM"}, &out->body, diag)) return false;
-        if (!expect_kw("END_PROGRAM", diag)) return false;
-        if (!at_end()) return fail("unexpected token after END_PROGRAM", diag);
+        /* Ràng buộc kind trên khối VAR — kiểm SAU khi đọc hết để thông điệp nói
+         * đúng khối vi phạm chứ không phải khối đầu tiên gặp phải. */
+        if (!check_var_blocks_for_kind(*out, diag)) return false;
+
+        const std::string terminator = std::string("END_") +
+            (kind == StPouKind::FUNCTION_BLOCK ? "FUNCTION_BLOCK"
+                                               : st_pou_kind_name(kind));
+        if (!parse_stmt_list({terminator.c_str()}, &out->body, diag)) return false;
+        if (!expect_kw(terminator.c_str(), diag)) return false;
+        if (!at_end()) return fail("unexpected token after " + terminator, diag);
         return true;
     }
 
@@ -483,6 +535,7 @@ private:
     {
         static const char* kKeywords[] = {
             "PROGRAM", "END_PROGRAM", "VAR", "VAR_INPUT", "VAR_OUTPUT", "END_VAR",
+            "FUNCTION", "END_FUNCTION", "FUNCTION_BLOCK", "END_FUNCTION_BLOCK",
             "RETAIN", "IF", "THEN", "ELSIF", "ELSE", "END_IF",
             "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE",
             "BOOL", "INT", "DINT", "UINT", "REAL", "TIME",
@@ -505,6 +558,7 @@ private:
     }
     Token advance() { return tok_[pos_ + 1 < tok_.size() ? pos_++ : pos_]; }
     bool at_ident() const { return peek().kind == Token::Kind::Ident; }
+    bool at(Token::Kind kind) const { return peek().kind == kind; }
     bool at_kw(const char* up) const { return at_ident() && peek().upper == up; }
     bool at_end() const { return peek().kind == Token::Kind::End; }
 
@@ -513,6 +567,57 @@ private:
         set_diag(diag, st_diag_code::kSyntaxUnexpected, msg, peek().line, peek().column,
                  peek().length);
         return false;
+    }
+
+    /* Vi phạm kind/chữ ký POU có mã riêng `ST-POU-001` (DDD §5.2 ->
+     * PRG-ERR-POU-KIND-001), tách khỏi `ST-SYN-001` để BE và FE phân biệt được
+     * "viết sai cú pháp" với "khai sai loại khối". */
+    bool pou_signature_fail(const std::string& msg, StDiagnostic* diag)
+    {
+        set_diag(diag, st_diag_code::kPouSignatureInvalid, msg, peek().line, peek().column,
+                 peek().length);
+        return false;
+    }
+
+    static bool scalar_type_from_name(const std::string& up, StType* out)
+    {
+        if (up == "BOOL")      { *out = StType::BOOL; return true; }
+        if (up == "INT")       { *out = StType::INT;  return true; }
+        if (up == "DINT")      { *out = StType::DINT; return true; }
+        if (up == "UINT")      { *out = StType::UINT; return true; }
+        if (up == "REAL")      { *out = StType::REAL; return true; }
+        if (up == "TIME")      { *out = StType::TIME; return true; }
+        return false;
+    }
+
+    bool check_var_blocks_for_kind(const StProgram& pou, StDiagnostic* diag)
+    {
+        if (pou.kind != StPouKind::FUNCTION) return true;
+        /* FUNCTION thuần: một giá trị trả về, không state. VAR_OUTPUT và
+         * VAR RETAIN đều là state hoặc kênh ra thứ hai (DDD §0). Kiểm tại parser
+         * để lỗi có vị trí chính xác của khai báo vi phạm. */
+        for (const StVarDecl& decl : pou.vars) {
+            if (decl.storage == StStorage::VAR_OUTPUT) {
+                set_diag(diag, st_diag_code::kPouSignatureInvalid,
+                         "FUNCTION must not declare VAR_OUTPUT; it returns exactly one value",
+                         decl.line, decl.column, decl.length);
+                return false;
+            }
+            if (decl.storage == StStorage::VAR_RETAIN) {
+                set_diag(diag, st_diag_code::kPouSignatureInvalid,
+                         "FUNCTION must not declare VAR RETAIN; a pure function keeps no state",
+                         decl.line, decl.column, decl.length);
+                return false;
+            }
+        }
+        if (!pou.fbs.empty()) {
+            const StFbDecl& first = pou.fbs.front();
+            set_diag(diag, st_diag_code::kPouSignatureInvalid,
+                     "FUNCTION must not declare function block instances; they carry state",
+                     first.line, first.column, first.length);
+            return false;
+        }
+        return true;
     }
 
     bool fail_depth(const char* what, int limit, StDiagnostic* diag)
@@ -1069,13 +1174,30 @@ private:
 
 } // namespace
 
-bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* diag)
+bool parse_st_pou(const std::string& source, StProgram* out, StDiagnostic* diag)
 {
     std::vector<Token> tokens;
     if (!tokenize(source, &tokens, diag)) return false;
     Parser parser(std::move(tokens));
     *out = StProgram{};
-    return parser.parse_program(out, diag);
+    return parser.parse_pou(out, diag);
+}
+
+bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* diag)
+{
+    /* Giữ nguyên hợp đồng cũ cho mọi call site hiện có: entry này CHỈ nhận
+     * PROGRAM. Nếu nguồn là FUNCTION/FUNCTION_BLOCK thì nó parse được nhưng bị
+     * từ chối ở đây bằng mã kind — thông tin hữu ích hơn "expected PROGRAM". */
+    if (!parse_st_pou(source, out, diag)) return false;
+    if (out->kind != StPouKind::PROGRAM) {
+        set_diag(diag, st_diag_code::kPouSignatureInvalid,
+                 std::string("expected PROGRAM but source declares ") +
+                     st_pou_kind_name(out->kind),
+                 out->line, out->column, out->length);
+        *out = StProgram{};
+        return false;
+    }
+    return true;
 }
 
 } // namespace core

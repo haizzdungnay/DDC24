@@ -436,12 +436,52 @@ chạy.
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-101` | P0 | Parser/AST cho `FUNCTION` và `FUNCTION_BLOCK`; interface/signature | T59-003/004 | ORDERED | Valid ST parse/source-map; kind/name/signature negative ổn định. |
+| `T59-101` | P0 | Parser/AST cho `FUNCTION` và `FUNCTION_BLOCK`; interface/signature | T59-003/004 | **DONE** | `parse_st_pou()` nhận cả ba loại POU; 12 test (4 positive + 8 negative) khoá kind/name/signature kèm mã lỗi và vị trí; `ctest` 1077/1077; wave W1 **5/5 PASS**. Chi tiết §3.2. |
 | `T59-102` | P0 | Symbol/call graph, library resolver, recursion/DAG guard | T59-101 | ORDERED | Direct/indirect recursion, ambiguous/missing/version drift reject; deterministic graph. |
 | `T59-103` | P0 | FUNCTION purity/type/side-effect enforcement | T59-102 | ORDERED | Function equivalence ST/FBD; state/RETAIN/I/O/FB stateful call reject. |
 | `T59-104` | P0 | FUNCTION_BLOCK instance state/layout/RETAIN ownership | T59-102 | ORDERED | 100/1024 instance isolation; stable layout/source reorder; corrupt/mismatch cold-init. |
 | `T59-105` | P1 | FBD nodes gọi user Function/FB + inspector/pin generation | T59-103/104 | ORDERED | ST/FBD shared typed IR; connect/order/undo/source-map/a11y tests. |
 | `T59-106` | P0 | Artifact v2 writer/loader: POU/program/library/signal/binding/resource sections | T59-103/104/006 | ORDERED | Golden byte/hash stable; loader bounds/fuzz/tamper/wrong profile; v1 LKG load. |
+
+### 3.2 Ghi chú thực thi W1
+
+#### `T59-101` — Parser/AST cho FUNCTION và FUNCTION_BLOCK
+
+**Quyết định thiết kế.** Ba loại POU dùng **chung** một AST (`StProgram` thêm
+`kind`, `has_return_type`, `return_type`, và vị trí tên cho source map). Thân của
+chúng là cùng một ngôn ngữ; chỉ chữ ký và quyền hạn khác nhau. Tách thành ba
+struct riêng sẽ nhân bản toàn bộ statement/expression grammar — đúng thứ đã sinh
+ra drift ở registry library trước đây.
+
+**Hợp đồng cũ giữ nguyên.** `parse_st_program()` vẫn **chỉ** nhận `PROGRAM`, nên
+mọi call site hiện có (`st_compile.cpp`, `st_validate_main.cpp`) không đổi hành
+vi. Nguồn khai `FUNCTION`/`FUNCTION_BLOCK` bị nó từ chối bằng mã kind kèm thông
+điệp nói đúng loại đã gặp — hữu ích hơn "expected PROGRAM". Entry mới là
+`parse_st_pou()`.
+
+**Quy tắc chữ ký được ép ở parser, không phải quy ước ngầm.**
+
+- `FUNCTION` **bắt buộc** có kiểu trả về; `PROGRAM`/`FUNCTION_BLOCK` **không được**
+  có. Cả hai chiều đều là `ST-POU-001` (→ `PRG-ERR-POU-KIND-001`).
+- `FUNCTION` không được khai `VAR_OUTPUT`, `VAR RETAIN` hay FB instance — ba thứ
+  đó là kênh ra thứ hai hoặc state. Kiểm **sau** khi đọc hết khối VAR để lỗi trỏ
+  đúng khai báo vi phạm chứ không phải khối đầu tiên.
+- Kiểu trả về lạ dùng `ST-SEM-005` (unknown type), **không** gộp vào mã kind: hai
+  lỗi này dẫn tới hai hành động sửa khác nhau.
+- Từ khóa kết thúc phải khớp loại đã mở.
+
+**Finding trong chính task.** Bản đầu có nhánh kiểm độ dài tên POU trong parser.
+Nó là **code chết**: lexer đã chặn mọi identifier dài hơn `kMaxIdentifierLength`
+bằng `ST-LIM-005`, và trần đó bằng đúng trần tên POU của DDD §4.2. Đã gỡ nhánh và
+thay bằng `static_assert` giữ hai con số dính nhau — nếu ai nâng trần lexer lên
+trên trần tên POU thì build đỏ ngay, chứ không âm thầm cho tên quá dài lọt qua.
+Test khoá đúng hành vi thật (`ST-LIM-005` tại 65 ký tự, PASS tại 64).
+
+**Chưa mở cửa nửa vời.** `compile_st_source()` vẫn đi qua `parse_st_program()`,
+nên `FUNCTION`/`FUNCTION_BLOCK` **chưa** compile được. Symbol/call graph là
+`T59-102`, purity là `T59-103`, instance state là `T59-104`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
 ### W2 — Control Library
 

@@ -233,8 +233,37 @@ struct StStmt {
 
 /* ---- Chương trình ---- */
 
+/* ---- T59-101: ba loại POU (DDD-SW-PROG-UNIFIED-001 §0, §4.2) ----
+ *
+ * Ba loại dùng CHUNG một AST vì thân chúng là cùng một ngôn ngữ; khác biệt nằm ở
+ * chữ ký và ở quyền hạn. Tách thành ba struct riêng sẽ nhân bản toàn bộ parser,
+ * semantic và lowering — đúng thứ đã sinh ra drift ở registry library. */
+enum class StPouKind : uint8_t {
+    PROGRAM        = 0,
+    FUNCTION       = 1,
+    FUNCTION_BLOCK = 2,
+};
+
+const char* st_pou_kind_name(StPouKind kind);
+bool st_pou_kind_from_keyword(const std::string& upper, StPouKind* out);
+
+/* Độ dài tên POU theo DDD §4.2 (IEC identifier 1..64). */
+constexpr std::size_t kMaxPouNameLength = 64;
+
 struct StProgram {
+    /* Mặc định PROGRAM để mọi call site cũ giữ nguyên nghĩa. */
+    StPouKind   kind = StPouKind::PROGRAM;
     std::string name;
+
+    /* Chỉ FUNCTION có kiểu trả về; hai loại còn lại phải để `has_return_type`
+     * bằng false. Bất biến này do parser ép, không phải quy ước ngầm. */
+    bool        has_return_type = false;
+    StType      return_type = StType::REAL;
+
+    int line = 0;      /* vị trí của tên POU, cho source map */
+    int column = 0;
+    int length = 1;
+
     std::vector<StVarDecl> vars;      /* mọi khối VAR_*, phân biệt bằng storage */
     std::vector<StFbDecl>  fbs;
     std::vector<StStmt>    body;

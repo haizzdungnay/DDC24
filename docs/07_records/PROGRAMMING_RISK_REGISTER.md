@@ -394,6 +394,15 @@ không đổi.
 Đây là control chống **claim sai mức bằng chứng**, không phải bằng chứng về sản
 phẩm. Nó không hạ risk nào: 16/16 giữ `Open`, 11 Critical, S×L và residual không đổi.
 
+### 5.23 Cập nhật treatment source `T59-101` (Plan59 W1)
+
+| Risk | Control đã có trên nhánh `feat/t59-101-pou-parser` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-006` | Quy tắc kind/chữ ký POU được ép ngay ở parser với mã riêng `ST-POU-001` và vị trí chính xác của khai báo vi phạm; `FUNCTION` không thể khai `VAR_OUTPUT`/`VAR RETAIN`/FB instance. `parse_st_program()` giữ hợp đồng cũ nên `FUNCTION`/`FUNCTION_BLOCK` **chưa** compile được — không có cửa nửa vời | Symbol/call graph + recursion guard (`T59-102`), purity enforcement (`T59-103`), instance state/RETAIN (`T59-104`), fuzz parser POU (`T59-601`) và Test Result `VS-PROG-006` | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local. Parser mới chỉ **đọc** được POU; chưa có lowering, chưa có
+runtime. 16/16 risk giữ `Open`, 11 Critical, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -440,6 +449,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 2.4 | 2026-08-20 | Ghi `T59-005` (Plan59 W0) cho treatment partial RSK-007/008/010: store schema v6, migration atomic/idempotent/không tự Commission, generation intent chỉ tăng và chính sách fallback signal bị ràng buộc ở schema. Giữ 16/16 Open, 11 Critical và mọi residual vì API/runtime/board chưa có. |
 | 2.5 | 2026-08-20 | Ghi `T59-006` (Plan59 W0) cho treatment partial RSK-006/014/015: catalog v1.7.0 theo đúng bộ tên DDD §5.2 (đính chính T59-004), artifact v2 + dual-reader thành contract G1, và guard action IPC hai chiều. Giữ 16/16 Open, 11 Critical và mọi residual vì writer/loader/route chưa có. |
 | 2.6 | 2026-08-20 | Ghi `T59-007` (Plan59 W0) cho treatment partial RSK-015: ma trận cổng theo Wave thành contract có schema/self-test, và runner không thể báo PASS cho cổng cần CI/board/instrument. Giữ 16/16 Open, 11 Critical và mọi residual. |
+| 2.7 | 2026-08-20 | Ghi `T59-101` (Plan59 W1) cho treatment partial RSK-006: parser nhận ba loại POU với AST chung và ép quy tắc kind/chữ ký bằng mã riêng. Giữ 16/16 Open, 11 Critical và mọi residual vì lowering, runtime và target chưa có. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
 | 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |
