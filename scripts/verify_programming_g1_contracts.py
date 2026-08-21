@@ -245,6 +245,17 @@ def validate(join: dict[str, Any]) -> list[str]:
         require(digest(ipc_manifest_path) == ipc_item["goldenManifestSha256"], "IPC golden manifest hash drift")
         require(ipc_manifest.get("schemaSha256") == ipc_item["sha256"], "IPC schema/golden hash lệch")
         require(ipc_manifest.get("protocolMajor") == 1, "IPC golden major phải là 1")
+        # `version` ở đây mirror hằng `schemaVersion` TRÊN DÂY, còn `minor` mirror
+        # `protocolMinor`. Hai thứ khác nhau có chủ ý: thêm một action là thay đổi
+        # tương thích ngược nên `protocolMinor` tăng, còn `schemaVersion` phải
+        # đứng yên — đổi nó sẽ làm mọi Core phiên bản cũ từ chối MỌI request, đúng
+        # thứ mà `protocolMinor` sinh ra để tránh. Vì vậy `version` KHÔNG phải
+        # "major.minor"; phép kiểm dưới đây khoá `minor` vào golden manifest để
+        # hai con số không trôi khỏi nhau.
+        require(
+            ipc_manifest.get("protocolMinor") == ipc_item["minor"],
+            "IPC protocolMinor lệch giữa join và golden manifest",
+        )
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"ipc: {error}")
 
@@ -708,6 +719,11 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
 
     def break_golden_v2_program_count(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "artifact-v2")["goldenProgramCount"] += 1
+
+    def break_ipc_minor(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "ipc")["minor"] += 1
+
+    add("ipc-minor-drift", "IPC protocolMinor lệch", break_ipc_minor)
 
     add("golden-v2-hash-drift", "golden artifact v2 SHA-256 drift", break_golden_v2_hash)
     add("golden-v2-size-drift", "kích thước lệch pin", break_golden_v2_size)

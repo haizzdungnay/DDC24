@@ -7,19 +7,19 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "bd78d9ec677ff8da4b64fbf0ed88eb87f38ad4b3252ea652170c90a8df7ad161",
+      "sha256": "429b97f8fda6fefbbdb7b8276da5dcfd1de5e4f415802f8c8b7e3d7285b169b4",
       "major": 1,
-      "version": "1.23.0",
-      "operationCount": 28
+      "version": "1.24.0",
+      "operationCount": 30
     },
     {
       "name": "ipc",
       "path": "contracts/ipc/programming_v1/schema.json",
-      "sha256": "81aa88c6a68ca563929f73fbb34889eb3f3e47f1a19e0ac6fcc425842e3c7e16",
+      "sha256": "f27d24b820ee8be7637612496884f4da5e99e79396eaa933938491a430a80435",
       "goldenManifestPath": "contracts/ipc/programming_v1/golden/manifest.json",
-      "goldenManifestSha256": "d1c44e344568e86f10dd890f4dd2ce4daba9a7e3a10dc51ca48bf2b3b25a41dd",
+      "goldenManifestSha256": "aae5e49f7b1a7899ed0572e88a290bcd8c52c47516109896333f7bc3c287a1d8",
       "major": 1,
-      "minor": 0,
+      "minor": 1,
       "version": "1.0"
     },
     {
@@ -55,21 +55,21 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "1b6e96ef9ec0f1e8679a76d3f55660eae586b9d7cbd25efdd0f242c3f1df36c2",
+      "sha256": "c0c380d422cef6277fbe35ec9ce26787ea398976c5e1878ebbf86bd8c6a19cd6",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "cdf2430c94cd9d89725cb07d79ed525f1a89de457c279773eaa0deee7b939c6d",
+      "manifestSha256": "04ee86ae0eda02dc9d568708eaab9913c8e376d376d843923827141deb3f0918",
       "major": 1,
       "publicErrorCount": 30,
-      "componentDetailCount": 120
+      "componentDetailCount": 122
     },
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "d7513574ae11b2a85353d8448e1c69a13a9ef6cafa39f30e1cfc37412cbfd990",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0009_package_artifact_v2.sql",
-      "migrationSha256": "5a9ce8052b041533d7222c66d679b54fe575a16dc4075d4b0b2d0a921bab5d5d",
+      "sha256": "58a5880e61c80d6d6ed5c6229269f759d58f57635c164a2eb0f1b4e8580b7bd7",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0010_runtime_intent_receipts.sql",
+      "migrationSha256": "dc0f28a96cd554313695d59b77b6e8d5ca3c7e07f9fed37c79a71094e3070cd3",
       "major": 1,
-      "schemaVersion": 9,
+      "schemaVersion": 10,
       "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {
