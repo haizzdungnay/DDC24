@@ -993,7 +993,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
 | `T59-301` | P0 | Project Draft/model/API cho 32 Program + POU + signal definitions | T59-005/006 | **DONE** | Document **v2**: POU (`objects`) tách khỏi cấu hình Program, biến vào `locals` của POU, `signals` hạng nhất, bỏ `task.programOrder` theo DDD §4.1; migration v1→v2 **tất định + idempotent + giữ identity**; op mới `upsertObject/removeObject/renameObject/duplicateObject/upsertProgram(v2)/upsertSignal/...` cộng **lớp tương thích op v1** để FE đang chạy không gãy; **Program thứ 33 bị từ chối và Draft giữ đúng 32**; tên POU unique case-folded; không cascade ngầm; 7 test v2 + adapter FE 3 test; `go test ./... -count=1` 18/18; FE 116 file / 1091 test; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
-| `T59-302` | P0 | Package Check toàn POU/Program/library/signal/resource | T59-106/201/301 | ORDERED | Aggregate diagnostics, deterministic build, no Active effect, concurrent Check bounded. |
+| `T59-302` | P0 | Package Check toàn POU/Program/library/signal/resource | T59-106/201/301 | **DONE** | Check biên dịch **mọi** Program (bỏ trần pipeline 1 của `T59-002`), **gộp** diagnostic của tất cả Program hỏng và gắn `programId` cho từng cái; `mkddc-st-package` mới lắp container v2 bằng **chính** `WritePackageV2()` production (byte-stable, đọc lại bằng loader trước khi ghi); migration `0009` cho artifact `schemaVersion∈{1,2}`; `contentSha256` tất định qua hai lần Check; Check **không** đụng Draft/Active và không sinh hành động triển khai; hai worker chia nhau Check qua lease; 5 test Check + 3 test packager; `go test ./... -count=1` 18/18; `ctest` 1138/1138; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-303` | P0 | MB_RTU binding compiler adapter qua canonical Point contract | T59-302 | ORDERED | LOCAL/VP/MB_RTU input/output cases; endian/polling không tái định nghĩa; wrong direction reject. |
 | `T59-304` | P0 | Output owner/conflict + Published Signal publisher/consumer validation | T59-302/303 | ORDERED | Duplicate output/publisher reject; freshness/fallback/type graph tests. |
 | `T59-305` | P0 | Package manifest/topology/budget cho 32/16; Program mới Disabled | T59-302/304 | ORDERED | 32 compile, 16 enabled, one-over stable; manifest không chứa creation-order dependency. |
@@ -1074,6 +1074,64 @@ bản thuộc `T59-306`; tới lúc đó adapter biến mất. Chu kỳ lạ rơ
 **Ranh giới trung thực.** Đây là **model + Draft API**. Check đa Program thuộc
 `T59-302`; binding MB_RTU thuộc `T59-303`; kiểm output owner/publisher ở cấp
 package thuộc `T59-304`; UI PGM-02/03 thuộc `T59-306`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-302` — Check cấp package: mọi Program, gộp diagnostic, container thật
+
+**Bỏ trần pipeline "một Program mỗi lần chạy".** `T59-002` ghi rõ đây là giới hạn
+giai đoạn chứ không phải capacity sản phẩm, và task này gỡ nó: `compilerInputs`
+dựng input cho **mọi** Program, sắp theo `objectId` để thứ tự biên dịch — và do
+đó thứ tự diagnostic — không phụ thuộc thứ tự đọc DB.
+
+**Gộp diagnostic thay vì dừng ở Program đầu tiên hỏng.** Dừng sớm bắt người dùng
+sửa từng lỗi rồi chạy lại Check; với 32 Program đó là 32 vòng. Mỗi diagnostic
+được gắn `programId` của chính nó — compiler một-nguồn không biết nó đang ở
+Program nào nên luôn trả chuỗi rỗng, và **một mã lỗi không kèm Program là một mã
+lỗi không dùng được**: người đọc không biết mở file nào.
+
+**Container v2 do CHÍNH writer production ghi.** `mkddc-st-package` là CLI mới
+gọi đúng `WritePackageV2()` mà golden và fuzz của `T59-106` đang canh, rồi **đọc
+lại bằng chính loader** trước khi ghi ra đĩa. Cài lại định dạng bằng Go sẽ tạo bản
+thứ hai cho cùng một format, và bản thứ hai luôn là bản quên cập nhật. CLI
+**không** biên dịch lại gì: nó nhận đúng blob IR v1 mà Check vừa tạo, nên hash
+package suy được từ hash các thành phần.
+
+**Vì sao không để Check PASSED mà thiếu artifact.** Store ép bất biến "PASSED ⇒
+có Artifact" từ v1, và bất biến đó đúng: một Check báo *sẵn sàng* trong khi không
+có gì nạp được là một Check nói dối. Vì vậy multi-Program **phải** có container
+thật — đó là lý do packager được làm ngay ở task này thay vì đẩy sang `T59-305`.
+Khi không có packager, Check **fail-closed** và nêu đúng thứ còn thiếu.
+
+**Hai con số hash, hai câu hỏi khác nhau.** `contentSha256` băm dãy
+`(programId, artifactSha256)` — tất định theo **nội dung**, không phụ thuộc
+container. `containerSha256` là hash của chính package đã ghi. Gộp chúng lại sẽ
+làm mất khả năng trả lời riêng "nội dung có đổi không" và "byte nạp lên Core là
+gì".
+
+**Migration `0009` mở `schema_version ∈ {1,2}` cho `artifacts`.** CHECK cũ viết
+cứng `= 1` từ thời mỗi Revision chỉ có một Program; giữ nguyên nó sẽ chặn đúng
+thứ Check vừa dựng được, và chặn ở lớp DB nên lỗi hiện ra rất xa nguyên nhân.
+Rebuild giữ **nguyên** hình dạng mà migration v3 đã chốt: **không** có UNIQUE trên
+content hash (v3 bỏ có chủ ý — hai Check có byte deterministic giống nhau là
+chuyện bình thường), và giữ lại index cùng hai trigger bất biến.
+
+**Finding trong chính task.** Bản đầu của `0009` vô tình đưa lại UNIQUE trên
+`(sha256, profile, target_abi)` và làm rơi index/trigger, tái tạo đúng lỗi mà
+migration v3 đã sửa. Test `TestCheckLeaseIdempotencyAtomicArtifactAndDeterministicDedup`
+bắt được ngay — đó là giá trị của việc chạy **toàn bộ** bộ test sau mỗi migration.
+
+**Ba bất biến còn lại được khoá bằng test.** Check **không** đụng Draft (ETag và
+content hash không đổi) và **không** sinh hành động triển khai nào trong audit,
+kiểm ở **cả hai** chiều đạt/hỏng — chỉ kiểm chiều hỏng sẽ bỏ lọt đúng trường hợp
+Check đạt rồi tự ý kích hoạt. Hai worker chạy đồng thời chia nhau Check qua lease
+và Program chỉ được biên dịch đúng số lần cần thiết.
+
+**Ranh giới trung thực.** Bảng POU signature trong container hiện chỉ khai
+`PROGRAM`; signature đầy đủ (FUNCTION/FB, cổng, kiểu), signal defs, binding
+manifest, resource budget và `desiredEnabled=false` cho Program mới thuộc
+`T59-305`. Khai thiếu tốt hơn khai bừa: loader kiểm bảng này và một bản khai sai
+sẽ được nạp **như thật**.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

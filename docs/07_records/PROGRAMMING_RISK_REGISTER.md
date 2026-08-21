@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 3.8 |
+| Phiên bản | 3.9 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -536,6 +536,20 @@ Ba consumer được sửa theo mà **không nhân bản dữ liệu**: io_map �
 POU, phân loại RETAIN đọc tập biến RETAIN của POU, và `compilerInput` đọc cả hai
 đời tên. Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
+### 5.35 Cập nhật treatment source `T59-302` (Plan59 W3)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-001` | Check biên dịch **mọi** Program của package (trần pipeline 1 đã gỡ) và lắp container v2 bằng chính writer production; thứ tự biên dịch ổn định theo `objectId` | Topology/budget/`desiredEnabled` (`T59-305`), runtime scheduler (`T59-402`), target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-003` | Container do `WritePackageV2()` ghi và được **đọc lại bằng chính loader** trước khi lưu; hash package tính lại từ byte đọc về, không nhận con số CLI báo; package byte-stable qua hai lần chạy | Ký artifact (`T59-602`), nạp trên target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Diagnostic của mọi Program hỏng được **gộp** trong một lần Check và mỗi cái mang `programId` của chính nó | Nối signal/output-owner vào Check (`T59-304`), FE hiển thị (`T59-306`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Check không đụng Draft và không sinh hành động triển khai (kiểm cả chiều đạt lẫn hỏng); hai worker chia nhau Check qua lease | E2E real-backend (`T59-505`) | `OPEN — PARTIAL SOURCE` |
+
+Một finding trong task: bản đầu của migration `0009` đưa lại UNIQUE trên content
+hash và làm rơi index/trigger, tái tạo đúng lỗi mà migration v3 đã sửa — bộ test
+đầy đủ bắt được ngay. Evidence host/local; **22/22 risk giữ Open**, S×L và
+residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -588,6 +602,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 3.9 | 2026-08-21 | Ghi `T59-302` (Plan59 W3) cho treatment partial RSK-001/003/008/014: Check biên dịch mọi Program và gộp diagnostic, container v2 do chính writer production ghi và được loader đọc lại trước khi lưu, Check không đụng Draft/Active. Giữ 22/22 Open vì topology/budget, ký artifact và target chưa có. |
 | 3.8 | 2026-08-21 | Ghi `T59-301` (Plan59 W3, **mở Wave**) cho treatment partial RSK-001/006/012: document v2 tách POU khỏi cấu hình Program, trần 32 là trần cứng ở Draft, migration v1→v2 tất định giữ identity, signal hạng nhất với fallback ghép cứng vào policy. Giữ 22/22 Open vì Check/runtime/target chưa có. |
 | 3.7 | 2026-08-20 | Ghi `T59-203` (Plan59 W2, **đóng Wave 5/5**) cho treatment partial RSK-005/008/014: PGM-04 chỉ hiển thị review-gate mà không có ô tick duyệt, phân biệt state chưa biết với 0, và dùng lại ETag mới. Giữ 22/22 Open vì E2E real-backend và evidence Controls/Safety chưa có. |
 | 3.6 | 2026-08-20 | Ghi `T59-204` (Plan59 W2) cho treatment partial RSK-017/020: Control Library đi trong bundle nguồn có sẵn, export tất định không mang artifact, corpus thù địch 10 biến thể 0 mutation, lệch version registry SYSTEM có mã riêng, Seal publish+pin library cùng transaction. Giữ 22/22 Open vì bundle chưa ký (`T59-602`) và chưa có Test Result. |

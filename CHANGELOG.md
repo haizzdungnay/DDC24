@@ -8,6 +8,49 @@
 
 ## [Unreleased]
 
+### Added — `T59-302` Check cấp package: mọi Program, gộp diagnostic, container v2 thật (2026-08-21)
+
+**Bỏ trần pipeline "một Program mỗi lần chạy"** mà `T59-002` đã ghi là giới hạn
+giai đoạn. `compilerInputs` dựng input cho **mọi** Program, sắp theo `objectId` để
+thứ tự biên dịch — và do đó thứ tự diagnostic — không phụ thuộc thứ tự đọc DB.
+
+**Gộp diagnostic thay vì dừng ở Program đầu tiên hỏng.** Dừng sớm bắt người dùng
+sửa từng lỗi rồi chạy lại; với 32 Program đó là 32 vòng. Mỗi diagnostic mang
+`programId` của chính nó — compiler một-nguồn luôn trả chuỗi rỗng, và một mã lỗi
+không kèm Program là mã lỗi không dùng được.
+
+**`mkddc-st-package`** lắp container v2 bằng **chính** `WritePackageV2()` mà
+golden và fuzz của `T59-106` đang canh, rồi **đọc lại bằng chính loader** trước
+khi ghi ra đĩa. Cài lại định dạng bằng Go sẽ tạo bản thứ hai cho cùng một format,
+và bản thứ hai luôn là bản quên cập nhật. CLI không biên dịch lại gì.
+
+**Vì sao packager làm ngay ở đây:** store ép bất biến "PASSED ⇒ có Artifact", và
+bất biến đó đúng — một Check báo *sẵn sàng* trong khi không có gì nạp được là một
+Check nói dối. Thiếu packager thì Check **fail-closed** và nêu đúng thứ còn thiếu.
+
+**Hai con số hash cho hai câu hỏi khác nhau:** `contentSha256` (dãy
+`programId`+`artifactSha256`, tất định theo nội dung) và `containerSha256` (hash
+của chính package đã ghi).
+
+**Migration `0009`** mở `artifacts.schema_version ∈ {1,2}`. Rebuild giữ **nguyên**
+hình dạng migration v3 đã chốt: không UNIQUE trên content hash, giữ index và hai
+trigger bất biến.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; `ctest` 1138/1138; FE 116 file / 1091 test; G1 10/10;
+`verify-project.sh --wave W3` **6/6 PASS**.
+
+**Ranh giới:** bảng POU signature trong container hiện chỉ khai `PROGRAM`; signal
+defs, binding manifest, resource budget và `desiredEnabled=false` thuộc `T59-305`.
+
+### Fixed — `T59-302` migration 0009 bản đầu tái tạo lỗi đã sửa ở v3 (2026-08-21)
+
+Bản đầu đưa lại `UNIQUE(sha256, profile, target_abi)` trên `artifacts` và làm rơi
+`artifacts_content_idx` cùng hai trigger bất biến — đúng lỗi mà migration v3 đã
+sửa có chủ ý (hai Check có byte deterministic giống nhau là chuyện bình thường).
+`TestCheckLeaseIdempotencyAtomicArtifactAndDeterministicDedup` bắt được ngay khi
+chạy toàn bộ bộ test.
+
 ### Changed — `T59-301` Project Draft lên document v2: POU, 32 Program, Published Signal (2026-08-21)
 
 **Ba khác biệt bản chất so với v1**, mỗi cái sửa một lỗi mô hình thật:
