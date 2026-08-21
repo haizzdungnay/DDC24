@@ -8,6 +8,34 @@
 
 ## [Unreleased]
 
+### Added — `T59-305` Topology và budget cấp package (2026-08-21)
+
+**Thứ tự tạo là dữ liệu của quá khứ, không phải của package.** Topology sắp theo
+`programId`, không theo thứ tự xuất hiện trong tài liệu. Nếu manifest bám thứ tự
+tạo thì hai Project **cùng nội dung** dựng theo thứ tự khác nhau sẽ cho hai
+package khác nhau — và mọi so sánh provenance giữa hai controller mất nghĩa.
+
+**Program mới LUÔN `desiredEnabled=false`.** Package không được tự bật thứ vừa
+được nạp: bật là quyết định vận hành riêng, có audit riêng, và người vận hành
+phải thấy nó trước khi nó chạy. Phép kiểm giữ cả khi không có đường đặt cờ true —
+một package tự bật Program là một package tự triển khai chính nó.
+
+**Trần 32 được ép LẠI ở Check.** `T59-301` đã ép ở Draft, nhưng Revision có thể
+tới từ **bundle import** hoặc từ Draft cũ hơn; Check là biên cuối trước khi
+package thành artifact nên nó không tin lớp trước. Chu kỳ ngoài ba lớp profile bị
+từ chối — một chu kỳ lạ là một lớp lập lịch không tồn tại.
+
+**Budget đếm theo từng lớp chu kỳ** — dữ liệu mà scheduler (`T59-402`) dùng để
+phân bổ, nên đếm sai ở đây là phân bổ sai ở đó. Trần `32/16/20%` lấy từ profile
+sinh, không phải hằng viết trong code.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; `verify-project.sh --wave W3` **6/6 PASS**.
+
+**Ranh giới:** trần **16 Enabled** được *ghi* vào manifest nhưng chưa được *thi
+hành* — nó chỉ có nghĩa khi có intent enable thật (`T59-405`). Ngân sách thời gian
+thực thuộc `T59-402`.
+
 ### Added — `T59-304` Bất biến cấp package kiểm ở Check, không chỉ ở loader (2026-08-21)
 
 **Vì sao kiểm lại thứ loader đã kiểm.** Loader v2 kiểm "một output owner" và "một

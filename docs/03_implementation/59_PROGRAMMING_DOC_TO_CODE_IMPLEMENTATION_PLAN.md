@@ -996,7 +996,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | `T59-302` | P0 | Package Check toàn POU/Program/library/signal/resource | T59-106/201/301 | **DONE** | Check biên dịch **mọi** Program (bỏ trần pipeline 1 của `T59-002`), **gộp** diagnostic của tất cả Program hỏng và gắn `programId` cho từng cái; `mkddc-st-package` mới lắp container v2 bằng **chính** `WritePackageV2()` production (byte-stable, đọc lại bằng loader trước khi ghi); migration `0009` cho artifact `schemaVersion∈{1,2}`; `contentSha256` tất định qua hai lần Check; Check **không** đụng Draft/Active và không sinh hành động triển khai; hai worker chia nhau Check qua lease; 5 test Check + 3 test packager; `go test ./... -count=1` 18/18; `ctest` 1138/1138; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-303` | P0 | MB_RTU binding compiler adapter qua canonical Point contract | T59-302 | **DONE** | Point contract thêm `extIndex` (slot EXT 1..256 do Point Catalog phân giải); `resolve_io_bindings` nhận MB_RTU và map thẳng sang `StPointKind::EXT` — compiler **không** tự suy slot nên không tái định nghĩa register/function code/endian/chu kỳ poll; LOCAL và MB_RTU sống chung trong một Program; thiếu `extIndex`, thiếu `deviceId`, vượt trần 256, sai chiều và kiểu `TIME` đều fail-closed; guard Go kiểm **hai chiều** (MB_RTU thiếu slot / category khác lại mang slot); 6 test C++ + 1 test Go; `ctest` **1145/1145**; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-304` | P0 | Output owner/conflict + Published Signal publisher/consumer validation | T59-302/303 | **DONE** | Bất biến cấp package kiểm ở **Check** (trước khi biên dịch) chứ không chỉ ở loader: một output binding có đúng một Program owner — nhận diện theo **điểm vật lý** (`deviceId`+`extIndex` với MB_RTU) chứ không theo tên; một signal có đúng một publisher (case-folded); publisher phải là Program có thật; freshness 1000..90000; kiểu trong hệ kiểu ST; `USE_FALLBACK` ghép cứng với giá trị dự phòng. Mọi vi phạm được **gộp** trong một lần Check; đọc chung điểm và ghi điểm riêng vẫn hợp lệ. 7 test; `go test ./... -count=1` 18/18; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
-| `T59-305` | P0 | Package manifest/topology/budget cho 32/16; Program mới Disabled | T59-302/304 | ORDERED | 32 compile, 16 enabled, one-over stable; manifest không chứa creation-order dependency. |
+| `T59-305` | P0 | Package manifest/topology/budget cho 32/16; Program mới Disabled | T59-302/304 | **DONE** | Manifest Check thêm `topology` (mỗi Program: id/tên/chu kỳ/`desiredEnabled=false`) và `budget` (32/16/20% + số Program theo từng lớp chu kỳ); topology sắp theo `programId` nên **không phụ thuộc thứ tự tạo** — hai Project cùng nội dung dựng khác thứ tự cho đúng cùng manifest; trần 32 được ép **lại** ở Check (Revision có thể tới từ bundle import) với one-over ổn định; chu kỳ ngoài ba lớp profile bị từ chối; `desiredEnabled` không có đường nào đặt true. 5 test; `go test ./... -count=1` 18/18; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-306` | P1 | FE PGM-02/03: POU tree, Program properties, mapping conflicts, signals | T59-301/304 | ORDERED | Sáu route target/legacy redirect; Function/FB hides invalid fields; E2E Draft save/reload. |
 
 ### 3.4 Ghi chú thực thi W3
@@ -1209,6 +1209,41 @@ kiểm được.
 **Ranh giới trung thực.** Đây là kiểm **định nghĩa**. Consumer thật của signal
 (đọc giá trị trong ST/FBD), double-buffer, freshness runtime và fallback lúc chạy
 thuộc `T59-404`; trọng tài output và candidate withdrawal thuộc `T59-406`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-305` — Topology và budget: không bám thứ tự tạo, Program mới luôn Disabled
+
+**Thứ tự tạo là dữ liệu của quá khứ, không phải của package.** Topology sắp theo
+`programId` chứ không theo thứ tự xuất hiện trong tài liệu. Nếu manifest bám thứ
+tự tạo thì hai Project **cùng nội dung** nhưng dựng theo thứ tự khác nhau sẽ cho
+hai package khác nhau — và mọi so sánh provenance giữa hai controller mất nghĩa.
+Test đảo thứ tự đầu vào và đòi manifest **giống hệt**.
+
+**Program mới LUÔN `desiredEnabled=false`.** Package không được tự bật thứ vừa
+được nạp: bật là một quyết định vận hành riêng, có audit riêng, và người vận hành
+phải thấy nó **trước khi** nó chạy (DDD §0/§4.3). Không có đường nào đặt cờ này
+true ở lớp này, nhưng phép kiểm vẫn giữ — một package tự bật Program là một
+package tự triển khai chính nó.
+
+**Trần 32 được ép LẠI ở Check.** `T59-301` đã ép ở Draft, nhưng một Revision có
+thể tới từ **bundle import** hoặc từ một Draft cũ hơn. Check là biên cuối trước
+khi package thành artifact, nên nó không được tin lớp trước. One-over báo đúng
+`ST-LIM-009` với `limit` là trần sản phẩm thật, không phải một con số khác.
+
+**Chu kỳ ngoài ba lớp profile bị từ chối.** Một chu kỳ lạ là một lớp lập lịch
+**không tồn tại**; chấp nhận nó ở Check chỉ đẩy lỗi xuống runtime, nơi nó biểu
+hiện thành deadline miss chứ không thành một câu trả lời hiểu được.
+
+**Budget đếm theo từng lớp chu kỳ.** Đây là dữ liệu mà scheduler (`T59-402`) dùng
+để phân bổ, nên đếm sai ở đây là phân bổ sai ở đó. Trần `32/16/20%` lấy từ profile
+sinh, không phải hằng viết trong code.
+
+**Ranh giới trung thực.** Trần **16 Enabled** được *ghi* vào manifest nhưng chưa
+được *thi hành* ở đây: nó chỉ có nghĩa khi có intent enable thật, và đường đó là
+`T59-405`. Ngân sách thời gian thực (`budgetUs` theo Program, deadline, đo tải)
+thuộc `T59-402`. Bảng POU signature đầy đủ trong container vẫn thuộc phần còn lại
+của lane compiler.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
