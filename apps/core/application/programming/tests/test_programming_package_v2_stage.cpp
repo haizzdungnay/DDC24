@@ -458,3 +458,62 @@ TEST(ProgrammingPackageV2Stage, SchedulerCommitsSignalsAtBoundary)
     EXPECT_EQ(read.state, StSignalReadState::FRESH);
     EXPECT_FLOAT_EQ(read.value.r, 42.0f);
 }
+
+/* T59-405 — intent Enable/Disable áp lên đúng một Program. */
+TEST(ProgrammingPackageV2Stage, SetProgramEnabledAppliesToOneInstance)
+{
+    TempTree tree;
+    ASSERT_FALSE(tree.path.empty());
+    std::filesystem::create_directories(std::filesystem::path(tree.path) / "staging");
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_task(&scheduler);
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                               tree.path + "/staging");
+    std::string error;
+    ASSERT_TRUE(coordinator.recover(&error)) << error;
+
+    const std::vector<std::string> names = {"P_ahu", "P_boiler"};
+    const StageCommand command =
+        write_candidate(tree, kOperation, kRevision, package_of(names, {1000u, 5000u}), "P_ahu");
+    std::string detail;
+    ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
+    ActivateCommand activate;
+    activate.operation_id = kOperation;
+    activate.staged_token = kOperation;
+    activate.cutover = CutoverMode::PROGRAM_ONLY;
+    activate.plan_hash = command.plan_hash;
+    ASSERT_TRUE(coordinator.activate(activate, &detail, &error)) << detail << ": " << error;
+    coordinator.on_safe_boundary();
+
+    ProgramEnableCommand enable;
+    enable.operation_id = kOperation;
+    enable.instance_id = "P_ahu";
+    enable.enabled = false;
+    ASSERT_TRUE(coordinator.set_program_enabled(enable, &detail, &error)) << detail << ": " << error;
+    EXPECT_EQ(scheduler.find_program("P_ahu")->state, StProgramState::STOPPED);
+    /* Chỉ MỘT Program bị tác động: lệnh cho một instance không được làm gì với
+     * instance khác. */
+    EXPECT_EQ(scheduler.find_program("P_boiler")->state, StProgramState::RUNNING);
+
+    /* Tắt lại Program đã dừng là no-op THÀNH CÔNG: intent đã đạt, và trả lỗi ở
+     * đây sẽ biến một lần gửi lại thành một lỗi giả. */
+    ASSERT_TRUE(coordinator.set_program_enabled(enable, &detail, &error)) << detail;
+
+    enable.enabled = true;
+    ASSERT_TRUE(coordinator.set_program_enabled(enable, &detail, &error)) << detail << ": " << error;
+    EXPECT_EQ(scheduler.find_program("P_ahu")->state, StProgramState::RUNNING);
+
+    /* Instance không có trong package đang chạy: KHÔNG tự tạo. Bật một Program
+     * không tồn tại nghĩa là người gọi và thiết bị đang nói về hai gói khác
+     * nhau — im lặng tạo ra nó sẽ giấu đúng sự lệch đó đi. */
+    enable.instance_id = "P_ghost";
+    EXPECT_FALSE(coordinator.set_program_enabled(enable, &detail, &error));
+    EXPECT_EQ(detail, "IPC-UNKNOWN-INSTANCE");
+    EXPECT_EQ(scheduler.find_program("P_ghost"), nullptr);
+
+    /* Identity rác bị chặn trước khi chạm scheduler. */
+    enable.instance_id = "../escape";
+    EXPECT_FALSE(coordinator.set_program_enabled(enable, &detail, &error));
+    EXPECT_EQ(detail, "IPC-PAYLOAD");
+}

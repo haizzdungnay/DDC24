@@ -14,7 +14,11 @@
 namespace core::programming {
 
 constexpr uint16_t PROGRAM_IPC_PROTOCOL_MAJOR = 1;
-constexpr uint16_t PROGRAM_IPC_PROTOCOL_MINOR = 0;
+/* T59-405 nâng minor 0 -> 1: thêm action `SET_PROGRAM_ENABLED` là thay đổi
+ * TƯƠNG THÍCH NGƯỢC (client cũ không gửi action mới, server cũ trả
+ * `IPC-ACTION-NOT-IMPLEMENTED`). Giữ nguyên minor sẽ làm hai bên không có
+ * cách nào biết đối phương có hiểu action mới hay không. */
+constexpr uint16_t PROGRAM_IPC_PROTOCOL_MINOR = 1;
 constexpr std::size_t PROGRAM_IPC_MAX_FRAME = 64U * 1024U;
 constexpr std::size_t PROGRAM_IPC_MAX_PAYLOAD = 32U * 1024U;
 constexpr std::size_t PROGRAM_IPC_MAX_QUEUE = 32;
@@ -29,6 +33,11 @@ enum class ProgramAction {
     Restore,
     TraceStart,
     RetainReset,
+    /* T59-405 — intent Enable/Disable cho MỘT Program. Là action riêng chứ không
+     * phải tham số của ACTIVATE: "chương trình nào đang chạy" và "gói nào đang
+     * hoạt động" là hai quyết định khác nhau, và gộp chúng sẽ buộc mọi lần bật
+     * một Program phải đi qua đường Commission. */
+    SetProgramEnabled,
 };
 
 enum class ProgramResult {

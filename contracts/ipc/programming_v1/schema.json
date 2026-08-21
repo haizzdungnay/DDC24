@@ -99,7 +99,8 @@
       "OPERATION_STATUS",
       "RESTORE",
       "TRACE_START",
-      "RETAIN_RESET"
+      "RETAIN_RESET",
+      "SET_PROGRAM_ENABLED"
      ],
      "title": "action"
     },
@@ -255,6 +256,12 @@
     "mutation": true,
     "owner": "Core",
     "implementedBy": "T59-408"
+   },
+   {
+    "action": "SET_PROGRAM_ENABLED",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": true,
+    "owner": "Core"
    }
   ]
  }

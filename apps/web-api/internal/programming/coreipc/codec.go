@@ -13,7 +13,10 @@ import (
 
 const (
 	ProtocolMajor    uint16 = 1
-	ProtocolMinor    uint16 = 0
+	// T59-405 nâng minor 0 -> 1: thêm action `SET_PROGRAM_ENABLED` là thay đổi
+	// TƯƠNG THÍCH NGƯỢC. Giữ nguyên minor sẽ làm hai bên không có cách nào
+	// biết đối phương có hiểu action mới hay không.
+	ProtocolMinor    uint16 = 1
 	SchemaVersion           = "1.0"
 	MaxFramePayload         = 64 * 1024
 	MaxQueueDepth           = 32
@@ -33,6 +36,11 @@ const (
 	ActionRestore         Action = "RESTORE"
 	ActionTraceStart      Action = "TRACE_START"
 	ActionRetainReset     Action = "RETAIN_RESET"
+	// T59-405 — intent Enable/Disable cho MỘT Program. Action riêng chứ không
+	// phải tham số của ACTIVATE: "chương trình nào đang chạy" và "gói nào đang
+	// hoạt động" là hai quyết định khác nhau, và gộp chúng sẽ buộc mọi lần bật
+	// một Program phải đi qua đường Commission.
+	ActionSetProgramEnabled Action = "SET_PROGRAM_ENABLED"
 )
 
 type Result string
@@ -370,7 +378,8 @@ func canonicalCBOR(payload []byte) bool {
 func knownAction(action Action) bool {
 	switch action {
 	case ActionCapabilities, ActionStatus, ActionStage, ActionActivate,
-		ActionOperationStatus, ActionRestore, ActionTraceStart, ActionRetainReset:
+		ActionOperationStatus, ActionRestore, ActionTraceStart, ActionRetainReset,
+		ActionSetProgramEnabled:
 		return true
 	}
 	return false
@@ -386,7 +395,8 @@ func knownResult(result Result) bool {
 
 func isMutation(action Action) bool {
 	switch action {
-	case ActionStage, ActionActivate, ActionRestore, ActionTraceStart, ActionRetainReset:
+	case ActionStage, ActionActivate, ActionRestore, ActionTraceStart, ActionRetainReset,
+		ActionSetProgramEnabled:
 		return true
 	}
 	return false

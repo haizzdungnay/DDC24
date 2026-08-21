@@ -31,6 +31,7 @@ std::string action_name(ProgramAction action)
     case ProgramAction::Restore: return "RESTORE";
     case ProgramAction::TraceStart: return "TRACE_START";
     case ProgramAction::RetainReset: return "RETAIN_RESET";
+    case ProgramAction::SetProgramEnabled: return "SET_PROGRAM_ENABLED";
     }
     return {};
 }
@@ -45,6 +46,7 @@ bool parse_action(const std::string& value, ProgramAction* action)
     else if (value == "RESTORE") *action = ProgramAction::Restore;
     else if (value == "TRACE_START") *action = ProgramAction::TraceStart;
     else if (value == "RETAIN_RESET") *action = ProgramAction::RetainReset;
+    else if (value == "SET_PROGRAM_ENABLED") *action = ProgramAction::SetProgramEnabled;
     else return false;
     return true;
 }
@@ -118,7 +120,8 @@ bool mutation_action(ProgramAction action)
 {
     return action == ProgramAction::Stage || action == ProgramAction::Activate ||
            action == ProgramAction::Restore || action == ProgramAction::TraceStart ||
-           action == ProgramAction::RetainReset;
+           action == ProgramAction::RetainReset ||
+           action == ProgramAction::SetProgramEnabled;
 }
 
 bool canonical_cbor(const std::vector<uint8_t>& payload)
@@ -286,6 +289,23 @@ bool parse_retain_reset_payload(const ProgramRequest& request, RetainResetComman
         output->expected_active_revision_id = value[0].is_null()
             ? std::string() : value[0].get<std::string>();
         output->instance_id = value[1].get<std::string>();
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+/* T59-405. Payload 2 phần tử: `[instance_id (string), enabled (bool)]`.
+ * `operation_id` lấy từ envelope chung như mọi mutation khác. */
+bool parse_set_enabled_payload(const ProgramRequest& request, ProgramEnableCommand* output)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 2 || !value[0].is_string() ||
+            !value[1].is_boolean()) return false;
+        output->operation_id = uuid_text(request.operation_id);
+        output->instance_id = value[0].get<std::string>();
+        output->enabled = value[1].get<bool>();
         return true;
     } catch (const json::exception&) {
         return false;
@@ -695,6 +715,16 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
                 response = make_response(request, result,
                                          result == ProgramResult::Ok ? nullptr
                                              : (detail.empty() ? "IPC-PAYLOAD" : detail.c_str()));
+            } else if (request.action == ProgramAction::SetProgramEnabled) {
+                ProgramEnableCommand command;
+                std::string detail;
+                std::string error;
+                const bool applied = parse_set_enabled_payload(request, &command) &&
+                    coordinator_->set_program_enabled(command, &detail, &error);
+                response = make_response(request, applied ? ProgramResult::Ok
+                                                          : ProgramResult::Rejected,
+                                         applied ? nullptr : (detail.empty()
+                                             ? "IPC-PAYLOAD" : detail.c_str()));
             } else {
                 response = make_response(request, ProgramResult::Unavailable,
                                          "IPC-ACTION-NOT-IMPLEMENTED");

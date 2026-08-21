@@ -812,6 +812,45 @@ bool ProgrammingRuntimeCoordinator::activate(const ActivateCommand& command,
     return true;
 }
 
+bool ProgrammingRuntimeCoordinator::set_program_enabled(const ProgramEnableCommand& command,
+                                                       std::string* detail_code,
+                                                       std::string* error)
+{
+    if (!canonical_uuid(command.operation_id) || !valid_instance_id(command.instance_id)) {
+        if (detail_code) *detail_code = "IPC-PAYLOAD";
+        if (error) *error = "operation/instance identity invalid";
+        return false;
+    }
+    StProgramInstance* program = scheduler_->find_program(command.instance_id);
+    if (program == nullptr) {
+        /* Không tự tạo instance. Bật một Program không có trong package đang
+         * chạy nghĩa là người gọi và thiết bị đang nói về hai gói khác nhau —
+         * im lặng tạo ra nó sẽ giấu đúng sự lệch đó đi. */
+        if (detail_code) *detail_code = "IPC-UNKNOWN-INSTANCE";
+        if (error) *error = "instance '" + command.instance_id + "' not in active package";
+        return false;
+    }
+    if (command.enabled) {
+        /* `start` từ chối khi trạng thái không cho phép (ví dụ FAULTED chưa
+         * reset) và khi vượt trần 16. Cả hai đều là câu trả lời ĐÚNG cho người
+         * vận hành, không phải lỗi cần che. */
+        if (program->state == StProgramState::RUNNING) return true;
+        if (!scheduler_->start(command.instance_id, error)) {
+            if (detail_code) *detail_code = "IPC-RUNTIME-STATE";
+            return false;
+        }
+        return true;
+    }
+    /* Tắt một Program đã dừng là no-op thành công: intent đã đạt. Trả lỗi ở đây
+     * sẽ làm một lần gửi lại (retry) biến thành một lỗi giả. */
+    if (program->state != StProgramState::RUNNING) return true;
+    if (!scheduler_->stop(command.instance_id, error)) {
+        if (detail_code) *detail_code = "IPC-RUNTIME-STATE";
+        return false;
+    }
+    return true;
+}
+
 RetainResetOutcome ProgrammingRuntimeCoordinator::reset_retain(
     const RetainResetCommand& command, std::string* detail_code, std::string* error)
 {

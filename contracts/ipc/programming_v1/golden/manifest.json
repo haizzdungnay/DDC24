@@ -1,20 +1,20 @@
 {
-  "protocolMajor": 1,
-  "protocolMinor": 0,
-  "schemaVersion": "1.0",
-  "schemaSha256": "81aa88c6a68ca563929f73fbb34889eb3f3e47f1a19e0ac6fcc425842e3c7e16",
-  "files": {
-    "request_capabilities.hex": {
-      "sha256": "8d302dcad135b0b3e1e2529ff4d942c9ae936e1c08e34aef155cface79167c2d",
-      "description": "Request CAPABILITIES hợp lệ, payload là CBOR empty array"
-    },
-    "response_unavailable.hex": {
-      "sha256": "702090e52fb0f58e9e8fa590329299b2e360a8e0c8772c7d93da162d706b38e8",
-      "description": "Response UNAVAILABLE keepsRunning=true"
-    },
-    "request_unknown_major.hex": {
-      "sha256": "25edbb3073496b39d2e35d6aebc84e359178752eab49d533d84f2e47bd819f4c",
-      "description": "Negative fixture: major=2, phải reject"
-    }
+ "protocolMajor": 1,
+ "protocolMinor": 1,
+ "schemaVersion": "1.0",
+ "schemaSha256": "f27d24b820ee8be7637612496884f4da5e99e79396eaa933938491a430a80435",
+ "files": {
+  "request_capabilities.hex": {
+   "sha256": "1aa44d5450507036c65719cbf8c880004cc5eac597cc337c3f315e61ced2c568",
+   "description": "Request CAPABILITIES hợp lệ, payload là CBOR empty array"
+  },
+  "response_unavailable.hex": {
+   "sha256": "0bb8f8df9c453e16860c57dede6c7eb4c2e58cebe63373f5ef1db37696783207",
+   "description": "Response UNAVAILABLE keepsRunning=true"
+  },
+  "request_unknown_major.hex": {
+   "sha256": "9b60390a9993d31ab8822d588a5149754e00155f7e6353c89ea9052c567f7812",
+   "description": "Negative fixture: major=2, phải reject"
   }
+ }
 }

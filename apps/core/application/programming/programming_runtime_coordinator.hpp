@@ -63,6 +63,16 @@ struct RetainResetCommand {
     std::string expected_active_revision_id;
 };
 
+/* T59-405 — intent Enable/Disable cho một Program. `enabled` là Ý ĐỊNH; trạng
+ * thái thật (`STARTING`/`RUNNING`/`STOPPING`/`DISABLED`/`FAULTED`) là thứ Core
+ * báo ngược về. Gộp hai thứ vào một trường sẽ làm một Program đã bật nhưng đang
+ * FAULTED trông y hệt một Program chưa ai bật. */
+struct ProgramEnableCommand {
+    std::string operation_id;
+    std::string instance_id;
+    bool        enabled = false;
+};
+
 enum class RetainResetOutcome : uint8_t {
     APPLIED = 0,      /* Đã áp dụng ở boundary VÀ force-flush persisted image thành công. */
     REJECTED,         /* Revision không khớp active, hoặc instance chưa có program loaded. */
@@ -106,6 +116,12 @@ public:
      * áp dụng, sau đó force-flush persisted image (`retain_service()->flush(true)`,
      * bỏ qua cửa sổ autosave 60s) trước khi trả về. Không giả định thành
      * công khi timeout — trả `TIMED_OUT` riêng biệt (§7). */
+    /* Áp intent Enable/Disable lên đúng một Program. Trả false + `*detail_code`
+     * khi instance không có, khi trạng thái không cho phép, hoặc khi vượt trần
+     * 16 Program chạy đồng thời. */
+    bool set_program_enabled(const ProgramEnableCommand& command, std::string* detail_code,
+                             std::string* error);
+
     RetainResetOutcome reset_retain(const RetainResetCommand& command, std::string* detail_code,
                                     std::string* error);
 

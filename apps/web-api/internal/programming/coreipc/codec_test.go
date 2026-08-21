@@ -231,3 +231,44 @@ func TestGoldenManifestPinsSchemaAndCorpus(t *testing.T) {
 		assertHash(filepath.Join(directory, name), entry.SHA256)
 	}
 }
+
+// T59-405 — nâng `protocolMinor` 0 -> 1 phải TƯƠNG THÍCH NGƯỢC. Một client cũ
+// vẫn gửi minor=0 và server mới phải nhận; đó chính là lý do action mới được
+// thêm bằng cách tăng minor thay vì đổi `schemaVersion` trên dây — đổi
+// `schemaVersion` sẽ làm mọi Core phiên bản cũ từ chối MỌI request.
+func TestOlderProtocolMinorIsStillAccepted(t *testing.T) {
+	request := NewRequest(ActionCapabilities, make([]byte, 16), nil, "controller-1", "",
+		"correlation-id-0001", 2000000, EmptyPayload())
+	request.ProtocolMinor = 0
+	frame, err := EncodeRequestFrame(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeRequestFrame(frame)
+	if err != nil {
+		t.Fatalf("request minor=0 bị từ chối: %v", err)
+	}
+	if decoded.ProtocolMinor != 0 {
+		t.Fatalf("minor=%d", decoded.ProtocolMinor)
+	}
+
+	// Minor CAO hơn bị chặn ngay ở lớp mã hoá: dựng một frame tự nhận hiểu một
+	// hợp đồng chưa tồn tại là lỗi của phía gửi, không phải thứ để phía nhận
+	// phát hiện muộn.
+	request.ProtocolMinor = ProtocolMinor + 1
+	if _, err := EncodeRequestFrame(request); !errors.Is(err, ErrUnsupportedMinor) {
+		t.Fatalf("minor cao hơn không bị chặn: %v", err)
+	}
+}
+
+// Action mới phải được cả bảng `knownAction` lẫn bảng `isMutation` nhận. Thiếu
+// bảng thứ hai thì một mutation đi qua đường không cần `operationId`, và Core
+// mất khả năng đối chiếu lệnh với operation nào.
+func TestSetProgramEnabledIsAKnownMutation(t *testing.T) {
+	if !knownAction(ActionSetProgramEnabled) {
+		t.Fatal("SET_PROGRAM_ENABLED không nằm trong knownAction")
+	}
+	if !isMutation(ActionSetProgramEnabled) {
+		t.Fatal("SET_PROGRAM_ENABLED không được coi là mutation")
+	}
+}
