@@ -7,6 +7,7 @@ import argparse
 import copy
 import hashlib
 import json
+import struct
 from pathlib import Path
 import re
 import sys
@@ -43,6 +44,34 @@ BASELINE_STATE = {
     "active-lkg": "active-lkg-before",
     "commissionCount": 0,
 }
+
+
+SECTION_TYPE_NAMES = {
+    1: "POU_TABLE", 2: "PROGRAM_TABLE", 3: "TYPE_SIGNATURE_TABLE", 4: "CODE_IR",
+    5: "CONSTANTS", 6: "FB_LAYOUT", 7: "SIGNAL_DEFS", 8: "BINDING_MANIFEST",
+    9: "SOURCE_MAP", 10: "LIBRARY_LOCK", 11: "RETAIN_LAYOUT", 12: "RESOURCE_BUDGET",
+}
+
+
+def golden_sections(data: bytes) -> list[dict[str, Any]]:
+    """Đọc bảng section THẬT từ file package v2 (header 128 byte, entry 16 byte)."""
+    if len(data) < 128:
+        return []
+    count = struct.unpack_from("<H", data, 18)[0]
+    sections: list[dict[str, Any]] = []
+    for index in range(count):
+        base = 128 + index * 16
+        if base + 16 > len(data):
+            return []
+        type_code = struct.unpack_from("<H", data, base)[0]
+        offset, size, items = struct.unpack_from("<III", data, base + 4)
+        sections.append({
+            "type": SECTION_TYPE_NAMES.get(type_code, f"UNKNOWN_{type_code}"),
+            "offset": offset,
+            "bytes": size,
+            "itemCount": items,
+        })
+    return sections
 
 
 def digest(path: Path) -> str:
@@ -381,6 +410,23 @@ def validate(join: dict[str, Any]) -> list[str]:
             == artifact_v2_item["goldenProgramCount"],
             "golden manifest v2 lệch số Program đã pin",
         )
+        # Bảng section trong manifest phải khớp BẢNG THẬT trong file golden.
+        # Không có phép kiểm này thì manifest chỉ là một mô tả viết tay đi kèm,
+        # và một lần đổi bố cục section sẽ để lại manifest mô tả một file không
+        # còn tồn tại — trong khi hash vẫn "khớp pin" vì pin cũng vừa được sửa.
+        if golden_path.is_file():
+            require(
+                golden_sections(golden_path.read_bytes()) == [
+                    {
+                        "type": section["type"],
+                        "offset": section["offset"],
+                        "bytes": section["bytes"],
+                        "itemCount": section["itemCount"],
+                    }
+                    for section in golden_manifest["sections"]
+                ],
+                "golden manifest v2 lệch bảng section thật trong file",
+            )
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"artifact-v2/dual-reader: {error}")
 
@@ -743,6 +789,41 @@ def run_chain_self_test() -> int:
     return len(cases)
 
 
+def run_golden_section_self_test() -> int:
+    """Negative case cho phép so bảng section.
+
+    Không đi qua `build_mutations` được vì bộ đó chỉ đột biến file join, còn bảng
+    section nằm trong file manifest. Kiểm thẳng phép so: nó phải KHỚP với file
+    golden thật, và phải TỪ CHỐI khi một trường bất kỳ bị xê dịch.
+    """
+    golden = safe_path("contracts/programming/golden/package_v2_ahu.mkpkg").read_bytes()
+    manifest = json.loads(
+        safe_path("contracts/programming/golden/package_v2_manifest.json").read_text()
+    )
+    actual = golden_sections(golden)
+    declared = [
+        {key: section[key] for key in ("type", "offset", "bytes", "itemCount")}
+        for section in manifest["sections"]
+    ]
+    if actual != declared:
+        raise RuntimeError(f"bảng section golden lệch manifest: {actual} != {declared}")
+    cases = 0
+    for field in ("offset", "bytes", "itemCount"):
+        for index in range(len(declared)):
+            perturbed = copy.deepcopy(declared)
+            perturbed[index][field] += 1
+            if actual == perturbed:
+                raise RuntimeError(f"phép so bỏ qua sai lệch {field} ở section {index}")
+            cases += 1
+    perturbed = copy.deepcopy(declared)
+    perturbed[0]["type"] = "CONSTANTS"
+    if actual == perturbed:
+        raise RuntimeError("phép so bỏ qua sai lệch loại section")
+    cases += 1
+    print(f"PASS bảng section golden: {cases}/{cases} sai lệch bị bắt")
+    return cases
+
+
 def run_self_test(join: dict[str, Any]) -> None:
     mutations = build_mutations(join)
     for name, mutation, expected in mutations:
@@ -755,6 +836,7 @@ def run_self_test(join: dict[str, Any]) -> None:
             )
     print(f"PASS self-test: {len(mutations)}/{len(mutations)} mutation bị reject fail-closed đúng lý do")
 
+    run_golden_section_self_test()
     chain_cases = run_chain_self_test()
     print(f"PASS chuỗi migration: {chain_cases}/{chain_cases} manifest lỗi bị bắt đúng lý do")
 
