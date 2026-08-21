@@ -247,12 +247,26 @@ TEST(StResolveIoBindings, RejectsVpCategoryForOutputDirection)
     EXPECT_EQ(diags[0].code, st_diag_code::kIoMapUnsupportedCategory);
 }
 
-TEST(StResolveIoBindings, RejectsUnsupportedCategoryMbRtu)
+/* T59-303 gỡ chặn MB_RTU: nó KHÔNG còn là "category không hỗ trợ". Thứ vẫn phải
+ * bị từ chối là entry MB_RTU CHƯA được Point Catalog phân giải slot — compiler
+ * không đoán `extIndex`. Category ngoài allowlist mới là lỗi category. */
+TEST(StResolveIoBindings, RejectsMbRtuWithoutResolvedExtIndex)
 {
     StIrModule module = compile_ok(kAhuFanControl);
     StIoMapEntry entry = local_entry("SupplyTemp", "input", "TEMP1", StType::REAL);
     entry.category = "MB_RTU";
     entry.device_id = "bus1";
+    std::vector<StDiagnostic> diags;
+    EXPECT_FALSE(resolve_io_bindings(&module, {entry}, &diags));
+    ASSERT_FALSE(diags.empty());
+    EXPECT_EQ(diags[0].code, st_diag_code::kIoMapBadPointId);
+}
+
+TEST(StResolveIoBindings, RejectsCategoryOutsideAllowlist)
+{
+    StIrModule module = compile_ok(kAhuFanControl);
+    StIoMapEntry entry = local_entry("SupplyTemp", "input", "AV-01", StType::REAL);
+    entry.category = "BACNET";
     std::vector<StDiagnostic> diags;
     EXPECT_FALSE(resolve_io_bindings(&module, {entry}, &diags));
     ASSERT_FALSE(diags.empty());

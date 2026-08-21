@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -91,5 +92,40 @@ func TestProcessPackagerRejectsHostileProgramNames(t *testing.T) {
 	}
 	if _, err := packager.Package(context.Background(), nil); err == nil {
 		t.Fatal("package rỗng được chấp nhận")
+	}
+}
+
+// T59-303: `extIndex` chỉ có nghĩa với MB_RTU. Runner phải chặn cả hai chiều —
+// MB_RTU thiếu slot, và category khác lại mang slot — trước khi spawn compiler.
+func TestRunnerValidatesModbusExtIndexBothWays(t *testing.T) {
+	runner := ProcessRunner{BinaryPath: "/nonexistent", ScratchRoot: t.TempDir(), Timeout: 5 * time.Second}
+	source := []byte("PROGRAM P\nVAR_INPUT X : REAL; END_VAR\nEND_PROGRAM\n")
+	base := Input{SourceID: "11111111-1111-4111-8111-111111111111", Language: "ST", Source: source}
+
+	for name, entry := range map[string]IoMapEntry{
+		"MB_RTU thiếu extIndex": {Variable: "X", Direction: "input", PointID: "d.t", Type: "REAL",
+			Category: "MB_RTU", DeviceID: "mb-1"},
+		"MB_RTU thiếu deviceId": {Variable: "X", Direction: "input", PointID: "d.t", Type: "REAL",
+			Category: "MB_RTU", ExtIndex: 3},
+		"MB_RTU vượt trần EXT": {Variable: "X", Direction: "input", PointID: "d.t", Type: "REAL",
+			Category: "MB_RTU", DeviceID: "mb-1", ExtIndex: 257},
+		"LOCAL mang extIndex": {Variable: "X", Direction: "input", PointID: "UI-01", Type: "REAL",
+			Category: "LOCAL", ExtIndex: 3},
+	} {
+		input := base
+		input.IoMap = []IoMapEntry{entry}
+		if _, err := runner.Compile(context.Background(), input); err == nil {
+			t.Fatalf("%s: được chấp nhận", name)
+		}
+	}
+
+	// Chiều khẳng định: entry MB_RTU đủ dữ liệu phải QUA lớp validate và chỉ
+	// hỏng vì binary không tồn tại — nếu không, guard đang chặn cả dữ liệu đúng.
+	input := base
+	input.IoMap = []IoMapEntry{{Variable: "X", Direction: "input", PointID: "d.t", Type: "REAL",
+		Category: "MB_RTU", DeviceID: "mb-1", ExtIndex: 3}}
+	err := func() error { _, err := runner.Compile(context.Background(), input); return err }()
+	if err == nil || strings.Contains(err.Error(), "tham số compiler worker không hợp lệ") {
+		t.Fatalf("entry MB_RTU hợp lệ bị guard chặn: %v", err)
 	}
 }

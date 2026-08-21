@@ -201,6 +201,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_fbd_model.cpp
       application/st/tests/test_st_library_registry.cpp
       application/st/tests/test_st_review_gate.cpp
+      application/st/tests/test_st_mb_rtu_binding.cpp
       application/st/tests/test_st_pou_parser.cpp
       application/st/tests/test_st_pou_registry.cpp
       application/st/tests/test_st_function_purity.cpp

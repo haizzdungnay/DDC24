@@ -520,6 +520,10 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 				Category string `json:"category"`
 				PointID  string `json:"pointId"`
 				DeviceID string `json:"deviceId"`
+				// T59-303: slot EXT do Point Catalog phân giải khi Mapping tab
+				// chọn điểm MB_RTU. BE chỉ CHUYỂN TIẾP nó — suy slot ở đây là
+				// định nghĩa lại ánh xạ Modbus ở lớp không sở hữu nó.
+				ExtIndex int `json:"extIndex"`
 			} `json:"point"`
 			DataType string `json:"dataType"`
 			Unit     string `json:"unit"`
@@ -548,7 +552,8 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 		entries = append(entries, programmingcompiler.IoMapEntry{
 			Variable: variable.name, Direction: direction, PointID: payload.Point.PointID,
 			Type: variable.dataType, Unit: payload.Unit, Category: payload.Point.Category,
-			DeviceID: payload.Point.DeviceID, Writable: payload.Writable,
+			DeviceID: payload.Point.DeviceID, ExtIndex: payload.Point.ExtIndex,
+			Writable: payload.Writable,
 		})
 	}
 	return entries, nil

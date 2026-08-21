@@ -64,7 +64,11 @@ type IoMapEntry struct {
 	RangeMax  float64 `json:"rangeMax,omitempty"`
 	Category  string  `json:"category"`
 	DeviceID  string  `json:"deviceId,omitempty"`
-	Writable  bool    `json:"writable"`
+	// ExtIndex là slot EXT 1..256 do Point Catalog phân giải, CHỈ dùng cho
+	// MB_RTU. Compiler không tự suy nó từ `PointID`: ánh xạ điểm Modbus sang
+	// slot (register, function code, endian, chu kỳ poll) thuộc hệ Modbus RTU.
+	ExtIndex int  `json:"extIndex,omitempty"`
+	Writable bool `json:"writable"`
 }
 
 type Diagnostic struct {
@@ -151,6 +155,15 @@ func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error)
 			(entry.Direction != "input" && entry.Direction != "output") ||
 			!boundedLen(entry.Type, 1, 16) || !boundedLen(entry.Category, 1, 16) ||
 			len(entry.Unit) > 32 || len(entry.DeviceID) > 64 {
+			return Result{}, fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+		// `extIndex` chỉ có nghĩa với MB_RTU. Cho nó đi kèm category khác là mở
+		// một trường vô nghĩa mà lớp sau phải đoán xem có nên tin hay không.
+		if entry.Category == "MB_RTU" {
+			if entry.ExtIndex < 1 || entry.ExtIndex > 256 || entry.DeviceID == "" {
+				return Result{}, fmt.Errorf("tham số compiler worker không hợp lệ")
+			}
+		} else if entry.ExtIndex != 0 {
 			return Result{}, fmt.Errorf("tham số compiler worker không hợp lệ")
 		}
 	}
