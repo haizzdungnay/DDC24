@@ -77,6 +77,10 @@ public:
                                   std::string journal_path, std::string staging_root);
 
     bool recover(std::string* error);
+
+    /* Danh sách instance của package đang được coordinator quản lý. STATUS đọc
+     * nó để read-back đúng thứ đã nạp thay vì đoán theo một tên cố định. */
+    std::vector<std::string> instance_ids() const;
     bool stage(const StageCommand& command, std::string* detail_code, std::string* error);
     bool activate(const ActivateCommand& command, std::string* detail_code,
                   std::string* error);
@@ -112,6 +116,15 @@ private:
     bool stage_impl(const StageCommand& command, bool restore,
                     std::string* detail_code, std::string* error);
     bool ensure_instance(std::string* error);
+    /* Chuẩn bị topology cho đúng tập Program của package: thêm instance còn
+     * thiếu vào scheduler. Bootstrap không còn phải biết trước tên Program —
+     * đó là dữ liệu của package, không phải của bootstrap. */
+    bool ensure_topology(const std::vector<std::string>& instance_ids, std::string* error);
+    /* Tách artifact thành các (instance_id, ir_blob). v1 -> đúng một cặp dùng
+     * `command.instance_id`; v2 -> N cặp lấy tên từ chính package. */
+    bool split_package(const std::vector<uint8_t>& bytes, const std::string& fallback_instance,
+                       std::vector<std::pair<std::string, std::vector<uint8_t>>>* out,
+                       std::string* detail_code, std::string* error) const;
     bool append_phase(StJournalPhase phase, std::string* error);
     bool read_staged_artifact(const StageCommand& command, std::vector<uint8_t>* bytes,
                               std::string* detail_code, std::string* error) const;
@@ -141,7 +154,13 @@ private:
     std::string artifact_hash_;
     std::string previous_artifact_hash_;
     std::string plan_hash_;
+    /* T59-401: một package có thể mang nhiều Program. `instance_id_` là instance
+     * CHÍNH (giữ nguyên nghĩa cho journal và cho artifact v1 một Program);
+     * `instance_ids_` là toàn bộ tập instance của package đang stage/active.
+     * Giữ cả hai thay vì chỉ vector: journal v1 ghi một instance id, và đổi
+     * định dạng journal ở đây sẽ làm mọi bản ghi cũ không đọc được. */
     std::string instance_id_ = "program-main";
+    std::vector<std::string> instance_ids_{"program-main"};
     std::string detail_code_;
     uint64_t artifact_byte_size_ = 0;
     bool staged_restore_ = false;

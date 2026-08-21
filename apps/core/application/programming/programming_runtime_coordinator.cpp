@@ -14,6 +14,8 @@
 #include <unistd.h>
 
 #include "st/st_ir.hpp"
+#include "st/st_package_v2.hpp"
+#include "st/st_profile_generated.hpp"
 
 namespace core::programming {
 namespace {
@@ -169,6 +171,21 @@ bool canonical_uuid(const std::string& value)
         }
         const char ch = value[index];
         if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'))) return false;
+    }
+    return true;
+}
+
+/* Instance id đi vào scheduler và vào journal, nên nó phải là identity ổn định:
+ * ASCII in được, không dấu phân cách đường dẫn, không rỗng. Không ép nó phải là
+ * một tên cố định — tên Program là dữ liệu của package (T59-401). */
+bool valid_instance_id(const std::string& value)
+{
+    if (value.empty() || value.size() > 64) return false;
+    for (const char character : value) {
+        const bool alphanumeric = (character >= '0' && character <= '9') ||
+                                  (character >= 'A' && character <= 'Z') ||
+                                  (character >= 'a' && character <= 'z');
+        if (!alphanumeric && character != '_' && character != '-' && character != '.') return false;
     }
     return true;
 }
@@ -444,9 +461,68 @@ bool ProgrammingRuntimeCoordinator::load_active_checkpoint(
 
 bool ProgrammingRuntimeCoordinator::ensure_instance(std::string* error)
 {
-    if (scheduler_->find_task(kTaskId) && scheduler_->find_program(instance_id_)) return true;
-    if (error) *error = "Programming topology main/program-main was not prepared at bootstrap";
-    return false;
+    return ensure_topology(instance_ids_, error);
+}
+
+std::vector<std::string> ProgrammingRuntimeCoordinator::instance_ids() const
+{
+    return instance_ids_;
+}
+
+bool ProgrammingRuntimeCoordinator::ensure_topology(const std::vector<std::string>& instance_ids,
+                                                    std::string* error)
+{
+    if (!scheduler_->find_task(kTaskId)) {
+        if (error) *error = "Programming task was not prepared at bootstrap";
+        return false;
+    }
+    if (instance_ids.empty()) {
+        if (error) *error = "package has no program instance";
+        return false;
+    }
+    /* Thêm instance còn thiếu thay vì đòi bootstrap biết trước tên Program.
+     * Tên Program là dữ liệu của PACKAGE; bắt bootstrap khai trước nghĩa là mỗi
+     * lần đổi tên Program phải sửa cả tiến trình khởi động. */
+    uint16_t order = 0;
+    for (const std::string& id : instance_ids) {
+        if (scheduler_->find_program(id) == nullptr &&
+            !scheduler_->add_program(kTaskId, id, order, error))
+            return false;
+        ++order;
+    }
+    return true;
+}
+
+bool ProgrammingRuntimeCoordinator::split_package(
+    const std::vector<uint8_t>& bytes, const std::string& fallback_instance,
+    std::vector<std::pair<std::string, std::vector<uint8_t>>>* out,
+    std::string* detail_code, std::string* error) const
+{
+    out->clear();
+    bool is_v2 = false;
+    const char* probe_error = nullptr;
+    if (!ProbePackageFormat(bytes.data(), bytes.size(), &is_v2, &probe_error)) {
+        if (detail_code) *detail_code = probe_error != nullptr ? probe_error : "PKG-E-001";
+        if (error) *error = "artifact format is neither v1 nor package v2";
+        return false;
+    }
+    if (!is_v2) {
+        /* Artifact v1 mô tả ĐÚNG một Program; dual-reader DDD §12.1 buộc đường
+         * này còn sống, nếu không một lần nâng cấp là mất bản LKG cuối cùng. */
+        out->emplace_back(fallback_instance, bytes);
+        return true;
+    }
+    StPackageContents contents;
+    const char* load_error = nullptr;
+    if (!UnpackPackageV2(bytes.data(), bytes.size(), st_profile_generated::kProfileCode,
+                         st_profile_generated::kTargetAbi, &contents, &load_error)) {
+        if (detail_code) *detail_code = load_error != nullptr ? load_error : "PKG-E-001";
+        if (error) *error = "package v2 rejected by loader";
+        return false;
+    }
+    for (std::size_t index = 0; index < contents.view.program_names.size(); ++index)
+        out->emplace_back(contents.view.program_names[index], contents.program_ir[index]);
+    return true;
 }
 
 bool ProgrammingRuntimeCoordinator::read_staged_artifact(
@@ -509,23 +585,48 @@ bool ProgrammingRuntimeCoordinator::stage_impl(const StageCommand& command, bool
         if (error) *error = "another lifecycle operation is active";
         return false;
     }
+    /* T59-401: `instance_id` không còn bị khoá ở "program-main". Tên instance là
+     * dữ liệu của package; khoá cứng một tên nghĩa là chỉ nạp được đúng một
+     * Program mãi mãi. Vẫn ép định dạng để tên rác không đi vào scheduler. */
     if (!canonical_uuid(command.operation_id) || !canonical_uuid(command.revision_id) ||
-        command.instance_id != "program-main" || !lowercase_hex_64(command.plan_hash)) {
+        !valid_instance_id(command.instance_id) || !lowercase_hex_64(command.plan_hash)) {
         if (detail_code) *detail_code = "IPC-PAYLOAD";
         if (error) *error = "operation/revision/instance/plan identity invalid";
         return false;
     }
     std::vector<uint8_t> bytes;
     if (!read_staged_artifact(command, &bytes, detail_code, error)) return false;
-    instance_id_ = command.instance_id.empty() ? "program-main" : command.instance_id;
-    if (!ensure_instance(error)) {
+
+    std::vector<std::pair<std::string, std::vector<uint8_t>>> programs;
+    if (!split_package(bytes, command.instance_id, &programs, detail_code, error)) return false;
+    std::vector<std::string> instance_ids;
+    instance_ids.reserve(programs.size());
+    for (const auto& program : programs) {
+        if (!valid_instance_id(program.first)) {
+            if (detail_code) *detail_code = "IPC-PAYLOAD";
+            if (error) *error = "package program name is not a valid instance id";
+            return false;
+        }
+        instance_ids.push_back(program.first);
+    }
+    if (!ensure_topology(instance_ids, error)) {
         if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
         return false;
     }
-    if (!scheduler_->stage_activation(instance_id_, bytes, error)) {
-        if (detail_code) *detail_code = "IPC-STAGE-REJECTED";
-        return false;
+    /* Stage TỪNG Program. Một Program hỏng làm cả package hỏng, và mọi Program
+     * đã stage trước đó phải được huỷ — nạp nửa gói là nạp một cấu hình chưa
+     * từng được Check. */
+    for (std::size_t index = 0; index < programs.size(); ++index) {
+        if (!scheduler_->stage_activation(programs[index].first, programs[index].second, error)) {
+            std::string ignored;
+            for (std::size_t undo = 0; undo < index; ++undo)
+                (void)scheduler_->abort_staged_activation(programs[undo].first, &ignored);
+            if (detail_code) *detail_code = "IPC-STAGE-REJECTED";
+            return false;
+        }
     }
+    instance_ids_ = instance_ids;
+    instance_id_ = instance_ids_.front();
     operation_id_ = command.operation_id;
     revision_id_ = command.revision_id;
     artifact_hash_ = hex_digest(command.sha256.data(), command.sha256.size());
@@ -539,7 +640,8 @@ bool ProgrammingRuntimeCoordinator::stage_impl(const StageCommand& command, bool
     first_cycle_journaled_.store(false, std::memory_order_relaxed);
     if (!append_phase(StJournalPhase::PREPARED, error)) {
         std::string ignored;
-        (void)scheduler_->abort_staged_activation(instance_id_, &ignored);
+        for (const std::string& id : instance_ids_)
+            (void)scheduler_->abort_staged_activation(id, &ignored);
         if (detail_code) *detail_code = "IPC-JOURNAL-FSYNC";
         return false;
     }
@@ -586,9 +688,13 @@ bool ProgrammingRuntimeCoordinator::activate(const ActivateCommand& command,
         if (detail_code) *detail_code = "IPC-JOURNAL-FSYNC";
         return false;
     }
-    if (!scheduler_->commit_staged_activation(instance_id_, staged_restore_, error)) {
-        if (detail_code) *detail_code = "IPC-ACTIVATE-ARM";
-        return false;
+    /* Arm TẤT CẢ instance của package. Arm một phần rồi lỗi sẽ để package ở
+     * trạng thái nửa cũ nửa mới ngay tại boundary kế tiếp. */
+    for (const std::string& id : instance_ids_) {
+        if (!scheduler_->commit_staged_activation(id, staged_restore_, error)) {
+            if (detail_code) *detail_code = "IPC-ACTIVATE-ARM";
+            return false;
+        }
     }
     cutover_->request(command.cutover);
     state_.store(LifecycleState::COMMIT_INTENT, std::memory_order_release);
@@ -703,14 +809,18 @@ void ProgrammingRuntimeCoordinator::on_safe_boundary() noexcept
     if (current == LifecycleState::ROLLING_BACK) {
         scheduler_->apply_pending_activations_at_boundary();
         (void)cutover_->apply_pending_at_boundary();
-        StProgramInstance* instance = scheduler_->find_program(instance_id_);
+        /* MỌI instance phải quay về bản cũ và chạy lại. Chỉ khôi phục instance
+         * chính sẽ để package ở trạng thái nửa cũ nửa mới. */
         std::string ignored;
-        if (instance && instance->state == StProgramState::ROLLED_BACK &&
-            scheduler_->start(instance_id_, &ignored)) {
-            state_.store(LifecycleState::ROLLED_BACK, std::memory_order_release);
-        } else {
-            state_.store(LifecycleState::FAILED, std::memory_order_release);
+        bool rolled_back = true;
+        for (const std::string& id : instance_ids_) {
+            StProgramInstance* instance = scheduler_->find_program(id);
+            rolled_back = rolled_back && instance != nullptr &&
+                          instance->state == StProgramState::ROLLED_BACK &&
+                          scheduler_->start(id, &ignored);
         }
+        state_.store(rolled_back ? LifecycleState::ROLLED_BACK : LifecycleState::FAILED,
+                     std::memory_order_release);
         return;
     }
     if (current == LifecycleState::IDLE || current == LifecycleState::FAILED ||
@@ -721,16 +831,18 @@ void ProgrammingRuntimeCoordinator::on_safe_boundary() noexcept
     if (current != LifecycleState::COMMIT_INTENT) return;
     scheduler_->apply_pending_activations_at_boundary();
     (void)cutover_->apply_pending_at_boundary();
-    StProgramInstance* instance = scheduler_->find_program(instance_id_);
-    if (!instance || (instance->state != StProgramState::ACTIVE &&
-                      instance->state != StProgramState::ROLLED_BACK)) {
-        cutover_->request(CutoverMode::GRAPH_ONLY);
-        (void)cutover_->apply_pending_at_boundary();
-        state_.store(LifecycleState::FAILED, std::memory_order_release);
-        return;
-    }
     std::string ignored;
-    if (!scheduler_->start(instance_id_, &ignored)) {
+    bool all_started = true;
+    for (const std::string& id : instance_ids_) {
+        StProgramInstance* instance = scheduler_->find_program(id);
+        if (!instance || (instance->state != StProgramState::ACTIVE &&
+                          instance->state != StProgramState::ROLLED_BACK) ||
+            !scheduler_->start(id, &ignored)) {
+            all_started = false;
+            break;
+        }
+    }
+    if (!all_started) {
         cutover_->request(CutoverMode::GRAPH_ONLY);
         (void)cutover_->apply_pending_at_boundary();
         state_.store(LifecycleState::FAILED, std::memory_order_release);

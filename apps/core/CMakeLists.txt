@@ -74,6 +74,12 @@ add_library(core_application STATIC
     application/st/st_process_image.cpp
     application/st/st_retain.cpp
     application/st/st_journal.cpp
+    # T59-401: runtime cần LOADER package v2 để nạp gói nhiều Program.
+    # Chỉ thêm TU này, không kéo cả `st_compiler_lib` vào nhị phân điều
+    # khiển — compiler không có việc gì trên board đang chạy.
+    application/st/st_package_v2.cpp
+    application/st/st_pou_registry.cpp
+    application/st/st_fb_instance_layout.cpp
     application/st/st_control_api.cpp)
 target_link_libraries(core_application PUBLIC
     core_domain core_build_settings PkgConfig::SODIUM)
@@ -111,9 +117,11 @@ target_link_libraries(core_lib INTERFACE
 # làm cho điều đó thành ràng buộc LINK-TIME chứ không phải kỷ luật lập trình —
 # mkddc-core không liên kết st_compiler_lib nên không thể vô tình gọi parser.
 # Chiều phụ thuộc: st_compiler_lib -> core_lib (không bao giờ ngược lại).
+# `st_pou_registry`/`st_fb_instance_layout`/`st_package_v2` nay thuộc
+# `core_application` (T59-401: runtime cần loader package v2). `st_compiler_lib`
+# link `core_lib` nên vẫn dùng được — biên dịch lại ở đây sẽ tạo ký hiệu trùng.
 add_library(st_compiler_lib STATIC
-    application/st/st_parser.cpp application/st/st_pou_registry.cpp
-    application/st/st_fb_instance_layout.cpp application/st/st_package_v2.cpp
+    application/st/st_parser.cpp
     application/st/st_semantic.cpp application/st/st_review_gate.cpp
     application/st/st_compile.cpp application/st/st_ir.cpp
     application/st/st_artifact_manifest.cpp
@@ -183,6 +191,7 @@ if(CORE_BUILD_TESTS)
       application/runtime/test_scan_loop.cpp
       application/programming/tests/test_program_ipc_server.cpp
       application/programming/tests/test_programming_runtime_coordinator.cpp
+      application/programming/tests/test_programming_package_v2_stage.cpp
       adapters/ipc/tests/test_program_ipc_unix.cpp
       application/programming/tests/test_program_error_catalog.cpp
       adapters/ipc/tests/test_web_ipc.cpp domain/graph/tests/test_graph_runtime.cpp
