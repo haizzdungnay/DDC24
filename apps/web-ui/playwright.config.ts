@@ -47,7 +47,9 @@ export default defineConfig({
       // TASK-PROG-500: bốn workspace Programming chỉ hiện sau cờ này; mặc
       // định TẮT ở production, bật riêng cho dev server e2e để có bằng
       // chứng trình duyệt thật (không phải mock) cho toàn bộ P5.
-      VITE_PROGRAMMING_REV_A: '1'
+      VITE_PROGRAMMING_REV_A: '1',
+      // Tắt file watcher của Vite: xem ghi chú ở `vite.config.ts`.
+      VITE_E2E_NO_WATCH: '1'
     }
   }
 })

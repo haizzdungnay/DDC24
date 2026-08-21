@@ -36,7 +36,12 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       port: 5173,
-      proxy: developmentProxy(target)
+      proxy: developmentProxy(target),
+      // Dev server phục vụ E2E KHÔNG cần theo dõi file: Playwright không sửa
+      // nguồn giữa lúc chạy, nên watcher chỉ đem lại hai thứ — hàng chục nghìn
+      // inotify watch, và nguy cơ Vite rebuild giữa một assertion. Tắt hẳn cho
+      // đường E2E; đường dev thường giữ nguyên HMR.
+      watch: env.VITE_E2E_NO_WATCH === '1' ? null : undefined
     },
     build: {
       outDir: '../../build/web-ui/dist',
