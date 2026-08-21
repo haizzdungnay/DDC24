@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -82,6 +84,7 @@ type checkResultDocument struct {
 type CheckServiceOptions struct {
 	Store         *programmingstore.Store
 	Runner        programmingcompiler.Runner
+	Packager      programmingcompiler.Packager
 	Artifacts     *programmingartifact.Store
 	TargetID      string
 	LeaseDuration time.Duration
@@ -92,6 +95,7 @@ type CheckServiceOptions struct {
 type CheckService struct {
 	store         *programmingstore.Store
 	runner        programmingcompiler.Runner
+	packager      programmingcompiler.Packager
 	artifacts     *programmingartifact.Store
 	targetID      string
 	leaseDuration time.Duration
@@ -120,8 +124,8 @@ func NewCheckService(options CheckServiceOptions) (*CheckService, error) {
 	if options.NewID == nil {
 		options.NewID = uuid.NewString
 	}
-	return &CheckService{store: options.Store, runner: options.Runner, artifacts: options.Artifacts,
-		targetID: options.TargetID, leaseDuration: options.LeaseDuration, now: options.Now, newID: options.NewID,
+	return &CheckService{store: options.Store, runner: options.Runner, packager: options.Packager,
+		artifacts: options.Artifacts, targetID: options.TargetID, leaseDuration: options.LeaseDuration, now: options.Now, newID: options.NewID,
 		workerID: "check-worker-" + options.NewID(), wake: make(chan struct{}, 1)}, nil
 }
 
@@ -213,41 +217,90 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	if err != nil {
 		return true, err
 	}
-	input, scopeDiagnostic := compilerInput(revision)
-	if scopeDiagnostic != nil {
-		return true, s.complete(ctx, check, "FAILED", []DiagnosticView{*scopeDiagnostic}, nil)
+	inputs, scopeDiagnostics := compilerInputs(revision)
+	if len(scopeDiagnostics) > 0 {
+		return true, s.complete(ctx, check, "FAILED", scopeDiagnostics, nil)
 	}
-	result, err := s.runner.Compile(ctx, input)
-	if errors.Is(err, programmingcompiler.ErrTimeout) {
-		return true, s.complete(ctx, check, "TIMED_OUT", []DiagnosticView{workerDiagnostic("ST-WORKER-TIMEOUT")}, nil)
-	}
-	if err != nil {
-		// Crash/output lỗi giữ RUNNING cho tới lease expiry để cùng input được
-		// thử đúng một lần nữa. Lần hai vẫn chết sẽ được FailExhaustedChecks đóng.
-		return true, err
-	}
-	if !result.OK {
-		diagnostics := make([]DiagnosticView, 0, len(result.Diagnostics))
-		for _, item := range result.Diagnostics {
-			diagnostics = append(diagnostics, compilerDiagnostic(item))
+	// Biên dịch TỪNG Program và gộp kết quả. Một Program hỏng không dừng phần
+	// còn lại: người dùng phải thấy hết lỗi của package trong MỘT lần Check.
+	diagnostics := make([]DiagnosticView, 0)
+	results := make([]programmingcompiler.Result, 0, len(inputs))
+	for _, input := range inputs {
+		result, err := s.runner.Compile(ctx, input)
+		if errors.Is(err, programmingcompiler.ErrTimeout) {
+			return true, s.complete(ctx, check, "TIMED_OUT", []DiagnosticView{workerDiagnostic("ST-WORKER-TIMEOUT")}, nil)
 		}
-		if len(diagnostics) == 0 {
-			diagnostics = append(diagnostics, workerDiagnostic("ST-CLI-IO"))
+		if err != nil {
+			// Crash/output lỗi giữ RUNNING cho tới lease expiry để cùng input được
+			// thử đúng một lần nữa. Lần hai vẫn chết sẽ được FailExhaustedChecks đóng.
+			return true, err
 		}
+		if !result.OK {
+			programDiagnostics := make([]DiagnosticView, 0, len(result.Diagnostics))
+			for _, item := range result.Diagnostics {
+				view := compilerDiagnostic(item)
+				// Với package nhiều Program, một mã lỗi không kèm Program nào là
+				// một mã lỗi không dùng được: người đọc không biết mở file nào.
+				if view.Location == nil {
+					view.Location = map[string]any{}
+				}
+				// Ghi đè cả khi khoá đã có nhưng RỖNG: compiler một-nguồn không
+				// biết mình đang ở Program nào, nên nó luôn trả chuỗi rỗng.
+				if existing, _ := view.Location["programId"].(string); existing == "" {
+					view.Location["programId"] = input.SourceID
+				}
+				programDiagnostics = append(programDiagnostics, view)
+			}
+			if len(programDiagnostics) == 0 {
+				programDiagnostics = append(programDiagnostics, workerDiagnostic("ST-CLI-IO"))
+			}
+			diagnostics = append(diagnostics, programDiagnostics...)
+			continue
+		}
+		results = append(results, result)
+	}
+	if len(diagnostics) > 0 {
 		return true, s.complete(ctx, check, "FAILED", diagnostics, nil)
 	}
-	relative, err := s.artifacts.Put(result.ArtifactSHA256, result.Artifact)
+
+	artifacts := make([]packageProgramArtifact, 0, len(results))
+	for index, result := range results {
+		relative, err := s.artifacts.Put(result.ArtifactSHA256, result.Artifact)
+		if err != nil {
+			return true, err
+		}
+		if err := s.artifacts.Verify(relative, result.ArtifactSHA256, int64(len(result.Artifact))); err != nil {
+			return true, err
+		}
+		artifacts = append(artifacts, packageProgramArtifact{
+			ProgramID: inputs[index].SourceID, SHA256: hex.EncodeToString(result.ArtifactSHA256[:]),
+			ByteSize: int64(len(result.Artifact)), RelativePath: relative,
+			SchemaVersion: result.ArtifactSchemaVersion, TargetABI: result.TargetABI,
+			CompilerVersion: result.CompilerVersion, LibraryVersion: result.LibraryVersion,
+			IntegrityMode: result.IntegrityMode,
+		})
+	}
+	manifest, err := packageCheckManifest(artifacts, results)
 	if err != nil {
 		return true, err
 	}
-	if err := s.artifacts.Verify(relative, result.ArtifactSHA256, int64(len(result.Artifact))); err != nil {
+
+	// Hàng `artifacts` là thứ Commission STAGE sang Core. Một Program giữ đúng
+	// artifact v1 của nó; nhiều Program phải được bọc thành container v2 bằng
+	// CHÍNH writer production — trỏ hàng này vào artifact của Program đầu tiên
+	// sẽ là nói dối rằng cả package đã sẵn sàng stage.
+	storeArtifact, packageInfo, err := s.packageArtifact(ctx, check, inputs, results, artifacts)
+	if err != nil {
 		return true, err
 	}
-	artifact := &programmingstore.Artifact{ArtifactID: s.newID(), RevisionID: check.RevisionID, CheckID: check.CheckID,
-		SchemaVersion: result.ArtifactSchemaVersion, Profile: checkStoreProfile, TargetABI: result.TargetABI,
-		CompilerVersion: result.CompilerVersion, LibraryVersion: result.LibraryVersion, ByteSize: int64(len(result.Artifact)),
-		SHA256: result.ArtifactSHA256, RelativePath: relative, IntegrityMode: result.IntegrityMode}
-	return true, s.complete(ctx, check, "PASSED", []DiagnosticView{}, &completion{artifact: artifact, manifest: result.Manifest})
+	if packageInfo != nil {
+		manifest, err = packageCheckManifestWith(artifacts, results, packageInfo)
+		if err != nil {
+			return true, err
+		}
+	}
+	return true, s.complete(ctx, check, "PASSED", []DiagnosticView{},
+		&completion{artifact: storeArtifact, manifest: manifest})
 }
 
 type completion struct {
@@ -303,36 +356,55 @@ func checkInputHash(revision programmingstore.RevisionSnapshot, targetID string)
 	return output
 }
 
-func compilerInput(revision programmingstore.RevisionSnapshot) (programmingcompiler.Input, *DiagnosticView) {
+// compilerInputs dựng input cho MỌI Program của Revision, sắp theo `objectId` để
+// thứ tự biên dịch — và do đó thứ tự diagnostic — không phụ thuộc thứ tự đọc DB.
+// Một Check chạy lại trên cùng Revision phải cho đúng cùng dãy kết quả, nếu
+// không thì "deterministic build" chỉ là lời nói.
+func compilerInputs(revision programmingstore.RevisionSnapshot) ([]programmingcompiler.Input, []DiagnosticView) {
 	var programs []programmingstore.RevisionObject
+	userPou := 0
 	for _, object := range revision.Objects {
 		switch object.Kind {
 		case "PROGRAM":
 			programs = append(programs, object)
 		case "FUNCTION", "FUNCTION_BLOCK":
-			// User POU chưa được compiler nhận: T59-101..105 mở lane này.
-			diagnostic := scopeDiagnostic(object.ObjectID, domain.MaxUserPou)
-			return programmingcompiler.Input{}, &diagnostic
+			userPou++
 		}
+	}
+	if userPou > domain.MaxUserPou {
+		return nil, []DiagnosticView{scopeDiagnostic("", domain.MaxUserPou)}
 	}
 	// Trần capacity sản phẩm lấy từ profile, không phải hằng viết trong code.
 	// DDD §5.2 dành riêng `PRG-ERR-PROGRAM-LIMIT-001` cho vi phạm trần package —
-	// không gộp vào `PRG-ERR-SCOPE-001` như trước.
+	// không gộp vào `PRG-ERR-SCOPE-001`.
 	if len(programs) == 0 || len(programs) > domain.MaxProgramsTotal {
-		diagnostic := programLimitDiagnostic(len(programs), domain.MaxProgramsTotal)
-		return programmingcompiler.Input{}, &diagnostic
+		return nil, []DiagnosticView{programLimitDiagnostic(len(programs), domain.MaxProgramsTotal)}
 	}
-	// Trong trần capacity nhưng pipeline compiler hiện chỉ dựng được một Program
-	// mỗi lần chạy; multi-Program package là T59-302/T59-305. Đây là giới hạn
-	// giai đoạn của pipeline, KHÔNG phải capacity sản phẩm — nên nó được báo
-	// riêng và không ghi đè con số 32 ở nhánh trên.
-	if len(programs) != 1 {
-		diagnostic := scopeDiagnostic("", 1)
-		return programmingcompiler.Input{}, &diagnostic
+	sort.Slice(programs, func(left, right int) bool { return programs[left].ObjectID < programs[right].ObjectID })
+
+	inputs := make([]programmingcompiler.Input, 0, len(programs))
+	// GỘP diagnostic thay vì dừng ở Program đầu tiên hỏng. Dừng sớm bắt người
+	// dùng sửa từng lỗi một rồi chạy lại Check — với 32 Program đó là 32 vòng.
+	diagnostics := make([]DiagnosticView, 0)
+	for _, program := range programs {
+		input, diagnostic := programCompilerInput(revision, program)
+		if diagnostic != nil {
+			diagnostics = append(diagnostics, *diagnostic)
+			continue
+		}
+		inputs = append(inputs, input)
 	}
+	if len(diagnostics) > 0 {
+		return nil, diagnostics
+	}
+	return inputs, nil
+}
+
+func programCompilerInput(revision programmingstore.RevisionSnapshot,
+	program programmingstore.RevisionObject) (programmingcompiler.Input, *DiagnosticView) {
 	var payload map[string]json.RawMessage
-	if err := json.Unmarshal(programs[0].PayloadJSON, &payload); err != nil {
-		diagnostic := scopeDiagnostic(programs[0].ObjectID, 0)
+	if err := json.Unmarshal(program.PayloadJSON, &payload); err != nil {
+		diagnostic := scopeDiagnostic(program.ObjectID, 0)
 		return programmingcompiler.Input{}, &diagnostic
 	}
 	// Document v2 (T59-301) đặt identity ở `objectId` và mã nguồn ở `source`;
@@ -349,8 +421,8 @@ func compilerInput(revision programmingstore.RevisionSnapshot) (programmingcompi
 		document = payload["document"]
 	}
 	if json.Unmarshal(identity, &programID) != nil || json.Unmarshal(payload["language"], &language) != nil ||
-		programID != programs[0].ObjectID || (language != "ST" && language != "FBD") || len(document) == 0 {
-		diagnostic := scopeDiagnostic(programs[0].ObjectID, 0)
+		programID != program.ObjectID || (language != "ST" && language != "FBD") || len(document) == 0 {
+		diagnostic := scopeDiagnostic(program.ObjectID, 0)
 		return programmingcompiler.Input{}, &diagnostic
 	}
 	var source []byte
@@ -547,4 +619,127 @@ func checkView(check programmingstore.Check) (CheckView, error) {
 			TargetABI: a.TargetABI, CompilerVersion: a.CompilerVersion, LibraryVersion: a.LibraryVersion}
 	}
 	return view, nil
+}
+
+// packageProgramArtifact là một dòng trong manifest Check cấp package: mỗi
+// Program một artifact content-addressed. Đây là dữ liệu mà `T59-305` lắp thành
+// container v2 — ghi ra ngay từ Check để bước đó không phải biên dịch lại.
+type packageProgramArtifact struct {
+	ProgramID       string `json:"programId"`
+	SHA256          string `json:"sha256"`
+	ByteSize        int64  `json:"byteSize"`
+	RelativePath    string `json:"relativePath"`
+	SchemaVersion   int    `json:"artifactSchemaVersion"`
+	TargetABI       int64  `json:"targetAbi"`
+	CompilerVersion string `json:"compilerVersion"`
+	LibraryVersion  string `json:"libraryVersion"`
+	IntegrityMode   string `json:"integrityMode"`
+}
+
+// packageArtifact quyết định thứ Commission sẽ stage. Một Program: artifact v1
+// nguyên trạng. Nhiều Program: gọi packager để bọc thành container v2, rồi lưu
+// container đó content-addressed như mọi artifact khác.
+func (s *CheckService) packageArtifact(ctx context.Context, check programmingstore.Check,
+	inputs []programmingcompiler.Input, results []programmingcompiler.Result,
+	artifacts []packageProgramArtifact) (*programmingstore.Artifact, *programmingcompiler.PackageResult, error) {
+	if len(results) == 1 {
+		result := results[0]
+		return &programmingstore.Artifact{ArtifactID: s.newID(), RevisionID: check.RevisionID, CheckID: check.CheckID,
+			SchemaVersion: result.ArtifactSchemaVersion, Profile: checkStoreProfile, TargetABI: result.TargetABI,
+			CompilerVersion: result.CompilerVersion, LibraryVersion: result.LibraryVersion,
+			ByteSize: int64(len(result.Artifact)), SHA256: result.ArtifactSHA256,
+			RelativePath: artifacts[0].RelativePath, IntegrityMode: result.IntegrityMode}, nil, nil
+	}
+	if s.packager == nil {
+		// Không có packager mà vẫn báo PASSED sẽ là một Check nói "sẵn sàng"
+		// trong khi không có gì nạp được. Fail-closed và nêu đúng thứ còn thiếu.
+		return nil, nil, fmt.Errorf("package %d Program cần packager container v2", len(results))
+	}
+	programs := make([]programmingcompiler.PackageProgram, 0, len(results))
+	for index, result := range results {
+		programs = append(programs, programmingcompiler.PackageProgram{
+			Name: programPackageName(inputs[index].SourceID), Artifact: result.Artifact})
+	}
+	packaged, err := s.packager.Package(ctx, programs)
+	if err != nil {
+		return nil, nil, err
+	}
+	relative, err := s.artifacts.Put(packaged.SHA256, packaged.Package)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.artifacts.Verify(relative, packaged.SHA256, packaged.ByteSize); err != nil {
+		return nil, nil, err
+	}
+	return &programmingstore.Artifact{ArtifactID: s.newID(), RevisionID: check.RevisionID, CheckID: check.CheckID,
+		SchemaVersion: packaged.SchemaVersion, Profile: checkStoreProfile, TargetABI: packaged.TargetABI,
+		CompilerVersion: results[0].CompilerVersion, LibraryVersion: results[0].LibraryVersion,
+		ByteSize: packaged.ByteSize, SHA256: packaged.SHA256, RelativePath: relative,
+		IntegrityMode: results[0].IntegrityMode}, &packaged, nil
+}
+
+// programPackageName biến UUID thành tên Program hợp lệ trong container. Tên là
+// identity trong package v2 và không được chứa `=` hay dấu phân cách đường dẫn.
+func programPackageName(sourceID string) string {
+	name := strings.NewReplacer("-", "_", "=", "_", "/", "_", "\\", "_").Replace(sourceID)
+	if len(name) > 64 {
+		name = name[:64]
+	}
+	if name == "" {
+		name = "PROGRAM"
+	}
+	return "P_" + name[:min(len(name), 62)]
+}
+
+// packageCheckManifest tất định: `artifacts` đã sắp theo `programId` từ
+// `compilerInputs`, và `packageSha256` băm đúng dãy đó. Cùng một Revision Check
+// hai lần phải cho cùng `packageSha256` — đó là phép đo duy nhất biến
+// "deterministic build" thành thứ kiểm được.
+func packageCheckManifest(artifacts []packageProgramArtifact, results []programmingcompiler.Result) (json.RawMessage, error) {
+	return packageCheckManifestWith(artifacts, results, nil)
+}
+
+func packageCheckManifestWith(artifacts []packageProgramArtifact, results []programmingcompiler.Result,
+	packaged *programmingcompiler.PackageResult) (json.RawMessage, error) {
+	digest := sha256.New()
+	for _, artifact := range artifacts {
+		_, _ = digest.Write([]byte(artifact.ProgramID))
+		_, _ = digest.Write([]byte{0})
+		_, _ = digest.Write([]byte(artifact.SHA256))
+		_, _ = digest.Write([]byte{0})
+	}
+	var packageSum [sha256.Size]byte
+	copy(packageSum[:], digest.Sum(nil))
+
+	programManifests := make([]json.RawMessage, 0, len(results))
+	for _, result := range results {
+		if len(result.Manifest) > 0 {
+			programManifests = append(programManifests, result.Manifest)
+		}
+	}
+	// `contentSha256` băm dãy (programId, artifactSha256) — nó tất định theo NỘI
+	// DUNG và không phụ thuộc container. `containerSha256` là hash của chính
+	// package đã ghi. Giữ riêng hai con số vì chúng trả lời hai câu khác nhau:
+	// "nội dung có đổi không" và "byte nạp lên Core là gì".
+	containerSHA := ""
+	containerBytes := int64(0)
+	if packaged != nil {
+		containerSHA = hex.EncodeToString(packaged.SHA256[:])
+		containerBytes = packaged.ByteSize
+	}
+	return json.Marshal(struct {
+		SchemaVersion    int                      `json:"schemaVersion"`
+		ProgramCount     int                      `json:"programCount"`
+		ContentSHA256    string                   `json:"contentSha256"`
+		ContainerSHA256  string                   `json:"containerSha256,omitempty"`
+		ContainerBytes   int64                    `json:"containerBytes,omitempty"`
+		Artifacts        []packageProgramArtifact `json:"artifacts"`
+		ProgramManifests []json.RawMessage        `json:"programManifests,omitempty"`
+	}{
+		SchemaVersion: 2, ProgramCount: len(artifacts),
+		ContentSHA256:   hex.EncodeToString(packageSum[:]),
+		ContainerSHA256: containerSHA, ContainerBytes: containerBytes,
+		Artifacts:        artifacts,
+		ProgramManifests: programManifests,
+	})
 }
