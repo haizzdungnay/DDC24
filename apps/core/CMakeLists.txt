@@ -73,6 +73,7 @@ add_library(core_application STATIC
     application/st/st_scheduler.cpp
     application/programming/program_candidate_registry.cpp
     application/st/st_signal_bus.cpp
+    application/st/st_value_trace.cpp
     application/st/st_process_image.cpp
     application/st/st_retain.cpp
     application/st/st_journal.cpp
@@ -223,6 +224,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/programming/tests/test_program_candidate_registry.cpp
       application/st/tests/test_st_program_lanes.cpp
+      application/st/tests/test_st_value_trace.cpp
       application/st/tests/test_st_signal_bus.cpp
       application/st/tests/test_st_program_release.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp
