@@ -300,7 +300,7 @@ END_PROGRAM
 
 /* ---- Hold-last + rút proposal an toàn (TASK-PROG-401, DDD-CTRL-PROG-001 §6) ---- */
 
-TEST(StIntegration, HoldLastKeepsPreviousProposalIndefinitelyWhenTtlUnconfigured)
+TEST(StIntegration, HoldLastKeepsPreviousProposalIndefinitelyWhenTtlDisabled)
 {
     StScheduler sched;
     make_running(&sched, doubler_artifact());
@@ -322,15 +322,16 @@ TEST(StIntegration, HoldLastKeepsPreviousProposalIndefinitelyWhenTtlUnconfigured
     ASSERT_EQ(sched.find_program("p")->state, StProgramState::FAULTED);
     st_apply_all_outputs(&sched, &resolver, &table, &stats);
 
-    /* hold_ttl_base_steps=0: TTL CHƯA được Product+Controls ký (§15) -> hold
-     * KHÔNG GIỚI HẠN, không tự rút proposal cũ. */
+    /* `hold_ttl_ns = 0` TẮT HẲN TTL -> giữ vô hạn. Sau ADR-051 đây chỉ còn là
+     * affordance chẩn đoán: đường sản phẩm luôn mang TTL đã ký, xem
+     * T59_406_ScanDepsDefaultIsSignedTtlNotUnlimitedHold. */
     EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 0, &stats), 0u);
     EXPECT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC)
-        << "hold-last phải giữ proposal cũ khi TTL chưa cấu hình";
+        << "TTL tắt thì hold-last phải giữ proposal cũ";
     EXPECT_FLOAT_EQ(resolver.resolve().ao[0], 10.0f);
 }
 
-TEST(StIntegration, HoldLastWithdrawsExactlyWhenTtlBaseStepsElapseAfterFault)
+TEST(StIntegration, HoldLastWithdrawsExactlyWhenTtlElapsesAfterFault)
 {
     StScheduler sched;
     make_running(&sched, doubler_artifact());
@@ -341,27 +342,32 @@ TEST(StIntegration, HoldLastWithdrawsExactlyWhenTtlBaseStepsElapseAfterFault)
 
     StIoBridgeStats stats;
     st_load_all_inputs(&sched, table, &stats);
-    sched.tick(100 * kMs);   /* base_step=2, publish thành công */
+    sched.tick(100 * kMs);   /* publish thành công tại t=100 ms */
     ASSERT_TRUE(st_apply_all_outputs(&sched, &resolver, &table, &stats));
-    ASSERT_EQ(sched.find_program("p")->output_commit_generation, 2u);
+    ASSERT_EQ(sched.find_program("p")->output_commit_now_ns, 100 * kMs);
 
-    sched.tick(200 * kMs);   /* base_step=3, FAULTED (input snapshot cũ) */
+    sched.tick(200 * kMs);   /* FAULTED (input snapshot cũ) */
     ASSERT_EQ(sched.find_program("p")->state, StProgramState::FAULTED);
     st_apply_all_outputs(&sched, &resolver, &table, &stats);
 
-    /* holdTtl=2 base step kể từ output_commit_generation=2 -> ngưỡng rút là
-     * base_step=4. Tại base_step=3 (còn trong TTL) CHƯA được rút. */
-    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 2, &stats), 0u);
+    /* TTL 200 ms kể từ lệnh cuối (t=100 ms) -> ngưỡng rút là t=300 ms. Tại
+     * t=200 ms còn trong TTL nên CHƯA được rút. */
+    const uint64_t ttl_ns = 200 * kMs;
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, ttl_ns, &stats), 0u);
     EXPECT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC)
         << "còn trong holdTtl, chưa tới lúc rút";
 
-    sched.tick(300 * kMs);   /* base_step=4: đủ ngưỡng holdTtl */
-    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 2, &stats), 1u);
+    /* Ngay TRƯỚC ngưỡng một ns vẫn phải giữ: biên là >=, không phải "khoảng đó". */
+    sched.tick(300 * kMs - 1);
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, ttl_ns, &stats), 0u);
+
+    sched.tick(300 * kMs);   /* đúng ngưỡng holdTtl */
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, ttl_ns, &stats), 1u);
     EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT)
         << "hết holdTtl phải rút proposal, nhả quyền cho downstream";
 
     /* Idempotent: gọi lại không rút thêm lần hai (đã outputs_withdrawn). */
-    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 2, &stats), 0u);
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, ttl_ns, &stats), 0u);
 }
 
 TEST(StIntegration, StoppedProgramWithdrawsImmediatelyRegardlessOfTtl)
@@ -440,6 +446,151 @@ TEST(StIntegration, RestartAfterWithdrawReclaimsPriorityAndResetsHoldLastTrackin
     ASSERT_TRUE(sched.stop("p", &err)) << err;
     EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, 0, &stats), 1u)
         << "sau khi publish lại, dừng lần hai phải rút được lần nữa";
+}
+
+/* ---- TTL hold-last đã ký (ADR-051, DDD-CTRL-PROG-001 §6/§15) ---- */
+
+TEST(StIntegration, T59_406_SignedHoldTtlIsSixtySecondsOfWallClock)
+{
+    /* Quyết định là 60 GIÂY. Đo bằng số vòng quét thì cùng một quyết định lại
+     * cho ra thời gian giữ khác nhau tuỳ base step và tuỳ vòng lặp có chạy đúng
+     * nhịp hay không — đúng thứ người ký KHÔNG ký. */
+    EXPECT_EQ(st_hold_ttl::kSignedTtlMs, 60000u);
+    EXPECT_EQ(st_hold_ttl::kSignedTtlNs, 60000000000ull);
+    EXPECT_LE(st_hold_ttl::kSignedTtlMs, st_hold_ttl::kMaxConfigurableMs);
+
+    /* Tiền đề của con số: TTL >= 2x chu kỳ Task chậm nhất. Tuổi lệnh cuối lúc
+     * Program chết đã có thể bằng trọn một chu kỳ, nên TTL nhỏ hơn 2x làm thời
+     * gian giữ THỰC TẾ trôi xuống tận 0 — không hứa được gì với người vận hành. */
+    EXPECT_EQ(st_hold_ttl::max_allowed_period_ms(), 30000u);
+    EXPECT_GE(st_hold_ttl::kSignedTtlMs, 2u * st_hold_ttl::max_allowed_period_ms());
+}
+
+TEST(StIntegration, T59_406_ScanDepsDefaultIsSignedTtlNotUnlimitedHold)
+{
+    /* Mặc định `0` cũ nghĩa là GIỮ VÔ HẠN. Bất kỳ đường nối dây nào quên set
+     * field đều âm thầm quay lại đúng hành vi ADR-051 đóng, và không test hành
+     * vi nào bắt được vì "không rút" trông y hệt "chưa tới hạn". */
+    const ScanDeps defaults{};
+    EXPECT_EQ(defaults.program_hold_ttl_ns, st_hold_ttl::kSignedTtlNs);
+    EXPECT_GT(defaults.program_hold_ttl_ns, 0u);
+}
+
+TEST(StIntegration, T59_406_HoldTtlWithdrawsProgramThatStoppedPublishingWithoutFaultState)
+{
+    StScheduler sched;
+    make_running(&sched, doubler_artifact());
+
+    PointTable table;
+    PriorityResolver resolver;
+    programming::ProgramCandidateRegistry registry;
+    set_ai(&table, 0, 5.0f);
+
+    StIoBridgeStats stats;
+    std::string err;
+    st_load_all_inputs(&sched, table, &stats);
+    sched.tick(100 * kMs);
+    ASSERT_TRUE(st_apply_all_outputs(&sched, &resolver, &table, &stats));
+    ASSERT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC);
+    ASSERT_TRUE(st_register_instance_candidates(*sched.find_program("p"), &registry,
+                                                sched.base_step_count(), &err))
+        << err;
+    ASSERT_EQ(registry.owner_of(PointKind::AO, 0), "p");
+
+    /* Task bị disable: Program KHÔNG chuyển FAULTED, không chuyển STOPPED —
+     * nó vẫn RUNNING và chỉ đơn giản không bao giờ được release nữa. Đây là
+     * đường im lặng mà chính sách "chỉ rút khi FAULTED" để lọt: lệnh cuối sống
+     * vĩnh viễn dù không còn ai tính ra nó. */
+    sched.tasks()[0]->set_enabled(false);
+    ASSERT_EQ(sched.find_program("p")->state, StProgramState::RUNNING);
+
+    const uint64_t ttl_ns = 5000 * kMs;   /* 5 s */
+    const uint64_t threshold = sched.find_program("p")->output_commit_now_ns + ttl_ns;
+    for (uint64_t now = 200 * kMs; now < threshold; now += 500 * kMs) {
+        sched.tick(now);
+        ASSERT_EQ(st_withdraw_stale_outputs(&sched, &resolver, ttl_ns, &registry, &stats), 0u)
+            << "còn trong TTL mà đã rút, now_ns=" << now;
+        ASSERT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC);
+    }
+
+    sched.tick(threshold);
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, ttl_ns, &registry, &stats), 1u);
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT)
+        << "hết TTL thì lệnh cũ phải nhả, kể cả khi Program chưa từng mang trạng thái FAULTED";
+
+    const programming::CandidateClaim* claim = registry.find(PointKind::AO, 0);
+    ASSERT_NE(claim, nullptr);
+    EXPECT_FALSE(claim->active);
+    EXPECT_EQ(claim->withdraw_reason, programming::CandidateWithdrawReason::FAULT_TTL_EXPIRED)
+        << "rút vì hết TTL phải mang đúng lý do đó, không lẫn với lệnh operator";
+    EXPECT_TRUE(registry.owner_of(PointKind::AO, 0).empty());
+}
+
+TEST(StIntegration, T59_406_NeverPublishedInstanceIsNotWithdrawnByTtl)
+{
+    StScheduler sched;
+    make_running(&sched, doubler_artifact());
+
+    PointTable table;
+    PriorityResolver resolver;
+    programming::ProgramCandidateRegistry registry;
+
+    /* Không set_ai -> input không GOOD -> Program fault ngay lần chạy đầu và
+     * KHÔNG BAO GIỜ publish. `output_commit_generation` đứng ở 0. */
+    StIoBridgeStats stats;
+    for (int i = 1; i <= 10; ++i) {
+        st_load_all_inputs(&sched, table, &stats);
+        sched.tick(static_cast<uint64_t>(i) * 100 * kMs);
+        st_apply_all_outputs(&sched, &resolver, &table, &stats);
+    }
+    ASSERT_EQ(sched.find_program("p")->output_commit_generation, 0u);
+    ASSERT_EQ(sched.find_program("p")->output_commit_now_ns, 0u);
+
+    /* Instance chưa từng giữ gì thì không có gì để rút — ghi một dòng "đã rút"
+     * ở đây chỉ làm nhiễu đúng chỗ người vận hành cần đọc khi có sự cố thật. */
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, kMs, &registry, &stats), 0u);
+    EXPECT_FALSE(sched.find_program("p")->outputs_withdrawn);
+    EXPECT_EQ(registry.find(PointKind::AO, 0), nullptr);
+}
+
+TEST(StIntegration, T59_406_SlowestHealthyTaskNeverReachesSignedHoldTtl)
+{
+    /* Task 30 s trên base step 1 s là trường hợp xấu nhất của profile: lệnh
+     * cuối luôn già tới 30 base step ngay cả khi mọi thứ khoẻ mạnh. Test này
+     * canh chính tiền đề của ADR-051 — nếu ai đó hạ TTL xuống dưới 2x chu kỳ
+     * chậm nhất, một hệ HOÀN TOÀN BÌNH THƯỜNG sẽ bị rút đầu ra định kỳ. */
+    StScheduler sched;
+    std::string err;
+    ASSERT_TRUE(sched.add_task(task_cfg("T", 30000), &err)) << err;
+    ASSERT_TRUE(sched.add_program("T", "p", 0, &err)) << err;
+    ASSERT_TRUE(sched.request_activation("p", doubler_artifact(), &err)) << err;
+    sched.tick(0);
+    ASSERT_TRUE(sched.start("p", &err)) << err;
+
+    PointTable table;
+    PriorityResolver resolver;
+    set_ai(&table, 0, 5.0f);
+
+    StIoBridgeStats stats;
+    const uint64_t ttl_ns = st_hold_ttl::kSignedTtlNs;
+    for (uint64_t step = 1; step <= 300; ++step) {
+        set_ai(&table, 0, 5.0f);
+        st_load_all_inputs(&sched, table, &stats);
+        sched.tick(step * 1000 * kMs);           /* base step 1 s */
+        st_apply_all_outputs(&sched, &resolver, &table, &stats);
+        ASSERT_EQ(st_withdraw_stale_outputs(&sched, &resolver, ttl_ns, &stats), 0u)
+            << "hệ khoẻ mạnh bị rút đầu ra tại base_step=" << step;
+        /* Trước lần tới hạn ĐẦU TIÊN của Task 30 s thì chưa có lệnh nào để giữ;
+         * khẳng định mức 5 ở đó là khẳng định sai chỗ. */
+        if (sched.find_program("p")->output_commit_generation > 0) {
+            ASSERT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC)
+                << "base_step=" << step;
+        }
+    }
+    EXPECT_EQ(sched.find_program("p")->state, StProgramState::RUNNING);
+    /* 300 s / 30 s: phải có ít nhất 9 lần publish thật, nếu không thì test đã
+     * "pass" chỉ vì Task chưa bao giờ chạy. */
+    EXPECT_GE(stats.output_batches_committed, 9u);
 }
 
 TEST(StIntegration, NonFiniteInputIsBlockedAtBoundary)
@@ -972,12 +1123,16 @@ TEST(StIntegration, TenThousandCycleSoakStaysAllocationFreeAndBounded)
     deps.mode = CutoverMode::PROGRAM_ONLY;
     ScanLoop loop(deps);
 
-    for (int i = 0; i < 5; i++) { shm.ts_ns += 1000000; loop.step(); }
+    /* Mỗi scan step phải đẩy đồng hồ đúng MỘT BASE STEP (1 s Rev A). Bước 1 ms
+     * như trước làm Task 1 s chỉ chạy 10 lần trong "10.000 chu kỳ" — con số
+     * trong tên test khi đó nói về vòng lặp, không nói về chu kỳ chương trình,
+     * và mọi chính sách tính theo tuổi lệnh (hold TTL ADR-051) bị đo sai nhịp. */
+    for (int i = 0; i < 5; i++) { shm.ts_ns += 1000000000ull; loop.step(); }
 
     std::size_t allocations = 0;
     {
         allocation_probe::ScopedCounter counter;
-        for (int i = 0; i < 10000; i++) { shm.ts_ns += 1000000; loop.step(); }
+        for (int i = 0; i < 10000; i++) { shm.ts_ns += 1000000000ull; loop.step(); }
         allocations = counter.allocations();
     }
     EXPECT_LT(allocations, 10000u * 40u)
@@ -989,6 +1144,10 @@ TEST(StIntegration, TenThousandCycleSoakStaysAllocationFreeAndBounded)
     EXPECT_LE(trace.size(), trace.capacity());
     EXPECT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC)
         << "sau 10.000 chu kỳ, program vẫn là producer AO — không rơi vào FAULT im lặng";
+    /* ADR-051: soak chạy đúng nối dây production (`ScanDeps` mang TTL đã ký), nên
+     * nó cũng là bằng chứng TTL 60 s KHÔNG cắn vào hệ khoẻ mạnh suốt 10.000 chu
+     * kỳ — hold-last chỉ rút khi thật sự không còn ai publish. */
+    EXPECT_EQ(deps.program_hold_ttl_ns, st_hold_ttl::kSignedTtlNs);
 }
 
 } // namespace core

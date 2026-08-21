@@ -521,6 +521,7 @@ void StScheduler::apply_pending_activations(StTask& task)
             p->input_snapshot_valid = true;
             p->last_successful_base_step = 0;
             p->output_commit_generation = 0;
+            p->output_commit_now_ns = 0;
             p->outputs_withdrawn = false;
             p->retain_restore_state = p->pending_retain_restore_state;
             p->retain_reject_code = p->pending_retain_reject_code;
@@ -863,6 +864,7 @@ StSchedulerTickResult StScheduler::on_base_step(uint64_t now_ns)
 {
     StSchedulerTickResult result;
     result.base_step_sequence = ++base_step_count_;
+    last_tick_now_ns_ = now_ns;
 
     /* tasks_ đã sắp theo ưu tiên tăng dần từ lúc add_task. Non-preemptive:
      * task ưu tiên cao chạy TRỌN VẸN rồi mới tới task kế. */

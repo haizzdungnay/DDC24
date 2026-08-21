@@ -67,12 +67,15 @@ struct ScanDeps {
     CutoverMode       mode = CutoverMode::GRAPH_ONLY;
     ProgrammingCutover* cutover = nullptr;
     programming::ProgrammingRuntimeCoordinator* programming_coordinator = nullptr;
-    /* TASK-PROG-401, DDD-CTRL-PROG-001 §6: số base step tối đa một proposal
-     * PRIO_LOCAL_LOGIC được hold-last khi Program FAULTED trước khi bị rút
-     * (release_ao/release_do). 0 = TTL CHƯA được Product+Controls ký field
-     * decision (§15) — giữ hold-last KHÔNG GIỚI HẠN như hành vi trước
-     * TASK-PROG-401, không đổi bootstrap hiện hành nếu caller không set. */
-    uint64_t          program_hold_ttl_base_steps = 0;
+    /* TASK-PROG-401 + ADR-051, DDD-CTRL-PROG-001 §6: thời gian tối đa một
+     * proposal PRIO_LOCAL_LOGIC được hold-last kể từ lần publish cuối trước khi
+     * bị rút (release_ao/release_do), tính bằng ns theo đồng hồ của tick.
+     *
+     * Mặc định là giá trị ĐÃ KÝ (60 s), không còn là `0`. Mặc định `0` cũ có
+     * nghĩa "giữ vô hạn", nên bất kỳ đường nối dây nào quên set field này đều
+     * âm thầm quay về đúng hành vi mà ADR-051 đóng lại — mặc định an toàn phải
+     * là mặc định đã ký. `0` chỉ còn dùng cho test/chẩn đoán muốn tắt hẳn TTL. */
+    uint64_t          program_hold_ttl_ns = st_hold_ttl::kSignedTtlNs;
     /* T59-406: sổ đăng ký candidate output theo Program (kiến trúc §7). Nó chỉ
      * GHI NHẬN quyền sở hữu và lý do rút — trọng tài vẫn là `PriorityResolver`.
      * nullptr = không ghi sổ, hành vi y hệt trước. */

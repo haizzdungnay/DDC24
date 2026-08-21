@@ -90,6 +90,9 @@ int main(int argc, char** argv)
     CutoverMode programming_mode = CutoverMode::GRAPH_ONLY;
     bool programming_runtime_enabled = false;
     std::string programming_sock_path = "/run/mkddc/programming-v1.sock";
+    /* ADR-051: TTL hold-last đã ký là 60 s. CLI chỉ để commissioning/HIL đo hai
+     * biên mà không phải build lại; không set thì dùng đúng số đã ký. */
+    uint32_t program_hold_ttl_ms = st_hold_ttl::kSignedTtlMs;
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
@@ -123,6 +126,20 @@ int main(int argc, char** argv)
             }
         }
         else if (a == "--programming-runtime") programming_runtime_enabled = true;
+        else if (a == "--program-hold-ttl-ms" && i + 1 < argc) {
+            const long long ms = std::atoll(argv[++i]);
+            /* 0 KHÔNG được chấp nhận ở đường sản phẩm: 0 nghĩa là giữ đầu ra vô
+             * hạn khi chương trình chết — đúng hành vi ADR-051 đóng lại. Muốn
+             * tắt TTL thì phải sửa quyết định, không phải truyền một cờ. */
+            if (ms <= 0 || ms > static_cast<long long>(st_hold_ttl::kMaxConfigurableMs)) {
+                std::fprintf(stderr,
+                             "ERROR core.bad_program_hold_ttl_ms '%s' (cần 1..%u ms; 0/vô hạn"
+                             " bị cấm bởi ADR-051)\n",
+                             argv[i], st_hold_ttl::kMaxConfigurableMs);
+                return 1;
+            }
+            program_hold_ttl_ms = static_cast<uint32_t>(ms);
+        }
         else if (a == "--programming-sock" && i + 1 < argc)
             programming_sock_path = argv[++i];
         else if (a == "--help") {
@@ -130,6 +147,7 @@ int main(int argc, char** argv)
                         " [--safe-state-conf FILE] [--io-conf FILE] [--alarm-conf FILE]"
                         " [--schedule-conf FILE] [--scan-ms N]"
                         " [--programming-mode graph_only|program_only] [--programming-runtime]"
+                        " [--program-hold-ttl-ms N]"
                         " [--programming-sock PATH]"
                         " [--log-level LVL]\n");
             return 0;
@@ -241,6 +259,21 @@ int main(int argc, char** argv)
     std::fprintf(stderr, "INFO  core.base_step_ms=%llu programming_mode=%s\n",
                  static_cast<unsigned long long>(base_step_ns / 1000000ull),
                  programming_mode == CutoverMode::PROGRAM_ONLY ? "program_only" : "graph_only");
+
+    /* ADR-051 — TTL hold-last đo bằng đồng hồ, nên nó độc lập với base step.
+     * Chốt SAU khi base step đã thống nhất với graph.json chỉ để một lần log nói
+     * đủ hai con số cạnh nhau: TTL ngắn hơn một base step thì không lần publish
+     * nào kịp gia hạn, hold-last biến thành rút-ngay. */
+    const uint32_t base_step_ms = static_cast<uint32_t>(base_step_ns / 1000000ull);
+    if (program_hold_ttl_ms < base_step_ms) {
+        std::fprintf(stderr,
+                     "WARN  core.program_hold_ttl_ms=%u < base_step_ms=%u -> nâng lên 1 base step\n",
+                     program_hold_ttl_ms, base_step_ms);
+        program_hold_ttl_ms = base_step_ms;
+    }
+    const uint64_t program_hold_ttl_ns = st_hold_ttl::ns_from_ms(program_hold_ttl_ms);
+    std::fprintf(stderr, "INFO  core.program_hold_ttl_ms=%u signed_ms=%u base_step_ms=%u\n",
+                 program_hold_ttl_ms, st_hold_ttl::kSignedTtlMs, base_step_ms);
 
     PriorityResolver resolver;
 
@@ -403,6 +436,7 @@ int main(int argc, char** argv)
     scan_deps.programming_coordinator = programming_coordinator.get();
     scan_deps.candidate_registry = programming_runtime_enabled ? &programming_candidates : nullptr;
     scan_deps.value_trace = programming_runtime_enabled ? &programming_value_trace : nullptr;
+    scan_deps.program_hold_ttl_ns = program_hold_ttl_ns;
     ScanLoop loop(scan_deps);
 
     /* SIGHUP → reload io_config + io_safe_state + graph ở ranh giới scan;

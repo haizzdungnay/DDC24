@@ -80,24 +80,27 @@ bool st_apply_all_outputs(StScheduler* sched, PriorityResolver* resolver, PointT
  * gọi lại trên instance đã rút hoặc chưa từng load không lỗi. */
 bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityResolver* resolver);
 
-/* Chính sách hold-last + rút an toàn cho MỌI instance (DDD-CTRL-PROG-001 §6):
+/* Chính sách hold-last + rút an toàn cho MỌI instance (DDD-CTRL-PROG-001 §6,
+ * ADR-051):
  *  - STOPPED/DISABLED: rút NGAY tại safe boundary, không chờ TTL — lệnh dừng
  *    có chủ ý của operator phải nhả quyền ngay, không giữ mãi.
- *  - FAULTED giữ quá `hold_ttl_base_steps` kể từ lần publish thành công cuối
- *    (`output_commit_generation`): rút. `hold_ttl_base_steps == 0` nghĩa là
- *    TTL CHƯA được Product+Controls ký (DDD-CTRL-PROG-001 §15/§6: "Giá
- *    trị/TTL mặc định vẫn TARGET-PENDING") — giữ hold-last KHÔNG GIỚI HẠN
- *    như hành vi trước TASK-PROG-401, không tự đoán một con số chưa duyệt.
+ *  - Mọi instance ĐÃ từng publish mà lệnh cuối đã già hơn `hold_ttl_ns` theo
+ *    ĐỒNG HỒ của tick: rút, bất kể trạng thái là FAULTED, ROLLED_BACK hay
+ *    RUNNING-trong-Task-bị-disable. TTL đo tuổi của lệnh, không đo trạng thái,
+ *    nên trần "không lệnh mức 5 nào sống quá TTL" là tuyệt đối.
+ *  - `hold_ttl_ns == 0` TẮT TTL (giữ vô hạn). Sau ADR-051 đây chỉ còn là
+ *    affordance cho test/chẩn đoán: bootstrap sản phẩm LUÔN truyền giá trị đã
+ *    ký `st_hold_ttl::kSignedTtlNs` (60 s).
  * Trả về số instance vừa bị rút ở lần gọi này; gọi lại trên instance đã rút
  * là no-op (outputs_withdrawn chặn double-release). */
 uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
-                                   uint64_t hold_ttl_base_steps, StIoBridgeStats* stats);
+                                   uint64_t hold_ttl_ns, StIoBridgeStats* stats);
 
 /* T59-406 — bản có SỔ ĐĂNG KÝ. Cùng chính sách rút, nhưng ghi thêm LÝ DO vào
  * `programming::ProgramCandidateRegistry` để câu hỏi "vì sao van này về default"
  * có câu trả lời. `registry == nullptr` cho hành vi y hệt bản trên. */
 uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
-                                   uint64_t hold_ttl_base_steps,
+                                   uint64_t hold_ttl_ns,
                                    programming::ProgramCandidateRegistry* registry,
                                    StIoBridgeStats* stats);
 

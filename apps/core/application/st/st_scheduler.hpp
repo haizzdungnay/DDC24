@@ -82,6 +82,60 @@ constexpr uint32_t kMaxMs = 2000;
 constexpr uint32_t kMaxTaskBudgetPercent = st_profile_generated::kMaxTaskBudgetPercent;
 } // namespace st_base_step
 
+/* Hold-last TTL — ADR-051, DDD-CTRL-PROG-001 §6/§15.
+ *
+ * Con số này trả lời đúng một câu: thiết bị được phép giữ lệnh cuối cùng của
+ * một Program đã ngừng publish trong bao lâu trước khi nhả quyền cho mức ưu
+ * tiên tiếp theo/default. Trước ADR-051 nó là `0` — nghĩa là GIỮ VÔ HẠN: một
+ * van có thể đứng ở 73% mãi mãi vì chương trình chết chứ không vì ai ra lệnh.
+ *
+ * 60 s được chọn theo ba ràng buộc, không phải theo cảm tính:
+ *  1. `>= 2x` chu kỳ Task chậm nhất của profile (30 s). Tuổi của lệnh cuối tại
+ *     lúc Program chết đã có thể bằng trọn một chu kỳ, nên TTL nhỏ hơn 2x chu
+ *     kỳ làm thời gian giữ thực tế dao động tới tận 0 — không hứa được gì.
+ *     Ràng buộc này được `static_assert` bên dưới canh, không phải ghi chú.
+ *  2. Nằm trong dải fail-safe/watchdog quen thuộc của thiết bị BAS (10..60 s),
+ *     nên hành vi không gây bất ngờ cho người vận hành đã quen gear khác.
+ *  3. Ngắn hơn hằng số thời gian nhiệt của tải (phút tới hàng chục phút), nên
+ *     cụm thiết bị không chạy mù đủ lâu để lệch trạng thái.
+ *
+ * TTL KHÔNG chờ người vận hành reset: FAULTED là trạng thái chốt, hồi phục cần
+ * thao tác người. Giữ vô hạn để "đợi người" chính là lỗi mà ADR-051 đóng.
+ */
+namespace st_hold_ttl {
+/* Giá trị đã ký. Wall-clock, KHÔNG phải số base step: base step cấu hình được
+ * 500..2000 ms, ghim theo base step thì cùng một quyết định lại cho ra ba thời
+ * gian giữ khác nhau tuỳ site. */
+constexpr uint32_t kSignedTtlMs = 60000;
+
+/* Trần cho override tại field. Vượt trần này thì "giữ tạm" đã thành "giữ vô
+ * hạn" dưới một cái tên khác. */
+constexpr uint32_t kMaxConfigurableMs = 600000;
+
+constexpr uint32_t max_allowed_period_ms()
+{
+    uint32_t worst = 0;
+    for (const uint32_t period : st_profile_generated::kAllowedPeriodMs)
+        if (period > worst) worst = period;
+    return worst;
+}
+
+/* Profile mọc thêm một lớp chu kỳ chậm hơn thì tiền đề của ADR-051 gãy — bắt
+ * gãy ở lúc build, không phải lúc một van đứng im ngoài hiện trường. */
+static_assert(kSignedTtlMs >= 2u * max_allowed_period_ms(),
+              "hold TTL phải >= 2x chu kỳ Task chậm nhất của profile (ADR-051)");
+static_assert(kSignedTtlMs <= kMaxConfigurableMs, "TTL đã ký không được vượt trần field");
+
+constexpr uint64_t ns_from_ms(uint32_t ms) { return static_cast<uint64_t>(ms) * 1000000ull; }
+
+/* TTL đo bằng ĐỒNG HỒ, không bằng số vòng quét. Đếm vòng quét chỉ xấp xỉ thời
+ * gian khi vòng quét được nhịp đúng base step; mọi đường chạy nhanh hơn nhịp
+ * thật (soak, replay, catch-up sau khi trễ) sẽ làm "60 s" co lại thành mili
+ * giây mà không có gì báo. Một hẹn giờ an toàn không được phụ thuộc vào việc
+ * vòng lặp có đang chạy đúng tốc độ hay không. */
+constexpr uint64_t kSignedTtlNs = ns_from_ms(kSignedTtlMs);
+} // namespace st_hold_ttl
+
 enum class StSchedulerProfile : uint8_t {
     SUPPORTING_AS_BUILT = 0,
     REV_A,
@@ -186,6 +240,10 @@ struct StProgramInstance {
     const char* pending_retain_reject_code = nullptr;
     uint64_t pending_retain_generation = 0;
     uint64_t last_successful_now_ns = 0;
+    /* ADR-051: mốc ĐỒNG HỒ của lần commit output gần nhất, đi kèm
+     * `output_commit_generation` (mốc base step). TTL hold-last đọc mốc này chứ
+     * không đọc số base step, xem `st_hold_ttl`. */
+    uint64_t output_commit_now_ns = 0;
 
     /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §3). Mẫu giống
      * `has_pending`/`pending_commit_requested`: non-RT set `true` (release),
@@ -294,6 +352,13 @@ public:
 
     StSchedulerProfile profile() const { return profile_; }
     uint64_t base_step_count() const { return base_step_count_; }
+
+    /* Đồng hồ của tick gần nhất (ns), đúng giá trị caller truyền vào
+     * `on_base_step()`. Chính sách tính theo THỜI GIAN (hold TTL ADR-051) đọc ở
+     * đây thay vì tự gọi đồng hồ: cả hệ đã thống nhất một đồng hồ chụp một lần
+     * cho cả tick, thêm một nguồn thời gian thứ hai là thêm một cách để hai câu
+     * trả lời lệch nhau. */
+    uint64_t last_tick_now_ns() const { return last_tick_now_ns_; }
 
     /* Đồng hồ RIÊNG cho đo WCET/overrun (PROGRAM_TASK_SCHEDULER_SPEC §5:
      * `task_start`/`exec_ns`) — KHÁC với `now_ns` của on_base_step(), vốn
@@ -422,6 +487,7 @@ public:
 private:
     StSchedulerProfile profile_ = StSchedulerProfile::SUPPORTING_AS_BUILT;
     uint64_t base_step_count_ = 0;
+    uint64_t last_tick_now_ns_ = 0;
     std::vector<std::unique_ptr<StTask>> tasks_;
     StLoaderOptions loader_opts_;
     std::function<uint64_t()> wall_clock_ = default_monotonic_wall_clock_ns;
