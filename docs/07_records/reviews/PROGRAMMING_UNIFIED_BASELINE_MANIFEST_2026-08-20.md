@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.25 |
+| Phiên bản | 1.26 |
 | Trạng thái | Active |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -39,9 +39,9 @@ target, HIL hoặc release.
 | 10 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `d4992caf7d85275558de9c3e0553c31cbf686a28ddb61082a998edea666fec6d` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 11 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `716344cd9d21e3b32765cc1126418a0013518e86bdf3460f7ed8713d443d2a62` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `2d26255dda3f9431c79a2553e11f37de5641f04d377a8de0075af3a9cb672968` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `f397f4a1edc043df21b8064594ea71091574c50319c841d09d1aa57d534d0f0d` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `cdaf705c3495d8cbe81e9cf75f665dda2884ed9ad467a5f4c816e93ac66d2544` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `6069fe95ffaeffc0d7ffc0a8cff1bdd6caa31e390e94b882a338b9deae5d4f7a` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `6a0def15842d63c30689594d75eb31f0f27496da8543d4f47ea169a702d26fed` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `953388e60dea1dc2806f13f98c53dbaba8e6e06ec7811c1429cc8b519581abc6` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `38882dfc7cd083951e2184bf699f76451a7283ec37282794a2bf6b346bea1751` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `8dd7bd227861ded3a1da3478aec522826dc60716280bdd40b79fa23f7f1ef29a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 
 ## 3. Disposition baseline cũ
@@ -102,4 +102,5 @@ evidence release.
 | 1.22 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-304`. **Đánh giá impact:** dòng 13 thêm §5.37 và lịch sử 4.1, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence bất biến cấp package vào `SYS-REQ-PROG-112` và `SYS-REQ-PROG-114`; dòng 15 là status W3 + ghi chú §3.4. Unified DDD, SRS và VVP không đổi — §4.5/§4.6 vốn đã khoá hai bất biến này. |
 | 1.23 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-305`. **Đánh giá impact:** dòng 13 thêm §5.38 và lịch sử 4.2, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence topology/budget vào `SYS-REQ-PROG-111`; dòng 15 là status W3 + ghi chú §3.4. Unified DDD, SRS và VVP không đổi. |
 | 1.24 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-306` (**đóng Wave W3, 6/6 task**). **Đánh giá impact:** dòng 13 thêm §5.39 và lịch sử 4.3, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence PGM-02/03 vào `SWR-REQ-PROG-FE-116..118`; dòng 15 là status W3 + ghi chú §3.4. Unified DDD **không đổi** — §8 vốn đã khoá IA sáu trang, task chỉ đưa route đích về đúng chỗ. SRS và VVP không đổi. |
+| 1.26 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-402`. **Đánh giá impact:** dòng 13 thêm §5.41 và lịch sử 4.5, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence lập lịch theo Program vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status `T59-402` + ghi chú §3.5. Unified DDD **không đổi** — §7.1 vốn đã khoá ba lớp chu kỳ và trần 16/32. SRS và VVP không đổi. Golden package v2 đổi byte (PROGRAM_TABLE mang `periodMs`/`budgetUs`) nên `g1_contract_join_v1.json` được ghim lại cùng phiên. |
 | 1.25 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-401` (**mở Wave W4**). **Đánh giá impact:** dòng 13 thêm §5.40 và lịch sử 4.4, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence coordinator package v2 vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status W4 + mục ghi chú mới §3.5. Unified DDD **không đổi** — §5.3/§12.1 vốn đã khoá container và dual-reader. SRS và VVP không đổi. |

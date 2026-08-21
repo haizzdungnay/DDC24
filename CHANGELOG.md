@@ -8,6 +8,44 @@
 
 ## [Unreleased]
 
+### T59-402 — Lập lịch theo từng Program: chu kỳ, deadline, trần 16 (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/st_scheduler.{hpp,cpp}`,
+  `apps/core/application/st/st_package_v2.{hpp,cpp}`,
+  `apps/core/application/st/st_package_main.cpp`,
+  `apps/core/application/st/st_package_golden_main.cpp`,
+  `apps/core/application/programming/programming_runtime_coordinator.{hpp,cpp}`,
+  `apps/web-api/internal/programming/compiler/packager.go`,
+  `apps/web-api/internal/programming/application/checks.go`,
+  `contracts/programming/golden/*`, `contracts/programming/g1_contract_join_v1.json`,
+  `scripts/verify_programming_g1_contracts.py`, Plan 59 §3/§3.5, Risk Register v4.5,
+  Traceability v5.3, baseline manifest v1.26.
+- **Triệu chứng:** `run_task` chạy **mọi** Program mỗi lần Task tới hạn, nên một
+  Program cấu hình 30 s thực chất chạy 30 lần nhiều hơn thiết kế — kết quả khác
+  với thứ người dùng cấu hình, không chỉ là chạy nhanh hơn.
+- **Nguyên nhân gốc:** Task là đơn vị chạy duy nhất; `StProgramInstance` không có
+  chu kỳ riêng, và package v2 không mang chu kỳ nên runtime không có gì để theo.
+- **Cách sửa:** `st_program_due()`/`st_program_mark_released()` quyết định release
+  theo từng Program, bù trôi theo mốc **lý thuyết** (một tick trễ không đẩy mọi
+  deadline sau đó), lỡ chu kỳ thì **đếm và bỏ** chứ không chạy bù. `PROGRAM_TABLE`
+  của package mang `periodMs`/`budgetUs`; writer **và** loader cùng từ chối chu kỳ
+  ngoài ba lớp profile. Trần **16 Program chạy đồng thời** ép ở `start()`.
+  `add_program` chèn theo `order` nên thứ tự chạy độc lập thứ tự tạo.
+- **Sửa kèm 1 — package v2 không sống sót reboot.** `load_active_checkpoint` nạp
+  nguyên khối container vào một instance như thể artifact v1; loader IR v1 từ chối
+  magic `MKDDCIR2` và thiết bị tỉnh dậy **không có Program nào**. Nay đường khôi
+  phục đi qua đúng `split_package` + `ensure_topology` như đường stage.
+- **Sửa kèm 2 — bảng section golden không được canh.** Verifier G1 ghim hash và
+  `artifactBytes` nhưng không đối chiếu bảng section trong manifest với bảng thật
+  trong file, nên manifest có thể mô tả một file không còn tồn tại. Thêm
+  `golden_sections()` + self-test 25 ca sai lệch.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1159/1159** pass;
+  `scripts/verify-project.sh --wave W4` **5/5 PASS** (layout, cpp, go, docs,
+  candidate-pin); `verify_programming_g1_contracts.py --self-test` 34/34 mutation +
+  25/25 sai lệch bảng section + 6/6 chuỗi migration + 5/5 dry-run;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5, `RSK-PROG-001/005/018/022`, DDD §7.1.
+
 ### Added — `T59-401` Coordinator nạp package v2, bỏ hardcode `program-main` (2026-08-21)
 
 **Một parser, không hai.** `UnpackPackageV2` giữ lại blob IR nhưng dùng **đúng

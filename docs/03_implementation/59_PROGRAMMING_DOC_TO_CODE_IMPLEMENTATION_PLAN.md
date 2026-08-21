@@ -1291,7 +1291,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
 | `T59-401` | P0 | Package coordinator/loader v2 + topology image, bỏ hardcode `program-main` | T59-106/305 | **DONE** | `UnpackPackageV2` dùng **chung một parser** với loader (không bản thứ hai); coordinator probe v1/v2 và dựng topology theo **chính package** — bootstrap không còn phải biết trước tên Program; `instance_id` bỏ hardcode `program-main`, thay bằng validator định dạng; stage/arm/rollback/start chạy trên **toàn bộ** tập instance; gói hỏng để lại **0 mutation** (mọi stage trước đó bị huỷ); `instance_ids()` cho read-back; 4 test mới; `ctest` **1149/1149**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
-| `T59-402` | P0 | Per-Program due queue/state/period/budget/metrics, max 16 | T59-401 | ORDERED | 10-Program/3-period host fixture; deterministic deadline; creation reorder same result. |
+| `T59-402` | P0 | Per-Program due queue/state/period/budget/metrics, max 16 | T59-401 | **DONE** | Chu kỳ release theo **từng Program** (`st_program_due`/`st_program_mark_released`), bù trôi theo mốc **lý thuyết**, lỡ chu kỳ thì **đếm và bỏ** chứ không chạy bù; chu kỳ đi **trong PROGRAM_TABLE của package** nên hai controller cùng gói chạy cùng dãy release; writer **và** loader cùng từ chối chu kỳ ngoài ba lớp profile; trần **16 Program chạy đồng thời** ép ở `start()`; thứ tự chạy độc lập thứ tự tạo; đo `last_exec_ns`/`max_exec_ns`/`missed_release_count` theo Program. Sửa kèm: package v2 **không sống sót reboot** (đường restore nạp nguyên container như artifact v1). 11 test mới; `ctest` **1159/1159**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-403` | P0 | Worker lanes/fault isolation/no-allocation RT | T59-402 | ORDERED | Single/multicore same semantics; TSan/no allocation/blocking; one Program fault isolated. |
 | `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | ORDERED | No torn read; fallback/hold/wait; producer disable/fault/recover tests. |
 | `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | ORDERED | RBAC/idempotency/restart intent; STARTING/RUNNING/STOPPING/DISABLED truth. |
@@ -1344,6 +1344,67 @@ gì trên bộ điều khiển đang chạy.
 theo chu kỳ riêng, hàng đợi due và ngân sách thuộc `T59-402`; `instance_id_` vẫn
 được giữ làm instance chính vì journal v1 ghi một id — đổi định dạng journal ở
 đây sẽ làm mọi bản ghi cũ không đọc được.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-402` — Chu kỳ, hàng đợi due và ngân sách theo từng Program
+
+**Task đến hạn KHÔNG có nghĩa mọi Program đến hạn.** Một package hợp lệ có ba lớp
+chu kỳ (1 s / 5 s / 30 s) chạy trong cùng một Task. Trước task này `run_task`
+chạy **mọi** Program mỗi lần Task tới hạn, nên một Program 30 s thực chất chạy
+30 lần nhiều hơn thiết kế — sai không phải ở chỗ chậm, mà ở chỗ **kết quả khác**
+với thứ người dùng cấu hình. Nay `st_program_due()` quyết định từng Program.
+
+**Bù trôi theo mốc LÝ THUYẾT, không theo thời điểm chạy thật.** `next_release_ns`
+cộng từ deadline trước đó chứ không từ `now`. Bám thời điểm thật sẽ làm một tick
+trễ 300 ms đẩy **mọi** deadline sau đó trôi theo, và sau vài giờ chu kỳ danh
+nghĩa 1 s không còn là 1 s. Test khoá đúng ca này: trễ 300 ms ở tick thứ hai
+nhưng deadline kế tiếp vẫn là mốc 2000 ms.
+
+**Lỡ chu kỳ thì ĐẾM và BỎ.** Nhảy từ 0 lên 5,4 s làm lỡ bốn mốc;
+`missed_release_count` tăng 4 và Program chạy **một** lần. Chạy bù bốn lần là
+cách chắc chắn nhất để một lần quá tải trở thành một chuỗi quá tải.
+
+**Chu kỳ là dữ liệu của PACKAGE.** `PROGRAM_TABLE` nay mang `periodMs` +
+`budgetUs` cho từng Program, và coordinator áp chúng lên instance mỗi lần dựng
+topology — kể cả khi instance đã tồn tại, vì một gói mới có thể đổi chu kỳ của
+Program cũ. Để runtime tự chọn chu kỳ nghĩa là hai controller nạp **cùng một
+gói** chạy hai dãy release khác nhau, và mọi tuyên bố "cùng package cho cùng
+hành vi" mất nghĩa. Golden v2 được sinh lại bằng chính writer production, mang
+**hai chu kỳ khác nhau** để phân biệt "đọc đúng trường" với "đọc trúng may".
+
+**Chu kỳ lạ bị chặn ở CẢ writer lẫn loader.** Loader không được tin writer: gói
+tới tay runtime có thể do một writer khác phiên bản sinh. Một lớp lập lịch không
+tồn tại chấp nhận ở đây chỉ đẩy lỗi xuống runtime, nơi nó biểu hiện thành
+deadline miss chứ không thành một câu trả lời hiểu được.
+
+**Trần 16 ép ở nơi Program THỰC SỰ bắt đầu tác động.** `start()` đếm số Program
+đang RUNNING. Ép ở lớp cấu hình chỉ chặn được *ý định*; ép ở đây chặn được *hành
+vi*. Trần là trần **động**: dừng một Program giải phóng đúng một suất.
+
+**Thứ tự chạy độc lập với thứ tự tạo.** `add_program` chèn theo `order` (rồi
+`instance_id` khi cần tie-break) thay vì nối đuôi. Hai controller nạp cùng một
+package theo thứ tự khác nhau phải chạy cùng một dãy. `order` vẫn phải **duy
+nhất** trong Task — cho phép trùng sẽ biến thứ tự chạy thành thứ phụ thuộc vào
+tie-break, tức là thành thứ có thể đổi khi ai đó sửa tie-break.
+
+**Sửa kèm — package v2 không sống sót reboot.** `load_active_checkpoint` nạp
+**nguyên khối** container vào một instance như thể là artifact v1; loader IR v1 từ
+chối magic `MKDDCIR2` và thiết bị tỉnh dậy **không có Program nào** — hỏng đúng
+vào lúc không ai đang nhìn. Nay đường khôi phục đi qua **đúng** `split_package` +
+`ensure_topology` như đường stage. Ma trận fault/power đầy đủ vẫn thuộc `T59-501`;
+đây chỉ là bịt lỗ do `T59-401` mở ra.
+
+**Sửa kèm — bảng section golden không được canh.** `verify_programming_g1_contracts.py`
+ghim hash golden và `artifactBytes` nhưng **không** đối chiếu bảng section trong
+manifest với bảng thật trong file. Nghĩa là một lần đổi bố cục section có thể để
+lại manifest mô tả một file không còn tồn tại, trong khi hash vẫn "khớp pin" vì
+pin cũng vừa được sửa. Nay có `golden_sections()` + self-test 25 ca sai lệch.
+
+**Ranh giới trung thực.** Đây là **luật release và trần chạy đồng thời**. Worker
+lane, cô lập lỗi và ràng buộc không cấp phát trong RT thuộc `T59-403`; đo tải
+theo lớp chu kỳ mới chỉ dừng ở `last_exec_ns`/`max_exec_ns` trên từng instance,
+chưa có đường công bố ra API.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

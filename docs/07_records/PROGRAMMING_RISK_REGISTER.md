@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.4 |
+| Phiên bản | 4.5 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -604,6 +604,17 @@ residual không đổi.
 
 Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
+### 5.41 Cập nhật treatment source `T59-402` (Plan59 W4)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-018` | Mỗi Program release theo **deadline riêng**, bù trôi theo mốc **lý thuyết** nên một tick trễ không đẩy mọi deadline sau đó; lỡ chu kỳ thì **đếm và bỏ** chứ không chạy bù, để một lần quá tải không thành chuỗi quá tải; thứ tự chạy theo `order` duy nhất, độc lập thứ tự tạo | Worker lane và ràng buộc không cấp phát trong RT (`T59-403`), đo tải thật trên target 10-Program (`T59-702`), Test Result `VS-PROG-U05` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-001` | Chu kỳ + ngân sách đi **trong `PROGRAM_TABLE` của package**, coordinator áp lên instance mỗi lần dựng topology kể cả instance đã tồn tại; writer **và** loader cùng từ chối chu kỳ ngoài ba lớp profile — loader không được tin writer vì gói có thể do writer khác phiên bản sinh | Publish số đo tải ra API (`T59-408`), nghiệm thu target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-005` | Trần **16 Program chạy đồng thời** ép ở `start()` — nơi Program thực sự bắt đầu tác động lên đầu ra, không phải ở lớp cấu hình vốn chỉ chặn được *ý định*; trần là trần **động**, dừng một Program giải phóng đúng một suất | Đường intent Enable/Disable đầu-cuối (`T59-405`), Test Result `VS-PROG-U07` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-022` | Đường khôi phục sau reboot nay đi qua **đúng** `split_package` + `ensure_topology` như đường stage. Trước bản vá, `load_active_checkpoint` nạp nguyên khối container v2 vào một instance như thể artifact v1: loader IR v1 từ chối và thiết bị tỉnh dậy **không có Program nào** | Ma trận fault/power-cut đầy đủ (`T59-501`, `T59-704`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -656,6 +667,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 4.5 | 2026-08-21 | Ghi `T59-402` (Plan59 W4) cho treatment partial RSK-001/005/018/022: chu kỳ release theo từng Program với bù trôi theo mốc lý thuyết, lỡ chu kỳ đếm-và-bỏ, chu kỳ đi trong package và bị chặn ở cả writer lẫn loader, trần 16 chạy đồng thời ép ở `start()`, đường khôi phục package v2 sau reboot được bịt. Giữ 22/22 Open vì worker lane/đo tải target/intent Enable chưa có. |
 | 4.4 | 2026-08-21 | Ghi `T59-401` (Plan59 W4, **mở Wave**) cho treatment partial RSK-001/003/006: coordinator nạp package v2 bằng parser dùng chung, dựng topology theo chính package, bỏ hardcode `program-main`, gói hỏng 0 mutation, dual-reader v1 còn sống. Giữ 22/22 Open vì scheduler/fault-isolation/target chưa có. |
 | 4.3 | 2026-08-21 | Ghi `T59-306` (Plan59 W3, **đóng Wave 6/6**) cho treatment partial RSK-014/016: IA sáu trang đảo chiều đúng DDD §8, cây POU kind-aware và inspector ẩn trường không có nghĩa. Giữ 22/22 Open vì E2E real-backend và usability chưa có. |
 | 4.2 | 2026-08-21 | Ghi `T59-305` (Plan59 W3) cho treatment partial RSK-001/003/007: manifest package mang topology/budget theo profile, không bám thứ tự tạo, Program mới luôn Disabled, trần 32 ép lại ở Check. Giữ 22/22 Open vì thi hành trần 16 Enabled, ngân sách RT và target chưa có. |
