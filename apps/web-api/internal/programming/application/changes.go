@@ -30,6 +30,14 @@ type RevisionImpact struct {
 	ActiveOverrides      RevisionImpactGroup `json:"activeOverrides"`
 	Cutover              RevisionImpactGroup `json:"cutover"`
 	OutputMappingChanges RevisionImpactGroup `json:"outputMappingChanges"`
+	// T59-502 — bốn nhóm cho mô hình đa Program. Bốn nhóm trên chỉ phủ Rev A
+	// một Program, nên trước bản vá một Revision đổi Published Signal, đổi
+	// Control Library, thêm/bớt Program, hay chạm đúng Program đang Enabled đều
+	// đi qua Commission mà KHÔNG hỏi acknowledgement nào.
+	PublishedSignals RevisionImpactGroup `json:"publishedSignals"`
+	ControlLibrary   RevisionImpactGroup `json:"controlLibrary"`
+	ProgramSet       RevisionImpactGroup `json:"programSet"`
+	EnableIntent     RevisionImpactGroup `json:"enableIntent"`
 }
 
 type RevisionChangesView struct {
@@ -59,19 +67,29 @@ func (s *ProjectService) GetRevisionChanges(ctx context.Context, fromRevisionID,
 		beforeObjects = before.Objects
 	}
 	changes := compareRevisionObjects(beforeObjects, after.Objects)
-	retainItems := make([]string, 0)
-	outputItems := make([]string, 0)
+	byCategory := map[string][]string{}
 	for _, change := range changes {
-		if change.Category == "RETAIN" {
-			retainItems = append(retainItems, change.ObjectID)
-		}
-		if change.Category == "OUTPUT_MAPPING" {
-			outputItems = append(outputItems, change.ObjectID)
-		}
+		byCategory[change.Category] = append(byCategory[change.Category], change.ObjectID)
 	}
+	retainItems := byCategory["RETAIN"]
+	outputItems := byCategory["OUTPUT_MAPPING"]
+	if retainItems == nil {
+		retainItems = make([]string, 0)
+	}
+	if outputItems == nil {
+		outputItems = make([]string, 0)
+	}
+	// Program đang Enabled mà Revision này chạm tới. Đọc intent bền vững ở
+	// store, không suy từ diff: "đang chạy" là trạng thái của thiết bị, không
+	// phải thuộc tính của một Revision.
+	enableItems := s.enabledProgramsTouched(ctx, after.Revision.ProjectID, changes)
 	impact := RevisionImpact{
 		Retain:               impactFromItems(retainItems),
 		OutputMappingChanges: impactFromItems(outputItems),
+		PublishedSignals:     impactFromItems(sortedItems(byCategory["PUBLISHED_SIGNAL"])),
+		ControlLibrary:       impactFromItems(sortedItems(byCategory["LIBRARY"])),
+		ProgramSet:           impactFromItems(sortedItems(byCategory["PROGRAM_SET"])),
+		EnableIntent:         impactFromItems(enableItems),
 		ActiveOverrides: RevisionImpactGroup{Status: "UNAVAILABLE", Items: []string{
 			"Core read-back override chưa được nối; Commission phải fail-closed",
 		}},
@@ -98,6 +116,53 @@ func (s *ProjectService) GetRevisionChanges(ctx context.Context, fromRevisionID,
 	digest, _ := semanticHash(digestInput)
 	impact.ImpactRef = hex.EncodeToString(digest[:])
 	return RevisionChangesView{FromRevisionID: fromRevisionID, ToRevisionID: toRevisionID, Impact: impact, Changes: changes}, nil
+}
+
+// sortedItems trả một slice KHÁC nil và sắp xếp — `impactRef` băm cả nội dung
+// nhóm, nên thứ tự đọc DB lọt vào đó sẽ làm hai lần gọi trên cùng một Revision
+// cho hai `impactRef` khác nhau, và mọi ack đều thành stale.
+func sortedItems(items []string) []string {
+	out := append([]string(nil), items...)
+	if out == nil {
+		out = make([]string, 0)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// enabledProgramsTouched trả các Program ĐANG có intent Enabled mà Revision này
+// chạm tới. Không có store intent (đường test/Rev A cũ) thì trả rỗng — nhóm khi
+// đó là `NONE`, không phải `UNAVAILABLE`: không có Program nào được bật thì
+// thật sự không có gì để cảnh báo.
+func (s *ProjectService) enabledProgramsTouched(ctx context.Context, projectID string,
+	changes []RevisionChange) []string {
+	if s.store == nil || projectID == "" {
+		return make([]string, 0)
+	}
+	intents, err := s.store.ListProgramRuntimeIntents(ctx, projectID)
+	if err != nil || len(intents) == 0 {
+		return make([]string, 0)
+	}
+	enabled := make(map[string]struct{}, len(intents))
+	for _, intent := range intents {
+		if intent.DesiredEnabled {
+			enabled[intent.ProgramID] = struct{}{}
+		}
+	}
+	touched := make([]string, 0)
+	seen := make(map[string]struct{}, len(enabled))
+	for _, change := range changes {
+		if _, ok := enabled[change.ObjectID]; !ok {
+			continue
+		}
+		if _, dup := seen[change.ObjectID]; dup {
+			continue
+		}
+		seen[change.ObjectID] = struct{}{}
+		touched = append(touched, change.ObjectID)
+	}
+	sort.Strings(touched)
+	return touched
 }
 
 func compareRevisionObjects(before, after []programmingstore.RevisionObject) []RevisionChange {
@@ -182,7 +247,22 @@ func revisionChangeCategory(before, after *programmingstore.RevisionObject) stri
 			return "RETAIN"
 		}
 		return "SOURCE"
+	case "SIGNAL":
+		// Trước T59-502, SIGNAL rơi vào nhánh mặc định `SOURCE`: đổi freshness,
+		// đổi chính sách stale, hay đổi publisher của một Published Signal hiện
+		// ra như một thay đổi mã nguồn bình thường và Commission không hỏi gì.
+		// Nhưng đó là thứ đổi hành vi của MỌI consumer khi mất dữ liệu — và
+		// không nhìn thấy được trong diff mã nguồn.
+		return "PUBLISHED_SIGNAL"
+	case "LIBRARY_ENTRY":
+		return "LIBRARY"
 	case "PROGRAM", "FUNCTION", "FUNCTION_BLOCK":
+		// Thêm/bớt một PROGRAM đổi TẬP chương trình chạy trên thiết bị — khác
+		// hẳn sửa thân một Program đã có. Người vận hành cần biết mình sắp thêm
+		// hay bớt một chương trình, không phải suy ra từ một dòng "SOURCE".
+		if sample.Kind == "PROGRAM" && (before == nil || after == nil) {
+			return "PROGRAM_SET"
+		}
 		// v2 đặt biến vào `locals` của POU, nên một thay đổi RETAIN đến dưới
 		// dạng thay đổi POU. Bỏ nhánh này thì impact RETAIN im lặng biến mất —
 		// và Commission sẽ không còn hỏi acknowledgement RETAIN nữa.

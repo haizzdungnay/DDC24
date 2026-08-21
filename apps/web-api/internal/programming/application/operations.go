@@ -817,6 +817,14 @@ func decodeOperationContext(raw []byte) (operationContext, error) {
 	return value, nil
 }
 
+// impactAckKeys là enum ĐÓNG của khoá acknowledgement. Giữ ở một chỗ để thêm
+// nhóm impact không thể quên cập nhật phép kiểm — bản trước liệt kê bốn khoá
+// bằng bốn phép so `!=` nối nhau, đúng dạng dễ thêm nhóm mà quên sửa.
+var impactAckKeys = map[string]bool{
+	"retain": true, "activeOverrides": true, "cutover": true, "outputMappingChanges": true,
+	"publishedSignals": true, "controlLibrary": true, "programSet": true, "enableIntent": true,
+}
+
 func validateApplicationImpact(current RevisionImpact, ref string, acknowledgements []string) *domain.PublicError {
 	if current.ImpactRef == "" || current.ImpactRef != ref {
 		value := domain.NewPublicError(domain.ErrImpactStale)
@@ -825,7 +833,7 @@ func validateApplicationImpact(current RevisionImpact, ref string, acknowledgeme
 	}
 	provided := make(map[string]bool, len(acknowledgements))
 	for _, key := range acknowledgements {
-		if provided[key] || (key != "retain" && key != "activeOverrides" && key != "cutover" && key != "outputMappingChanges") {
+		if provided[key] || !impactAckKeys[key] {
 			value := domain.NewPublicError(domain.ErrAckUnexpected)
 			value.Args = map[string]any{"key": key}
 			return &value
@@ -833,7 +841,9 @@ func validateApplicationImpact(current RevisionImpact, ref string, acknowledgeme
 		provided[key] = true
 	}
 	groups := map[string]RevisionImpactGroup{"retain": current.Retain, "activeOverrides": current.ActiveOverrides,
-		"cutover": current.Cutover, "outputMappingChanges": current.OutputMappingChanges}
+		"cutover": current.Cutover, "outputMappingChanges": current.OutputMappingChanges,
+		"publishedSignals": current.PublishedSignals, "controlLibrary": current.ControlLibrary,
+		"programSet": current.ProgramSet, "enableIntent": current.EnableIntent}
 	missing, unexpected := make([]string, 0), make([]string, 0)
 	for key, group := range groups {
 		switch group.Status {

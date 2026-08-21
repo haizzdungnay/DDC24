@@ -7,9 +7,9 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "429b97f8fda6fefbbdb7b8276da5dcfd1de5e4f415802f8c8b7e3d7285b169b4",
+      "sha256": "c4be40618bb1e9ef37d93b3f7686bc4f7773a9f99aa50348c910f5f7116e7e9d",
       "major": 1,
-      "version": "1.24.0",
+      "version": "1.25.0",
       "operationCount": 30
     },
     {
@@ -65,11 +65,11 @@
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "58a5880e61c80d6d6ed5c6229269f759d58f57635c164a2eb0f1b4e8580b7bd7",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0010_runtime_intent_receipts.sql",
-      "migrationSha256": "dc0f28a96cd554313695d59b77b6e8d5ca3c7e07f9fed37c79a71094e3070cd3",
+      "sha256": "d7171bc3791c018230f36ec2ff7bb17d1303e166b63a86f2ee37a393123a45bd",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0011_revision_signal_objects.sql",
+      "migrationSha256": "c5d32ec655ca02c6b9fa0867604734b4e3efdcead226953163b1313543658626",
       "major": 1,
-      "schemaVersion": 10,
+      "schemaVersion": 11,
       "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {

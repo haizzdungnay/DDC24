@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -224,8 +225,13 @@ func (f operationFixture) commissionCommand(t *testing.T, runtime *fakeOperation
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Ack đúng những nhóm ĐANG `PRESENT`, dựng từ chính impact vừa tính. Viết
+	// cứng một danh sách sẽ làm mọi lần thêm nhóm impact mới phải sửa tay ở đây
+	// — và lần quên sửa đầu tiên sẽ hiện ra dưới dạng "test hỏng" thay vì
+	// "Commission thiếu ack".
 	return OperationCommand{SchemaVersion: "1.0", RevisionID: f.revision, CheckID: f.checkID,
-		ImpactRef: impact.Impact.ImpactRef, Acknowledgements: []string{"cutover"}, Cutover: "PROGRAM_ONLY",
+		ImpactRef: impact.Impact.ImpactRef, Acknowledgements: presentImpactKeys(impact.Impact),
+		Cutover:        "PROGRAM_ONLY",
 		IdempotencyKey: "40000000-0000-4000-8000-000000000002", CorrelationID: testCorrelationID}
 }
 
@@ -552,4 +558,22 @@ func TestOperationResetRetainIdempotencyReplaysSameKeyRejectsDifferentRequest(t 
 	if _, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"}, conflicting); !errors.Is(err, programmingstore.ErrIdempotencyConflict) {
 		t.Fatalf("idempotency key trùng nhưng request khác phải conflict: err=%v", err)
 	}
+}
+
+// presentImpactKeys trả các khoá acknowledgement mà impact hiện đang yêu cầu.
+func presentImpactKeys(impact RevisionImpact) []string {
+	groups := map[string]RevisionImpactGroup{
+		"retain": impact.Retain, "activeOverrides": impact.ActiveOverrides,
+		"cutover": impact.Cutover, "outputMappingChanges": impact.OutputMappingChanges,
+		"publishedSignals": impact.PublishedSignals, "controlLibrary": impact.ControlLibrary,
+		"programSet": impact.ProgramSet, "enableIntent": impact.EnableIntent,
+	}
+	keys := make([]string, 0, len(groups))
+	for key, group := range groups {
+		if group.Status == "PRESENT" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }

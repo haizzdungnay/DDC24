@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.24.0"
+  version: "1.25.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -2882,7 +2882,13 @@ components:
       enum: [NONE, PRESENT, UNAVAILABLE]
     ProgrammingImpactKey:
       type: string
-      enum: [retain, activeOverrides, cutover, outputMappingChanges]
+      # T59-502 bổ sung bốn nhóm cho mô hình đa Program. Bốn nhóm cũ chỉ phủ
+      # Rev A một Program, nên một Revision đổi Published Signal, đổi Control
+      # Library, thêm/bớt Program, hay chạm đúng Program đang Enabled đều đi qua
+      # Commission mà KHÔNG hỏi acknowledgement nào.
+      enum:
+        [retain, activeOverrides, cutover, outputMappingChanges,
+         publishedSignals, controlLibrary, programSet, enableIntent]
     ProgrammingImpactGroup:
       type: object
       additionalProperties: false
@@ -2895,13 +2901,26 @@ components:
     ProgrammingImpact:
       type: object
       additionalProperties: false
-      required: [impactRef, retain, activeOverrides, cutover, outputMappingChanges]
+      required:
+        [impactRef, retain, activeOverrides, cutover, outputMappingChanges,
+         publishedSignals, controlLibrary, programSet, enableIntent]
       properties:
         impactRef: { type: string, minLength: 8, maxLength: 128 }
         retain: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
         activeOverrides: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
         cutover: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
         outputMappingChanges: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Đổi freshness/chính sách stale/publisher của một Published Signal đổi
+        # hành vi của MỌI consumer khi mất dữ liệu — thứ không nhìn thấy được
+        # trong diff mã nguồn.
+        publishedSignals: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Đổi Control Library đổi thân của mọi POU tham chiếu nó.
+        controlLibrary: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Thêm/bớt Program đổi TẬP chương trình đang chạy trên thiết bị.
+        programSet: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Program đang Enabled mà Revision này chạm tới: người vận hành phải biết
+        # thứ đang chạy sắp bị thay, không phải phát hiện sau khi nó đã thay.
+        enableIntent: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
     ProgrammingCheckRequest:
       type: object
       additionalProperties: false
