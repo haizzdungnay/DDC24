@@ -24,6 +24,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "graph/point_table.hpp"
@@ -123,6 +124,16 @@ struct StProgramInstance {
     uint32_t missed_release_count = 0;
     uint64_t last_exec_ns = 0;
     uint64_t max_exec_ns = 0;
+
+    /* T59-403 — lane là đơn vị SONG SONG. Program cùng lane chạy tuần tự theo
+     * `order`; lane khác nhau độc lập nên có thể chạy đồng thời mà không đổi
+     * kết quả. Mặc định 0: mọi Program một lane = hành vi tuần tự cũ.
+     *
+     * Lane KHÔNG được mang dữ liệu dùng chung. Trao đổi giữa Program đi qua
+     * Published Signal có chính sách freshness/fallback khai báo (`T59-404`),
+     * không qua biến chung — chia sẻ ngầm giữa hai lane là thứ làm kết quả phụ
+     * thuộc vào việc lane nào chạy trước. */
+    uint8_t     lane = 0;
 
     StProgramState   state = StProgramState::EMPTY;
     StProgramRuntime runtime;
@@ -245,6 +256,20 @@ private:
     friend class StScheduler;
 };
 
+/* Chế độ chạy lane. Hai chế độ phải cho ĐÚNG cùng kết quả quan sát được: nếu
+ * khác, thì một trong hai đang chạy một chương trình khác với thứ người dùng
+ * cấu hình, và không có cách nào biết là chế độ nào. */
+enum class StLaneMode : uint8_t {
+    /* Mặc định. Mọi lane chạy tuần tự theo số hiệu lane. */
+    SEQUENTIAL = 0,
+    /* Mỗi lane một worker đã tạo sẵn. Không cấp phát, không khoá trong chu kỳ. */
+    PARALLEL,
+};
+
+/* Trần lane: bằng trần Program mỗi Task, để cấu hình "mỗi Program một lane" vẫn
+ * hợp lệ. Cấp phát tĩnh theo trần này nên không có heap trong scan. */
+constexpr std::size_t kMaxLanes = st_sched_limits::kMaxProgramsPerTask;
+
 struct StSchedulerTickResult {
     uint64_t base_step_sequence = 0;
     uint32_t tasks_run = 0;
@@ -260,6 +285,11 @@ public:
      * sẽ là điểm bootstrap duy nhất làm việc đó. */
     explicit StScheduler(StSchedulerProfile profile = StSchedulerProfile::SUPPORTING_AS_BUILT)
         : profile_(profile) {}
+    /* Worker phải dừng TRƯỚC khi mọi thứ chúng đọc bị huỷ. Để mặc định huỷ là
+     * để lại một luồng đang đọc bộ nhớ vừa được giải phóng. */
+    ~StScheduler();
+    StScheduler(const StScheduler&) = delete;
+    StScheduler& operator=(const StScheduler&) = delete;
 
     StSchedulerProfile profile() const { return profile_; }
     uint64_t base_step_count() const { return base_step_count_; }
@@ -280,6 +310,17 @@ public:
      * không tự cấp phát trace log để giữ chủ quyền bounded-capacity ở caller. */
     void set_trace_log(StSchedulerTrace* trace) { trace_ = trace; }
     const StSchedulerTrace* trace_log() const { return trace_; }
+
+    /* T59-403 — chọn chế độ chạy lane. Đổi chế độ tạo/huỷ worker NGOÀI chu kỳ
+     * quét; gọi giữa chừng một tick là lỗi lập trình, không phải trường hợp cần
+     * hỗ trợ. Mặc định SEQUENTIAL: bật song song phải là quyết định tường minh
+     * của người dựng hệ, không phải mặc định ai đó thừa hưởng. */
+    void set_lane_mode(StLaneMode mode);
+    StLaneMode lane_mode() const { return lane_mode_; }
+
+    /* Gán lane cho một Program. Trả false nếu không tìm thấy instance hoặc lane
+     * vượt trần. */
+    bool set_program_lane(const std::string& instance_id, uint8_t lane, std::string* error);
 
     /* Trả false + *error nếu cấu hình vi phạm ràng buộc SPEC §3. Fail-fast:
      * cấu hình sai không được chạy với "phần hợp lệ", vì như vậy hệ chạy khác
@@ -375,11 +416,61 @@ private:
     StSchedulerTrace* trace_ = nullptr;
     StRetainService* retain_service_ = nullptr;
 
+    /* Kết quả MỘT lane trong MỘT lần chạy Task. Lane không được đụng vào
+     * `StSchedulerTickResult` hay trace chung: hai lane ghi cùng lúc là một
+     * data race, và thứ tự ghi sẽ phụ thuộc lane nào chạy nhanh hơn. Gom riêng
+     * rồi trộn lại theo SỐ HIỆU LANE sau khi mọi lane xong — trộn theo thứ tự
+     * hoàn thành sẽ làm kết quả khác nhau giữa hai lần chạy. */
+    struct LaneOutcome {
+        uint32_t ran = 0;
+        uint32_t faults = 0;
+        bool     dispatch_failed = false;
+        /* Trace của lane, phát lại vào trace chung theo thứ tự lane. Bounded và
+         * cấp phát tĩnh nên không có heap trong chu kỳ. */
+        std::array<StRuntimeTraceEvent, st_sched_limits::kMaxProgramsPerTask> events{};
+        std::size_t event_count = 0;
+    };
+
+    /* Một lane đang chờ chạy: dải chỉ số Program trong `task.programs()`.
+     * Không giữ con trỏ Program để tránh mọi nghi vấn về tuổi thọ khi worker
+     * chạy song song. */
+    struct LaneWork {
+        std::array<uint16_t, st_sched_limits::kMaxProgramsPerTask> program_index{};
+        std::size_t program_count = 0;
+    };
+
     void run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out);
+    /* Chạy đúng một Program. Trả về false nếu Program fault — caller quyết định
+     * cô lập hay dừng, hàm này không biết chính sách đó. */
+    bool run_program(StTask& task, StProgramInstance& program, uint64_t now_ns,
+                     LaneOutcome* outcome);
+    void run_lane(StTask& task, const LaneWork& work, uint64_t now_ns, LaneOutcome* outcome);
+    void start_workers(std::size_t count);
+    void stop_workers();
     void apply_pending_activations(StTask& task);
     void apply_pending_retain_resets(StTask& task);
     void log_trace(StTraceEventKind kind, uint64_t now_ns, bool ok, const char* task_id,
                    const char* instance_id, const char* code);
+
+    StLaneMode lane_mode_ = StLaneMode::SEQUENTIAL;
+    /* Bộ đệm lane cấp phát MỘT LẦN, dùng lại mỗi tick: cấp phát trong chu kỳ
+     * quét là thứ làm WCET không còn giới hạn trên. */
+    std::array<LaneWork, kMaxLanes> lane_work_{};
+    std::array<LaneOutcome, kMaxLanes> lane_outcome_{};
+
+    /* Worker đã tạo sẵn cho chế độ PARALLEL. Tạo/huỷ chỉ xảy ra ở
+     * `set_lane_mode`, ngoài chu kỳ quét. */
+    struct Worker {
+        StScheduler* owner = nullptr;
+        std::thread thread;
+        std::atomic<bool> has_work{false};
+        std::atomic<bool> stop{false};
+        StTask* task = nullptr;
+        const LaneWork* work = nullptr;
+        LaneOutcome* outcome = nullptr;
+        uint64_t now_ns = 0;
+    };
+    std::vector<std::unique_ptr<Worker>> workers_;
 };
 
 } // namespace core

@@ -588,6 +588,79 @@ void StScheduler::apply_pending_retain_resets_at_boundary()
     for (auto& task : tasks_) apply_pending_retain_resets(*task);
 }
 
+bool StScheduler::run_program(StTask& task, StProgramInstance& program, uint64_t now_ns,
+                             LaneOutcome* outcome)
+{
+    const uint64_t program_start = wall_clock_();
+
+    bool has_input_binding = false;
+    for (const StIrIoBinding& binding : program.runtime.program()->io_bindings) {
+        if (!binding.is_output) {
+            has_input_binding = true;
+            break;
+        }
+    }
+    auto record_fault = [&](const char* code, uint32_t pc, int line) {
+        program.fault_count++;
+        program.last_fault_code = code;
+        program.last_fault_pc = pc;
+        program.last_fault_line = line;
+        program.state = StProgramState::FAULTED;
+        program.last_successful_base_step = 0;
+        outcome->faults++;
+        outcome->dispatch_failed = true;
+        if (outcome->event_count < outcome->events.size()) {
+            StRuntimeTraceEvent& event = outcome->events[outcome->event_count++];
+            event.kind = StTraceEventKind::RUNTIME_FAULT;
+            event.timestamp_ns = now_ns;
+            event.ok = false;
+            event.task_id = task.config().id.c_str();
+            event.instance_id = program.instance_id.c_str();
+            event.code = code;
+        }
+    };
+
+    if (has_input_binding &&
+        (program.input_snapshot_generation != base_step_count_ || !program.input_snapshot_valid)) {
+        /* Required input không GOOD/mapped/coercible thì Program này KHÔNG
+         * execute — chạy bằng slot cũ sẽ trình bày dữ liệu stale như dữ liệu
+         * live và vẫn publish output mới. */
+        record_fault(st_diag_code::kRtNonFiniteInput, 0, 0);
+        return false;
+    }
+
+    const StExecResult result = program.runtime.execute(static_cast<int64_t>(now_ns));
+    program.run_count++;
+    if (!result.ok) {
+        record_fault(result.fault_code, result.fault_pc, result.fault_line);
+        return false;
+    }
+    program.last_successful_base_step = base_step_count_;
+    program.last_successful_now_ns = now_ns;
+    /* Đo WCET theo TỪNG Program: với ba lớp chu kỳ trong một Task, một con số
+     * gộp ở Task không trả lời được "Program nào ăn hết ngân sách". */
+    program.last_exec_ns = wall_clock_() - program_start;
+    if (program.last_exec_ns > program.max_exec_ns) program.max_exec_ns = program.last_exec_ns;
+    outcome->ran++;
+    return true;
+}
+
+void StScheduler::run_lane(StTask& task, const LaneWork& work, uint64_t now_ns,
+                           LaneOutcome* outcome)
+{
+    for (std::size_t slot = 0; slot < work.program_count; ++slot) {
+        StProgramInstance& program = *task.programs()[work.program_index[slot]];
+        /* Cô lập lỗi (kiến trúc §8 "isolate Program"): fault của MỘT Program
+         * không dừng những Program còn lại. Trước T59-403 một fault dừng cả
+         * Task, nên một Program hỏng làm mọi Program khác — kể cả Program không
+         * liên quan gì tới nó — ngừng tác động lên đầu ra mà không có mục nào
+         * trong hồ sơ nói vì sao. Trao đổi dữ liệu giữa Program đi qua Published
+         * Signal, nơi consumer có chính sách fallback khai báo cho đúng tình
+         * huống producer chết. */
+        (void)run_program(task, program, now_ns, outcome);
+    }
+}
+
 void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out)
 {
     /* task_start là đồng hồ RIÊNG cho WCET (SPEC §5) — KHÁC now_ns (mốc
@@ -596,77 +669,74 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
      * chậm tới đâu; đây là lỗi đã có trước TASK-PROG-304, không phải hành vi
      * định trước. */
     const uint64_t task_start = wall_clock_();
-    uint32_t ran = 0;
     task.last_dispatch_base_step_ = base_step_count_;
     task.last_dispatch_succeeded_ = true;
 
-    for (auto& p : task.programs()) {
-        if (!p->enabled) continue;
+    /* Phân lane. Dùng bộ đệm cấp phát sẵn của scheduler: cấp phát trong chu kỳ
+     * quét là thứ làm WCET không còn giới hạn trên. */
+    std::size_t lane_count = 0;
+    for (LaneWork& lane : lane_work_) lane.program_count = 0;
+    for (LaneOutcome& outcome : lane_outcome_) outcome = LaneOutcome{};
+
+    for (std::size_t index = 0; index < task.programs().size(); ++index) {
+        StProgramInstance& program = *task.programs()[index];
+        if (!program.enabled) continue;
         /* CHỈ RUNNING mới được thực thi. ACTIVE nghĩa là "đã là package hiện
          * hành" chứ chưa phải "đang được chạy mỗi chu kỳ" — chuyển sang RUNNING
          * là việc của lệnh `start`. Gộp hai trạng thái sẽ làm `start` trở nên
          * vô nghĩa và người vận hành mất quyền quyết định khi nào chương trình
          * bắt đầu tác động lên đầu ra (SPEC §7.1, §7.3). */
-        if (p->state != StProgramState::RUNNING) continue;
-        if (!p->runtime.loaded()) continue;
+        if (program.state != StProgramState::RUNNING) continue;
+        if (!program.runtime.loaded()) continue;
         /* Deadline RIÊNG của Program: một package 3 lớp chu kỳ chạy trong cùng
          * một Task, nên Task đến hạn KHÔNG có nghĩa mọi Program đến hạn. */
-        if (!st_program_due(*p, task.config().period_ms, now_ns)) continue;
-        st_program_mark_released(p.get(), now_ns);
-        const uint64_t program_start = wall_clock_();
+        if (!st_program_due(program, task.config().period_ms, now_ns)) continue;
+        st_program_mark_released(&program, now_ns);
 
-        bool has_input_binding = false;
-        for (const StIrIoBinding& binding : p->runtime.program()->io_bindings) {
-            if (!binding.is_output) {
-                has_input_binding = true;
-                break;
-            }
-        }
-        if (has_input_binding &&
-            (p->input_snapshot_generation != base_step_count_ ||
-             !p->input_snapshot_valid)) {
-            p->fault_count++;
-            p->last_fault_code = st_diag_code::kRtNonFiniteInput;
-            p->last_fault_pc = 0;
-            p->last_fault_line = 0;
-            p->state = StProgramState::FAULTED;
-            p->last_successful_base_step = 0;
-            task.last_dispatch_succeeded_ = false;
-            out->faults++;
-            log_trace(StTraceEventKind::RUNTIME_FAULT, now_ns, false, task.config().id.c_str(),
-                     p->instance_id.c_str(), p->last_fault_code);
-            /* Required input không GOOD/mapped/coercible làm hủy cả cycle.
-             * Không execute bằng slot cũ vì như vậy stale/bad sẽ bị trình bày
-             * như dữ liệu live và output mới vẫn có thể được publish. */
-            break;
-        }
+        const std::size_t lane = program.lane < kMaxLanes ? program.lane : 0;
+        LaneWork& work = lane_work_[lane];
+        if (work.program_count < work.program_index.size())
+            work.program_index[work.program_count++] = static_cast<uint16_t>(index);
+        if (lane + 1 > lane_count) lane_count = lane + 1;
+    }
 
-        const StExecResult r = p->runtime.execute(static_cast<int64_t>(now_ns));
-        p->run_count++;
-        if (!r.ok) {
-            p->fault_count++;
-            p->last_fault_code = r.fault_code;
-            p->last_fault_pc = r.fault_pc;
-            p->last_fault_line = r.fault_line;
-            p->state = StProgramState::FAULTED;
-            p->last_successful_base_step = 0;
-            task.last_dispatch_succeeded_ = false;
-            out->faults++;
-            log_trace(StTraceEventKind::RUNTIME_FAULT, now_ns, false, task.config().id.c_str(),
-                     p->instance_id.c_str(), p->last_fault_code);
-            /* Fault của MỘT Program dừng cả Task: các Program trong một Task
-             * thường phối hợp (Program 0 tính setpoint, Program 1 dùng nó), nên
-             * chạy tiếp sẽ đẩy đầu ra vào tổ hợp chưa từng được thiết kế
-             * (SPEC §5). Staging của từng Program đã được StProgramRuntime huỷ. */
-            break;
+    if (lane_mode_ == StLaneMode::PARALLEL && lane_count > 1 && !workers_.empty()) {
+        /* Lane 0 chạy trên chính luồng gọi: một luồng đã có sẵn thì giao nó cho
+         * worker rồi ngồi chờ là lãng phí thuần tuý. */
+        const std::size_t dispatched = std::min(lane_count - 1, workers_.size());
+        for (std::size_t lane = 1; lane <= dispatched; ++lane) {
+            Worker& worker = *workers_[lane - 1];
+            worker.task = &task;
+            worker.work = &lane_work_[lane];
+            worker.outcome = &lane_outcome_[lane];
+            worker.now_ns = now_ns;
+            worker.has_work.store(true, std::memory_order_release);
         }
-        p->last_successful_base_step = base_step_count_;
-        p->last_successful_now_ns = now_ns;
-        /* Đo WCET theo TỪNG Program: với ba lớp chu kỳ trong một Task, con số
-         * gộp ở Task không trả lời được "Program nào ăn hết ngân sách". */
-        p->last_exec_ns = wall_clock_() - program_start;
-        if (p->last_exec_ns > p->max_exec_ns) p->max_exec_ns = p->last_exec_ns;
-        ran++;
+        run_lane(task, lane_work_[0], now_ns, &lane_outcome_[0]);
+        /* Lane vượt số worker chạy nốt trên luồng gọi — thiếu worker phải làm
+         * chậm đi, không được làm BỎ SÓT. */
+        for (std::size_t lane = dispatched + 1; lane < lane_count; ++lane)
+            run_lane(task, lane_work_[lane], now_ns, &lane_outcome_[lane]);
+        for (std::size_t lane = 1; lane <= dispatched; ++lane) {
+            Worker& worker = *workers_[lane - 1];
+            while (worker.has_work.load(std::memory_order_acquire)) std::this_thread::yield();
+        }
+    } else {
+        for (std::size_t lane = 0; lane < lane_count; ++lane)
+            run_lane(task, lane_work_[lane], now_ns, &lane_outcome_[lane]);
+    }
+
+    /* Trộn theo SỐ HIỆU LANE, không theo thứ tự hoàn thành: trộn theo thứ tự
+     * hoàn thành sẽ làm trace và số đếm khác nhau giữa hai lần chạy cùng một
+     * cấu hình, và "single/multicore cùng ngữ nghĩa" mất nghĩa. */
+    uint32_t ran = 0;
+    for (std::size_t lane = 0; lane < lane_count; ++lane) {
+        const LaneOutcome& outcome = lane_outcome_[lane];
+        ran += outcome.ran;
+        out->faults += outcome.faults;
+        if (outcome.dispatch_failed) task.last_dispatch_succeeded_ = false;
+        for (std::size_t index = 0; index < outcome.event_count; ++index)
+            if (trace_ != nullptr) trace_->push(outcome.events[index]);
     }
 
     const uint64_t exec_ns = wall_clock_() - task_start;
@@ -699,6 +769,74 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
 
     out->programs_run += ran;
     out->tasks_run++;
+}
+
+StScheduler::~StScheduler() { stop_workers(); }
+
+void StScheduler::start_workers(std::size_t count)
+{
+    stop_workers();
+    workers_.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        auto worker = std::make_unique<Worker>();
+        Worker* raw = worker.get();
+        raw->owner = this;
+        /* Spin + yield thay vì condition variable: đường quét không được đi vào
+         * kernel để chờ. Worker chỉ tồn tại khi PARALLEL được bật tường minh,
+         * nên chi phí spin là chi phí người dựng hệ đã chọn. */
+        raw->thread = std::thread([raw]() {
+            while (!raw->stop.load(std::memory_order_acquire)) {
+                if (!raw->has_work.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                    continue;
+                }
+                raw->owner->run_lane(*raw->task, *raw->work, raw->now_ns, raw->outcome);
+                raw->has_work.store(false, std::memory_order_release);
+            }
+        });
+        workers_.push_back(std::move(worker));
+    }
+}
+
+void StScheduler::stop_workers()
+{
+    for (auto& worker : workers_) {
+        worker->stop.store(true, std::memory_order_release);
+        if (worker->thread.joinable()) worker->thread.join();
+    }
+    workers_.clear();
+}
+
+void StScheduler::set_lane_mode(StLaneMode mode)
+{
+    if (mode == lane_mode_) return;
+    lane_mode_ = mode;
+    if (mode == StLaneMode::PARALLEL) {
+        const unsigned hardware = std::thread::hardware_concurrency();
+        /* Một luồng đã là luồng gọi, nên chỉ cần thêm `hardware - 1`. Trần
+         * `kMaxLanes - 1` vì không bao giờ có nhiều lane hơn thế. */
+        const std::size_t count =
+            std::min<std::size_t>(kMaxLanes - 1, hardware > 1 ? hardware - 1 : 1);
+        start_workers(count);
+    } else {
+        stop_workers();
+    }
+}
+
+bool StScheduler::set_program_lane(const std::string& instance_id, uint8_t lane,
+                                   std::string* error)
+{
+    if (lane >= kMaxLanes) {
+        if (error) *error = "lane vượt trần " + std::to_string(kMaxLanes);
+        return false;
+    }
+    StProgramInstance* program = find_program(instance_id);
+    if (program == nullptr) {
+        if (error) *error = "không có instance '" + instance_id + "'";
+        return false;
+    }
+    program->lane = lane;
+    return true;
 }
 
 StSchedulerTickResult StScheduler::on_base_step(uint64_t now_ns)
