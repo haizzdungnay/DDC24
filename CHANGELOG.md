@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### T59-406 — Sổ candidate output, rút theo lý do và đường rơi về (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/programming/program_candidate_registry.{hpp,cpp}` (mới),
+  `apps/core/application/programming/tests/test_program_candidate_registry.cpp` (mới),
+  `apps/core/application/st/st_process_image.{hpp,cpp}`,
+  `apps/core/application/runtime/scan_loop.{hpp,cpp}`,
+  `apps/core/application/programming/programming_runtime_coordinator.{hpp,cpp}`,
+  `apps/core/CMakeLists.txt`, Plan 59 §3/§3.5, Risk Register v4.9,
+  Traceability v5.7, baseline manifest v1.30.
+- **Thêm:** `ProgramCandidateRegistry` — mắt xích `owner registry` của kiến trúc
+  §7. `PriorityResolver` chỉ biết "mức 5 đang active", không biết mức 5 đó là
+  **của Program nào**; với 32 Program thì "ai đang giữ AO-3" là câu hỏi không có
+  nơi nào trả lời — và đó là câu hỏi đầu tiên khi một van không nghe lệnh.
+- **Rút mang LÝ DO, enum đóng:** `OPERATOR_DISABLE` / `FAULT_TTL_EXPIRED` /
+  `PACKAGE_REPLACED`. "Đã rút" mà không nói vì sao buộc người vận hành đoán giữa
+  một lệnh chủ ý và một sự cố. Bản ghi **không** bị xoá khi rút: câu hỏi "vì sao
+  van này về default" phải còn câu trả lời.
+- **Một output, một owner — ép LẠI ở runtime.** Check đã ép ở `T59-304`, nhưng
+  gói có thể tới từ bundle import hoặc writer khác phiên bản. Đăng ký chạy
+  **trước** khi publish: phát hiện xung đột sau khi đã ghi ra van thì đã muộn.
+  Chiếm chỗ đã rút vẫn bị từ chối — quyền sở hữu thuộc package, không thuộc thứ
+  tự tới trước.
+- **Đường rơi về:** test đầu-cuối chạy Program thật, publish qua resolver, rồi
+  `stop()` và kiểm AO về `0.0`. Rút mà đầu ra kẹt ở giá trị cuối của Program đã
+  chết thì rút chỉ là một dòng log.
+- **"Không có đường Program→IOP trực tiếp" kiểm bằng ĐỌC MÃ NGUỒN.** Một test
+  hành vi chỉ chứng minh đường hợp lệ chạy đúng, không chứng minh **không có**
+  đường thứ hai. Test đọc `st_process_image.cpp`, khẳng định không có
+  `plc_shm`/`iop_write`/`shm_write`, và khẳng định đường hợp lệ thực sự có mặt —
+  nếu không, phép kiểm trên chỉ đang xác nhận một file rỗng.
+- **Còn mở có chủ ý:** TTL hold-last vẫn `0` (giữ vô hạn khi Program FAULTED).
+  Cơ chế đã có và đã có test; con số là quyết định Product+Controls
+  (`DDD-CTRL-PROG-001` §15) **chưa được ký**. Tự chọn một con số ở đây là chọn
+  thay họ xem thiết bị giữ đầu ra bao lâu sau khi chương trình chết.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1187/1187** pass (9 test mới);
+  `scripts/verify-project.sh --wave W4` **5/5 PASS**;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-406`, `RSK-PROG-002/006/021`,
+  `PROGRAMMING_ARCHITECTURE.md` §7.
+
 ### T59-405 — Enable/Disable Program đi trọn store → API → IPC → Core → read-back (2026-08-21)
 
 - **Phạm vi:** `apps/web-api/internal/programming/store/{runtime_intent.go,idempotency.go,schema.go}`,

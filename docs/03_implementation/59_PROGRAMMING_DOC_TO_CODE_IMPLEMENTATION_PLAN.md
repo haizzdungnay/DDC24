@@ -1295,7 +1295,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | `T59-403` | P0 | Worker lanes/fault isolation/no-allocation RT | T59-402 | **DONE** | Lane là đơn vị song song (`StLaneMode::SEQUENTIAL|PARALLEL`, worker tạo sẵn ngoài chu kỳ, spin+yield không vào kernel); hai chế độ cho **đúng cùng** kết quả trên fixture 10 Program/3 chu kỳ/4 lane, ổn định qua 20 lần lặp; **đảo chiều** chính sách fault — fault của một Program **không** còn dừng cả Task (kiến trúc §8 `isolate Program`); đường quét **0 cấp phát** ở cả hai chế độ; lane vượt số worker vẫn chạy nốt trên luồng gọi. 7 test mới; `ctest` **1166/1166**; TSan 0 cảnh báo. Chi tiết §3.5. |
 | `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | **DONE** | `StSignalBus` double-buffer, commit ở **boundary** nên mọi consumer trong một chu kỳ thấy cùng một ảnh; **0 đọc rách** qua 20.000 vòng publisher/consumer song song trên `StCell` 8 byte; ba chính sách `HOLD_LAST`/`USE_FALLBACK`/`WAIT` cho ba hành vi khác nhau, "chưa ai publish" khác "quá hạn"; producer dừng thì giá trị **quá hạn theo freshness** chứ không biến mất tức thì, hồi phục ngay ở boundary kế. Sửa kèm: signal **chưa từng** đi vào container (bus runtime luôn rỗng) và `stalePolicy` **không phải enum đóng** ở Check. 15 test mới; `ctest` **1179/1179**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | **DONE** | Đường đầy đủ: store (`program_runtime_intents`, migration **v10**) → API (`PUT .../programs/{id}/runtime-intent`, `GET .../programs`, RBAC admin/viewer, idempotency) → IPC (**action mới** `SET_PROGRAM_ENABLED`, protocolMinor 0→1 tương thích ngược) → Core (`set_program_enabled` áp lên đúng một instance) → read-back + audit **cùng một transaction**. Intent và trạng thái là **hai trường riêng**; Core từ chối/không sẵn sàng vẫn giữ intent bền vững. Trần 16 Enabled ép ở **hai** lớp. Sửa kèm: trigger `generation` chặn cả read-back; biên nhận idempotency đòi ETag cho mutation không thuộc Draft. 10 test mới; `ctest` **1180/1180**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
-| `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | ORDERED | Disable/fault/TTL withdraw; next priority/default/safe path; no direct IOP. |
+| `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | **DONE** | `ProgramCandidateRegistry` trả lời **ai đang giữ output nào và vì sao không còn giữ** (enum lý do đóng: `OPERATOR_DISABLE`/`FAULT_TTL_EXPIRED`/`PACKAGE_REPLACED`); bất biến một-output-một-owner ép **lại** ở runtime; rút candidate → trọng tài rơi đúng **mức tiếp theo → default**, không kẹt ở giá trị cuối của Program đã dừng; gói mới xoá sạch quyền sở hữu cũ; luật **không có đường Program→IOP trực tiếp** kiểm bằng đọc chính mã nguồn. 9 test mới; `ctest` **1187/1187**; `--wave W4` 5/5 PASS. **Còn mở:** TTL hold-last vẫn là `0` (giữ vô hạn) vì con số chưa được Product+Controls ký. Chi tiết §3.5. |
 | `T59-407` | P0 | Per-Program/FB RETAIN namespace/layout/restart/reset | T59-104/401 | ORDERED | Warm/cold/revision/corrupt/reset matrix; no half reset; Program isolation. |
 | `T59-408` | P1 | Core trace ring buffer + real `TRACE_START/STOP` | T59-402/006 | ORDERED | 10k/10 min bounded, no RT allocation; BE caller thật; action ma = 0. |
 
@@ -1592,6 +1592,59 @@ khi biên nhận mang `DraftID`.
 candidate khi Disable thuộc `T59-406`. Trạng thái `RUNNING`/`DISABLED` cuối cùng
 chỉ được ghi khi có đường đọc trạng thái Program từ Core — hiện `STATUS` chưa mang
 trạng thái theo từng Program, đó là phần còn lại của lane runtime.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-406` — Sổ candidate, rút theo lý do, và đường rơi về
+
+**Vì sao cần một sổ riêng.** `PriorityResolver` chỉ biết "mức 5 đang active",
+không biết mức 5 đó là **của Program nào**. Với một Program thì hai câu đó trùng
+nhau; với 32 Program thì "ai đang giữ AO-3" trở thành câu hỏi **không có nơi nào
+trả lời** — và đó đúng là câu hỏi đầu tiên người vận hành hỏi khi một van không
+nghe lệnh. `ProgramCandidateRegistry` là mắt xích `owner registry` của kiến trúc
+§7; nó không tự ghi ra điểm nào và không thay resolver làm trọng tài.
+
+**Rút phải mang LÝ DO.** "Đã rút" mà không nói vì sao buộc người vận hành đoán
+giữa một **lệnh chủ ý** và một **sự cố** — hai thứ cần hai phản ứng khác nhau.
+Enum đóng ba lý do: `OPERATOR_DISABLE` (rút ngay tại safe boundary),
+`FAULT_TTL_EXPIRED`, `PACKAGE_REPLACED`.
+
+**Rút KHÔNG xoá bản ghi.** Xoá sẽ làm câu hỏi "vì sao van này về default" mất câu
+trả lời đúng vào lúc cần nó nhất. `owner_of()` trả rỗng cho claim đã rút vì nó
+trả lời "ai **đang** giữ", còn `find()` vẫn cho biết ai đã giữ và vì sao thôi.
+
+**Một output, một owner — ép LẠI ở runtime.** `T59-304` đã ép ở Check, nhưng gói
+có thể tới từ **bundle import** hoặc từ một writer khác phiên bản. Runtime không
+được tin lớp trước ở một bất biến an toàn: hai Program cùng giữ một output vật lý
+là hai nguồn sự thật cho cùng một van. Đăng ký chạy **trước** khi publish — phát
+hiện sau khi đã ghi ra thì đã muộn.
+
+**Chiếm chỗ đã rút vẫn bị từ chối.** Quyền sở hữu thuộc **package**, không thuộc
+thứ tự tới trước. Cùng Program claim lại sau khi bị rút là **hồi phục**, không
+phải xung đột.
+
+**Đường rơi về là thứ làm việc rút có nghĩa.** Test đi trọn: mức 4 thắng mức 5 →
+rút mức 4, rơi xuống mức 5 → rút nốt mức 5, về **DEFAULT**. Rút mà đầu ra kẹt ở
+giá trị cuối của Program đã chết thì rút chỉ là một dòng log. Test đầu-cuối chạy
+Program thật, publish qua resolver, rồi `stop()` và kiểm AO về `0.0`.
+
+**"Không có đường Program→IOP trực tiếp" kiểm bằng ĐỌC MÃ NGUỒN.** Một test hành
+vi không chứng minh được điều này — nó chỉ chứng minh đường hợp lệ chạy đúng,
+không chứng minh **không có** đường thứ hai. Test đọc chính
+`st_process_image.cpp` và khẳng định không có `plc_shm`/`iop_write`/`shm_write`,
+đồng thời khẳng định đường hợp lệ (`PRIO_LOCAL_LOGIC`, `resolver`) **thực sự có
+mặt** — nếu không, phép kiểm trên chỉ đang xác nhận một file rỗng.
+
+**Ranh giới trung thực — TTL hold-last vẫn là `0`.** `0` nghĩa là giữ hold-last
+**không giới hạn** khi Program FAULTED. Cơ chế TTL đã có và đã có test, nhưng con
+số cụ thể là quyết định Product+Controls (`DDD-CTRL-PROG-001` §15) **chưa được
+ký**. Tự chọn một con số ở đây là chọn thay họ xem thiết bị giữ đầu ra bao lâu
+sau khi chương trình chết — không phải quyết định của lane implementation. Đây là
+mục **duy nhất** của `T59-406` chưa đóng được, và nó bị chặn bởi chữ ký chứ không
+bởi mã.
+
+Interlock và SafeState là hai mắt xích đã tồn tại (`safe_state.hpp`, ma trận
+trigger T1–T8); task này nối candidate vào đầu chuỗi chứ không viết lại chúng.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
