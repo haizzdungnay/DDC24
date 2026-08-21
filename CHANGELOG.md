@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### T59-404 — Published Signal ở runtime: double-buffer, freshness, ba chính sách (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/st_signal_bus.{hpp,cpp}` (mới),
+  `apps/core/application/st/tests/test_st_signal_bus.cpp` (mới),
+  `apps/core/application/st/st_scheduler.{hpp,cpp}`,
+  `apps/core/application/st/st_package_v2.{hpp,cpp}`,
+  `apps/core/application/st/st_package_main.cpp`,
+  `apps/core/application/st/st_package_golden_main.cpp`,
+  `apps/core/application/programming/programming_runtime_coordinator.{hpp,cpp}`,
+  `apps/web-api/internal/programming/compiler/packager.go`,
+  `apps/web-api/internal/programming/application/checks{,_invariants}.go`,
+  `contracts/programming/golden/*`, `contracts/programming/g1_contract_join_v1.json`,
+  Plan 59 §3/§3.5, Risk Register v4.7, Traceability v5.5, baseline manifest v1.28.
+- **Thêm:** `StSignalBus` double-buffer. Publisher ghi vào bản nháp; đổi bản là
+  **một** lần ghi atomic ở boundary nên consumer hoặc thấy trọn bản cũ hoặc trọn
+  bản mới. Một ô nhớ chung sẽ cho consumer đọc nửa giá trị mới và nửa giá trị cũ —
+  với `StCell` 8 byte trên bus 32 bit, đó là một số **chưa Program nào từng ghi**.
+  Khoá thì đưa đường quét vào chờ, thứ mà `T59-403` vừa loại bỏ.
+- **Ba chính sách khác nhau thật:** `HOLD_LAST` giữ giá trị cuối, `USE_FALLBACK`
+  dùng giá trị **khai báo**, `WAIT` trả `UNAVAILABLE`. "Chưa ai publish" khác
+  "quá hạn": chỉ `USE_FALLBACK` có câu trả lời khai báo cho trường hợp đầu.
+  Producer dừng làm giá trị **quá hạn theo freshness** chứ không biến mất tức thì —
+  xoá ngay sẽ biến một sự cố có thời hạn thành sự cố tức thì.
+- **Sửa kèm 1 — signal chưa từng đi vào container.** `mkddc-st-package` không có
+  đường nhận signal và `ProcessPackager` không truyền, nên mọi khai báo Published
+  Signal đã qua validate ở `T59-304` **không tới được thiết bị**: bus runtime luôn
+  rỗng bất kể người dùng cấu hình gì. Nay `SIGNAL_DEFS` mang thêm
+  `stalePolicy`/`fallbackBits`, CLI nhận `--signals <file JSON>` (file chứ không
+  phải argv vì tên signal là chuỗi người dùng đặt), giá trị dự phòng đi xuống dưới
+  dạng **bit** của `StCell` để không có lần làm tròn nào.
+- **Sửa kèm 2 — `stalePolicy` không phải enum đóng.** Check chỉ kiểm cặp
+  policy↔fallback nên `"MAGIC"`, chuỗi rỗng hay `"HOLD_LAST "` đều lọt và buộc
+  runtime phải đoán. Nay đóng ở ba lớp độc lập: Check (Go), writer + loader
+  package (C++), và `StSignalBus::declare`.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1179/1179** pass (11 test bus + 2 test
+  coordinator mới); **0 lần đọc rách** qua 20.000 vòng publisher/consumer song
+  song; 2 test Go mới; `scripts/verify-project.sh --wave W4` **5/5 PASS**;
+  `verify_programming_g1_contracts.py` 10/10; `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-404`, `RSK-PROG-012/017/020`, DDD §4.5/§10.
+
 ### T59-403 — Worker lane, cô lập lỗi Program và ràng buộc không cấp phát (2026-08-21)
 
 - **Phạm vi:** `apps/core/application/st/st_scheduler.{hpp,cpp}`,

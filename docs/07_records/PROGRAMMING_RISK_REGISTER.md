@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.6 |
+| Phiên bản | 4.7 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -625,6 +625,16 @@ Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
 Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
+### 5.43 Cập nhật treatment source `T59-404` (Plan59 W4)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-017` | Double-buffer + commit ở boundary: consumer **không bao giờ** thấy giá trị chưa từng được publish, và mọi consumer trong một chu kỳ thấy **cùng một** ảnh signal nên kết quả không phụ thuộc lane nào chạy trước; 20.000 vòng publisher/consumer song song cho **0 lần đọc rách** | Nối opcode đọc/ghi signal vào thân chương trình, chạy 24 h trên target (`T59-702`), Test Result `VS-PROG-U08` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-012` | Ba chính sách stale cho ba hành vi **khác nhau**; "chưa ai publish" khác "quá hạn" — chỉ `USE_FALLBACK` có câu trả lời khai báo, hai chính sách kia nói thẳng `UNAVAILABLE` thay vì bịa 0; producer dừng làm giá trị **quá hạn theo freshness** chứ không biến mất tức thì | Trọng tài output khi consumer nhận `UNAVAILABLE` (`T59-406`), HIL | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-020` | Signal nay **thực sự đi trong container**: trước bản vá `mkddc-st-package` không có đường nhận signal nên mọi khai báo đã validate vẫn không tới thiết bị; `stalePolicy` đóng thành enum ở **ba** lớp độc lập (Check Go, writer + loader C++, `StSignalBus::declare`) | Ký artifact (`T59-602`), nạp trên target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -677,6 +687,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 4.7 | 2026-08-21 | Ghi `T59-404` (Plan59 W4) cho treatment partial RSK-012/017/020: bus Published Signal double-buffer commit ở boundary với 0 đọc rách qua 20.000 vòng, ba chính sách stale phân biệt "chưa publish" với "quá hạn", signal lần đầu thực sự đi vào container, `stalePolicy` đóng ở ba lớp. Giữ 22/22 Open vì opcode signal trong thân chương trình, trọng tài output và target chưa có. |
 | 4.6 | 2026-08-21 | Ghi `T59-403` (Plan59 W4) cho treatment partial RSK-006/018/021: lane là đơn vị song song với hai chế độ cho cùng kết quả, đảo chiều chính sách fault sang cô lập theo kiến trúc §8, đường quét 0 cấp phát, TSan 54 test 0 cảnh báo tái lập bằng script. Giữ 22/22 Open vì đo trên target và rút candidate chưa có. |
 | 4.5 | 2026-08-21 | Ghi `T59-402` (Plan59 W4) cho treatment partial RSK-001/005/018/022: chu kỳ release theo từng Program với bù trôi theo mốc lý thuyết, lỡ chu kỳ đếm-và-bỏ, chu kỳ đi trong package và bị chặn ở cả writer lẫn loader, trần 16 chạy đồng thời ép ở `start()`, đường khôi phục package v2 sau reboot được bịt. Giữ 22/22 Open vì worker lane/đo tải target/intent Enable chưa có. |
 | 4.4 | 2026-08-21 | Ghi `T59-401` (Plan59 W4, **mở Wave**) cho treatment partial RSK-001/003/006: coordinator nạp package v2 bằng parser dùng chung, dựng topology theo chính package, bỏ hardcode `program-main`, gói hỏng 0 mutation, dual-reader v1 còn sống. Giữ 22/22 Open vì scheduler/fault-isolation/target chưa có. |

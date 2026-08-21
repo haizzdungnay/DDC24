@@ -1293,7 +1293,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | `T59-401` | P0 | Package coordinator/loader v2 + topology image, bỏ hardcode `program-main` | T59-106/305 | **DONE** | `UnpackPackageV2` dùng **chung một parser** với loader (không bản thứ hai); coordinator probe v1/v2 và dựng topology theo **chính package** — bootstrap không còn phải biết trước tên Program; `instance_id` bỏ hardcode `program-main`, thay bằng validator định dạng; stage/arm/rollback/start chạy trên **toàn bộ** tập instance; gói hỏng để lại **0 mutation** (mọi stage trước đó bị huỷ); `instance_ids()` cho read-back; 4 test mới; `ctest` **1149/1149**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-402` | P0 | Per-Program due queue/state/period/budget/metrics, max 16 | T59-401 | **DONE** | Chu kỳ release theo **từng Program** (`st_program_due`/`st_program_mark_released`), bù trôi theo mốc **lý thuyết**, lỡ chu kỳ thì **đếm và bỏ** chứ không chạy bù; chu kỳ đi **trong PROGRAM_TABLE của package** nên hai controller cùng gói chạy cùng dãy release; writer **và** loader cùng từ chối chu kỳ ngoài ba lớp profile; trần **16 Program chạy đồng thời** ép ở `start()`; thứ tự chạy độc lập thứ tự tạo; đo `last_exec_ns`/`max_exec_ns`/`missed_release_count` theo Program. Sửa kèm: package v2 **không sống sót reboot** (đường restore nạp nguyên container như artifact v1). 11 test mới; `ctest` **1159/1159**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-403` | P0 | Worker lanes/fault isolation/no-allocation RT | T59-402 | **DONE** | Lane là đơn vị song song (`StLaneMode::SEQUENTIAL|PARALLEL`, worker tạo sẵn ngoài chu kỳ, spin+yield không vào kernel); hai chế độ cho **đúng cùng** kết quả trên fixture 10 Program/3 chu kỳ/4 lane, ổn định qua 20 lần lặp; **đảo chiều** chính sách fault — fault của một Program **không** còn dừng cả Task (kiến trúc §8 `isolate Program`); đường quét **0 cấp phát** ở cả hai chế độ; lane vượt số worker vẫn chạy nốt trên luồng gọi. 7 test mới; `ctest` **1166/1166**; TSan 0 cảnh báo. Chi tiết §3.5. |
-| `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | ORDERED | No torn read; fallback/hold/wait; producer disable/fault/recover tests. |
+| `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | **DONE** | `StSignalBus` double-buffer, commit ở **boundary** nên mọi consumer trong một chu kỳ thấy cùng một ảnh; **0 đọc rách** qua 20.000 vòng publisher/consumer song song trên `StCell` 8 byte; ba chính sách `HOLD_LAST`/`USE_FALLBACK`/`WAIT` cho ba hành vi khác nhau, "chưa ai publish" khác "quá hạn"; producer dừng thì giá trị **quá hạn theo freshness** chứ không biến mất tức thì, hồi phục ngay ở boundary kế. Sửa kèm: signal **chưa từng** đi vào container (bus runtime luôn rỗng) và `stalePolicy` **không phải enum đóng** ở Check. 15 test mới; `ctest` **1179/1179**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | ORDERED | RBAC/idempotency/restart intent; STARTING/RUNNING/STOPPING/DISABLED truth. |
 | `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | ORDERED | Disable/fault/TTL withdraw; next priority/default/safe path; no direct IOP. |
 | `T59-407` | P0 | Per-Program/FB RETAIN namespace/layout/restart/reset | T59-104/401 | ORDERED | Warm/cold/revision/corrupt/reset matrix; no half reset; Program isolation. |
@@ -1462,6 +1462,62 @@ với "unexpected memory mapping" ngay ở bước `gtest_discover_tests`.
 fallback khi consumer đọc signal của producer vừa fault thuộc `T59-404`; rút
 candidate và safe-state khi Program fault thuộc `T59-406`. Số đo TSan là host,
 trên fixture của bộ test — không phải 24 h trên target (`T59-702`).
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-404` — Published Signal: double-buffer, freshness và ba chính sách
+
+**Double-buffer chứ không phải một ô có khoá.** Publisher ghi trong lúc consumer
+đọc là chuyện bình thường khi hai Program ở hai lane khác nhau. Một ô nhớ chung
+sẽ cho consumer đọc được **nửa** giá trị mới và nửa giá trị cũ — với `StCell`
+8 byte trên bus 32 bit, đó là một số **chưa Program nào từng ghi**. Khoá thì đưa
+đường quét vào chờ, thứ mà `T59-403` vừa loại bỏ. Test tấn công thật: 20.000 vòng
+publisher/consumer song song, mọi giá trị publish đều là bội của
+`0x0001000100010001` nên một giá trị ghép từ hai bản sẽ lộ ra ngay — **0 lần**.
+
+**Commit ở BOUNDARY, không ngay khi publish.** Trong cùng một chu kỳ, hai consumer
+chạy ở hai thời điểm khác nhau phải thấy **cùng một** ảnh signal. Cho consumer
+thấy giá trị ngay khi publisher ghi sẽ làm kết quả phụ thuộc lane nào chạy trước —
+đúng thứ mà "single/multicore cùng ngữ nghĩa" của `T59-403` cấm. Cái giá là độ trễ
+một chu kỳ, và nó rẻ hơn nhiều so với kết quả phụ thuộc thứ tự chạy.
+
+**Bản nháp kế thừa bản cũ trước khi đổi.** Một signal chỉ publish mỗi 30 s sẽ
+"biến mất" ở chu kỳ kế tiếp nếu bản nháp không được chép từ bản live — và
+`HOLD_LAST` sẽ giữ một ô **rỗng** thay vì giá trị cuối, tức là đúng ngược với tên
+của nó.
+
+**"Chưa ai publish" KHÁC "quá hạn".** Chỉ `USE_FALLBACK` có câu trả lời khai báo
+cho trường hợp chưa có dữ liệu; hai chính sách kia phải nói thẳng `UNAVAILABLE`.
+Bịa một giá trị ở đây đúng là lối "im lặng thay bằng 0" mà DDD §10 cấm.
+
+**Producer dừng làm giá trị GIÀ ĐI, không biến mất.** `note_publisher_stopped`
+cố ý **không** xoá giá trị: xoá sẽ biến một sự cố có thời hạn thành một sự cố tức
+thì, và `HOLD_LAST` mất hết ý nghĩa đúng vào lúc nó cần có nghĩa nhất. Test đi
+trọn dừng → còn trong hạn → quá hạn → hồi phục.
+
+**Sửa kèm 1 — signal chưa từng đi vào container.** `mkddc-st-package` không có
+đường nhận signal và `ProcessPackager` không truyền, nên **mọi** khai báo Published
+Signal đã qua validate ở `T59-304` vẫn không tới được thiết bị: bus ở runtime
+luôn rỗng bất kể người dùng cấu hình gì. Nay `SIGNAL_DEFS` mang thêm chính sách +
+giá trị dự phòng, CLI nhận `--signals <file JSON>`, và Check truyền danh sách đã
+sắp theo tên. Signal đi bằng **file JSON** chứ không bằng argv vì tên signal là
+chuỗi người dùng đặt — mọi dấu phân cách ta chọn đều có thể xuất hiện trong chính
+dữ liệu. Giá trị dự phòng đi xuống dưới dạng **bit** của `StCell`: mỗi lần đổi
+biểu diễn là một lần làm tròn, và làm tròn một giá trị an toàn là đúng thứ không
+được phép xảy ra âm thầm.
+
+**Sửa kèm 2 — `stalePolicy` không phải enum đóng.** Check chỉ kiểm cặp
+policy↔fallback, nên `"MAGIC"`, chuỗi rỗng, hay `"HOLD_LAST "` thừa khoảng trắng
+đều đi lọt và buộc runtime phải **đoán** thiết bị làm gì khi mất dữ liệu. Nay
+đóng ở **ba** lớp độc lập: Check (Go), writer và loader package (C++), và
+`StSignalBus::declare`. Ba cài đặt của cùng một hợp đồng là ba chỗ cần phép kiểm
+riêng — một hằng dùng chung chỉ làm cả ba cùng sai một lúc.
+
+**Ranh giới trung thực.** Đây là **bus và chính sách đọc**. Thân chương trình
+chưa có opcode đọc/ghi signal — nối vào lowering thuộc phần còn lại của lane
+compiler. Trọng tài output khi consumer nhận `UNAVAILABLE` thuộc `T59-406`. Số đo
+"không đọc rách" là host, trên một cặp luồng — không phải 24 h trên target
+(`T59-702`).
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
