@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sort"
+	"strings"
 
 	programmingstore "mkddc-web/internal/programming/store"
 )
@@ -181,9 +182,50 @@ func revisionChangeCategory(before, after *programmingstore.RevisionObject) stri
 			return "RETAIN"
 		}
 		return "SOURCE"
+	case "PROGRAM", "FUNCTION", "FUNCTION_BLOCK":
+		// v2 đặt biến vào `locals` của POU, nên một thay đổi RETAIN đến dưới
+		// dạng thay đổi POU. Bỏ nhánh này thì impact RETAIN im lặng biến mất —
+		// và Commission sẽ không còn hỏi acknowledgement RETAIN nữa.
+		if retainedLocalsChanged(before, after) {
+			return "RETAIN"
+		}
+		return "SOURCE"
 	default:
 		return "SOURCE"
 	}
+}
+
+// retainedLocalsChanged so TẬP biến RETAIN của POU hai bên. So cả payload sẽ
+// báo RETAIN cho mọi lần sửa mã; chỉ so `retain=true` mới đúng thứ ảnh hưởng
+// tới state đang chạy.
+func retainedLocalsChanged(before, after *programmingstore.RevisionObject) bool {
+	return retainedLocalsSignature(before) != retainedLocalsSignature(after)
+}
+
+func retainedLocalsSignature(object *programmingstore.RevisionObject) string {
+	if object == nil {
+		return ""
+	}
+	var payload struct {
+		Locals []struct {
+			VariableID string `json:"variableId"`
+			Name       string `json:"name"`
+			Type       string `json:"type"`
+			Retain     bool   `json:"retain"`
+		} `json:"locals"`
+	}
+	if json.Unmarshal(object.PayloadJSON, &payload) != nil {
+		return ""
+	}
+	parts := make([]string, 0, len(payload.Locals))
+	for _, local := range payload.Locals {
+		if !local.Retain {
+			continue
+		}
+		parts = append(parts, local.VariableID+"|"+local.Name+"|"+local.Type)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ";")
 }
 
 func retainedVariable(object *programmingstore.RevisionObject) bool {

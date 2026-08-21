@@ -568,7 +568,7 @@ func validBundleDescriptor(descriptor bundleFileDescriptor) bool {
 
 func validBundleObjectKind(kind string) bool {
 	switch kind {
-	case "METADATA", "PROGRAM", "FUNCTION", "FUNCTION_BLOCK", "VARIABLE", "BINDING", "TASK":
+	case "METADATA", "PROGRAM", "FUNCTION", "FUNCTION_BLOCK", "VARIABLE", "BINDING", "TASK", "SIGNAL":
 		return true
 	default:
 		return false
@@ -584,7 +584,11 @@ func validateRevisionManifests(manifest bundleManifest, files map[string][]byte,
 		}
 		var revision revisionManifestDocument
 		if err := decodeBundleJSON(files[manifestPath], &revision); err != nil || revision.SchemaVersion != 1 ||
-			revision.TargetProfile != targetProfile || revision.ProjectID != manifest.SourceProject.ProjectID || len(revision.Objects) < 2 {
+			revision.TargetProfile != targetProfile || revision.ProjectID != manifest.SourceProject.ProjectID ||
+			len(revision.Objects) < 1 {
+			// Trần dưới là 1, không phải 2. Document v2 bỏ object TASK, nên một
+			// Project chưa có POU nào seal ra đúng MỘT object METADATA — và đó
+			// là trạng thái hợp lệ, không phải bundle hỏng.
 			return ErrInvalidBundle
 		}
 		seen := make(map[string]struct{}, len(revision.Objects))
@@ -621,9 +625,10 @@ func validateRevisionManifests(manifest bundleManifest, files map[string][]byte,
 
 func selectedRevisionDraft(manifest bundleManifest, files map[string][]byte, newProjectID, newProjectName string) ([]byte, error) {
 	prefix := "revisions/" + manifest.SelectedRevisionID + "/objects/"
-	programs, variables, bindings := make([]any, 0), make([]any, 0), make([]any, 0)
-	var projectValue, libraryValue, taskValue any
-	metadataCount, taskCount := 0, 0
+	objects, programs := make([]any, 0), make([]any, 0)
+	signals, bindings := make([]any, 0), make([]any, 0)
+	var projectValue, libraryValue, executionValue any
+	metadataCount := 0
 	for _, descriptor := range manifest.Files {
 		name := descriptor.Path
 		if descriptor.RevisionID != manifest.SelectedRevisionID || !strings.HasPrefix(name, prefix) {
@@ -639,26 +644,34 @@ func selectedRevisionDraft(manifest bundleManifest, files map[string][]byte, new
 		switch kind {
 		case "metadata":
 			metadata, ok := value.(map[string]any)
-			if !ok || len(metadata) != 2 {
+			if !ok || len(metadata) < 2 || len(metadata) > 3 {
 				return nil, fmt.Errorf("%w: metadata shape", ErrInvalidBundle)
 			}
 			projectValue, libraryValue = metadata["project"], metadata["library"]
+			executionValue = metadata["execution"]
 			metadataCount++
 		case "program", "function", "function_block":
-			programs = append(programs, value)
-		case "variable":
-			variables = append(variables, value)
+			object, ok := value.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("%w: POU shape %q", ErrInvalidBundle, name)
+			}
+			// Cấu hình Program đi kèm payload POU (xem `revisionPayload`), nên
+			// tách nó ra lại ở đây thay vì bịa một object thứ hai.
+			if config, ok := object["programConfig"].(map[string]any); ok {
+				programs = append(programs, config)
+				delete(object, "programConfig")
+			}
+			objects = append(objects, object)
+		case "signal":
+			signals = append(signals, value)
 		case "binding":
 			bindings = append(bindings, value)
-		case "task":
-			taskValue = value
-			taskCount++
 		default:
 			return nil, fmt.Errorf("%w: object kind %q", ErrInvalidBundle, kind)
 		}
 	}
-	if metadataCount != 1 || taskCount != 1 {
-		return nil, fmt.Errorf("%w: metadata=%d task=%d", ErrInvalidBundle, metadataCount, taskCount)
+	if metadataCount != 1 {
+		return nil, fmt.Errorf("%w: metadata=%d", ErrInvalidBundle, metadataCount)
 	}
 	projectMap, ok := projectValue.(map[string]any)
 	if !ok || projectMap["projectId"] != manifest.SourceProject.ProjectID {
@@ -666,9 +679,18 @@ func selectedRevisionDraft(manifest bundleManifest, files map[string][]byte, new
 	}
 	projectMap["projectId"] = newProjectID
 	projectMap["name"] = newProjectName
-	document := map[string]any{"schemaVersion": float64(1), "project": projectMap, "programs": programs,
-		"variables": variables, "bindings": bindings, "task": taskValue, "library": libraryValue}
-	if err := validateDraftDocument(document); err != nil {
+	if executionValue == nil {
+		executionValue = map[string]any{"profileId": domain.ProfileID,
+			"maxProgramsEnabled": float64(domain.MaxProgramsEnabled)}
+	}
+	// Library nhập về là library MỚI của Project mới; pin cũ không còn nghĩa.
+	if libraryMap, ok := libraryValue.(map[string]any); ok {
+		libraryMap["projectLibraryRevisionId"] = nil
+	}
+	document := map[string]any{"schemaVersion": float64(draftDocumentVersion), "project": projectMap,
+		"objects": objects, "programs": programs, "signals": signals, "bindings": bindings,
+		"library": libraryValue, "execution": executionValue}
+	if err := validateDraftDocumentV2(document); err != nil {
 		return nil, fmt.Errorf("%w: Draft contract: %v", ErrInvalidBundle, err)
 	}
 	content, err := json.Marshal(document)

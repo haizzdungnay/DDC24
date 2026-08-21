@@ -335,9 +335,20 @@ func compilerInput(revision programmingstore.RevisionSnapshot) (programmingcompi
 		diagnostic := scopeDiagnostic(programs[0].ObjectID, 0)
 		return programmingcompiler.Input{}, &diagnostic
 	}
+	// Document v2 (T59-301) đặt identity ở `objectId` và mã nguồn ở `source`;
+	// v1 dùng `programId`/`document`. Đọc cả hai tên là điều kiện để một Revision
+	// đã seal TRƯỚC khi nâng model vẫn Check lại được — bỏ đường v1 là làm mất
+	// khả năng kiểm lại lịch sử của chính mình.
 	var programID, language string
-	document := payload["document"]
-	if json.Unmarshal(payload["programId"], &programID) != nil || json.Unmarshal(payload["language"], &language) != nil ||
+	identity := payload["objectId"]
+	if len(identity) == 0 {
+		identity = payload["programId"]
+	}
+	document := payload["source"]
+	if len(document) == 0 {
+		document = payload["document"]
+	}
+	if json.Unmarshal(identity, &programID) != nil || json.Unmarshal(payload["language"], &language) != nil ||
 		programID != programs[0].ObjectID || (language != "ST" && language != "FBD") || len(document) == 0 {
 		diagnostic := scopeDiagnostic(programs[0].ObjectID, 0)
 		return programmingcompiler.Input{}, &diagnostic
@@ -389,25 +400,41 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 		class     string
 		dataType  string
 	}
+	// Document v2 (T59-301) đặt biến vào `locals` của chính POU thay vì một
+	// Revision object kind VARIABLE riêng. Đọc từ POU giữ ĐÚNG MỘT nguồn: nhân
+	// bản biến ra object thứ hai chỉ để lớp này đọc được là cách hai bản trôi
+	// khỏi nhau ngay lần sửa sau.
 	variables := make(map[string]variableInfo)
 	for _, object := range revision.Objects {
-		if object.Kind != "VARIABLE" {
+		if object.Kind != "PROGRAM" && object.Kind != "FUNCTION" && object.Kind != "FUNCTION_BLOCK" {
 			continue
 		}
 		var payload struct {
-			VariableID string `json:"variableId"`
-			ProgramID  string `json:"programId"`
-			Name       string `json:"name"`
-			Type       string `json:"type"`
-			Class      string `json:"class"`
+			ObjectID string `json:"objectId"`
+			Locals   []struct {
+				VariableID string `json:"variableId"`
+				ProgramID  string `json:"programId"`
+				Name       string `json:"name"`
+				Type       string `json:"type"`
+				Class      string `json:"class"`
+			} `json:"locals"`
 		}
-		if err := json.Unmarshal(object.PayloadJSON, &payload); err != nil || payload.VariableID != object.ObjectID ||
-			payload.Name == "" || payload.Type == "" {
+		if err := json.Unmarshal(object.PayloadJSON, &payload); err != nil {
 			diagnostic := scopeDiagnostic(programID, 0)
 			return nil, &diagnostic
 		}
-		variables[payload.VariableID] = variableInfo{name: payload.Name, programID: payload.ProgramID,
-			class: payload.Class, dataType: payload.Type}
+		for _, local := range payload.Locals {
+			if local.VariableID == "" || local.Name == "" || local.Type == "" {
+				diagnostic := scopeDiagnostic(programID, 0)
+				return nil, &diagnostic
+			}
+			owner := local.ProgramID
+			if owner == "" {
+				owner = object.ObjectID
+			}
+			variables[local.VariableID] = variableInfo{name: local.Name, programID: owner,
+				class: local.Class, dataType: local.Type}
+		}
 	}
 	var entries []programmingcompiler.IoMapEntry
 	for _, object := range revision.Objects {
