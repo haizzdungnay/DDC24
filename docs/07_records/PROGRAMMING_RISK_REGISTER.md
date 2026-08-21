@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 3.7 |
+| Phiên bản | 3.8 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -524,6 +524,18 @@ Wave W2 đóng với 5/5 task DONE. Evidence vẫn là host/local (vitest + jsdo
 **không** phải E2E trình duyệt thật, không phải target/HIL. `22/22` risk giữ
 Open, S×L và residual không đổi.
 
+### 5.34 Cập nhật treatment source `T59-301` (Plan59 W3 — mở Wave)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-001` | Document v2 tách POU khỏi cấu hình Program và mang trần 32 Program là **trần cứng ở Draft**: Program thứ 33 bị từ chối và Draft giữ đúng 32, POU đi kèm cũng không được ghi | Check/compile 32 Program (`T59-302`), manifest/topology/budget (`T59-305`), runtime (`T59-402`), target 10-Program (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-006` | Migration v1→v2 **tất định + idempotent + giữ nguyên identity**, nên Revision đã seal không trỏ hư không; `compilerInput` đọc cả hai đời tên nên Revision cũ vẫn Check lại được | Migration trên board thật (`T59-705`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-012` | `signals` là công dân hạng nhất ở Draft với publisher/freshness/policy/fallback; `USE_FALLBACK` và giá trị dự phòng đi liền nhau; dải freshness khớp chính xác `CHECK` của store | Validation cấp package (`T59-304`), runtime double-buffer (`T59-404`) | `OPEN — PARTIAL SOURCE` |
+
+Ba consumer được sửa theo mà **không nhân bản dữ liệu**: io_map đọc `locals` của
+POU, phân loại RETAIN đọc tập biến RETAIN của POU, và `compilerInput` đọc cả hai
+đời tên. Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -576,6 +588,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 3.8 | 2026-08-21 | Ghi `T59-301` (Plan59 W3, **mở Wave**) cho treatment partial RSK-001/006/012: document v2 tách POU khỏi cấu hình Program, trần 32 là trần cứng ở Draft, migration v1→v2 tất định giữ identity, signal hạng nhất với fallback ghép cứng vào policy. Giữ 22/22 Open vì Check/runtime/target chưa có. |
 | 3.7 | 2026-08-20 | Ghi `T59-203` (Plan59 W2, **đóng Wave 5/5**) cho treatment partial RSK-005/008/014: PGM-04 chỉ hiển thị review-gate mà không có ô tick duyệt, phân biệt state chưa biết với 0, và dùng lại ETag mới. Giữ 22/22 Open vì E2E real-backend và evidence Controls/Safety chưa có. |
 | 3.6 | 2026-08-20 | Ghi `T59-204` (Plan59 W2) cho treatment partial RSK-017/020: Control Library đi trong bundle nguồn có sẵn, export tất định không mang artifact, corpus thù địch 10 biến thể 0 mutation, lệch version registry SYSTEM có mã riêng, Seal publish+pin library cùng transaction. Giữ 22/22 Open vì bundle chưa ký (`T59-602`) và chưa có Test Result. |
 | 3.5 | 2026-08-20 | Ghi `T59-205` (Plan59 W2) cho treatment partial RSK-005/020: review gate PID ép ở ba đường Check và độc lập producer; token phê duyệt suy ra từ contract profile, generator từ chối token bịa, G1 ghim riêng danh sách đã duyệt. Giữ 22/22 Open và mọi residual vì evidence Controls/Safety thật (`VS-PROG-U12`/`T59-706`) chưa có. |

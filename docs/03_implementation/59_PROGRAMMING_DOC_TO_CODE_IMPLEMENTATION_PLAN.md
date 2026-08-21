@@ -992,12 +992,90 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-301` | P0 | Project Draft/model/API cho 32 Program + POU + signal definitions | T59-005/006 | ORDERED | CRUD/rename/duplicate/search, ETag/idempotency/restart; 33rd Program reject. |
+| `T59-301` | P0 | Project Draft/model/API cho 32 Program + POU + signal definitions | T59-005/006 | **DONE** | Document **v2**: POU (`objects`) tách khỏi cấu hình Program, biến vào `locals` của POU, `signals` hạng nhất, bỏ `task.programOrder` theo DDD §4.1; migration v1→v2 **tất định + idempotent + giữ identity**; op mới `upsertObject/removeObject/renameObject/duplicateObject/upsertProgram(v2)/upsertSignal/...` cộng **lớp tương thích op v1** để FE đang chạy không gãy; **Program thứ 33 bị từ chối và Draft giữ đúng 32**; tên POU unique case-folded; không cascade ngầm; 7 test v2 + adapter FE 3 test; `go test ./... -count=1` 18/18; FE 116 file / 1091 test; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-302` | P0 | Package Check toàn POU/Program/library/signal/resource | T59-106/201/301 | ORDERED | Aggregate diagnostics, deterministic build, no Active effect, concurrent Check bounded. |
 | `T59-303` | P0 | MB_RTU binding compiler adapter qua canonical Point contract | T59-302 | ORDERED | LOCAL/VP/MB_RTU input/output cases; endian/polling không tái định nghĩa; wrong direction reject. |
 | `T59-304` | P0 | Output owner/conflict + Published Signal publisher/consumer validation | T59-302/303 | ORDERED | Duplicate output/publisher reject; freshness/fallback/type graph tests. |
 | `T59-305` | P0 | Package manifest/topology/budget cho 32/16; Program mới Disabled | T59-302/304 | ORDERED | 32 compile, 16 enabled, one-over stable; manifest không chứa creation-order dependency. |
 | `T59-306` | P1 | FE PGM-02/03: POU tree, Program properties, mapping conflicts, signals | T59-301/304 | ORDERED | Sáu route target/legacy redirect; Function/FB hides invalid fields; E2E Draft save/reload. |
+
+### 3.4 Ghi chú thực thi W3
+
+#### `T59-301` — Document v2: POU, 32 Program và Published Signal
+
+**Ba khác biệt bản chất so với v1, mỗi cái sửa một lỗi mô hình thật.**
+
+1. *POU tách khỏi cấu hình Program.* `objects` giữ mã nguồn và interface;
+   `programs` chỉ giữ chu kỳ và trỏ tới một object kind `PROGRAM`. Trộn hai thứ
+   như v1 làm "đổi chu kỳ" và "sửa mã" đụng cùng một bản ghi — mọi diff, mọi
+   impact và mọi hash đều không phân biệt được hai loại thay đổi đó.
+2. *Bỏ `task.programOrder`.* DDD §4.1 cấm expose Task order và §7.1 quy định mỗi
+   Program tự release theo deadline riêng. Giữ một mảng thứ tự là **hứa một ngữ
+   nghĩa mà runtime không thực hiện**.
+3. *`signals` là công dân hạng nhất*, không phải biến toàn cục ẩn, và mang đủ
+   publisher/freshness/policy/fallback ngay ở Draft.
+
+**Migration v1→v2 không sinh identity mới.** Chạy hai lần trên cùng document cho
+**đúng cùng byte**, và chạy lại trên chính kết quả v2 là no-op. Mọi `programId`,
+`variableId`, `bindingId` cũ được giữ nguyên: đổi identity khi migrate sẽ làm mọi
+Revision đã seal trỏ vào hư không. Chu kỳ của Task v1 trở thành chu kỳ của từng
+Program; biến v1 vào `locals` của đúng POU sở hữu; binding v1 được nối lại với
+`programId` + tên biến.
+
+**Lớp tương thích op v1 là bắt buộc, không phải tiện lợi.** FE đang chạy và mọi
+bundle/test hiện có nói ngôn ngữ v1. Đổi cả model lẫn toàn bộ consumer trong một
+bước là cách chắc chắn để một consumer bị bỏ quên rồi hỏng lặng lẽ. Op v1 giữ
+NGUYÊN tên và được dịch sang v2 tại một chỗ; phân biệt v1/v2 theo **hình dạng
+payload** (`program.objectId` chỉ có ở v2, `program.document` chỉ có ở v1).
+Binding v1 giữ hình dạng **mở** — Mapping tab ghi thêm `point`, `dataType`,
+`unit`, `writable`; giải mã chặt ở đây sẽ từ chối đúng dữ liệu mà lớp Check đang
+đọc.
+
+**Trần 32 là trần cứng và Draft không nhận nửa vời.** Program thứ 33 bị từ chối
+và cả POU đi kèm cũng **không** được ghi — test kiểm cả hai, vì một Draft nhận
+POU rồi từ chối Program sẽ để lại rác mà người dùng không thấy.
+
+**Không cascade ngầm.** Xoá POU đang có Program, hoặc xoá Program đang publish
+signal, đều **báo lỗi** thay vì xoá kèm. Xoá kèm làm người dùng mất cấu hình mà
+không ai nói.
+
+**`USE_FALLBACK` và giá trị dự phòng đi liền nhau.** Bắt buộc có với
+`USE_FALLBACK`, cấm có với ba chính sách còn lại — đúng lối "im lặng thay bằng 0"
+mà DDD §10 cấm. Dải `freshnessMs` 1000..90000 khớp **chính xác** `CHECK` của
+store: hai lớp nói khác nhau nghĩa là lớp trên nhận rồi lớp dưới chối.
+
+**Ba consumer được sửa theo, không nhân bản dữ liệu.**
+
+- `ioMapFromRevision` đọc `locals` của POU thay vì object kind `VARIABLE`. Nhân
+  bản biến ra một object thứ hai chỉ để lớp này đọc được là cách hai bản trôi
+  khỏi nhau ngay lần sửa sau.
+- `revisionChangeCategory` phân loại `RETAIN` từ **tập biến RETAIN** của POU. Bỏ
+  nhánh này thì impact RETAIN im lặng biến mất và Commission không còn hỏi
+  acknowledgement RETAIN nữa. So cả payload sẽ báo RETAIN cho mọi lần sửa mã, nên
+  chỉ so chữ ký của các biến `retain=true`.
+- `compilerInput` đọc **cả hai** tên (`objectId`/`source` và `programId`/
+  `document`): một Revision seal trước khi nâng model vẫn phải Check lại được.
+
+**Cấu hình Program đi trong payload POU, không thành object riêng.**
+`revision_objects` khoá theo `object_id` duy nhất và Program là quan hệ 1:1 với
+đúng một PROGRAM POU. Tách thành hai Revision object buộc phải **bịa một UUID
+thứ hai cho cùng một thứ**.
+
+**Trần dưới của Revision object hạ từ 2 xuống 1.** v2 bỏ object `TASK`, nên một
+Project chưa có POU nào seal ra đúng một object `METADATA` — đó là trạng thái hợp
+lệ, không phải bundle hỏng.
+
+**FE: một adapter, không sửa bốn tab.** `toWorkspaceDocument` chiếu v2 về view
+model mà bốn tab Design đang dùng. Đường **ghi** vẫn là op v1, nên đổi cả đọc lẫn
+ghi cùng lúc sẽ là hai thay đổi lớn chồng nhau. Chuyển tab sang mô hình v2 nguyên
+bản thuộc `T59-306`; tới lúc đó adapter biến mất. Chu kỳ lạ rơi về 1000 thay vì
+ép kiểu — giao diện không được hiện một chu kỳ mà profile không cho phép.
+
+**Ranh giới trung thực.** Đây là **model + Draft API**. Check đa Program thuộc
+`T59-302`; binding MB_RTU thuộc `T59-303`; kiểm output owner/publisher ở cấp
+package thuộc `T59-304`; UI PGM-02/03 thuộc `T59-306`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
 ### W4 — Runtime, scheduler, signal, Enable/Disable và output
 

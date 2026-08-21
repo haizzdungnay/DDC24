@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Changed — `T59-301` Project Draft lên document v2: POU, 32 Program, Published Signal (2026-08-21)
+
+**Ba khác biệt bản chất so với v1**, mỗi cái sửa một lỗi mô hình thật:
+
+1. **POU tách khỏi cấu hình Program.** `objects` giữ mã nguồn và interface;
+   `programs` chỉ giữ chu kỳ và trỏ tới một object kind `PROGRAM`. Trộn hai thứ
+   như v1 làm "đổi chu kỳ" và "sửa mã" đụng cùng một bản ghi — mọi diff, impact
+   và hash đều không phân biệt được hai loại thay đổi đó.
+2. **Bỏ `task.programOrder`.** DDD §4.1 cấm expose Task order và §7.1 quy định
+   mỗi Program tự release theo deadline riêng; giữ mảng thứ tự là hứa một ngữ
+   nghĩa mà runtime không thực hiện.
+3. **`signals` là công dân hạng nhất** với publisher/freshness/policy/fallback
+   ngay ở Draft.
+
+**Migration v1→v2 không sinh identity mới**, tất định và idempotent: chạy hai lần
+cho đúng cùng byte, chạy lại trên kết quả v2 là no-op. Đổi identity khi migrate
+sẽ làm mọi Revision đã seal trỏ vào hư không.
+
+**Lớp tương thích op v1 là bắt buộc.** FE đang chạy và mọi bundle/test hiện có
+nói ngôn ngữ v1; đổi cả model lẫn toàn bộ consumer trong một bước là cách chắc
+chắn để một consumer bị bỏ quên rồi hỏng lặng lẽ. Op v1 giữ nguyên tên, phân biệt
+v1/v2 theo **hình dạng payload**. Binding v1 giữ hình dạng **mở** vì Mapping tab
+ghi thêm `point`/`dataType`/`unit`/`writable`.
+
+**Trần 32 là trần cứng ở Draft:** Program thứ 33 bị từ chối và POU đi kèm cũng
+không được ghi. **Không cascade ngầm:** xoá POU đang có Program, hoặc xoá Program
+đang publish signal, đều báo lỗi thay vì xoá kèm.
+
+**Ba consumer sửa theo mà không nhân bản dữ liệu:** `ioMapFromRevision` đọc
+`locals` của POU; phân loại `RETAIN` đọc tập biến `retain=true` của POU (bỏ nhánh
+này thì impact RETAIN im lặng biến mất và Commission không còn hỏi
+acknowledgement); `compilerInput` đọc **cả hai** đời tên nên Revision seal trước
+khi nâng model vẫn Check lại được.
+
+**FE:** một adapter `toWorkspaceDocument` chiếu v2 về view model của bốn tab
+Design; đường ghi vẫn là op v1. Chuyển tab sang v2 nguyên bản thuộc `T59-306`.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; FE **116 file / 1091 test**; `ctest` 1138/1138;
+`verify-project.sh --wave W3` **6/6 PASS**.
+
 ### Added — `T59-203` FE PGM-04 Control Library (đóng Wave W2) (2026-08-20)
 
 Route `eng/programming/projects/{id}/library` + mục nav desktop; trang tìm kiếm,
