@@ -33,11 +33,11 @@ func TestProcessPackagerIsByteStable(t *testing.T) {
 		{Name: "P_AHU", Artifact: []byte("IR-AHU-BLOB")},
 		{Name: "P_BOILER", Artifact: []byte("IR-BOILER-BLOB")},
 	}
-	first, err := packager.Package(context.Background(), programs)
+	first, err := packager.Package(context.Background(), programs, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := packager.Package(context.Background(), programs)
+	second, err := packager.Package(context.Background(), programs, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,12 +61,12 @@ func TestProcessPackagerOrderIsSemantic(t *testing.T) {
 	packager := ProcessPackager{BinaryPath: packagerBinary(t),
 		ScratchRoot: filepath.Join(t.TempDir(), "scratch"), Timeout: 10 * time.Second}
 	forward, err := packager.Package(context.Background(), []PackageProgram{
-		{Name: "P_A", Artifact: []byte("A")}, {Name: "P_B", Artifact: []byte("B")}})
+		{Name: "P_A", Artifact: []byte("A")}, {Name: "P_B", Artifact: []byte("B")}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	reverse, err := packager.Package(context.Background(), []PackageProgram{
-		{Name: "P_B", Artifact: []byte("B")}, {Name: "P_A", Artifact: []byte("A")}})
+		{Name: "P_B", Artifact: []byte("B")}, {Name: "P_A", Artifact: []byte("A")}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,11 +86,11 @@ func TestProcessPackagerRejectsHostileProgramNames(t *testing.T) {
 		"tên rỗng":             {Name: "", Artifact: []byte("A")},
 		"artifact rỗng":        {Name: "P_OK", Artifact: nil},
 	} {
-		if _, err := packager.Package(context.Background(), []PackageProgram{program}); err == nil {
+		if _, err := packager.Package(context.Background(), []PackageProgram{program}, nil); err == nil {
 			t.Fatalf("%s: được chấp nhận", name)
 		}
 	}
-	if _, err := packager.Package(context.Background(), nil); err == nil {
+	if _, err := packager.Package(context.Background(), nil, nil); err == nil {
 		t.Fatal("package rỗng được chấp nhận")
 	}
 }

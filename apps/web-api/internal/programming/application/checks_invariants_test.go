@@ -2,6 +2,7 @@ package application
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 )
 
@@ -149,6 +150,77 @@ func TestSignalFallbackIsCoupledToPolicy(t *testing.T) {
 	counts := detailCodes(packageInvariantDiagnostics(objects))
 	if counts["ST-SIG-003"] != 2 {
 		t.Fatalf("ghép policy/fallback=%+v", counts)
+	}
+}
+
+// Chính sách stale là enum ĐÓNG. Trước T59-404 chỉ có phép kiểm cặp
+// policy/fallback, nên một chính sách bịa đi lọt xuống package và buộc runtime
+// phải ĐOÁN thiết bị làm gì khi mất dữ liệu — tức là chọn thay người thiết kế.
+func TestStalePolicyIsAClosedSet(t *testing.T) {
+	program := "a1111111-1111-4111-8111-111111111111"
+	value := 21.5
+	objects := []revisionObjectView{
+		programView(program),
+		// Ba tên hợp lệ: không được sinh diagnostic nào.
+		signalView("d4444444-4444-4444-8444-444444444441", "OK_HOLD", "REAL", program, "HOLD_LAST", 5000, nil),
+		signalView("d4444444-4444-4444-8444-444444444442", "OK_FALL", "REAL", program, "USE_FALLBACK", 5000, &value),
+		signalView("d4444444-4444-4444-8444-444444444443", "OK_WAIT", "REAL", program, "WAIT", 5000, nil),
+	}
+	if counts := detailCodes(packageInvariantDiagnostics(objects)); counts["ST-SIG-003"] != 0 {
+		t.Fatalf("ba chính sách hợp lệ bị từ chối: %+v", counts)
+	}
+
+	// Chuỗi rỗng, tên viết thường, tên của tài liệu kiến trúc (`USE_LAST`/
+	// `FALLBACK` — cách gọi khác của cùng ba chính sách) và một tên bịa. Mọi
+	// biến thể đều phải bị chặn ở Check, không đẩy xuống runtime.
+	for _, policy := range []string{"", "hold_last", "USE_LAST", "FALLBACK", "MAGIC", "HOLD_LAST "} {
+		objects := []revisionObjectView{
+			programView(program),
+			signalView("d4444444-4444-4444-8444-444444444441", "BAD_POLICY", "REAL", program, policy, 5000, nil),
+		}
+		counts := detailCodes(packageInvariantDiagnostics(objects))
+		if counts["ST-SIG-003"] != 1 {
+			t.Fatalf("chính sách %q không bị chặn: %+v", policy, counts)
+		}
+	}
+}
+
+// Signal phải ĐI TRONG container, không dừng lại ở manifest Check. Trước T59-404
+// `mkddc-st-package` không hề nhận signal, nên mọi khai báo Published Signal đã
+// qua validate vẫn KHÔNG tới được thiết bị — bus ở runtime luôn rỗng.
+func TestPackageSignalsReachTheContainer(t *testing.T) {
+	program := "a1111111-1111-4111-8111-111111111111"
+	value := 5.0
+	objects := []revisionObjectView{
+		programView(program),
+		signalView("d4444444-4444-4444-8444-444444444442", "ZULU", "REAL", program, "WAIT", 5000, nil),
+		signalView("d4444444-4444-4444-8444-444444444441", "ALPHA", "REAL", program, "USE_FALLBACK", 30000, &value),
+		signalView("d4444444-4444-4444-8444-444444444443", "MIKE", "BOOL", program, "HOLD_LAST", 1000, nil),
+	}
+	signals := packageSignals(objects)
+	if len(signals) != 3 {
+		t.Fatalf("số signal=%d", len(signals))
+	}
+	// Sắp theo TÊN, không theo thứ tự đọc DB: hai lần Check trên cùng Revision
+	// phải cho cùng một package.
+	if signals[0].Name != "ALPHA" || signals[1].Name != "MIKE" || signals[2].Name != "ZULU" {
+		t.Fatalf("thứ tự signal không tất định: %+v", signals)
+	}
+	if signals[0].StalePolicy != 1 || signals[1].StalePolicy != 0 || signals[2].StalePolicy != 2 {
+		t.Fatalf("chính sách stale ánh xạ sai: %+v", signals)
+	}
+	if signals[0].FallbackBits == nil || *signals[0].FallbackBits != uint64(math.Float32bits(5.0)) {
+		t.Fatalf("giá trị dự phòng không đi xuống dưới dạng bit: %+v", signals[0])
+	}
+	if signals[1].FallbackBits != nil || signals[2].FallbackBits != nil {
+		t.Fatal("chính sách không phải USE_FALLBACK mà vẫn mang giá trị dự phòng")
+	}
+	// Mã kiểu phải là mã `StType` của runtime, không phải 0 mặc định.
+	if signals[1].Type != 1 || signals[0].Type != 3 {
+		t.Fatalf("mã kiểu sai: %+v", signals)
+	}
+	if signals[0].FreshnessMs != 30000 || signals[2].FreshnessMs != 5000 {
+		t.Fatalf("freshness sai: %+v", signals)
 	}
 }
 

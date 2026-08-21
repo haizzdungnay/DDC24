@@ -46,18 +46,27 @@ func (r *perProgramRunner) Compile(_ context.Context, input programmingcompiler.
 // của T59-106 canh. Ở đây chỉ cần một Packager có hành vi tất định để kiểm phần
 // điều phối của Check.
 type fakePackager struct {
-	mu    sync.Mutex
-	calls int
+	mu      sync.Mutex
+	calls   int
+	signals []programmingcompiler.PackageSignal
 }
 
-func (p *fakePackager) Package(_ context.Context, programs []programmingcompiler.PackageProgram) (programmingcompiler.PackageResult, error) {
+func (p *fakePackager) Package(_ context.Context, programs []programmingcompiler.PackageProgram,
+	signals []programmingcompiler.PackageSignal) (programmingcompiler.PackageResult, error) {
 	p.mu.Lock()
 	p.calls++
+	p.signals = signals
 	p.mu.Unlock()
 	blob := []byte("PKG")
 	for _, program := range programs {
 		blob = append(blob, []byte("|"+program.Name+"|")...)
 		blob = append(blob, program.Artifact...)
+	}
+	// Signal cũng phải đi vào nội dung: một packager giả bỏ qua chúng sẽ làm mọi
+	// test "package đổi khi signal đổi" xanh mà không chứng minh gì.
+	for _, signal := range signals {
+		blob = append(blob, []byte(fmt.Sprintf("|S:%s:%d:%d|", signal.Name, signal.Type,
+			signal.StalePolicy))...)
 	}
 	return programmingcompiler.PackageResult{Package: blob, SHA256: sha256.Sum256(blob),
 		ByteSize: int64(len(blob)), ProgramCount: len(programs), SchemaVersion: 2, TargetABI: 3841}, nil

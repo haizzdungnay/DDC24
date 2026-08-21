@@ -297,7 +297,8 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	// artifact v1 của nó; nhiều Program phải được bọc thành container v2 bằng
 	// CHÍNH writer production — trỏ hàng này vào artifact của Program đầu tiên
 	// sẽ là nói dối rằng cả package đã sẵn sàng stage.
-	storeArtifact, packageInfo, err := s.packageArtifact(ctx, check, inputs, results, artifacts, topology)
+	storeArtifact, packageInfo, err := s.packageArtifact(ctx, check, inputs, results, artifacts, topology,
+		packageSignals(objectViews))
 	if err != nil {
 		return true, err
 	}
@@ -654,8 +655,8 @@ type packageProgramArtifact struct {
 // container đó content-addressed như mọi artifact khác.
 func (s *CheckService) packageArtifact(ctx context.Context, check programmingstore.Check,
 	inputs []programmingcompiler.Input, results []programmingcompiler.Result,
-	artifacts []packageProgramArtifact,
-	topology []packageProgramTopology) (*programmingstore.Artifact, *programmingcompiler.PackageResult, error) {
+	artifacts []packageProgramArtifact, topology []packageProgramTopology,
+	signals []programmingcompiler.PackageSignal) (*programmingstore.Artifact, *programmingcompiler.PackageResult, error) {
 	if len(results) == 1 {
 		result := results[0]
 		return &programmingstore.Artifact{ArtifactID: s.newID(), RevisionID: check.RevisionID, CheckID: check.CheckID,
@@ -683,7 +684,7 @@ func (s *CheckService) packageArtifact(ctx context.Context, check programmingsto
 			Artifact: result.Artifact,
 			PeriodMs: periods[inputs[index].SourceID]})
 	}
-	packaged, err := s.packager.Package(ctx, programs)
+	packaged, err := s.packager.Package(ctx, programs, signals)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -3,9 +3,11 @@ package application
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
+	programmingcompiler "mkddc-web/internal/programming/compiler"
 	"mkddc-web/internal/programming/domain"
 )
 
@@ -35,6 +37,7 @@ type packageSignal struct {
 	publisherID   string
 	freshnessMs   float64
 	stalePolicy   string
+	fallbackValue *float64
 	hasFallback   bool
 	consumerCount int
 }
@@ -111,7 +114,7 @@ func collectPackageObjects(objects []revisionObjectView) ([]packageBinding, []pa
 			signals = append(signals, packageSignal{signalID: payload.SignalID, name: payload.Name,
 				dataType: payload.Type, publisherID: payload.PublisherProgramID,
 				freshnessMs: payload.FreshnessMs, stalePolicy: payload.StalePolicy,
-				hasFallback: payload.FallbackValue != nil})
+				hasFallback: payload.FallbackValue != nil, fallbackValue: payload.FallbackValue})
 		}
 	}
 	return bindings, signals, programIDs
@@ -202,13 +205,89 @@ func signalDiagnostics(signals []packageSignal, programIDs map[string]struct{}) 
 				map[string]any{"signalId": signal.signalID, "programId": signal.publisherID},
 				map[string]any{"name": signal.name, "type": signal.dataType}))
 		}
-		if (signal.stalePolicy == "USE_FALLBACK") != signal.hasFallback {
+		// Enum ĐÓNG. Trước bản vá này chỉ có phép kiểm cặp đôi bên dưới, nên một
+		// chính sách bịa (`"MAGIC"`, chuỗi rỗng, hay `"HOLD_LAST "` thừa khoảng
+		// trắng) đi lọt xuống package và buộc runtime phải ĐOÁN thiết bị làm gì
+		// khi mất dữ liệu — tức là chọn thay người thiết kế.
+		if !validStalePolicy(signal.stalePolicy) {
+			diagnostics = append(diagnostics, packageDiagnostic("ST-SIG-003",
+				map[string]any{"signalId": signal.signalID, "programId": signal.publisherID},
+				map[string]any{"name": signal.name, "stalePolicy": signal.stalePolicy}))
+		} else if (signal.stalePolicy == "USE_FALLBACK") != signal.hasFallback {
 			diagnostics = append(diagnostics, packageDiagnostic("ST-SIG-003",
 				map[string]any{"signalId": signal.signalID, "programId": signal.publisherID},
 				map[string]any{"name": signal.name, "stalePolicy": signal.stalePolicy}))
 		}
 	}
 	return diagnostics
+}
+
+// validStalePolicy giữ đúng ba chính sách mà runtime cài đặt
+// (`st_signal_bus.hpp`). Danh sách nằm ở đây chứ không ở một hằng dùng chung vì
+// phía Go và phía Core là hai cài đặt độc lập của cùng một hợp đồng — chỗ để
+// chúng lệch nhau là chỗ cần một phép kiểm ở CẢ HAI, không phải một biến chung
+// làm cả hai cùng sai một lúc.
+func validStalePolicy(policy string) bool {
+	switch policy {
+	case "HOLD_LAST", "USE_FALLBACK", "WAIT":
+		return true
+	default:
+		return false
+	}
+}
+
+// packageSignals dựng danh sách signal ĐI TRONG container từ chính các object đã
+// qua `packageInvariantDiagnostics`. Sắp theo tên để hai lần Check trên cùng
+// Revision cho cùng một package — thứ tự đọc DB không phải là dữ liệu.
+func packageSignals(objects []revisionObjectView) []programmingcompiler.PackageSignal {
+	_, signals, _ := collectPackageObjects(objects)
+	sort.Slice(signals, func(left, right int) bool { return signals[left].name < signals[right].name })
+	result := make([]programmingcompiler.PackageSignal, 0, len(signals))
+	for _, signal := range signals {
+		policy := 0
+		switch signal.stalePolicy {
+		case "USE_FALLBACK":
+			policy = 1
+		case "WAIT":
+			policy = 2
+		}
+		item := programmingcompiler.PackageSignal{
+			Name: signal.name, Publisher: signal.publisherID, Type: signalTypeCode(signal.dataType),
+			FreshnessMs: int(signal.freshnessMs), StalePolicy: policy,
+		}
+		if signal.fallbackValue != nil {
+			// Giá trị dự phòng đi xuống runtime dưới dạng BIT của `StCell`, không
+			// phải dưới dạng số thập phân đọc lại: mọi lần đổi biểu diễn là một
+			// lần làm tròn, và làm tròn giá trị an toàn là đúng thứ không được
+			// phép xảy ra âm thầm.
+			bits := uint64(math.Float32bits(float32(*signal.fallbackValue)))
+			item.FallbackBits = &bits
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+// signalTypeCode ánh xạ tên kiểu ST sang mã `StType` của runtime. Danh sách này
+// và `validSignalType` phải cùng một tập — kiểu lọt qua validate mà không có mã
+// sẽ đi xuống package với mã 0, tức là một kiểu không tồn tại.
+func signalTypeCode(name string) int {
+	switch name {
+	case "BOOL":
+		return 1
+	case "DINT":
+		return 2
+	case "REAL":
+		return 3
+	case "TIME":
+		return 4
+	case "INT":
+		return 5
+	case "UINT":
+		return 6
+	default:
+		return 0
+	}
 }
 
 func packageDiagnostic(detailCode string, location, args map[string]any) DiagnosticView {

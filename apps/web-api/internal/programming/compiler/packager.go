@@ -27,6 +27,24 @@ type PackageProgram struct {
 	PeriodMs int64
 }
 
+// PackageSignal là một Published Signal đi TRONG container. Nó phải đi trong
+// package chứ không nằm lại ở manifest Check: chính sách khi dữ liệu quá hạn là
+// quyết định thiết kế của người dựng chương trình, và để runtime tự chọn nghĩa
+// là chọn thay họ xem thiết bị làm gì khi mất dữ liệu.
+type PackageSignal struct {
+	Name        string
+	Publisher   string
+	Type        int
+	FreshnessMs int
+	// StalePolicy theo enum đóng của runtime: 0=HOLD_LAST, 1=USE_FALLBACK,
+	// 2=WAIT. Dùng số chứ không dùng chuỗi để một tên viết sai không thể đi qua
+	// biên process mà chỉ lộ ra ở loader.
+	StalePolicy int
+	// FallbackBits là 8 byte thô của giá trị dự phòng, chỉ có nghĩa với
+	// USE_FALLBACK. nil = không có giá trị dự phòng.
+	FallbackBits *uint64
+}
+
 // PackageResult là kết quả lắp container v2.
 type PackageResult struct {
 	Package       []byte
@@ -41,7 +59,7 @@ type PackageResult struct {
 // Packager bọc N artifact đã có. Gộp chúng sẽ làm mọi test Check phải mock cả
 // hai chức năng dù chỉ dùng một.
 type Packager interface {
-	Package(ctx context.Context, programs []PackageProgram) (PackageResult, error)
+	Package(ctx context.Context, programs []PackageProgram, signals []PackageSignal) (PackageResult, error)
 }
 
 type packagerOutput struct {
@@ -64,7 +82,8 @@ type ProcessPackager struct {
 	Timeout     time.Duration
 }
 
-func (p ProcessPackager) Package(ctx context.Context, programs []PackageProgram) (PackageResult, error) {
+func (p ProcessPackager) Package(ctx context.Context, programs []PackageProgram,
+	signals []PackageSignal) (PackageResult, error) {
 	if p.BinaryPath == "" || p.ScratchRoot == "" || p.Timeout < time.Second || p.Timeout > time.Minute {
 		return PackageResult{}, fmt.Errorf("tham số packager không hợp lệ")
 	}
@@ -110,6 +129,43 @@ func (p ProcessPackager) Package(ctx context.Context, programs []PackageProgram)
 	packageCtx, cancel := context.WithTimeout(ctx, p.Timeout)
 	defer cancel()
 	stdout, stderr := &boundedBuffer{limit: maxStdoutBytes}, &boundedBuffer{limit: maxStderrBytes}
+	if len(signals) > 0 {
+		// Signal đi bằng FILE JSON chứ không bằng argv: tên signal là chuỗi
+		// người dùng đặt, nên mọi dấu phân cách ta chọn đều có thể xuất hiện
+		// trong chính dữ liệu. Một định dạng có escape sẵn thì không có lớp lỗi
+		// đó.
+		if len(signals) > 512 {
+			return PackageResult{}, fmt.Errorf("số signal vượt trần: %d", len(signals))
+		}
+		encoded := make([]map[string]any, 0, len(signals))
+		for _, signal := range signals {
+			if signal.StalePolicy < 0 || signal.StalePolicy > 2 {
+				return PackageResult{}, fmt.Errorf("chính sách stale không hợp lệ cho signal %q", signal.Name)
+			}
+			if (signal.StalePolicy == 1) != (signal.FallbackBits != nil) {
+				return PackageResult{}, fmt.Errorf(
+					"signal %q: USE_FALLBACK và giá trị dự phòng phải đi liền nhau", signal.Name)
+			}
+			item := map[string]any{
+				"name": signal.Name, "publisher": signal.Publisher, "type": signal.Type,
+				"freshnessMs": signal.FreshnessMs, "stalePolicy": signal.StalePolicy,
+			}
+			if signal.FallbackBits != nil {
+				item["fallbackBits"] = *signal.FallbackBits
+			}
+			encoded = append(encoded, item)
+		}
+		payload, err := json.Marshal(encoded)
+		if err != nil {
+			return PackageResult{}, err
+		}
+		signalPath := filepath.Join(jobRoot, "signals.json")
+		if err := writeExclusive(signalPath, payload, 0o600); err != nil {
+			return PackageResult{}, err
+		}
+		args = append(args, "--signals", signalPath)
+	}
+
 	cmd := exec.CommandContext(packageCtx, p.BinaryPath, args...)
 	cmd.Dir = jobRoot
 	cmd.Env = []string{"LANG=C", "LC_ALL=C", "TZ=UTC", "PATH=/usr/bin:/bin"}
