@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	ProtocolMajor    uint16 = 1
+	ProtocolMajor uint16 = 1
 	// T59-405 nâng minor 0 -> 1: thêm action `SET_PROGRAM_ENABLED` là thay đổi
 	// TƯƠNG THÍCH NGƯỢC. Giữ nguyên minor sẽ làm hai bên không có cách nào
 	// biết đối phương có hiểu action mới hay không.
-	ProtocolMinor    uint16 = 1
+	ProtocolMinor    uint16 = 2
 	SchemaVersion           = "1.0"
 	MaxFramePayload         = 64 * 1024
 	MaxQueueDepth           = 32
@@ -41,6 +41,9 @@ const (
 	// hoạt động" là hai quyết định khác nhau, và gộp chúng sẽ buộc mọi lần bật
 	// một Program phải đi qua đường Commission.
 	ActionSetProgramEnabled Action = "SET_PROGRAM_ENABLED"
+	// T59-408 — trace giá trị lấy tại ranh giới quét của Core.
+	ActionTraceStop Action = "TRACE_STOP"
+	ActionTraceRead Action = "TRACE_READ"
 )
 
 type Result string
@@ -379,7 +382,7 @@ func knownAction(action Action) bool {
 	switch action {
 	case ActionCapabilities, ActionStatus, ActionStage, ActionActivate,
 		ActionOperationStatus, ActionRestore, ActionTraceStart, ActionRetainReset,
-		ActionSetProgramEnabled:
+		ActionSetProgramEnabled, ActionTraceStop, ActionTraceRead:
 		return true
 	}
 	return false
@@ -396,7 +399,10 @@ func knownResult(result Result) bool {
 func isMutation(action Action) bool {
 	switch action {
 	case ActionStage, ActionActivate, ActionRestore, ActionTraceStart, ActionRetainReset,
-		ActionSetProgramEnabled:
+		ActionSetProgramEnabled, ActionTraceStop:
+		// `TRACE_READ` KHÔNG nằm ở đây: nó chỉ đọc. Xếp một lệnh đọc vào nhóm
+		// mutation sẽ buộc nó mang `operationId` và đi qua kiểm idempotency mà
+		// nó không cần.
 		return true
 	}
 	return false

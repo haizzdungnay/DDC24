@@ -272,3 +272,75 @@ func TestSetProgramEnabledIsAKnownMutation(t *testing.T) {
 		t.Fatal("SET_PROGRAM_ENABLED không được coi là mutation")
 	}
 }
+
+// T59-408 — "action ma = 0": mọi action khai trong contract phải có handler
+// THẬT ở Core, và mọi action Go biết phải có mặt trong contract.
+//
+// Một action khai mà không ai xử lý là một lời hứa suông: client thấy nó trong
+// hợp đồng, gọi nó, và nhận `UNAVAILABLE` — hoặc tệ hơn, nhận `OK` rỗng. Chiều
+// ngược lại cũng vậy: một action Go gửi mà contract không khai là một đường đi
+// không ai review.
+func TestNoGhostActionsInContract(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(contractGoldenDir(t), "..", "schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	handlers := findHandlerTable(document)
+	if len(handlers) == 0 {
+		t.Fatal("không tìm thấy bảng handler trong schema")
+	}
+	declared := make(map[string]struct{}, len(handlers))
+	for _, entry := range handlers {
+		item, ok := entry.(map[string]any)
+		if !ok {
+			t.Fatalf("handler entry không phải object: %v", entry)
+		}
+		action, _ := item["action"].(string)
+		status, _ := item["handlerStatus"].(string)
+		if status != "IMPLEMENTED" {
+			t.Fatalf("action ma: %q có handlerStatus=%q", action, status)
+		}
+		declared[action] = struct{}{}
+		if !knownAction(Action(action)) {
+			t.Fatalf("contract khai %q nhưng Go không biết action đó", action)
+		}
+	}
+	for _, action := range []Action{ActionCapabilities, ActionStatus, ActionStage, ActionActivate,
+		ActionOperationStatus, ActionRestore, ActionTraceStart, ActionRetainReset,
+		ActionSetProgramEnabled, ActionTraceStop, ActionTraceRead} {
+		if _, ok := declared[string(action)]; !ok {
+			t.Fatalf("Go biết action %q nhưng contract không khai", action)
+		}
+	}
+}
+
+// findHandlerTable tìm mảng handler trong schema mà không phụ thuộc vị trí — vị
+// trí là chi tiết trình bày, còn sự tồn tại của bảng mới là hợp đồng.
+func findHandlerTable(node any) []any {
+	switch value := node.(type) {
+	case map[string]any:
+		for _, child := range value {
+			if found := findHandlerTable(child); found != nil {
+				return found
+			}
+		}
+	case []any:
+		if len(value) > 0 {
+			if first, ok := value[0].(map[string]any); ok {
+				if _, has := first["handlerStatus"]; has {
+					return value
+				}
+			}
+		}
+		for _, child := range value {
+			if found := findHandlerTable(child); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
+}

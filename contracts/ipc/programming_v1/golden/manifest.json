@@ -1,19 +1,19 @@
 {
  "protocolMajor": 1,
- "protocolMinor": 1,
+ "protocolMinor": 2,
  "schemaVersion": "1.0",
- "schemaSha256": "f27d24b820ee8be7637612496884f4da5e99e79396eaa933938491a430a80435",
+ "schemaSha256": "4dd1e0661524a2351275ba9ad53fb2788bb97e528b198891cb0ae83ee6c83157",
  "files": {
   "request_capabilities.hex": {
-   "sha256": "1aa44d5450507036c65719cbf8c880004cc5eac597cc337c3f315e61ced2c568",
+   "sha256": "3019647d6461ec9af2c3c6b846076d1a2d6cf0a71c3f9398744c99e404ed422a",
    "description": "Request CAPABILITIES hợp lệ, payload là CBOR empty array"
   },
   "response_unavailable.hex": {
-   "sha256": "0bb8f8df9c453e16860c57dede6c7eb4c2e58cebe63373f5ef1db37696783207",
+   "sha256": "d3e82805b929d59c59f4e77a8257cc140e044b7da4adeb55d7132f9e7d6dc885",
    "description": "Response UNAVAILABLE keepsRunning=true"
   },
   "request_unknown_major.hex": {
-   "sha256": "9b60390a9993d31ab8822d588a5149754e00155f7e6353c89ea9052c567f7812",
+   "sha256": "4c1cefcf9fa4516e4eb0a38be01a346bda57e73b54e854b5610812c0a14b2675",
    "description": "Negative fixture: major=2, phải reject"
   }
  }

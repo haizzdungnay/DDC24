@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "programming/programming_runtime_coordinator.hpp"
+#include "st/st_value_trace.hpp"
 
 namespace core::programming {
 
@@ -18,7 +19,7 @@ constexpr uint16_t PROGRAM_IPC_PROTOCOL_MAJOR = 1;
  * TƯƠNG THÍCH NGƯỢC (client cũ không gửi action mới, server cũ trả
  * `IPC-ACTION-NOT-IMPLEMENTED`). Giữ nguyên minor sẽ làm hai bên không có
  * cách nào biết đối phương có hiểu action mới hay không. */
-constexpr uint16_t PROGRAM_IPC_PROTOCOL_MINOR = 1;
+constexpr uint16_t PROGRAM_IPC_PROTOCOL_MINOR = 2;
 constexpr std::size_t PROGRAM_IPC_MAX_FRAME = 64U * 1024U;
 constexpr std::size_t PROGRAM_IPC_MAX_PAYLOAD = 32U * 1024U;
 constexpr std::size_t PROGRAM_IPC_MAX_QUEUE = 32;
@@ -38,6 +39,12 @@ enum class ProgramAction {
      * hoạt động" là hai quyết định khác nhau, và gộp chúng sẽ buộc mọi lần bật
      * một Program phải đi qua đường Commission. */
     SetProgramEnabled,
+    /* T59-408 — trace giá trị. `TRACE_START`/`TRACE_STOP` là mutation (đổi trạng
+     * thái lấy mẫu của Core); `TRACE_READ` chỉ đọc. Tách `TRACE_READ` ra khỏi
+     * hai cái kia vì trộn một lệnh đọc vào nhóm mutation sẽ buộc nó phải mang
+     * `operationId` và đi qua kiểm idempotency mà nó không cần. */
+    TraceStop,
+    TraceRead,
 };
 
 enum class ProgramResult {
@@ -126,6 +133,15 @@ public:
                                      const PeerCredentials& peer,
                                      uint64_t now_mono_ns);
 
+    /* T59-408 — trace giá trị của Core. nullptr = ba action trace trả
+     * `IPC-TRACE-UNAVAILABLE` thay vì im lặng thành công: một `TRACE_START`
+     * "thành công" mà không có nơi lấy mẫu là lời hứa suông. */
+    void set_value_trace(StValueTrace* trace, const StScheduler* scheduler)
+    {
+        value_trace_ = trace;
+        trace_scheduler_ = scheduler;
+    }
+
 #ifdef CORE_BUILD_TESTS
     void set_queue_depth_for_test(std::size_t depth) { queue_depth_ = depth; }
     std::size_t cache_size_for_test() const { return cache_.size(); }
@@ -136,6 +152,10 @@ private:
         std::vector<uint8_t> request_frame;
         std::vector<uint8_t> response_frame;
     };
+
+    /* Ba action trace gộp một chỗ: chúng chia chung phép kiểm "có bus trace
+     * không" và chung cách trả lỗi. */
+    ProgramResponse handle_trace(const ProgramRequest& request, uint64_t now_mono_ns) const;
 
     ProgramResponse make_response(const ProgramRequest& request, ProgramResult result,
                                   const char* detail_code,
@@ -148,6 +168,10 @@ private:
     std::unordered_map<std::string, CachedResponse> cache_;
     std::deque<std::string> cache_order_;
     ProgrammingRuntimeCoordinator* coordinator_ = nullptr;
+    StValueTrace* value_trace_ = nullptr;
+    /* Cần để phân giải tên biến → slot lúc `TRACE_START`. Đi cùng `value_trace_`
+     * vì hai thứ chỉ có nghĩa cùng nhau. */
+    const StScheduler* trace_scheduler_ = nullptr;
 };
 
 } // namespace core::programming

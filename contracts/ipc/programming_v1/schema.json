@@ -100,7 +100,9 @@
       "RESTORE",
       "TRACE_START",
       "RETAIN_RESET",
-      "SET_PROGRAM_ENABLED"
+      "SET_PROGRAM_ENABLED",
+      "TRACE_STOP",
+      "TRACE_READ"
      ],
      "title": "action"
     },
@@ -252,15 +254,26 @@
    },
    {
     "action": "TRACE_START",
-    "handlerStatus": "NOT_IMPLEMENTED",
+    "handlerStatus": "IMPLEMENTED",
     "mutation": true,
-    "owner": "Core",
-    "implementedBy": "T59-408"
+    "owner": "Core"
    },
    {
     "action": "SET_PROGRAM_ENABLED",
     "handlerStatus": "IMPLEMENTED",
     "mutation": true,
+    "owner": "Core"
+   },
+   {
+    "action": "TRACE_STOP",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": true,
+    "owner": "Core"
+   },
+   {
+    "action": "TRACE_READ",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": false,
     "owner": "Core"
    }
   ]

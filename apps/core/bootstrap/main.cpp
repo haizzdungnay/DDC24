@@ -254,6 +254,11 @@ int main(int argc, char** argv)
     std::unique_ptr<StRetainService> retain_service;
     std::unique_ptr<programming::ProgrammingRuntimeCoordinator> programming_coordinator;
     std::unique_ptr<programming::ProgramIpcServer> programming_ipc_server;
+    /* T59-406/T59-408: sổ candidate và trace giá trị. Cấp phát tĩnh, cùng tuổi
+     * thọ với scan loop — cả hai đều bị đọc từ đường quét nên không được huỷ
+     * trước nó. */
+    programming::ProgramCandidateRegistry programming_candidates;
+    StValueTrace programming_value_trace;
     std::unique_ptr<programming::ProgramIpcUnixEndpoint> programming_ipc_endpoint;
     std::thread programming_ipc_thread;
     if (programming_runtime_enabled) {
@@ -316,8 +321,10 @@ int main(int argc, char** argv)
         if (!programming_coordinator->recover(&recovery_error))
             std::fprintf(stderr, "ERROR programming.recovery_required error=%s\n",
                          recovery_error.c_str());
+        programming_coordinator->set_candidate_registry(&programming_candidates);
         programming_ipc_server = std::make_unique<programming::ProgramIpcServer>(
             static_cast<uint32_t>(::getuid()), programming_coordinator.get());
+        programming_ipc_server->set_value_trace(&programming_value_trace, &programming_scheduler);
         programming_ipc_endpoint = std::make_unique<programming::ProgramIpcUnixEndpoint>();
         std::string ipc_error;
         if (!programming_ipc_endpoint->open(programming_sock_path, &ipc_error)) {
@@ -394,6 +401,8 @@ int main(int argc, char** argv)
     scan_deps.mode = programming_mode;
     scan_deps.cutover = programming_runtime_enabled ? &programming_cutover : nullptr;
     scan_deps.programming_coordinator = programming_coordinator.get();
+    scan_deps.candidate_registry = programming_runtime_enabled ? &programming_candidates : nullptr;
+    scan_deps.value_trace = programming_runtime_enabled ? &programming_value_trace : nullptr;
     ScanLoop loop(scan_deps);
 
     /* SIGHUP → reload io_config + io_safe_state + graph ở ranh giới scan;

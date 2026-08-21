@@ -30,6 +30,7 @@
 #include "st/st_scheduler.hpp"
 #include "programming/programming_cutover.hpp"
 #include "programming/program_candidate_registry.hpp"
+#include "st/st_value_trace.hpp"
 #include "programming/programming_runtime_coordinator.hpp"
 #include "ipc/web_ipc.hpp"
 
@@ -76,6 +77,11 @@ struct ScanDeps {
      * GHI NHẬN quyền sở hữu và lý do rút — trọng tài vẫn là `PriorityResolver`.
      * nullptr = không ghi sổ, hành vi y hệt trước. */
     programming::ProgramCandidateRegistry* candidate_registry = nullptr;
+    /* T59-408: trace giá trị lấy tại RANH GIỚI QUÉT. Lấy ở đây chứ không để BE
+     * poll vì BE poll ở nhịp riêng của nó — hai biến trong cùng một mẫu có thể
+     * đến từ hai chu kỳ khác nhau, và đồ thị sẽ trông hợp lý trong khi quan hệ
+     * nhân quả giữa hai biến đã bị xáo. nullptr = không lấy mẫu. */
+    StValueTrace* value_trace = nullptr;
 };
 
 class ScanLoop {

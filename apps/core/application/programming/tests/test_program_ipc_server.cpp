@@ -237,12 +237,14 @@ TEST(ProgramIpcServer, CapabilitiesAndDuplicateRequestAreDeterministic)
     EXPECT_EQ(response.detail_code, "IPC-REQUEST-ID-CONFLICT");
 }
 
-TEST(ProgramIpcServer, NotImplementedActionFailsClosedWithStableDetail)
+TEST(ProgramIpcServer, UnconfiguredDependencyFailsClosedWithStableDetail)
 {
-    /* `TRACE_START` nằm trong enum wire và trong cả hai codec, nhưng Core chưa có
-     * nhánh dispatch (T59-408 sẽ làm). Contract khai NOT_IMPLEMENTED, và test này
-     * khoá đúng hành vi tương ứng: từ chối ổn định bằng một detail code duy nhất,
-     * KHÔNG "ok" giả, và không đụng tới coordinator. */
+    /* T59-408 đã hiện thực `TRACE_START`, nên nó không còn là ví dụ "action chưa
+     * hiện thực" — bảng handler nay 0 action ma (test `TestNoGhostActionsInContract`
+     * ở lớp Go khoá điều đó). Bất biến CÒN LẠI vẫn phải đúng và vẫn cần một test:
+     * khi phụ thuộc chưa được cấu hình, Core từ chối ổn định bằng một detail code
+     * duy nhất, KHÔNG BAO GIỜ trả "ok" giả. Ở đây là `TRACE_START` không có bus
+     * trace. */
     ProgramIpcServer server(static_cast<uint32_t>(::getuid()));
     ProgramCodecError error = ProgramCodecError::None;
     ProgramRequest original = request(ProgramAction::TraceStart);
@@ -256,10 +258,10 @@ TEST(ProgramIpcServer, NotImplementedActionFailsClosedWithStableDetail)
     ProgramResponse response;
     ASSERT_TRUE(DecodeResponseFrame(encoded, &response, &error));
     EXPECT_NE(response.result, ProgramResult::Ok);
-    /* Không có coordinator nên Core dừng ngay ở IPC-RUNTIME-NOT-CONFIGURED; điều
-     * bắt buộc là KHÔNG BAO GIỜ trả Ok cho action chưa hiện thực. */
+    /* Điều bắt buộc là KHÔNG BAO GIỜ trả Ok khi phụ thuộc chưa sẵn sàng. */
     EXPECT_TRUE(response.detail_code == "IPC-ACTION-NOT-IMPLEMENTED" ||
-                response.detail_code == "IPC-RUNTIME-NOT-CONFIGURED")
+                response.detail_code == "IPC-RUNTIME-NOT-CONFIGURED" ||
+                response.detail_code == "IPC-TRACE-UNAVAILABLE")
         << "detail=" << response.detail_code;
     EXPECT_FALSE(response.detail_code.empty());
 
@@ -363,4 +365,91 @@ TEST(ProgramIpcGolden, CrossLanguageCorpus)
 }
 
 } // namespace
+
+/* T59-408 — ba action trace đi trọn: START lấy mẫu, READ đọc ra, STOP dừng. */
+TEST(ProgramIpcServer, TraceStartReadStopRoundTrip)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    std::string error;
+    StTaskConfig task;
+    task.id = "main";
+    task.period_ms = 1000;
+    task.budget_ms = 199;
+    ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
+    ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
+    ASSERT_TRUE(scheduler.request_activation("P_ahu", signed_artifact(), &error)) << error;
+    scheduler.tick(0);
+    ASSERT_TRUE(scheduler.start("P_ahu", &error)) << error;
+
+    StValueTrace trace;
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()));
+    server.set_value_trace(&trace, &scheduler);
+
+    auto send = [&](ProgramAction action, const nlohmann::json& body, uint8_t seed) {
+        ProgramRequest input = request(action);
+        input.request_id = bytes(16, seed);
+        input.operation_id = bytes(16, static_cast<uint8_t>(seed + 1));
+        input.actor_id = "admin-1";
+        input.payload = nlohmann::json::to_cbor(body);
+        crypto_hash_sha256(input.payload_hash.data(), input.payload.data(), input.payload.size());
+        ProgramCodecError codec_error = ProgramCodecError::None;
+        const std::vector<uint8_t> frame = EncodeRequestFrame(input, &codec_error);
+        EXPECT_EQ(codec_error, ProgramCodecError::None);
+        const std::vector<uint8_t> reply = server.HandleFrame(frame, allowed_peer(), 1'000'000);
+        EXPECT_FALSE(reply.empty());
+        ProgramResponse response;
+        EXPECT_TRUE(DecodeResponseFrame(reply, &response, &codec_error));
+        return response;
+    };
+
+    const nlohmann::json start_body = nlohmann::json::array(
+        {"session-1", 1000u, 10000u, nlohmann::json::array({nlohmann::json::array({"P_ahu", "x"})})});
+    EXPECT_EQ(send(ProgramAction::TraceStart, start_body, 0x20).result, ProgramResult::Accepted);
+    EXPECT_EQ(trace.status().state, StTraceState::RUNNING);
+
+    /* Lấy mẫu ở boundary — đúng chỗ scan loop gọi. */
+    trace.on_boundary(scheduler, 1'000'000);
+    trace.on_boundary(scheduler, 1'001'000'000);
+    EXPECT_EQ(trace.sample_count(), 2u);
+
+    const ProgramResponse read =
+        send(ProgramAction::TraceRead, nlohmann::json::array({"session-1"}), 0x40);
+    ASSERT_EQ(read.result, ProgramResult::Ok);
+    const nlohmann::json body = nlohmann::json::from_cbor(read.payload, true, true);
+    ASSERT_TRUE(body.is_array());
+    ASSERT_EQ(body.size(), 3u);
+    EXPECT_EQ(body[0].get<std::string>(), "RUNNING");
+    EXPECT_EQ(body[1].get<uint32_t>(), 0u);
+    ASSERT_EQ(body[2].size(), 2u);
+    /* Mẫu mang cờ `valid` cho từng biến — "không đo được" khác "đo được 0". */
+    EXPECT_TRUE(body[2][0][1][0][0].get<bool>());
+
+    /* Đọc nhầm session của người khác bị từ chối. */
+    EXPECT_EQ(send(ProgramAction::TraceRead, nlohmann::json::array({"session-khac"}), 0x60).result,
+              ProgramResult::Rejected);
+
+    EXPECT_EQ(send(ProgramAction::TraceStop, nlohmann::json::array({"session-1"}), 0x80).result,
+              ProgramResult::Ok);
+    EXPECT_EQ(trace.status().state, StTraceState::STOPPED);
+}
+
+/* Không có bus trace: ba action trả UNAVAILABLE tường minh. Một `TRACE_START`
+ * "thành công" mà không có nơi lấy mẫu là lời hứa suông. */
+TEST(ProgramIpcServer, TraceActionsWithoutBusAreUnavailableNotSilentlyOk)
+{
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()));
+    ProgramRequest input = request(ProgramAction::TraceRead);
+    input.actor_id = "admin-1";
+    input.payload = nlohmann::json::to_cbor(nlohmann::json::array({"session-1"}));
+    crypto_hash_sha256(input.payload_hash.data(), input.payload.data(), input.payload.size());
+    ProgramCodecError codec_error = ProgramCodecError::None;
+    const std::vector<uint8_t> frame = EncodeRequestFrame(input, &codec_error);
+    ASSERT_EQ(codec_error, ProgramCodecError::None);
+    const std::vector<uint8_t> reply = server.HandleFrame(frame, allowed_peer(), 1'000'000);
+    ProgramResponse response;
+    ASSERT_TRUE(DecodeResponseFrame(reply, &response, &codec_error));
+    EXPECT_EQ(response.result, ProgramResult::Unavailable);
+    EXPECT_EQ(response.detail_code, "IPC-TRACE-UNAVAILABLE");
+}
+
 } // namespace core::programming
