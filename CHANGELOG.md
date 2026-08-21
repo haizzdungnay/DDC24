@@ -8,6 +8,23 @@
 
 ## [Unreleased]
 
+### T59-603 — Ma trận security sinh từ bảng route; audit chain lần đầu bị thử thật (2026-08-21)
+
+- **Phạm vi:** `apps/web-api/internal/programming/transport/http/security_matrix_test.go` (mới),
+  `apps/web-api/internal/programming/store/audit_chain_test.go` (mới), Plan 59 §3/§3.7.
+- **Added — RBAC ma trận sinh từ `routeDefinitions`:** 30/30 route kiểm
+  chưa-xác-thực → 401 với handler **không được gọi**; 14/14 route mutation kiểm
+  viewer → 403; route đọc không được đòi hơn viewer. Chép tay danh sách case
+  nghĩa là route mới không có ai phủ — cùng lý do đã dùng cho corpus ở T59-601.
+- **Added — audit chain bị thử bằng chuỗi HỎNG:** `VerifyAuditChain` trước đây
+  chỉ từng chạy trên chuỗi lành (một hàm luôn trả `nil` cũng qua). Nay tách hai
+  lớp: trigger DB chặn UPDATE/DELETE; và khi gỡ trigger (kẻ có file DB) thì sửa
+  actor hoặc xoá bản ghi giữa chuỗi phải làm chuỗi gãy.
+- **Added — đồng thời:** 8 goroutine cùng idempotency key → đúng 1 Project, 1
+  dòng audit, chuỗi không gãy.
+- **Kiểm chứng:** `go vet ./...` + `go test ./... -count=1` PASS; mutation check
+  hạ một route mutation xuống viewer làm test đỏ đúng dòng.
+
 ### T59-605 — Gói phát hành thiếu `mkddc-st-package`; Programming bật đủ hai nửa (2026-08-21)
 
 - **Phạm vi:** `platform/packaging/{install.sh,build-release.sh}`,

@@ -1952,7 +1952,7 @@ hai** (đã đọc ring **và** mẫu đã ghi); chạy lặp 5 lần đều xan
 |---|---|---|---|---|---|
 | `T59-601` | P1 | ST↔FBD corpus mọi registry entry + state traces; 3 fuzz harness CI | T59-105/106 | **DONE (HOST/LOCAL)** | Corpus phủ **40/40 entry** registry (20→35 cặp stateless + 5 trace nhiều chu kỳ), kiểm phủ **hai chiều** tính từ chính registry sinh máy nên entry mới không có vector sẽ đỏ. **Ba lỗi thật lộ ra ngay khi corpus chạm tới vùng chưa ai chạy:** (1) `compile_fbd_source` không có affordance `enforce_review_gate` như ST ⇒ nhánh lower **PID sang FBD chưa từng được một vector nào chạy**; (2) corpus cũ dựng node `FUNCTION` cho entry chuyển kiểu trong khi model đòi kind `CONVERSION`; (3) verifier hợp đồng FBD thiếu `SQRT` trong danh sách chép tay. Harness fuzz FBD có trong repo nhưng **không job CI nào chạy** — nay chạy cùng parser/loader. `ctest` **1213/1213**; `verify_programming_fbd_contract.py` PASS. Chi tiết §3.7. |
 | `T59-602` | P0 | Artifact/library trust SIGNED + key custody/rotation/rollback | T59-106/204 | **PARTIAL — cơ chế xong, bật SIGNED còn chờ chữ ký** | Bộ test tin cậy đi trọn vòng đời: ký hợp lệ, **ký lại bằng khoá lạ sau khi tính lại hash** (mối đe doạ mà `HASH_ONLY` KHÔNG chặn), sửa byte, rotation **có cửa sổ overlap**, rollback về LKG ký bằng khoá cũ, và đóng cửa sổ. Verify nay nhận **TẬP** khoá tin cậy — đổi khoá tức thời sẽ chặn đúng đường lùi mà cơ chế tồn tại để bảo vệ. **Lỗi thật:** `st_public_key_is_test_key()` có sẵn từ lâu nhưng **không nơi nào gọi**, nên "release phải dùng khoá thật" chỉ là một câu trong tài liệu; nay bootstrap log CRITICAL và `build-release.sh` chặn bằng `--st-key-info` (lab mở bằng `MKDDC_ALLOW_TEST_KEY=1`, ghi vào provenance). `ctest` **1220/1220**. **Còn chặn:** bật `SIGNATURE_REQUIRED` production cần Security+Product chốt **ký ở đâu và khoá riêng nằm ở đâu** (`DDD-ARTIFACT-TRUST-PROG-001` §2/§3 cố ý để mở) — không phải thiếu mã. Chi tiết §3.7. |
-| `T59-603` | P1 | Security/RBAC/audit/malicious input/concurrency full matrix | T59-202/405/501 | ORDERED | Direct API negative, zero mutation, audit completeness/no secret, rate/resource bounds. |
+| `T59-603` | P1 | Security/RBAC/audit/malicious input/concurrency full matrix | T59-202/405/501 | **DONE (HOST/LOCAL)** | Ma trận RBAC **sinh từ `routeDefinitions`**, không chép tay: 30/30 route kiểm chưa-xác-thực → 401 và handler **không được gọi** (zero mutation ở mức mạnh hơn "store không đổi"); 14/14 route mutation kiểm viewer → 403; chiều ngược lại kiểm route đọc không được đòi hơn viewer (siết quá tay cũng là lỗi, và không bao giờ tự lộ trong happy-path). Mutation check: hạ một route xuống viewer thì đỏ đúng dòng. Audit: `VerifyAuditChain` trước đây **chỉ từng chạy trên chuỗi lành** — một hàm luôn trả `nil` cũng qua; nay có test gỡ trigger rồi sửa/xoá và đòi chuỗi phải gãy, cộng test khẳng định trigger DB chặn UPDATE/DELETE. Đồng thời: 8 goroutine cùng idempotency key → đúng 1 Project, 1 dòng audit, chuỗi không gãy. Go `vet` + `test ./... -count=1` PASS. Chi tiết §3.7. |
 | `T59-604` | P1 | E2E stability, remove stale quarantine, deterministic workers/retry policy | T59-505 | ORDERED | 5 consecutive full runs; all spec included; retry không che deterministic defect. |
 | `T59-605` | P0 | Release packaging: Programming default ON, artifact/compiler/library/systemd/env | T59-501/602 | **DONE (HOST/LOCAL + TARGET DEPLOY)** | **Lỗi thật, kiểm chứng trên chính board Foxlinx:** `/usr/sbin/mkddc-st-package` **không tồn tại** trên bo — binary được build, có test riêng, nhưng chưa bao giờ được cài, trong khi BE gọi đúng đường dẫn đó ở bước Commission (`ProgrammingPackagerPath`). Cài + đưa vào `checksums.sha256`/`runtime-checksums`. `PROGRAMMING_REV_A=1` nay do `install.sh` ghi, **cả nhánh nâng cấp** (bo cũ có file env sẵn nên khối khởi tạo lần đầu không chạy — thiếu nhánh này thì bo cũ mãi ở trạng thái FE-bật/BE-tắt). 6/6 guard đóng gói PASS. Deploy thật lên board: core/web/st-compile/st-package/dist mới, ba service `active`, `/api/v1/programming/projects` trả **401** (route có, cờ ON) thay vì 404. Chi tiết §3.7. |
 | `T59-606` | P0 | RC reproducible build/provenance/SBOM/backup/restore/upgrade dry-run | T59-601..605 | ORDERED | Same source reproducible hashes or explained variance; dry-run fresh/upgrade/rollback PASS. |
@@ -2066,6 +2066,34 @@ chứ không chỉ cảnh báo.
 **Evidence level.** Host/local cho guard; **target deploy thật** cho phần cài đặt
 (xem `docs/07_records/test-evidence/fw-som/2026-08-21-foxlinx-w6-deploy.md`).
 Chưa phải soak 24 h, chưa phải I/O vật lý.
+
+#### `T59-603` — Ma trận sinh từ bảng khai báo, và một hàm verify chưa từng bị thử
+
+**RBAC phải là ma trận, không phải vài case chọn tay.** Sai quyền ở MỘT route là
+đủ mở một đường mutation cho viewer, và route mới thêm vào bảng sẽ không có test
+nào phủ nếu danh sách case được chép tay. Bộ test sinh thẳng từ
+`routeDefinitions`: 30/30 route kiểm 401-khi-chưa-xác-thực, 14/14 route mutation
+kiểm 403-với-viewer. Điều kiện dừng mạnh hơn "store không đổi": handler **không
+được gọi**, vì một handler chạy rồi mới lỗi vẫn có thể đã ghi audit, cấp scratch
+hoặc chạm Core.
+
+**Chiều ngược lại cũng là lỗi.** Route đọc mà đòi `admin` sẽ làm người vận hành
+quyền viewer không xem được trạng thái đúng lúc sự cố — happy-path không bao giờ
+lộ ra điều đó, nên nó được kiểm riêng.
+
+**`VerifyAuditChain` chưa từng bị thử bằng một chuỗi HỎNG.** Hàm này được gọi ở
+nhiều test, nhưng luôn trên chuỗi lành: một hàm luôn trả `nil` cũng qua hết. Nay
+có hai lớp được tách bạch:
+- lớp DB: trigger `audit_records_no_update`/`_no_delete` **chặn** sửa/xoá — mạnh
+  hơn phát hiện, nhưng chỉ với ai đi qua chính kết nối đó;
+- lớp hash chain: gỡ trigger (mô phỏng kẻ có file DB trong tay) rồi sửa actor và
+  xoá bản ghi giữa chuỗi — chuỗi phải gãy. Đây mới là lý do chuỗi tồn tại.
+
+**Đồng thời.** Cùng một idempotency key gửi từ 8 goroutine là kịch bản thật
+(người bấm hai lần, client retry khi request đầu chưa xong). Kết quả phải là đúng
+một Project, đúng một dòng audit, và chuỗi audit không gãy.
+
+**Evidence level.** Host/local: `go vet ./...` + `go test ./... -count=1` PASS.
 
 ### W7 — Target/HIL/V&V và quyết định phát hành
 
