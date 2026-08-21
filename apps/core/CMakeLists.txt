@@ -219,6 +219,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_package_v2.cpp
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
+      application/st/tests/test_st_program_release.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp
       application/st/tests/test_st_retain.cpp application/st/tests/test_st_control_api.cpp
       application/st/tests/test_st_journal.cpp

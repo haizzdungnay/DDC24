@@ -80,6 +80,43 @@ bool StTask::due(uint64_t now_ns) const
     return now_ns >= last_run_ns_ + period_ns;
 }
 
+/* T59-402 — release theo Program. `period_ms == 0` nghĩa là "theo chu kỳ Task":
+ * giữ nguyên hành vi cho mọi cấu hình chưa khai chu kỳ riêng. */
+bool st_program_due(const StProgramInstance& program, uint32_t task_period_ms, uint64_t now_ns)
+{
+    if (program.period_ms == 0) return true; /* Task đã quyết định thời điểm. */
+    (void)task_period_ms;
+    if (!program.release_started) return true;
+    return now_ns >= program.next_release_ns;
+}
+
+void st_program_mark_released(StProgramInstance* program, uint64_t now_ns)
+{
+    if (program->period_ms == 0) return;
+    const uint64_t period_ns = static_cast<uint64_t>(program->period_ms) * 1000000ull;
+    if (!program->release_started) {
+        program->release_started = true;
+        program->next_release_ns = now_ns + period_ns;
+        return;
+    }
+    /* Bù trôi theo mốc LÝ THUYẾT. Bám thời điểm chạy thật sẽ làm một tick trễ
+     * đẩy mọi deadline sau đó trôi theo, và Program 1 s không còn chạy đúng
+     * một lần mỗi giây. */
+    if (now_ns >= program->next_release_ns) {
+        const uint64_t late = now_ns - program->next_release_ns;
+        const uint64_t missed = late / period_ns;
+        if (missed > 0) {
+            const uint64_t room = UINT32_MAX - program->missed_release_count;
+            program->missed_release_count +=
+                static_cast<uint32_t>(std::min(missed, room));
+        }
+        program->next_release_ns += period_ns * (missed + 1);
+        /* Lỡ quá nhiều thì BỎ, không chạy bù: chạy bù làm timer nhảy và làm
+         * tình trạng quá tải nặng thêm (SPEC §4). */
+        if (program->next_release_ns <= now_ns) program->next_release_ns = now_ns + period_ns;
+    }
+}
+
 void StTask::mark_ran(uint64_t now_ns)
 {
     const uint64_t period_ns = static_cast<uint64_t>(cfg_.period_ms) * 1000000ull;
@@ -196,9 +233,19 @@ bool StScheduler::add_program(const std::string& task_id, const std::string& ins
             return fail("cannot register RETAIN identity for instance '" + instance_id + "'");
     }
     task->programs().push_back(std::move(inst));
+    /* `order` vẫn phải DUY NHẤT trong Task (giữ nguyên bất biến có sẵn): nó là
+     * thứ quyết định thứ tự chạy, và cho phép trùng sẽ biến thứ tự thành thứ
+     * cần tie-break — tức là thành thứ có thể đổi khi ai đó sửa tie-break.
+     *
+     * Sắp theo `order`, rồi theo `instance_id` khi trùng. Không bám thứ tự
+     * THÊM VÀO: hai controller nạp cùng một package theo thứ tự khác nhau phải
+     * chạy Program theo cùng một dãy, nếu không kết quả không tái lập được. */
     std::sort(task->programs().begin(), task->programs().end(),
               [](const std::unique_ptr<StProgramInstance>& a,
-                 const std::unique_ptr<StProgramInstance>& b) { return a->order < b->order; });
+                 const std::unique_ptr<StProgramInstance>& b) {
+                  if (a->order != b->order) return a->order < b->order;
+                  return a->instance_id < b->instance_id;
+              });
     return true;
 }
 
@@ -342,6 +389,24 @@ bool StScheduler::start(const std::string& instance_id, std::string* error)
         if (error) *error = std::string("cannot start from state ") +
                             st_program_state_name(p->state);
         return false;
+    }
+    /* T59-402 — trần 16 Program chạy đồng thời (DDD §0/§4.1). Trần này phải ép
+     * ở đây, nơi một Program thực sự BẮT ĐẦU tác động lên đầu ra; ép ở lớp cấu
+     * hình chỉ chặn được ý định, không chặn được trạng thái. Program đã RUNNING
+     * không tính lại vì `start` trên nó là no-op idempotent. */
+    if (p->state != StProgramState::RUNNING) {
+        std::size_t running = 0;
+        for (const auto& task : tasks_)
+            for (const auto& program : task->programs())
+                if (program->state == StProgramState::RUNNING) ++running;
+        const std::size_t max_enabled = profile_ == StSchedulerProfile::REV_A
+                                            ? st_profile_generated::kMaxProgramsEnabled
+                                            : st_sched_limits::kMaxProgramsTotal;
+        if (running >= max_enabled) {
+            if (error)
+                *error = "too many running programs (limit " + std::to_string(max_enabled) + ")";
+            return false;
+        }
     }
     p->state = StProgramState::RUNNING;
     p->enabled = true;
@@ -544,6 +609,11 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
          * bắt đầu tác động lên đầu ra (SPEC §7.1, §7.3). */
         if (p->state != StProgramState::RUNNING) continue;
         if (!p->runtime.loaded()) continue;
+        /* Deadline RIÊNG của Program: một package 3 lớp chu kỳ chạy trong cùng
+         * một Task, nên Task đến hạn KHÔNG có nghĩa mọi Program đến hạn. */
+        if (!st_program_due(*p, task.config().period_ms, now_ns)) continue;
+        st_program_mark_released(p.get(), now_ns);
+        const uint64_t program_start = wall_clock_();
 
         bool has_input_binding = false;
         for (const StIrIoBinding& binding : p->runtime.program()->io_bindings) {
@@ -592,6 +662,10 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
         }
         p->last_successful_base_step = base_step_count_;
         p->last_successful_now_ns = now_ns;
+        /* Đo WCET theo TỪNG Program: với ba lớp chu kỳ trong một Task, con số
+         * gộp ở Task không trả lời được "Program nào ăn hết ngân sách". */
+        p->last_exec_ns = wall_clock_() - program_start;
+        if (p->last_exec_ns > p->max_exec_ns) p->max_exec_ns = p->last_exec_ns;
         ran++;
     }
 

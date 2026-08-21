@@ -106,6 +106,24 @@ struct StProgramInstance {
     uint16_t    order = 0;
     bool        enabled = true;
 
+    /* T59-402 — chu kỳ RIÊNG của từng Program (DDD §7.1: mỗi Program tự release
+     * theo deadline của nó, Task không còn là đơn vị chạy chung).
+     *
+     * `0` nghĩa là "theo chu kỳ Task", giữ nguyên hành vi cho mọi Program chưa
+     * khai chu kỳ — đổi mặc định sẽ làm mọi cấu hình cũ chạy khác đi mà không ai
+     * yêu cầu. */
+    uint32_t period_ms = 0;
+    /* Mốc release LÝ THUYẾT kế tiếp. Bù trôi theo mốc lý thuyết chứ không theo
+     * thời điểm chạy thật — nếu bám thời điểm thật, một tick trễ sẽ đẩy mọi
+     * deadline sau đó trôi theo và Program 1 s không còn chạy 1 lần/giây. */
+    uint64_t next_release_ns = 0;
+    bool     release_started = false;
+    /* Metrics theo Program. Task-level không thay được: với chu kỳ khác nhau,
+     * một con số gộp không trả lời được "Program nào lỡ deadline". */
+    uint32_t missed_release_count = 0;
+    uint64_t last_exec_ns = 0;
+    uint64_t max_exec_ns = 0;
+
     StProgramState   state = StProgramState::EMPTY;
     StProgramRuntime runtime;
     /* Last-known-good: artifact cuối cùng đã chạy >= 1 tick không fault.
@@ -177,6 +195,11 @@ struct StTaskConfig {
     bool        enabled = true;
     uint32_t    overrun_threshold = 3;
 };
+
+/* T59-402 — release theo Program. Đặt ở đây (không ẩn trong .cpp) để test khoá
+ * được luật deadline mà không phải dựng cả một scan loop. */
+bool st_program_due(const StProgramInstance& program, uint32_t task_period_ms, uint64_t now_ns);
+void st_program_mark_released(StProgramInstance* program, uint64_t now_ns);
 
 struct StTaskStats {
     uint32_t run_count = 0;
