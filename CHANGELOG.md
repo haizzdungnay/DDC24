@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+### T59-605 — Gói phát hành thiếu `mkddc-st-package`; Programming bật đủ hai nửa (2026-08-21)
+
+- **Phạm vi:** `platform/packaging/{install.sh,build-release.sh}`,
+  `tests/integration/test_release_packaging_guard.py`, Plan 59 §3/§3.7,
+  `docs/07_records/test-evidence/fw-som/2026-08-21-foxlinx-w6-deploy.md` (mới).
+- **Fixed — binary sinh artifact không được cài:** BE gọi
+  `/usr/sbin/mkddc-st-package` ở bước Commission; binary được build và có test
+  riêng nhưng `install.sh` chưa bao giờ cài, `checksums.sha256` cũng không phủ.
+  Kiểm trên board Foxlinx: đường dẫn **không tồn tại** — một bo cài từ gói phát
+  hành đi trọn Draft → Check rồi hỏng ở Commission. Nay cài + đưa vào cả
+  `checksums.sha256` lẫn `runtime-checksums.sha256` + `--version` sanity.
+- **Fixed — Programming chỉ bật một nửa:** FE bật lúc build, BE bật bằng
+  `PROGRAMMING_REV_A`. Gói cũ chỉ có nửa FE, nên bo hiện đủ bốn workspace mà mọi
+  endpoint trả 404. `install.sh` nay ghi cờ, **kèm nhánh riêng cho bo nâng cấp**
+  (file env đã tồn tại nên khối khởi tạo lần đầu không chạy).
+- **Added:** 3 guard đóng gói mới (packager được cài + có trong checksums; cờ
+  Programming ở cả hai nhánh; cổng khoá TEST thực sự `exit 1`). 6/6 PASS.
+- **Kiểm chứng target:** deploy thật lên `SOM-DDC-24-foxlinx` — cross-build
+  aarch64 (`-static-libstdc++`, không dính GLIBCXX), snapshot rollback trước khi
+  ghi đè, ba service `active`, log core hiện `program_hold_ttl_ms=60000` (ADR-051)
+  và `CRITICAL st_public_key=TEST` (T59-602), `/api/v1/programming/projects` trả
+  **401** thay vì 404 (route có, cờ ON).
+
 ### T59-602 — Tin cậy artifact: cổng khoá TEST và rotation có overlap (2026-08-21)
 
 - **Phạm vi:** `apps/core/application/st/{st_loader.hpp,st_loader.cpp,st_public_key.hpp,st_public_key.cpp}`,

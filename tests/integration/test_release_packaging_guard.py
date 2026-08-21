@@ -87,3 +87,75 @@ class ReleaseFirmwareProvenanceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProgrammingRuntimePackagingTest(unittest.TestCase):
+    """T59-605 — hai nửa của Programming phải cùng ra bo trong một gói.
+
+    Cả hai bất biến dưới đây cũng thuộc loại "hỏng im lặng": build xanh, test
+    xanh, và triệu chứng chỉ lộ ra ở đúng thao tác cuối của người vận hành trên
+    board.
+    """
+
+    INSTALL_SCRIPT = ROOT / "platform/packaging/install.sh"
+
+    def test_packager_binary_duoc_cai_dat(self) -> None:
+        """BE gọi `/usr/sbin/mkddc-st-package` ở bước Commission.
+
+        Binary này được build và có test riêng, nhưng trước T59-605 KHÔNG được
+        cài. Trên bo mới cài, Commission gọi vào một đường dẫn không tồn tại —
+        không có lỗi nào sớm hơn để bắt.
+        """
+        install = _uncommented_lines(self.INSTALL_SCRIPT.read_text(encoding="utf-8"))
+        installs = [l for l in install if "mkddc-st-package" in l and l.strip().startswith("install ")]
+        self.assertTrue(
+            installs,
+            "install.sh phải cài mkddc-st-package — BE mặc định gọi "
+            "/usr/sbin/mkddc-st-package (config.go ProgrammingPackagerPath)",
+        )
+
+        release = _uncommented_lines(RELEASE_SCRIPT.read_text(encoding="utf-8"))
+        self.assertTrue(
+            any("mkddc-st-package" in line for line in release),
+            "checksums.sha256 phải phủ mkddc-st-package: provenance thiếu đúng "
+            "binary sinh ra artifact là provenance không đầy đủ",
+        )
+
+    def test_programming_bat_mac_dinh_o_ca_hai_phia(self) -> None:
+        """FE bật lúc build, BE bật bằng env — thiếu một nửa là 404 im lặng.
+
+        Bo cài xong hiện đủ bốn workspace Programming (FE có cờ) nhưng mọi
+        endpoint phía sau trả 404 vì `PROGRAMMING_REV_A` không có trong
+        `/etc/mkddc-web.env`. Triệu chứng giống hệt "backend hỏng".
+        """
+        install = _uncommented_lines(self.INSTALL_SCRIPT.read_text(encoding="utf-8"))
+        self.assertTrue(
+            any("PROGRAMMING_REV_A=1" in line for line in install),
+            "install.sh phải ghi PROGRAMMING_REV_A=1 vào /etc/mkddc-web.env",
+        )
+        # Nâng cấp KHÔNG được bỏ sót: file env đã tồn tại từ bản trước nên khối
+        # khởi tạo lần đầu không chạy.
+        text = self.INSTALL_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn(
+            "grep -q '^PROGRAMMING_REV_A='",
+            text,
+            "phải có nhánh bổ sung cờ cho bo NÂNG CẤP, không chỉ cho bo cài mới",
+        )
+
+
+class ReleaseSigningKeyGateTest(unittest.TestCase):
+    """T59-602 — khoá TEST không được lặng lẽ đi ra bản phát hành."""
+
+    def test_release_script_chan_khoa_test(self) -> None:
+        text = RELEASE_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("--st-key-info", text, "build-release.sh phải hỏi binary đang nhúng khoá nào")
+        self.assertIn(
+            "MKDDC_ALLOW_TEST_KEY",
+            text,
+            "phải có escape hatch TƯỜNG MINH cho bản lab, thay vì im lặng cho qua",
+        )
+        lines = _uncommented_lines(text)
+        self.assertTrue(
+            any("exit 1" in line for line in lines),
+            "gate phải THOÁT khi gặp khoá TEST, không chỉ cảnh báo",
+        )

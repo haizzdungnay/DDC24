@@ -1954,7 +1954,7 @@ hai** (đã đọc ring **và** mẫu đã ghi); chạy lặp 5 lần đều xan
 | `T59-602` | P0 | Artifact/library trust SIGNED + key custody/rotation/rollback | T59-106/204 | **PARTIAL — cơ chế xong, bật SIGNED còn chờ chữ ký** | Bộ test tin cậy đi trọn vòng đời: ký hợp lệ, **ký lại bằng khoá lạ sau khi tính lại hash** (mối đe doạ mà `HASH_ONLY` KHÔNG chặn), sửa byte, rotation **có cửa sổ overlap**, rollback về LKG ký bằng khoá cũ, và đóng cửa sổ. Verify nay nhận **TẬP** khoá tin cậy — đổi khoá tức thời sẽ chặn đúng đường lùi mà cơ chế tồn tại để bảo vệ. **Lỗi thật:** `st_public_key_is_test_key()` có sẵn từ lâu nhưng **không nơi nào gọi**, nên "release phải dùng khoá thật" chỉ là một câu trong tài liệu; nay bootstrap log CRITICAL và `build-release.sh` chặn bằng `--st-key-info` (lab mở bằng `MKDDC_ALLOW_TEST_KEY=1`, ghi vào provenance). `ctest` **1220/1220**. **Còn chặn:** bật `SIGNATURE_REQUIRED` production cần Security+Product chốt **ký ở đâu và khoá riêng nằm ở đâu** (`DDD-ARTIFACT-TRUST-PROG-001` §2/§3 cố ý để mở) — không phải thiếu mã. Chi tiết §3.7. |
 | `T59-603` | P1 | Security/RBAC/audit/malicious input/concurrency full matrix | T59-202/405/501 | ORDERED | Direct API negative, zero mutation, audit completeness/no secret, rate/resource bounds. |
 | `T59-604` | P1 | E2E stability, remove stale quarantine, deterministic workers/retry policy | T59-505 | ORDERED | 5 consecutive full runs; all spec included; retry không che deterministic defect. |
-| `T59-605` | P0 | Release packaging: Programming default ON, artifact/compiler/library/systemd/env | T59-501/602 | ORDERED | Fresh install + upgrade package manifest/checksum; services/routes visible; rollback package. |
+| `T59-605` | P0 | Release packaging: Programming default ON, artifact/compiler/library/systemd/env | T59-501/602 | **DONE (HOST/LOCAL + TARGET DEPLOY)** | **Lỗi thật, kiểm chứng trên chính board Foxlinx:** `/usr/sbin/mkddc-st-package` **không tồn tại** trên bo — binary được build, có test riêng, nhưng chưa bao giờ được cài, trong khi BE gọi đúng đường dẫn đó ở bước Commission (`ProgrammingPackagerPath`). Cài + đưa vào `checksums.sha256`/`runtime-checksums`. `PROGRAMMING_REV_A=1` nay do `install.sh` ghi, **cả nhánh nâng cấp** (bo cũ có file env sẵn nên khối khởi tạo lần đầu không chạy — thiếu nhánh này thì bo cũ mãi ở trạng thái FE-bật/BE-tắt). 6/6 guard đóng gói PASS. Deploy thật lên board: core/web/st-compile/st-package/dist mới, ba service `active`, `/api/v1/programming/projects` trả **401** (route có, cờ ON) thay vì 404. Chi tiết §3.7. |
 | `T59-606` | P0 | RC reproducible build/provenance/SBOM/backup/restore/upgrade dry-run | T59-601..605 | ORDERED | Same source reproducible hashes or explained variance; dry-run fresh/upgrade/rollback PASS. |
 
 ### 3.7 Ghi chú thực thi W6
@@ -2037,6 +2037,35 @@ là thứ **duy nhất** còn giữ `T59-602` ở `PARTIAL`. Mã đã sẵn sàn
 chọn: bật mode là một tham số, tập khoá đã có, audit đã có trường.
 
 **Evidence level.** Host/local, `ctest` 1220/1220.
+
+#### `T59-605` — Gói phát hành thiếu đúng binary mà bước cuối cần
+
+**Lỗi thật, và nó chỉ lộ ra ở thao tác cuối cùng của người vận hành.**
+`mkddc-st-package` là writer artifact v2; BE gọi nó ở bước Commission qua
+`ProgrammingPackagerPath` (mặc định `/usr/sbin/mkddc-st-package`). Binary này
+được build, có test riêng, có golden — nhưng `install.sh` **chưa bao giờ cài
+nó**, và `checksums.sha256` cũng không phủ nó. Kiểm trên chính board Foxlinx:
+`ls /usr/sbin/mkddc-st-package` → **No such file or directory**. Nghĩa là một bo
+cài từ gói phát hành sẽ đi trọn Draft → Check → và **hỏng ở Commission**, với
+thông báo lỗi trỏ vào một đường dẫn không tồn tại. Không cổng nào phía trước bắt
+được: build xanh, test xanh, install xanh.
+
+**Nửa còn lại của cùng một tính năng.** FE bật Programming lúc build
+(`build:release`), BE bật bằng env `PROGRAMMING_REV_A`. Trước task này chỉ FE
+được bật trong gói: bo hiện đủ bốn workspace nhưng mọi endpoint sau lưng trả
+404 — triệu chứng giống hệt "backend hỏng" trong khi thật ra chưa ai bật cờ. Nay
+`install.sh` ghi cờ, và **có nhánh riêng cho bo nâng cấp**: file env đã tồn tại
+từ bản trước nên khối khởi tạo lần đầu không chạy, thiếu nhánh này thì mọi bo cũ
+ở lại vĩnh viễn trong trạng thái FE-bật/BE-tắt.
+
+**Guard chống tái phát.** `tests/integration/test_release_packaging_guard.py` thêm
+ba phép kiểm: packager có trong `install.sh` và trong checksums; cờ Programming
+có ở cả hai nhánh cài mới/nâng cấp; cổng khoá TEST của `T59-602` thực sự `exit 1`
+chứ không chỉ cảnh báo.
+
+**Evidence level.** Host/local cho guard; **target deploy thật** cho phần cài đặt
+(xem `docs/07_records/test-evidence/fw-som/2026-08-21-foxlinx-w6-deploy.md`).
+Chưa phải soak 24 h, chưa phải I/O vật lý.
 
 ### W7 — Target/HIL/V&V và quyết định phát hành
 

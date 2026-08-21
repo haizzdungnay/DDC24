@@ -40,6 +40,11 @@ fi
 # không lộ trên bo lab vì tools/deploy/deploy_board.sh có copy riêng.
 [ -x "$BUILD/core/mkddc-schedule-sim" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-schedule-sim" >&2; exit 1; }
 [ -x "$BUILD/core/mkddc-st-compile" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-st-compile" >&2; exit 1; }
+# T59-605: `mkddc-st-package` là writer artifact v2 mà BE gọi ở bước Commission
+# (`ProgrammingPackagerPath`, mặc định /usr/sbin/mkddc-st-package). Nó được build
+# nhưng KHÔNG được cài, nên trên bo mới cài, Commission gọi vào một đường dẫn
+# không tồn tại — lỗi chỉ lộ ra ở đúng thao tác cuối của người vận hành.
+[ -x "$BUILD/core/mkddc-st-package" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-st-package" >&2; exit 1; }
 [ -x "$MKDDC_GO_BINARY_REL" ] || { echo "ERROR: chưa build $MKDDC_GO_BINARY_REL (chạy platform/packaging/build-release.sh)" >&2; exit 1; }
 [ -f "$MKDDC_WEB_UI_DIST_REL/index.html" ] || { echo "ERROR: chưa build frontend $MKDDC_WEB_UI_DIST_REL" >&2; exit 1; }
 [ -f build/release/provenance.json ] || { echo "ERROR: thiếu provenance.json" >&2; exit 1; }
@@ -133,6 +138,22 @@ if [ ! -s /etc/mkddc-web.env ]; then
     chown root:root /etc/mkddc-web.env
 fi
 
+# T59-605 — Programming BẬT mặc định trong gói phát hành.
+#
+# BE đọc `PROGRAMMING_REV_A` qua `envTruthy` (mặc định TẮT), còn FE lấy cờ lúc
+# build (`npm run build:release`). Trước đây chỉ FE được bật: bo cài xong hiện
+# đủ bốn workspace Programming nhưng MỌI endpoint phía sau trả 404 — triệu chứng
+# giống hệt "backend hỏng" trong khi thật ra chưa ai bật cờ. Hai nửa của cùng một
+# tính năng phải bật cùng một chỗ.
+#
+# Dòng này đặt cả ở nhánh nâng cấp: file env đã tồn tại từ bản trước sẽ KHÔNG
+# được sửa bởi khối `if` phía trên, nên nâng cấp mà thiếu bước này sẽ để bo cũ
+# mãi mãi ở trạng thái FE-bật/BE-tắt.
+if ! grep -q '^PROGRAMMING_REV_A=' /etc/mkddc-web.env 2>/dev/null; then
+    printf 'PROGRAMMING_REV_A=1\n' >> /etc/mkddc-web.env
+    echo "INFO: bật PROGRAMMING_REV_A=1 trong /etc/mkddc-web.env (T59-605)"
+fi
+
 # Chụp bản đang cài trước khi ghi đè, để rollback là thao tác có quy trình thay vì
 # ứng biến. Trước đây không có bước này nên /usr/sbin tích tụ các bản sao tay kiểu
 # mkddc-core.bak-*/.prev-*, và rollback phụ thuộc trí nhớ người trực.
@@ -145,7 +166,7 @@ if [ -x /usr/sbin/mkddc-core ]; then
     SNAP="/var/backups/mkddc/${prev_ver}-$(date +%Y%m%d-%H%M%S)"
     install -d -m 0755 "$SNAP"
     for f in /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
-             /usr/sbin/mkddc-st-compile \
+             /usr/sbin/mkddc-st-compile /usr/sbin/mkddc-st-package \
              /usr/sbin/mkddc-fake-mcu /usr/sbin/mkddc-hmi /opt/mkddc-web/mkddc-web \
              /opt/mkddc-web/mkddc-schedule-sim \
              /usr/share/mkddc/provenance.json /usr/share/mkddc/checksums.sha256; do
@@ -164,6 +185,7 @@ install -m 0755 "$BUILD/iobus/mkddc-iobus" /usr/sbin/mkddc-iobus
 install -m 0755 "$BUILD/core/mkddc-core"   /usr/sbin/mkddc-core
 install -m 0755 "$BUILD/netcfg/mkddc-netcfg" /usr/sbin/mkddc-netcfg
 install -m 0755 "$BUILD/core/mkddc-st-compile" /usr/sbin/mkddc-st-compile
+install -m 0755 "$BUILD/core/mkddc-st-package" /usr/sbin/mkddc-st-package
 # SRC-F-01: đặt cạnh mkddc-web, KHÔNG vào /usr/sbin. `scheduleSimBinary()` dò
 # theo thứ tự env → PATH → thư mục chứa chính nó; service chạy `User=mkddc` với
 # PATH systemd mặc định (không có /usr/sbin), nên chỉ nhánh "cạnh binary" là
@@ -185,10 +207,11 @@ install -m 0644 build/release/checksums.sha256 /usr/share/mkddc/checksums.sha256
     /usr/sbin/mkddc-iobus --version
     /usr/sbin/mkddc-netcfg --version
     /usr/sbin/mkddc-st-compile --version
+    /usr/sbin/mkddc-st-package --version
     /opt/mkddc-web/mkddc-web --version
 } > /usr/share/mkddc/runtime-build-info.txt
 sha256sum /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
-    /usr/sbin/mkddc-st-compile \
+    /usr/sbin/mkddc-st-compile /usr/sbin/mkddc-st-package \
     /opt/mkddc-web/mkddc-web /opt/mkddc-web/mkddc-schedule-sim \
     > /usr/share/mkddc/runtime-checksums.sha256
 install -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/configure-web-hostname.sh" /usr/libexec/mkddc/configure-web-hostname
