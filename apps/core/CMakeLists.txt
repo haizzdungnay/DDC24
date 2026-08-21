@@ -136,6 +136,11 @@ target_link_libraries(mkddc-st-package-golden PRIVATE st_compiler_lib)
 add_executable(mkddc-st-compile application/st/st_compile_main.cpp)
 target_link_libraries(mkddc-st-compile PRIVATE st_compiler_lib)
 
+# T59-302/T59-305: lắp package v2 bằng ĐÚNG writer production, không cài lại
+# định dạng ở lớp BE.
+add_executable(mkddc-st-package application/st/st_package_main.cpp)
+target_link_libraries(mkddc-st-package PRIVATE st_compiler_lib)
+
 # SCHD-133: mô phỏng lịch bằng ĐÚNG engine của controller. Backend gọi binary
 # này thay vì cài lại thuật toán đánh giá trong Go — bản cài lại sẽ đúng cho tới
 # ngày nó lệch khỏi bản C++, và ngày đó không ai biết.
