@@ -576,6 +576,26 @@ void StScheduler::apply_pending_retain_resets(StTask& task)
     for (auto& p : task.programs()) {
         if (!p->pending_retain_reset.load(std::memory_order_acquire)) continue;
         p->runtime.reset_retained_state();
+        /* T59-407 — công bố ngay ảnh ĐÃ RESET, không chờ chu kỳ chạy kế tiếp.
+         *
+         * Triệu chứng nếu thiếu: reset xong, RAM sạch, nhưng file bền vững vẫn
+         * giữ giá trị cũ — khởi động lại là giá trị cũ quay về. Đúng nghĩa "reset
+         * nửa vời" mà `T59-407` cấm.
+         *
+         * Nguyên nhân: `publish_committed_retain_snapshots()` chỉ công bố cho
+         * Program vừa CHẠY và vừa COMMIT output trong base step này. Mà Program
+         * hay bị reset nhất lại là Program đang STOPPED hoặc FAULTED — đúng
+         * những Program không bao giờ thoả điều kiện đó. Force-flush sau đó chỉ
+         * ghi lại ảnh CŨ, hoặc không ghi gì.
+         *
+         * Công bố ở đây không phụ thuộc trạng thái chạy: reset là một sự kiện
+         * của DỮ LIỆU, không phải của việc chạy. */
+        if (p->retain_mailbox != nullptr && p->runtime.loaded()) {
+            const StLoadedProgram* loaded = p->runtime.program();
+            if (loaded != nullptr && loaded->has_retain())
+                (void)st_publish_retain_snapshot(p->retain_mailbox, *loaded,
+                                                 p->last_successful_now_ns);
+        }
         p->pending_retain_reset.store(false, std::memory_order_relaxed);
         /* release: non-RT polling generation này phải thấy đúng slots đã
          * ghi ở dòng trên trước khi thấy generation tăng. */
