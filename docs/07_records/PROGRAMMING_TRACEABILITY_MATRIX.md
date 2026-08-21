@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 5.3 |
+| Phiên bản | 5.4 |
 | Trạng thái | **Active — 60 requirement legacy + 22 unified requirement; 0 Open Decision; release evidence chưa đủ** |
 | Cập nhật | 2026-08-20 |
 | Chủ quản | Verification Lead |
@@ -39,7 +39,7 @@ nghĩa code tồn tại, cũng không nghĩa test đã PASS.
 | `SWR-REQ-PROG-FE-116..118` | Unified DDD §8; UX unified section | T59-203/503/504/506 | U03/U06/U07/U10 | `T59-203`: PGM-04 search/filter/detail/create/delete, review-gate chỉ hiển thị. `T59-306`: IA sáu trang đúng DDD §8, cây POU ba nhóm, inspector ẩn trường không có nghĩa (host/local). E2E real-backend thuộc T59-505; U03 NOT_RUN |
 | `SWR-REQ-PROG-BE-111` | Unified DDD §4–§6 | T59-005/201/202 | U03 | `T59-201`: domain/store + schema v7 có immutable/version/reference guard. `T59-202`: 3 route DDD §5.1, OpenAPI 1.23.0 28 operation ↔ route Go ↔ client TS exact, RBAC admin-only cho mutation, `If-Match`+idempotency+audit cùng transaction. FE/import/target còn thiếu; U03 NOT_RUN |
 | `SWR-REQ-PROG-BE-112..115` | Unified DDD §4–§6 | T59-006/302/405/408 | U04/U07/U10 | NOT_RUN |
-| `SWR-REQ-PROG-CORE-111..116` | Unified DDD §5.3/§7 | T59-401..408/501 | U02/U05..U09/U11 | `T59-401`: coordinator nạp package v2, dựng topology theo package, dual-reader v1 còn sống, gói hỏng 0 mutation (host/local). `T59-402`: mỗi Program release theo deadline riêng bù trôi theo mốc lý thuyết, lỡ chu kỳ đếm-và-bỏ, chu kỳ+ngân sách đi trong `PROGRAM_TABLE` và bị chặn ở cả writer lẫn loader, trần 16 chạy đồng thời ép ở `start()`, thứ tự chạy độc lập thứ tự tạo, package v2 sống sót reboot (host/local). Worker lane/signal/enable/output còn thiếu; U02/U05..U09/U11 NOT_RUN |
+| `SWR-REQ-PROG-CORE-111..116` | Unified DDD §5.3/§7 | T59-401..408/501 | U02/U05..U09/U11 | `T59-401`: coordinator nạp package v2, dựng topology theo package, dual-reader v1 còn sống, gói hỏng 0 mutation (host/local). `T59-402`: mỗi Program release theo deadline riêng bù trôi theo mốc lý thuyết, lỡ chu kỳ đếm-và-bỏ, chu kỳ+ngân sách đi trong `PROGRAM_TABLE` và bị chặn ở cả writer lẫn loader, trần 16 chạy đồng thời ép ở `start()`, thứ tự chạy độc lập thứ tự tạo, package v2 sống sót reboot (host/local). `T59-403`: lane là đơn vị song song, hai chế độ cho cùng kết quả (fixture 10 Program/3 chu kỳ/4 lane, 20 lần lặp), fault của một Program được cô lập theo kiến trúc §8, đường quét 0 cấp phát, TSan 54 test 0 cảnh báo (host/local). Signal/enable/output còn thiếu; U02/U05..U09/U11 NOT_RUN |
 | `NFR-REQ-PROG-111` | Unified DDD §11–§12 | T59-606/702/707 | U05/U11 | NOT_RUN |
 
 ## 1. Quy tắc đọc

@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### T59-403 — Worker lane, cô lập lỗi Program và ràng buộc không cấp phát (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/st_scheduler.{hpp,cpp}`,
+  `apps/core/application/st/tests/test_st_program_lanes.cpp` (mới),
+  `apps/core/application/st/tests/test_st_scheduler.cpp`, `apps/core/CMakeLists.txt`,
+  `scripts/run_core_tsan.sh` (mới), Plan 59 §3/§3.5, Risk Register v4.6,
+  Traceability v5.4, baseline manifest v1.27.
+- **Đổi hành vi có chủ ý:** fault của **một** Program không còn dừng cả Task.
+  Lý do cũ ghi trong code ("các Program trong một Task thường phối hợp") thuộc về
+  thời Task chỉ có một Program và mọi trao đổi là ngầm. Kiến trúc §8 quy định
+  `isolate Program`, và trao đổi giữa Program đi qua Published Signal có chính
+  sách fallback **khai báo**. Giữ hành vi cũ nghĩa là một Program hỏng làm mọi
+  Program khác — kể cả Program không liên quan gì tới nó — ngừng tác động lên đầu
+  ra mà không có mục nào trong hồ sơ nói vì sao. `last_dispatch_succeeded()` vẫn
+  `false`: cô lập không có nghĩa là im lặng. Test `ProgramFaultStopsRestOfTask`
+  được thay bằng `ProgramFaultIsIsolatedFromRestOfTask`.
+- **Thêm:** lane là đơn vị song song (`StLaneMode::SEQUENTIAL|PARALLEL`). Program
+  cùng lane chạy tuần tự theo `order`; lane khác nhau độc lập. Kết quả và trace
+  của mỗi lane gom riêng rồi trộn theo **số hiệu lane** — trộn theo thứ tự hoàn
+  thành sẽ làm kết quả khác nhau giữa hai lần chạy cùng cấu hình.
+- **Ràng buộc RT:** worker tạo sẵn ngoài chu kỳ quét, spin+yield không vào kernel;
+  bộ đệm lane cấp phát một lần. `allocation_probe` đo **0 cấp phát** ở cả hai chế
+  độ. Lane vượt số worker chạy nốt trên luồng gọi — thiếu worker làm chậm, không
+  làm bỏ sót.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1166/1166** pass;
+  `scripts/verify-project.sh --wave W4` **5/5 PASS**; `scripts/run_core_tsan.sh`
+  54 test lập lịch, **0 cảnh báo ThreadSanitizer**; `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-403`, `RSK-PROG-006/018/021`,
+  `PROGRAMMING_ARCHITECTURE.md` §8.
+
 ### T59-402 — Lập lịch theo từng Program: chu kỳ, deadline, trần 16 (2026-08-21)
 
 - **Phạm vi:** `apps/core/application/st/st_scheduler.{hpp,cpp}`,

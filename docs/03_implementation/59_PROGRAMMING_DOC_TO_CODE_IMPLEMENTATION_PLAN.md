@@ -1292,7 +1292,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 |---|---|---|---|---|---|
 | `T59-401` | P0 | Package coordinator/loader v2 + topology image, bỏ hardcode `program-main` | T59-106/305 | **DONE** | `UnpackPackageV2` dùng **chung một parser** với loader (không bản thứ hai); coordinator probe v1/v2 và dựng topology theo **chính package** — bootstrap không còn phải biết trước tên Program; `instance_id` bỏ hardcode `program-main`, thay bằng validator định dạng; stage/arm/rollback/start chạy trên **toàn bộ** tập instance; gói hỏng để lại **0 mutation** (mọi stage trước đó bị huỷ); `instance_ids()` cho read-back; 4 test mới; `ctest` **1149/1149**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-402` | P0 | Per-Program due queue/state/period/budget/metrics, max 16 | T59-401 | **DONE** | Chu kỳ release theo **từng Program** (`st_program_due`/`st_program_mark_released`), bù trôi theo mốc **lý thuyết**, lỡ chu kỳ thì **đếm và bỏ** chứ không chạy bù; chu kỳ đi **trong PROGRAM_TABLE của package** nên hai controller cùng gói chạy cùng dãy release; writer **và** loader cùng từ chối chu kỳ ngoài ba lớp profile; trần **16 Program chạy đồng thời** ép ở `start()`; thứ tự chạy độc lập thứ tự tạo; đo `last_exec_ns`/`max_exec_ns`/`missed_release_count` theo Program. Sửa kèm: package v2 **không sống sót reboot** (đường restore nạp nguyên container như artifact v1). 11 test mới; `ctest` **1159/1159**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
-| `T59-403` | P0 | Worker lanes/fault isolation/no-allocation RT | T59-402 | ORDERED | Single/multicore same semantics; TSan/no allocation/blocking; one Program fault isolated. |
+| `T59-403` | P0 | Worker lanes/fault isolation/no-allocation RT | T59-402 | **DONE** | Lane là đơn vị song song (`StLaneMode::SEQUENTIAL|PARALLEL`, worker tạo sẵn ngoài chu kỳ, spin+yield không vào kernel); hai chế độ cho **đúng cùng** kết quả trên fixture 10 Program/3 chu kỳ/4 lane, ổn định qua 20 lần lặp; **đảo chiều** chính sách fault — fault của một Program **không** còn dừng cả Task (kiến trúc §8 `isolate Program`); đường quét **0 cấp phát** ở cả hai chế độ; lane vượt số worker vẫn chạy nốt trên luồng gọi. 7 test mới; `ctest` **1166/1166**; TSan 0 cảnh báo. Chi tiết §3.5. |
 | `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | ORDERED | No torn read; fallback/hold/wait; producer disable/fault/recover tests. |
 | `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | ORDERED | RBAC/idempotency/restart intent; STARTING/RUNNING/STOPPING/DISABLED truth. |
 | `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | ORDERED | Disable/fault/TTL withdraw; next priority/default/safe path; no direct IOP. |
@@ -1405,6 +1405,63 @@ pin cũng vừa được sửa. Nay có `golden_sections()` + self-test 25 ca sa
 lane, cô lập lỗi và ràng buộc không cấp phát trong RT thuộc `T59-403`; đo tải
 theo lớp chu kỳ mới chỉ dừng ở `last_exec_ns`/`max_exec_ns` trên từng instance,
 chưa có đường công bố ra API.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-403` — Lane, cô lập lỗi và ràng buộc không cấp phát
+
+**Đảo chiều chính sách fault, có chủ ý.** Trước task này, fault của MỘT Program
+dừng cả Task (`break` trong vòng chạy). Lý do ghi trong code — "các Program trong
+một Task thường phối hợp" — thuộc về thời Task chỉ có một Program và mọi trao đổi
+là ngầm. Trong mô hình đa Program, kiến trúc §8 quy định `isolate Program`, và
+trao đổi giữa Program đi qua Published Signal có chính sách fallback **khai báo**
+cho đúng tình huống producer chết. Giữ hành vi cũ nghĩa là một Program hỏng làm
+mọi Program khác — kể cả Program không liên quan gì tới nó — ngừng tác động lên
+đầu ra, mà không có mục nào trong hồ sơ nói vì sao. Test cũ
+`ProgramFaultStopsRestOfTask` được thay bằng `ProgramFaultIsIsolatedFromRestOfTask`;
+`last_dispatch_succeeded()` vẫn `false` — **cô lập không có nghĩa là im lặng**.
+
+**Lane là đơn vị song song, không phải đơn vị cấu hình.** Program cùng lane chạy
+tuần tự theo `order`; lane khác nhau độc lập. Lane **không** được mang dữ liệu
+dùng chung: chia sẻ ngầm giữa hai lane là thứ làm kết quả phụ thuộc vào lane nào
+chạy trước, và đó chính là điều hai chế độ phải không bao giờ khác nhau.
+
+**Trộn theo SỐ HIỆU LANE, không theo thứ tự hoàn thành.** Mỗi lane gom kết quả và
+trace vào bộ đệm riêng (cấp phát tĩnh), trộn lại sau khi mọi lane xong. Trộn theo
+thứ tự hoàn thành sẽ làm trace và số đếm khác nhau giữa hai lần chạy cùng một cấu
+hình — và "single/multicore cùng ngữ nghĩa" mất nghĩa ngay ở chỗ dễ bỏ qua nhất.
+
+**Số đếm phải khớp LÝ THUYẾT, không chỉ khớp nhau.** Fixture kiểm cả hai: hai chế
+độ cho cùng dãy, **và** dãy đó bằng dãy release tính tay cho 30 chu kỳ. Hai chế độ
+cùng sai một kiểu vẫn cho hai kết quả bằng nhau.
+
+**Worker tạo sẵn, spin + yield, không vào kernel.** Condition variable sẽ đưa
+đường quét vào chờ ở kernel. Worker chỉ tồn tại khi `PARALLEL` được bật **tường
+minh** — chi phí spin là chi phí người dựng hệ đã chọn, không phải mặc định ai đó
+thừa hưởng. Đổi chế độ tạo/huỷ worker **ngoài** chu kỳ quét; destructor dừng
+worker trước khi bất cứ thứ gì chúng đọc bị huỷ.
+
+**Thiếu worker làm CHẬM, không làm BỎ SÓT.** Lane vượt số worker chạy nốt trên
+luồng gọi. Có test khoá đúng ca `kMaxLanes` lane trên máy ít nhân.
+
+**Không cấp phát trong đường quét.** Phân lane dùng bộ đệm cấp phát một lần của
+scheduler. `allocation_probe` đo 0 cấp phát ở **cả hai** chế độ. Bộ đếm là
+`thread_local` nên phép đo phủ luồng gọi — phân lane, điều phối, trộn kết quả, và
+ở chế độ tuần tự là toàn bộ thân lane; worker chạy **chính** `run_lane` đó nên
+phần thân đã được phủ. Nói phép đo phủ cả luồng worker sẽ là nói quá.
+
+**TSan tái lập được, không phải một lần chạy tay.** `scripts/run_core_tsan.sh`
+dựng cây build TSan riêng và chạy 54 test lập lịch: **0 cảnh báo**. Nó là script
+riêng chứ không phải một cổng của `verify-project.sh` vì instrumentation đổi cả
+layout bộ nhớ nên phải là cây build khác — gộp vào cổng mặc định bắt mọi task
+không liên quan tới đồng thời trả cái giá đó. Script bọc `setarch -R` quanh **cả**
+bước build lẫn bước chạy: kernel mới đặt `vm.mmap_rnd_bits` đủ cao để TSan thoát
+với "unexpected memory mapping" ngay ở bước `gtest_discover_tests`.
+
+**Ranh giới trung thực.** Đây là **cấu trúc chạy và chính sách fault**. Chính sách
+fallback khi consumer đọc signal của producer vừa fault thuộc `T59-404`; rút
+candidate và safe-state khi Program fault thuộc `T59-406`. Số đo TSan là host,
+trên fixture của bộ test — không phải 24 h trên target (`T59-702`).
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
