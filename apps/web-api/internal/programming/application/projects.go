@@ -276,7 +276,7 @@ func (s *ProjectService) SealRevision(ctx context.Context, actor Actor, command 
 	if command.BaseRevisionID != expectedBase {
 		return MutationResult{}, programmingstore.ErrETagConflict
 	}
-	objects, manifest, err := revisionPayload(snapshot.Draft.ContentJSON, command.ProjectID, command.Label, command.Comment)
+	objects, pous, manifest, err := revisionPayload(snapshot.Draft.ContentJSON, command.ProjectID, command.Label, command.Comment)
 	if err != nil {
 		return MutationResult{}, err
 	}
@@ -284,7 +284,17 @@ func (s *ProjectService) SealRevision(ctx context.Context, actor Actor, command 
 	// Draft library được đóng băng CÙNG lúc với Revision. Pin một library còn
 	// DRAFT nghĩa là pin một thứ vẫn sửa được — mọi POU dependency sau đó trỏ
 	// vào một tập entry có thể đổi sau lưng Revision đã "đóng băng".
+	// Revision v2 khi Draft có POU hoặc có library. `programCount` phải là số
+	// Program THẬT: khai 1 cho một package 8 Program sẽ làm mọi kiểm trần phía
+	// sau chạy trên một con số không đúng.
 	libraryRevisionID, documentSchemaVersion := "", 1
+	programCount := 1
+	if count := len(pous); count > 0 {
+		documentSchemaVersion = 2
+		if configured := sealProgramCount(snapshot.Draft.ContentJSON); configured > 0 {
+			programCount = configured
+		}
+	}
 	if libraryDraft, libraryErr := s.store.FindProjectLibraryDraft(ctx, command.ProjectID); libraryErr == nil {
 		libraryRevisionID, documentSchemaVersion = libraryDraft.LibraryRevisionID, 2
 	} else if !errors.Is(libraryErr, programmingstore.ErrNotFound) {
@@ -293,7 +303,7 @@ func (s *ProjectService) SealRevision(ctx context.Context, actor Actor, command 
 	revision, err := s.store.CreateRevision(ctx, programmingstore.CreateRevisionParams{
 		RevisionID: revisionID, ProjectID: command.ProjectID, DraftID: snapshot.Draft.DraftID, ExpectedDraftETag: etag,
 		ParentRevisionID: snapshot.Draft.BaseRevisionID, ManifestJSON: manifest, Objects: objects,
-		DocumentSchemaVersion: documentSchemaVersion, ProgramCount: 1,
+		DocumentSchemaVersion: documentSchemaVersion, ProgramCount: programCount, POUObjects: pous,
 		LibraryRevisionID: libraryRevisionID, PublishLibraryRevisionID: libraryRevisionID,
 		ActorID: actor.ID, Role: actor.Role, AuditID: auditID, CorrelationID: command.CorrelationID,
 		At: s.now(), IdempotencyKeySHA256: keyHash, RequestSHA256: requestHash,
