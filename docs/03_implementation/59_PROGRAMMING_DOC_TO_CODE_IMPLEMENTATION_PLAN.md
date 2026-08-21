@@ -1297,7 +1297,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | **DONE** | Đường đầy đủ: store (`program_runtime_intents`, migration **v10**) → API (`PUT .../programs/{id}/runtime-intent`, `GET .../programs`, RBAC admin/viewer, idempotency) → IPC (**action mới** `SET_PROGRAM_ENABLED`, protocolMinor 0→1 tương thích ngược) → Core (`set_program_enabled` áp lên đúng một instance) → read-back + audit **cùng một transaction**. Intent và trạng thái là **hai trường riêng**; Core từ chối/không sẵn sàng vẫn giữ intent bền vững. Trần 16 Enabled ép ở **hai** lớp. Sửa kèm: trigger `generation` chặn cả read-back; biên nhận idempotency đòi ETag cho mutation không thuộc Draft. 10 test mới; `ctest` **1180/1180**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | **DONE** | `ProgramCandidateRegistry` trả lời **ai đang giữ output nào và vì sao không còn giữ** (enum lý do đóng: `OPERATOR_DISABLE`/`FAULT_TTL_EXPIRED`/`PACKAGE_REPLACED`); bất biến một-output-một-owner ép **lại** ở runtime; rút candidate → trọng tài rơi đúng **mức tiếp theo → default**, không kẹt ở giá trị cuối của Program đã dừng; gói mới xoá sạch quyền sở hữu cũ; luật **không có đường Program→IOP trực tiếp** kiểm bằng đọc chính mã nguồn. 9 test mới; `ctest` **1187/1187**; `--wave W4` 5/5 PASS. **Còn mở:** TTL hold-last vẫn là `0` (giữ vô hạn) vì con số chưa được Product+Controls ký. Chi tiết §3.5. |
 | `T59-407` | P0 | Per-Program/FB RETAIN namespace/layout/restart/reset | T59-104/401 | **DONE** | Sửa lỗi **reset nửa vời**: reset trên Program đang DỪNG chỉ sạch trong RAM, file bền vững giữ giá trị cũ nên khởi động lại là giá trị cũ quay về. Nay reset công bố ảnh đã reset **ngay tại boundary**, không phụ thuộc trạng thái chạy. Ma trận warm/cold/revision/corrupt/reset đóng đủ; reset **cô lập** giữa Program; file hỏng của một Program **không** làm Program khác cold-init. 3 test mới; test chống hồi quy đã kiểm chứng bằng cách gỡ bản vá (đỏ đúng chỗ); `ctest` **1191/1191**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
-| `T59-408` | P1 | Core trace ring buffer + real `TRACE_START/STOP` | T59-402/006 | ORDERED | 10k/10 min bounded, no RT allocation; BE caller thật; action ma = 0. |
+| `T59-408` | P1 | Core trace ring buffer + real `TRACE_START/STOP` | T59-402/006 | **DONE** | `StValueTrace` lấy mẫu tại **ranh giới quét**, bounded 10.000 Ô / 10 phút, **0 cấp phát**; ba action IPC thật `TRACE_START`/`TRACE_STOP`/`TRACE_READ` (protocolMinor 1→2, tương thích ngược); BE gọi **thật** xuống Core; **action ma = 0** — bảng handler không còn `NOT_IMPLEMENTED` nào, có test ở cả Go lẫn verifier. Sửa kèm: self-test verifier IPC bám vào `TRACE_START` nên thành no-op ngay khi nó được hiện thực; luật "`NOT_IMPLEMENTED` phải ghi task" thoát khỏi phép kiểm vì thoát sớm ở phép kiểm khác. 10 test mới; `ctest` **1200/1200**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 
 ### 3.5 Ghi chú thực thi W4
 
@@ -1689,6 +1689,72 @@ lượt, tại safe boundary trước khi Program nào chạy. Không có cửa 
 **Ranh giới trung thực.** Đây là **cô lập và bền vững của reset**. Ma trận
 power-cut thật trên board thuộc `T59-704`; đường IPC `RETAIN_RESET` và ràng buộc
 trạng thái Commission đã có từ `WP-12`, task này không đổi chúng.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-408` — Trace giá trị lấy tại ranh giới quét, và diệt action ma
+
+**Vì sao lấy mẫu trong Core chứ không để BE poll.** BE poll ở nhịp riêng của nó,
+nên "mẫu tại t" thực chất là "thứ gì đó Core đã công bố quanh khoảng t" — hai
+biến trong cùng một mẫu có thể đến từ **hai chu kỳ khác nhau**. Với một đồ thị
+chẩn đoán, đó là dữ liệu nói dối theo cách khó thấy nhất: đường cong trông hợp lý
+nhưng quan hệ nhân quả giữa hai biến bị xáo. Lấy tại boundary thì mọi biến trong
+một mẫu đến từ **đúng một** chu kỳ.
+
+**Hai trần cùng tồn tại, trần nào chặt hơn thì thắng.** Thời lượng (10 phút ở
+chu kỳ 100 ms = 6.000 mẫu) và ngân sách Ô (32 biến chỉ được 10.000/32 = 312 mẫu).
+Biết rõ điều này là điều kiện để đọc đúng một đồ thị bị cắt cụt — và số mẫu **rơi**
+được đếm, vì giấu nó sẽ làm người đọc tưởng mình thấy toàn bộ.
+
+**Kho theo Ô, không theo struct mẫu.** Lưu 10.000 struct mẫu (32 ô + cờ + mốc
+thời gian) tốn ~3 MB tĩnh cho một tính năng chẩn đoán — không hợp lý trên một bộ
+điều khiển. Lưu theo ô cho ngân sách **cố định ~170 KB** không phụ thuộc số biến,
+và đó là một con số nói ra được.
+
+**Biến khai bằng TÊN, không bằng số slot.** Số slot là kết quả của một lần biên
+dịch cụ thể và **không tồn tại** ở bất kỳ nơi nào BE nhìn thấy — Revision chỉ có
+tên biến. Bắt BE gửi slot nghĩa là phải xuất bảng slot ra khỏi artifact chỉ để
+phục vụ chẩn đoán, rồi giữ hai bản đồ tên→slot ở hai bên. Core đã có bảng đó
+trong chương trình đang nạp; phân giải ở đó là phân giải ở nơi dữ liệu sống.
+
+**Biến không phân giải được KHÔNG làm hỏng cả phiên.** Nó vẫn được nhận, nhưng
+mọi mẫu của nó mang `valid=false`. Từ chối cả phiên vì một biến gõ sai sẽ làm mất
+luôn dữ liệu của những biến còn lại. Và `valid=false` khác `0`: "không đo được"
+và "đo được giá trị 0" là hai sự thật khác nhau.
+
+**`TRACE_READ` KHÔNG phải mutation.** Xếp một lệnh đọc vào nhóm mutation sẽ buộc
+nó mang `operationId` và đi qua kiểm idempotency mà nó không cần.
+
+**Trace không cần coordinator.** Nó đọc trạng thái Program đang chạy, không đụng
+vòng đời gói. Bắt nó chờ coordinator sẽ làm chẩn đoán không dùng được đúng lúc
+cần nhất — khi chưa có gói nào commission thành công.
+
+**`protocolMinor` 1→2, `schemaVersion` trên dây vẫn "1.0"** — cùng lý do đã ghi ở
+`T59-405`.
+
+**Action ma = 0.** Bảng handler nay không còn `NOT_IMPLEMENTED` nào. Khoá bằng hai
+phép kiểm độc lập: `TestNoGhostActionsInContract` (Go — mọi action khai phải
+IMPLEMENTED và phải có hằng ở codec Go, và ngược lại) và
+`verify_programming_ipc_actions.py` (đối chiếu schema ↔ enum C++ ↔ nhánh dispatch
+↔ codec Go).
+
+**Sửa kèm — self-test của chính verifier đã mục ruỗng.** Hai mutation dùng
+`TRACE_START` làm ví dụ "action chưa hiện thực". Ngay khi task này hiện thực nó,
+hai mutation trở thành **no-op** và self-test xanh mà không kiểm gì — đúng lớp lỗi
+mà self-test sinh ra để chặn. Nay mutation **tự tiêm** một action giả, và ca
+"khai IMPLEMENTED nhưng không có nhánh" được dựng bằng cách **tiêm nội dung nguồn
+Core đã bị bỏ nhánh** — mutation trên schema không mô phỏng được ca đó.
+
+**Sửa kèm — một luật thoát khỏi phép kiểm vì thoát sớm ở phép kiểm khác.** Luật
+"`NOT_IMPLEMENTED` phải ghi task sẽ hiện thực" nằm **sau** phép tra enum C++, nên
+một action chưa có enum thoát khỏi luật này. Nay luật thuần schema được kiểm
+trước.
+
+**Ranh giới trung thực.** BE hiện gọi `TRACE_START`/`TRACE_STOP` thật, còn đường
+**đọc mẫu** vẫn dùng poll monitor làm nguồn: chuyển hẳn sang `TRACE_READ` cần đổi
+hình chiếu mẫu ở API và FE, thuộc lane sản phẩm chứ không thuộc task này. Lỗi khi
+gọi Core **không** huỷ phiên — mất trace hoàn toàn vì Core bận là tệ hơn. Số đo
+10k/10 phút là host, không phải 10 phút thật trên target (`T59-702`).
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

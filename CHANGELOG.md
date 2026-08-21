@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### T59-408 — Trace giá trị lấy tại ranh giới quét; action ma = 0 (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/st_value_trace.{hpp,cpp}` (mới),
+  `apps/core/application/st/tests/test_st_value_trace.cpp` (mới),
+  `apps/core/application/programming/program_ipc_server.{hpp,cpp}`,
+  `apps/core/application/runtime/scan_loop.{hpp,cpp}`, `apps/core/bootstrap/main.cpp`,
+  `apps/web-api/internal/programming/{coreipc/codec.go,application/trace.go}`,
+  `contracts/ipc/programming_v1/*`, `contracts/programming/error_catalog_v1.json`,
+  `scripts/verify_programming_ipc_actions.py`, Plan 59 §3/§3.5,
+  Risk Register v4.11, Traceability v5.9, baseline manifest v1.32.
+- **Thêm:** `StValueTrace` — historian giá trị bounded (10.000 Ô / 10 phút), lấy
+  mẫu tại **ranh giới quét**. BE poll ở nhịp riêng của nó nên hai biến trong cùng
+  một mẫu có thể đến từ **hai chu kỳ khác nhau**; đồ thị trông hợp lý nhưng quan
+  hệ nhân quả giữa hai biến bị xáo. Lấy tại boundary thì mọi biến trong một mẫu
+  đến từ **đúng một** chu kỳ.
+- **Kho theo Ô, không theo struct mẫu:** lưu 10.000 struct mẫu tốn ~3 MB tĩnh cho
+  một tính năng chẩn đoán. Lưu theo ô cho ngân sách **cố định ~170 KB** không phụ
+  thuộc số biến. Số mẫu **rơi** được đếm — giấu nó sẽ làm người đọc đồ thị tưởng
+  mình thấy toàn bộ.
+- **Biến khai bằng TÊN, không bằng slot:** số slot là kết quả của một lần biên
+  dịch cụ thể và không tồn tại ở nơi nào BE nhìn thấy. Core đã có bảng tên→slot
+  trong chương trình đang nạp. Biến không phân giải được vẫn nhận nhưng mọi mẫu
+  mang `valid=false` — từ chối cả phiên vì một biến gõ sai sẽ làm mất luôn dữ
+  liệu của những biến còn lại.
+- **Ba action IPC thật:** `TRACE_START`/`TRACE_STOP` (mutation) và `TRACE_READ`
+  (chỉ đọc — xếp nó vào nhóm mutation sẽ buộc nó mang `operationId` và đi qua
+  kiểm idempotency mà nó không cần). `protocolMinor` 1→2, `schemaVersion` trên
+  dây giữ nguyên "1.0". BE gọi **thật** xuống Core khi phiên bắt đầu và kết thúc.
+- **Action ma = 0:** bảng handler IPC không còn `NOT_IMPLEMENTED` nào, khoá bằng
+  hai phép kiểm độc lập ở hai lớp.
+- **Sửa kèm 1 — self-test của chính verifier đã mục ruỗng.** Hai mutation dùng
+  `TRACE_START` làm ví dụ "action chưa hiện thực"; ngay khi task này hiện thực
+  nó, hai mutation thành **no-op** và self-test xanh mà không kiểm gì — đúng lớp
+  lỗi mà self-test sinh ra để chặn. Nay mutation tự tiêm action giả, và ca "khai
+  IMPLEMENTED nhưng không có nhánh" được dựng bằng cách tiêm nội dung nguồn Core
+  đã bỏ nhánh.
+- **Sửa kèm 2 — một luật thoát khỏi phép kiểm.** Luật "`NOT_IMPLEMENTED` phải ghi
+  task sẽ hiện thực" nằm sau phép tra enum C++, nên một action chưa có enum thoát
+  khỏi luật này. Nay luật thuần schema được kiểm trước.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1200/1200** pass (10 test mới);
+  `scripts/verify-project.sh --wave W4` **5/5 PASS**;
+  `verify_programming_ipc_actions.py --self-test` 5/5 mutation, 11 action /
+  0 NOT_IMPLEMENTED; `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-408`, `RSK-PROG-014/021`, OD-PROG-011.
+
 ### T59-407 — RETAIN theo Program: cô lập và bịt lỗ "reset nửa vời" (2026-08-21)
 
 - **Phạm vi:** `apps/core/application/st/st_scheduler.cpp`,
