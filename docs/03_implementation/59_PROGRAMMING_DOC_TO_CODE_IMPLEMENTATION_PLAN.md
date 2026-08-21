@@ -1290,7 +1290,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-401` | P0 | Package coordinator/loader v2 + topology image, bỏ hardcode `program-main` | T59-106/305 | ORDERED | v1/v2 prepared image; stage corrupt no mutation; package status/read-back. |
+| `T59-401` | P0 | Package coordinator/loader v2 + topology image, bỏ hardcode `program-main` | T59-106/305 | **DONE** | `UnpackPackageV2` dùng **chung một parser** với loader (không bản thứ hai); coordinator probe v1/v2 và dựng topology theo **chính package** — bootstrap không còn phải biết trước tên Program; `instance_id` bỏ hardcode `program-main`, thay bằng validator định dạng; stage/arm/rollback/start chạy trên **toàn bộ** tập instance; gói hỏng để lại **0 mutation** (mọi stage trước đó bị huỷ); `instance_ids()` cho read-back; 4 test mới; `ctest` **1149/1149**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-402` | P0 | Per-Program due queue/state/period/budget/metrics, max 16 | T59-401 | ORDERED | 10-Program/3-period host fixture; deterministic deadline; creation reorder same result. |
 | `T59-403` | P0 | Worker lanes/fault isolation/no-allocation RT | T59-402 | ORDERED | Single/multicore same semantics; TSan/no allocation/blocking; one Program fault isolated. |
 | `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | ORDERED | No torn read; fallback/hold/wait; producer disable/fault/recover tests. |
@@ -1298,6 +1298,54 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | ORDERED | Disable/fault/TTL withdraw; next priority/default/safe path; no direct IOP. |
 | `T59-407` | P0 | Per-Program/FB RETAIN namespace/layout/restart/reset | T59-104/401 | ORDERED | Warm/cold/revision/corrupt/reset matrix; no half reset; Program isolation. |
 | `T59-408` | P1 | Core trace ring buffer + real `TRACE_START/STOP` | T59-402/006 | ORDERED | 10k/10 min bounded, no RT allocation; BE caller thật; action ma = 0. |
+
+### 3.5 Ghi chú thực thi W4
+
+#### `T59-401` — Coordinator nạp package v2, bỏ hardcode `program-main`
+
+**Một parser, không hai.** `UnpackPackageV2` giữ lại blob IR nhưng dùng **đúng
+cùng** hàm parse với `LoadPackageV2` — chỉ khác một tham số `ir_out`. Viết một
+parser thứ hai để "chỉ lấy blob" sẽ tạo hai bộ ngữ nghĩa cho một định dạng, và
+bản thứ hai luôn là bản quên cập nhật khi format đổi. Parser cũng ép **mỗi
+Program đúng một blob IR**: lệch số nghĩa là gói thiếu thân chương trình cho một
+Program nào đó, và nạp nó sẽ cho một instance không chạy được mà không ai báo.
+
+**Tên Program là dữ liệu của PACKAGE.** Trước task này, coordinator đòi
+`instance_id == "program-main"` và đòi bootstrap khai sẵn instance đó. Nghĩa là
+mỗi lần đổi tên Program phải sửa tiến trình khởi động — và chỉ nạp được đúng một
+Program mãi mãi. Nay `ensure_topology` **thêm instance còn thiếu** vào scheduler
+theo đúng danh sách trong package.
+
+**Bỏ hardcode KHÔNG có nghĩa là nhận mọi chuỗi.** `valid_instance_id` ép ASCII in
+được, không dấu phân cách đường dẫn, 1..64 ký tự — instance id đi vào scheduler
+và vào journal nên nó phải là identity ổn định. Test khoá bốn chuỗi độc hại
+(`../escape`, rỗng, 65 ký tự, có khoảng trắng).
+
+**Vòng đời chạy trên TOÀN BỘ tập instance.** Stage, arm (`commit_staged_activation`),
+rollback và `start` đều lặp qua `instance_ids_`. Chỉ xử lý instance chính sẽ để
+package ở trạng thái **nửa cũ nửa mới** ngay tại boundary kế tiếp — đúng loại
+trạng thái mà không lớp nào phía sau phát hiện được.
+
+**Gói hỏng để lại 0 mutation.** Một Program stage lỗi thì mọi Program đã stage
+trước đó bị `abort_staged_activation`. Nạp nửa gói là nạp một cấu hình **chưa
+từng được Check**.
+
+**Dual-reader còn sống.** Artifact v1 (một Program) vẫn nạp được qua đúng đường
+cũ; test khoá nó. Nếu probe từ chối v1 thì **một lần nâng cấp là mất bản LKG cuối
+cùng** (DDD §12.1).
+
+**Ranh giới CMake có chủ ý.** `st_package_v2.cpp` (+ `st_pou_registry`,
+`st_fb_instance_layout` mà nó cần) chuyển sang `core_application`; chúng bị **gỡ
+khỏi** `st_compiler_lib` vì lib đó link `core_lib`, biên dịch lại sẽ tạo ký hiệu
+trùng. Không link cả `st_compiler_lib` vào `mkddc-core`: compiler không có việc
+gì trên bộ điều khiển đang chạy.
+
+**Ranh giới trung thực.** Đây là **nạp và dựng topology**. Lập lịch từng Program
+theo chu kỳ riêng, hàng đợi due và ngân sách thuộc `T59-402`; `instance_id_` vẫn
+được giữ làm instance chính vì journal v1 ghi một id — đổi định dạng journal ở
+đây sẽ làm mọi bản ghi cũ không đọc được.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
 ### W5 — Lifecycle atomic và sản phẩm FE↔BE↔Core
 

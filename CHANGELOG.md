@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### Added — `T59-401` Coordinator nạp package v2, bỏ hardcode `program-main` (2026-08-21)
+
+**Một parser, không hai.** `UnpackPackageV2` giữ lại blob IR nhưng dùng **đúng
+cùng** hàm parse với `LoadPackageV2` — chỉ khác một tham số. Parser thứ hai để
+"chỉ lấy blob" sẽ tạo hai bộ ngữ nghĩa cho một định dạng. Parser cũng ép **mỗi
+Program đúng một blob IR**: lệch số nghĩa là gói thiếu thân chương trình, và nạp
+nó cho một instance không chạy được mà không ai báo.
+
+**Tên Program là dữ liệu của PACKAGE.** Trước đây coordinator đòi
+`instance_id == "program-main"` và đòi bootstrap khai sẵn instance đó — mỗi lần
+đổi tên Program phải sửa tiến trình khởi động, và chỉ nạp được đúng một Program
+mãi mãi. Nay topology được dựng theo **chính package**. Bỏ hardcode **không** có
+nghĩa nhận mọi chuỗi: `valid_instance_id` ép ASCII in được, không dấu phân cách
+đường dẫn, 1..64 ký tự.
+
+**Vòng đời chạy trên TOÀN BỘ tập instance** — stage, arm, rollback, start. Chỉ xử
+lý instance chính sẽ để package ở trạng thái **nửa cũ nửa mới** ngay tại boundary
+kế tiếp.
+
+**Gói hỏng để lại 0 mutation:** một Program stage lỗi thì mọi Program đã stage
+trước đó bị huỷ. Nạp nửa gói là nạp một cấu hình **chưa từng được Check**.
+
+**Dual-reader còn sống:** artifact v1 một Program vẫn nạp được, có test khoá —
+mất đường này là mất bản LKG cuối cùng sau một lần nâng cấp (DDD §12.1).
+
+**Ranh giới CMake:** `st_package_v2.cpp` (+ `st_pou_registry`,
+`st_fb_instance_layout`) chuyển sang `core_application` và bị **gỡ khỏi**
+`st_compiler_lib` (lib đó link `core_lib`, biên dịch lại sẽ tạo ký hiệu trùng).
+Không link cả `st_compiler_lib` vào `mkddc-core` — compiler không có việc gì trên
+bộ điều khiển đang chạy.
+
+**Kiểm chứng (host/local):** `ctest` **1149/1149**; `go test ./... -count=1` 18/18;
+`verify-project.sh --wave W4` **5/5 PASS**.
+
+**Ranh giới:** lập lịch từng Program theo chu kỳ riêng, hàng đợi due và ngân sách
+thuộc `T59-402`.
+
 ### Changed — `T59-306` IA sáu trang: `programs`/`mapping` là route đích (đóng Wave W3) (2026-08-21)
 
 **Đảo chiều `design` ↔ `programs`/`mapping`.** DDD §8 khoá sáu route, trong đó
