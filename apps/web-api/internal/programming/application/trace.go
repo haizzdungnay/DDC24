@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -31,10 +32,34 @@ type traceStartPayload struct {
 	Variables      [][2]string
 }
 
-// traceSessionPayload: `[sessionId]` cho TRACE_STOP.
+// traceSessionPayload: `[sessionId]` cho TRACE_STOP và TRACE_READ.
 type traceSessionPayload struct {
 	_         struct{} `cbor:",toarray"`
 	SessionID string
+}
+
+// traceReadReply là thân trả về của TRACE_READ:
+// `[state, droppedCount, [[timestampNs, [[valid, bits], ...]], ...]]`.
+//
+// `bits` là 8 byte THÔ của ô nhớ, không phải số đã diễn giải: kiểu của ô là dữ
+// liệu của package, và diễn giải hai lần ở hai bên là hai chỗ để lệch nhau.
+type traceReadReply struct {
+	_       struct{} `cbor:",toarray"`
+	State   string
+	Dropped uint32
+	Samples []traceReadSample
+}
+
+type traceReadSample struct {
+	_           struct{} `cbor:",toarray"`
+	TimestampNS uint64
+	Values      []traceReadCell
+}
+
+type traceReadCell struct {
+	_     struct{} `cbor:",toarray"`
+	Valid bool
+	Bits  uint64
 }
 
 const (
@@ -98,6 +123,13 @@ type traceSession struct {
 	stop          chan struct{}
 	stopOnce      sync.Once
 	maxSamples    int
+	// T59-408/T59-501: thứ tự biến ĐÃ GỬI xuống Core ở `TRACE_START`. Ô trong
+	// mỗi mẫu Core trả về song song 1-1 với danh sách này, nên đây là thứ duy
+	// nhất dịch được ô thứ n trở lại `variableId`. Rỗng = Core không nhận phiên,
+	// đường dự phòng poll monitor được dùng.
+	coreVariableIDs []string
+	// Kiểu dữ liệu theo `variableId`, để diễn giải bit thô Core gửi lên.
+	coreDataTypes map[string]string
 }
 
 type traceIdempotency struct {
@@ -212,10 +244,14 @@ func (s *RuntimeService) CreateTrace(ctx context.Context, request TraceRequest, 
 	//
 	// Lỗi ở đây KHÔNG huỷ phiên: đường lấy mẫu dự phòng (poll monitor) vẫn cho
 	// dữ liệu dùng được, và mất trace hoàn toàn vì Core bận là tệ hơn.
-	s.startCoreTrace(ctx, traceID, request, monitor)
-	if !s.captureTraceSample(traceID, monitor) {
-		_ = s.finishTrace(traceID, "COMPLETED", "QUOTA_REACHED")
-		return traceAcceptedFrom(session, correlationID), nil
+	// Core nhận phiên thì KHÔNG lấy mẫu đầu bằng poll: mẫu đầu sẽ tới từ ring
+	// cùng nguồn với mọi mẫu sau. Trộn hai nguồn trong một dãy tạo ra một đồ thị
+	// mà điểm đầu tiên đến từ nơi khác các điểm còn lại.
+	if !s.startCoreTrace(ctx, traceID, request, monitor) {
+		if !s.captureTraceSample(traceID, monitor) {
+			_ = s.finishTrace(traceID, "COMPLETED", "QUOTA_REACHED")
+			return traceAcceptedFrom(session, correlationID), nil
+		}
 	}
 	go s.runTrace(traceID)
 	return traceAcceptedFrom(session, correlationID), nil
@@ -263,6 +299,16 @@ func (s *RuntimeService) runTrace(traceID string) {
 	for {
 		select {
 		case <-ticker.C:
+			// Nguồn ĐÚNG trước: mẫu Core lấy tại ranh giới quét. Chỉ khi Core
+			// không có phiên này mới rơi về poll monitor — và khi đó đồ thị là
+			// dữ liệu xấp xỉ, không phải dữ liệu của một chu kỳ.
+			if reply, ok := s.readCoreTrace(context.Background(), traceID); ok {
+				if !s.applyCoreTraceSamples(traceID, reply) {
+					_ = s.finishTrace(traceID, "COMPLETED", "QUOTA_REACHED")
+					return
+				}
+				continue
+			}
 			monitor, err := s.GetMonitor(context.Background())
 			if err != nil {
 				s.traces.mu.Lock()
@@ -286,6 +332,65 @@ func (s *RuntimeService) runTrace(traceID string) {
 			return
 		}
 	}
+}
+
+// applyCoreTraceSamples thay TOÀN BỘ dãy mẫu bằng thứ Core đang giữ.
+//
+// Thay chứ không nối thêm: ring của Core là bounded và có thể đã ghi đè mẫu cũ
+// nhất. Nối thêm sẽ tạo ra một dãy vừa trùng lặp vừa thiếu, và số `dropped` của
+// Core không còn giải thích được khoảng trống nào.
+func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadReply) bool {
+	s.traces.mu.Lock()
+	defer s.traces.mu.Unlock()
+	session := s.traces.sessions[traceID]
+	if session == nil || session.view.State != "RUNNING" {
+		return false
+	}
+	samples := make([]TraceSampleView, 0, len(reply.Samples))
+	for index, incoming := range reply.Samples {
+		if len(samples) >= session.maxSamples {
+			break
+		}
+		if len(incoming.Values) != len(session.coreVariableIDs) {
+			// Số ô lệch số biến đã khai: mẫu này không dịch được về `variableId`
+			// nào cả. Đếm là rơi thay vì ghép bừa theo vị trí.
+			session.view.DroppedSamples++
+			continue
+		}
+		sample := TraceSampleView{
+			Sequence:   int64(index + 1),
+			ObservedAt: s.now().UTC().Add(-time.Duration(0)).Format(time.RFC3339Nano),
+			Values:     make([]TraceValueView, 0, len(incoming.Values)),
+		}
+		for position, cell := range incoming.Values {
+			variableID := session.coreVariableIDs[position]
+			value := TraceValueView{
+				VariableID: variableID,
+				Quality:    "GOOD",
+				Freshness:  "FRESH",
+			}
+			if cell.Valid {
+				value.ProgramValue = traceCellValue(session.coreDataTypes[variableID], cell.Bits)
+			} else {
+				// "Không đo được" KHÁC "đo được giá trị 0": để giá trị rỗng và
+				// nói thẳng chất lượng, thay vì vẽ một điểm 0 lên đồ thị.
+				value.Quality = "BAD"
+				value.Freshness = "UNAVAILABLE"
+			}
+			value.ActualValue = value.ProgramValue
+			sample.Values = append(sample.Values, value)
+		}
+		samples = append(samples, sample)
+	}
+	session.view.Samples = samples
+	if reply.Dropped > 0 {
+		session.view.DroppedSamples = reply.Dropped
+	}
+	session.view.UpdatedAt = s.now().UTC().Format(time.RFC3339Nano)
+	if reply.State == "COMPLETED" || reply.State == "STOPPED" {
+		return false
+	}
+	return len(session.view.Samples) < session.maxSamples
 }
 
 func (s *RuntimeService) captureTraceSample(traceID string, monitor MonitorPageView) bool {
@@ -325,10 +430,14 @@ func (s *RuntimeService) captureTraceSample(traceID string, monitor MonitorPageV
 // startCoreTrace gửi TRACE_START xuống Core. `programId` của mỗi biến là
 // instance id ở Core, `variableName` là tên trong mã nguồn — cả hai đều có sẵn
 // trong monitor, nên BE không cần biết bố cục slot của artifact.
+// Trả true khi Core ĐÃ NHẬN phiên và sẽ tự lấy mẫu. Caller dùng nó để KHÔNG
+// lấy mẫu đầu bằng poll: trộn một mẫu poll vào một dãy mẫu boundary tạo ra một
+// dãy mà mẫu đầu tiên đến từ nguồn khác mọi mẫu còn lại — và không có gì trên
+// đồ thị nói ra điều đó.
 func (s *RuntimeService) startCoreTrace(ctx context.Context, traceID string, request TraceRequest,
-	monitor MonitorPageView) {
+	monitor MonitorPageView) bool {
 	if s.runtime == nil {
-		return
+		return false
 	}
 	byID := make(map[string]MonitorSampleView, len(monitor.Items))
 	for _, item := range monitor.Items {
@@ -338,7 +447,7 @@ func (s *RuntimeService) startCoreTrace(ctx context.Context, traceID string, req
 	for _, variableID := range request.VariableIDs {
 		item, ok := byID[variableID]
 		if !ok || item.ProgramID == "" || item.VariableName == "" {
-			return
+			return false
 		}
 		variables = append(variables, [2]string{item.ProgramID, item.VariableName})
 	}
@@ -346,9 +455,27 @@ func (s *RuntimeService) startCoreTrace(ctx context.Context, traceID string, req
 		SessionID: traceID, SamplePeriodMS: uint32(request.SamplePeriodMS),
 		DurationMS: uint32(request.DurationMS), Variables: variables})
 	if err != nil {
-		return
+		return false
 	}
-	s.callCoreTrace(ctx, coreipc.ActionTraceStart, payload)
+	response, ok := s.callCoreTrace(ctx, coreipc.ActionTraceStart, payload)
+	if !ok || response.Result != coreipc.ResultAccepted {
+		// Core không nhận phiên: KHÔNG ghi thứ tự biến. `coreVariableIDs` rỗng
+		// là tín hiệu cho vòng lấy mẫu dùng đường dự phòng — đoán rằng Core đang
+		// lấy mẫu trong khi nó không nhận là cách chắc chắn nhất để trả về một
+		// đồ thị rỗng mà không nói vì sao.
+		return false
+	}
+	dataTypes := make(map[string]string, len(request.VariableIDs))
+	for _, variableID := range request.VariableIDs {
+		dataTypes[variableID] = byID[variableID].DataType
+	}
+	s.traces.mu.Lock()
+	if session := s.traces.sessions[traceID]; session != nil {
+		session.coreVariableIDs = append([]string(nil), request.VariableIDs...)
+		session.coreDataTypes = dataTypes
+	}
+	s.traces.mu.Unlock()
+	return true
 }
 
 // stopCoreTrace gửi TRACE_STOP. Gọi cả khi phiên kết thúc tự nhiên: để Core lấy
@@ -361,15 +488,72 @@ func (s *RuntimeService) stopCoreTrace(ctx context.Context, traceID string) {
 	if err != nil {
 		return
 	}
-	s.callCoreTrace(ctx, coreipc.ActionTraceStop, payload)
+	_, _ = s.callCoreTrace(ctx, coreipc.ActionTraceStop, payload)
 }
 
-func (s *RuntimeService) callCoreTrace(ctx context.Context, action coreipc.Action, payload []byte) {
+func (s *RuntimeService) callCoreTrace(ctx context.Context, action coreipc.Action,
+	payload []byte) (coreipc.Response, bool) {
 	request := coreipc.NewRequest(action, uuidBytes(s.newID()), uuidBytes(s.newID()),
 		s.controllerID, "", "", coreipc.FutureDeadline(traceCallTimeout), payload)
 	callCtx, cancel := context.WithTimeout(ctx, traceCallTimeout)
 	defer cancel()
-	_, _ = s.runtime.Call(callCtx, request)
+	response, err := s.runtime.Call(callCtx, request)
+	if err != nil {
+		return coreipc.Response{}, false
+	}
+	return response, true
+}
+
+// readCoreTrace rút mẫu từ ring của Core.
+//
+// Đây mới là NGUỒN ĐÚNG của một phiên trace: Core lấy mẫu tại ranh giới quét
+// nên mọi biến trong một mẫu đến từ ĐÚNG một chu kỳ. Đường poll monitor lấy mẫu
+// theo nhịp riêng của BE, nên hai biến trong cùng một "mẫu" có thể đến từ hai
+// chu kỳ khác nhau — đồ thị trông hợp lý trong khi quan hệ nhân quả đã bị xáo.
+//
+// Trả `ok=false` khi phiên này không có ở Core; caller rơi về đường dự phòng.
+func (s *RuntimeService) readCoreTrace(ctx context.Context, traceID string) (traceReadReply, bool) {
+	if s.runtime == nil {
+		return traceReadReply{}, false
+	}
+	s.traces.mu.RLock()
+	session := s.traces.sessions[traceID]
+	hasCore := session != nil && len(session.coreVariableIDs) > 0
+	s.traces.mu.RUnlock()
+	if !hasCore {
+		return traceReadReply{}, false
+	}
+	payload, err := coreipc.EncodePayload(traceSessionPayload{SessionID: traceID})
+	if err != nil {
+		return traceReadReply{}, false
+	}
+	response, ok := s.callCoreTrace(ctx, coreipc.ActionTraceRead, payload)
+	if !ok || response.Result != coreipc.ResultOK {
+		return traceReadReply{}, false
+	}
+	var reply traceReadReply
+	if err := coreipc.DecodePayload(response.Payload, &reply); err != nil {
+		return traceReadReply{}, false
+	}
+	return reply, true
+}
+
+// traceCellValue diễn giải 8 byte thô của một ô theo kiểu đã khai trong package.
+// Kiểu không nhận ra thì trả `nil` thay vì đoán: một số sai kiểu trên đồ thị chẩn
+// đoán tệ hơn một ô trống.
+func traceCellValue(dataType string, bits uint64) any {
+	switch dataType {
+	case "BOOL":
+		return bits&1 != 0
+	case "INT", "DINT", "UINT":
+		return int32(uint32(bits))
+	case "REAL":
+		return math.Float32frombits(uint32(bits))
+	case "TIME":
+		return int64(bits)
+	default:
+		return nil
+	}
 }
 
 func (s *RuntimeService) finishTrace(traceID, state, reason string) error {
