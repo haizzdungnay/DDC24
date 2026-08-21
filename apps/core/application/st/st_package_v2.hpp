@@ -140,6 +140,20 @@ struct StPackageView {
 bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
                     std::string* error);
 
+/* Nội dung đã giải nén của package: cùng dữ liệu `StPackageView` kiểm, cộng các
+ * blob IR v1 theo đúng thứ tự Program trong bảng PROGRAM_TABLE. Coordinator cần
+ * blob để nạp từng Program; `StPackageView` cố ý không mang chúng vì phần lớn
+ * caller chỉ cần khung. */
+struct StPackageContents {
+    StPackageView view;
+    std::vector<std::vector<uint8_t>> program_ir;
+};
+
+/* Nạp package v2 VÀ giữ lại blob IR. Dùng đúng một parser với `LoadPackageV2` —
+ * hai bộ parser cho một định dạng là hai bộ ngữ nghĩa để trôi khỏi nhau. */
+bool UnpackPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_profile,
+                     uint32_t expected_abi, StPackageContents* out, const char** error_code);
+
 /* Nạp package v2. Kiểm toàn bộ offset/count/overflow, exact profile, hash, và hai
  * bất biến cấp package: một output binding chỉ có một Program owner, một signal
  * chỉ có một publisher. */
