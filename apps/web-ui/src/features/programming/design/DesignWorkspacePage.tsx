@@ -12,6 +12,7 @@ import { ExecutionTab } from './task/ExecutionTab'
 import { Modal } from '../../../shared/components/Modal'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
+import { toWorkspaceDocument } from '../model/draftV2'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
@@ -138,7 +139,8 @@ export function DesignWorkspacePage() {
   if (workspace.status === 'error' || !workspace.project?.draft) {
     return <StateBlock state="error" title={pick('Không tải được Project.', 'Could not load the project.')} detail={workspace.error ?? undefined} onRetry={workspace.reload} />
   }
-  const document = workspace.project.draft
+  // T59-301: BE trả document v2; adapter chiếu về view model của bốn tab.
+  const document = toWorkspaceDocument(workspace.project.draft)
 
   return (
     <div className="space-y-3">
