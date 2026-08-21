@@ -1783,12 +1783,83 @@ gọi Core **không** huỷ phiên — mất trace hoàn toàn vì Core bận l�
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-501` | P0 | Package Commission/Restore first-cycle barrier, LKG/journal/recovery | T59-401..407 | ORDERED | Fault mọi phase/restart/power simulation; no partial active; old LKG exact. |
+| `T59-501` | P0 | Package Commission/Restore first-cycle barrier, LKG/journal/recovery | T59-401..407 | **DONE** | Barrier chu kỳ đầu và rollback nâng lên mức **GÓI**: trước đó chỉ xét `instance_id_` nên một Program chết vẫn được tuyên bố `FIRST_CYCLE_OK`, và rollback để lại gói **nửa cũ nửa mới**. LKG thăng cấp **all-or-nothing**. Restart ở cả 4 pha không để lại active một nửa. Hai test chống hồi quy **kiểm chứng bằng cách gỡ bản vá** (đỏ đúng dòng lý do). Sửa kèm ở FE (hồi quy W3 lộ ra vì W3 không có cổng `e2e`): thanh tab Thiết kế **bấm không ăn** trên `/programs`+`/mapping` và tab `execution` **mất chỗ hiển thị**; E2E còn ghi IA cũ. `ctest` **1209/1209**; `--wave W5` **7/7 PASS** (lần đầu chạy `frontend`+`e2e` trong Plan 59). Chi tiết §3.6. |
 | `T59-502` | P0 | Impact/ack cho multi-Program/library/signal/output/RETAIN/enable intent | T59-501 | ORDERED | BE authority diff; FE chỉ hiện impact thật; stale ack reject. |
 | `T59-503` | P1 | FE sáu workspace/navigation/context, PGM-05/06 lifecycle | T59-203/306/405/502 | ORDERED | Desktop/mobile, Draft vs Active vs intent/runtime, stale/offline/unknown/a11y. |
 | `T59-504` | P1 | Monitor đủ LOCAL/VP/MB_RTU, Program/signal/candidate/actual/priority | T59-303/404/406 | ORDERED | 3 category, programValue vs actual, source/freshness/quality đúng. |
 | `T59-505` | P0 | Real-backend E2E Draft→Check→Commission→Enable→Runtime→Disable→Restore | T59-501..504 | ORDERED | Không `page.route` mock Programming; compiler thật + Core simulator authority; CI lane. |
 | `T59-506` | P1 | ST editor durable history/runtime overlay + FBD POU UX polish | T59-503/504 | ORDERED | 20 edit undo/redo, cursor; live value quality/stale; browser Console/Network sạch. |
+
+### 3.6 Ghi chú thực thi W5
+
+#### `T59-501` — Vòng đời Commission/Restore ở mức gói
+
+**Barrier chu kỳ đầu chỉ xét một Program.** `on_output_commit` đọc đúng
+`instance_id_`. Với gói nhiều Program, một Program hỏng chu kỳ đầu trong khi
+Program chính chạy sạch vẫn được tuyên bố `FIRST_CYCLE_OK` — gói đi tiếp với một
+Program đã chết. Chiều ngược lại tệ hơn: rollback cũng chỉ quay Program chính về,
+để lại gói **nửa cũ nửa mới**, tức đúng thứ "no partial active" cấm.
+
+**LKG thăng cấp theo từng Program.** Với gói trộn ba lớp chu kỳ, tập LKG trở
+thành một tổ hợp **chưa từng được Check**: Program 1 s mang bản mới, Program 30 s
+còn bản cũ. Rollback từ tập đó khôi phục một thứ chưa ai kiểm, và "old LKG exact"
+mất nghĩa. Nay thăng cấp là all-or-nothing trên cả gói.
+
+**Điều kiện là "đã commit ít nhất một lần kể từ activate", không phải "cùng
+commit ở một base step".** Đòi điều thứ hai là đòi một thứ **không bao giờ xảy
+ra** với gói nhiều chu kỳ — Program 30 s chỉ commit mỗi 30 base step. Vì vậy có
+cờ `committed_since_activation`, xoá sạch ở mỗi lần activate: tư cách của gói cũ
+không được thừa kế.
+
+**Program không chạy KHÔNG tham gia barrier, nhưng FAULTED thì có.** Đòi một
+Program `DISABLED` "chạy sạch một chu kỳ" là đòi một điều không thể xảy ra và sẽ
+treo barrier vĩnh viễn. `FAULTED` là **hỏng**, không phải vắng mặt.
+
+**Kiểm TRƯỚC, áp SAU khi rollback.** Quay về được một nửa rồi kẹt ở nửa còn lại
+để thiết bị ở một tổ hợp chưa từng được Check. Không instance nào có LKG thì
+`FAILED` — không có bản cũ nguyên vẹn để khôi phục.
+
+**Hai test chống hồi quy đã được kiểm chứng.** Gỡ từng bản vá ra và chạy lại: cả
+hai đỏ đúng ở dòng lý do ("gói có Program chết vẫn được tuyên bố thành công",
+"tập LKG thành nửa gói mới nửa gói cũ"). Một test xanh cả khi có lẫn khi không có
+bản vá thì không chứng minh gì.
+
+**Về `PENDING` — vì sao nó khó dựng.** `st_program_due` cho lần release **đầu
+tiên** chạy ngay (T59-402), nên mọi Program của gói đều chạy ở base step đầu và
+barrier thường qua ngay tại đó. Test khoá chính điều này lại: nếu ai đổi luật
+release thì đỏ ở đây chứ không đỏ ở hiện trường bằng một Commission treo. Luật
+all-or-nothing vì vậy được kiểm **thẳng** trên `promote_output_committed_artifacts()`
+thay vì dựng qua nhiều lớp.
+
+#### Sửa kèm — ba hồi quy FE/E2E của W3 lộ ra ở cổng `e2e`
+
+Ma trận cổng của W2–W4 **không có** `frontend` và `e2e`. W5 là wave đầu tiên gọi
+chúng, và ba lỗi đã nằm trong nhánh từ W3 mới hiện ra:
+
+1. **Thanh tab Thiết kế bấm không ăn.** `T59-306` đặt `tab = route ?? fromQuery`
+   — `route` **ghi đè** query. Nhưng nút tab chỉ ghi lại `?tab=`, thứ vừa bị ghi
+   đè. Trên `/programs` và `/mapping`, người dùng bấm tab và **không có gì xảy
+   ra**. Nay nút **điều hướng** sang đúng route của IA.
+2. **Tab `execution` mất chỗ hiển thị.** Nó không phải một trong sáu trang IA mà
+   là tab con, nên chỉ có địa chỉ dưới dạng `?tab=execution` — và đúng dạng đó bị
+   `route` ghi đè. Kết quả: `/task` (lối vào cũ) dẫn tới một trang không hiện thứ
+   nó hứa. Nay `execution` là ngoại lệ tường minh, query thắng route **chỉ** cho
+   giá trị này.
+3. **E2E còn ghi IA cũ.** `VS-PROG-032` kỳ vọng ba route dẫn về `/design`, trong
+   khi `T59-306` đã **đảo chiều**: `/programs`/`/mapping` nay là route thật còn
+   `/design` là lối vào cũ. Spec được viết lại theo chiều mới, phủ thêm
+   `/design?tab=mapping` và `/task`.
+
+**Sửa kèm — dev server E2E không cần watcher.** Playwright không sửa nguồn giữa
+lúc chạy, nên watcher chỉ đem lại hai thứ: hàng chục nghìn inotify watch (đủ để
+`ENOSPC` trên máy đang mở editor) và nguy cơ Vite rebuild giữa một assertion.
+`VITE_E2E_NO_WATCH=1` tắt hẳn cho đường E2E; đường dev thường giữ nguyên HMR.
+
+**Ranh giới trung thực.** Đây là **atomicity mức gói trên host**. Mô phỏng mất
+điện thật (cắt nguồn giữa fsync) và số đo phục hồi trên board thuộc `T59-704`;
+`e2e` ở đây vẫn dùng mock Programming — đường real-backend là `T59-505`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
 ### W6 — Hardening, packaging và Release Candidate
 

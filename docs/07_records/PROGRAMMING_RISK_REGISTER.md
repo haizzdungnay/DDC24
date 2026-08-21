@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.12 |
+| Phiên bản | 4.13 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-21 |
 | Chủ quản | Product + Architecture + QA |
@@ -685,6 +685,15 @@ Evidence host/local (`ctest` 1205/1205, có mutation check: gỡ nhánh tuổi-l
 test Task-bị-disable đỏ đúng chỗ). **22/22 risk giữ Open**, S×L và residual không
 đổi — ký một con số không hạ residual khi chưa đo trên phần cứng thật.
 
+### 5.48 Cập nhật treatment source `T59-501` (Plan59 W5 — mở Wave)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-022` | Barrier chu kỳ đầu và rollback nâng lên mức **GÓI**: một Program hỏng làm **cả gói** quay về, không còn "một nửa thành công"; rollback kiểm TRƯỚC áp SAU nên không kẹt giữa chừng; LKG thăng cấp **all-or-nothing** nên không tồn tại tập LKG ghép từ hai gói; restart ở cả bốn pha không để lại active một nửa | Mô phỏng mất điện thật giữa fsync và số đo phục hồi trên board (`T59-704`), Test Result `VS-PROG-029/030` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Ba hồi quy FE/E2E của W3 được phát hiện và sửa ngay khi cổng `e2e` chạy lần đầu: thanh tab Thiết kế **bấm không ăn**, tab `execution` **mất chỗ hiển thị**, E2E còn ghi IA cũ. Đây là bằng chứng cho chính luận điểm ma trận cổng: thứ không được cổng nào gọi thì không ai biết nó hỏng | E2E real-backend (`T59-505`), usability người thật | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -737,6 +746,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 4.13 | 2026-08-21 | Ghi `T59-501` (Plan59 W5, **mở Wave**) cho treatment partial RSK-014/022: barrier chu kỳ đầu và rollback lên mức gói, LKG all-or-nothing, restart bốn pha không để lại active một nửa; ba hồi quy FE/E2E của W3 lộ ra ở lần đầu chạy cổng `e2e` và đã sửa. Giữ 22/22 Open vì mô phỏng mất điện thật trên board chưa có. |
 | 4.12 | 2026-08-21 | Ghi `ADR-051` (ký TTL hold-last 60 s) cho treatment partial RSK-002/006: đóng mục treo cuối của `T59-406`. TTL đo bằng đồng hồ chứ không đếm base step, đo tuổi của LỆNH nên phủ cả `ROLLED_BACK`/Task-bị-disable, mặc định `ScanDeps` là giá trị đã ký thay vì `0`. Giữ 22/22 Open: ký số không hạ residual khi chưa đo trên phần cứng thật. |
 | 4.11 | 2026-08-21 | Ghi `T59-408` (Plan59 W4, **đóng Wave 8/8**) cho treatment partial RSK-014/021: trace giá trị bounded lấy tại ranh giới quét với 0 cấp phát, ba action IPC thật, action ma = 0 khoá bằng hai phép kiểm độc lập; sửa self-test verifier vốn đã mục ruỗng vì bám vào một action cụ thể. Giữ 22/22 Open vì đo 10 phút thật trên target chưa có. |
 | 4.10 | 2026-08-21 | Ghi `T59-407` (Plan59 W4) cho treatment partial RSK-009/022: bịt lỗ reset nửa vời (reset trên Program đang dừng nay bền vững qua khởi động lại), cô lập RETAIN giữa Program cho cả đường reset lẫn đường file hỏng. Giữ 22/22 Open vì power-cut thật trên board chưa có. |

@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### T59-501 — Commission/Restore atomic ở mức GÓI (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/{st_scheduler.hpp,st_scheduler.cpp,st_process_image.cpp}`,
+  `apps/core/application/programming/programming_runtime_coordinator.{hpp,cpp}`,
+  `apps/core/application/programming/tests/test_programming_package_lifecycle.cpp` (mới),
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
+  `apps/web-ui/e2e/programming.spec.ts`, `apps/web-ui/{vite,playwright}.config.ts`,
+  `apps/web-ui/src/features/programming/api/generated/client.test.ts`,
+  Plan 59 §3/§3.6, Risk Register v4.13, Traceability v6.1, baseline manifest v1.34.
+- **Triệu chứng:** với gói nhiều Program, một Program hỏng chu kỳ đầu vẫn để gói
+  được tuyên bố `FIRST_CYCLE_OK`; và khi rollback thì chỉ Program chính quay về,
+  để lại gói **nửa cũ nửa mới**.
+- **Nguyên nhân gốc:** `on_output_commit` đọc đúng `instance_id_`. Bất biến
+  "Commission atomic ở cấp package" (DDD §6) chưa từng được ép ở mã.
+- **Cách sửa:** `package_first_cycle_verdict()` xét **mọi** instance đang chạy;
+  `rollback_package()` kiểm TRƯỚC áp SAU nên không kẹt giữa chừng.
+  `promote_output_committed_artifacts()` thăng cấp LKG **all-or-nothing** — thăng
+  cấp riêng lẻ tạo ra tập LKG ghép từ hai gói, một tổ hợp **chưa từng được
+  Check**. Điều kiện là "đã commit ít nhất một lần kể từ activate"
+  (`committed_since_activation`), không phải "cùng commit ở một base step" — đòi
+  điều thứ hai là đòi một thứ không bao giờ xảy ra với gói nhiều chu kỳ.
+- **Test chống hồi quy đã kiểm chứng:** gỡ từng bản vá ra, cả hai test đỏ đúng ở
+  dòng lý do.
+- **Sửa kèm — ba hồi quy FE/E2E của W3.** Ma trận cổng W2–W4 **không có**
+  `frontend`/`e2e`; W5 là wave đầu tiên gọi chúng:
+  1. Thanh tab Thiết kế **bấm không ăn** trên `/programs` và `/mapping` —
+     `route` ghi đè query, mà nút tab chỉ ghi `?tab=`. Nay nút **điều hướng**.
+  2. Tab `execution` **mất chỗ hiển thị** — nó chỉ có địa chỉ `?tab=execution`,
+     đúng dạng bị `route` ghi đè. Nay là ngoại lệ tường minh.
+  3. E2E `VS-PROG-032` còn ghi IA cũ (`/design` là đích), trong khi `T59-306` đã
+     đảo chiều. Spec viết lại theo chiều mới, phủ thêm `/design?tab=mapping`.
+- **Sửa kèm — dev server E2E không cần watcher.** Playwright không sửa nguồn giữa
+  lúc chạy; watcher chỉ đem lại hàng chục nghìn inotify watch (đủ `ENOSPC` trên
+  máy đang mở editor) và nguy cơ Vite rebuild giữa một assertion.
+  `VITE_E2E_NO_WATCH=1` tắt hẳn cho đường E2E, đường dev giữ nguyên HMR.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1209/1209** pass (4 test mới);
+  `scripts/verify-project.sh --wave W5` **7/7 PASS** — lần đầu `frontend`
+  (118 file / 1102 test) và `e2e` (61 test) chạy trong Plan 59;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.6 `T59-501`, `RSK-PROG-014/022`, DDD §6.
+
 ### ADR-051 — TTL hold-last của Program = 60 giây đồng hồ (2026-08-21)
 
 - **Phạm vi:** `docs/adr/ADR-051-programming-ttl-hold-last-60s.md` (mới),
