@@ -997,7 +997,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | `T59-303` | P0 | MB_RTU binding compiler adapter qua canonical Point contract | T59-302 | **DONE** | Point contract thêm `extIndex` (slot EXT 1..256 do Point Catalog phân giải); `resolve_io_bindings` nhận MB_RTU và map thẳng sang `StPointKind::EXT` — compiler **không** tự suy slot nên không tái định nghĩa register/function code/endian/chu kỳ poll; LOCAL và MB_RTU sống chung trong một Program; thiếu `extIndex`, thiếu `deviceId`, vượt trần 256, sai chiều và kiểu `TIME` đều fail-closed; guard Go kiểm **hai chiều** (MB_RTU thiếu slot / category khác lại mang slot); 6 test C++ + 1 test Go; `ctest` **1145/1145**; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-304` | P0 | Output owner/conflict + Published Signal publisher/consumer validation | T59-302/303 | **DONE** | Bất biến cấp package kiểm ở **Check** (trước khi biên dịch) chứ không chỉ ở loader: một output binding có đúng một Program owner — nhận diện theo **điểm vật lý** (`deviceId`+`extIndex` với MB_RTU) chứ không theo tên; một signal có đúng một publisher (case-folded); publisher phải là Program có thật; freshness 1000..90000; kiểu trong hệ kiểu ST; `USE_FALLBACK` ghép cứng với giá trị dự phòng. Mọi vi phạm được **gộp** trong một lần Check; đọc chung điểm và ghi điểm riêng vẫn hợp lệ. 7 test; `go test ./... -count=1` 18/18; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-305` | P0 | Package manifest/topology/budget cho 32/16; Program mới Disabled | T59-302/304 | **DONE** | Manifest Check thêm `topology` (mỗi Program: id/tên/chu kỳ/`desiredEnabled=false`) và `budget` (32/16/20% + số Program theo từng lớp chu kỳ); topology sắp theo `programId` nên **không phụ thuộc thứ tự tạo** — hai Project cùng nội dung dựng khác thứ tự cho đúng cùng manifest; trần 32 được ép **lại** ở Check (Revision có thể tới từ bundle import) với one-over ổn định; chu kỳ ngoài ba lớp profile bị từ chối; `desiredEnabled` không có đường nào đặt true. 5 test; `go test ./... -count=1` 18/18; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
-| `T59-306` | P1 | FE PGM-02/03: POU tree, Program properties, mapping conflicts, signals | T59-301/304 | ORDERED | Sáu route target/legacy redirect; Function/FB hides invalid fields; E2E Draft save/reload. |
+| `T59-306` | P1 | FE PGM-02/03: POU tree, Program properties, mapping conflicts, signals | T59-301/304 | **DONE** | IA sáu trang đảo chiều: `projects/{id}/programs` và `.../mapping` nay là **route đích** (DDD §8), `/design` thành lối vào cũ và chuyển hướng theo `?tab=` **giữ nguyên** query định vị lỗi; nav trỏ route mới; cây POU gom ba nhóm Programs/Functions/Function Blocks đọc document v2 **trực tiếp**; inspector **ẩn** chu kỳ và trạng thái bật với Function/FB (không hiện rồi xám); Program hiện `Tắt (mặc định cho Program mới)`; 11 test FE mới; FE **118 file / 1102 test**; `--wave W3` 6/6 PASS. **Còn thiếu:** E2E real-backend Draft save/reload thuộc `T59-505`. Chi tiết §3.4. |
 
 ### 3.4 Ghi chú thực thi W3
 
@@ -1246,6 +1246,45 @@ thuộc `T59-402`. Bảng POU signature đầy đủ trong container vẫn thu�
 của lane compiler.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-306` — IA sáu trang: đảo chiều route và cây POU kind-aware
+
+**Đảo chiều `design` ↔ `programs/mapping`.** DDD §8 khoá sáu route, trong đó
+`projects/{id}/programs` (PGM-02) và `.../mapping` (PGM-03) là **route đích**.
+Trước task này chúng chỉ là redirect **tới** `/design`; nay ngược lại. Lý do
+không giữ nguyên: IA là hợp đồng điều hướng, và để route đích làm redirect nghĩa
+là địa chỉ thật của trang không bao giờ xuất hiện trên thanh URL — mọi link chia
+sẻ, bookmark và báo lỗi đều trỏ vào lối vào cũ.
+
+**Route thắng query.** `DesignWorkspacePage` nhận `route` cố định tab; nếu query
+thắng thì `/mapping?tab=programs` sẽ hiện một trang **không khớp địa chỉ của
+chính nó**.
+
+**Lối vào cũ giữ nguyên query định vị lỗi.** Một link báo lỗi cũ mang theo
+`program/line/column`; mất chúng nghĩa là mất luôn vị trí lỗi. `tab=execution`
+chưa có route đích riêng trong IA sáu trang nên nó đi tiếp dưới dạng query trên
+`/programs` — giữ hành vi thay vì im lặng bỏ mất.
+
+**Cây POU đọc document v2 TRỰC TIẾP.** Ba nhóm `Programs`/`Functions`/
+`Function Blocks` với số đếm, sắp theo tên. Đây là phần IA mới nên nó không đi
+qua adapter tương thích của `T59-301`; editor cũ bên dưới vẫn dùng adapter cho
+tới khi lane editor chuyển sang v2.
+
+**Inspector ẨN trường không có nghĩa, không hiện rồi xám.** Một FUNCTION không có
+chu kỳ và không có trạng thái bật — nó không phải đơn vị lập lịch. Hiện một ô
+"chu kỳ" bị xám vẫn **nói rằng khái niệm đó tồn tại ở đây**, và người dùng sẽ đi
+tìm cách bật nó. Thay vào đó trang nói thẳng: POU dùng chung chỉ chạy khi được
+Program gọi. Program hiện `Tắt (mặc định cho Program mới)` — khớp đúng
+`desiredEnabled=false` mà `T59-305` ghi vào topology.
+
+**Ranh giới trung thực.** E2E real-backend cho Draft save/reload thuộc `T59-505`
+(không `page.route` mock). Mapping conflict **hiển thị** trên UI cần diagnostic
+của Check đi tới trang Mapping — đường đó gắn với `T59-503`; luật conflict đã
+được ép ở BE (`T59-304`) nên không có đường nào tạo được cấu hình xung đột mà
+Check bỏ qua.
+
+**Evidence level.** Host/local (vitest + jsdom). Không phải GitHub CI, không phải
+target/HIL, và **không phải** E2E trình duyệt thật.
 
 ### W4 — Runtime, scheduler, signal, Enable/Disable và output
 

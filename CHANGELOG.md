@@ -8,6 +8,34 @@
 
 ## [Unreleased]
 
+### Changed — `T59-306` IA sáu trang: `programs`/`mapping` là route đích (đóng Wave W3) (2026-08-21)
+
+**Đảo chiều `design` ↔ `programs`/`mapping`.** DDD §8 khoá sáu route, trong đó
+`projects/{id}/programs` (PGM-02) và `.../mapping` (PGM-03) là **route đích**.
+Trước đây chúng chỉ redirect **tới** `/design`; nay ngược lại. Để route đích làm
+redirect nghĩa là địa chỉ thật của trang không bao giờ xuất hiện trên thanh URL —
+mọi link chia sẻ, bookmark và báo lỗi đều trỏ vào lối vào cũ.
+
+**Route thắng query:** nếu query thắng thì `/mapping?tab=programs` sẽ hiện một
+trang **không khớp địa chỉ của chính nó**. Lối vào cũ `/design` giữ nguyên
+`program/line/column` — mất chúng là mất luôn vị trí lỗi trong link báo lỗi cũ.
+
+**Cây POU (PGM-02)** gom ba nhóm `Programs`/`Functions`/`Function Blocks` với số
+đếm, đọc document v2 **trực tiếp** (không qua adapter tương thích).
+
+**Inspector ẨN trường không có nghĩa, không hiện rồi xám.** Một FUNCTION không có
+chu kỳ và không có trạng thái bật — nó không phải đơn vị lập lịch. Một ô "chu kỳ"
+bị xám vẫn nói rằng khái niệm đó tồn tại ở đây, và người dùng sẽ đi tìm cách bật
+nó. Program hiện `Tắt (mặc định cho Program mới)`, khớp `desiredEnabled=false` mà
+`T59-305` ghi vào topology.
+
+**Kiểm chứng (host/local):** FE **118 file / 1102 test**; `tsc --noEmit` sạch;
+`verify-project.sh --wave W3` **6/6 PASS**.
+
+**Ranh giới:** E2E real-backend Draft save/reload thuộc `T59-505`; hiển thị
+diagnostic conflict trên trang Mapping gắn với `T59-503` — luật conflict đã được
+ép ở BE (`T59-304`).
+
 ### Added — `T59-305` Topology và budget cấp package (2026-08-21)
 
 **Thứ tự tạo là dữ liệu của quá khứ, không phải của package.** Topology sắp theo

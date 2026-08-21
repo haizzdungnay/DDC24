@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.2 |
+| Phiên bản | 4.3 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -583,6 +583,17 @@ S×L và residual không đổi.
 
 Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
+### 5.39 Cập nhật treatment source `T59-306` (Plan59 W3 — đóng Wave)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-014` | Inspector **ẩn** chu kỳ/trạng thái bật với Function/FB thay vì hiện rồi xám, và nói thẳng vì sao; Program hiện `Tắt (mặc định cho Program mới)` khớp `desiredEnabled=false` của topology | E2E real-backend (`T59-505`), usability người thật | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-016` | IA sáu trang đúng DDD §8: `programs`/`mapping` là route đích, `/design` là lối vào cũ giữ nguyên query định vị lỗi; route thắng query nên trang luôn khớp địa chỉ của chính nó | Ba workspace còn lại của IA (`T59-503`), E2E (`T59-505`) | `OPEN — PARTIAL SOURCE` |
+
+Wave W3 đóng với 6/6 task DONE. Evidence host/local (vitest + jsdom) — **không**
+phải E2E trình duyệt thật, không phải target/HIL. `22/22` risk giữ Open, S×L và
+residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -635,6 +646,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 4.3 | 2026-08-21 | Ghi `T59-306` (Plan59 W3, **đóng Wave 6/6**) cho treatment partial RSK-014/016: IA sáu trang đảo chiều đúng DDD §8, cây POU kind-aware và inspector ẩn trường không có nghĩa. Giữ 22/22 Open vì E2E real-backend và usability chưa có. |
 | 4.2 | 2026-08-21 | Ghi `T59-305` (Plan59 W3) cho treatment partial RSK-001/003/007: manifest package mang topology/budget theo profile, không bám thứ tự tạo, Program mới luôn Disabled, trần 32 ép lại ở Check. Giữ 22/22 Open vì thi hành trần 16 Enabled, ngân sách RT và target chưa có. |
 | 4.1 | 2026-08-21 | Ghi `T59-304` (Plan59 W3) cho treatment partial RSK-002/012/014: output owner nhận diện theo điểm vật lý và Published Signal đủ bốn luật, kiểm ở Check trước khi biên dịch và gộp mọi vi phạm. Giữ 22/22 Open vì runtime signal/output arbitration và HIL chưa có. |
 | 4.0 | 2026-08-21 | Ghi `T59-303` (Plan59 W3) cho treatment partial RSK-011/014: binding MB_RTU qua Point contract canonical với `extIndex` do Point Catalog phân giải; compiler không tự suy slot nên không tái định nghĩa giao thức. Giữ 22/22 Open vì Point Catalog/UI và nghiệm thu I/O thật chưa có. |
