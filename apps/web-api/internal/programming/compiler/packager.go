@@ -20,6 +20,11 @@ import (
 type PackageProgram struct {
 	Name     string
 	Artifact []byte
+	// PeriodMs là chu kỳ release riêng của Program (DDD §7.1). Nó đi TRONG
+	// container chứ không để runtime tự chọn: hai controller nạp cùng một
+	// package phải chạy cùng một dãy release, và điều đó chỉ đúng khi chu kỳ là
+	// dữ liệu của package. 0 = theo chu kỳ Task.
+	PeriodMs int64
 }
 
 // PackageResult là kết quả lắp container v2.
@@ -97,6 +102,9 @@ func (p ProcessPackager) Package(ctx context.Context, programs []PackageProgram)
 			return PackageResult{}, err
 		}
 		args = append(args, "--program", program.Name+"="+irPath)
+		if program.PeriodMs != 0 {
+			args = append(args, "--period", fmt.Sprintf("%s=%d", program.Name, program.PeriodMs))
+		}
 	}
 
 	packageCtx, cancel := context.WithTimeout(ctx, p.Timeout)

@@ -297,7 +297,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	// artifact v1 của nó; nhiều Program phải được bọc thành container v2 bằng
 	// CHÍNH writer production — trỏ hàng này vào artifact của Program đầu tiên
 	// sẽ là nói dối rằng cả package đã sẵn sàng stage.
-	storeArtifact, packageInfo, err := s.packageArtifact(ctx, check, inputs, results, artifacts)
+	storeArtifact, packageInfo, err := s.packageArtifact(ctx, check, inputs, results, artifacts, topology)
 	if err != nil {
 		return true, err
 	}
@@ -654,7 +654,8 @@ type packageProgramArtifact struct {
 // container đó content-addressed như mọi artifact khác.
 func (s *CheckService) packageArtifact(ctx context.Context, check programmingstore.Check,
 	inputs []programmingcompiler.Input, results []programmingcompiler.Result,
-	artifacts []packageProgramArtifact) (*programmingstore.Artifact, *programmingcompiler.PackageResult, error) {
+	artifacts []packageProgramArtifact,
+	topology []packageProgramTopology) (*programmingstore.Artifact, *programmingcompiler.PackageResult, error) {
 	if len(results) == 1 {
 		result := results[0]
 		return &programmingstore.Artifact{ArtifactID: s.newID(), RevisionID: check.RevisionID, CheckID: check.CheckID,
@@ -668,10 +669,19 @@ func (s *CheckService) packageArtifact(ctx context.Context, check programmingsto
 		// trong khi không có gì nạp được. Fail-closed và nêu đúng thứ còn thiếu.
 		return nil, nil, fmt.Errorf("package %d Program cần packager container v2", len(results))
 	}
+	// Chu kỳ lấy từ CHÍNH topology mà manifest công bố, không tính lại từ payload
+	// lần hai: hai phép đọc cùng một dữ liệu là hai chỗ để lệch nhau, và lệch ở
+	// đây nghĩa là manifest nói một đằng còn thiết bị chạy một nẻo.
+	periods := make(map[string]int64, len(topology))
+	for _, item := range topology {
+		periods[item.ProgramID] = item.PeriodMs
+	}
 	programs := make([]programmingcompiler.PackageProgram, 0, len(results))
 	for index, result := range results {
 		programs = append(programs, programmingcompiler.PackageProgram{
-			Name: programPackageName(inputs[index].SourceID), Artifact: result.Artifact})
+			Name:     programPackageName(inputs[index].SourceID),
+			Artifact: result.Artifact,
+			PeriodMs: periods[inputs[index].SourceID]})
 	}
 	packaged, err := s.packager.Package(ctx, programs)
 	if err != nil {
