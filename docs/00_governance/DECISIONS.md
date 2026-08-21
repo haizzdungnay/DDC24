@@ -1451,3 +1451,56 @@ Signal và Enable/Disable bị đẩy khỏi implementation dù là capability c
 Chỉ Product Owner có thể supersede ADR này bằng decision record mới. Rollback
 code không được âm thầm thu hẹp Product Spec; nếu v2 fail, giữ active v1/LKG và
 tiếp tục implementation/fix theo cùng Product Target.
+
+## ADR-051 — TTL hold-last của Program là 60 giây đồng hồ
+
+**Trạng thái:** Accepted
+**Ngày:** 2026-08-21
+**Hồ sơ đầy đủ:** [`docs/adr/ADR-051-programming-ttl-hold-last-60s.md`](../adr/ADR-051-programming-ttl-hold-last-60s.md)
+**Người quyết định:** Phạm Đình Chương — Product Owner/CTO (chốt số theo đề xuất
+kỹ thuật của lane implementation, phiên 2026-08-21)
+
+### Bối cảnh
+
+Cơ chế TTL hold-last có từ `TASK-PROG-401`, nhưng giá trị vẫn là `0` — giữ lệnh
+cuối của một Program đã chết **vô thời hạn**. `0` trông như "chưa quyết định"
+nhưng thực chất là quyết định "giữ mãi": van đứng ở vị trí cũ không vì ai ra lệnh
+mà vì chương trình đã chết, và `FAULTED` là trạng thái chốt nên không có đường tự
+hồi phục. `T59-406` đóng mọi mắt xích khác của chuỗi candidate; đây là mục duy
+nhất còn treo, treo vì chữ ký chứ không vì mã.
+
+### Quyết định
+
+1. **TTL hold-last = 60 s**, đồng nhất mọi Program và mọi Point class.
+2. TTL đo bằng **đồng hồ của tick** (`output_commit_now_ns`), không đếm vòng quét —
+   đếm vòng quét chỉ xấp xỉ thời gian khi vòng lặp chạy đúng nhịp.
+3. TTL đo **tuổi của lệnh**, không đo trạng thái: `FAULTED`, `ROLLED_BACK` và
+   `RUNNING` trong Task bị disable đều nằm dưới cùng một trần.
+4. `STOPPED`/`DISABLED` vẫn rút NGAY tại safe boundary.
+5. `0` = tắt TTL chỉ còn dùng cho test/chẩn đoán; bootstrap luôn mang số đã ký,
+   cờ `--program-hold-ttl-ms` từ chối `0` và giá trị vượt trần 600 s.
+6. Hỏi "khoá theo Point class" được **đóng**, không hoãn: đích rơi về đã theo từng
+   điểm (`default` của chính điểm đó), thêm TTL theo class là thêm núm thứ hai cho
+   cùng một kết quả.
+
+### Cơ sở của con số
+
+Chặn dưới là `2x` chu kỳ Task chậm nhất của profile (2×30 s) — lệnh cuối lúc
+Program chết đã có thể già trọn một chu kỳ, TTL nhỏ hơn thì thời gian giữ thực tế
+trôi xuống tận 0. Chặn trên là dải fail-safe quen thuộc của thiết bị BAS
+(10..60 s) và hằng số thời gian nhiệt của tải (phút trở lên). 60 s là điểm thoả cả
+hai chặn; ràng buộc `2x` được `static_assert` canh theo `allowedPeriodMs` của
+profile nên profile đổi sẽ gãy build, không gãy ngoài hiện trường.
+
+### Hệ quả
+
+- Đóng hàng "Hold TTL … chưa ký" ở `DDD-CTRL-PROG-001` §15 (phần Hold TTL; PID set
+  và capacity vẫn mở). Hàng "Safety interaction chưa có HIL evidence" KHÔNG đổi.
+- `RSK-PROG-002` gỡ được mục treo TTL; evidence hiện là host/local, target/HIL vẫn
+  nợ.
+- Số nằm ở `core::st_hold_ttl` chứ không ở `product_profile_v2.json`: SHA-256 của
+  profile bị ghim trong mọi build manifest artifact và `g1_contract_join_v1.json`,
+  đặt hẹn giờ an toàn ở đó sẽ biến mỗi lần chỉnh thành sự kiện tương thích
+  artifact trong khi không artifact nào phụ thuộc nó.
+
+Số ADR tiếp theo còn trống: **`ADR-052`**.
