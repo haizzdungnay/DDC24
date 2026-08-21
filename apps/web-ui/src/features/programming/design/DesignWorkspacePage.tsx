@@ -36,10 +36,21 @@ const EMPTY_DIAGNOSTICS: ProgrammingDiagnostic[] = []
  * trong `useEffect` (không setState lúc render).
  */
 /**
- * T59-306: `route` cố định tab theo ROUTE ĐÍCH của IA sáu trang (DDD §8). Khi
- * không có nó (lối vào cũ), tab vẫn lấy từ `?tab=`. Route thắng query vì URL
- * đích là nguồn sự thật — nếu query thắng thì `/mapping?tab=programs` sẽ hiện
- * một trang không khớp địa chỉ của chính nó.
+ * T59-306: `route` cố định tab theo ROUTE ĐÍCH của IA sáu trang (DDD §8). Route
+ * thắng query vì URL đích là nguồn sự thật — nếu query thắng thì
+ * `/mapping?tab=programs` sẽ hiện một trang không khớp địa chỉ của chính nó.
+ *
+ * T59-501 sửa hai hệ quả mà `--wave W3` không bắt được vì ma trận cổng của W3
+ * không có `e2e`:
+ *
+ * 1. Thanh tab BẤM KHÔNG ĂN trên `/programs` và `/mapping`. Nút chỉ ghi lại
+ *    `?tab=`, mà `route` thì ghi đè query — người dùng bấm và không có gì xảy
+ *    ra. Nay nút ĐIỀU HƯỚNG sang đúng route của IA.
+ * 2. `execution` mất chỗ hiển thị. Nó KHÔNG phải một trong sáu trang IA mà là
+ *    một tab con, nên nó chỉ sống dưới dạng `?tab=execution` — và đúng dạng đó
+ *    lại bị `route` ghi đè. Nay `execution` là ngoại lệ tường minh: query
+ *    thắng route CHỈ cho giá trị này, đúng nơi mà `/task` (lối vào cũ) và nút
+ *    tab cùng trỏ tới.
  */
 export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
   const { pick } = useI18n()
@@ -51,7 +62,9 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
   const [searchParams, setSearchParams] = useSearchParams()
   const requested = searchParams.get('tab')
   const fromQuery: DesignTab = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as DesignTab) : 'programs'
-  const tab: DesignTab = route ?? fromQuery
+  /* `execution` là tab con, không phải trang IA: nó chỉ có địa chỉ dưới dạng
+   * `?tab=execution` trên route `programs`. Mọi giá trị khác thì route thắng. */
+  const tab: DesignTab = requested === 'execution' ? 'execution' : (route ?? fromQuery)
   // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-03
   // (Check) chọn sẵn đúng Program bị lỗi khi mở workspace Thiết kế.
   const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>(() => searchParams.get('program') ?? undefined)
@@ -78,6 +91,23 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
   const [savingBeforeNavigation, setSavingBeforeNavigation] = useState(false)
 
   useEffect(() => {
+    /* Trên route của IA sáu trang, ĐỊA CHỈ đã mang tab — ghi thêm `?tab=` chỉ
+     * tạo một URL thứ hai cho cùng một trang, và chính vòng ghi đó là thứ làm
+     * `/programs` điều hướng lại chính nó ở e2e. Chỉ đồng bộ query cho lối vào
+     * cũ (không có `route`) và cho `execution`, thứ không có route riêng. */
+    if (route && tab !== 'execution') {
+      if (requested && requested !== 'execution') {
+        setSearchParams(
+          (current) => {
+            const next = new URLSearchParams(current)
+            next.delete('tab')
+            return next
+          },
+          { replace: true }
+        )
+      }
+      return
+    }
     if (requested === tab) return
     setSearchParams(
       (current) => {
@@ -87,7 +117,7 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
       },
       { replace: true }
     )
-  }, [requested, tab, setSearchParams])
+  }, [requested, route, tab, setSearchParams])
 
   const workspace = useDraftWorkspace(projectId)
   const pendingOperations = useMemo(() => [...programOperations, ...executionOperations], [executionOperations, programOperations])
@@ -169,16 +199,20 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
               className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1.5 text-sm font-medium ${
                 candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
               }`}
-              onClick={() =>
-                setSearchParams(
-                  (current) => {
-                    const next = new URLSearchParams(current)
-                    next.set('tab', candidate)
-                    return next
-                  },
+              onClick={() => {
+                /* Điều hướng sang ROUTE của IA thay vì chỉ ghi `?tab=`: trên
+                 * `/programs` và `/mapping`, query bị `route` ghi đè nên ghi
+                 * query là bấm vào chỗ không có gì xảy ra. */
+                const query = new URLSearchParams(searchParams)
+                query.delete('tab')
+                if (candidate === 'execution') query.set('tab', 'execution')
+                const target = candidate === 'mapping' ? 'mapping' : 'programs'
+                const suffix = query.toString()
+                navigate(
+                  `/eng/programming/projects/${projectId}/${target}${suffix ? `?${suffix}` : ''}`,
                   { replace: true }
                 )
-              }
+              }}
             >
               {pick(...TAB_LABEL[candidate])}
             </button>

@@ -296,18 +296,28 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await expect(page.getByRole('tab', { name: /Phiên bản & Bảo trì/ })).toHaveAttribute('aria-selected', 'true')
   })
 
-  test('VS-PROG-032: ba route cũ chuyển hướng đúng đích và giữ projectId', async ({ page }) => {
+  test('VS-PROG-032: lối vào cũ chuyển hướng đúng đích IA sáu trang và giữ projectId', async ({ page }) => {
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     await login(page)
 
-    for (const [from, expectedTab] of [
-      [`/eng/programming/projects/${PROJECT_ID}/programs`, 'programs'],
-      [`/eng/programming/projects/${PROJECT_ID}/mapping`, 'mapping'],
-      [`/eng/programming/projects/${PROJECT_ID}/task`, 'execution']
+    // T59-306 ĐẢO CHIỀU: `programs`/`mapping` nay là ROUTE THẬT của IA sáu
+    // trang, còn `/design` mới là lối vào cũ. Bảng dưới đi theo chiều mới —
+    // bản trước còn ghi chiều cũ và không ai phát hiện vì ma trận cổng của W3
+    // không có `e2e`.
+    for (const [from, expectedPath, expectedTab] of [
+      // Route thật: đứng nguyên, KHÔNG kèm `?tab=` thừa.
+      [`/eng/programming/projects/${PROJECT_ID}/programs`, `/eng/programming/projects/${PROJECT_ID}/programs`, null],
+      [`/eng/programming/projects/${PROJECT_ID}/mapping`, `/eng/programming/projects/${PROJECT_ID}/mapping`, null],
+      // Lối vào cũ `/design`: rơi về `programs`, và `?tab=mapping` dẫn sang `/mapping`.
+      [`/eng/programming/projects/${PROJECT_ID}/design`, `/eng/programming/projects/${PROJECT_ID}/programs`, null],
+      [`/eng/programming/projects/${PROJECT_ID}/design?tab=mapping`, `/eng/programming/projects/${PROJECT_ID}/mapping`, null],
+      // `execution` là TAB CON, không phải trang IA — nó chỉ có địa chỉ dưới
+      // dạng `?tab=execution` trên route `programs`.
+      [`/eng/programming/projects/${PROJECT_ID}/task`, `/eng/programming/projects/${PROJECT_ID}/programs`, 'execution']
     ] as const) {
       await navigate(page, from)
-      await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/design`, { timeout: 10_000 })
+      await page.waitForURL((url) => url.pathname === expectedPath, { timeout: 10_000 })
       expect(new URL(page.url()).searchParams.get('tab')).toBe(expectedTab)
     }
   })

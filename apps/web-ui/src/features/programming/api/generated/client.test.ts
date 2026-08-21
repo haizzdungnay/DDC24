@@ -10,9 +10,22 @@ import {
 import impactGolden from "../../../../../../../contracts/openapi/testdata/programming-impact.json";
 
 describe("Programming API client sinh từ OpenAPI", () => {
-  it("khóa đủ 28 operation và contract Commission", () => {
-    // 25 operation Rev A + 3 operation Control Library (T59-202).
-    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(28);
+  it("khóa đủ 30 operation và contract Commission", () => {
+    // 25 operation Rev A + 3 operation Control Library (T59-202)
+    // + 2 operation intent Enable/Disable (T59-405).
+    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(30);
+    // Intent Enable/Disable: đọc cho viewer, đặt intent admin-only — RBAC nằm ở
+    // CHÍNH contract sinh ra, không chỉ ở BE.
+    expect(PROGRAMMING_ENDPOINTS.listProgrammingProgramIntents).toEqual({
+      method: "GET",
+      path: "/api/v1/programming/projects/{projectId}/programs",
+      roles: ["viewer", "operator", "admin"],
+    });
+    expect(PROGRAMMING_ENDPOINTS.setProgrammingProgramIntent).toEqual({
+      method: "PUT",
+      path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent",
+      roles: ["admin"],
+    });
     expect(PROGRAMMING_ENDPOINTS.searchProgrammingLibraries).toEqual({
       method: "GET",
       path: "/api/v1/programming/libraries",
