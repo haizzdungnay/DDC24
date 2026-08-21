@@ -65,11 +65,11 @@
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "ccc4205f06e770470fd53f14d39e508be4243693dd7ec3cd0b4a878adccd11dc",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0008_library_mutation_receipts.sql",
-      "migrationSha256": "c9f19b4213601aa760385a72345e88fde018e18cc600f84abbfe01e17f0ebe9c",
+      "sha256": "d7513574ae11b2a85353d8448e1c69a13a9ef6cafa39f30e1cfc37412cbfd990",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0009_package_artifact_v2.sql",
+      "migrationSha256": "5a9ce8052b041533d7222c66d679b54fe575a16dc4075d4b0b2d0a921bab5d5d",
       "major": 1,
-      "schemaVersion": 8,
+      "schemaVersion": 9,
       "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {
