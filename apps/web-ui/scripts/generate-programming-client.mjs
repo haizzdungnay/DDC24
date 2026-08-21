@@ -157,10 +157,7 @@ export interface ProgrammingImpactGroup {
 
 export interface ProgrammingImpact {
   impactRef: string;
-  retain: ProgrammingImpactGroup;
-  activeOverrides: ProgrammingImpactGroup;
-  cutover: ProgrammingImpactGroup;
-  outputMappingChanges: ProgrammingImpactGroup;
+${impactKeys.map((key) => `  ${key}: ProgrammingImpactGroup;`).join('\n')}
 }
 
 export interface ProgrammingCommissionRequest {

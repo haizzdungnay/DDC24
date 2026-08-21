@@ -15,12 +15,22 @@ import { useCommissionWorkflow } from './useCommissionWorkflow'
 import type { ProgrammingImpactKey } from '../api/generated/client'
 import { ProblemsDrawer } from '../shared/ProblemsDrawer'
 
-const IMPACT_GROUP_ORDER: ProgrammingImpactKey[] = ['retain', 'activeOverrides', 'cutover', 'outputMappingChanges']
+// T59-502: thứ tự đi từ thứ tác động MẠNH NHẤT lên thiết bị đang chạy xuống
+// thứ nhẹ hơn. Người vận hành đọc từ trên xuống, nên thứ có thể làm hỏng quá
+// trình phải nằm trên.
+const IMPACT_GROUP_ORDER: ProgrammingImpactKey[] = [
+  'enableIntent', 'programSet', 'retain', 'activeOverrides',
+  'cutover', 'outputMappingChanges', 'publishedSignals', 'controlLibrary'
+]
 const IMPACT_GROUP_LABEL: Record<ProgrammingImpactKey, [string, string]> = {
   retain: ['Trạng thái lưu (RETAIN) sẽ khởi tạo lại', 'RETAIN state will be re-initialised'],
   activeOverrides: ['Override thủ công đang giữ đầu ra', 'Manual overrides currently holding outputs'],
   cutover: ['Chuyển quyền điều khiển graph → program', 'Cutover from graph to program control'],
-  outputMappingChanges: ['Thay đổi ánh xạ Điểm ảnh hưởng đầu ra vật lý', 'Point mapping changes affecting physical outputs']
+  outputMappingChanges: ['Thay đổi ánh xạ Điểm ảnh hưởng đầu ra vật lý', 'Point mapping changes affecting physical outputs'],
+  enableIntent: ['Chương trình ĐANG CHẠY sẽ bị thay', 'Programs currently running will be replaced'],
+  programSet: ['Thêm hoặc bớt chương trình trên thiết bị', 'Programs added to or removed from the controller'],
+  publishedSignals: ['Đổi tín hiệu công bố: freshness / chính sách khi mất dữ liệu', 'Published signal changes: freshness / stale policy'],
+  controlLibrary: ['Đổi Control Library dùng chung', 'Shared Control Library changes']
 }
 
 interface NavState {
@@ -72,8 +82,16 @@ export function CheckCommissionPage() {
   const [password, setPassword] = useState('')
 
   const impact = changes.data?.impact
-  const presentKeys = useMemo(() => IMPACT_GROUP_ORDER.filter((key) => impact?.[key].status === 'PRESENT'), [impact])
-  const hasUnavailable = useMemo(() => IMPACT_GROUP_ORDER.some((key) => !impact || impact[key].status !== 'NONE' && impact[key].status !== 'PRESENT'), [impact])
+  // Nhóm impact VẮNG MẶT là `UNAVAILABLE`, không phải `NONE`. Một BE cũ hơn (hoặc
+  // một nhóm mới chưa được nối) gửi thiếu nhóm thì Commission phải fail-closed —
+  // coi "không thấy" là "không có" đúng là cách để một tác động thật đi qua mà
+  // không ai xác nhận. Đọc phòng thủ cũng giữ trang sống thay vì trắng màn hình.
+  const groupStatus = (key: ProgrammingImpactKey) => impact?.[key]?.status ?? 'UNAVAILABLE'
+  const presentKeys = useMemo(() => IMPACT_GROUP_ORDER.filter((key) => groupStatus(key) === 'PRESENT'), [impact])
+  const hasUnavailable = useMemo(
+    () => IMPACT_GROUP_ORDER.some((key) => groupStatus(key) !== 'NONE' && groupStatus(key) !== 'PRESENT'),
+    [impact]
+  )
   const checkPassed = check.data?.state === 'PASSED'
   /* `safeState=true` một mình không chặn Commission: nếu lý do DUY NHẤT là
    * `safeStateNoControllerOnly` (Core trigger T7 — chưa Program nào đang
@@ -249,7 +267,7 @@ export function CheckCommissionPage() {
         ) : (
           <ul className="space-y-2 text-sm">
             {IMPACT_GROUP_ORDER.map((key) => {
-              const group = impact[key]
+              const group = impact[key] ?? { status: 'UNAVAILABLE' as const, items: [] }
               return (
                 <li key={key} className="flex items-start justify-between gap-3">
                   <span className="text-[var(--c-text)]">{pick(...IMPACT_GROUP_LABEL[key])}</span>

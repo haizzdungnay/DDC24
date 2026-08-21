@@ -8,12 +8,12 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.24.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.25.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type ProgrammingImpactStatus = "NONE" | "PRESENT" | "UNAVAILABLE";
-export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "outputMappingChanges";
+export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "outputMappingChanges" | "publishedSignals" | "controlLibrary" | "programSet" | "enableIntent";
 
 export interface ProgrammingPublicError {
   code: ProgrammingErrorCode;
@@ -88,6 +88,10 @@ export interface ProgrammingImpact {
   activeOverrides: ProgrammingImpactGroup;
   cutover: ProgrammingImpactGroup;
   outputMappingChanges: ProgrammingImpactGroup;
+  publishedSignals: ProgrammingImpactGroup;
+  controlLibrary: ProgrammingImpactGroup;
+  programSet: ProgrammingImpactGroup;
+  enableIntent: ProgrammingImpactGroup;
 }
 
 export interface ProgrammingCommissionRequest {

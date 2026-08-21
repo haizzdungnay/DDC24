@@ -124,7 +124,19 @@ describe('RuntimeServicePage — S5-D (TASK-PROG-505)', () => {
             retain: { status: 'UNAVAILABLE', items: [] },
             activeOverrides: { status: 'NONE', items: [] },
             cutover: { status: 'NONE', items: [] },
-            outputMappingChanges: { status: 'NONE', items: [] }
+            outputMappingChanges: { status: 'NONE', items: [] },
+
+            // T59-502: bốn nhóm impact của mô hình đa Program. Thiếu nhóm nào
+
+            // thì trang fail-closed — "không thấy" không phải "không có".
+
+            publishedSignals: { status: 'NONE', items: [] },
+
+            controlLibrary: { status: 'NONE', items: [] },
+
+            programSet: { status: 'NONE', items: [] },
+
+            enableIntent: { status: 'NONE', items: [] }
           },
           changes: []
         })
@@ -151,7 +163,19 @@ describe('RuntimeServicePage — S5-D (TASK-PROG-505)', () => {
             retain: { status: 'PRESENT', items: ['SupplySetpoint', 'FanRuntimeHours'] },
             activeOverrides: { status: 'NONE', items: [] },
             cutover: { status: 'NONE', items: [] },
-            outputMappingChanges: { status: 'NONE', items: [] }
+            outputMappingChanges: { status: 'NONE', items: [] },
+
+            // T59-502: bốn nhóm impact của mô hình đa Program. Thiếu nhóm nào
+
+            // thì trang fail-closed — "không thấy" không phải "không có".
+
+            publishedSignals: { status: 'NONE', items: [] },
+
+            controlLibrary: { status: 'NONE', items: [] },
+
+            programSet: { status: 'NONE', items: [] },
+
+            enableIntent: { status: 'NONE', items: [] }
           },
           changes: []
         }),

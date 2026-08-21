@@ -58,7 +58,19 @@ function changesWithTwoPresentGroups(): ProgrammingRevisionChanges {
       retain: { status: 'PRESENT', items: ['var-1'] },
       activeOverrides: { status: 'PRESENT', items: ['AO-01'] },
       cutover: { status: 'NONE', items: [] },
-      outputMappingChanges: { status: 'NONE', items: [] }
+      outputMappingChanges: { status: 'NONE', items: [] },
+
+      // T59-502: bốn nhóm impact của mô hình đa Program. Thiếu nhóm nào
+
+      // thì trang fail-closed — "không thấy" không phải "không có".
+
+      publishedSignals: { status: 'NONE', items: [] },
+
+      controlLibrary: { status: 'NONE', items: [] },
+
+      programSet: { status: 'NONE', items: [] },
+
+      enableIntent: { status: 'NONE', items: [] }
     }
   }
 }

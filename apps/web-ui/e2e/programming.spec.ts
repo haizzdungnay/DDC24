@@ -147,7 +147,19 @@ async function installProgrammingMocks(page: Page, state: MockState) {
           retain: { status: 'NONE', items: [] },
           activeOverrides: { status: 'NONE', items: [] },
           cutover: { status: 'PRESENT', items: ['GRAPH_ONLY→PROGRAM_ONLY'] },
-          outputMappingChanges: { status: 'NONE', items: [] }
+          outputMappingChanges: { status: 'NONE', items: [] },
+
+          // T59-502: bốn nhóm impact của mô hình đa Program. Thiếu nhóm nào
+
+          // thì trang fail-closed — "không thấy" không phải "không có".
+
+          publishedSignals: { status: 'NONE', items: [] },
+
+          controlLibrary: { status: 'NONE', items: [] },
+
+          programSet: { status: 'NONE', items: [] },
+
+          enableIntent: { status: 'NONE', items: [] }
         }
       })
     }
@@ -160,7 +172,19 @@ async function installProgrammingMocks(page: Page, state: MockState) {
           retain: { status: 'PRESENT', items: ['SupplySetpoint', 'FanRuntimeHours'] },
           activeOverrides: { status: 'NONE', items: [] },
           cutover: { status: 'NONE', items: [] },
-          outputMappingChanges: { status: 'NONE', items: [] }
+          outputMappingChanges: { status: 'NONE', items: [] },
+
+          // T59-502: bốn nhóm impact của mô hình đa Program. Thiếu nhóm nào
+
+          // thì trang fail-closed — "không thấy" không phải "không có".
+
+          publishedSignals: { status: 'NONE', items: [] },
+
+          controlLibrary: { status: 'NONE', items: [] },
+
+          programSet: { status: 'NONE', items: [] },
+
+          enableIntent: { status: 'NONE', items: [] }
         }
       })
     }
