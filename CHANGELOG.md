@@ -8,6 +8,37 @@
 
 ## [Unreleased]
 
+### Added — `T59-303` Binding MB_RTU qua Point contract canonical (2026-08-21)
+
+**Ranh giới quyết định toàn bộ thiết kế:** compiler **không biết** register,
+function code, endian hay chu kỳ poll — và không được biết. Ánh xạ một điểm
+Modbus sang vị trí SHM là việc của hệ Modbus RTU. Contract Point vì vậy thêm đúng
+một trường: `extIndex` — slot EXT `1..256` do **Point Catalog** phân giải;
+`resolve_io_bindings` map thẳng nó sang `StPointKind::EXT`.
+
+**Không suy `extIndex` từ `pointId`:** suy nó ở đây là định nghĩa lại ánh xạ
+Modbus ở lớp không sở hữu nó, và hai định nghĩa sẽ trôi khỏi nhau. Thiếu
+`extIndex` là **thiếu dữ liệu** — từ chối, không đoán.
+
+**IR không đổi:** `StPointKind::EXT` và `StPointCategory::MB_RTU` đã có sẵn với
+`st_point_kind_limit(EXT) = KX_N_EXT`; thứ thiếu duy nhất là `resolve_io_bindings`
+chặn category này. Artifact vì thế byte-compatible với bản cũ.
+
+**Fail-closed đầy đủ:** thiếu `extIndex`, thiếu `deviceId` (mất tính duy nhất của
+identity `(deviceId, pointId)`), vượt trần 256, ghi vào điểm read-only, bind
+`VAR_INPUT` với `direction=output`, và kiểu `TIME` (không có biểu diễn trên dây).
+
+**Guard hai chiều ở BE:** MB_RTU thiếu slot bị chặn, và category khác **mang**
+slot cũng bị chặn — bỏ chiều thứ hai là mở một trường vô nghĩa mà lớp sau phải
+đoán có nên tin hay không.
+
+**Kiểm chứng (host/local):** `ctest` **1145/1145**; `go test ./... -count=1` 18/18
+package ok; `verify-project.sh --wave W3` **6/6 PASS**.
+
+**Ranh giới:** Point Catalog phía BE chưa phát `extIndex` cho Mapping tab — đường
+đó cùng UI chọn điểm MB_RTU thuộc `T59-306`; nghiệm thu I/O Modbus thật thuộc
+`T59-703`.
+
 ### Added — `T59-302` Check cấp package: mọi Program, gộp diagnostic, container v2 thật (2026-08-21)
 
 **Bỏ trần pipeline "một Program mỗi lần chạy"** mà `T59-002` đã ghi là giới hạn

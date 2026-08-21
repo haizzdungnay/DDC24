@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 4.7 |
+| Phiên bản | 4.8 |
 | Trạng thái | **Active — 60 requirement legacy + 22 unified requirement; 0 Open Decision; release evidence chưa đủ** |
 | Cập nhật | 2026-08-20 |
 | Chủ quản | Verification Lead |
@@ -34,7 +34,7 @@ nghĩa code tồn tại, cũng không nghĩa test đã PASS.
 | `SYS-REQ-PROG-111` | Unified DDD §4.1/§7; profile v2 | T59-002, T59-301/305/402 | U04/U05 | `T59-301`: document v2 32 Program, Program thứ 33 bị từ chối và Draft giữ đúng 32. `T59-302`: Check biên dịch mọi Program và lắp container v2 bằng writer production, hash tất định (host/local). Topology/budget/runtime còn thiếu; U04/U05 NOT_RUN |
 | `SYS-REQ-PROG-112` | Unified DDD §4.5/§7.3 | T59-301/304/404 | U05/U06 | `T59-301`: định nghĩa Published Signal ở Draft (publisher/freshness/policy/fallback ghép cứng). Validation cấp package và runtime còn thiếu; U05/U06 NOT_RUN |
 | `SYS-REQ-PROG-113` | Unified DDD §4.3/§5.1–5.2/§7.2 | T59-405/501/503 | U07/U08/U10 | NOT_RUN |
-| `SYS-REQ-PROG-114` | Unified DDD §4.6/§7/§9 | T59-303/304/406 | U07/U09 | NOT_RUN |
+| `SYS-REQ-PROG-114` | Unified DDD §4.6/§7/§9 | T59-303/304/406 | U07/U09 | `T59-303`: binding MB_RTU resolve qua `extIndex` của Point Catalog, LOCAL/VP/MB_RTU cùng một Program, sai chiều/kiểu fail-closed (host/local). Output owner/candidate còn thiếu; U07/U09 NOT_RUN |
 | `SYS-REQ-PROG-115` | Unified DDD §7 | T59-402/403/702 | U05/U11 | NOT_RUN |
 | `SWR-REQ-PROG-FE-116..118` | Unified DDD §8; UX unified section | T59-203/503/504/506 | U03/U06/U07/U10 | `T59-203`: PGM-04 search/filter/detail/create/delete, review-gate chỉ hiển thị, permission và state-unknown khoá bằng 8 test component/a11y (host/local). E2E real-backend thuộc T59-505; U03 NOT_RUN |
 | `SWR-REQ-PROG-BE-111` | Unified DDD §4–§6 | T59-005/201/202 | U03 | `T59-201`: domain/store + schema v7 có immutable/version/reference guard. `T59-202`: 3 route DDD §5.1, OpenAPI 1.23.0 28 operation ↔ route Go ↔ client TS exact, RBAC admin-only cho mutation, `If-Match`+idempotency+audit cùng transaction. FE/import/target còn thiếu; U03 NOT_RUN |

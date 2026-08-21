@@ -994,7 +994,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 |---|---|---|---|---|---|
 | `T59-301` | P0 | Project Draft/model/API cho 32 Program + POU + signal definitions | T59-005/006 | **DONE** | Document **v2**: POU (`objects`) tách khỏi cấu hình Program, biến vào `locals` của POU, `signals` hạng nhất, bỏ `task.programOrder` theo DDD §4.1; migration v1→v2 **tất định + idempotent + giữ identity**; op mới `upsertObject/removeObject/renameObject/duplicateObject/upsertProgram(v2)/upsertSignal/...` cộng **lớp tương thích op v1** để FE đang chạy không gãy; **Program thứ 33 bị từ chối và Draft giữ đúng 32**; tên POU unique case-folded; không cascade ngầm; 7 test v2 + adapter FE 3 test; `go test ./... -count=1` 18/18; FE 116 file / 1091 test; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-302` | P0 | Package Check toàn POU/Program/library/signal/resource | T59-106/201/301 | **DONE** | Check biên dịch **mọi** Program (bỏ trần pipeline 1 của `T59-002`), **gộp** diagnostic của tất cả Program hỏng và gắn `programId` cho từng cái; `mkddc-st-package` mới lắp container v2 bằng **chính** `WritePackageV2()` production (byte-stable, đọc lại bằng loader trước khi ghi); migration `0009` cho artifact `schemaVersion∈{1,2}`; `contentSha256` tất định qua hai lần Check; Check **không** đụng Draft/Active và không sinh hành động triển khai; hai worker chia nhau Check qua lease; 5 test Check + 3 test packager; `go test ./... -count=1` 18/18; `ctest` 1138/1138; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
-| `T59-303` | P0 | MB_RTU binding compiler adapter qua canonical Point contract | T59-302 | ORDERED | LOCAL/VP/MB_RTU input/output cases; endian/polling không tái định nghĩa; wrong direction reject. |
+| `T59-303` | P0 | MB_RTU binding compiler adapter qua canonical Point contract | T59-302 | **DONE** | Point contract thêm `extIndex` (slot EXT 1..256 do Point Catalog phân giải); `resolve_io_bindings` nhận MB_RTU và map thẳng sang `StPointKind::EXT` — compiler **không** tự suy slot nên không tái định nghĩa register/function code/endian/chu kỳ poll; LOCAL và MB_RTU sống chung trong một Program; thiếu `extIndex`, thiếu `deviceId`, vượt trần 256, sai chiều và kiểu `TIME` đều fail-closed; guard Go kiểm **hai chiều** (MB_RTU thiếu slot / category khác lại mang slot); 6 test C++ + 1 test Go; `ctest` **1145/1145**; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-304` | P0 | Output owner/conflict + Published Signal publisher/consumer validation | T59-302/303 | ORDERED | Duplicate output/publisher reject; freshness/fallback/type graph tests. |
 | `T59-305` | P0 | Package manifest/topology/budget cho 32/16; Program mới Disabled | T59-302/304 | ORDERED | 32 compile, 16 enabled, one-over stable; manifest không chứa creation-order dependency. |
 | `T59-306` | P1 | FE PGM-02/03: POU tree, Program properties, mapping conflicts, signals | T59-301/304 | ORDERED | Sáu route target/legacy redirect; Function/FB hides invalid fields; E2E Draft save/reload. |
@@ -1132,6 +1132,43 @@ và Program chỉ được biên dịch đúng số lần cần thiết.
 manifest, resource budget và `desiredEnabled=false` cho Program mới thuộc
 `T59-305`. Khai thiếu tốt hơn khai bừa: loader kiểm bảng này và một bản khai sai
 sẽ được nạp **như thật**.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-303` — MB_RTU đi qua Point contract, compiler không sở hữu giao thức
+
+**Ranh giới quyết định toàn bộ thiết kế.** Compiler **không biết** register,
+function code, endian hay chu kỳ poll — và nó không được biết. Ánh xạ một điểm
+Modbus sang vị trí trong SHM là việc của hệ Modbus RTU. Vì vậy contract Point
+thêm đúng một trường: `extIndex` — slot EXT `1..KX_N_EXT` mà **Point Catalog**
+phân giải. Compiler nhận nó nguyên trạng và map thẳng sang `StPointKind::EXT`.
+
+**Vì sao không suy `extIndex` từ `pointId`.** Suy nó ở đây nghĩa là định nghĩa
+lại ánh xạ Modbus ở lớp **không sở hữu** nó, và hai định nghĩa sẽ trôi khỏi nhau
+— đúng cơ chế đã sinh ra drift ở registry Control Library. Thiếu `extIndex` là
+**thiếu dữ liệu**, và câu trả lời đúng là từ chối chứ không đoán.
+
+**IR không cần đổi.** `StPointKind::EXT = 7` và `StPointCategory::MB_RTU` đã có
+sẵn từ trước với `st_point_kind_limit(EXT) = KX_N_EXT`; thứ thiếu duy nhất là
+`resolve_io_bindings` chặn category này. Container/artifact vì thế
+**byte-compatible** với bản cũ.
+
+**Identity là cặp `(deviceId, pointId)`.** Thiếu `deviceId` thì hai thiết bị có
+thể dùng cùng tên điểm và identity mất tính duy nhất — bị từ chối.
+
+**Guard hai chiều ở lớp BE.** `extIndex` chỉ có nghĩa với MB_RTU: MB_RTU thiếu
+slot bị chặn, và category khác **mang** slot cũng bị chặn. Bỏ chiều thứ hai là mở
+một trường vô nghĩa mà lớp sau phải đoán xem có nên tin hay không.
+
+**Hai test cũ được thay vì chúng khoá đúng thứ task này gỡ.**
+`RejectsUnsupportedCategoryMbRtu` khoá hành vi "MB_RTU không hỗ trợ" — nay thay
+bằng `RejectsMbRtuWithoutResolvedExtIndex` (đúng thứ vẫn phải bị từ chối) và
+`RejectsCategoryOutsideAllowlist` (giữ nguyên phép kiểm category cho `BACNET`).
+Xoá mà không thay thế sẽ để mất phép kiểm allowlist.
+
+**Ranh giới trung thực.** Point Catalog phía BE **chưa** phát `extIndex` cho
+Mapping tab; đường đó cùng UI chọn điểm MB_RTU thuộc `T59-306`. Nghiệm thu I/O
+Modbus thật trên board thuộc `T59-703`.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
