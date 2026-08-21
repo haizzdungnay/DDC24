@@ -31,6 +31,7 @@
 #include "persistence/state_snapshot.hpp"
 #include "ipc/program_ipc_unix.hpp"
 #include "programming/programming_cutover.hpp"
+#include "st/st_public_key.hpp"
 #include "programming/programming_runtime_coordinator.hpp"
 #include "build_info.h"
 
@@ -97,6 +98,17 @@ int main(int argc, char** argv)
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
         if (a == "--version") { std::printf("version=%s git_commit=%s build_time=%s toolchain=%s\n", MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN); return 0; }
+        /* T59-602: gate đóng gói phát hành đọc đúng dòng này để biết binary đang
+         * nhúng khoá TEST hay khoá phát hành. Trước đó `st_public_key_is_test_key()`
+         * có sẵn nhưng KHÔNG nơi nào gọi, nên "build release phải truyền
+         * -DMKDDC_ST_PUBLIC_KEY_HEX" chỉ là một câu trong tài liệu. */
+        else if (a == "--st-key-info") {
+            char fingerprint[17] = {0};
+            st_public_key_fingerprint(st_builtin_public_key(), fingerprint, sizeof(fingerprint));
+            std::printf("st_public_key fingerprint=%s mode=%s\n", fingerprint,
+                        st_public_key_is_test_key() ? "TEST" : "RELEASE");
+            return 0;
+        }
         else if (a == "--log-level" && i + 1 < argc) { ++i; /* Rev A: log level cố định */ }
         else if (a == "--sock" && i + 1 < argc) sock_path = argv[++i];
         else if (a == "--fieldbus-sock" && i + 1 < argc) fieldbus_sock_path = argv[++i];
@@ -147,7 +159,7 @@ int main(int argc, char** argv)
                         " [--safe-state-conf FILE] [--io-conf FILE] [--alarm-conf FILE]"
                         " [--schedule-conf FILE] [--scan-ms N]"
                         " [--programming-mode graph_only|program_only] [--programming-runtime]"
-                        " [--program-hold-ttl-ms N]"
+                        " [--program-hold-ttl-ms N] [--st-key-info]"
                         " [--programming-sock PATH]"
                         " [--log-level LVL]\n");
             return 0;
@@ -159,6 +171,25 @@ int main(int argc, char** argv)
     /* scan_ms log SAU khi chốt với graph.json (tránh log giá trị không dùng) */
     std::fprintf(stderr, "INFO  core.start version=%s git_commit=%s build_time=%s toolchain=%s pid=%d\n",
                  MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN, getpid());
+
+    /* T59-602, DDD-ARTIFACT-TRUST-PROG-001 §1: khoá TEST được cam kết vào repo
+     * CÓ CHỦ Ý để CI ký/verify được. Rủi ro đi kèm là nó lặng lẽ theo binary ra
+     * hiện trường: mọi người đều có khoá riêng tương ứng, nên "artifact có chữ
+     * ký" khi đó không chứng minh điều gì. Log ở mức CRITICAL để dòng này không
+     * lẫn vào INFO khi ai đó đọc log board. */
+    {
+        char fingerprint[17] = {0};
+        st_public_key_fingerprint(st_builtin_public_key(), fingerprint, sizeof(fingerprint));
+        if (st_public_key_is_test_key()) {
+            std::fprintf(stderr,
+                         "CRITICAL core.st_public_key=TEST fingerprint=%s"
+                         " — build này KHÔNG dùng được cho phát hành (T59-602)\n",
+                         fingerprint);
+        } else {
+            std::fprintf(stderr, "INFO  core.st_public_key=RELEASE fingerprint=%s\n",
+                         fingerprint);
+        }
+    }
 
     /* RT + mlockall. Đo lại trạng thái THẬT sau khi cố đặt, thay vì tin vào
      * mã trả về: trên hệ có CONFIG_RT_GROUP_SCHED + cgroup v2, systemd có thể

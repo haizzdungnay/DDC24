@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### T59-602 — Tin cậy artifact: cổng khoá TEST và rotation có overlap (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/{st_loader.hpp,st_loader.cpp,st_public_key.hpp,st_public_key.cpp}`,
+  `apps/core/bootstrap/main.cpp`, `platform/packaging/build-release.sh`,
+  `apps/core/application/st/tests/test_st_artifact_trust.cpp` (mới), Plan 59 §3/§3.7.
+- **Fixed — nguyên tắc không có cổng nào đọc:** `st_public_key_is_test_key()` tồn
+  tại từ lâu nhưng **không call site nào** gọi, nên "build release phải truyền
+  `-DMKDDC_ST_PUBLIC_KEY_HEX`" chỉ là một câu trong tài liệu. Khoá TEST được cam
+  kết vào repo có chủ ý (ai cũng có khoá riêng tương ứng) nên nó có thể lặng lẽ
+  ra hiện trường, và khi đó "artifact có chữ ký" không chứng minh được gì. Nay:
+  `mkddc-core --st-key-info` in fingerprint + mode; bootstrap log **CRITICAL** khi
+  chạy khoá TEST; `build-release.sh` **chặn** đóng gói, lab mở bằng
+  `MKDDC_ALLOW_TEST_KEY=1` và cờ đó được ghi vào `provenance.json`.
+- **Fixed — rotate khoá sẽ tự chặn đường lùi:** loader chỉ nhận một khoá, nên đổi
+  khoá tức thời từ chối mọi artifact ký bằng khoá cũ — kể cả **LKG**, bản duy
+  nhất để lùi khi bản mới hỏng. Nay `StLoaderOptions` nhận **tập** khoá tin cậy
+  (trần 4) cho cửa sổ overlap; `StLoadedProgram.verified_public_key` ghi khoá đã
+  tin bản đó để audit trả lời được "còn bao nhiêu artifact sống nhờ khoá cũ".
+- **Added:** 7 test đi trọn vòng đời tin cậy — ký hợp lệ, artifact không ký bị từ
+  chối ở `SIGNATURE_REQUIRED`, sửa byte (`kBadHash`), **ký lại bằng khoá lạ sau
+  khi tính lại hash** (`kBadSignature` — đúng mối đe doạ mà `HASH_ONLY` không
+  chặn), rotation overlap giữ cả cũ lẫn mới, rollback về LKG ký khoá cũ, đóng cửa
+  sổ thì khoá cũ hết hiệu lực.
+- **Còn chặn (không phải thiếu mã):** bật `SIGNATURE_REQUIRED` ở production cần
+  Security + Product chốt **ký ở đâu** và **khoá riêng nằm ở đâu** —
+  `DDD-ARTIFACT-TRUST-PROG-001` §2/§3 cố ý để mở vì câu trả lời đổi trực tiếp UX
+  "biên dịch ngay trên board".
+- **Kiểm chứng (host/local):** `ctest` **1220/1220**; cổng đóng gói chặn đúng khi
+  binary nhúng khoá TEST.
+
 ### T59-601 — Corpus ST↔FBD phủ 100% Control Library; fuzz FBD vào CI (2026-08-21)
 
 - **Phạm vi:** `contracts/programming/fbd/{equivalence_v1.json,manifest.json}`,

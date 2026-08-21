@@ -205,9 +205,28 @@ private:
         if (!signature_nonzero)
             return fail(st_ir_error::kBadSignature,
                         "signed flag is set but signature field is zero");
+        /* Tập khoá tin cậy (T59-602): thử lần lượt, khớp một khoá là đủ. Khoá
+         * cũ còn trong tập chính là thứ giữ cho đường rollback về LKG không bị
+         * chặn bởi chính cơ chế bảo vệ nó. */
+        if (opts_.trusted_key_count > 0) {
+            const std::size_t count = opts_.trusted_key_count < kMaxTrustedKeys
+                                          ? opts_.trusted_key_count
+                                          : kMaxTrustedKeys;
+            for (std::size_t index = 0; index < count; ++index) {
+                const uint8_t* candidate = opts_.trusted_keys[index];
+                if (candidate == nullptr) continue;
+                if (crypto_sign_verify_detached(d_ + 64, digest, 32, candidate) == 0) {
+                    std::memcpy(out_->verified_public_key, candidate, 32);
+                    return true;
+                }
+            }
+            return fail(st_ir_error::kBadSignature,
+                        "Ed25519 signature does not match any trusted key");
+        }
         const uint8_t* pk = opts_.public_key ? opts_.public_key : st_builtin_public_key();
         if (crypto_sign_verify_detached(d_ + 64, digest, 32, pk) != 0)
             return fail(st_ir_error::kBadSignature, "Ed25519 signature verification failed");
+        std::memcpy(out_->verified_public_key, pk, 32);
         return true;
     }
 

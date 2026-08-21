@@ -1951,7 +1951,7 @@ hai** (đã đọc ring **và** mẫu đã ghi); chạy lặp 5 lần đều xan
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
 | `T59-601` | P1 | ST↔FBD corpus mọi registry entry + state traces; 3 fuzz harness CI | T59-105/106 | **DONE (HOST/LOCAL)** | Corpus phủ **40/40 entry** registry (20→35 cặp stateless + 5 trace nhiều chu kỳ), kiểm phủ **hai chiều** tính từ chính registry sinh máy nên entry mới không có vector sẽ đỏ. **Ba lỗi thật lộ ra ngay khi corpus chạm tới vùng chưa ai chạy:** (1) `compile_fbd_source` không có affordance `enforce_review_gate` như ST ⇒ nhánh lower **PID sang FBD chưa từng được một vector nào chạy**; (2) corpus cũ dựng node `FUNCTION` cho entry chuyển kiểu trong khi model đòi kind `CONVERSION`; (3) verifier hợp đồng FBD thiếu `SQRT` trong danh sách chép tay. Harness fuzz FBD có trong repo nhưng **không job CI nào chạy** — nay chạy cùng parser/loader. `ctest` **1213/1213**; `verify_programming_fbd_contract.py` PASS. Chi tiết §3.7. |
-| `T59-602` | P0 | Artifact/library trust SIGNED + key custody/rotation/rollback | T59-106/204 | ORDERED | Valid/tampered/wrong key/rotation/rollback tests; no `HASH_ONLY` release. |
+| `T59-602` | P0 | Artifact/library trust SIGNED + key custody/rotation/rollback | T59-106/204 | **PARTIAL — cơ chế xong, bật SIGNED còn chờ chữ ký** | Bộ test tin cậy đi trọn vòng đời: ký hợp lệ, **ký lại bằng khoá lạ sau khi tính lại hash** (mối đe doạ mà `HASH_ONLY` KHÔNG chặn), sửa byte, rotation **có cửa sổ overlap**, rollback về LKG ký bằng khoá cũ, và đóng cửa sổ. Verify nay nhận **TẬP** khoá tin cậy — đổi khoá tức thời sẽ chặn đúng đường lùi mà cơ chế tồn tại để bảo vệ. **Lỗi thật:** `st_public_key_is_test_key()` có sẵn từ lâu nhưng **không nơi nào gọi**, nên "release phải dùng khoá thật" chỉ là một câu trong tài liệu; nay bootstrap log CRITICAL và `build-release.sh` chặn bằng `--st-key-info` (lab mở bằng `MKDDC_ALLOW_TEST_KEY=1`, ghi vào provenance). `ctest` **1220/1220**. **Còn chặn:** bật `SIGNATURE_REQUIRED` production cần Security+Product chốt **ký ở đâu và khoá riêng nằm ở đâu** (`DDD-ARTIFACT-TRUST-PROG-001` §2/§3 cố ý để mở) — không phải thiếu mã. Chi tiết §3.7. |
 | `T59-603` | P1 | Security/RBAC/audit/malicious input/concurrency full matrix | T59-202/405/501 | ORDERED | Direct API negative, zero mutation, audit completeness/no secret, rate/resource bounds. |
 | `T59-604` | P1 | E2E stability, remove stale quarantine, deterministic workers/retry policy | T59-505 | ORDERED | 5 consecutive full runs; all spec included; retry không che deterministic defect. |
 | `T59-605` | P0 | Release packaging: Programming default ON, artifact/compiler/library/systemd/env | T59-501/602 | ORDERED | Fresh install + upgrade package manifest/checksum; services/routes visible; rollback package. |
@@ -2000,6 +2000,43 @@ trong ba cửa vào. Nay job chạy cả ba, seed corpus FBD lấy từ golden t
 
 **Evidence level.** Host/local. `ctest` 1213/1213, `verify_programming_fbd_contract.py`
 PASS, `docs_iso_harness.py --expect` PASS. Chưa phải GitHub CI, chưa phải target.
+
+#### `T59-602` — Tin cậy artifact: cơ chế đã đủ, chữ ký chính sách thì chưa
+
+**Khoảng cách thật không nằm ở crypto.** Cả hai chiều đã có từ lâu: `st_ir.cpp`
+ký Ed25519, `st_loader.cpp` verify constant-time. Cái thiếu là **quy trình**, và
+hai chỗ nó rò ra thành lỗ thật:
+
+**Lỗ 1 — nguyên tắc không có cổng nào đọc.** `st_public_key.hpp` ghi "build
+release PHẢI truyền `-DMKDDC_ST_PUBLIC_KEY_HEX`" và có sẵn
+`st_public_key_is_test_key()`, nhưng **không call site nào** gọi nó. Khoá TEST
+được cam kết vào repo có chủ ý (ai cũng có khoá riêng tương ứng) nên nó có thể
+lặng lẽ đi theo binary ra hiện trường — và khi đó "artifact có chữ ký" không
+chứng minh được gì. Nay: `mkddc-core --st-key-info` in fingerprint + TEST/RELEASE,
+bootstrap log **CRITICAL** khi đang chạy khoá TEST, `build-release.sh` **chặn**
+đóng gói. Bản lab mở bằng `MKDDC_ALLOW_TEST_KEY=1` và cờ đó được **ghi vào
+`provenance.json`** — không có bản nào mang khoá test mà hồ sơ không nói.
+
+**Lỗ 2 — rotate khoá sẽ tự chặn đường lùi.** `StLoaderOptions` chỉ nhận MỘT
+khoá. Đổi khoá tức thời làm mọi artifact ký bằng khoá cũ bị từ chối ngay lúc
+đổi — kể cả **LKG**, tức bản duy nhất để lùi khi bản mới hỏng. Cơ chế bảo vệ khi
+đó khoá đúng đường thoát, và đúng vào lúc cần thoát nhất. Nay verify nhận **tập**
+khoá tin cậy (trần 4), thử lần lượt; `StLoadedProgram.verified_public_key` ghi lại
+**khoá nào đã tin bản này** để audit trả lời được "còn bao nhiêu artifact đang
+sống nhờ khoá cũ" — thứ mà một dòng "verify PASS" không nói.
+
+**Vì sao chưa bật `SIGNATURE_REQUIRED` ở production.** `DDD-ARTIFACT-TRUST-PROG-001`
+§2/§3 **cố ý để mở** hai câu hỏi và ghi rõ không tự chọn: ký ở khâu build/release
+(a) hay ký on-demand sau khi Check PASSED qua một service tách biệt (b), và khoá
+riêng nằm ở đâu. Câu trả lời đổi trực tiếp UX "biên dịch ngay trên board" đã cam
+kết: mô hình (a) giả định Program cố định lúc phát hành — không đúng với sản phẩm
+này; mô hình (b) thêm một phụ thuộc mạng vào đúng đường Commission, nên phải trả
+lời trước "mất mạng thì Check chặn hẳn hay rơi về `HASH_ONLY`". Đó là quyết định
+threat-model của Security + Product, không phải của lane implementation — và nó
+là thứ **duy nhất** còn giữ `T59-602` ở `PARTIAL`. Mã đã sẵn sàng cho cả hai lựa
+chọn: bật mode là một tham số, tập khoá đã có, audit đã có trường.
+
+**Evidence level.** Host/local, `ctest` 1220/1220.
 
 ### W7 — Target/HIL/V&V và quyết định phát hành
 
