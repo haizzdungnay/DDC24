@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.28 |
+| Phiên bản | 1.29 |
 | Trạng thái | Active |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -39,9 +39,9 @@ target, HIL hoặc release.
 | 10 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `d4992caf7d85275558de9c3e0553c31cbf686a28ddb61082a998edea666fec6d` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 11 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `716344cd9d21e3b32765cc1126418a0013518e86bdf3460f7ed8713d443d2a62` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `2d26255dda3f9431c79a2553e11f37de5641f04d377a8de0075af3a9cb672968` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `756adf9aa3e0b50054b1854715d1bd2ec2713bb547a11ba792ce6cd638869c29` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `4fa8110d89ae173cb28c462ed50f3c7d41fee179157074a8cfd72b8b824a11cf` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `abd035ffc64331ce30cf355c4939f13d8de6ced0ee5042aea1d6994847791e8e` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `3703918e8a0e0e50849de2c92010ac49826cedcdaf78fd518be12ed98363a9c3` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `31f3fba5a30f72045993044f4f017fdfc1464701bc454c30b1c1197feceaf475` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `161240cbb0de523504502be7981f18d538c4c6822316287774e8278121ab9e02` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `8dd7bd227861ded3a1da3478aec522826dc60716280bdd40b79fa23f7f1ef29a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 
 ## 3. Disposition baseline cũ
@@ -102,6 +102,7 @@ evidence release.
 | 1.22 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-304`. **Đánh giá impact:** dòng 13 thêm §5.37 và lịch sử 4.1, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence bất biến cấp package vào `SYS-REQ-PROG-112` và `SYS-REQ-PROG-114`; dòng 15 là status W3 + ghi chú §3.4. Unified DDD, SRS và VVP không đổi — §4.5/§4.6 vốn đã khoá hai bất biến này. |
 | 1.23 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-305`. **Đánh giá impact:** dòng 13 thêm §5.38 và lịch sử 4.2, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence topology/budget vào `SYS-REQ-PROG-111`; dòng 15 là status W3 + ghi chú §3.4. Unified DDD, SRS và VVP không đổi. |
 | 1.24 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-306` (**đóng Wave W3, 6/6 task**). **Đánh giá impact:** dòng 13 thêm §5.39 và lịch sử 4.3, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence PGM-02/03 vào `SWR-REQ-PROG-FE-116..118`; dòng 15 là status W3 + ghi chú §3.4. Unified DDD **không đổi** — §8 vốn đã khoá IA sáu trang, task chỉ đưa route đích về đúng chỗ. SRS và VVP không đổi. |
+| 1.29 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-405`. **Đánh giá impact:** dòng 13 thêm §5.44 và lịch sử 4.8, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence intent Enable/Disable vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status `T59-405` + ghi chú §3.5. Unified DDD **không đổi** — §4.3/§7.2 vốn đã khoá intent bền vững và ngũ trạng thái Program. **Contract đổi cùng phiên:** store manifest v9→v10 (migration `0010`), IPC `protocolMinor` 0→1 với action `SET_PROGRAM_ENABLED` (`schemaVersion` trên dây GIỮ NGUYÊN "1.0" — đổi nó sẽ làm mọi Core cũ từ chối mọi request), OpenAPI 1.23.0→1.24.0 với 2 operation mới, error catalog 120→122 detail. SRS và VVP không đổi. |
 | 1.28 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-404`. **Đánh giá impact:** dòng 13 thêm §5.43 và lịch sử 4.7, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence bus Published Signal vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status `T59-404` + ghi chú §3.5. Unified DDD **không đổi** — §4.5/§10 vốn đã khoá bốn luật signal và cấm "im lặng thay bằng 0". Golden package v2 đổi byte lần hai (SIGNAL_DEFS mang `stalePolicy`/`fallbackBits`) nên `g1_contract_join_v1.json` được ghim lại cùng phiên. SRS và VVP không đổi. |
 | 1.27 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-403`. **Đánh giá impact:** dòng 13 thêm §5.42 và lịch sử 4.6, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence lane/cô lập lỗi vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status `T59-403` + ghi chú §3.5. **Đổi hành vi có chủ ý:** fault của một Program không còn dừng cả Task — theo kiến trúc §8 `isolate Program`; Unified DDD không đổi vì §7 không quy định hành vi cũ, nó đến từ `PROGRAM_TASK_SCHEDULER_SPEC` thời một Program. SRS và VVP không đổi. |
 | 1.26 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-402`. **Đánh giá impact:** dòng 13 thêm §5.41 và lịch sử 4.5, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence lập lịch theo Program vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status `T59-402` + ghi chú §3.5. Unified DDD **không đổi** — §7.1 vốn đã khoá ba lớp chu kỳ và trần 16/32. SRS và VVP không đổi. Golden package v2 đổi byte (PROGRAM_TABLE mang `periodMs`/`budgetUs`) nên `g1_contract_join_v1.json` được ghim lại cùng phiên. |

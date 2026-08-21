@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+### T59-405 — Enable/Disable Program đi trọn store → API → IPC → Core → read-back (2026-08-21)
+
+- **Phạm vi:** `apps/web-api/internal/programming/store/{runtime_intent.go,idempotency.go,schema.go}`,
+  `migrations/0010_runtime_intent_receipts.sql` (mới),
+  `apps/web-api/internal/programming/application/runtime_intent.go` (mới),
+  `apps/web-api/internal/programming/transport/http/{runtime_intent.go,router.go,projects.go}`,
+  `apps/web-api/internal/programming/coreipc/codec.go`, `apps/web-api/internal/app/`,
+  `apps/core/application/programming/{program_ipc_server,programming_runtime_coordinator}.{hpp,cpp}`,
+  `contracts/ipc/programming_v1/*`, `contracts/openapi/openapi.yaml`,
+  `contracts/programming/{error_catalog_v1.json,programming_store_v1.manifest.json,g1_contract_join_v1.json}`,
+  `apps/web-ui/src/features/programming/api/generated/client.ts`, Plan 59 §3/§3.5,
+  Risk Register v4.8, Traceability v5.6, baseline manifest v1.29.
+- **Thêm:** đường intent đầy đủ. Store (`program_runtime_intents`) ghi intent +
+  audit + biên nhận idempotency trong **cùng một transaction**; API
+  `PUT /projects/{id}/programs/{programId}/runtime-intent` (admin) và
+  `GET /projects/{id}/programs` (viewer); IPC action mới `SET_PROGRAM_ENABLED`;
+  Core `set_program_enabled` áp lên **đúng một** instance.
+- **Ý định KHÁC trạng thái.** `desiredEnabled` là điều người vận hành muốn,
+  `runtimeState` là điều thiết bị đang làm. Gộp thành một trường sẽ làm một
+  Program bật-nhưng-FAULTED trông y hệt một Program chưa ai bật. Core từ chối →
+  `FAULTED`; Core không liên lạc được → `UNKNOWN`; **không** trường hợp nào xoá
+  intent. Core nhận lệnh → ghi trạng thái **chuyển tiếp** `STARTING`/`STOPPING`,
+  không ghi thẳng đích.
+- **Enable/Disable là hai action riêng ở lớp biên nhận.** Biên nhận khoá theo
+  `(actor, action, target, key)`; gộp hai chiều sẽ làm một lần "bật" và một lần
+  "tắt" cùng idempotency key trở thành cùng một ô, và lần thứ hai replay kết quả
+  của lần thứ nhất thay vì đổi trạng thái.
+- **IPC `protocolMinor` 0→1, `schemaVersion` trên dây GIỮ NGUYÊN "1.0".** Thêm
+  action là thay đổi tương thích ngược. Đổi `schemaVersion` sẽ làm mọi Core
+  phiên bản cũ từ chối **mọi** request — hỏng toàn diện thay vì thiếu một tính
+  năng.
+- **Sửa kèm 1 — trigger `generation` siết quá tay.** Trigger v6 đòi generation
+  tăng ở **mọi** UPDATE, nên read-back của Core không ghi được. Migration v10
+  tách thành hai luật: đổi intent bắt buộc tăng generation; generation không bao
+  giờ lùi.
+- **Sửa kèm 2 — biên nhận idempotency đòi ETag cho mọi mutation.** Phép kiểm giả
+  định mọi mutation thuộc một Draft; intent tác động lên Project đang chạy nên sẽ
+  phải bịa một số phiên bản Draft. Nay ETag chỉ bắt buộc khi biên nhận mang
+  `DraftID`.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1180/1180** pass; 8 test Go + 2 test IPC
+  mới; `scripts/verify-project.sh --wave W4` **5/5 PASS**;
+  `verify_programming_g1_contracts.py --self-test` 35/35 mutation;
+  `generate_programming_errors.py --check` 30 public / 122 detail;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-405`, `RSK-PROG-005/007/008/014`,
+  DDD §4.3/§7.2.
+
 ### T59-404 — Published Signal ở runtime: double-buffer, freshness, ba chính sách (2026-08-21)
 
 - **Phạm vi:** `apps/core/application/st/st_signal_bus.{hpp,cpp}` (mới),

@@ -1294,7 +1294,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | `T59-402` | P0 | Per-Program due queue/state/period/budget/metrics, max 16 | T59-401 | **DONE** | Chu kỳ release theo **từng Program** (`st_program_due`/`st_program_mark_released`), bù trôi theo mốc **lý thuyết**, lỡ chu kỳ thì **đếm và bỏ** chứ không chạy bù; chu kỳ đi **trong PROGRAM_TABLE của package** nên hai controller cùng gói chạy cùng dãy release; writer **và** loader cùng từ chối chu kỳ ngoài ba lớp profile; trần **16 Program chạy đồng thời** ép ở `start()`; thứ tự chạy độc lập thứ tự tạo; đo `last_exec_ns`/`max_exec_ns`/`missed_release_count` theo Program. Sửa kèm: package v2 **không sống sót reboot** (đường restore nạp nguyên container như artifact v1). 11 test mới; `ctest` **1159/1159**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-403` | P0 | Worker lanes/fault isolation/no-allocation RT | T59-402 | **DONE** | Lane là đơn vị song song (`StLaneMode::SEQUENTIAL|PARALLEL`, worker tạo sẵn ngoài chu kỳ, spin+yield không vào kernel); hai chế độ cho **đúng cùng** kết quả trên fixture 10 Program/3 chu kỳ/4 lane, ổn định qua 20 lần lặp; **đảo chiều** chính sách fault — fault của một Program **không** còn dừng cả Task (kiến trúc §8 `isolate Program`); đường quét **0 cấp phát** ở cả hai chế độ; lane vượt số worker vẫn chạy nốt trên luồng gọi. 7 test mới; `ctest` **1166/1166**; TSan 0 cảnh báo. Chi tiết §3.5. |
 | `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | **DONE** | `StSignalBus` double-buffer, commit ở **boundary** nên mọi consumer trong một chu kỳ thấy cùng một ảnh; **0 đọc rách** qua 20.000 vòng publisher/consumer song song trên `StCell` 8 byte; ba chính sách `HOLD_LAST`/`USE_FALLBACK`/`WAIT` cho ba hành vi khác nhau, "chưa ai publish" khác "quá hạn"; producer dừng thì giá trị **quá hạn theo freshness** chứ không biến mất tức thì, hồi phục ngay ở boundary kế. Sửa kèm: signal **chưa từng** đi vào container (bus runtime luôn rỗng) và `stalePolicy` **không phải enum đóng** ở Check. 15 test mới; `ctest` **1179/1179**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
-| `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | ORDERED | RBAC/idempotency/restart intent; STARTING/RUNNING/STOPPING/DISABLED truth. |
+| `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | **DONE** | Đường đầy đủ: store (`program_runtime_intents`, migration **v10**) → API (`PUT .../programs/{id}/runtime-intent`, `GET .../programs`, RBAC admin/viewer, idempotency) → IPC (**action mới** `SET_PROGRAM_ENABLED`, protocolMinor 0→1 tương thích ngược) → Core (`set_program_enabled` áp lên đúng một instance) → read-back + audit **cùng một transaction**. Intent và trạng thái là **hai trường riêng**; Core từ chối/không sẵn sàng vẫn giữ intent bền vững. Trần 16 Enabled ép ở **hai** lớp. Sửa kèm: trigger `generation` chặn cả read-back; biên nhận idempotency đòi ETag cho mutation không thuộc Draft. 10 test mới; `ctest` **1180/1180**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | ORDERED | Disable/fault/TTL withdraw; next priority/default/safe path; no direct IOP. |
 | `T59-407` | P0 | Per-Program/FB RETAIN namespace/layout/restart/reset | T59-104/401 | ORDERED | Warm/cold/revision/corrupt/reset matrix; no half reset; Program isolation. |
 | `T59-408` | P1 | Core trace ring buffer + real `TRACE_START/STOP` | T59-402/006 | ORDERED | 10k/10 min bounded, no RT allocation; BE caller thật; action ma = 0. |
@@ -1518,6 +1518,80 @@ chưa có opcode đọc/ghi signal — nối vào lowering thuộc phần còn l
 compiler. Trọng tài output khi consumer nhận `UNAVAILABLE` thuộc `T59-406`. Số đo
 "không đọc rách" là host, trên một cặp luồng — không phải 24 h trên target
 (`T59-702`).
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-405` — Enable/Disable đi trọn đường store → API → IPC → Core → read-back
+
+**Ý định KHÁC trạng thái, và phải nằm cạnh nhau.** "Đã bật" là điều người vận
+hành muốn; "đang chạy" là điều thiết bị đang làm. Gộp thành một trường sẽ làm một
+Program **bật-nhưng-FAULTED** trông y hệt một Program chưa ai bật — đúng lúc
+người vận hành cần phân biệt nhất. Vì vậy `desiredEnabled` và `runtimeState` là
+hai trường riêng ở cả store, API lẫn hình chiếu public.
+
+**STORE trước, Core sau.** Intent là thứ bền vững phải sống qua mất điện và qua
+việc Core chưa sẵn sàng. Đẩy xuống Core trước rồi mới ghi sẽ để lại một thiết bị
+đã đổi hành vi mà không ai biết ai ra lệnh, nếu tiến trình chết ở giữa. Biên nhận
+idempotency, audit và bản ghi intent đi trong **cùng một transaction**.
+
+**Core từ chối hay không sẵn sàng KHÔNG xoá intent.** Intent là ý định, không phải
+kết quả. Trạng thái ghi lại là `FAULTED` (bị từ chối) hoặc `UNKNOWN` (không liên
+lạc được) — **không phải** trạng thái mong muốn. Đoán rằng lệnh đã tới nơi là đúng
+thứ làm người vận hành tin nhầm.
+
+**Ghi trạng thái CHUYỂN TIẾP, không ghi thẳng đích.** Core nhận lệnh xong thì
+Program mới `STARTING`/`STOPPING`, chưa `RUNNING`/`DISABLED`. Nói nó đã tới đích
+khi nó mới lên đường là nói dối.
+
+**Enable và Disable là HAI action riêng ở lớp biên nhận.** Biên nhận khoá theo
+`(actor, action, target, key)`. Gộp hai chiều vào một action `PROGRAM_SET_ENABLED`
+sẽ làm một lần "bật" và một lần "tắt" **cùng idempotency key** trở thành cùng một
+ô — và lần thứ hai replay kết quả của lần thứ nhất thay vì đổi trạng thái. Có test
+khoá đúng ca này.
+
+**Replay không gửi lại lệnh xuống Core.** Một lần gửi lại vì mạng không được thành
+một lệnh vận hành thứ hai.
+
+**`PUT` chứ không phải `enable`/`disable`.** Intent là một **trạng thái mong
+muốn**; hai động từ riêng sẽ làm việc "đặt lại đúng thứ đang có" trở thành hai
+request khác nhau tuỳ giá trị hiện tại. Payload thiếu `desiredEnabled` bị từ chối
+chứ **không** mặc định `false` — mặc định sẽ biến một payload hỏng thành lệnh TẮT
+chương trình.
+
+**IPC: action mới, `protocolMinor` 0→1, `schemaVersion` ĐỨNG YÊN.** Thêm action là
+thay đổi tương thích ngược, và `protocolMinor` sinh ra đúng để diễn đạt điều đó.
+Đổi `schemaVersion` trên dây sẽ làm **mọi** Core phiên bản cũ từ chối **mọi**
+request — hỏng toàn diện thay vì thiếu một tính năng. Vì vậy `version` trong join
+G1 mirror hằng trên dây (giữ "1.0") còn `minor` mirror `protocolMinor` (thành 1);
+verifier nay khoá `minor` vào golden manifest để hai con số không trôi khỏi nhau.
+Có test khoá: client `minor=0` vẫn được nhận, `minor` cao hơn bị chặn ngay ở lớp
+mã hoá.
+
+**Trần 16 ép ở HAI lớp, không thừa.** Lớp application chặn **trước khi ghi**:
+intent là thứ bền vững, nên một intent vượt trần sẽ sống lại ở mỗi lần khởi động
+và bị Core từ chối mãi mãi mà không ai thấy vì sao. Lớp Core ép lại ở `start()` —
+nơi Program thực sự bắt đầu tác động lên đầu ra, và là nơi bất biến phải đúng kể
+cả khi intent tới từ đường khác.
+
+**Sửa kèm 1 — trigger `generation` siết quá tay.** Trigger v6 đòi `generation`
+tăng ở **mọi** UPDATE, nên read-back của Core không ghi được: SQLite trả
+"generation must increase" cho một UPDATE chẳng đụng tới `desired_enabled`. Thứ
+trigger sinh ra để bảo vệ là "intent cũ tới muộn không ghi đè intent mới", còn ghi
+lại một quan sát thì không có generation mới để mang. Migration v10 tách thành hai
+luật đúng với hai việc: đổi intent **bắt buộc** tăng generation; generation
+**không bao giờ** lùi.
+
+**Sửa kèm 2 — biên nhận idempotency đòi ETag cho mọi mutation.** Phép kiểm
+`result.ETag < 1` giả định mọi mutation thuộc một Draft. Intent tác động lên
+Project **đang chạy**, không lên Draft, nên nó sẽ phải bịa ra một số phiên bản
+Draft — và một số bịa ra thì phép kiểm không còn canh gì. Nay ETag chỉ bắt buộc
+khi biên nhận mang `DraftID`.
+
+**Ranh giới trung thực.** Đây là **đường intent và read-back**. Đối chiếu định kỳ
+(reconcile) giữa intent bền vững và trạng thái Core thật thuộc `T59-501`; rút
+candidate khi Disable thuộc `T59-406`. Trạng thái `RUNNING`/`DISABLED` cuối cùng
+chỉ được ghi khi có đường đọc trạng thái Program từ Core — hiện `STATUS` chưa mang
+trạng thái theo từng Program, đó là phần còn lại của lane runtime.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

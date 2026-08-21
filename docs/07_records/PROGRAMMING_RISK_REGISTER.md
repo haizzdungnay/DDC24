@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.7 |
+| Phiên bản | 4.8 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -635,6 +635,17 @@ Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
 Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
+### 5.44 Cập nhật treatment source `T59-405` (Plan59 W4)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-008` | Intent Enable/Disable đi trọn store → API → IPC → Core → read-back; biên nhận idempotency, audit và bản ghi intent trong **cùng một transaction**; Enable/Disable là **hai action riêng** ở lớp biên nhận nên cùng idempotency key cho hai chiều không bị replay nhầm; replay **không** gửi lại lệnh xuống Core | Đối chiếu định kỳ intent ↔ trạng thái Core (`T59-501`), Test Result `VS-PROG-U07` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | RBAC khai báo theo route (`admin` cho mutation, `viewer` cho đọc); actor rỗng bị từ chối bằng `ErrInvalidRequest` chứ không rơi vào 503 "hãy thử lại"; payload thiếu `desiredEnabled` bị từ chối chứ **không** mặc định `false` — mặc định sẽ biến payload hỏng thành lệnh TẮT chương trình | FE cho đường Enable/Disable, usability người thật | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-005` | Trần **16 Enabled** ép ở **hai lớp**: application chặn trước khi ghi (intent bền vững, nên intent vượt trần sẽ sống lại mỗi lần khởi động và bị từ chối mãi mãi), Core ép lại ở `start()` nơi Program thực sự tác động lên đầu ra | Nghiệm thu target với 16 Program chạy thật (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-007` | Ý định và trạng thái là **hai trường riêng**; Core từ chối → `FAULTED`, Core không liên lạc được → `UNKNOWN`, và **không** trường hợp nào xoá intent; Core nhận lệnh → ghi trạng thái **chuyển tiếp** `STARTING`/`STOPPING` chứ không ghi thẳng đích | Đường đọc trạng thái theo từng Program từ Core (`STATUS` chưa mang), HIL | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -687,6 +698,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 4.8 | 2026-08-21 | Ghi `T59-405` (Plan59 W4) cho treatment partial RSK-005/007/008/014: intent Enable/Disable đi trọn store→API→IPC→Core→read-back/audit trong một transaction, ý định và trạng thái là hai trường riêng, trần 16 ép ở hai lớp, IPC thêm action mới với `protocolMinor` 0→1 tương thích ngược. Giữ 22/22 Open vì đối chiếu định kỳ, đọc trạng thái theo Program từ Core và FE chưa có. |
 | 4.7 | 2026-08-21 | Ghi `T59-404` (Plan59 W4) cho treatment partial RSK-012/017/020: bus Published Signal double-buffer commit ở boundary với 0 đọc rách qua 20.000 vòng, ba chính sách stale phân biệt "chưa publish" với "quá hạn", signal lần đầu thực sự đi vào container, `stalePolicy` đóng ở ba lớp. Giữ 22/22 Open vì opcode signal trong thân chương trình, trọng tài output và target chưa có. |
 | 4.6 | 2026-08-21 | Ghi `T59-403` (Plan59 W4) cho treatment partial RSK-006/018/021: lane là đơn vị song song với hai chế độ cho cùng kết quả, đảo chiều chính sách fault sang cô lập theo kiến trúc §8, đường quét 0 cấp phát, TSan 54 test 0 cảnh báo tái lập bằng script. Giữ 22/22 Open vì đo trên target và rút candidate chưa có. |
 | 4.5 | 2026-08-21 | Ghi `T59-402` (Plan59 W4) cho treatment partial RSK-001/005/018/022: chu kỳ release theo từng Program với bù trôi theo mốc lý thuyết, lỡ chu kỳ đếm-và-bỏ, chu kỳ đi trong package và bị chặn ở cả writer lẫn loader, trần 16 chạy đồng thời ép ở `start()`, đường khôi phục package v2 sau reboot được bịt. Giữ 22/22 Open vì worker lane/đo tải target/intent Enable chưa có. |
