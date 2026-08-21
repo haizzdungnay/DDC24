@@ -517,6 +517,13 @@ func validObjectKind(value string) bool {
 	switch value {
 	case "PROGRAM", "FUNCTION", "FUNCTION_BLOCK", "VARIABLE", "BINDING", "TASK", "METADATA":
 		return true
+	// T59-502: `SIGNAL` bị bỏ sót khỏi danh sách này từ đầu, nên `SealRevision`
+	// từ chối MỌI Revision có Published Signal. Hệ quả: toàn bộ lane signal —
+	// validate ở Check (`T59-304`), đóng gói vào container (`T59-404`), bus ở
+	// runtime — không bao giờ chạm tới một Revision thật. Lỗi này không lộ ra ở
+	// bất kỳ test nào vì chưa test nào seal một Revision có signal.
+	case "SIGNAL":
+		return true
 	default:
 		return false
 	}
