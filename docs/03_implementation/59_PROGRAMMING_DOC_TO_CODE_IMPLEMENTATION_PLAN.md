@@ -1950,12 +1950,56 @@ hai** (đã đọc ring **và** mẫu đã ghi); chạy lặp 5 lần đều xan
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-601` | P1 | ST↔FBD corpus mọi registry entry + state traces; 3 fuzz harness CI | T59-105/106 | ORDERED | Registry presence 100%; stateful/conversion vectors; parser/loader/FBD fuzz. |
+| `T59-601` | P1 | ST↔FBD corpus mọi registry entry + state traces; 3 fuzz harness CI | T59-105/106 | **DONE (HOST/LOCAL)** | Corpus phủ **40/40 entry** registry (20→35 cặp stateless + 5 trace nhiều chu kỳ), kiểm phủ **hai chiều** tính từ chính registry sinh máy nên entry mới không có vector sẽ đỏ. **Ba lỗi thật lộ ra ngay khi corpus chạm tới vùng chưa ai chạy:** (1) `compile_fbd_source` không có affordance `enforce_review_gate` như ST ⇒ nhánh lower **PID sang FBD chưa từng được một vector nào chạy**; (2) corpus cũ dựng node `FUNCTION` cho entry chuyển kiểu trong khi model đòi kind `CONVERSION`; (3) verifier hợp đồng FBD thiếu `SQRT` trong danh sách chép tay. Harness fuzz FBD có trong repo nhưng **không job CI nào chạy** — nay chạy cùng parser/loader. `ctest` **1213/1213**; `verify_programming_fbd_contract.py` PASS. Chi tiết §3.7. |
 | `T59-602` | P0 | Artifact/library trust SIGNED + key custody/rotation/rollback | T59-106/204 | ORDERED | Valid/tampered/wrong key/rotation/rollback tests; no `HASH_ONLY` release. |
 | `T59-603` | P1 | Security/RBAC/audit/malicious input/concurrency full matrix | T59-202/405/501 | ORDERED | Direct API negative, zero mutation, audit completeness/no secret, rate/resource bounds. |
 | `T59-604` | P1 | E2E stability, remove stale quarantine, deterministic workers/retry policy | T59-505 | ORDERED | 5 consecutive full runs; all spec included; retry không che deterministic defect. |
 | `T59-605` | P0 | Release packaging: Programming default ON, artifact/compiler/library/systemd/env | T59-501/602 | ORDERED | Fresh install + upgrade package manifest/checksum; services/routes visible; rollback package. |
 | `T59-606` | P0 | RC reproducible build/provenance/SBOM/backup/restore/upgrade dry-run | T59-601..605 | ORDERED | Same source reproducible hashes or explained variance; dry-run fresh/upgrade/rollback PASS. |
+
+### 3.7 Ghi chú thực thi W6
+
+#### `T59-601` — Corpus phủ registry, và ba chỗ nó chạm vào vùng chưa ai chạy
+
+**Vì sao đếm phủ phải tính từ registry, không ghim số.** Bộ 20 cặp cũ khoá đúng
+20 entry nó liệt kê. Thêm một entry mới vào Control Library **không làm test nào
+đỏ** — entry đó chỉ đơn giản không được ai chạy, trong khi FE vẫn chào nó cho
+người dùng cuối. Nay phép kiểm đọc `pou_library_registry_v1.json` và so **hai
+chiều**: entry không có vector ⇒ đỏ; vector trỏ tới entry đã gỡ ⇒ cũng đỏ (chiều
+sau giữ cho số phủ không đẹp hơn sự thật).
+
+**Entry có state không kiểm được bằng một chu kỳ.** Cái sai điển hình của
+TON/TOF/R_TRIG/F_TRIG/PID là **chuyển state giữa các chu kỳ**, không phải công
+thức trong một chu kỳ. Vì thế 5 entry này đi bằng trace nhiều chu kỳ, chạy song
+song ST và FBD trên **cùng mốc thời gian** và so **từng chu kỳ**: TOF giữ Q thêm
+đúng `PT` sau khi IN xuống, R_TRIG chỉ bắn một chu kỳ, PID tích luỹ tích phân
+theo `dt` rồi **đóng băng integrator** khi `ACTUAL` lệch khỏi đề xuất trước
+(TRACKING lên) — đúng ngữ nghĩa §7 của `DDD-CTRL-PROG-001`.
+
+**Lỗi thật 1 — PID chưa từng được chạy qua đường FBD.** `compile_fbd_source`
+không có affordance `enforce_review_gate` mà đường ST đã có, nên bộ conformance
+**không thể** dựng PID bằng FBD. Nghĩa là nhánh lower PID sang FBD chưa có một
+vector nào chạy, trong khi chính bộ conformance này là thứ dựng evidence để mở
+review gate cho PID. Nay có overload nhận `StCompileOptions`; đường production
+`compile_fbd_source(source)` giữ mặc định BẬT, và có test khoá đúng điều đó —
+cửa hậu vừa mở phải không chạm được từ production.
+
+**Lỗi thật 2 — corpus dựng sai node kind cho chuyển kiểu.** Model FBD có kind
+`CONVERSION` riêng và từ chối `INT_TO_REAL` trên node `FUNCTION` bằng
+`FBD-SEM-TYPE-REF-001`. Nó từ chối ĐÚNG; harness mới là chỗ sai, và nay lấy kind
+từ registry sinh máy thay vì đoán.
+
+**Lỗi thật 3 — verifier hợp đồng thiếu `SQRT`.** Danh sách `PURE_FUNCTIONS` trong
+`verify_programming_fbd_contract.py` được chép tay và đã trôi khỏi registry. Cùng
+loại lỗi mà `st_fbd_model.cpp` đã sửa trước đó bằng cách sinh từ registry.
+
+**Fuzz: harness thứ ba có trong repo nhưng không ai chạy.** `fuzz_st_fbd_model`
+tồn tại từ trước, job CI chỉ build parser + loader. Đồ thị FBD là input thù địch
+đến từ BE/FE y hệt source ST và artifact, nên bỏ nó ngoài CI là bỏ trống đúng một
+trong ba cửa vào. Nay job chạy cả ba, seed corpus FBD lấy từ golden thật.
+
+**Evidence level.** Host/local. `ctest` 1213/1213, `verify_programming_fbd_contract.py`
+PASS, `docs_iso_harness.py --expect` PASS. Chưa phải GitHub CI, chưa phải target.
 
 ### W7 — Target/HIL/V&V và quyết định phát hành
 

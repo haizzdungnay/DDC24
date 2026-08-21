@@ -8,6 +8,34 @@
 
 ## [Unreleased]
 
+### T59-601 — Corpus ST↔FBD phủ 100% Control Library; fuzz FBD vào CI (2026-08-21)
+
+- **Phạm vi:** `contracts/programming/fbd/{equivalence_v1.json,manifest.json}`,
+  `apps/core/application/st/tests/test_st_library_conformance.cpp` (mới),
+  `apps/core/application/st/tests/test_st_fbd_compile.cpp`,
+  `apps/core/application/st/st_fbd_compile.{hpp,cpp}`,
+  `scripts/verify_programming_fbd_contract.py`, `.github/workflows/build-and-test.yml`,
+  Plan 59 §3/§3.7.
+- **Added:** corpus phủ **40/40 entry** registry — 35 cặp stateless (thêm `SQRT`
+  + 14 entry chuyển kiểu) và 5 trace nhiều chu kỳ cho `TON`/`TOF`/`R_TRIG`/
+  `F_TRIG`/`PID`. Phép kiểm phủ tính **từ registry machine-readable** và soát hai
+  chiều, nên entry mới không có vector sẽ đỏ thay vì im lặng không được chạy.
+- **Fixed — PID chưa từng chạy qua đường FBD:** `compile_fbd_source` thiếu
+  affordance `enforce_review_gate` mà đường ST đã có, nên bộ conformance không
+  dựng nổi PID bằng FBD — chính bộ conformance là thứ dựng evidence để mở gate
+  đó. Thêm overload nhận `StCompileOptions`; production giữ gate BẬT và có test
+  khoá (`ProductionFbdEntryPointStillBlocksReviewGatedEntries`).
+- **Fixed — verifier hợp đồng FBD thiếu `SQRT`** trong danh sách `PURE_FUNCTIONS`
+  chép tay (cùng loại drift mà `st_fbd_model.cpp` đã sửa bằng cách sinh từ registry).
+- **Fixed — harness fuzz FBD không job CI nào chạy:** `fuzz_st_fbd_model` có sẵn
+  nhưng job `fuzz-smoke` chỉ build parser + loader. Đồ thị FBD là input thù địch
+  y hệt source ST/artifact; nay chạy đủ ba harness, seed từ golden thật.
+- **Changed:** bỏ ghim "đúng 20 cặp" ở test và ở verifier — ghim con số làm corpus
+  không lớn theo registry. Manifest FBD thêm `equivalenceStateTraceCount`.
+- **Kiểm chứng (host/local):** `ctest` **1213/1213**;
+  `verify_programming_fbd_contract.py` PASS; `verify-project.sh --component layout`
+  PASS; `docs_iso_harness.py --expect` PASS.
+
 ### T59-502 — Impact/ack cho mô hình đa Program (2026-08-21)
 
 - **Phạm vi:** `apps/web-api/internal/programming/store/{commands.go,schema.go}`,

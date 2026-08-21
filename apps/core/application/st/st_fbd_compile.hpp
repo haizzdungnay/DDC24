@@ -13,6 +13,7 @@
 #include <string_view>
 #include <vector>
 
+#include "st/st_compile.hpp"
 #include "st/st_fbd_model.hpp"
 #include "st/st_ir.hpp"
 
@@ -44,6 +45,17 @@ struct FbdCompileResult {
 // Parse + validate + lower + typecheck + compile. Khi lỗi, module trả về luôn
 // rỗng; consumer không được stage partial IR.
 FbdCompileResult compile_fbd_source(std::string_view source);
+
+// T59-601 — cùng affordance `enforce_review_gate` mà đường ST đã có
+// (`StCompileOptions`). Vì sao cần: bộ conformance của một feature ĐANG bị review
+// gate chặn (hôm nay là PID) chính là thứ dựng evidence để mở gate đó. ST có
+// đường vào; FBD thì không, nên nhánh lower PID sang FBD chưa từng được chạy bởi
+// một vector nào — feature vẫn hiện trên UI FBD với một đường mã chưa ai kiểm.
+//
+// `enforce_review_gate=false` CHỈ dành cho bộ test conformance của chính feature
+// đó. Đường production (`compile_fbd_source(source)`) giữ mặc định BẬT, và
+// `test_st_review_gate.cpp` khoá bất biến đó cho cả hai ngôn ngữ.
+FbdCompileResult compile_fbd_source(std::string_view source, const StCompileOptions& options);
 
 // T59-105: chỉ parse + validate + lower, DỪNG trước typecheck và codegen.
 //
