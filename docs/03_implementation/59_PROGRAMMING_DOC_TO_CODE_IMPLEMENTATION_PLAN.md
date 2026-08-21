@@ -1805,7 +1805,7 @@ thật trên target (`T59-702`).
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
 | `T59-501` | P0 | Package Commission/Restore first-cycle barrier, LKG/journal/recovery | T59-401..407 | **DONE** | Barrier chu kỳ đầu và rollback nâng lên mức **GÓI**: trước đó chỉ xét `instance_id_` nên một Program chết vẫn được tuyên bố `FIRST_CYCLE_OK`, và rollback để lại gói **nửa cũ nửa mới**. LKG thăng cấp **all-or-nothing**. Restart ở cả 4 pha không để lại active một nửa. Hai test chống hồi quy **kiểm chứng bằng cách gỡ bản vá** (đỏ đúng dòng lý do). Sửa kèm ở FE (hồi quy W3 lộ ra vì W3 không có cổng `e2e`): thanh tab Thiết kế **bấm không ăn** trên `/programs`+`/mapping` và tab `execution` **mất chỗ hiển thị**; E2E còn ghi IA cũ. `ctest` **1209/1209**; `--wave W5` **7/7 PASS** (lần đầu chạy `frontend`+`e2e` trong Plan 59). Chi tiết §3.6. |
-| `T59-502` | P0 | Impact/ack cho multi-Program/library/signal/output/RETAIN/enable intent | T59-501 | ORDERED | BE authority diff; FE chỉ hiện impact thật; stale ack reject. |
+| `T59-502` | P0 | Impact/ack cho multi-Program/library/signal/output/RETAIN/enable intent | T59-501 | **DONE** | Bốn nhóm impact mới: `publishedSignals`/`controlLibrary`/`programSet`/`enableIntent` (trước đó chỉ có 4 nhóm của Rev A một Program). **Lỗi thật:** `SIGNAL` không nằm trong whitelist kind của `revision_objects`, nên `SealRevision` từ chối MỌI Revision có Published Signal — cả lane `T59-304`/`T59-404` chưa từng chạm một Revision thật (migration **v11**). Đổi chính sách stale trước đây rơi vào `SOURCE` nên Commission không hỏi ack. Nhóm vắng mặt = `UNAVAILABLE` (fail-closed), không phải `NONE`. Kiểu TS sinh **từ enum contract** thay vì viết cứng. `--wave W5` **7/7 PASS**. Chi tiết §3.6. |
 | `T59-503` | P1 | FE sáu workspace/navigation/context, PGM-05/06 lifecycle | T59-203/306/405/502 | ORDERED | Desktop/mobile, Draft vs Active vs intent/runtime, stale/offline/unknown/a11y. |
 | `T59-504` | P1 | Monitor đủ LOCAL/VP/MB_RTU, Program/signal/candidate/actual/priority | T59-303/404/406 | ORDERED | 3 category, programValue vs actual, source/freshness/quality đúng. |
 | `T59-505` | P0 | Real-backend E2E Draft→Check→Commission→Enable→Runtime→Disable→Restore | T59-501..504 | ORDERED | Không `page.route` mock Programming; compiler thật + Core simulator authority; CI lane. |
@@ -1879,6 +1879,55 @@ lúc chạy, nên watcher chỉ đem lại hai thứ: hàng chục nghìn inotif
 **Ranh giới trung thực.** Đây là **atomicity mức gói trên host**. Mô phỏng mất
 điện thật (cắt nguồn giữa fsync) và số đo phục hồi trên board thuộc `T59-704`;
 `e2e` ở đây vẫn dùng mock Programming — đường real-backend là `T59-505`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-502` — Impact/ack cho mô hình đa Program
+
+**Lỗi thật: Published Signal chưa từng seal được.** `revisionPayload` sinh object
+kind `SIGNAL` từ collection `signals` của document v2, nhưng `SIGNAL` **không nằm
+trong** whitelist kind của `revision_objects` — danh sách đó viết từ migration v1,
+trước khi Published Signal tồn tại, và chưa bao giờ được mở rộng. Hệ quả:
+`SealRevision` từ chối **mọi** Revision có signal với "CHECK constraint failed".
+Toàn bộ lane signal — validate ở Check (`T59-304`), đóng gói vào container
+(`T59-404`), bus ở runtime — **chưa từng chạm một Revision thật**. Không test nào
+bắt được vì chưa test nào seal một Revision có signal. Migration **v11** mở
+whitelist và khôi phục đúng hai trigger bất biến của bảng.
+
+**Bốn nhóm impact chỉ phủ Rev A một Program.** Với mô hình đa Program, bốn thứ
+sau đi qua Commission mà **không hỏi acknowledgement nào**:
+
+- **`publishedSignals`** — đổi freshness / chính sách stale / publisher đổi hành
+  vi của **mọi** consumer khi mất dữ liệu, và **không nhìn thấy được** trong diff
+  mã nguồn. Trước bản vá `SIGNAL` rơi vào nhánh mặc định `SOURCE`.
+- **`controlLibrary`** — đổi library đổi thân của mọi POU tham chiếu nó.
+- **`programSet`** — thêm/bớt Program đổi **tập** chương trình chạy trên thiết
+  bị; khác hẳn sửa thân một Program đã có, nên nó là một category riêng chứ
+  không phải một dòng `SOURCE`.
+- **`enableIntent`** — Program **đang Enabled** mà Revision này chạm tới. Đọc
+  intent bền vững ở store chứ không suy từ diff: "đang chạy" là trạng thái của
+  **thiết bị**, không phải thuộc tính của một Revision.
+
+**Nhóm vắng mặt là `UNAVAILABLE`, không phải `NONE`.** Một BE cũ hơn (hoặc một
+nhóm mới chưa nối) gửi thiếu nhóm thì Commission **fail-closed**. Coi "không
+thấy" là "không có" đúng là cách để một tác động thật đi qua mà không ai xác
+nhận. FE đọc phòng thủ nên trang vẫn sống thay vì trắng màn hình.
+
+**Khoá ack là enum đóng ở một chỗ.** Bản trước liệt kê bốn khoá bằng bốn phép so
+`!=` nối nhau — đúng dạng dễ thêm nhóm mà quên sửa phép kiểm.
+
+**Kiểu TS sinh từ enum của contract.** `ProgrammingImpact` trước đây viết cứng
+bốn trường trong generator, nên thêm nhóm ở contract mà quên sửa generator sẽ cho
+một kiểu **im lặng thiếu trường**. Nay sinh từ `ProgrammingImpactKey`.
+
+**Ack trong test dựng từ chính impact vừa tính**, không viết cứng danh sách: viết
+cứng làm mọi lần thêm nhóm phải sửa tay, và lần quên đầu tiên hiện ra dưới dạng
+"test hỏng" thay vì "Commission thiếu ack".
+
+**Ranh giới trung thực.** `impactRef` đã băm cả nội dung nhóm nên ack cũ tự thành
+stale — điều đó có sẵn từ trước, task này chỉ mở rộng thứ được băm. Thứ tự items
+được sắp để thứ tự đọc DB không lọt vào `impactRef`. FE hiện đủ tám nhóm; usability
+người thật thuộc `T59-503`.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.14 |
+| Phiên bản | 4.15 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-21 |
 | Chủ quản | Product + Architecture + QA |
@@ -702,6 +702,16 @@ Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
 Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
+### 5.50 Cập nhật treatment source `T59-502` (Plan59 W5)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-012` | **Lỗi thật đã sửa:** `SIGNAL` không nằm trong whitelist kind của `revision_objects`, nên `SealRevision` từ chối MỌI Revision có Published Signal — toàn bộ lane signal (`T59-304` validate, `T59-404` bus) chưa từng chạm một Revision thật. Migration **v11** mở whitelist và khôi phục đúng hai trigger bất biến | Nghiệm thu signal đầu-cuối trên target (`T59-702`), Test Result `VS-PROG-U08` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Impact/ack phủ **tám** nhóm: bốn nhóm Rev A cộng `publishedSignals`/`controlLibrary`/`programSet`/`enableIntent`. Đổi chính sách stale, đổi library, thêm/bớt Program, hay chạm Program **đang Enabled** nay đều phải được xác nhận; trước bản vá cả bốn đi qua Commission mà không hỏi gì | Usability người thật trên FE (`T59-503`), Test Result `VS-PROG-019` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Nhóm impact **vắng mặt** = `UNAVAILABLE`, không phải `NONE`: coi "không thấy" là "không có" đúng là cách để một tác động thật đi qua mà không ai xác nhận. Khoá ack là enum đóng một chỗ; kiểu TS sinh **từ enum contract** thay vì viết cứng | E2E real-backend (`T59-505`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -754,6 +764,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 4.15 | 2026-08-21 | Ghi `T59-502` (Plan59 W5) cho treatment partial RSK-008/012/014: impact/ack phủ tám nhóm cho mô hình đa Program; sửa lỗi `SIGNAL` chưa từng seal được vào Revision (migration v11); nhóm vắng mặt fail-closed. Giữ 22/22 Open vì nghiệm thu signal trên target và usability chưa có. |
 | 4.14 | 2026-08-21 | Bổ sung `T59-408` sau khi cổng W5 lộ ra đường đọc trace chưa nối: BE nay rút mẫu từ ring của Core qua `TRACE_READ`, không trộn nguồn, không vẽ ô không đo được thành 0, số mẫu rơi hiện ra. Giữ 22/22 Open. |
 | 4.13 | 2026-08-21 | Ghi `T59-501` (Plan59 W5, **mở Wave**) cho treatment partial RSK-014/022: barrier chu kỳ đầu và rollback lên mức gói, LKG all-or-nothing, restart bốn pha không để lại active một nửa; ba hồi quy FE/E2E của W3 lộ ra ở lần đầu chạy cổng `e2e` và đã sửa. Giữ 22/22 Open vì mô phỏng mất điện thật trên board chưa có. |
 | 4.12 | 2026-08-21 | Ghi `ADR-051` (ký TTL hold-last 60 s) cho treatment partial RSK-002/006: đóng mục treo cuối của `T59-406`. TTL đo bằng đồng hồ chứ không đếm base step, đo tuổi của LỆNH nên phủ cả `ROLLED_BACK`/Task-bị-disable, mặc định `ScanDeps` là giá trị đã ký thay vì `0`. Giữ 22/22 Open: ký số không hạ residual khi chưa đo trên phần cứng thật. |

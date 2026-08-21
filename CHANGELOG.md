@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### T59-502 — Impact/ack cho mô hình đa Program (2026-08-21)
+
+- **Phạm vi:** `apps/web-api/internal/programming/store/{commands.go,schema.go}`,
+  `migrations/0011_revision_signal_objects.sql` (mới),
+  `apps/web-api/internal/programming/application/{changes.go,operations.go}`,
+  `apps/web-ui/src/features/programming/commission/CheckCommissionPage.tsx`,
+  `apps/web-ui/scripts/generate-programming-client.mjs`,
+  `contracts/openapi/openapi.yaml`, `contracts/programming/*`,
+  Plan 59 §3/§3.6, Risk Register v4.15, Traceability v6.3, manifest v1.36.
+- **Lỗi thật — Published Signal chưa từng seal được.** `revisionPayload` sinh
+  object kind `SIGNAL`, nhưng `SIGNAL` **không nằm trong** whitelist kind của
+  `revision_objects` (danh sách viết từ migration v1, trước khi Published Signal
+  tồn tại). `SealRevision` từ chối **mọi** Revision có signal với "CHECK
+  constraint failed". Toàn bộ lane signal — validate ở Check (`T59-304`), đóng
+  gói (`T59-404`), bus runtime — **chưa từng chạm một Revision thật**. Không test
+  nào bắt được vì chưa test nào seal một Revision có signal. Migration **v11** mở
+  whitelist và khôi phục đúng hai trigger bất biến của bảng.
+- **Bốn nhóm impact mới:** `publishedSignals`, `controlLibrary`, `programSet`,
+  `enableIntent`. Trước bản vá cả bốn đi qua Commission mà **không hỏi
+  acknowledgement nào** — đáng kể nhất là đổi chính sách stale, thứ đổi hành vi
+  của mọi consumer khi mất dữ liệu và **không nhìn thấy được** trong diff mã
+  nguồn.
+- **`enableIntent` đọc intent bền vững ở store**, không suy từ diff: "đang chạy"
+  là trạng thái của **thiết bị**, không phải thuộc tính của một Revision.
+- **Nhóm vắng mặt = `UNAVAILABLE`, không phải `NONE`.** Coi "không thấy" là
+  "không có" đúng là cách để một tác động thật đi qua mà không ai xác nhận. FE
+  đọc phòng thủ nên trang vẫn sống thay vì trắng màn hình.
+- **Khoá ack là enum đóng ở một chỗ** (trước là bốn phép so `!=` nối nhau), và
+  kiểu TS `ProgrammingImpact` nay **sinh từ enum contract** thay vì viết cứng bốn
+  trường trong generator — viết cứng làm thêm nhóm ở contract mà quên sửa
+  generator cho một kiểu im lặng thiếu trường.
+- **Kiểm chứng (HOST/LOCAL):** `scripts/verify-project.sh --wave W5` **7/7 PASS**;
+  test mới khoá impact signal/programSet/enableIntent và `impactRef` đổi khi nội
+  dung nhóm đổi; `verify_programming_g1_contracts.py` 10/10;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.6 `T59-502`, `RSK-PROG-008/012/014`, DDD §4.5/§10.
+
 ### FIX DEBUG — đường đọc trace của Core chưa nối tới người dùng (2026-08-21)
 
 - **Phạm vi:** `apps/web-api/internal/programming/application/trace.go`,
