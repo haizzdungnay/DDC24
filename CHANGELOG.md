@@ -8,6 +8,20 @@
 
 ## [Unreleased]
 
+### T59-604 — Flake e2e không phải lỗi spec, là đói CPU (2026-08-21)
+
+- **Phạm vi:** `apps/web-ui/e2e/point-names.spec.ts`, Plan 59 §3.
+- **Root cause:** mọi lần đỏ đều rơi vào `point-names.spec.ts`, chết ở
+  `locator.fill` sau 30 s. Đối chiếu thời điểm: các lần đỏ **trùng đúng lúc một
+  build song song chiếm hết lõi CPU** — vite biên dịch theo yêu cầu lâu hơn
+  timeout của cả test. Bốn lần chạy khi máy rảnh: 79/79 mỗi lần.
+- **Fixed:** helper đăng nhập chờ ĐIỀU KIỆN (`toBeEditable`, 60 s) thay vì đua
+  với dev server. Hết hạn ở đó nay nói "trang chưa sẵn sàng", không nói "điền
+  không được" — hai nguyên nhân khác nhau, hai cách sửa khác nhau.
+- **Kiểm chứng:** spec 18/18 hai lần liên tiếp **khi máy đang tải nặng** (load
+  ~10). Chuỗi 5 lần chạy sạch liên tiếp vẫn cần máy không chia sẻ nên `T59-604`
+  giữ `PARTIAL` — đo trên máy có phiên khác build là đo nhiễu, không đo hệ.
+
 ### T59-606 / T59-604 — Binary không dựng lại được; cách ly e2e đã cũ (2026-08-21)
 
 - **Phạm vi:** `CMakeLists.txt`, `scripts/verify_release_reproducible.py` (mới),

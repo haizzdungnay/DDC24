@@ -38,7 +38,15 @@ async function login(page: Page) {
   // navigator.language — xem playwright.config.ts và network-qa.spec.ts).
   await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'en'))
   await page.goto('/login')
-  await page.getByLabel('Username', { exact: true }).fill('admin')
+  // T59-604: chờ ĐIỀU KIỆN, không đua với dev server. `fill()` tự chờ element
+  // editable nhưng tính vào timeout của cả test (30 s); khi máy build song song
+  // chiếm hết CPU, vite biên dịch theo yêu cầu lâu hơn ngần ấy và test chết ở
+  // `fill` — triệu chứng trông như flake của chính spec, thật ra là đói CPU.
+  // Chờ tường minh tách hai thứ đó ra: hết hạn ở đây nói "trang chưa sẵn sàng",
+  // không nói "điền không được".
+  const username = page.getByLabel('Username', { exact: true })
+  await expect(username).toBeEditable({ timeout: 60_000 })
+  await username.fill('admin')
   await page.getByLabel('Password', { exact: true }).fill('e2e')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).not.toHaveURL(/\/login$/)
