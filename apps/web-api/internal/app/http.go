@@ -336,7 +336,7 @@ func (a *App) routeTable() []webRouter.Route {
 	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, programminghttp.Services{
 		Library: a.programmingLibrary, Projects: a.programmingProjects,
 		Checks: a.programmingChecks, Operations: a.programmingOperations,
-		Runtime: a.programmingRuntime})
+		Runtime: a.programmingRuntime, Intents: a.programmingIntents})
 	return routes
 }
 

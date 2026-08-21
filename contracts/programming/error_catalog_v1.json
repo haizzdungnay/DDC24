@@ -504,41 +504,6 @@
   ],
   "componentDetails": [
     {
-      "component": "st-control-api",
-      "detailCode": "API-E-001",
-      "publicCode": "PRG-ERR-REQ-001"
-    },
-    {
-      "component": "st-control-api",
-      "detailCode": "API-E-002",
-      "publicCode": "PRG-ERR-REQ-001"
-    },
-    {
-      "component": "st-control-api",
-      "detailCode": "API-E-003",
-      "publicCode": "PRG-ERR-TARGET-001"
-    },
-    {
-      "component": "st-control-api",
-      "detailCode": "API-E-004",
-      "publicCode": "PRG-ERR-OP-001"
-    },
-    {
-      "component": "st-control-api",
-      "detailCode": "API-E-005",
-      "publicCode": "PRG-ERR-ARTIFACT-001"
-    },
-    {
-      "component": "st-control-api",
-      "detailCode": "API-E-006",
-      "publicCode": "PRG-ERR-ARTIFACT-001"
-    },
-    {
-      "component": "st-control-api",
-      "detailCode": "API-E-007",
-      "publicCode": "PRG-ERR-UNAVAILABLE-001"
-    },
-    {
       "component": "artifact-loader",
       "detailCode": "IR-E-001",
       "publicCode": "PRG-ERR-ARTIFACT-001"
@@ -614,10 +579,289 @@
       "publicCode": "PRG-ERR-ARTIFACT-001"
     },
     {
-      "component": "core-ipc",
-      "detailCode": "IPC-CONTRACT-ONLY",
-      "publicCode": "PRG-ERR-UNAVAILABLE-001",
-      "contractOnly": true
+      "component": "compiler",
+      "detailCode": "ST-CLI-ARGS",
+      "publicCode": "PRG-ERR-REQ-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-IO",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-KEY",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-LIMIT",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-SANDBOX",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-TOOLARGE",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-001",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-002",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-003",
+      "publicCode": "PRG-ERR-MAP-004"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-004",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-005",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-006",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-007",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-008",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LEX-001",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LEX-002",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LEX-003",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIB-001",
+      "publicCode": "PRG-ERR-LIB-VERSION-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIB-002",
+      "publicCode": "PRG-ERR-LIB-VERSION-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIB-003",
+      "publicCode": "PRG-ERR-POU-RECURSION-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-001",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-002",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-003",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-004",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-005",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-006",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-007",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-008",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-009",
+      "publicCode": "PRG-ERR-PROGRAM-LIMIT-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-OWN-001",
+      "publicCode": "PRG-ERR-OUTPUT-OWNER-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-PID-001",
+      "publicCode": "PRG-ERR-PID-REVIEW-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-POU-001",
+      "publicCode": "PRG-ERR-POU-KIND-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-POU-002",
+      "publicCode": "PRG-ERR-POU-KIND-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-POU-003",
+      "publicCode": "PRG-ERR-POU-RECURSION-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-POU-004",
+      "publicCode": "PRG-ERR-PROGRAM-LIMIT-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-001",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-002",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-003",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-004",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-005",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-006",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-007",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-008",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-009",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-010",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-011",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-012",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-013",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-014",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SIG-001",
+      "publicCode": "PRG-ERR-SIGNAL-PUBLISHER-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SIG-002",
+      "publicCode": "PRG-ERR-MAP-004"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SIG-003",
+      "publicCode": "PRG-ERR-SIGNAL-FRESHNESS-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SIG-004",
+      "publicCode": "PRG-ERR-SIGNAL-PUBLISHER-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SYN-001",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SYN-002",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-WORKER-CRASH",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-WORKER-TIMEOUT",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
     },
     {
       "component": "core-ipc",
@@ -628,6 +872,12 @@
       "component": "core-ipc",
       "detailCode": "IPC-ACTIVATE-ARM",
       "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-CONTRACT-ONLY",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001",
+      "contractOnly": true
     },
     {
       "component": "core-ipc",
@@ -711,6 +961,11 @@
     },
     {
       "component": "core-ipc",
+      "detailCode": "IPC-RUNTIME-STATE",
+      "publicCode": "PRG-ERR-CONFLICT-001"
+    },
+    {
+      "component": "core-ipc",
       "detailCode": "IPC-STAGE-REJECTED",
       "publicCode": "PRG-ERR-ARTIFACT-001"
     },
@@ -740,6 +995,11 @@
       "publicCode": "PRG-ERR-ARTIFACT-001"
     },
     {
+      "component": "core-ipc",
+      "detailCode": "IPC-UNKNOWN-INSTANCE",
+      "publicCode": "PRG-ERR-NOT-FOUND-001"
+    },
+    {
       "component": "retain",
       "detailCode": "RT-RETAIN-001",
       "publicCode": "PRG-ERR-RETAIN-001"
@@ -758,221 +1018,6 @@
       "component": "retain",
       "detailCode": "RT-RETAIN-004",
       "publicCode": "PRG-ERR-RETAIN-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LEX-001",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LEX-002",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LEX-003",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SYN-001",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SYN-002",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-001",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-002",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-003",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-004",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-005",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-006",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-007",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-008",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-009",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-010",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-011",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-012",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-013",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SEM-014",
-      "publicCode": "PRG-ERR-CHECK-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LIM-001",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LIM-002",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LIM-003",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LIM-004",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LIM-005",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LIM-006",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LIM-007",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LIM-008",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-IOMAP-001",
-      "publicCode": "PRG-ERR-MAP-003"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-IOMAP-002",
-      "publicCode": "PRG-ERR-MAP-003"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-IOMAP-003",
-      "publicCode": "PRG-ERR-MAP-004"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-IOMAP-004",
-      "publicCode": "PRG-ERR-MAP-003"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-IOMAP-005",
-      "publicCode": "PRG-ERR-MAP-003"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-IOMAP-006",
-      "publicCode": "PRG-ERR-MAP-003"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-IOMAP-007",
-      "publicCode": "PRG-ERR-MAP-003"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-IOMAP-008",
-      "publicCode": "PRG-ERR-MAP-003"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-CLI-ARGS",
-      "publicCode": "PRG-ERR-REQ-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-CLI-IO",
-      "publicCode": "PRG-ERR-UNAVAILABLE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-CLI-KEY",
-      "publicCode": "PRG-ERR-UNAVAILABLE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-CLI-SANDBOX",
-      "publicCode": "PRG-ERR-UNAVAILABLE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-WORKER-CRASH",
-      "publicCode": "PRG-ERR-UNAVAILABLE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-WORKER-TIMEOUT",
-      "publicCode": "PRG-ERR-UNAVAILABLE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-CLI-LIMIT",
-      "publicCode": "PRG-ERR-SCOPE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-CLI-TOOLARGE",
-      "publicCode": "PRG-ERR-SCOPE-001"
     },
     {
       "component": "runtime",
@@ -1025,69 +1070,39 @@
       "publicCode": "PRG-ERR-COM-001"
     },
     {
-      "component": "compiler",
-      "detailCode": "ST-POU-001",
-      "publicCode": "PRG-ERR-POU-KIND-001"
+      "component": "st-control-api",
+      "detailCode": "API-E-001",
+      "publicCode": "PRG-ERR-REQ-001"
     },
     {
-      "component": "compiler",
-      "detailCode": "ST-POU-002",
-      "publicCode": "PRG-ERR-POU-KIND-001"
+      "component": "st-control-api",
+      "detailCode": "API-E-002",
+      "publicCode": "PRG-ERR-REQ-001"
     },
     {
-      "component": "compiler",
-      "detailCode": "ST-POU-003",
-      "publicCode": "PRG-ERR-POU-RECURSION-001"
+      "component": "st-control-api",
+      "detailCode": "API-E-003",
+      "publicCode": "PRG-ERR-TARGET-001"
     },
     {
-      "component": "compiler",
-      "detailCode": "ST-POU-004",
-      "publicCode": "PRG-ERR-PROGRAM-LIMIT-001"
+      "component": "st-control-api",
+      "detailCode": "API-E-004",
+      "publicCode": "PRG-ERR-OP-001"
     },
     {
-      "component": "compiler",
-      "detailCode": "ST-LIB-001",
-      "publicCode": "PRG-ERR-LIB-VERSION-001"
+      "component": "st-control-api",
+      "detailCode": "API-E-005",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
     },
     {
-      "component": "compiler",
-      "detailCode": "ST-LIB-002",
-      "publicCode": "PRG-ERR-LIB-VERSION-001"
+      "component": "st-control-api",
+      "detailCode": "API-E-006",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
     },
     {
-      "component": "compiler",
-      "detailCode": "ST-LIB-003",
-      "publicCode": "PRG-ERR-POU-RECURSION-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SIG-001",
-      "publicCode": "PRG-ERR-SIGNAL-PUBLISHER-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SIG-002",
-      "publicCode": "PRG-ERR-MAP-004"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SIG-003",
-      "publicCode": "PRG-ERR-SIGNAL-FRESHNESS-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-SIG-004",
-      "publicCode": "PRG-ERR-SIGNAL-PUBLISHER-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-OWN-001",
-      "publicCode": "PRG-ERR-OUTPUT-OWNER-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-PID-001",
-      "publicCode": "PRG-ERR-PID-REVIEW-001"
+      "component": "st-control-api",
+      "detailCode": "API-E-007",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
     },
     {
       "component": "st-control-api",
@@ -1098,11 +1113,6 @@
       "component": "st-control-api",
       "detailCode": "API-E-009",
       "publicCode": "PRG-ERR-PROGRAM-STATE-001"
-    },
-    {
-      "component": "compiler",
-      "detailCode": "ST-LIM-009",
-      "publicCode": "PRG-ERR-PROGRAM-LIMIT-001"
     }
   ]
 }

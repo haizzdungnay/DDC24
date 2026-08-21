@@ -77,6 +77,7 @@ type App struct {
 	programmingChecks     *programmingapplication.CheckService
 	programmingOperations *programmingapplication.OperationService
 	programmingRuntime    *programmingapplication.RuntimeService
+	programmingIntents    *programmingapplication.RuntimeIntentService
 	// Plan 57 Wave 3
 	preferences   *UserPreferenceStore
 	systemHistory *SystemHistoryRing
@@ -154,6 +155,17 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming Library service: %w", libraryErr)
 		}
+		intents, intentErr := programmingapplication.NewRuntimeIntentService(
+			programmingapplication.RuntimeIntentServiceOptions{
+				Store:        store,
+				Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
+				ControllerID: cfg.ProgrammingTargetID,
+			})
+		if intentErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming Runtime Intent service: %w", intentErr)
+		}
+		app.programmingIntents = intents
 		app.programmingStore = store
 		app.programmingLibrary = library
 		app.programmingProjects = projects

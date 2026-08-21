@@ -28,11 +28,12 @@ func TestRegisterProgrammingRoutesHonorsFeatureFlag(t *testing.T) {
 		t.Fatalf("enabled routes = %d; want %d", len(routes), len(routeDefinitions))
 	}
 	// Con số này là contract, không phải chi tiết: 25 route Rev A + 3 route
-	// Control Library của T59-202. Thêm route mà quên OpenAPI/client sẽ đỏ ở
+	// Control Library của T59-202 + 2 route intent Enable/Disable của T59-405.
+	// Thêm route mà quên OpenAPI/client sẽ đỏ ở
 	// `TestRegisteredRoutesMatchProgrammingOpenAPI`; thêm route mà quên cả hai
 	// nơi thì đỏ ở đây.
-	if len(routes) != 28 {
-		t.Fatalf("contract route count = %d; want 28", len(routes))
+	if len(routes) != 30 {
+		t.Fatalf("contract route count = %d; want 30", len(routes))
 	}
 }
 

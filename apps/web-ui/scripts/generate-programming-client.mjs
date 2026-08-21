@@ -36,8 +36,8 @@ for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
 }
 
 endpoints.sort((left, right) => left.operationId.localeCompare(right.operationId));
-if (endpoints.length !== 28) {
-  throw new Error(`Programming OpenAPI phải có 28 operation, thực tế ${endpoints.length}`);
+if (endpoints.length !== 30) {
+  throw new Error(`Programming OpenAPI phải có 30 operation, thực tế ${endpoints.length}`);
 }
 if (new Set(endpoints.map(({ operationId }) => operationId)).size !== endpoints.length) {
   throw new Error("Programming OpenAPI có operationId trùng");

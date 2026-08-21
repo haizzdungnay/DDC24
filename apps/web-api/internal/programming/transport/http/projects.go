@@ -249,6 +249,14 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 		WriteProgrammingError(w, domain.DefaultHTTPStatus(libraryPublic.Code), libraryPublic, correlationID)
 		return
 	}
+	// Trần Program giữ mã riêng tới tận HTTP: người vận hành cần biết CON SỐ
+	// trần, không chỉ biết là request sai.
+	var programLimit *programmingapplication.ProgramLimitError
+	if errors.As(err, &programLimit) {
+		WriteProgrammingError(w, http.StatusConflict,
+			domain.NewPublicError(domain.ErrProgramLimit), correlationID)
+		return
+	}
 	switch {
 	case errors.As(err, &operationError):
 		public = operationError.Public

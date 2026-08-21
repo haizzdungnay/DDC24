@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.23.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.24.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -134,10 +134,12 @@ export const PROGRAMMING_ENDPOINTS = {
   "listProgrammingAudit": { method: "GET", path: "/api/v1/programming/audit", roles: ["viewer","operator","admin"] },
   "listProgrammingOperations": { method: "GET", path: "/api/v1/programming/operations", roles: ["viewer","operator","admin"] },
   "listProgrammingOverrides": { method: "GET", path: "/api/v1/programming/overrides", roles: ["viewer","operator","admin"] },
+  "listProgrammingProgramIntents": { method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", roles: ["viewer","operator","admin"] },
   "listProgrammingProjects": { method: "GET", path: "/api/v1/programming/projects", roles: ["viewer","operator","admin"] },
   "resetProgrammingRetain": { method: "POST", path: "/api/v1/programming/retain/reset", roles: ["admin"] },
   "restoreProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/restore", roles: ["admin"] },
   "searchProgrammingLibraries": { method: "GET", path: "/api/v1/programming/libraries", roles: ["viewer","operator","admin"] },
+  "setProgrammingProgramIntent": { method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent", roles: ["admin"] },
   "stopProgrammingTrace": { method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["admin"] },
   "updateProgrammingDraft": { method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", roles: ["admin"] },
   "upsertProgrammingLibraryEntry": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", roles: ["admin"] },

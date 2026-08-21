@@ -56,6 +56,13 @@ var routeDefinitions = []routeDefinition{
 	{method: "POST", path: "/api/v1/programming/bundles/export", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 	{method: "POST", path: "/api/v1/programming/bundles/import", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, maxBodyBytes: maxBundleMutationBodyBytes},
 	{method: "POST", path: "/api/v1/programming/retain/reset", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
+	// T59-405 — intent Enable/Disable. `PUT` chứ không phải hai route
+	// `enable`/`disable`: intent là một TRẠNG THÁI mong muốn, và hai động từ
+	// riêng sẽ làm việc "đặt lại đúng thứ đang có" trở thành hai request khác
+	// nhau tuỳ giá trị hiện tại.
+	{method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", role: auth.RoleViewer},
+	{method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/audit", role: auth.RoleViewer},
 }
 
@@ -68,6 +75,7 @@ type Services struct {
 	Checks     *programmingapplication.CheckService
 	Operations *programmingapplication.OperationService
 	Runtime    *programmingapplication.RuntimeService
+	Intents    *programmingapplication.RuntimeIntentService
 }
 
 func RegisterProgrammingRoutes(routes *[]webrouter.Route, enabled bool, provided ...Services) {
@@ -102,6 +110,9 @@ func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition
 		return
 	}
 	if services.Runtime != nil && handleRuntimeRequest(w, r, correlationID, services.Runtime) {
+		return
+	}
+	if services.Intents != nil && handleProgramIntentRequest(w, r, correlationID, services.Intents) {
 		return
 	}
 	if services.Projects != nil && handleProjectRequest(w, r, correlationID, services.Projects) {
