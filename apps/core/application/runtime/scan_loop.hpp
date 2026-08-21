@@ -29,6 +29,7 @@
 #include "st/st_process_image.hpp"
 #include "st/st_scheduler.hpp"
 #include "programming/programming_cutover.hpp"
+#include "programming/program_candidate_registry.hpp"
 #include "programming/programming_runtime_coordinator.hpp"
 #include "ipc/web_ipc.hpp"
 
@@ -71,6 +72,10 @@ struct ScanDeps {
      * decision (§15) — giữ hold-last KHÔNG GIỚI HẠN như hành vi trước
      * TASK-PROG-401, không đổi bootstrap hiện hành nếu caller không set. */
     uint64_t          program_hold_ttl_base_steps = 0;
+    /* T59-406: sổ đăng ký candidate output theo Program (kiến trúc §7). Nó chỉ
+     * GHI NHẬN quyền sở hữu và lý do rút — trọng tài vẫn là `PriorityResolver`.
+     * nullptr = không ghi sổ, hành vi y hệt trước. */
+    programming::ProgramCandidateRegistry* candidate_registry = nullptr;
 };
 
 class ScanLoop {

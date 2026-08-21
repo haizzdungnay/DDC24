@@ -723,6 +723,14 @@ bool ProgrammingRuntimeCoordinator::stage_impl(const StageCommand& command, bool
         return false;
     }
     if (!rebuild_signal_bus(signals, detail_code, error)) return false;
+    /* Gói mới đến, quyền sở hữu cũ hết hiệu lực. Ghi lý do trước khi xoá để
+     * dấu vết "vì sao van này đổi chủ" không biến mất cùng gói cũ. */
+    if (candidates_ != nullptr) {
+        for (const std::string& id : instance_ids_)
+            candidates_->withdraw_instance(id, CandidateWithdrawReason::PACKAGE_REPLACED,
+                                           scheduler_->base_step_count());
+        candidates_->clear();
+    }
     /* Stage TỪNG Program. Một Program hỏng làm cả package hỏng, và mọi Program
      * đã stage trước đó phải được huỷ — nạp nửa gói là nạp một cấu hình chưa
      * từng được Check. */

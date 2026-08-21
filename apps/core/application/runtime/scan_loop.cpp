@@ -202,6 +202,19 @@ void ScanLoop::step()
                               &st_io_stats_);
         st_tick_ = d_.st_sched->on_base_step(clock.monotonic_ns);
         PointWriter program_writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
+        /* Đăng ký quyền sở hữu TRƯỚC khi publish: hai Program cùng giữ một
+         * output vật lý là hai nguồn sự thật cho cùng một van, và phát hiện điều
+         * đó SAU khi đã ghi ra thì đã muộn. */
+        if (d_.candidate_registry != nullptr) {
+            const uint64_t generation = d_.st_sched->base_step_count();
+            for (const auto& task : d_.st_sched->tasks())
+                for (const auto& program : task->programs()) {
+                    if (program->state != StProgramState::RUNNING) continue;
+                    std::string claim_error;
+                    (void)st_register_instance_candidates(*program, d_.candidate_registry,
+                                                          generation, &claim_error);
+                }
+        }
         const bool outputs_committed =
             st_apply_all_outputs(d_.st_sched, d_.resolver, &program_writer, &st_io_stats_);
         if (d_.programming_coordinator)
@@ -211,7 +224,7 @@ void ScanLoop::step()
          * vừa publish thành công đã reset outputs_withdrawn ở trên, nên
          * instance vẫn đang chạy tốt không bị rút nhầm. */
         st_withdraw_stale_outputs(d_.st_sched, d_.resolver, d_.program_hold_ttl_base_steps,
-                                  &st_io_stats_);
+                                  d_.candidate_registry, &st_io_stats_);
     }
 
     if (d_.alarms)

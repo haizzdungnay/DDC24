@@ -9,6 +9,7 @@
 #include "programming/programming_cutover.hpp"
 #include "priority/priority_resolver.hpp"
 #include "st/st_journal.hpp"
+#include "programming/program_candidate_registry.hpp"
 #include "st/st_package_v2.hpp"
 #include "st/st_scheduler.hpp"
 
@@ -116,6 +117,13 @@ public:
      * áp dụng, sau đó force-flush persisted image (`retain_service()->flush(true)`,
      * bỏ qua cửa sổ autosave 60s) trước khi trả về. Không giả định thành
      * công khi timeout — trả `TIMED_OUT` riêng biệt (§7). */
+    /* T59-406 — sổ candidate output. Coordinator XOÁ SẠCH sổ mỗi lần nạp gói
+     * mới: giữ claim của gói cũ nghĩa là trả lời sai câu "ai đang giữ điểm này",
+     * và câu đó là câu đầu tiên người vận hành hỏi khi một van không nghe lệnh.
+     * nullptr = không ghi sổ. */
+    void set_candidate_registry(ProgramCandidateRegistry* registry) { candidates_ = registry; }
+    ProgramCandidateRegistry* candidate_registry() const { return candidates_; }
+
     /* Áp intent Enable/Disable lên đúng một Program. Trả false + `*detail_code`
      * khi instance không có, khi trạng thái không cho phép, hoặc khi vượt trần
      * 16 Program chạy đồng thời. */
@@ -198,6 +206,7 @@ private:
      * định dạng journal ở đây sẽ làm mọi bản ghi cũ không đọc được. */
     std::string instance_id_ = "program-main";
     std::vector<std::string> instance_ids_{"program-main"};
+    ProgramCandidateRegistry* candidates_ = nullptr;
     std::string detail_code_;
     uint64_t artifact_byte_size_ = 0;
     bool staged_restore_ = false;

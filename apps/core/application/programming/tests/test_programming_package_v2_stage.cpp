@@ -517,3 +517,32 @@ TEST(ProgrammingPackageV2Stage, SetProgramEnabledAppliesToOneInstance)
     EXPECT_FALSE(coordinator.set_program_enabled(enable, &detail, &error));
     EXPECT_EQ(detail, "IPC-PAYLOAD");
 }
+
+/* T59-406 — nạp gói mới xoá sổ candidate, kèm lý do `PACKAGE_REPLACED`. Giữ
+ * claim của gói cũ nghĩa là trả lời SAI câu "ai đang giữ điểm này". */
+TEST(ProgrammingPackageV2Stage, NewPackageClearsCandidateOwnership)
+{
+    TempTree tree;
+    ASSERT_FALSE(tree.path.empty());
+    std::filesystem::create_directories(std::filesystem::path(tree.path) / "staging");
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_task(&scheduler);
+    ProgramCandidateRegistry registry;
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                               tree.path + "/staging");
+    coordinator.set_candidate_registry(&registry);
+    std::string error;
+    ASSERT_TRUE(coordinator.recover(&error)) << error;
+
+    std::string claim_error;
+    ASSERT_TRUE(registry.claim("P_old", PointKind::AO, 1, 1, &claim_error)) << claim_error;
+    EXPECT_EQ(registry.owner_of(PointKind::AO, 1), "P_old");
+
+    const StageCommand command =
+        write_candidate(tree, kOperation, kRevision, package_of({"P_ahu"}, {1000u}), "P_ahu");
+    std::string detail;
+    ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
+    EXPECT_EQ(registry.size(), 0u) << "sổ giữ quyền sở hữu của gói cũ";
+    EXPECT_EQ(registry.owner_of(PointKind::AO, 1), "");
+}
