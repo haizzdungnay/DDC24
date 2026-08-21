@@ -1953,9 +1953,9 @@ hai** (đã đọc ring **và** mẫu đã ghi); chạy lặp 5 lần đều xan
 | `T59-601` | P1 | ST↔FBD corpus mọi registry entry + state traces; 3 fuzz harness CI | T59-105/106 | **DONE (HOST/LOCAL)** | Corpus phủ **40/40 entry** registry (20→35 cặp stateless + 5 trace nhiều chu kỳ), kiểm phủ **hai chiều** tính từ chính registry sinh máy nên entry mới không có vector sẽ đỏ. **Ba lỗi thật lộ ra ngay khi corpus chạm tới vùng chưa ai chạy:** (1) `compile_fbd_source` không có affordance `enforce_review_gate` như ST ⇒ nhánh lower **PID sang FBD chưa từng được một vector nào chạy**; (2) corpus cũ dựng node `FUNCTION` cho entry chuyển kiểu trong khi model đòi kind `CONVERSION`; (3) verifier hợp đồng FBD thiếu `SQRT` trong danh sách chép tay. Harness fuzz FBD có trong repo nhưng **không job CI nào chạy** — nay chạy cùng parser/loader. `ctest` **1213/1213**; `verify_programming_fbd_contract.py` PASS. Chi tiết §3.7. |
 | `T59-602` | P0 | Artifact/library trust SIGNED + key custody/rotation/rollback | T59-106/204 | **PARTIAL — cơ chế xong, bật SIGNED còn chờ chữ ký** | Bộ test tin cậy đi trọn vòng đời: ký hợp lệ, **ký lại bằng khoá lạ sau khi tính lại hash** (mối đe doạ mà `HASH_ONLY` KHÔNG chặn), sửa byte, rotation **có cửa sổ overlap**, rollback về LKG ký bằng khoá cũ, và đóng cửa sổ. Verify nay nhận **TẬP** khoá tin cậy — đổi khoá tức thời sẽ chặn đúng đường lùi mà cơ chế tồn tại để bảo vệ. **Lỗi thật:** `st_public_key_is_test_key()` có sẵn từ lâu nhưng **không nơi nào gọi**, nên "release phải dùng khoá thật" chỉ là một câu trong tài liệu; nay bootstrap log CRITICAL và `build-release.sh` chặn bằng `--st-key-info` (lab mở bằng `MKDDC_ALLOW_TEST_KEY=1`, ghi vào provenance). `ctest` **1220/1220**. **Còn chặn:** bật `SIGNATURE_REQUIRED` production cần Security+Product chốt **ký ở đâu và khoá riêng nằm ở đâu** (`DDD-ARTIFACT-TRUST-PROG-001` §2/§3 cố ý để mở) — không phải thiếu mã. Chi tiết §3.7. |
 | `T59-603` | P1 | Security/RBAC/audit/malicious input/concurrency full matrix | T59-202/405/501 | **DONE (HOST/LOCAL)** | Ma trận RBAC **sinh từ `routeDefinitions`**, không chép tay: 30/30 route kiểm chưa-xác-thực → 401 và handler **không được gọi** (zero mutation ở mức mạnh hơn "store không đổi"); 14/14 route mutation kiểm viewer → 403; chiều ngược lại kiểm route đọc không được đòi hơn viewer (siết quá tay cũng là lỗi, và không bao giờ tự lộ trong happy-path). Mutation check: hạ một route xuống viewer thì đỏ đúng dòng. Audit: `VerifyAuditChain` trước đây **chỉ từng chạy trên chuỗi lành** — một hàm luôn trả `nil` cũng qua; nay có test gỡ trigger rồi sửa/xoá và đòi chuỗi phải gãy, cộng test khẳng định trigger DB chặn UPDATE/DELETE. Đồng thời: 8 goroutine cùng idempotency key → đúng 1 Project, 1 dòng audit, chuỗi không gãy. Go `vet` + `test ./... -count=1` PASS. Chi tiết §3.7. |
-| `T59-604` | P1 | E2E stability, remove stale quarantine, deterministic workers/retry policy | T59-505 | ORDERED | 5 consecutive full runs; all spec included; retry không che deterministic defect. |
+| `T59-604` | P1 | E2E stability, remove stale quarantine, deterministic workers/retry policy | T59-505 | **PARTIAL — cách ly đã gỡ, ổn định CHƯA đạt** | Cách ly `point-names.spec.ts` là **cách ly cũ**: chạy lại 18/18 PASS — nguyên nhân đã được sửa trong W5 nhưng không ai gỡ, nên một spec LÀNH bị giữ ngoài cổng và mọi hồi quy sau đó trong file ấy không ai bắt. Nay danh sách rỗng và cổng **tự kiểm**: spec còn trong cách ly mà PASS thì cổng đỏ kèm yêu cầu gỡ. `retries: 0` giữ nguyên (retry che defect tất định). **Chưa đạt acceptance:** 5 lần chạy liên tiếp cho 64/79/79/78+1F/78+1F — bộ e2e **có flake thật**, chưa khoanh được nguyên nhân. Không tự nâng thành DONE. |
 | `T59-605` | P0 | Release packaging: Programming default ON, artifact/compiler/library/systemd/env | T59-501/602 | **DONE (HOST/LOCAL + TARGET DEPLOY)** | **Lỗi thật, kiểm chứng trên chính board Foxlinx:** `/usr/sbin/mkddc-st-package` **không tồn tại** trên bo — binary được build, có test riêng, nhưng chưa bao giờ được cài, trong khi BE gọi đúng đường dẫn đó ở bước Commission (`ProgrammingPackagerPath`). Cài + đưa vào `checksums.sha256`/`runtime-checksums`. `PROGRAMMING_REV_A=1` nay do `install.sh` ghi, **cả nhánh nâng cấp** (bo cũ có file env sẵn nên khối khởi tạo lần đầu không chạy — thiếu nhánh này thì bo cũ mãi ở trạng thái FE-bật/BE-tắt). 6/6 guard đóng gói PASS. Deploy thật lên board: core/web/st-compile/st-package/dist mới, ba service `active`, `/api/v1/programming/projects` trả **401** (route có, cờ ON) thay vì 404. Chi tiết §3.7. |
-| `T59-606` | P0 | RC reproducible build/provenance/SBOM/backup/restore/upgrade dry-run | T59-601..605 | ORDERED | Same source reproducible hashes or explained variance; dry-run fresh/upgrade/rollback PASS. |
+| `T59-606` | P0 | RC reproducible build/provenance/SBOM/backup/restore/upgrade dry-run | T59-601..605 | **PARTIAL — tái lập 7/7 + SBOM xong; dry-run cài/nâng cấp còn lại** | **Lỗi thật:** build hai lần vào hai thư mục cho ra `mkddc-iobus` KHÁC nhau; `strings` chỉ đúng nguyên nhân — đường dẫn tuyệt đối của mã bacnet-stack (FetchContent) bị nhúng vào binary qua `__FILE__`. Hệ quả không chỉ là hash lệch: bản phát hành mang đường dẫn máy người đóng gói và **bên thứ ba không dựng lại được để đối chiếu**. Vá bằng `-ffile-prefix-map` (thứ tự nguồn-trước-build vì build dir lồng trong source dir — bản vá đầu đặt ngược thứ tự nên vẫn lệch). Nay **7/7 artifact tái lập**. SBOM 92 component (cmake-fetchcontent/system/go/npm) sinh cùng gói, có ghi `resolvedFrom` để không nói dối về thư viện hệ thống của board. **Còn lại:** dry-run cài mới/nâng cấp/rollback thật cần `install.sh` nhận DESTDIR — chưa làm. |
 
 ### 3.7 Ghi chú thực thi W6
 
@@ -2094,6 +2094,38 @@ có hai lớp được tách bạch:
 một Project, đúng một dòng audit, và chuỗi audit không gãy.
 
 **Evidence level.** Host/local: `go vet ./...` + `go test ./... -count=1` PASS.
+
+#### `T59-604` / `T59-606` — Cách ly cũ, và một binary không dựng lại được
+
+**Cách ly cũ giấu một spec đã LÀNH.** `point-names.spec.ts` bị đưa ra ngoài cổng
+vì 14 test hỏng sẵn. Chạy lại 2026-08-21: **18/18 PASS**. Nguyên nhân đã được sửa
+ở đâu đó trong W5, nhưng cách ly thì không ai gỡ — và đó là dạng mục ruỗng thứ
+hai của một cổng: không chỉ giấu spec đang hỏng, nó giữ luôn spec đã lành ở ngoài
+để mọi hồi quy sau này trong file ấy không ai bắt. Nay cổng **tự kiểm**: spec còn
+trong danh sách cách ly mà chạy PASS thì cổng đỏ kèm yêu cầu gỡ.
+
+**Nhưng bộ e2e chưa ổn định, và không được nói là đã ổn định.** Năm lần chạy liên
+tiếp: 64 / 79 / 79 / 78+1F / 78+1F. Có flake thật, chưa khoanh được nguyên nhân,
+nên `T59-604` giữ `PARTIAL`. `retries` vẫn để `0`: bật retry ở đây sẽ biến đúng
+flake này thành màu xanh và xoá luôn tín hiệu.
+
+**`mkddc-iobus` không dựng lại được.** Build hai lần từ cùng một mã nguồn vào hai
+thư mục cho ra hai file khác nhau. `strings` chỉ thẳng nguyên nhân: đường dẫn
+tuyệt đối của mã `bacnet-stack` kéo về qua FetchContent bị nhúng vào binary
+(`__FILE__` trong assert/log của `ports/linux`). Hệ quả nặng hơn "hash lệch": gói
+phát hành mang theo đường dẫn máy build của người đóng gói, và **bên thứ ba không
+thể dựng lại để đối chiếu** — provenance mất tính kiểm chứng độc lập, đúng thứ mà
+`checksums.sha256` được cho là bảo đảm.
+
+Vá bằng `-ffile-prefix-map`. Bản vá ĐẦU vẫn lệch vì đặt sai thứ tự: thư mục build
+nằm lồng trong thư mục nguồn, gcc áp map sau đè map trước, nên map nguồn phải
+đứng trước map build. Sau khi sửa thứ tự: **7/7 artifact tái lập**.
+
+**SBOM.** `provenance.json` nói bản này build TỪ ĐÂU; SBOM nói nó CHỨA GÌ — không
+có SBOM thì câu "bo của tôi có dính CVE này không" phải trả lời bằng cách đọc lại
+mã nguồn của đúng commit. 92 component, mỗi dòng ghi `resolvedFrom`: phiên bản
+`libsodium`/`libmodbus` là của **máy build**, không phải của Buildroot trên board,
+và một SBOM nói dối chỗ đó còn tệ hơn không có.
 
 ### W7 — Target/HIL/V&V và quyết định phát hành
 

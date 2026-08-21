@@ -159,3 +159,31 @@ class ReleaseSigningKeyGateTest(unittest.TestCase):
             any("exit 1" in line for line in lines),
             "gate phải THOÁT khi gặp khoá TEST, không chỉ cảnh báo",
         )
+
+
+class ReleaseSbomTest(unittest.TestCase):
+    """T59-606 — gói phát hành phải nói được nó CHỨA gì, không chỉ build từ đâu."""
+
+    SBOM_SCRIPT = ROOT / "scripts/generate_release_sbom.py"
+
+    def test_build_release_sinh_sbom(self) -> None:
+        lines = _uncommented_lines(RELEASE_SCRIPT.read_text(encoding="utf-8"))
+        self.assertTrue(
+            any("generate_release_sbom.py" in line for line in lines),
+            "build-release.sh phải sinh sbom.json cùng gói",
+        )
+
+    def test_sbom_phu_ba_he_sinh_thai(self) -> None:
+        text = self.SBOM_SCRIPT.read_text(encoding="utf-8")
+        for marker in ("go list -m all", "npm ls", "FetchContent_Declare"):
+            self.assertIn(marker, text, f"SBOM bỏ sót nguồn phụ thuộc: {marker}")
+
+    def test_sbom_khong_noi_doi_ve_thu_vien_he_thong(self) -> None:
+        """Phiên bản libsodium/libmodbus đọc trên MÁY BUILD, không phải trên board.
+
+        Buildroot của board có bản khác. Một SBOM ghi số của máy build như thể là
+        số của thiết bị còn tệ hơn không có SBOM — nên nguồn số phải được ghi rõ.
+        """
+        text = self.SBOM_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("resolvedFrom", text)
+        self.assertIn("MÁY BUILD", text)

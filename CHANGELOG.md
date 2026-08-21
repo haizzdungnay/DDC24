@@ -8,6 +8,31 @@
 
 ## [Unreleased]
 
+### T59-606 / T59-604 — Binary không dựng lại được; cách ly e2e đã cũ (2026-08-21)
+
+- **Phạm vi:** `CMakeLists.txt`, `scripts/verify_release_reproducible.py` (mới),
+  `scripts/generate_release_sbom.py` (mới), `platform/packaging/build-release.sh`,
+  `scripts/verify-project.sh`, `tests/integration/test_release_packaging_guard.py`,
+  Plan 59 §3/§3.7.
+- **Fixed — `mkddc-iobus` không tái lập:** build hai lần từ cùng mã nguồn vào hai
+  thư mục cho ra hai file khác nhau; nguyên nhân là đường dẫn tuyệt đối của mã
+  `bacnet-stack` (FetchContent) nhúng vào binary qua `__FILE__`. Hệ quả nặng hơn
+  hash lệch: gói phát hành mang đường dẫn máy người đóng gói và bên thứ ba không
+  dựng lại được để đối chiếu. Vá bằng `-ffile-prefix-map`; **thứ tự nguồn trước,
+  build sau** vì build dir lồng trong source dir (bản vá đầu đặt ngược nên vẫn
+  lệch). Kết quả: **7/7 artifact tái lập**.
+- **Added:** `verify_release_reproducible.py` (build hai lần, so SHA-256, in
+  variance kèm nguồn gây khác biệt) và SBOM 92 component sinh cùng gói phát hành,
+  mỗi dòng ghi `resolvedFrom` để không nói dối về thư viện hệ thống của board.
+- **Fixed — cách ly e2e đã cũ:** `point-names.spec.ts` bị giữ ngoài cổng vì từng
+  hỏng; chạy lại **18/18 PASS**. Cách ly cũ giấu luôn một spec đã lành khỏi cổng,
+  nên mọi hồi quy sau đó trong file ấy không ai bắt. Danh sách nay rỗng và cổng
+  **tự kiểm**: spec còn trong cách ly mà PASS thì cổng đỏ kèm yêu cầu gỡ.
+- **Chưa đạt:** 5 lần chạy e2e liên tiếp cho 64/79/79/78+1F/78+1F — có flake
+  thật, chưa khoanh được nguyên nhân; `T59-604` giữ `PARTIAL` và `retries` vẫn
+  `0` (bật retry sẽ biến chính flake này thành xanh). Dry-run cài mới/nâng cấp/
+  rollback cần `install.sh` nhận DESTDIR — chưa làm.
+
 ### T59-603 — Ma trận security sinh từ bảng route; audit chain lần đầu bị thử thật (2026-08-21)
 
 - **Phạm vi:** `apps/web-api/internal/programming/transport/http/security_matrix_test.go` (mới),

@@ -96,6 +96,12 @@ toolchain="$(c++ --version | head -n1 | tr ' ' '-')"
 printf '{\n  "version": "%s",\n  "git_commit": "%s",\n  "dirty": %s,\n  "build_time": "%s",\n  "toolchain": "%s",\n  "mcu_firmware": "not-included",\n  "st_public_key_mode": "%s",\n  "st_public_key_fingerprint": "%s"\n}\n' \
   "$version" "$commit" "$dirty" "$build_time" "$toolchain" "$key_mode" "$key_fingerprint" \
   > "$release_dir/provenance.json"
+# T59-606 — SBOM đi cùng gói. `provenance.json` nói bản này build TỪ ĐÂU; SBOM nói
+# bản này CHỨA GÌ. Khi có CVE trong một thư viện, thiếu SBOM nghĩa là câu "bo của
+# tôi có dính không" phải trả lời bằng cách đọc lại mã nguồn của đúng commit đó.
+python3 "$MKDDC_REPOSITORY_ROOT/scripts/generate_release_sbom.py" \
+  --version "$version" --commit "$commit" --output "$release_dir/sbom.json"
+
 sha256sum \
   "$build_dir/core/mkddc-core" "$build_dir/core/mkddc-schedule-sim" \
   "$build_dir/core/mkddc-st-compile" "$build_dir/core/mkddc-st-package" \
