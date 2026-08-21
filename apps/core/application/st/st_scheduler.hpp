@@ -221,6 +221,13 @@ struct StProgramInstance {
     uint64_t    input_snapshot_generation = 0;
     bool        input_snapshot_valid = true;
     uint64_t    last_successful_base_step = 0;
+    /* T59-501 — đã publish output thành công ÍT NHẤT MỘT LẦN kể từ lần activate
+     * gần nhất. Khác `output_commit_generation == base_step_count()` (chỉ đúng ở
+     * đúng base step vừa commit): với gói trộn ba lớp chu kỳ, Program 30 s chỉ
+     * commit mỗi 30 base step, nên đòi mọi Program cùng commit ở CÙNG một base
+     * step là đòi một điều không bao giờ xảy ra. Đây là thứ barrier chu kỳ đầu
+     * mức GÓI và phép thăng cấp LKG dùng để biết "đã đủ tư cách" hay chưa. */
+    bool        committed_since_activation = false;
     uint64_t    output_commit_generation = 0;
     /* TASK-PROG-401, DDD-CTRL-PROG-001 §6: true sau khi proposal mức
      * PRIO_LOCAL_LOGIC của instance đã được rút (release_ao/release_do) —

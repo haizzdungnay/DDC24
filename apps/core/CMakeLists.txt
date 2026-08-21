@@ -223,6 +223,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/programming/tests/test_program_candidate_registry.cpp
+      application/programming/tests/test_programming_package_lifecycle.cpp
       application/st/tests/test_st_program_lanes.cpp
       application/st/tests/test_st_value_trace.cpp
       application/st/tests/test_st_signal_bus.cpp

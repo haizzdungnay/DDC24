@@ -1010,26 +1010,72 @@ void ProgrammingRuntimeCoordinator::on_safe_boundary() noexcept
     state_.store(LifecycleState::ACTIVE_CANDIDATE, std::memory_order_release);
 }
 
+ProgrammingRuntimeCoordinator::PackageCycleVerdict
+ProgrammingRuntimeCoordinator::package_first_cycle_verdict(bool committed) const
+{
+    bool all_committed = true;
+    bool saw_instance = false;
+    for (const std::string& id : instance_ids_) {
+        const StProgramInstance* instance = scheduler_->find_program(id);
+        if (instance == nullptr) return PackageCycleVerdict::FAILED;
+        /* Program không chạy KHÔNG tham gia barrier: nó không sinh output, nên
+         * đòi nó "chạy sạch một chu kỳ" là đòi một điều không thể xảy ra và sẽ
+         * treo barrier vĩnh viễn. Nhưng FAULTED thì có tham gia — đó là hỏng,
+         * không phải vắng mặt. */
+        if (instance->state == StProgramState::FAULTED) return PackageCycleVerdict::FAILED;
+        if (instance->state != StProgramState::RUNNING) continue;
+        saw_instance = true;
+        if (!instance->committed_since_activation) all_committed = false;
+    }
+    if (!saw_instance) return PackageCycleVerdict::FAILED;
+    /* `committed == false` nghĩa là batch output của base step này bị từ chối.
+     * Đó là hỏng ngay, không phải "chưa tới lượt". */
+    if (!committed) return PackageCycleVerdict::FAILED;
+    return all_committed ? PackageCycleVerdict::PASSED : PackageCycleVerdict::PENDING;
+}
+
+bool ProgrammingRuntimeCoordinator::rollback_package(std::string* error)
+{
+    /* Kiểm TRƯỚC, áp SAU. Quay về được một nửa rồi kẹt ở nửa còn lại sẽ để thiết
+     * bị ở một tổ hợp chưa từng được Check — đúng thứ "no partial active" cấm. */
+    for (const std::string& id : instance_ids_) {
+        const StProgramInstance* instance = scheduler_->find_program(id);
+        if (instance == nullptr || instance->last_known_good.empty()) {
+            if (error) *error = "instance '" + id + "' không có LKG để quay về";
+            return false;
+        }
+    }
+    for (const std::string& id : instance_ids_)
+        if (!scheduler_->rollback(id, error)) return false;
+    return true;
+}
+
 void ProgrammingRuntimeCoordinator::on_output_commit(bool committed) noexcept
 {
     if (state_.load(std::memory_order_acquire) != LifecycleState::ACTIVE_CANDIDATE) return;
-    StProgramInstance* instance = scheduler_->find_program(instance_id_);
-    if (instance && instance->last_successful_base_step != scheduler_->base_step_count() &&
-        instance->state == StProgramState::RUNNING)
-        return; /* Task chu kỳ dài chưa đến hạn: chưa phải first-cycle failure. */
-    if (!committed || !instance || instance->state != StProgramState::RUNNING ||
-        instance->output_commit_generation != scheduler_->base_step_count()) {
+    /* T59-501 — barrier chu kỳ đầu là barrier của cả GÓI.
+     *
+     * Bản trước chỉ xét `instance_id_`. Với gói nhiều Program, một Program hỏng
+     * chu kỳ đầu trong khi Program chính chạy sạch sẽ được tuyên bố
+     * FIRST_CYCLE_OK — và gói đi tiếp với một Program đã chết. Ngược lại,
+     * rollback cũng chỉ quay Program chính về, để lại gói NỬA CŨ NỬA MỚI. */
+    switch (package_first_cycle_verdict(committed)) {
+    case PackageCycleVerdict::PENDING:
+        /* Gói trộn chu kỳ: Program 30 s chưa tới lượt. Chưa kết luận được —
+         * tuyên bố thành công lúc này là tuyên bố thay cho một Program chưa
+         * chạy lần nào. */
+        return;
+    case PackageCycleVerdict::FAILED: {
         std::string ignored;
-        if (instance && !instance->last_known_good.empty()) {
-            if (scheduler_->rollback(instance_id_, &ignored))
-                state_.store(LifecycleState::ROLLING_BACK, std::memory_order_release);
-            else
-                state_.store(LifecycleState::FAILED, std::memory_order_release);
-        } else {
+        if (rollback_package(&ignored))
+            state_.store(LifecycleState::ROLLING_BACK, std::memory_order_release);
+        else
             state_.store(LifecycleState::FAILED, std::memory_order_release);
-        }
         cutover_->request(CutoverMode::GRAPH_ONLY);
         return;
+    }
+    case PackageCycleVerdict::PASSED:
+        break;
     }
     first_output_committed_.store(true, std::memory_order_release);
     state_.store(LifecycleState::FIRST_CYCLE_OK, std::memory_order_release);

@@ -522,6 +522,8 @@ void StScheduler::apply_pending_activations(StTask& task)
             p->last_successful_base_step = 0;
             p->output_commit_generation = 0;
             p->output_commit_now_ns = 0;
+            /* Gói mới chưa chạy lần nào: tư cách của gói CŨ không được thừa kế. */
+            p->committed_since_activation = false;
             p->outputs_withdrawn = false;
             p->retain_restore_state = p->pending_retain_restore_state;
             p->retain_reject_code = p->pending_retain_reject_code;
@@ -928,12 +930,31 @@ void StScheduler::publish_committed_retain_snapshots() noexcept
 
 void StScheduler::promote_output_committed_artifacts() noexcept
 {
+    /* T59-501 — thăng cấp LKG là thao tác của cả GÓI, all-or-nothing.
+     *
+     * Bản trước thăng cấp từng Program độc lập. Với gói trộn ba lớp chu kỳ,
+     * Program 1 s đủ tư cách ngay base step đầu còn Program 30 s phải chờ 30
+     * base step — nên tập LKG trở thành NỬA GÓI MỚI NỬA GÓI CŨ. Rollback từ một
+     * tập như vậy khôi phục một tổ hợp chưa từng được Check, và "old LKG exact"
+     * mất nghĩa.
+     *
+     * Điều kiện là "đã commit ÍT NHẤT MỘT LẦN kể từ activate", không phải "cùng
+     * commit ở một base step" — đòi điều thứ hai là đòi một thứ không bao giờ
+     * xảy ra với gói nhiều chu kỳ. */
+    bool package_qualified = true;
+    bool has_candidate = false;
+    for (const auto& task : tasks_) {
+        for (const auto& program : task->programs()) {
+            if (program->activated_artifact.empty()) continue;
+            has_candidate = true;
+            if (!program->committed_since_activation) package_qualified = false;
+        }
+    }
+    if (!has_candidate || !package_qualified) return;
+
     for (auto& task : tasks_) {
         for (auto& program : task->programs()) {
-            if (program->activated_artifact.empty() ||
-                program->last_successful_base_step != base_step_count_ ||
-                program->output_commit_generation != base_step_count_)
-                continue;
+            if (program->activated_artifact.empty()) continue;
             program->retired_artifact.swap(program->last_known_good);
             program->last_known_good.swap(program->activated_artifact);
         }

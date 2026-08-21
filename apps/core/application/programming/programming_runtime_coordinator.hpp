@@ -170,6 +170,21 @@ private:
      * runtime không được tin nó chỉ vì writer của mình đã kiểm. */
     bool rebuild_signal_bus(const std::vector<StPackageSignal>& signals, std::string* detail_code,
                             std::string* error);
+
+    /* T59-501 — kết luận barrier chu kỳ đầu ở mức GÓI. */
+    enum class PackageCycleVerdict : uint8_t {
+        /* Còn Program chưa chạy xong chu kỳ đầu (ví dụ Program 30 s trong gói
+         * trộn chu kỳ). Chưa kết luận được — chờ tiếp. */
+        PENDING = 0,
+        /* MỌI Program đang chạy đã publish output thành công ít nhất một lần. */
+        PASSED,
+        /* Có Program hỏng. Cả gói phải quay về, không có "một nửa thành công". */
+        FAILED,
+    };
+    PackageCycleVerdict package_first_cycle_verdict(bool committed) const;
+    /* Quay về LKG cho TOÀN BỘ gói. Trả false nếu bất kỳ instance nào không có
+     * LKG để quay về — khi đó không có bản cũ nguyên vẹn nào để khôi phục. */
+    bool rollback_package(std::string* error);
     bool append_phase(StJournalPhase phase, std::string* error);
     bool read_staged_artifact(const StageCommand& command, std::vector<uint8_t>* bytes,
                               std::string* detail_code, std::string* error) const;

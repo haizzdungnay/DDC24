@@ -321,6 +321,7 @@ bool st_apply_outputs(const StProgramInstance& instance, PriorityResolver* resol
     StProgramInstance& mutable_instance = const_cast<StProgramInstance&>(instance);
     mutable_instance.output_commit_generation = generation;
     mutable_instance.output_commit_now_ns = instance.last_successful_now_ns;
+    mutable_instance.committed_since_activation = true;
     if (stats) {
         stats->output_batches_committed++;
         stats->output_commit_generation = generation;
@@ -377,6 +378,7 @@ bool st_apply_all_outputs(StScheduler* scheduler, PriorityResolver* resolver,
             if (program->last_successful_base_step == generation) {
                 program->output_commit_generation = generation;
                 program->output_commit_now_ns = program->last_successful_now_ns;
+                program->committed_since_activation = true;
                 /* Vừa tái xác nhận claim mức PRIO_LOCAL_LOGIC — mở lại cơ hội
                  * rút khi instance này ngừng publish lần sau (TASK-PROG-401). */
                 program->outputs_withdrawn = false;
