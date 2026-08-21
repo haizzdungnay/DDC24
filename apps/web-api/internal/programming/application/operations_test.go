@@ -429,7 +429,7 @@ func TestOperationResetRetainAppliesInSinglePassWhenActiveRevisionMatches(t *tes
 
 	accepted, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"},
 		OperationCommand{SchemaVersion: "1.0", ExpectedActiveRevisionID: fixture.revision,
-			Reason: "kiểm tra reset RETAIN sau nghiệm thu I/O",
+			Reason:         "kiểm tra reset RETAIN sau nghiệm thu I/O",
 			IdempotencyKey: "40000000-0000-4000-8000-000000000010", CorrelationID: testCorrelationID})
 	if err != nil {
 		t.Fatal(err)
@@ -470,7 +470,7 @@ func TestOperationResetRetainRejectsActiveRevisionMismatchNoHalfReset(t *testing
 	staleExpected := createUnrelatedRevisionFixture(t, fixture.store)
 	accepted, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"},
 		OperationCommand{SchemaVersion: "1.0", ExpectedActiveRevisionID: staleExpected,
-			Reason: "kiểm tra reject khi Active Revision đổi giữa chừng",
+			Reason:         "kiểm tra reject khi Active Revision đổi giữa chừng",
 			IdempotencyKey: "40000000-0000-4000-8000-000000000011", CorrelationID: testCorrelationID})
 	if err != nil {
 		t.Fatal(err)
@@ -499,7 +499,7 @@ func TestOperationResetRetainTimeoutBecomesUnknownThenRetriesIdempotentlyToSucce
 
 	accepted, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"},
 		OperationCommand{SchemaVersion: "1.0", ExpectedActiveRevisionID: fixture.revision,
-			Reason: "kiểm tra Core TIMED_OUT không phải false success",
+			Reason:         "kiểm tra Core TIMED_OUT không phải false success",
 			IdempotencyKey: "40000000-0000-4000-8000-000000000012", CorrelationID: testCorrelationID})
 	if err != nil {
 		t.Fatal(err)

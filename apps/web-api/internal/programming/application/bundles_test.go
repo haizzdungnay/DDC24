@@ -171,13 +171,20 @@ func TestSourceBundleDeterministicRoundTripCreatesDraftOnly(t *testing.T) {
 			ProjectID string `json:"projectId"`
 			Name      string `json:"name"`
 		} `json:"project"`
-		Programs  []any `json:"programs"`
-		Variables []any `json:"variables"`
-		Bindings  []any `json:"bindings"`
+		// T59-301: biến nằm trong `locals` của POU, không còn là collection riêng.
+		Objects []struct {
+			ObjectID string `json:"objectId"`
+			Locals   []any  `json:"locals"`
+		} `json:"objects"`
+		Programs []any `json:"programs"`
+		Bindings []any `json:"bindings"`
 	}
 	if err := json.Unmarshal(project.Draft.ContentJSON, &document); err != nil || document.Project.ProjectID != importedProjectID ||
-		document.Project.Name != "AHU nhập" || len(document.Programs) != 1 || len(document.Variables) != 1 || len(document.Bindings) != 1 {
+		document.Project.Name != "AHU nhập" || len(document.Objects) != 1 || len(document.Programs) != 1 || len(document.Bindings) != 1 {
 		t.Fatalf("Draft round-trip=%+v err=%v", document, err)
+	}
+	if len(document.Objects[0].Locals) != 1 {
+		t.Fatalf("biến của POU không đi qua bundle: %+v", document.Objects[0])
 	}
 	replay, err := service.ImportBundle(context.Background(), actor, command)
 	if err != nil || !replay.Replay || replay.Resource["projectId"] != importedProjectID || replay.AuditID != imported.AuditID ||

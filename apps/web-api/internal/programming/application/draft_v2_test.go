@@ -1,0 +1,345 @@
+package application
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"testing"
+
+	"mkddc-web/internal/programming/domain"
+)
+
+func op(value map[string]any) json.RawMessage {
+	raw, _ := json.Marshal(value)
+	return raw
+}
+
+func objectUUID(index int) string {
+	return fmt.Sprintf("7%07d-0000-4000-8000-%012d", index, index)
+}
+
+// saveOps áp một loạt operation lên Draft và trả ETag mới. Mỗi lần gọi dùng một
+// khoá idempotency riêng — dùng lại khoá là replay, không phải mutation thứ hai.
+func saveOps(t *testing.T, service *ProjectService, projectID, baseRevisionID, etag, key string,
+	operations ...json.RawMessage) (MutationResult, error) {
+	t.Helper()
+	return service.SaveDraft(context.Background(), Actor{ID: testActorID, Role: "admin"}, SaveDraftCommand{
+		ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: baseRevisionID,
+		Operations: operations, IfMatch: etag, IdempotencyKey: key, CorrelationID: testCorrelationID,
+	})
+}
+
+func draftDocument(t *testing.T, service *ProjectService, projectID string) map[string]any {
+	t.Helper()
+	view, err := service.GetProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(view.DraftContentJSON, &document); err != nil {
+		t.Fatal(err)
+	}
+	return document
+}
+
+func newV2Project(t *testing.T) (*ProjectService, string, string, string) {
+	t.Helper()
+	service, _ := openProjectService(t)
+	created, err := service.CreateProject(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		CreateProjectCommand{SchemaVersion: "1.0", Name: "AHU v2", Description: "fixture",
+			IdempotencyKey: "70000000-0000-4000-8000-000000000001", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// `openProjectService` phát ID từ một danh sách cố định, đủ cho vài mutation.
+	// Test trần 32 Program gọi SaveDraft 32 lần nên phải thay bằng bộ sinh không
+	// cạn — vẫn tất định để audit ID không phụ thuộc đồng hồ hay ngẫu nhiên.
+	counter := 0
+	service.newID = func() string {
+		counter++
+		return fmt.Sprintf("dddddddd-dddd-4ddd-8ddd-%012d", counter)
+	}
+	return service, created.Resource["projectId"].(string), created.Resource["draftRevisionId"].(string), created.ETag
+}
+
+func pouOp(objectID, name, kind string) json.RawMessage {
+	return op(map[string]any{"op": "upsertObject", "object": map[string]any{
+		"objectId": objectID, "kind": kind, "name": name, "language": "ST",
+		"source": "PROGRAM " + name + "\nEND_PROGRAM\n"}})
+}
+
+func programOp(programID, objectID string, period int) json.RawMessage {
+	return op(map[string]any{"op": "upsertProgram", "program": map[string]any{
+		"programId": programID, "objectId": objectID, "periodMs": period}})
+}
+
+// Trần 32 Program là quyết định Product (DDD §0). Program thứ 33 phải bị từ chối
+// và Draft phải giữ nguyên đúng 32 — không nhận nửa vời.
+func TestDraftRejectsThirtyThirdProgramAndKeepsThirtyTwo(t *testing.T) {
+	service, projectID, draftID, etag := newV2Project(t)
+	for index := 1; index <= domain.MaxProgramsTotal; index++ {
+		id := objectUUID(index)
+		result, err := saveOps(t, service, projectID, draftID, etag,
+			fmt.Sprintf("70000000-0000-4000-8000-1%011d", index),
+			pouOp(id, fmt.Sprintf("PRG_%02d", index), "PROGRAM"), programOp(id, id, 1000))
+		if err != nil {
+			t.Fatalf("Program thứ %d: %v", index, err)
+		}
+		etag = result.ETag
+	}
+	document := draftDocument(t, service, projectID)
+	if got := len(collectionOf(document, "programs")); got != domain.MaxProgramsTotal {
+		t.Fatalf("số Program=%d; want %d", got, domain.MaxProgramsTotal)
+	}
+
+	overID := objectUUID(domain.MaxProgramsTotal + 1)
+	_, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-200000000001",
+		pouOp(overID, "PRG_33", "PROGRAM"), programOp(overID, overID, 1000))
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("Program thứ 33: %v", err)
+	}
+	after := draftDocument(t, service, projectID)
+	if got := len(collectionOf(after, "programs")); got != domain.MaxProgramsTotal {
+		t.Fatalf("Draft nhận nửa vời: %d Program", got)
+	}
+	if len(collectionOf(after, "objects")) != domain.MaxProgramsTotal {
+		t.Fatal("POU của Program bị từ chối vẫn được ghi")
+	}
+}
+
+// Tên POU unique CASE-FOLDED trong Project (DDD §4.2). Không fold thì `Ahu` và
+// `AHU` là hai POU ở FE nhưng là một ở compiler.
+func TestDraftRejectsCaseFoldedDuplicatePouName(t *testing.T) {
+	service, projectID, draftID, etag := newV2Project(t)
+	first, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-300000000001",
+		pouOp(objectUUID(1), "Ahu", "PROGRAM"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := saveOps(t, service, projectID, draftID, first.ETag, "70000000-0000-4000-8000-300000000002",
+		pouOp(objectUUID(2), "AHU", "PROGRAM")); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("tên trùng case-folded: %v", err)
+	}
+	// Tên hợp lệ vẫn phải qua — guard chặn tất cả cũng là guard sai.
+	if _, err := saveOps(t, service, projectID, draftID, first.ETag, "70000000-0000-4000-8000-300000000003",
+		pouOp(objectUUID(3), "AHU_2", "PROGRAM")); err != nil {
+		t.Fatalf("tên hợp lệ bị chặn: %v", err)
+	}
+}
+
+func TestDraftRenameAndDuplicateKeepIdentitySemantics(t *testing.T) {
+	service, projectID, draftID, etag := newV2Project(t)
+	source := objectUUID(1)
+	created, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-400000000001",
+		pouOp(source, "AHU", "PROGRAM"), programOp(source, source, 1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	renamed, err := saveOps(t, service, projectID, draftID, created.ETag, "70000000-0000-4000-8000-400000000002",
+		op(map[string]any{"op": "renameObject", "objectId": source, "name": "AHU_MAIN"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := draftDocument(t, service, projectID)
+	object := findByID(document, "objects", "objectId", source)
+	if object == nil || object["name"] != "AHU_MAIN" {
+		t.Fatalf("rename không đổi tên: %+v", object)
+	}
+	// Rename KHÔNG được đụng identity: mọi Revision và binding đang trỏ theo
+	// objectId sẽ mất đích nếu identity đổi theo tên.
+	if program := findByID(document, "programs", "programId", source); program == nil || program["objectId"] != source {
+		t.Fatalf("rename làm đứt liên kết Program: %+v", program)
+	}
+
+	clone := objectUUID(2)
+	if _, err := saveOps(t, service, projectID, draftID, renamed.ETag, "70000000-0000-4000-8000-400000000003",
+		op(map[string]any{"op": "duplicateObject", "objectId": source, "newObjectId": clone, "name": "AHU_COPY"})); err != nil {
+		t.Fatal(err)
+	}
+	afterClone := draftDocument(t, service, projectID)
+	copied := findByID(afterClone, "objects", "objectId", clone)
+	original := findByID(afterClone, "objects", "objectId", source)
+	if copied == nil || copied["name"] != "AHU_COPY" || copied["source"] != original["source"] {
+		t.Fatalf("duplicate không sao chép nội dung: %+v", copied)
+	}
+	// Bản sao KHÔNG tự trở thành Program: nhân đôi mã nguồn không phải nhân đôi
+	// một đơn vị lập lịch, và làm vậy sẽ âm thầm tiêu một suất trong trần 32.
+	if findByID(afterClone, "programs", "programId", clone) != nil {
+		t.Fatal("duplicate tự tạo Program mới")
+	}
+}
+
+// Không cascade ngầm: xoá thứ đang bị tham chiếu phải BÁO, không phải xoá kèm.
+func TestDraftRefusesSilentCascadeOnRemove(t *testing.T) {
+	service, projectID, draftID, etag := newV2Project(t)
+	objectID := objectUUID(1)
+	created, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-500000000001",
+		pouOp(objectID, "AHU", "PROGRAM"), programOp(objectID, objectID, 1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := saveOps(t, service, projectID, draftID, created.ETag, "70000000-0000-4000-8000-500000000002",
+		op(map[string]any{"op": "removeObject", "objectId": objectID})); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("xoá POU đang có Program: %v", err)
+	}
+
+	signalID := objectUUID(9)
+	withSignal, err := saveOps(t, service, projectID, draftID, created.ETag, "70000000-0000-4000-8000-500000000003",
+		op(map[string]any{"op": "upsertSignal", "signal": map[string]any{
+			"signalId": signalID, "name": "SUPPLY_TEMP", "type": "REAL",
+			"publisherProgramId": objectID, "freshnessMs": 5000, "stalePolicy": "HOLD_LAST"}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := saveOps(t, service, projectID, draftID, withSignal.ETag, "70000000-0000-4000-8000-500000000004",
+		op(map[string]any{"op": "removeProgram", "programId": objectID})); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("xoá Program đang publish signal: %v", err)
+	}
+}
+
+// `USE_FALLBACK` bắt buộc có giá trị dự phòng; ba chính sách còn lại KHÔNG được
+// mang — đây đúng lối "im lặng thay bằng 0" mà DDD §10 cấm.
+func TestDraftSignalPolicyAndFallbackAreCoupled(t *testing.T) {
+	service, projectID, draftID, etag := newV2Project(t)
+	objectID := objectUUID(1)
+	base, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-600000000001",
+		pouOp(objectID, "AHU", "PROGRAM"), programOp(objectID, objectID, 1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	signal := func(policy string, fallback any, freshness int) json.RawMessage {
+		payload := map[string]any{"signalId": objectUUID(9), "name": "SUPPLY_TEMP", "type": "REAL",
+			"publisherProgramId": objectID, "freshnessMs": freshness, "stalePolicy": policy}
+		if fallback != nil {
+			payload["fallbackValue"] = fallback
+		}
+		return op(map[string]any{"op": "upsertSignal", "signal": payload})
+	}
+	for name, operation := range map[string]json.RawMessage{
+		"USE_FALLBACK thiếu giá trị": signal("USE_FALLBACK", nil, 5000),
+		"HOLD_LAST thừa giá trị":     signal("HOLD_LAST", 21.5, 5000),
+		"freshness dưới trần dưới":   signal("HOLD_LAST", nil, 999),
+		"freshness trên trần trên":   signal("HOLD_LAST", nil, 90001),
+		"chính sách tự chế":          signal("JUST_GUESS", nil, 5000),
+	} {
+		if _, err := saveOps(t, service, projectID, draftID, base.ETag, "70000000-0000-4000-8000-6000000000"+fmt.Sprintf("%02d", len(name)),
+			operation); !errors.Is(err, ErrInvalidRequest) {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	if _, err := saveOps(t, service, projectID, draftID, base.ETag, "70000000-0000-4000-8000-600000000099",
+		signal("USE_FALLBACK", 21.5, 5000)); err != nil {
+		t.Fatalf("signal hợp lệ bị chặn: %v", err)
+	}
+}
+
+// Migration v1→v2 phải TẤT ĐỊNH: chạy hai lần trên cùng document cho cùng kết
+// quả, và không sinh identity mới (identity mới làm mọi Revision cũ trỏ hư không).
+func TestMigrateDraftToV2IsDeterministicAndKeepsIdentity(t *testing.T) {
+	legacy := []byte(`{
+		"schemaVersion":1,
+		"project":{"projectId":"11111111-1111-4111-8111-111111111111","name":"AHU","functionalTags":[]},
+		"programs":[
+			{"programId":"70000002-0000-4000-8000-000000000002","name":"BOILER","kind":"PROGRAM","language":"ST","document":"PROGRAM BOILER\nEND_PROGRAM\n"},
+			{"programId":"70000001-0000-4000-8000-000000000001","name":"AHU","kind":"PROGRAM","language":"ST","document":"PROGRAM AHU\nEND_PROGRAM\n"}
+		],
+		"variables":[
+			{"variableId":"70000003-0000-4000-8000-000000000003","programId":"70000001-0000-4000-8000-000000000001","name":"Fan","type":"BOOL","retain":true}
+		],
+		"bindings":[
+			{"bindingId":"70000004-0000-4000-8000-000000000004","variableId":"70000003-0000-4000-8000-000000000003","pointId":"BO-1","direction":"WRITE"}
+		],
+		"task":{"taskId":"70000005-0000-4000-8000-000000000005","periodMs":5000,"programOrder":["70000001-0000-4000-8000-000000000001","70000002-0000-4000-8000-000000000002"]},
+		"library":{"profile":"CORE_REVA","version":"1"}
+	}`)
+
+	migrate := func() map[string]any {
+		var document map[string]any
+		if err := json.Unmarshal(legacy, &document); err != nil {
+			t.Fatal(err)
+		}
+		if err := migrateDraftToV2(document); err != nil {
+			t.Fatal(err)
+		}
+		return document
+	}
+	first, second := migrate(), migrate()
+	firstJSON, _ := json.Marshal(first)
+	secondJSON, _ := json.Marshal(second)
+	if string(firstJSON) != string(secondJSON) {
+		t.Fatal("migration không tất định")
+	}
+	if err := validateDraftDocumentV2(first); err != nil {
+		t.Fatalf("kết quả migration không hợp lệ: %v", err)
+	}
+
+	// Idempotent: chạy lại trên chính kết quả v2 là no-op.
+	again := first
+	if err := migrateDraftToV2(again); err != nil {
+		t.Fatal(err)
+	}
+	againJSON, _ := json.Marshal(again)
+	if string(againJSON) != string(firstJSON) {
+		t.Fatal("migrate lại document v2 làm đổi nội dung")
+	}
+
+	if len(collectionOf(first, "objects")) != 2 || len(collectionOf(first, "programs")) != 2 {
+		t.Fatalf("migration mất Program: %+v", first["programs"])
+	}
+	// Identity giữ nguyên — đây là lý do migration không được sinh UUID mới.
+	if findByID(first, "objects", "objectId", "70000001-0000-4000-8000-000000000001") == nil {
+		t.Fatal("migration đổi identity POU")
+	}
+	// Chu kỳ của Task v1 trở thành chu kỳ của từng Program.
+	for _, program := range collectionOf(first, "programs") {
+		if program["periodMs"] != float64(5000) {
+			t.Fatalf("chu kỳ không chuyển: %+v", program)
+		}
+	}
+	// Biến v1 vào `locals` của đúng POU sở hữu, không mất.
+	owner := findByID(first, "objects", "objectId", "70000001-0000-4000-8000-000000000001")
+	locals, _ := owner["locals"].([]any)
+	if len(locals) != 1 {
+		t.Fatalf("biến v1 bị mất: %+v", owner)
+	}
+	// Binding v1 được nối lại với Program và tên biến.
+	binding := findByID(first, "bindings", "bindingId", "70000004-0000-4000-8000-000000000004")
+	if binding == nil || binding["programId"] != "70000001-0000-4000-8000-000000000001" || binding["variable"] != "Fan" {
+		t.Fatalf("binding không được nối lại: %+v", binding)
+	}
+	// v2 bỏ hẳn Task và `variables`.
+	if _, present := first["task"]; present {
+		t.Fatal("v2 vẫn còn Task")
+	}
+	if _, present := first["variables"]; present {
+		t.Fatal("v2 vẫn còn collection variables")
+	}
+}
+
+// Idempotency và ETag vẫn phải đúng trên model mới, kể cả sau khi đóng/mở store.
+func TestDraftV2IdempotencyAndETagSurviveRestart(t *testing.T) {
+	service, projectID, draftID, etag := newV2Project(t)
+	objectID := objectUUID(1)
+	operations := []json.RawMessage{pouOp(objectID, "AHU", "PROGRAM"), programOp(objectID, objectID, 1000)}
+
+	first, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-700000000001", operations...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-700000000001", operations...)
+	if err != nil || !replay.Replay || replay.ETag != first.ETag || replay.AuditID != first.AuditID {
+		t.Fatalf("replay=%+v err=%v", replay, err)
+	}
+	// ETag cũ + khoá mới = xung đột, không phải ghi đè im lặng.
+	if _, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-700000000002",
+		pouOp(objectUUID(2), "BOILER", "PROGRAM")); err == nil {
+		t.Fatal("ETag cũ vẫn ghi được")
+	}
+
+	document := draftDocument(t, service, projectID)
+	if len(collectionOf(document, "objects")) != 1 || len(collectionOf(document, "programs")) != 1 {
+		t.Fatalf("Draft sau replay: %+v", document)
+	}
+}
