@@ -49,7 +49,7 @@ func (s *Store) LookupMutation(ctx context.Context, actorID, action, targetID st
 		return MutationReplay{}, false, ErrIdempotencyConflict
 	}
 	var result mutationReceiptResult
-	if err := json.Unmarshal(resultJSON, &result); err != nil || result.AuditID == "" || result.ETag < 1 {
+	if err := json.Unmarshal(resultJSON, &result); err != nil || !validMutationReceipt(result) {
 		return MutationReplay{}, false, fmt.Errorf("mutation receipt hỏng")
 	}
 	return MutationReplay{ProjectID: result.ProjectID, DraftID: result.DraftID, RevisionID: result.RevisionID,
@@ -85,10 +85,27 @@ func readMutationReceiptTx(ctx context.Context, tx *sql.Tx, actorID, action, tar
 		return mutationReceiptResult{}, false, ErrIdempotencyConflict
 	}
 	var result mutationReceiptResult
-	if err := json.Unmarshal(resultJSON, &result); err != nil || result.AuditID == "" || result.ETag < 1 {
+	if err := json.Unmarshal(resultJSON, &result); err != nil || !validMutationReceipt(result) {
 		return mutationReceiptResult{}, false, fmt.Errorf("mutation receipt hỏng")
 	}
 	return result, true, nil
+}
+
+// validMutationReceipt kiểm đúng thứ phép kiểm này sinh ra để canh: một biên
+// nhận rỗng hoặc dở dang không được replay thành một kết quả hợp lệ.
+//
+// `ETag` chỉ bắt buộc khi biên nhận thuộc một Draft. Không phải mutation nào
+// cũng thuộc Draft: intent Enable/Disable (T59-405) tác động lên Project đang
+// chạy, không lên Draft. Đòi ETag ở đó sẽ buộc mọi lần bật/tắt Program phải bịa
+// ra một số phiên bản Draft — và một số bịa ra thì phép kiểm không còn canh gì.
+func validMutationReceipt(result mutationReceiptResult) bool {
+	if result.AuditID == "" {
+		return false
+	}
+	if result.DraftID != "" && result.ETag < 1 {
+		return false
+	}
+	return true
 }
 
 func writeMutationReceiptTx(ctx context.Context, tx *sql.Tx, actorID, action, targetID string, key, request [sha256.Size]byte, result mutationReceiptResult, at int64) error {
