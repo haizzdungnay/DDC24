@@ -222,7 +222,10 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	// Program cùng ghi một output là package sai bất kể từng Program compile
 	// sạch hay không, và biên dịch 32 Program rồi mới báo là lãng phí đúng thứ
 	// người dùng đang chờ. Gộp cùng scope diagnostics để một lần Check nói hết.
-	scopeDiagnostics = append(scopeDiagnostics, packageInvariantDiagnostics(revisionObjectViews(revision))...)
+	objectViews := revisionObjectViews(revision)
+	topology, budget := packageTopology(objectViews)
+	scopeDiagnostics = append(scopeDiagnostics, packageTopologyDiagnostics(topology)...)
+	scopeDiagnostics = append(scopeDiagnostics, packageInvariantDiagnostics(objectViews)...)
 	if len(scopeDiagnostics) > 0 {
 		return true, s.complete(ctx, check, "FAILED", scopeDiagnostics, nil)
 	}
@@ -285,7 +288,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 			IntegrityMode: result.IntegrityMode,
 		})
 	}
-	manifest, err := packageCheckManifest(artifacts, results)
+	manifest, err := packageCheckManifestWith(artifacts, results, nil, topology, budget)
 	if err != nil {
 		return true, err
 	}
@@ -299,7 +302,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 		return true, err
 	}
 	if packageInfo != nil {
-		manifest, err = packageCheckManifestWith(artifacts, results, packageInfo)
+		manifest, err = packageCheckManifestWith(artifacts, results, packageInfo, topology, budget)
 		if err != nil {
 			return true, err
 		}
@@ -705,12 +708,9 @@ func programPackageName(sourceID string) string {
 // `compilerInputs`, và `packageSha256` băm đúng dãy đó. Cùng một Revision Check
 // hai lần phải cho cùng `packageSha256` — đó là phép đo duy nhất biến
 // "deterministic build" thành thứ kiểm được.
-func packageCheckManifest(artifacts []packageProgramArtifact, results []programmingcompiler.Result) (json.RawMessage, error) {
-	return packageCheckManifestWith(artifacts, results, nil)
-}
-
 func packageCheckManifestWith(artifacts []packageProgramArtifact, results []programmingcompiler.Result,
-	packaged *programmingcompiler.PackageResult) (json.RawMessage, error) {
+	packaged *programmingcompiler.PackageResult, topology []packageProgramTopology,
+	budget packageBudget) (json.RawMessage, error) {
 	digest := sha256.New()
 	for _, artifact := range artifacts {
 		_, _ = digest.Write([]byte(artifact.ProgramID))
