@@ -9,6 +9,7 @@
 #include "programming/programming_cutover.hpp"
 #include "priority/priority_resolver.hpp"
 #include "st/st_journal.hpp"
+#include "st/st_package_v2.hpp"
 #include "st/st_scheduler.hpp"
 
 namespace core::programming {
@@ -80,6 +81,10 @@ struct PackageProgramSlice {
     uint32_t period_ms = 0;
 };
 
+/* T59-404 — bus signal mà coordinator dựng lại mỗi lần nạp package. Đặt ở đây
+ * chứ không ở scheduler vì signal là dữ liệu của PACKAGE: đổi package là đổi tập
+ * signal, và giữ lại khai báo cũ nghĩa là chạy gói mới với hợp đồng gói cũ. */
+
 class ProgrammingRuntimeCoordinator {
 public:
     ProgrammingRuntimeCoordinator(StScheduler* scheduler, ProgrammingCutover* cutover,
@@ -133,8 +138,14 @@ private:
     /* Tách artifact thành các lát Program. v1 -> đúng một lát dùng
      * `command.instance_id`; v2 -> N lát lấy tên và chu kỳ từ chính package. */
     bool split_package(const std::vector<uint8_t>& bytes, const std::string& fallback_instance,
-                       std::vector<PackageProgramSlice>* out, std::string* detail_code,
+                       std::vector<PackageProgramSlice>* out,
+                       std::vector<StPackageSignal>* signals_out, std::string* detail_code,
                        std::string* error) const;
+    /* Dựng lại bus signal theo đúng khai báo của package. Trả false nếu khai báo
+     * mâu thuẫn — một package tới đây có thể do writer khác phiên bản sinh, nên
+     * runtime không được tin nó chỉ vì writer của mình đã kiểm. */
+    bool rebuild_signal_bus(const std::vector<StPackageSignal>& signals, std::string* detail_code,
+                            std::string* error);
     bool append_phase(StJournalPhase phase, std::string* error);
     bool read_staged_artifact(const StageCommand& command, std::vector<uint8_t>* bytes,
                               std::string* detail_code, std::string* error) const;

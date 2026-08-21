@@ -68,9 +68,11 @@ std::vector<uint8_t> program_ir(const std::string& name, int value)
 /* Package v2 dựng bằng ĐÚNG writer production — golden và fuzz của T59-106 canh
  * writer đó, nên test này không tự chế một định dạng thứ hai. */
 std::vector<uint8_t> package_of(const std::vector<std::string>& names,
-                                const std::vector<uint32_t>& periods_ms = {})
+                                const std::vector<uint32_t>& periods_ms = {},
+                                const std::vector<StPackageSignal>& signals = {})
 {
     StPackageInput input;
+    input.signals = signals;
     input.compiler_profile = st_profile_generated::kProfileCode;
     input.target_abi = st_profile_generated::kTargetAbi;
     int value = 1;
@@ -354,4 +356,105 @@ TEST(ProgrammingPackageV2Stage, PackageV2SurvivesRestartWithEveryProgram)
         EXPECT_EQ(instance->state, StProgramState::RUNNING) << names[index];
         EXPECT_EQ(instance->period_ms, periods[index]) << names[index];
     }
+}
+
+/* T59-404 — bus signal dựng theo ĐÚNG khai báo của package, và dựng LẠI mỗi lần
+ * nạp gói mới. Giữ khai báo của gói cũ nghĩa là chạy gói mới với hợp đồng gói
+ * cũ, và sai lệch đó không lộ ra cho tới khi ai đó đọc một signal đã bị bỏ. */
+TEST(ProgrammingPackageV2Stage, SignalBusIsRebuiltFromPackage)
+{
+    TempTree tree;
+    ASSERT_FALSE(tree.path.empty());
+    std::filesystem::create_directories(std::filesystem::path(tree.path) / "staging");
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_task(&scheduler);
+    StSignalBus bus;
+    scheduler.set_signal_bus(&bus);
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                               tree.path + "/staging");
+    std::string error;
+    ASSERT_TRUE(coordinator.recover(&error)) << error;
+
+    StPackageSignal held;
+    held.name = "SUPPLY";
+    held.producer_program = "P_ahu";
+    held.data_type = static_cast<uint8_t>(StType::REAL);
+    held.freshness_ms = 5000;
+    held.stale_policy = 0;
+    StPackageSignal fallback;
+    fallback.name = "RESET";
+    fallback.producer_program = "P_boiler";
+    fallback.data_type = static_cast<uint8_t>(StType::REAL);
+    fallback.freshness_ms = 30000;
+    fallback.stale_policy = 1;
+    fallback.fallback_bits = 0x40A00000ull;
+    fallback.has_fallback = true;
+
+    const StageCommand command = write_candidate(
+        tree, kOperation, kRevision,
+        package_of({"P_ahu", "P_boiler"}, {1000u, 5000u}, {held, fallback}), "P_ahu");
+    std::string detail;
+    ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
+
+    ASSERT_EQ(bus.size(), 2u);
+    const int supply = bus.index_of("SUPPLY");
+    const int reset = bus.index_of("RESET");
+    ASSERT_GE(supply, 0);
+    ASSERT_GE(reset, 0);
+    EXPECT_EQ(bus.definition(supply).stale_policy, StStalePolicy::HOLD_LAST);
+    EXPECT_EQ(bus.definition(supply).freshness_ms, 5000u);
+    EXPECT_EQ(bus.definition(reset).stale_policy, StStalePolicy::USE_FALLBACK);
+    EXPECT_FLOAT_EQ(bus.definition(reset).fallback.r, 5.0f);
+
+    /* Nạp gói KHÔNG có signal trên CÙNG bus đó: bus phải trống lại, không giữ
+     * hợp đồng của gói cũ. Dùng coordinator/journal mới vì gói trước còn đang
+     * dở một lifecycle operation — điều cần chứng minh ở đây là bus được dựng
+     * lại theo package, không phải là hai lệnh stage chồng nhau. */
+    TempTree second_tree;
+    ASSERT_FALSE(second_tree.path.empty());
+    std::filesystem::create_directories(std::filesystem::path(second_tree.path) / "staging");
+    StScheduler second_scheduler(StSchedulerProfile::REV_A);
+    configure_task(&second_scheduler);
+    second_scheduler.set_signal_bus(&bus);
+    ProgrammingCutover second_cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator second_coordinator(&second_scheduler, &second_cutover,
+                                                      second_tree.path + "/journal.bin",
+                                                      second_tree.path + "/staging");
+    ASSERT_TRUE(second_coordinator.recover(&error)) << error;
+    const StageCommand second = write_candidate(
+        second_tree, "33333333-3333-4333-8333-333333333333", kRevision,
+        package_of({"P_ahu"}, {1000u}), "P_ahu");
+    ASSERT_TRUE(second_coordinator.stage(second, &detail, &error)) << detail << ": " << error;
+    EXPECT_EQ(bus.size(), 0u) << "bus giữ khai báo của gói cũ";
+}
+
+/* Scheduler commit bus ở BOUNDARY, trước khi Program nào chạy: mọi consumer
+ * trong một chu kỳ phải thấy cùng một ảnh signal. */
+TEST(ProgrammingPackageV2Stage, SchedulerCommitsSignalsAtBoundary)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_task(&scheduler);
+    StSignalBus bus;
+    scheduler.set_signal_bus(&bus);
+    std::string error;
+    StSignalDefinition definition;
+    definition.name = "SUPPLY";
+    definition.publisher_program = "P_pub";
+    definition.type = StType::REAL;
+    definition.freshness_ms = 30000;
+    definition.stale_policy = StStalePolicy::HOLD_LAST;
+    ASSERT_TRUE(bus.declare(definition, &error)) << error;
+    const int index = bus.index_of("SUPPLY");
+
+    StCell cell{};
+    cell.r = 42.0f;
+    ASSERT_TRUE(bus.publish(index, cell, 0, "P_pub"));
+    EXPECT_EQ(bus.read(index, 0).state, StSignalReadState::UNAVAILABLE)
+        << "chưa qua boundary mà đã đọc được";
+
+    scheduler.on_base_step(1000ULL * 1000000ULL);
+    const StSignalRead read = bus.read(index, 1000ULL * 1000000ULL);
+    EXPECT_EQ(read.state, StSignalReadState::FRESH);
+    EXPECT_FLOAT_EQ(read.value.r, 42.0f);
 }

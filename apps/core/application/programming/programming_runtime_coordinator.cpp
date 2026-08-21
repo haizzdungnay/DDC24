@@ -445,7 +445,9 @@ bool ProgrammingRuntimeCoordinator::load_active_checkpoint(
      * container cho loader IR v1 và thiết bị tỉnh dậy KHÔNG có Program nào —
      * hỏng đúng vào lúc không ai đang nhìn. */
     std::vector<PackageProgramSlice> programs;
-    if (!split_package(bytes, instance_id_, &programs, &detail, error)) return false;
+    std::vector<StPackageSignal> signals;
+    if (!split_package(bytes, instance_id_, &programs, &signals, &detail, error)) return false;
+    if (!rebuild_signal_bus(signals, &detail, error)) return false;
     for (const PackageProgramSlice& program : programs)
         if (!valid_instance_id(program.instance_id)) {
             if (error) *error = "checkpoint package program name is not a valid instance id";
@@ -539,9 +541,11 @@ bool ProgrammingRuntimeCoordinator::ensure_topology(
 
 bool ProgrammingRuntimeCoordinator::split_package(
     const std::vector<uint8_t>& bytes, const std::string& fallback_instance,
-    std::vector<PackageProgramSlice>* out, std::string* detail_code, std::string* error) const
+    std::vector<PackageProgramSlice>* out, std::vector<StPackageSignal>* signals_out,
+    std::string* detail_code, std::string* error) const
 {
     out->clear();
+    if (signals_out != nullptr) signals_out->clear();
     bool is_v2 = false;
     const char* probe_error = nullptr;
     if (!ProbePackageFormat(bytes.data(), bytes.size(), &is_v2, &probe_error)) {
@@ -566,12 +570,64 @@ bool ProgrammingRuntimeCoordinator::split_package(
         if (error) *error = "package v2 rejected by loader";
         return false;
     }
+    if (signals_out != nullptr) signals_out->assign(contents.signals.begin(), contents.signals.end());
     for (std::size_t index = 0; index < contents.view.program_names.size(); ++index) {
         PackageProgramSlice slice;
         slice.instance_id = contents.view.program_names[index];
         slice.ir_blob = contents.program_ir[index];
         slice.period_ms = contents.view.program_periods_ms[index];
         out->push_back(std::move(slice));
+    }
+    return true;
+}
+
+bool ProgrammingRuntimeCoordinator::rebuild_signal_bus(
+    const std::vector<StPackageSignal>& signals, std::string* detail_code, std::string* error)
+{
+    StSignalBus* bus = scheduler_->signal_bus();
+    if (bus == nullptr) {
+        /* Không có bus mà package khai signal nghĩa là consumer sẽ đọc vào hư
+         * không. Không có bus và cũng không có signal thì đúng là không có gì
+         * phải làm. */
+        if (signals.empty()) return true;
+        if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
+        if (error) *error = "package declares signals but runtime has no signal bus";
+        return false;
+    }
+    /* Dựng LẠI từ đầu: giữ khai báo của gói cũ nghĩa là chạy gói mới với hợp
+     * đồng gói cũ, và sai lệch đó không lộ ra cho tới khi ai đó đọc một signal
+     * đã bị gói mới bỏ đi. */
+    bus->clear();
+    for (const StPackageSignal& signal : signals) {
+        StSignalDefinition definition;
+        definition.name = signal.name;
+        definition.publisher_program = signal.producer_program;
+        definition.type = static_cast<StType>(signal.data_type);
+        definition.freshness_ms = signal.freshness_ms;
+        StStalePolicy policy = StStalePolicy::HOLD_LAST;
+        switch (signal.stale_policy) {
+        case 0: policy = StStalePolicy::HOLD_LAST; break;
+        case 1: policy = StStalePolicy::USE_FALLBACK; break;
+        case 2: policy = StStalePolicy::WAIT; break;
+        default:
+            if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
+            if (error) *error = "signal '" + signal.name + "' có chính sách stale không hợp lệ";
+            bus->clear();
+            return false;
+        }
+        definition.stale_policy = policy;
+        definition.has_fallback = signal.has_fallback;
+        if (signal.has_fallback)
+            std::memcpy(&definition.fallback, &signal.fallback_bits, sizeof(definition.fallback));
+        std::string declare_error;
+        if (!bus->declare(definition, &declare_error)) {
+            if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
+            if (error) *error = declare_error;
+            /* Gói hỏng để lại 0 mutation, kể cả ở bus: một bus dựng dở là một
+             * tập hợp đồng chưa từng được Check. */
+            bus->clear();
+            return false;
+        }
     }
     return true;
 }
@@ -649,7 +705,9 @@ bool ProgrammingRuntimeCoordinator::stage_impl(const StageCommand& command, bool
     if (!read_staged_artifact(command, &bytes, detail_code, error)) return false;
 
     std::vector<PackageProgramSlice> programs;
-    if (!split_package(bytes, command.instance_id, &programs, detail_code, error)) return false;
+    std::vector<StPackageSignal> signals;
+    if (!split_package(bytes, command.instance_id, &programs, &signals, detail_code, error))
+        return false;
     std::vector<std::string> instance_ids;
     instance_ids.reserve(programs.size());
     for (const PackageProgramSlice& program : programs) {
@@ -664,6 +722,7 @@ bool ProgrammingRuntimeCoordinator::stage_impl(const StageCommand& command, bool
         if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
         return false;
     }
+    if (!rebuild_signal_bus(signals, detail_code, error)) return false;
     /* Stage TỪNG Program. Một Program hỏng làm cả package hỏng, và mọi Program
      * đã stage trước đó phải được huỷ — nạp nửa gói là nạp một cấu hình chưa
      * từng được Check. */

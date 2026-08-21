@@ -853,6 +853,12 @@ StSchedulerTickResult StScheduler::on_base_step(uint64_t now_ns)
      * giữa lúc execute() đang chạy. */
     apply_pending_activations_at_boundary();
 
+    /* Đổi bản signal TRƯỚC khi bất kỳ Program nào chạy. Consumer trong chu kỳ
+     * này đọc thứ publisher đã ghi ở chu kỳ TRƯỚC — độ trễ một chu kỳ là cái giá
+     * của việc mọi consumer thấy cùng một ảnh, và nó là cái giá rẻ hơn nhiều so
+     * với kết quả phụ thuộc thứ tự chạy. */
+    if (signal_bus_ != nullptr) signal_bus_->commit_at_boundary();
+
     for (auto& t : tasks_) {
         if (!t->enabled()) { t->stats_.skip_count++; continue; }
         if (!t->due(now_ns)) continue;

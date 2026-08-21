@@ -32,6 +32,7 @@
 #include "st/st_limits.hpp"
 #include "st/st_retain.hpp"
 #include "st/st_runtime.hpp"
+#include "st/st_signal_bus.hpp"
 #include "st/st_trace.hpp"
 
 namespace core {
@@ -308,6 +309,17 @@ public:
      * quyết định đó (phần đó cần selector/session riêng, còn mở — xem
      * DDD-CTRL-PROG-001 As-Built). nullptr = không log (mặc định), scheduler
      * không tự cấp phát trace log để giữ chủ quyền bounded-capacity ở caller. */
+    /* T59-404 — bus Published Signal của package đang chạy. Scheduler chỉ chịu
+     * trách nhiệm COMMIT ở boundary; khai báo và publish thuộc lớp nạp package
+     * và thân chương trình. nullptr = package không có signal nào.
+     *
+     * Vì sao commit ở đây chứ không để mỗi Program tự đổi bản: trong cùng một
+     * chu kỳ, mọi consumer phải thấy CÙNG một ảnh signal. Cho consumer thấy giá
+     * trị ngay khi publisher ghi sẽ làm kết quả phụ thuộc vào lane nào chạy
+     * trước — đúng thứ mà "single/multicore cùng ngữ nghĩa" cấm. */
+    void set_signal_bus(StSignalBus* bus) { signal_bus_ = bus; }
+    StSignalBus* signal_bus() const { return signal_bus_; }
+
     void set_trace_log(StSchedulerTrace* trace) { trace_ = trace; }
     const StSchedulerTrace* trace_log() const { return trace_; }
 
@@ -414,6 +426,7 @@ private:
     StLoaderOptions loader_opts_;
     std::function<uint64_t()> wall_clock_ = default_monotonic_wall_clock_ns;
     StSchedulerTrace* trace_ = nullptr;
+    StSignalBus* signal_bus_ = nullptr;
     StRetainService* retain_service_ = nullptr;
 
     /* Kết quả MỘT lane trong MỘT lần chạy Task. Lane không được đụng vào
