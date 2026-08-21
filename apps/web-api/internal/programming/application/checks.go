@@ -218,6 +218,11 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 		return true, err
 	}
 	inputs, scopeDiagnostics := compilerInputs(revision)
+	// Bất biến cấp package được kiểm TRƯỚC khi biên dịch: một package có hai
+	// Program cùng ghi một output là package sai bất kể từng Program compile
+	// sạch hay không, và biên dịch 32 Program rồi mới báo là lãng phí đúng thứ
+	// người dùng đang chờ. Gộp cùng scope diagnostics để một lần Check nói hết.
+	scopeDiagnostics = append(scopeDiagnostics, packageInvariantDiagnostics(revisionObjectViews(revision))...)
 	if len(scopeDiagnostics) > 0 {
 		return true, s.complete(ctx, check, "FAILED", scopeDiagnostics, nil)
 	}
@@ -747,4 +752,14 @@ func packageCheckManifestWith(artifacts []packageProgramArtifact, results []prog
 		Artifacts:        artifacts,
 		ProgramManifests: programManifests,
 	})
+}
+
+// revisionObjectViews tách lớp kiểm bất biến khỏi kiểu store: hàm kiểm chỉ cần
+// (id, kind, payload) nên nó test được mà không phải dựng cả một Revision.
+func revisionObjectViews(revision programmingstore.RevisionSnapshot) []revisionObjectView {
+	views := make([]revisionObjectView, 0, len(revision.Objects))
+	for _, object := range revision.Objects {
+		views = append(views, revisionObjectView{ObjectID: object.ObjectID, Kind: object.Kind, Payload: object.PayloadJSON})
+	}
+	return views
 }
