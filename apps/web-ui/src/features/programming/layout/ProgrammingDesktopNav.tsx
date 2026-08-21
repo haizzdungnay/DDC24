@@ -22,7 +22,7 @@ export function ProgrammingDesktopNav({ projectId }: { projectId: string | null 
   const { pick } = useI18n()
   const items: NavItem[] = [
     { key: 'overview', label: ['Tổng quan', 'Overview'], to: '/eng/programming', icon: Home, end: true },
-    { key: 'design', label: ['Thiết kế', 'Design'], to: projectId ? `/eng/programming/projects/${projectId}/design` : null, icon: PencilRuler },
+    { key: 'design', label: ['Thiết kế', 'Design'], to: projectId ? `/eng/programming/projects/${projectId}/programs` : null, icon: PencilRuler },
     { key: 'library', label: ['Thư viện', 'Library'], to: projectId ? `/eng/programming/projects/${projectId}/library` : null, icon: Library },
     { key: 'check', label: ['Kiểm tra', 'Check'], to: projectId ? `/eng/programming/projects/${projectId}/commission` : null, icon: ClipboardCheck },
     { key: 'runtime', label: ['Runtime', 'Runtime'], to: '/eng/programming/runtime', icon: Activity }

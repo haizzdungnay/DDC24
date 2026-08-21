@@ -31,12 +31,14 @@ describe('ProgrammingDesktopNav (D-04)', () => {
 
   it('có projectId — cả bốn mục đều là link thật, đúng route Design/Check của project đó', () => {
     renderNav('project-1')
-    expect(screen.getByRole('link', { name: 'Thiết kế' })).toHaveAttribute('href', '/eng/programming/projects/project-1/design')
+    // T59-306: IA sáu trang (DDD §8) đặt `/programs` làm route đích của PGM-02;
+    // `/design` trở thành lối vào cũ và chỉ chuyển hướng.
+    expect(screen.getByRole('link', { name: 'Thiết kế' })).toHaveAttribute('href', '/eng/programming/projects/project-1/programs')
     expect(screen.getByRole('link', { name: 'Kiểm tra' })).toHaveAttribute('href', '/eng/programming/projects/project-1/commission')
   })
 
   it('mục đang mở đúng route được đánh dấu active (aria-current)', () => {
-    renderNav('project-1', '/eng/programming/projects/project-1/design')
+    renderNav('project-1', '/eng/programming/projects/project-1/programs')
     expect(screen.getByRole('link', { name: 'Thiết kế' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Tổng quan' })).not.toHaveAttribute('aria-current')
   })

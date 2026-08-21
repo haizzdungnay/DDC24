@@ -13,6 +13,7 @@ import { Modal } from '../../../shared/components/Modal'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
 import { toWorkspaceDocument } from '../model/draftV2'
+import { PouTree } from './PouTree'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
@@ -34,7 +35,13 @@ const EMPTY_DIAGNOSTICS: ProgrammingDiagnostic[] = []
  * (DDD-FE-PROG-001 §0.1). Tab là trạng thái URL, đọc/ghi bằng `replace`
  * trong `useEffect` (không setState lúc render).
  */
-export function DesignWorkspacePage() {
+/**
+ * T59-306: `route` cố định tab theo ROUTE ĐÍCH của IA sáu trang (DDD §8). Khi
+ * không có nó (lối vào cũ), tab vẫn lấy từ `?tab=`. Route thắng query vì URL
+ * đích là nguồn sự thật — nếu query thắng thì `/mapping?tab=programs` sẽ hiện
+ * một trang không khớp địa chỉ của chính nó.
+ */
+export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
   const { pick } = useI18n()
   const { session } = useAuth()
   const navigate = useNavigate()
@@ -43,7 +50,8 @@ export function DesignWorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const requested = searchParams.get('tab')
-  const tab: DesignTab = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as DesignTab) : 'programs'
+  const fromQuery: DesignTab = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as DesignTab) : 'programs'
+  const tab: DesignTab = route ?? fromQuery
   // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-03
   // (Check) chọn sẵn đúng Program bị lỗi khi mở workspace Thiết kế.
   const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>(() => searchParams.get('program') ?? undefined)
@@ -221,6 +229,17 @@ export function DesignWorkspacePage() {
           DDD-FE-PROG-001 §0.1 ràng buộc 1. Phát hiện qua Playwright E2E
           (TASK-PROG-506), sửa ngay trong cùng phiên. */}
       <div hidden={tab !== 'programs'}>
+        {/* T59-306/PGM-02: cây POU gom ba nhóm Programs/Functions/Function
+            Blocks và inspector kind-aware. Nó đọc document v2 TRỰC TIẾP, không
+            qua adapter — đây là phần IA mới, còn `ProgramsTab` bên dưới vẫn là
+            editor cũ cho tới khi lane editor chuyển sang v2. */}
+        <div className="mb-3 rounded border border-[var(--c-border)] p-3">
+          <PouTree
+            draft={workspace.project.draft}
+            selectedObjectId={selectedProgramId}
+            onSelect={setSelectedProgramId}
+          />
+        </div>
         <ProgramsTab
           document={document}
           saving={workspace.saving}
