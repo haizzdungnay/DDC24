@@ -22,7 +22,10 @@
 #include <unistd.h>
 
 #include "programming/programming_runtime_coordinator.hpp"
+#include "graph/point_table.hpp"
+#include "priority/priority_resolver.hpp"
 #include "st/st_compile.hpp"
+#include "st/st_process_image.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_package_v2.hpp"
 #include "st/st_profile_generated.hpp"
@@ -64,14 +67,17 @@ std::vector<uint8_t> program_ir(const std::string& name, int value)
 
 /* Package v2 dựng bằng ĐÚNG writer production — golden và fuzz của T59-106 canh
  * writer đó, nên test này không tự chế một định dạng thứ hai. */
-std::vector<uint8_t> package_of(const std::vector<std::string>& names)
+std::vector<uint8_t> package_of(const std::vector<std::string>& names,
+                                const std::vector<uint32_t>& periods_ms = {})
 {
     StPackageInput input;
     input.compiler_profile = st_profile_generated::kProfileCode;
     input.target_abi = st_profile_generated::kTargetAbi;
     int value = 1;
-    for (const std::string& name : names) {
-        input.programs.push_back({name, program_ir(name, value++)});
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        const std::string& name = names[index];
+        const uint32_t period = index < periods_ms.size() ? periods_ms[index] : 0u;
+        input.programs.push_back({name, program_ir(name, value++), period, 0u});
         StPouSignature signature;
         signature.name = name;
         signature.kind = StPouKind::PROGRAM;
@@ -236,5 +242,116 @@ TEST(ProgrammingPackageV2Stage, RejectsHostileInstanceIdentity)
         std::string detail;
         EXPECT_FALSE(coordinator.stage(command, &detail, &error))
             << "instance id độc hại được chấp nhận: " << hostile;
+    }
+}
+
+/* T59-402 — chu kỳ là dữ liệu của PACKAGE. Nếu runtime tự chọn chu kỳ thì hai
+ * controller nạp cùng một gói sẽ chạy hai dãy release khác nhau, và mọi tuyên bố
+ * "cùng package cho cùng hành vi" mất nghĩa. */
+TEST(ProgrammingPackageV2Stage, PerProgramPeriodComesFromPackage)
+{
+    TempTree tree;
+    ASSERT_FALSE(tree.path.empty());
+    std::filesystem::create_directories(std::filesystem::path(tree.path) / "staging");
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_task(&scheduler);
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                               tree.path + "/staging");
+    std::string error;
+    ASSERT_TRUE(coordinator.recover(&error)) << error;
+
+    const std::vector<std::string> names = {"P_fast", "P_medium", "P_slow"};
+    const std::vector<uint32_t> periods = {1000u, 5000u, 30000u};
+    const StageCommand command =
+        write_candidate(tree, kOperation, kRevision, package_of(names, periods), "P_fast");
+    std::string detail;
+    ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
+
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        const StProgramInstance* instance = scheduler.find_program(names[index]);
+        ASSERT_NE(instance, nullptr) << names[index];
+        EXPECT_EQ(instance->period_ms, periods[index]) << names[index];
+    }
+}
+
+/* Chu kỳ ngoài ba lớp profile bị chặn ở CHÍNH writer: một lớp lập lịch không tồn
+ * tại chấp nhận ở đây chỉ đẩy lỗi xuống runtime, nơi nó biểu hiện thành deadline
+ * miss chứ không thành một câu trả lời hiểu được. */
+TEST(ProgrammingPackageV2Stage, WriterRejectsPeriodOutsideProfileClasses)
+{
+    StPackageInput input;
+    input.compiler_profile = st_profile_generated::kProfileCode;
+    input.target_abi = st_profile_generated::kTargetAbi;
+    input.programs.push_back({"P_odd", program_ir("P_odd", 3), 750u, 0u});
+    StPouSignature signature;
+    signature.name = "P_odd";
+    signature.kind = StPouKind::PROGRAM;
+    input.pou_signatures.push_back(signature);
+
+    std::vector<uint8_t> bytes;
+    std::string error;
+    EXPECT_FALSE(WritePackageV2(input, &bytes, &error));
+    EXPECT_NE(error.find("ngoài ba lớp"), std::string::npos) << error;
+}
+
+/* Gói v2 phải sống sót qua reboot. Trước T59-402 đường khôi phục nạp NGUYÊN khối
+ * container vào một instance như thể là artifact v1 — loader IR v1 từ chối, và
+ * thiết bị tỉnh dậy không có Program nào. Hỏng đúng vào lúc không ai đang nhìn. */
+TEST(ProgrammingPackageV2Stage, PackageV2SurvivesRestartWithEveryProgram)
+{
+    TempTree tree;
+    ASSERT_FALSE(tree.path.empty());
+    std::filesystem::create_directories(std::filesystem::path(tree.path) / "staging");
+    const std::vector<std::string> names = {"P_ahu", "P_boiler"};
+    const std::vector<uint32_t> periods = {1000u, 5000u};
+    const std::vector<uint8_t> bytes = package_of(names, periods);
+    const StageCommand command = write_candidate(tree, kOperation, kRevision, bytes, "P_ahu");
+
+    {
+        StScheduler scheduler(StSchedulerProfile::REV_A);
+        configure_task(&scheduler);
+        ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+        ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                                   tree.path + "/staging");
+        std::string error;
+        ASSERT_TRUE(coordinator.recover(&error)) << error;
+        std::string detail;
+        ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
+        ActivateCommand activate;
+        activate.operation_id = kOperation;
+        activate.staged_token = kOperation;
+        activate.cutover = CutoverMode::PROGRAM_ONLY;
+        activate.plan_hash = command.plan_hash;
+        ASSERT_TRUE(coordinator.activate(activate, &detail, &error)) << detail << ": " << error;
+        /* Checkpoint chỉ được ghi sau khi chu kỳ đầu tiên đẩy được output —
+         * "đã activate" chưa phải "đã cam kết". Phải đi hết đường đó, nếu không
+         * test chỉ chứng minh rằng không có gì để khôi phục. */
+        coordinator.on_safe_boundary();
+        scheduler.tick(scheduler.base_step_count() * 1000ULL * 1000000ULL + 1000ULL * 1000000ULL);
+        PointTable table;
+        PriorityResolver resolver;
+        StIoBridgeStats stats;
+        ASSERT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &stats));
+        coordinator.on_output_commit(true);
+        ASSERT_TRUE(coordinator.flush_progress(&error)) << error;
+        ASSERT_EQ(coordinator.snapshot().state, LifecycleState::COMMITTED);
+    }
+
+    /* Tiến trình MỚI: cùng journal, cùng staging, không còn gì trong bộ nhớ. */
+    StScheduler restarted(StSchedulerProfile::REV_A);
+    configure_task(&restarted);
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&restarted, &cutover, tree.path + "/journal.bin",
+                                               tree.path + "/staging");
+    std::string error;
+    ASSERT_TRUE(coordinator.recover(&error)) << error;
+
+    ASSERT_EQ(coordinator.instance_ids().size(), names.size());
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        const StProgramInstance* instance = restarted.find_program(names[index]);
+        ASSERT_NE(instance, nullptr) << names[index] << " mất sau khởi động lại";
+        EXPECT_EQ(instance->state, StProgramState::RUNNING) << names[index];
+        EXPECT_EQ(instance->period_ms, periods[index]) << names[index];
     }
 }

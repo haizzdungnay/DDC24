@@ -71,6 +71,15 @@ enum class RetainResetOutcome : uint8_t {
 /* Coordinator duy nhất sở hữu thứ tự journal → arm → safe-boundary → first
  * output commit. Filesystem chỉ chạy trong method IPC/non-RT; hai hook scan
  * chỉ đọc/ghi atomic và gọi swap O(1) đã prepare. */
+/* Một Program đã tách ra khỏi package, đủ để stage: identity, mã, và chu kỳ
+ * release. Gộp ba thứ vào một struct thay vì ba vector song song vì chúng luôn
+ * đi cùng nhau — vector song song là chỗ để lệch độ dài. */
+struct PackageProgramSlice {
+    std::string instance_id;
+    std::vector<uint8_t> ir_blob;
+    uint32_t period_ms = 0;
+};
+
 class ProgrammingRuntimeCoordinator {
 public:
     ProgrammingRuntimeCoordinator(StScheduler* scheduler, ProgrammingCutover* cutover,
@@ -117,14 +126,15 @@ private:
                     std::string* detail_code, std::string* error);
     bool ensure_instance(std::string* error);
     /* Chuẩn bị topology cho đúng tập Program của package: thêm instance còn
-     * thiếu vào scheduler. Bootstrap không còn phải biết trước tên Program —
-     * đó là dữ liệu của package, không phải của bootstrap. */
-    bool ensure_topology(const std::vector<std::string>& instance_ids, std::string* error);
-    /* Tách artifact thành các (instance_id, ir_blob). v1 -> đúng một cặp dùng
-     * `command.instance_id`; v2 -> N cặp lấy tên từ chính package. */
+     * thiếu vào scheduler và áp chu kỳ release của từng Program. Bootstrap không
+     * còn phải biết trước tên Program — đó là dữ liệu của package, không phải
+     * của bootstrap. */
+    bool ensure_topology(const std::vector<PackageProgramSlice>& slices, std::string* error);
+    /* Tách artifact thành các lát Program. v1 -> đúng một lát dùng
+     * `command.instance_id`; v2 -> N lát lấy tên và chu kỳ từ chính package. */
     bool split_package(const std::vector<uint8_t>& bytes, const std::string& fallback_instance,
-                       std::vector<std::pair<std::string, std::vector<uint8_t>>>* out,
-                       std::string* detail_code, std::string* error) const;
+                       std::vector<PackageProgramSlice>* out, std::string* detail_code,
+                       std::string* error) const;
     bool append_phase(StJournalPhase phase, std::string* error);
     bool read_staged_artifact(const StageCommand& command, std::vector<uint8_t>* bytes,
                               std::string* detail_code, std::string* error) const;

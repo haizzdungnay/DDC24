@@ -438,15 +438,41 @@ bool ProgrammingRuntimeCoordinator::load_active_checkpoint(
     if (!decode_hex_digest(checkpoint.artifact_sha256, &command.sha256)) return false;
     std::vector<uint8_t> bytes;
     std::string detail;
-    if (!read_staged_artifact(command, &bytes, &detail, error) || !ensure_instance(error) ||
-        !scheduler_->stage_activation(instance_id_, bytes, error) ||
-        !scheduler_->commit_staged_activation(instance_id_, false, error))
-        return false;
+    if (!read_staged_artifact(command, &bytes, &detail, error)) return false;
+
+    /* Khôi phục phải đi qua ĐÚNG đường tách gói như lúc stage. Nạp nguyên khối
+     * `bytes` vào một instance chỉ đúng với artifact v1; với package v2 nó đưa cả
+     * container cho loader IR v1 và thiết bị tỉnh dậy KHÔNG có Program nào —
+     * hỏng đúng vào lúc không ai đang nhìn. */
+    std::vector<PackageProgramSlice> programs;
+    if (!split_package(bytes, instance_id_, &programs, &detail, error)) return false;
+    for (const PackageProgramSlice& program : programs)
+        if (!valid_instance_id(program.instance_id)) {
+            if (error) *error = "checkpoint package program name is not a valid instance id";
+            return false;
+        }
+    if (!ensure_topology(programs, error)) return false;
+    for (std::size_t index = 0; index < programs.size(); ++index) {
+        if (!scheduler_->stage_activation(programs[index].instance_id, programs[index].ir_blob,
+                                          error) ||
+            !scheduler_->commit_staged_activation(programs[index].instance_id, false, error)) {
+            std::string ignored;
+            for (std::size_t undo = 0; undo < index; ++undo)
+                (void)scheduler_->abort_staged_activation(programs[undo].instance_id, &ignored);
+            return false;
+        }
+    }
     scheduler_->apply_pending_activations_at_boundary();
-    StProgramInstance* instance = scheduler_->find_program(instance_id_);
-    if (!instance || instance->state != StProgramState::ACTIVE ||
-        !scheduler_->start(instance_id_, error)) return false;
-    instance->last_known_good.swap(instance->activated_artifact);
+    for (const PackageProgramSlice& program : programs) {
+        StProgramInstance* restored = scheduler_->find_program(program.instance_id);
+        if (!restored || restored->state != StProgramState::ACTIVE ||
+            !scheduler_->start(program.instance_id, error)) return false;
+        restored->last_known_good.swap(restored->activated_artifact);
+    }
+    instance_ids_.clear();
+    for (const PackageProgramSlice& program : programs)
+        instance_ids_.push_back(program.instance_id);
+    instance_id_ = instance_ids_.front();
     revision_id_ = checkpoint.revision_id;
     previous_revision_id_ = checkpoint.revision_id;
     lkg_revision_id_ = checkpoint.revision_id;
@@ -461,7 +487,19 @@ bool ProgrammingRuntimeCoordinator::load_active_checkpoint(
 
 bool ProgrammingRuntimeCoordinator::ensure_instance(std::string* error)
 {
-    return ensure_topology(instance_ids_, error);
+    /* Đường chưa có package trong tay: chỉ bảo đảm instance tồn tại và GIỮ
+     * NGUYÊN chu kỳ đang chạy. Đặt 0 ở đây sẽ âm thầm hạ mọi Program về chu kỳ
+     * của Task. */
+    std::vector<PackageProgramSlice> slices;
+    slices.reserve(instance_ids_.size());
+    for (const std::string& id : instance_ids_) {
+        PackageProgramSlice slice;
+        slice.instance_id = id;
+        const StProgramInstance* existing = scheduler_->find_program(id);
+        slice.period_ms = existing != nullptr ? existing->period_ms : 0u;
+        slices.push_back(std::move(slice));
+    }
+    return ensure_topology(slices, error);
 }
 
 std::vector<std::string> ProgrammingRuntimeCoordinator::instance_ids() const
@@ -469,14 +507,14 @@ std::vector<std::string> ProgrammingRuntimeCoordinator::instance_ids() const
     return instance_ids_;
 }
 
-bool ProgrammingRuntimeCoordinator::ensure_topology(const std::vector<std::string>& instance_ids,
-                                                    std::string* error)
+bool ProgrammingRuntimeCoordinator::ensure_topology(
+    const std::vector<PackageProgramSlice>& slices, std::string* error)
 {
     if (!scheduler_->find_task(kTaskId)) {
         if (error) *error = "Programming task was not prepared at bootstrap";
         return false;
     }
-    if (instance_ids.empty()) {
+    if (slices.empty()) {
         if (error) *error = "package has no program instance";
         return false;
     }
@@ -484,10 +522,16 @@ bool ProgrammingRuntimeCoordinator::ensure_topology(const std::vector<std::strin
      * Tên Program là dữ liệu của PACKAGE; bắt bootstrap khai trước nghĩa là mỗi
      * lần đổi tên Program phải sửa cả tiến trình khởi động. */
     uint16_t order = 0;
-    for (const std::string& id : instance_ids) {
-        if (scheduler_->find_program(id) == nullptr &&
-            !scheduler_->add_program(kTaskId, id, order, error))
+    for (const PackageProgramSlice& slice : slices) {
+        if (scheduler_->find_program(slice.instance_id) == nullptr &&
+            !scheduler_->add_program(kTaskId, slice.instance_id, order, error))
             return false;
+        /* Chu kỳ lấy từ PACKAGE, không phải từ mặc định của Task. Đặt lại mỗi
+         * lần dựng topology chứ không chỉ lúc tạo mới: một package mới có thể
+         * đổi chu kỳ của Program đã tồn tại, và bỏ qua nó nghĩa là thiết bị chạy
+         * theo chu kỳ của gói CŨ. */
+        if (StProgramInstance* program = scheduler_->find_program(slice.instance_id))
+            program->period_ms = slice.period_ms;
         ++order;
     }
     return true;
@@ -495,8 +539,7 @@ bool ProgrammingRuntimeCoordinator::ensure_topology(const std::vector<std::strin
 
 bool ProgrammingRuntimeCoordinator::split_package(
     const std::vector<uint8_t>& bytes, const std::string& fallback_instance,
-    std::vector<std::pair<std::string, std::vector<uint8_t>>>* out,
-    std::string* detail_code, std::string* error) const
+    std::vector<PackageProgramSlice>* out, std::string* detail_code, std::string* error) const
 {
     out->clear();
     bool is_v2 = false;
@@ -509,7 +552,10 @@ bool ProgrammingRuntimeCoordinator::split_package(
     if (!is_v2) {
         /* Artifact v1 mô tả ĐÚNG một Program; dual-reader DDD §12.1 buộc đường
          * này còn sống, nếu không một lần nâng cấp là mất bản LKG cuối cùng. */
-        out->emplace_back(fallback_instance, bytes);
+        PackageProgramSlice slice;
+        slice.instance_id = fallback_instance;
+        slice.ir_blob = bytes;
+        out->push_back(std::move(slice));
         return true;
     }
     StPackageContents contents;
@@ -520,8 +566,13 @@ bool ProgrammingRuntimeCoordinator::split_package(
         if (error) *error = "package v2 rejected by loader";
         return false;
     }
-    for (std::size_t index = 0; index < contents.view.program_names.size(); ++index)
-        out->emplace_back(contents.view.program_names[index], contents.program_ir[index]);
+    for (std::size_t index = 0; index < contents.view.program_names.size(); ++index) {
+        PackageProgramSlice slice;
+        slice.instance_id = contents.view.program_names[index];
+        slice.ir_blob = contents.program_ir[index];
+        slice.period_ms = contents.view.program_periods_ms[index];
+        out->push_back(std::move(slice));
+    }
     return true;
 }
 
@@ -597,19 +648,19 @@ bool ProgrammingRuntimeCoordinator::stage_impl(const StageCommand& command, bool
     std::vector<uint8_t> bytes;
     if (!read_staged_artifact(command, &bytes, detail_code, error)) return false;
 
-    std::vector<std::pair<std::string, std::vector<uint8_t>>> programs;
+    std::vector<PackageProgramSlice> programs;
     if (!split_package(bytes, command.instance_id, &programs, detail_code, error)) return false;
     std::vector<std::string> instance_ids;
     instance_ids.reserve(programs.size());
-    for (const auto& program : programs) {
-        if (!valid_instance_id(program.first)) {
+    for (const PackageProgramSlice& program : programs) {
+        if (!valid_instance_id(program.instance_id)) {
             if (detail_code) *detail_code = "IPC-PAYLOAD";
             if (error) *error = "package program name is not a valid instance id";
             return false;
         }
-        instance_ids.push_back(program.first);
+        instance_ids.push_back(program.instance_id);
     }
-    if (!ensure_topology(instance_ids, error)) {
+    if (!ensure_topology(programs, error)) {
         if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
         return false;
     }
@@ -617,10 +668,11 @@ bool ProgrammingRuntimeCoordinator::stage_impl(const StageCommand& command, bool
      * đã stage trước đó phải được huỷ — nạp nửa gói là nạp một cấu hình chưa
      * từng được Check. */
     for (std::size_t index = 0; index < programs.size(); ++index) {
-        if (!scheduler_->stage_activation(programs[index].first, programs[index].second, error)) {
+        if (!scheduler_->stage_activation(programs[index].instance_id, programs[index].ir_blob,
+                                          error)) {
             std::string ignored;
             for (std::size_t undo = 0; undo < index; ++undo)
-                (void)scheduler_->abort_staged_activation(programs[undo].first, &ignored);
+                (void)scheduler_->abort_staged_activation(programs[undo].instance_id, &ignored);
             if (detail_code) *detail_code = "IPC-STAGE-REJECTED";
             return false;
         }
