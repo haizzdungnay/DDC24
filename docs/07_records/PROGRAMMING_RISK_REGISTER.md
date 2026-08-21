@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.0 |
+| Phiên bản | 4.1 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -561,6 +561,18 @@ Hai test cũ khoá hành vi "MB_RTU không hỗ trợ" được **thay** chứ k
 không mất phép kiểm allowlist category. Evidence host/local; **22/22 risk giữ
 Open**, S×L và residual không đổi.
 
+### 5.37 Cập nhật treatment source `T59-304` (Plan59 W3)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-002` | Một output binding có đúng một Program owner, kiểm ở **Check** trước khi biên dịch và nhận diện theo **điểm vật lý** (`deviceId`+`extIndex` với MB_RTU) chứ không theo tên điểm | Trọng tài output/candidate withdrawal runtime (`T59-406`), HIL I/O vật lý (`T59-703`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-012` | Bốn luật Published Signal kiểm ở Check: đúng một publisher (case-folded), publisher phải tồn tại, freshness 1000..90000, `USE_FALLBACK` ghép cứng với giá trị dự phòng | Double-buffer/freshness/fallback lúc chạy (`T59-404`), Test Result `U05/U06` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Mọi vi phạm cấp package được **gộp** trong một lần Check, mỗi diagnostic mang `signalId`/`programId`/`pointId` của chính nó | FE hiển thị (`T59-306`), Test Result `VS-PROG-019/024` | `OPEN — PARTIAL SOURCE` |
+
+Kiểm ở Check **bổ sung** cho loader chứ không thay: loader vẫn phải kiểm vì
+artifact có thể tới từ nơi khác. Evidence host/local; **22/22 risk giữ Open**,
+S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -613,6 +625,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 4.1 | 2026-08-21 | Ghi `T59-304` (Plan59 W3) cho treatment partial RSK-002/012/014: output owner nhận diện theo điểm vật lý và Published Signal đủ bốn luật, kiểm ở Check trước khi biên dịch và gộp mọi vi phạm. Giữ 22/22 Open vì runtime signal/output arbitration và HIL chưa có. |
 | 4.0 | 2026-08-21 | Ghi `T59-303` (Plan59 W3) cho treatment partial RSK-011/014: binding MB_RTU qua Point contract canonical với `extIndex` do Point Catalog phân giải; compiler không tự suy slot nên không tái định nghĩa giao thức. Giữ 22/22 Open vì Point Catalog/UI và nghiệm thu I/O thật chưa có. |
 | 3.9 | 2026-08-21 | Ghi `T59-302` (Plan59 W3) cho treatment partial RSK-001/003/008/014: Check biên dịch mọi Program và gộp diagnostic, container v2 do chính writer production ghi và được loader đọc lại trước khi lưu, Check không đụng Draft/Active. Giữ 22/22 Open vì topology/budget, ký artifact và target chưa có. |
 | 3.8 | 2026-08-21 | Ghi `T59-301` (Plan59 W3, **mở Wave**) cho treatment partial RSK-001/006/012: document v2 tách POU khỏi cấu hình Program, trần 32 là trần cứng ở Draft, migration v1→v2 tất định giữ identity, signal hạng nhất với fallback ghép cứng vào policy. Giữ 22/22 Open vì Check/runtime/target chưa có. |

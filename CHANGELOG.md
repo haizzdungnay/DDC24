@@ -8,6 +8,35 @@
 
 ## [Unreleased]
 
+### Added — `T59-304` Bất biến cấp package kiểm ở Check, không chỉ ở loader (2026-08-21)
+
+**Vì sao kiểm lại thứ loader đã kiểm.** Loader v2 kiểm "một output owner" và "một
+publisher" vì artifact có thể tới từ nơi khác. Nhưng loader chạy lúc
+**Commission** — báo lỗi ở đó là báo ở chỗ **xa nguyên nhân nhất**, sau khi người
+dùng đã đi qua toàn bộ Check và bấm triển khai. Kiểm ở Check là thứ duy nhất cho
+người dùng biết **phải sửa gì**, và nó chạy **trước khi biên dịch**: package có
+hai Program cùng ghi một output là package sai bất kể từng Program compile sạch
+hay không.
+
+**Nhận diện theo ĐIỂM VẬT LÝ, không theo tên.** Với MB_RTU, hai binding cùng
+`(deviceId, extIndex)` là **cùng một thanh ghi** kể cả khi tên điểm viết khác
+nhau — và đó là trường hợp dễ xảy ra nhất khi hai kỹ sư đặt tên khác nhau cho
+cùng một điểm.
+
+**Bốn luật Published Signal:** đúng một publisher (so **case-folded**); publisher
+phải là Program có thật (signal mất publisher là signal không ai ghi, consumer
+chờ vĩnh viễn); freshness `1000..90000` khớp chính xác dải store/runtime;
+`USE_FALLBACK` ghép cứng với giá trị dự phòng.
+
+**Chiều khẳng định được khoá:** hai Program **đọc chung** một điểm là hợp lệ, mỗi
+Program ghi điểm riêng là hợp lệ. Mọi vi phạm được **gộp** trong một lần Check.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; `verify-project.sh --wave W3` **6/6 PASS**.
+
+**Ranh giới:** đây là kiểm **định nghĩa**. Double-buffer/freshness/fallback lúc
+chạy thuộc `T59-404`; trọng tài output và candidate withdrawal thuộc `T59-406`.
+
 ### Added — `T59-303` Binding MB_RTU qua Point contract canonical (2026-08-21)
 
 **Ranh giới quyết định toàn bộ thiết kế:** compiler **không biết** register,

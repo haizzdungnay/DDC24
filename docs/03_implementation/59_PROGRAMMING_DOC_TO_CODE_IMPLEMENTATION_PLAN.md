@@ -995,7 +995,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | `T59-301` | P0 | Project Draft/model/API cho 32 Program + POU + signal definitions | T59-005/006 | **DONE** | Document **v2**: POU (`objects`) tách khỏi cấu hình Program, biến vào `locals` của POU, `signals` hạng nhất, bỏ `task.programOrder` theo DDD §4.1; migration v1→v2 **tất định + idempotent + giữ identity**; op mới `upsertObject/removeObject/renameObject/duplicateObject/upsertProgram(v2)/upsertSignal/...` cộng **lớp tương thích op v1** để FE đang chạy không gãy; **Program thứ 33 bị từ chối và Draft giữ đúng 32**; tên POU unique case-folded; không cascade ngầm; 7 test v2 + adapter FE 3 test; `go test ./... -count=1` 18/18; FE 116 file / 1091 test; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-302` | P0 | Package Check toàn POU/Program/library/signal/resource | T59-106/201/301 | **DONE** | Check biên dịch **mọi** Program (bỏ trần pipeline 1 của `T59-002`), **gộp** diagnostic của tất cả Program hỏng và gắn `programId` cho từng cái; `mkddc-st-package` mới lắp container v2 bằng **chính** `WritePackageV2()` production (byte-stable, đọc lại bằng loader trước khi ghi); migration `0009` cho artifact `schemaVersion∈{1,2}`; `contentSha256` tất định qua hai lần Check; Check **không** đụng Draft/Active và không sinh hành động triển khai; hai worker chia nhau Check qua lease; 5 test Check + 3 test packager; `go test ./... -count=1` 18/18; `ctest` 1138/1138; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-303` | P0 | MB_RTU binding compiler adapter qua canonical Point contract | T59-302 | **DONE** | Point contract thêm `extIndex` (slot EXT 1..256 do Point Catalog phân giải); `resolve_io_bindings` nhận MB_RTU và map thẳng sang `StPointKind::EXT` — compiler **không** tự suy slot nên không tái định nghĩa register/function code/endian/chu kỳ poll; LOCAL và MB_RTU sống chung trong một Program; thiếu `extIndex`, thiếu `deviceId`, vượt trần 256, sai chiều và kiểu `TIME` đều fail-closed; guard Go kiểm **hai chiều** (MB_RTU thiếu slot / category khác lại mang slot); 6 test C++ + 1 test Go; `ctest` **1145/1145**; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
-| `T59-304` | P0 | Output owner/conflict + Published Signal publisher/consumer validation | T59-302/303 | ORDERED | Duplicate output/publisher reject; freshness/fallback/type graph tests. |
+| `T59-304` | P0 | Output owner/conflict + Published Signal publisher/consumer validation | T59-302/303 | **DONE** | Bất biến cấp package kiểm ở **Check** (trước khi biên dịch) chứ không chỉ ở loader: một output binding có đúng một Program owner — nhận diện theo **điểm vật lý** (`deviceId`+`extIndex` với MB_RTU) chứ không theo tên; một signal có đúng một publisher (case-folded); publisher phải là Program có thật; freshness 1000..90000; kiểu trong hệ kiểu ST; `USE_FALLBACK` ghép cứng với giá trị dự phòng. Mọi vi phạm được **gộp** trong một lần Check; đọc chung điểm và ghi điểm riêng vẫn hợp lệ. 7 test; `go test ./... -count=1` 18/18; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
 | `T59-305` | P0 | Package manifest/topology/budget cho 32/16; Program mới Disabled | T59-302/304 | ORDERED | 32 compile, 16 enabled, one-over stable; manifest không chứa creation-order dependency. |
 | `T59-306` | P1 | FE PGM-02/03: POU tree, Program properties, mapping conflicts, signals | T59-301/304 | ORDERED | Sáu route target/legacy redirect; Function/FB hides invalid fields; E2E Draft save/reload. |
 
@@ -1169,6 +1169,46 @@ Xoá mà không thay thế sẽ để mất phép kiểm allowlist.
 **Ranh giới trung thực.** Point Catalog phía BE **chưa** phát `extIndex` cho
 Mapping tab; đường đó cùng UI chọn điểm MB_RTU thuộc `T59-306`. Nghiệm thu I/O
 Modbus thật trên board thuộc `T59-703`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-304` — Bất biến cấp package kiểm ở Check, không chỉ ở loader
+
+**Vì sao kiểm lại thứ loader đã kiểm.** Loader v2 (`T59-106`) kiểm "một output
+owner" và "một publisher" vì artifact có thể tới từ nơi khác. Nhưng loader chạy
+lúc **Commission** — báo lỗi ở đó nghĩa là báo ở chỗ **xa nguyên nhân nhất**, sau
+khi người dùng đã đi qua toàn bộ Check và bấm triển khai. Kiểm ở Check là thứ duy
+nhất cho người dùng biết **phải sửa gì**.
+
+**Kiểm TRƯỚC khi biên dịch.** Một package có hai Program cùng ghi một output là
+package sai bất kể từng Program compile sạch hay không; biên dịch 32 Program rồi
+mới báo là lãng phí đúng thứ người dùng đang chờ.
+
+**Nhận diện theo ĐIỂM VẬT LÝ, không theo chuỗi tên.** Với MB_RTU, hai binding
+cùng `(deviceId, extIndex)` là **cùng một thanh ghi** kể cả khi tên điểm viết
+khác nhau. So bằng tên sẽ bỏ lọt đúng trường hợp nguy hiểm — và đó là trường hợp
+dễ xảy ra nhất khi hai kỹ sư đặt tên khác nhau cho cùng một điểm.
+
+**Chiều khẳng định cũng được khoá.** Hai Program **đọc chung** một điểm là hợp
+lệ; mỗi Program ghi một điểm riêng là hợp lệ. Guard chặn tất cả cũng là guard sai
+và sẽ "xanh" ở mọi test phủ định.
+
+**Bốn luật của Published Signal.** Đúng một publisher (so **case-folded** — hai
+tên khác hoa/thường là một signal ở compiler); publisher phải là Program có thật
+(signal mất publisher là signal không ai ghi, consumer chờ vĩnh viễn); freshness
+`1000..90000` khớp chính xác dải mà store và runtime cùng dùng; và `USE_FALLBACK`
+ghép cứng với giá trị dự phòng — đúng lối "im lặng thay bằng 0" mà DDD §10 cấm.
+
+**Gộp, không dừng sớm.** Cùng lý do với `compilerInputs`: mọi vi phạm của package
+hiện ra trong **một** lần Check.
+
+**Đọc được cả hai đời binding.** Binding v1 để identity điểm ở cấp gốc, v2 gom
+vào `point`; hàm kiểm đọc cả hai để một Revision seal trước khi nâng model vẫn
+kiểm được.
+
+**Ranh giới trung thực.** Đây là kiểm **định nghĩa**. Consumer thật của signal
+(đọc giá trị trong ST/FBD), double-buffer, freshness runtime và fallback lúc chạy
+thuộc `T59-404`; trọng tài output và candidate withdrawal thuộc `T59-406`.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
