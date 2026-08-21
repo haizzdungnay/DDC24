@@ -1295,7 +1295,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | `T59-403` | P0 | Worker lanes/fault isolation/no-allocation RT | T59-402 | **DONE** | Lane là đơn vị song song (`StLaneMode::SEQUENTIAL|PARALLEL`, worker tạo sẵn ngoài chu kỳ, spin+yield không vào kernel); hai chế độ cho **đúng cùng** kết quả trên fixture 10 Program/3 chu kỳ/4 lane, ổn định qua 20 lần lặp; **đảo chiều** chính sách fault — fault của một Program **không** còn dừng cả Task (kiến trúc §8 `isolate Program`); đường quét **0 cấp phát** ở cả hai chế độ; lane vượt số worker vẫn chạy nốt trên luồng gọi. 7 test mới; `ctest` **1166/1166**; TSan 0 cảnh báo. Chi tiết §3.5. |
 | `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | **DONE** | `StSignalBus` double-buffer, commit ở **boundary** nên mọi consumer trong một chu kỳ thấy cùng một ảnh; **0 đọc rách** qua 20.000 vòng publisher/consumer song song trên `StCell` 8 byte; ba chính sách `HOLD_LAST`/`USE_FALLBACK`/`WAIT` cho ba hành vi khác nhau, "chưa ai publish" khác "quá hạn"; producer dừng thì giá trị **quá hạn theo freshness** chứ không biến mất tức thì, hồi phục ngay ở boundary kế. Sửa kèm: signal **chưa từng** đi vào container (bus runtime luôn rỗng) và `stalePolicy` **không phải enum đóng** ở Check. 15 test mới; `ctest` **1179/1179**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | **DONE** | Đường đầy đủ: store (`program_runtime_intents`, migration **v10**) → API (`PUT .../programs/{id}/runtime-intent`, `GET .../programs`, RBAC admin/viewer, idempotency) → IPC (**action mới** `SET_PROGRAM_ENABLED`, protocolMinor 0→1 tương thích ngược) → Core (`set_program_enabled` áp lên đúng một instance) → read-back + audit **cùng một transaction**. Intent và trạng thái là **hai trường riêng**; Core từ chối/không sẵn sàng vẫn giữ intent bền vững. Trần 16 Enabled ép ở **hai** lớp. Sửa kèm: trigger `generation` chặn cả read-back; biên nhận idempotency đòi ETag cho mutation không thuộc Draft. 10 test mới; `ctest` **1180/1180**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
-| `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | **DONE** | `ProgramCandidateRegistry` trả lời **ai đang giữ output nào và vì sao không còn giữ** (enum lý do đóng: `OPERATOR_DISABLE`/`FAULT_TTL_EXPIRED`/`PACKAGE_REPLACED`); bất biến một-output-một-owner ép **lại** ở runtime; rút candidate → trọng tài rơi đúng **mức tiếp theo → default**, không kẹt ở giá trị cuối của Program đã dừng; gói mới xoá sạch quyền sở hữu cũ; luật **không có đường Program→IOP trực tiếp** kiểm bằng đọc chính mã nguồn. 9 test mới; `ctest` **1187/1187**; `--wave W4` 5/5 PASS. **Còn mở:** TTL hold-last vẫn là `0` (giữ vô hạn) vì con số chưa được Product+Controls ký. Chi tiết §3.5. |
+| `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | **DONE (đóng trọn 2026-08-21)** | `ProgramCandidateRegistry` trả lời **ai đang giữ output nào và vì sao không còn giữ** (enum lý do đóng: `OPERATOR_DISABLE`/`FAULT_TTL_EXPIRED`/`PACKAGE_REPLACED`); bất biến một-output-một-owner ép **lại** ở runtime; rút candidate → trọng tài rơi đúng **mức tiếp theo → default**, không kẹt ở giá trị cuối của Program đã dừng; gói mới xoá sạch quyền sở hữu cũ; luật **không có đường Program→IOP trực tiếp** kiểm bằng đọc chính mã nguồn. 9 test mới; `ctest` **1187/1187**; `--wave W4` 5/5 PASS. **Mục treo cuối cùng đã đóng 2026-08-21 bằng `ADR-051`:** TTL hold-last = **60 s đồng hồ**, đo tuổi của LỆNH (phủ cả `ROLLED_BACK`/Task-bị-disable, không riêng `FAULTED`), mặc định `ScanDeps` là giá trị đã ký thay vì `0`; 5 test mới, `ctest` **1205/1205**. Chi tiết §3.5. |
 | `T59-407` | P0 | Per-Program/FB RETAIN namespace/layout/restart/reset | T59-104/401 | **DONE** | Sửa lỗi **reset nửa vời**: reset trên Program đang DỪNG chỉ sạch trong RAM, file bền vững giữ giá trị cũ nên khởi động lại là giá trị cũ quay về. Nay reset công bố ảnh đã reset **ngay tại boundary**, không phụ thuộc trạng thái chạy. Ma trận warm/cold/revision/corrupt/reset đóng đủ; reset **cô lập** giữa Program; file hỏng của một Program **không** làm Program khác cold-init. 3 test mới; test chống hồi quy đã kiểm chứng bằng cách gỡ bản vá (đỏ đúng chỗ); `ctest` **1191/1191**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-408` | P1 | Core trace ring buffer + real `TRACE_START/STOP` | T59-402/006 | **DONE** | `StValueTrace` lấy mẫu tại **ranh giới quét**, bounded 10.000 Ô / 10 phút, **0 cấp phát**; ba action IPC thật `TRACE_START`/`TRACE_STOP`/`TRACE_READ` (protocolMinor 1→2, tương thích ngược); BE gọi **thật** xuống Core; **action ma = 0** — bảng handler không còn `NOT_IMPLEMENTED` nào, có test ở cả Go lẫn verifier. Sửa kèm: self-test verifier IPC bám vào `TRACE_START` nên thành no-op ngay khi nó được hiện thực; luật "`NOT_IMPLEMENTED` phải ghi task" thoát khỏi phép kiểm vì thoát sớm ở phép kiểm khác. 10 test mới; `ctest` **1200/1200**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 
@@ -1635,13 +1635,34 @@ không chứng minh **không có** đường thứ hai. Test đọc chính
 đồng thời khẳng định đường hợp lệ (`PRIO_LOCAL_LOGIC`, `resolver`) **thực sự có
 mặt** — nếu không, phép kiểm trên chỉ đang xác nhận một file rỗng.
 
-**Ranh giới trung thực — TTL hold-last vẫn là `0`.** `0` nghĩa là giữ hold-last
-**không giới hạn** khi Program FAULTED. Cơ chế TTL đã có và đã có test, nhưng con
-số cụ thể là quyết định Product+Controls (`DDD-CTRL-PROG-001` §15) **chưa được
-ký**. Tự chọn một con số ở đây là chọn thay họ xem thiết bị giữ đầu ra bao lâu
-sau khi chương trình chết — không phải quyết định của lane implementation. Đây là
-mục **duy nhất** của `T59-406` chưa đóng được, và nó bị chặn bởi chữ ký chứ không
-bởi mã.
+**TTL hold-last đã ký — `ADR-051`, 2026-08-21.** Mục treo duy nhất của `T59-406`
+nay đóng: **60 giây**. Chặn dưới là `2x` chu kỳ Task chậm nhất (2×30 s) — lúc
+Program chết, lệnh cuối đã có thể già trọn một chu kỳ, nên TTL nhỏ hơn làm thời
+gian giữ THỰC TẾ trôi xuống tận 0; chặn trên là dải fail-safe quen thuộc của thiết
+bị BAS (10..60 s) và hằng số thời gian nhiệt của tải. Ràng buộc `2x` không nằm ở
+ghi chú mà ở `static_assert` đọc `allowedPeriodMs` của profile: profile mọc thêm
+lớp chu kỳ chậm hơn thì gãy build, không gãy ngoài hiện trường.
+
+Ba thứ phải sửa cùng con số, vì nếu không thì con số chỉ đúng trên giấy:
+
+1. **Đo bằng đồng hồ, không đếm base step.** `TASK-PROG-401` đếm base step. Số
+   base step chỉ xấp xỉ thời gian khi vòng quét chạy đúng nhịp — soak test của
+   chính repo này quay 10.000 vòng trong 90 ms và làm "60 s" co lại thành mili
+   giây, không có gì báo. Nay so `last_tick_now_ns()` với `output_commit_now_ns`.
+2. **Đo tuổi của LỆNH, không đo trạng thái.** Điều kiện cũ ràng vào riêng
+   `FAULTED` nên để lọt đúng những đường im lặng khó thấy nhất: Task bị disable
+   trong khi Program vẫn `RUNNING`, và instance đứng ở `ROLLED_BACK`. Cả hai ngừng
+   publish mà không bao giờ mang trạng thái `FAULTED`, nghĩa là giữ lệnh cũ vĩnh
+   viễn ngay cả sau khi TTL được ký.
+3. **Mặc định `ScanDeps` là giá trị đã ký, không phải `0`.** `0` nghĩa "giữ vô
+   hạn"; để nó làm mặc định thì mọi đường nối dây quên set field đều âm thầm quay
+   lại đúng hành vi vừa đóng, và không test hành vi nào bắt được vì "không rút"
+   trông y hệt "chưa tới hạn". `0` chỉ còn dùng cho test/chẩn đoán; bootstrap từ
+   chối nó qua `--program-hold-ttl-ms`.
+
+"Khoá TTL theo Point class" (§6 bản cũ) **đóng là KHÔNG làm**, không phải hoãn:
+đích rơi về đã theo từng điểm (`default` của chính điểm đó), thêm TTL theo class
+là thêm núm thứ hai cho cùng một kết quả. Lý do đầy đủ ở `ADR-051`.
 
 Interlock và SafeState là hai mắt xích đã tồn tại (`safe_state.hpp`, ma trận
 trigger T1–T8); task này nối candidate vào đầu chuỗi chứ không viết lại chúng.

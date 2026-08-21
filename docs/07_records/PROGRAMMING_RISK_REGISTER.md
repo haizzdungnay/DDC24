@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.11 |
+| Phiên bản | 4.12 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
-| Ngày | 2026-08-20 |
+| Ngày | 2026-08-21 |
 | Chủ quản | Product + Architecture + QA |
 | Người review | Risk owners, Safety, Security, Operations Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
@@ -651,7 +651,7 @@ Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 | Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
 |---|---|---|---|
 | `RSK-PROG-021` | Sổ candidate trả lời **ai đang giữ output nào**; bất biến một-output-một-owner ép **lại** ở runtime vì gói có thể tới từ bundle import chứ không chỉ từ Check; đăng ký chạy **trước** khi publish nên xung đột lộ ra trước khi ghi ra van | Nghiệm thu I/O vật lý (`T59-702`/`T59-704`), Test Result `VS-PROG-U09` | `OPEN — PARTIAL SOURCE` |
-| `RSK-PROG-002` | Rút candidate mang **lý do** (enum đóng ba giá trị) và **không xoá** bản ghi; trọng tài rơi đúng mức tiếp theo → default, có test đầu-cuối chạy Program thật rồi `stop()` và kiểm AO về `0.0` | **TTL hold-last vẫn `0` (giữ vô hạn)** — con số chưa được Product+Controls ký (`DDD-CTRL-PROG-001` §15); HIL | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-002` | Rút candidate mang **lý do** (enum đóng ba giá trị) và **không xoá** bản ghi; trọng tài rơi đúng mức tiếp theo → default, có test đầu-cuối chạy Program thật rồi `stop()` và kiểm AO về `0.0`. **Cập nhật 2026-08-21 (`ADR-051`):** TTL hold-last = 60 s đồng hồ, không còn `0`/vô hạn | HIL và I/O vật lý (đo thời gian rút thật trên board) | `OPEN — PARTIAL SOURCE` |
 | `RSK-PROG-006` | Luật "không có đường Program→SHM/IOP/MCU trực tiếp" (kiến trúc §7) kiểm bằng **đọc chính mã nguồn** lớp process image, kèm phép kiểm ngược rằng đường hợp lệ thực sự có mặt — một test hành vi chỉ chứng minh đường hợp lệ chạy đúng, không chứng minh **không có** đường thứ hai | Kiểm cùng lớp cho các adapter I/O khác, target | `OPEN — PARTIAL SOURCE` |
 
 Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
@@ -673,6 +673,17 @@ Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 | `RSK-PROG-014` | **Action ma = 0**: bảng handler IPC không còn `NOT_IMPLEMENTED` nào, khoá bằng hai phép kiểm độc lập (test Go đối chiếu hai chiều schema↔codec, và verifier đối chiếu schema↔enum C++↔nhánh dispatch↔codec Go). **Sửa kèm:** self-test của chính verifier bám vào `TRACE_START` nên thành no-op ngay khi nó được hiện thực — nay mutation tự tiêm action giả và tiêm cả nguồn Core đã bỏ nhánh | Đường đọc mẫu chuyển hẳn sang `TRACE_READ` (lane sản phẩm) | `OPEN — PARTIAL SOURCE` |
 
 Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.48 Ký TTL hold-last — `ADR-051` (đóng mục treo của `T59-406`)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-002` | TTL hold-last **60 s đồng hồ** (`ADR-051`), thay cho `0` = giữ vô hạn. TTL đo **tuổi của lệnh** nên phủ cả `ROLLED_BACK` và `RUNNING`-trong-Task-bị-disable — hai đường ngừng publish mà không bao giờ mang trạng thái `FAULTED`, tức là trước đó giữ lệnh cũ vĩnh viễn kể cả khi TTL đã có số. Mặc định `ScanDeps` là giá trị đã ký nên đường nối dây quên set field không âm thầm quay lại "giữ vô hạn" | Đo thời gian rút thật trên board (`T59-702`/`T59-704`); Safety review cho ma trận rơi-về theo từng loại tải | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-006` | Ràng buộc "TTL ≥ 2× chu kỳ Task chậm nhất" không nằm ở ghi chú mà ở `static_assert` đọc `allowedPeriodMs` của profile: profile mọc thêm lớp chu kỳ chậm hơn thì gãy build chứ không gãy ngoài hiện trường | Kiểm cùng lớp cho các hằng số an toàn khác đang chỉ sống trong tài liệu | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local (`ctest` 1205/1205, có mutation check: gỡ nhánh tuổi-lệnh thì
+test Task-bị-disable đỏ đúng chỗ). **22/22 risk giữ Open**, S×L và residual không
+đổi — ký một con số không hạ residual khi chưa đo trên phần cứng thật.
 
 ## 6. Treatment/acceptance record bắt buộc
 
@@ -726,6 +737,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 4.12 | 2026-08-21 | Ghi `ADR-051` (ký TTL hold-last 60 s) cho treatment partial RSK-002/006: đóng mục treo cuối của `T59-406`. TTL đo bằng đồng hồ chứ không đếm base step, đo tuổi của LỆNH nên phủ cả `ROLLED_BACK`/Task-bị-disable, mặc định `ScanDeps` là giá trị đã ký thay vì `0`. Giữ 22/22 Open: ký số không hạ residual khi chưa đo trên phần cứng thật. |
 | 4.11 | 2026-08-21 | Ghi `T59-408` (Plan59 W4, **đóng Wave 8/8**) cho treatment partial RSK-014/021: trace giá trị bounded lấy tại ranh giới quét với 0 cấp phát, ba action IPC thật, action ma = 0 khoá bằng hai phép kiểm độc lập; sửa self-test verifier vốn đã mục ruỗng vì bám vào một action cụ thể. Giữ 22/22 Open vì đo 10 phút thật trên target chưa có. |
 | 4.10 | 2026-08-21 | Ghi `T59-407` (Plan59 W4) cho treatment partial RSK-009/022: bịt lỗ reset nửa vời (reset trên Program đang dừng nay bền vững qua khởi động lại), cô lập RETAIN giữa Program cho cả đường reset lẫn đường file hỏng. Giữ 22/22 Open vì power-cut thật trên board chưa có. |
 | 4.9 | 2026-08-21 | Ghi `T59-406` (Plan59 W4) cho treatment partial RSK-002/006/021: sổ candidate trả lời quyền sở hữu output và lý do rút, bất biến một-output-một-owner ép lại ở runtime, đường rơi về mức tiếp theo/default có test đầu-cuối, luật không-đường-tắt kiểm bằng đọc mã nguồn. Giữ 22/22 Open; **TTL hold-last vẫn 0** vì con số chưa được Product+Controls ký. |

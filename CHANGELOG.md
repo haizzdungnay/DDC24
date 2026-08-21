@@ -8,6 +8,54 @@
 
 ## [Unreleased]
 
+### ADR-051 — TTL hold-last của Program = 60 giây đồng hồ (2026-08-21)
+
+- **Phạm vi:** `docs/adr/ADR-051-programming-ttl-hold-last-60s.md` (mới),
+  `docs/adr/README.md`, `docs/00_governance/DECISIONS.md`,
+  `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` (1.0→1.1),
+  `docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md` (1.0→1.1),
+  `apps/core/application/st/{st_scheduler.hpp,st_scheduler.cpp,st_process_image.hpp,st_process_image.cpp}`,
+  `apps/core/application/runtime/scan_loop.{hpp,cpp}`, `apps/core/bootstrap/main.cpp`,
+  `apps/core/application/st/tests/test_st_integration.cpp`, Plan 59 §3/§3.5,
+  Risk Register v4.12, Traceability v6.0, baseline manifest v1.33.
+- **Quyết định:** TTL hold-last = **60 s**, đồng nhất mọi Program và mọi Point
+  class. Trước đó là `0` — trông như "chưa quyết định" nhưng thực chất là quyết
+  định **giữ đầu ra vô hạn** khi chương trình chết: van đứng ở vị trí cũ không vì
+  ai ra lệnh, và `FAULTED` là trạng thái chốt nên không có đường tự hồi phục.
+- **Cơ sở con số:** chặn dưới `2x` chu kỳ Task chậm nhất (2×30 s) — lúc Program
+  chết, lệnh cuối đã có thể già trọn một chu kỳ, TTL nhỏ hơn làm thời gian giữ
+  THỰC TẾ trôi xuống tận 0; chặn trên là dải fail-safe quen thuộc của thiết bị BAS
+  (10..60 s) và hằng số thời gian nhiệt của tải. Ràng buộc `2x` nằm ở
+  `static_assert` đọc `allowedPeriodMs` của profile, không nằm ở ghi chú.
+- **Changed — đo bằng ĐỒNG HỒ, không đếm base step:** thêm `output_commit_now_ns`
+  và `StScheduler::last_tick_now_ns()`; `st_withdraw_stale_outputs()` nhận
+  `hold_ttl_ns`. Số base step chỉ xấp xỉ thời gian khi vòng quét chạy đúng nhịp —
+  soak test của chính repo quay 10.000 vòng trong 90 ms và làm "60 s" co lại thành
+  mili giây, không có gì báo.
+- **Fixed — TTL đo tuổi của LỆNH, không đo trạng thái:** điều kiện cũ ràng vào
+  riêng `FAULTED` nên để lọt hai đường im lặng — Task bị disable trong khi Program
+  vẫn `RUNNING`, và instance đứng ở `ROLLED_BACK`. Cả hai ngừng publish mà không
+  bao giờ mang trạng thái `FAULTED`, tức là giữ lệnh cũ vĩnh viễn **kể cả sau khi
+  TTL được ký**. Instance chưa từng publish không bị rút và không vào sổ candidate.
+- **Fixed — mặc định `ScanDeps` là giá trị đã ký, không phải `0`:** `0` nghĩa
+  "giữ vô hạn", nên mọi đường nối dây quên set field đều âm thầm quay lại đúng
+  hành vi vừa đóng, và không test hành vi nào bắt được vì "không rút" trông y hệt
+  "chưa tới hạn".
+- **Fixed — soak test đo sai nhịp:** `TenThousandCycleSoak...` đẩy đồng hồ 1 ms
+  mỗi scan step trong khi Task là 1 s, nên "10.000 chu kỳ" là 10.000 vòng lặp chứ
+  không phải 10.000 chu kỳ chương trình. Nay mỗi step đẩy đúng một base step.
+- **Bootstrap:** cờ `--program-hold-ttl-ms` (1..600000) cho commissioning/HIL; `0`
+  bị **từ chối** — muốn tắt TTL thì phải supersede ADR, không phải truyền một cờ.
+- **Đóng:** hàng "Hold TTL … chưa ký" ở `DDD-CTRL-PROG-001` §15 và mục treo cuối
+  cùng của `T59-406`. "Khoá TTL theo Point class" đóng là **KHÔNG làm**, lý do ở
+  ADR. Hàng "Safety interaction chưa có HIL evidence" KHÔNG đổi.
+- **Kiểm chứng (host/local, 2026-08-21):** `cmake --fresh` + build exit 0;
+  `ctest` **1205/1205 PASS**; `verify_wave_gates.py --wave W4` **5/5 PASS**
+  (layout/cpp/go/docs/candidate-pin); `candidate_pin_check.py` 16/16 khớp.
+  Mutation check: gỡ nhánh tuổi-lệnh thì
+  `T59_406_HoldTtlWithdrawsProgramThatStoppedPublishingWithoutFaultState` đỏ đúng
+  chỗ. **Target/HIL chưa đo** — chưa có số thời gian rút thật trên board.
+
 ### T59-408 — Trace giá trị lấy tại ranh giới quét; action ma = 0 (2026-08-21)
 
 - **Phạm vi:** `apps/core/application/st/st_value_trace.{hpp,cpp}` (mới),
