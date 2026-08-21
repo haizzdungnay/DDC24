@@ -421,8 +421,36 @@ bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityRes
     return true;
 }
 
+bool st_register_instance_candidates(const StProgramInstance& instance,
+                                     programming::ProgramCandidateRegistry* registry,
+                                     uint64_t generation, std::string* error)
+{
+    if (registry == nullptr) return true;
+    const StLoadedProgram* program = instance.runtime.program();
+    if (program == nullptr) return true; /* chưa load: không có gì để đăng ký */
+    for (const StIrIoBinding& binding : program->io_bindings) {
+        if (!binding.is_output) continue;
+        PointId id{};
+        if (!to_point_id(binding, &id)) continue;
+        /* Chỉ AO/BO đi qua PriorityResolver (§6); AV/BV/MSV/EXT không có trọng
+         * tài nên cũng không có candidate để đăng ký. */
+        if (id.kind != PointKind::AO && id.kind != PointKind::BO) continue;
+        if (!registry->claim(instance.instance_id, id.kind, id.idx, generation, error))
+            return false;
+    }
+    return true;
+}
+
 uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
                                    uint64_t hold_ttl_base_steps, StIoBridgeStats* stats)
+{
+    return st_withdraw_stale_outputs(scheduler, resolver, hold_ttl_base_steps, nullptr, stats);
+}
+
+uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
+                                   uint64_t hold_ttl_base_steps,
+                                   programming::ProgramCandidateRegistry* registry,
+                                   StIoBridgeStats* stats)
 {
     if (!scheduler || !resolver) return 0;
     const uint64_t generation = scheduler->base_step_count();
@@ -434,18 +462,26 @@ uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* res
             if (p.outputs_withdrawn) continue;
 
             bool should_withdraw = false;
+            auto reason = programming::CandidateWithdrawReason::NONE;
             if (p.state == StProgramState::STOPPED || p.state == StProgramState::DISABLED) {
                 /* Lệnh operator: rút NGAY tại safe boundary, không chờ TTL. */
                 should_withdraw = true;
+                reason = programming::CandidateWithdrawReason::OPERATOR_DISABLE;
             } else if (p.state == StProgramState::FAULTED && hold_ttl_base_steps > 0 &&
                       generation >= p.output_commit_generation + hold_ttl_base_steps) {
                 should_withdraw = true;
+                reason = programming::CandidateWithdrawReason::FAULT_TTL_EXPIRED;
             }
             if (!should_withdraw) continue;
 
             if (st_withdraw_instance_outputs(p, resolver)) {
                 p.outputs_withdrawn = true;
                 withdrawn++;
+                /* Ghi LÝ DO, không chỉ ghi "đã rút": người vận hành cần phân
+                 * biệt một lệnh chủ ý với một sự cố — hai thứ cần hai phản ứng
+                 * khác nhau. */
+                if (registry != nullptr)
+                    registry->withdraw_instance(p.instance_id, reason, generation);
             }
         }
     }

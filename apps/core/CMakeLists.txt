@@ -71,6 +71,7 @@ add_library(core_application STATIC
     application/st/st_exec.cpp
     application/st/st_public_key.cpp
     application/st/st_scheduler.cpp
+    application/programming/program_candidate_registry.cpp
     application/st/st_signal_bus.cpp
     application/st/st_process_image.cpp
     application/st/st_retain.cpp
@@ -220,6 +221,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_package_v2.cpp
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
+      application/programming/tests/test_program_candidate_registry.cpp
       application/st/tests/test_st_program_lanes.cpp
       application/st/tests/test_st_signal_bus.cpp
       application/st/tests/test_st_program_release.cpp
@@ -236,7 +238,8 @@ if(CORE_BUILD_TESTS)
       ST_COMPILE_CLI_PATH="$<TARGET_FILE:mkddc-st-compile>"
       ST_SAMPLE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/application/st/samples"
       PROGRAMMING_IPC_CONTRACT_DIR="${MKDDC_CONTRACTS_SOURCE_DIR}/ipc/programming_v1"
-      PROGRAMMING_PROFILE_CONTRACT_DIR="${CONTRACT_PROGRAMMING_DIR}")
+      PROGRAMMING_PROFILE_CONTRACT_DIR="${CONTRACT_PROGRAMMING_DIR}"
+      CORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   add_dependencies(core_tests mkddc-st-validate mkddc-st-compile)
   if(TARGET GTest::gtest_main)
     target_link_libraries(core_tests PRIVATE GTest::gtest_main)

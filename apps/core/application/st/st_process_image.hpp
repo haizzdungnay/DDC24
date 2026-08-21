@@ -24,6 +24,7 @@
 #include "graph/point_writer.hpp"
 #include "graph/point_table.hpp"
 #include "priority/priority_resolver.hpp"
+#include "programming/program_candidate_registry.hpp"
 #include "st/st_scheduler.hpp"
 
 namespace core {
@@ -91,6 +92,22 @@ bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityRes
  * là no-op (outputs_withdrawn chặn double-release). */
 uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
                                    uint64_t hold_ttl_base_steps, StIoBridgeStats* stats);
+
+/* T59-406 — bản có SỔ ĐĂNG KÝ. Cùng chính sách rút, nhưng ghi thêm LÝ DO vào
+ * `programming::ProgramCandidateRegistry` để câu hỏi "vì sao van này về default"
+ * có câu trả lời. `registry == nullptr` cho hành vi y hệt bản trên. */
+uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
+                                   uint64_t hold_ttl_base_steps,
+                                   programming::ProgramCandidateRegistry* registry,
+                                   StIoBridgeStats* stats);
+
+/* Đăng ký toàn bộ output binding AO/DO của một instance vào sổ. Gọi khi Program
+ * bắt đầu chạy; trả false + `*error` khi một điểm đã thuộc Program KHÁC — bất
+ * biến "một output, một owner" của DDD §4.6, ép lại ở runtime vì gói có thể tới
+ * từ bundle import chứ không chỉ từ Check. */
+bool st_register_instance_candidates(const StProgramInstance& instance,
+                                     programming::ProgramCandidateRegistry* registry,
+                                     uint64_t generation, std::string* error);
 
 } // namespace core
 
