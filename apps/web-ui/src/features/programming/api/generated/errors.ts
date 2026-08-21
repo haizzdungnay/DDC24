@@ -1,5 +1,5 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "c0c380d422cef6277fbe35ec9ce26787ea398976c5e1878ebbf86bd8c6a19cd6" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "43557a256909e98380fba044567a6792674b05e5ba07dc3c0b716660e80e79db" as const;
 export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.7.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
@@ -136,6 +136,8 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "core-ipc\u0000IPC-STAGING-LOCATOR": "PRG-ERR-ARTIFACT-001",
   "core-ipc\u0000IPC-STAGING-OPEN": "PRG-ERR-ARTIFACT-001",
   "core-ipc\u0000IPC-STAGING-TYPE-SIZE": "PRG-ERR-ARTIFACT-001",
+  "core-ipc\u0000IPC-TRACE-REJECTED": "PRG-ERR-REQ-001",
+  "core-ipc\u0000IPC-TRACE-UNAVAILABLE": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-UNKNOWN-INSTANCE": "PRG-ERR-NOT-FOUND-001",
   "retain\u0000RT-RETAIN-001": "PRG-ERR-RETAIN-001",
   "retain\u0000RT-RETAIN-002": "PRG-ERR-RETAIN-001",

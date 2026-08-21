@@ -11,8 +11,31 @@ import (
 
 	"github.com/google/uuid"
 
+	"mkddc-web/internal/programming/coreipc"
 	programmingstore "mkddc-web/internal/programming/store"
 )
+
+// traceCallTimeout ngắn có chủ ý: TRACE_START/STOP là lệnh admin hiếm gọi, và
+// endpoint IPC của Core là vòng poll ĐƠN LUỒNG — chờ lâu ở đây chiếm dụng toàn
+// bộ endpoint, không chỉ request này.
+const traceCallTimeout = 2 * time.Second
+
+// traceStartPayload: `[sessionId, samplePeriodMs, durationMs, [[instanceId, variableName], ...]]`.
+// Biến khai bằng TÊN vì số slot là kết quả của một lần biên dịch cụ thể và không
+// tồn tại ở bất kỳ nơi nào BE nhìn thấy — Revision chỉ có tên biến.
+type traceStartPayload struct {
+	_              struct{} `cbor:",toarray"`
+	SessionID      string
+	SamplePeriodMS uint32
+	DurationMS     uint32
+	Variables      [][2]string
+}
+
+// traceSessionPayload: `[sessionId]` cho TRACE_STOP.
+type traceSessionPayload struct {
+	_         struct{} `cbor:",toarray"`
+	SessionID string
+}
 
 const (
 	maxConcurrentTraces = 4
@@ -183,6 +206,13 @@ func (s *RuntimeService) CreateTrace(ctx context.Context, request TraceRequest, 
 	s.traces.sessions[traceID] = session
 	s.traces.idempotency[idempotencyIdentity] = traceIdempotency{requestHash: requestHash, traceID: traceID}
 	s.traces.mu.Unlock()
+	// Bảo Core BẮT ĐẦU lấy mẫu tại ranh giới quét. Core lấy mẫu chính xác theo
+	// chu kỳ và mọi biến trong một mẫu đến từ ĐÚNG một chu kỳ — thứ mà việc BE
+	// poll ở nhịp riêng của nó không bao giờ bảo đảm được.
+	//
+	// Lỗi ở đây KHÔNG huỷ phiên: đường lấy mẫu dự phòng (poll monitor) vẫn cho
+	// dữ liệu dùng được, và mất trace hoàn toàn vì Core bận là tệ hơn.
+	s.startCoreTrace(ctx, traceID, request, monitor)
 	if !s.captureTraceSample(traceID, monitor) {
 		_ = s.finishTrace(traceID, "COMPLETED", "QUOTA_REACHED")
 		return traceAcceptedFrom(session, correlationID), nil
@@ -292,6 +322,56 @@ func (s *RuntimeService) captureTraceSample(traceID string, monitor MonitorPageV
 	return len(session.view.Samples) < session.maxSamples
 }
 
+// startCoreTrace gửi TRACE_START xuống Core. `programId` của mỗi biến là
+// instance id ở Core, `variableName` là tên trong mã nguồn — cả hai đều có sẵn
+// trong monitor, nên BE không cần biết bố cục slot của artifact.
+func (s *RuntimeService) startCoreTrace(ctx context.Context, traceID string, request TraceRequest,
+	monitor MonitorPageView) {
+	if s.runtime == nil {
+		return
+	}
+	byID := make(map[string]MonitorSampleView, len(monitor.Items))
+	for _, item := range monitor.Items {
+		byID[item.VariableID] = item
+	}
+	variables := make([][2]string, 0, len(request.VariableIDs))
+	for _, variableID := range request.VariableIDs {
+		item, ok := byID[variableID]
+		if !ok || item.ProgramID == "" || item.VariableName == "" {
+			return
+		}
+		variables = append(variables, [2]string{item.ProgramID, item.VariableName})
+	}
+	payload, err := coreipc.EncodePayload(traceStartPayload{
+		SessionID: traceID, SamplePeriodMS: uint32(request.SamplePeriodMS),
+		DurationMS: uint32(request.DurationMS), Variables: variables})
+	if err != nil {
+		return
+	}
+	s.callCoreTrace(ctx, coreipc.ActionTraceStart, payload)
+}
+
+// stopCoreTrace gửi TRACE_STOP. Gọi cả khi phiên kết thúc tự nhiên: để Core lấy
+// mẫu tiếp cho một phiên BE đã đóng là giữ một vòng lấy mẫu không ai đọc.
+func (s *RuntimeService) stopCoreTrace(ctx context.Context, traceID string) {
+	if s.runtime == nil {
+		return
+	}
+	payload, err := coreipc.EncodePayload(traceSessionPayload{SessionID: traceID})
+	if err != nil {
+		return
+	}
+	s.callCoreTrace(ctx, coreipc.ActionTraceStop, payload)
+}
+
+func (s *RuntimeService) callCoreTrace(ctx context.Context, action coreipc.Action, payload []byte) {
+	request := coreipc.NewRequest(action, uuidBytes(s.newID()), uuidBytes(s.newID()),
+		s.controllerID, "", "", coreipc.FutureDeadline(traceCallTimeout), payload)
+	callCtx, cancel := context.WithTimeout(ctx, traceCallTimeout)
+	defer cancel()
+	_, _ = s.runtime.Call(callCtx, request)
+}
+
 func (s *RuntimeService) finishTrace(traceID, state, reason string) error {
 	s.traces.mu.Lock()
 	session := s.traces.sessions[traceID]
@@ -303,6 +383,7 @@ func (s *RuntimeService) finishTrace(traceID, state, reason string) error {
 	session.view.StopReason = &reason
 	session.view.UpdatedAt = s.now().UTC().Format(time.RFC3339Nano)
 	s.traces.mu.Unlock()
+	s.stopCoreTrace(context.Background(), traceID)
 	return s.commitTraceAudit(context.Background(), session, "TRACE_FINISH", state)
 }
 

@@ -996,6 +996,16 @@
     },
     {
       "component": "core-ipc",
+      "detailCode": "IPC-TRACE-REJECTED",
+      "publicCode": "PRG-ERR-REQ-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-TRACE-UNAVAILABLE",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
       "detailCode": "IPC-UNKNOWN-INSTANCE",
       "publicCode": "PRG-ERR-NOT-FOUND-001"
     },

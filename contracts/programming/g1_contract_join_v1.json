@@ -15,11 +15,11 @@
     {
       "name": "ipc",
       "path": "contracts/ipc/programming_v1/schema.json",
-      "sha256": "f27d24b820ee8be7637612496884f4da5e99e79396eaa933938491a430a80435",
+      "sha256": "4dd1e0661524a2351275ba9ad53fb2788bb97e528b198891cb0ae83ee6c83157",
       "goldenManifestPath": "contracts/ipc/programming_v1/golden/manifest.json",
-      "goldenManifestSha256": "aae5e49f7b1a7899ed0572e88a290bcd8c52c47516109896333f7bc3c287a1d8",
+      "goldenManifestSha256": "0b885f00ab14db0f187f25407888a00fdbface7a1f7aa510dd930d4873bf449a",
       "major": 1,
-      "minor": 1,
+      "minor": 2,
       "version": "1.0"
     },
     {
@@ -55,12 +55,12 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "c0c380d422cef6277fbe35ec9ce26787ea398976c5e1878ebbf86bd8c6a19cd6",
+      "sha256": "43557a256909e98380fba044567a6792674b05e5ba07dc3c0b716660e80e79db",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "04ee86ae0eda02dc9d568708eaab9913c8e376d376d843923827141deb3f0918",
+      "manifestSha256": "de3d180ccf0fc93311465143b855589dd7a583e22098df80f7d33de211f137e0",
       "major": 1,
       "publicErrorCount": 30,
-      "componentDetailCount": 122
+      "componentDetailCount": 124
     },
     {
       "name": "store",
