@@ -66,7 +66,25 @@ core::StPackageInput golden_input()
     timer.retained = true;
     input.fb_instances.push_back(timer);
 
-    input.signals.push_back({"SupplySetpoint", "AhuMain", 3, 5000});
+    /* Hai signal với hai chính sách stale KHÁC nhau: golden mà mọi signal cùng
+     * chính sách không phân biệt được "đọc đúng trường" với "đọc trúng may". */
+    core::StPackageSignal setpoint;
+    setpoint.name = "SupplySetpoint";
+    setpoint.producer_program = "AhuMain";
+    setpoint.data_type = 3;
+    setpoint.freshness_ms = 5000;
+    setpoint.stale_policy = 0; /* HOLD_LAST */
+    input.signals.push_back(setpoint);
+
+    core::StPackageSignal reset;
+    reset.name = "ResetDemand";
+    reset.producer_program = "AhuAux";
+    reset.data_type = 3;
+    reset.freshness_ms = 30000;
+    reset.stale_policy = 1; /* USE_FALLBACK */
+    reset.fallback_bits = 0x40A00000ull; /* 5.0f dạng bit */
+    reset.has_fallback = true;
+    input.signals.push_back(reset);
     input.bindings.push_back({"AhuMain", 1, "AO-1", true});
     input.bindings.push_back({"AhuAux", 1, "AO-2", true});
     input.bindings.push_back({"AhuMain", 1, "AI-1", false});

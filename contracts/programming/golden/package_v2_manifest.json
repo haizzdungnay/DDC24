@@ -5,7 +5,7 @@
   "compilerProfile": 1,
   "targetAbi": 3841,
   "headerBytes": 128,
-  "artifactBytes": 673,
+  "artifactBytes": 717,
   "sections": [
     {
       "type": "POU_TABLE",
@@ -34,24 +34,24 @@
     {
       "type": "SIGNAL_DEFS",
       "offset": 526,
-      "bytes": 30,
-      "itemCount": 1
+      "bytes": 74,
+      "itemCount": 2
     },
     {
       "type": "BINDING_MANIFEST",
-      "offset": 556,
+      "offset": 600,
       "bytes": 50,
       "itemCount": 3
     },
     {
       "type": "LIBRARY_LOCK",
-      "offset": 606,
+      "offset": 650,
       "bytes": 43,
       "itemCount": 1
     },
     {
       "type": "RESOURCE_BUDGET",
-      "offset": 649,
+      "offset": 693,
       "bytes": 24,
       "itemCount": 1
     }
@@ -62,7 +62,7 @@
     "HAS_MULTI_PROGRAM",
     "HAS_RETAIN"
   ],
-  "sha256": "0f7ad93db39ddcf483b055c3f96fd2e1696ccf797075d6d3e011670692ae63ae",
+  "sha256": "642ced0183d570a0a31baa7fe793923078ff53cce9cabaddbda464f1079dde97",
   "integrityMode": "HASH_ONLY",
   "signatureReservedZero": true,
   "libraryLock": {
@@ -75,7 +75,7 @@
     "programCount": 2,
     "pouCount": 3,
     "fbInstanceCount": 1,
-    "signalCount": 1,
+    "signalCount": 2,
     "bindingCount": 3
   }
 }

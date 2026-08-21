@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "st/st_artifact.hpp"
 #include "st/st_package_v2.hpp"
 #include "st/st_profile_generated.hpp"
@@ -43,12 +45,53 @@ bool read_file(const std::string& path, std::vector<uint8_t>* out)
     return static_cast<bool>(input);
 }
 
+/* Khai báo signal đi bằng FILE JSON chứ không bằng cờ `name=value`: tên signal
+ * là chuỗi người dùng đặt, nên mọi dấu phân cách ta chọn đều có thể xuất hiện
+ * trong chính dữ liệu. Một định dạng có escape sẵn thì không có lớp lỗi đó. */
+bool read_signals(const std::string& path, std::vector<core::StPackageSignal>* out,
+                  std::string* error)
+{
+    std::ifstream input(path);
+    if (!input) {
+        *error = "khong doc duoc " + path;
+        return false;
+    }
+    nlohmann::json document = nlohmann::json::parse(input, nullptr, false);
+    if (document.is_discarded() || !document.is_array()) {
+        *error = "signals phai la mang JSON";
+        return false;
+    }
+    for (const nlohmann::json& item : document) {
+        if (!item.is_object()) {
+            *error = "moi signal phai la object";
+            return false;
+        }
+        core::StPackageSignal signal;
+        signal.name = item.value("name", std::string());
+        signal.producer_program = item.value("publisher", std::string());
+        signal.data_type = static_cast<uint8_t>(item.value("type", 0));
+        signal.freshness_ms = item.value("freshnessMs", 0u);
+        signal.stale_policy = static_cast<uint8_t>(item.value("stalePolicy", 0));
+        if (item.contains("fallbackBits") && !item.at("fallbackBits").is_null()) {
+            signal.fallback_bits = item.at("fallbackBits").get<uint64_t>();
+            signal.has_fallback = true;
+        }
+        if (signal.name.empty() || signal.producer_program.empty()) {
+            *error = "signal thieu name hoac publisher";
+            return false;
+        }
+        out->push_back(std::move(signal));
+    }
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
 {
     std::string out_path;
     std::vector<core::StPackageProgram> programs;
+    std::vector<core::StPackageSignal> signals;
 
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
@@ -92,6 +135,10 @@ int main(int argc, char** argv)
                 target->period_ms = value;
             else
                 target->budget_us = value;
+        } else if (argument == "--signals" && index + 1 < argc) {
+            std::string signal_error;
+            if (!read_signals(argv[++index], &signals, &signal_error))
+                return fail("ST-CLI-IO", signal_error);
         } else if (argument == "--version") {
             std::printf("mkddc-st-package %s\n", core::st_profile_generated::kProfileId);
             return 0;
@@ -106,6 +153,7 @@ int main(int argc, char** argv)
     input.compiler_profile = core::st_profile_generated::kProfileCode;
     input.target_abi = core::st_profile_generated::kTargetAbi;
     input.programs = programs;
+    input.signals = signals;
     /* Mỗi Program là một POU kind PROGRAM. Bảng signature đầy đủ (FUNCTION/FB,
      * cổng, kiểu) đến cùng `T59-305`; khai thiếu ở đây tốt hơn khai bừa, vì
      * loader kiểm bảng này và một bản khai sai sẽ được nạp như thật. */

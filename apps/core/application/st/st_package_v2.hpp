@@ -96,6 +96,14 @@ struct StPackageSignal {
     std::string producer_program;
     uint8_t     data_type = 0;
     uint32_t    freshness_ms = 1000;
+    /* Chính sách khi quá hạn (T59-404). Đi TRONG package vì nó là quyết định
+     * thiết kế của người dựng chương trình — để runtime chọn nghĩa là chọn thay
+     * họ xem thiết bị làm gì khi mất dữ liệu. */
+    uint8_t     stale_policy = 0; /* 0=HOLD_LAST, 1=USE_FALLBACK, 2=WAIT */
+    /* Giá trị dự phòng, 8 byte thô đúng như `StCell`. Chỉ có nghĩa khi
+     * `stale_policy == USE_FALLBACK`; writer từ chối mọi tổ hợp khác. */
+    uint64_t    fallback_bits = 0;
+    bool        has_fallback = false;
 };
 
 struct StPackageBinding {
@@ -160,6 +168,10 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
 struct StPackageContents {
     StPackageView view;
     std::vector<std::vector<uint8_t>> program_ir;
+    /* Khai báo signal đầy đủ (tên/publisher/kiểu/freshness/chính sách/fallback).
+     * `StPackageView` cố ý chỉ mang tên vì đa số caller chỉ cần khung; runtime
+     * thì cần trọn khai báo để dựng bus. */
+    std::vector<StPackageSignal> signals;
 };
 
 /* Nạp package v2 VÀ giữ lại blob IR. Dùng đúng một parser với `LoadPackageV2` —
