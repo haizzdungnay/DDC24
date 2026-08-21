@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### T59-407 — RETAIN theo Program: cô lập và bịt lỗ "reset nửa vời" (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/st_scheduler.cpp`,
+  `apps/core/application/st/tests/test_st_retain.cpp`, Plan 59 §3/§3.5,
+  Risk Register v4.10, Traceability v5.8, baseline manifest v1.31.
+- **Triệu chứng:** reset RETAIN trên Program đang `STOPPED`/`FAULTED` làm sạch
+  RAM, nhưng file bền vững vẫn giữ giá trị cũ — lần khởi động sau giá trị trước
+  reset quay về. Người vận hành thấy "reset thành công" rồi thấy nó tự đảo ngược
+  sau lần mất điện đầu tiên.
+- **Nguyên nhân gốc:** `publish_committed_retain_snapshots()` chỉ công bố ảnh
+  RETAIN cho Program vừa **chạy** và vừa **commit output** trong base step đó. Mà
+  Program hay bị reset nhất lại là Program đang dừng — đúng những Program không
+  bao giờ thoả điều kiện đó. `flush(true)` sau reset chỉ ghi lại ảnh **cũ**.
+- **Cách sửa:** `apply_pending_retain_resets()` công bố ảnh **đã reset** ngay tại
+  safe boundary, không phụ thuộc trạng thái chạy. Reset là một sự kiện của **dữ
+  liệu**, không phải của việc chạy.
+- **Test chống hồi quy đã kiểm chứng:** gỡ bản vá ra và chạy lại,
+  `T59_407_ResetOnStoppedProgramIsPersistedNotHalfDone` đỏ đúng ở dòng "giá trị
+  trước reset quay về sau khởi động lại". Một test xanh cả khi có lẫn khi không
+  có bản vá thì không chứng minh gì.
+- **Thêm:** hai test cô lập giữa Program — reset instance-1 không chạm
+  instance-2; làm hỏng file RETAIN của một Program chỉ làm **một** Program
+  cold-init, Program còn lại warm-restart bình thường. Nếu hai Program dùng chung
+  một file thì một lần hỏng là mất trạng thái của cả hai.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1191/1191** pass;
+  `scripts/verify-project.sh --wave W4` **5/5 PASS**;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-407`, `RSK-PROG-009/022`,
+  `DDD-RETAIN-RESET-PROG-001`.
+
 ### T59-406 — Sổ candidate output, rút theo lý do và đường rơi về (2026-08-21)
 
 - **Phạm vi:** `apps/core/application/programming/program_candidate_registry.{hpp,cpp}` (mới),

@@ -1296,7 +1296,7 @@ target/HIL, và **không phải** E2E trình duyệt thật.
 | `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | **DONE** | `StSignalBus` double-buffer, commit ở **boundary** nên mọi consumer trong một chu kỳ thấy cùng một ảnh; **0 đọc rách** qua 20.000 vòng publisher/consumer song song trên `StCell` 8 byte; ba chính sách `HOLD_LAST`/`USE_FALLBACK`/`WAIT` cho ba hành vi khác nhau, "chưa ai publish" khác "quá hạn"; producer dừng thì giá trị **quá hạn theo freshness** chứ không biến mất tức thì, hồi phục ngay ở boundary kế. Sửa kèm: signal **chưa từng** đi vào container (bus runtime luôn rỗng) và `stalePolicy` **không phải enum đóng** ở Check. 15 test mới; `ctest` **1179/1179**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | **DONE** | Đường đầy đủ: store (`program_runtime_intents`, migration **v10**) → API (`PUT .../programs/{id}/runtime-intent`, `GET .../programs`, RBAC admin/viewer, idempotency) → IPC (**action mới** `SET_PROGRAM_ENABLED`, protocolMinor 0→1 tương thích ngược) → Core (`set_program_enabled` áp lên đúng một instance) → read-back + audit **cùng một transaction**. Intent và trạng thái là **hai trường riêng**; Core từ chối/không sẵn sàng vẫn giữ intent bền vững. Trần 16 Enabled ép ở **hai** lớp. Sửa kèm: trigger `generation` chặn cả read-back; biên nhận idempotency đòi ETag cho mutation không thuộc Draft. 10 test mới; `ctest` **1180/1180**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | **DONE** | `ProgramCandidateRegistry` trả lời **ai đang giữ output nào và vì sao không còn giữ** (enum lý do đóng: `OPERATOR_DISABLE`/`FAULT_TTL_EXPIRED`/`PACKAGE_REPLACED`); bất biến một-output-một-owner ép **lại** ở runtime; rút candidate → trọng tài rơi đúng **mức tiếp theo → default**, không kẹt ở giá trị cuối của Program đã dừng; gói mới xoá sạch quyền sở hữu cũ; luật **không có đường Program→IOP trực tiếp** kiểm bằng đọc chính mã nguồn. 9 test mới; `ctest` **1187/1187**; `--wave W4` 5/5 PASS. **Còn mở:** TTL hold-last vẫn là `0` (giữ vô hạn) vì con số chưa được Product+Controls ký. Chi tiết §3.5. |
-| `T59-407` | P0 | Per-Program/FB RETAIN namespace/layout/restart/reset | T59-104/401 | ORDERED | Warm/cold/revision/corrupt/reset matrix; no half reset; Program isolation. |
+| `T59-407` | P0 | Per-Program/FB RETAIN namespace/layout/restart/reset | T59-104/401 | **DONE** | Sửa lỗi **reset nửa vời**: reset trên Program đang DỪNG chỉ sạch trong RAM, file bền vững giữ giá trị cũ nên khởi động lại là giá trị cũ quay về. Nay reset công bố ảnh đã reset **ngay tại boundary**, không phụ thuộc trạng thái chạy. Ma trận warm/cold/revision/corrupt/reset đóng đủ; reset **cô lập** giữa Program; file hỏng của một Program **không** làm Program khác cold-init. 3 test mới; test chống hồi quy đã kiểm chứng bằng cách gỡ bản vá (đỏ đúng chỗ); `ctest` **1191/1191**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
 | `T59-408` | P1 | Core trace ring buffer + real `TRACE_START/STOP` | T59-402/006 | ORDERED | 10k/10 min bounded, no RT allocation; BE caller thật; action ma = 0. |
 
 ### 3.5 Ghi chú thực thi W4
@@ -1645,6 +1645,50 @@ bởi mã.
 
 Interlock và SafeState là hai mắt xích đã tồn tại (`safe_state.hpp`, ma trận
 trigger T1–T8); task này nối candidate vào đầu chuỗi chứ không viết lại chúng.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-407` — RETAIN theo Program: cô lập, và bịt lỗ "reset nửa vời"
+
+**Lỗi thật đã sửa: reset không bền vững khi Program đang dừng.**
+`publish_committed_retain_snapshots()` chỉ công bố ảnh RETAIN cho Program vừa
+**chạy** và vừa **commit output** trong base step đó. Nhưng Program hay bị reset
+nhất lại là Program đang `STOPPED`/`FAULTED` — đúng những Program không bao giờ
+thoả điều kiện đó. Kết quả: `reset_retained_state()` làm sạch RAM, rồi
+`flush(true)` ghi lại **ảnh CŨ** (hoặc không ghi gì), và lần khởi động sau giá
+trị trước reset quay về. Người vận hành thấy "reset thành công" rồi thấy nó tự
+đảo ngược sau lần mất điện đầu tiên.
+
+Nay `apply_pending_retain_resets()` công bố ảnh **đã reset** ngay tại boundary,
+không phụ thuộc trạng thái chạy: reset là một sự kiện của **dữ liệu**, không phải
+của việc chạy.
+
+**Test chống hồi quy đã được kiểm chứng.** Gỡ bản vá ra và chạy lại:
+`T59_407_ResetOnStoppedProgramIsPersistedNotHalfDone` đỏ đúng ở dòng "giá trị
+trước reset quay về sau khởi động lại". Một test xanh cả khi có lẫn khi không có
+bản vá thì không chứng minh gì.
+
+**Namespace theo instance là thứ làm cô lập có thật.** Mỗi Program có file riêng,
+đường dẫn dẫn xuất từ `SHA-256(controller_identity ‖ instance_id)`. Test khoá hai
+hệ quả: reset instance-1 **không** chạm instance-2, và làm hỏng file của một
+Program chỉ làm **một** Program cold-init — Program còn lại warm-restart bình
+thường. Nếu hai Program dùng chung một file thì một lần hỏng là mất trạng thái
+của cả hai.
+
+**Ma trận đã đóng đủ.** Cold (thiếu file), warm (khôi phục đúng giá trị), revision
+(đổi tên/kiểu biến RETAIN → `layout_identity` đổi → cold-init có lý do), corrupt
+(CRC sai, file cụt do mất điện, magic sai, version sai), reset (giá trị reset sống
+qua cả autosave tự nhiên lẫn warm restart). Phần lớn ma trận này đã có từ
+`TASK-PROG-402`; `T59-407` bổ sung tầng **Program isolation** và bịt lỗ trên.
+
+**Reset là all-or-nothing ở tầng dữ liệu.** `reset_retained_state()` đưa **cả**
+biến RETAIN **và** state của FB `retained` về giá trị khởi tạo trong cùng một
+lượt, tại safe boundary trước khi Program nào chạy. Không có cửa sổ nào mà biến
+đã reset còn FB thì chưa.
+
+**Ranh giới trung thực.** Đây là **cô lập và bền vững của reset**. Ma trận
+power-cut thật trên board thuộc `T59-704`; đường IPC `RETAIN_RESET` và ràng buộc
+trạng thái Commission đã có từ `WP-12`, task này không đổi chúng.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 

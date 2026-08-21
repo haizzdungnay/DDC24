@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.9 |
+| Phiên bản | 4.10 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + Architecture + QA |
@@ -656,6 +656,15 @@ Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
 Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
+### 5.46 Cập nhật treatment source `T59-407` (Plan59 W4)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-022` | **Lỗi thật đã sửa:** reset trên Program đang `STOPPED`/`FAULTED` chỉ sạch trong RAM còn file bền vững giữ giá trị cũ, nên khởi động lại là giá trị cũ quay về. Nay reset công bố ảnh đã reset **ngay tại boundary**, không phụ thuộc trạng thái chạy. Test chống hồi quy đã kiểm chứng bằng cách gỡ bản vá | Ma trận power-cut thật trên board (`T59-704`), Test Result `VS-PROG-029/030` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-009` | Namespace RETAIN theo instance (đường dẫn dẫn xuất từ `SHA-256(controller_identity ‖ instance_id)`): reset của một Program không chạm Program khác, và file hỏng của một Program chỉ làm **một** Program cold-init — Program còn lại warm-restart bình thường | Cold-init trên target sau đổi Revision (`T59-702`), `VS-PROG-029/030` | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -708,6 +717,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 4.10 | 2026-08-21 | Ghi `T59-407` (Plan59 W4) cho treatment partial RSK-009/022: bịt lỗ reset nửa vời (reset trên Program đang dừng nay bền vững qua khởi động lại), cô lập RETAIN giữa Program cho cả đường reset lẫn đường file hỏng. Giữ 22/22 Open vì power-cut thật trên board chưa có. |
 | 4.9 | 2026-08-21 | Ghi `T59-406` (Plan59 W4) cho treatment partial RSK-002/006/021: sổ candidate trả lời quyền sở hữu output và lý do rút, bất biến một-output-một-owner ép lại ở runtime, đường rơi về mức tiếp theo/default có test đầu-cuối, luật không-đường-tắt kiểm bằng đọc mã nguồn. Giữ 22/22 Open; **TTL hold-last vẫn 0** vì con số chưa được Product+Controls ký. |
 | 4.8 | 2026-08-21 | Ghi `T59-405` (Plan59 W4) cho treatment partial RSK-005/007/008/014: intent Enable/Disable đi trọn store→API→IPC→Core→read-back/audit trong một transaction, ý định và trạng thái là hai trường riêng, trần 16 ép ở hai lớp, IPC thêm action mới với `protocolMinor` 0→1 tương thích ngược. Giữ 22/22 Open vì đối chiếu định kỳ, đọc trạng thái theo Program từ Core và FE chưa có. |
 | 4.7 | 2026-08-21 | Ghi `T59-404` (Plan59 W4) cho treatment partial RSK-012/017/020: bus Published Signal double-buffer commit ở boundary với 0 đọc rách qua 20.000 vòng, ba chính sách stale phân biệt "chưa publish" với "quá hạn", signal lần đầu thực sự đi vào container, `stalePolicy` đóng ở ba lớp. Giữ 22/22 Open vì opcode signal trong thân chương trình, trọng tài output và target chưa có. |
