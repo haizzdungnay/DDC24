@@ -34,8 +34,10 @@ core::StPackageInput golden_input()
     input.compiler_profile = core::st_profile_generated::kProfileCode;
     input.target_abi = core::st_profile_generated::kTargetAbi;
 
-    input.programs.push_back({"AhuMain", deterministic_ir(0x11, 96)});
-    input.programs.push_back({"AhuAux", deterministic_ir(0x29, 64)});
+    /* Hai chu kỳ KHÁC nhau trong cùng một golden: golden mà mọi Program cùng
+     * chu kỳ sẽ không phân biệt được "đọc đúng trường" với "đọc trúng may". */
+    input.programs.push_back({"AhuMain", deterministic_ir(0x11, 96), 1000u, 12000u});
+    input.programs.push_back({"AhuAux", deterministic_ir(0x29, 64), 5000u, 3000u});
 
     core::StPouSignature main_program;
     main_program.name = "AhuMain";

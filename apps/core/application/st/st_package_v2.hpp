@@ -80,6 +80,15 @@ struct StPackageProgram {
     std::string program_name;
     /* Blob v1 do `serialize_st_ir` sinh; container KHÔNG diễn giải lại nội dung. */
     std::vector<uint8_t> ir_blob;
+    /* Chu kỳ release riêng của Program (DDD §7.1). 0 = theo chu kỳ Task, giữ cho
+     * package một Program không phải khai gì thêm. Chu kỳ phải nằm trong ba lớp
+     * của profile: một lớp lập lịch không tồn tại chỉ biểu hiện thành deadline
+     * miss ở runtime chứ không thành một câu trả lời hiểu được. */
+    uint32_t period_ms = 0;
+    /* Ngân sách WCET của Program trong một lần release, đơn vị µs. 0 = chưa đo.
+     * Đi trong package chứ không suy ở runtime: đây là số Check đã tính trên
+     * toàn bộ Revision, còn runtime chỉ thấy từng lần chạy. */
+    uint32_t budget_us = 0;
 };
 
 struct StPackageSignal {
@@ -127,6 +136,10 @@ struct StPackageHeaderView {
 struct StPackageView {
     StPackageHeaderView header;
     std::vector<std::string> program_names;
+    /* Song song 1-1 với `program_names`. Giữ hai vector thay vì một struct để
+     * caller chỉ cần tên (đa số) không phải kéo theo phần còn lại. */
+    std::vector<uint32_t> program_periods_ms;
+    std::vector<uint32_t> program_budget_us;
     std::vector<std::string> pou_names;
     std::vector<std::string> signal_names;
     std::vector<std::string> output_point_ids;

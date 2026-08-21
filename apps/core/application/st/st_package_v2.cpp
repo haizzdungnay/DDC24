@@ -150,13 +150,27 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
         sections.push_back(std::move(plan));
     }
 
-    /* PROGRAM_TABLE: tên Program theo đúng thứ tự trong CODE_IR. */
+    /* PROGRAM_TABLE: tên Program theo đúng thứ tự trong CODE_IR, kèm chu kỳ
+     * release và ngân sách WCET riêng của từng Program (DDD §7.1). Chu kỳ đi
+     * TRONG package chứ không do runtime tự chọn: hai controller nạp cùng một
+     * package phải chạy cùng một dãy release, và điều đó chỉ đúng khi chu kỳ là
+     * dữ liệu của package. */
     {
         SectionPlan plan;
         plan.type = st_pkg::SEC_PROGRAM_TABLE;
         plan.item_count = static_cast<uint32_t>(input.programs.size());
-        for (const StPackageProgram& program : input.programs)
+        for (const StPackageProgram& program : input.programs) {
+            if (program.period_ms != 0 &&
+                std::find(st_profile_generated::kAllowedPeriodMs.begin(),
+                          st_profile_generated::kAllowedPeriodMs.end(),
+                          program.period_ms) == st_profile_generated::kAllowedPeriodMs.end())
+                return fail(error, "Program '" + program.program_name + "' có chu kỳ " +
+                                       std::to_string(program.period_ms) +
+                                       " ms ngoài ba lớp của profile");
             if (!append_string(&plan.payload, program.program_name, error)) return false;
+            append_u32(&plan.payload, program.period_ms);
+            append_u32(&plan.payload, program.budget_us);
+        }
         sections.push_back(std::move(plan));
     }
 
@@ -428,7 +442,20 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
                 std::string name;
                 if (!read_string(payload, entry.bytes, &cursor, &name))
                     return reject(error_code, st_pkg_error::kBadRecord);
+                if (cursor + 8 > entry.bytes) return reject(error_code, st_pkg_error::kBadRecord);
+                const uint32_t period_ms = read_u32(payload, cursor);
+                const uint32_t budget_us = read_u32(payload, cursor + 4);
+                cursor += 8;
+                /* Chu kỳ lạ bị chặn ở LOADER, không chỉ ở writer: package tới đây
+                 * có thể do một writer khác phiên bản sinh ra. */
+                if (period_ms != 0 &&
+                    std::find(st_profile_generated::kAllowedPeriodMs.begin(),
+                              st_profile_generated::kAllowedPeriodMs.end(),
+                              period_ms) == st_profile_generated::kAllowedPeriodMs.end())
+                    return reject(error_code, st_pkg_error::kResourceLimit);
                 out->program_names.push_back(std::move(name));
+                out->program_periods_ms.push_back(period_ms);
+                out->program_budget_us.push_back(budget_us);
             }
             break;
         }

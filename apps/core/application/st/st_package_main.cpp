@@ -11,7 +11,9 @@
  *        vừa tạo và bọc chúng vào container. Trộn thêm một bước biên dịch ở đây
  *        sẽ làm hash package không còn suy được từ hash các artifact thành phần.
  */
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -66,6 +68,30 @@ int main(int argc, char** argv)
             if (program.ir_blob.empty())
                 return fail("ST-CLI-IO", "IR rong: " + program.program_name);
             programs.push_back(std::move(program));
+        } else if ((argument == "--period" || argument == "--budget") && index + 1 < argc) {
+            /* Chu kỳ và ngân sách đi bằng cờ RIÊNG, không nhồi thêm dấu phân cách
+             * vào `--program`: đường dẫn file có thể chứa gần như mọi ký tự, nên
+             * mọi dấu phân cách thứ hai đều là một cách phân tích sai chờ xảy ra. */
+            const bool is_period = argument == "--period";
+            const std::string spec = argv[++index];
+            const std::size_t separator = spec.find('=');
+            if (separator == std::string::npos || separator == 0 || separator + 1 >= spec.size())
+                return fail("ST-CLI-ARGS", argument + " can dang <name>=<so>");
+            const std::string name = spec.substr(0, separator);
+            const std::string value_text = spec.substr(separator + 1);
+            if (value_text.find_first_not_of("0123456789") != std::string::npos ||
+                value_text.size() > 9)
+                return fail("ST-CLI-ARGS", argument + " can gia tri nguyen khong dau");
+            const auto target = std::find_if(
+                programs.begin(), programs.end(),
+                [&name](const core::StPackageProgram& p) { return p.program_name == name; });
+            if (target == programs.end())
+                return fail("ST-CLI-ARGS", argument + " tro toi Program chua khai: " + name);
+            const uint32_t value = static_cast<uint32_t>(std::strtoul(value_text.c_str(), nullptr, 10));
+            if (is_period)
+                target->period_ms = value;
+            else
+                target->budget_us = value;
         } else if (argument == "--version") {
             std::printf("mkddc-st-package %s\n", core::st_profile_generated::kProfileId);
             return 0;

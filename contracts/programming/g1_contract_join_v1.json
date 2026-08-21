@@ -111,10 +111,10 @@
       "schemaVersion": 2,
       "magic": "MKDDCIR2",
       "goldenPath": "contracts/programming/golden/package_v2_ahu.mkpkg",
-      "goldenSha256": "69cb1dfef9259aa833b692170709131bb681beb5d0bf71d74a34ff13ff5ecb04",
+      "goldenSha256": "62a3feff1d8451b9777bd2656506657a014fe4ef9bf79a64848697b54e34646c",
       "goldenManifestPath": "contracts/programming/golden/package_v2_manifest.json",
-      "goldenManifestSha256": "cc227d86c61629305974baa1111f0aa8c33d9d9dbcb7f94f49829c8c56fd97f5",
-      "goldenArtifactBytes": 657,
+      "goldenManifestSha256": "a5ed85b42ba01ca4c865fee235db084305df6a523742cd6eb0f3df6796a22c48",
+      "goldenArtifactBytes": 673,
       "goldenProgramCount": 2
     },
     {
