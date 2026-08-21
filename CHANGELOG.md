@@ -8,6 +8,41 @@
 
 ## [Unreleased]
 
+### FIX DEBUG — đường đọc trace của Core chưa nối tới người dùng (2026-08-21)
+
+- **Phạm vi:** `apps/web-api/internal/programming/application/trace.go`,
+  `apps/web-api/internal/programming/application/monitor_trace_test.go`,
+  Plan 59 §3.5/§3.6, Risk Register v4.14, Traceability v6.2,
+  baseline manifest v1.35.
+- **Triệu chứng:** `TRACE_READ` **chưa từng được gọi ở bất kỳ đâu**. Core lấy mẫu
+  tại ranh giới quét rồi ghi vào một ring **không ai đọc**, còn người dùng vẫn
+  xem dãy mẫu poll theo nhịp riêng của BE. Toàn bộ lý do tồn tại của `T59-408` —
+  "mọi biến trong một mẫu đến từ đúng một chu kỳ" — không tới được người dùng.
+- **Nguyên nhân gốc:** `T59-408` nối `TRACE_START`/`TRACE_STOP` nhưng để đường
+  **đọc** lại cho lane sản phẩm. Kết quả là một tính năng có mã chạy đủ nhưng đầu
+  ra không ai thấy — cùng lớp lỗi với ba hồi quy FE của W3 (tab bấm không ăn):
+  đường đi tồn tại, đầu cuối không nối.
+- **Cách sửa:** `runTrace` rút mẫu từ ring qua `TRACE_READ`; poll monitor chỉ còn
+  là **đường dự phòng** khi Core không nhận phiên.
+  - **Không trộn hai nguồn trong một dãy:** Core nhận phiên thì mẫu đầu không lấy
+    bằng poll nữa — trộn vào tạo một đồ thị mà điểm đầu tiên đến từ nơi khác các
+    điểm còn lại, và không có gì nói ra điều đó.
+  - **`valid=false` không vẽ thành 0:** ô không đọc được trả giá trị rỗng kèm
+    `quality=BAD`/`freshness=UNAVAILABLE`.
+  - **Số mẫu rơi của Core hiện ra**, không giấu sau một dãy trông liền mạch.
+  - **Thay chứ không nối thêm:** ring bounded và có thể đã ghi đè mẫu cũ nhất;
+    nối thêm tạo ra một dãy vừa trùng lặp vừa thiếu.
+  - Bit thô diễn giải theo kiểu đã khai trong package; kiểu không nhận ra trả
+    `nil` thay vì đoán — một số sai kiểu trên đồ thị chẩn đoán tệ hơn ô trống.
+- **Sửa kèm — test đua.** Bản test đầu chờ `readCalls > 0` rồi đọc mẫu, trong khi
+  lệnh đọc tới Core **trước** lúc mẫu được ghi vào phiên; cổng `go` bắt được ở
+  lần chạy thứ hai. Điều kiện chờ nay là **cả hai**; chạy lặp 5 lần đều xanh.
+- **Kiểm chứng (HOST/LOCAL):** test chống hồi quy đã kiểm chứng bằng cách **gỡ
+  đường `TRACE_READ`** — đỏ đúng dòng "ring của Core không ai đọc". Build
+  **Debug** (`CMAKE_BUILD_TYPE=Debug`) sạch và `ctest` **1209/1209**;
+  `scripts/verify-project.sh --wave W5` **7/7 PASS**.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-408` / §3.6, `RSK-PROG-021`, OD-PROG-011.
+
 ### T59-501 — Commission/Restore atomic ở mức GÓI (2026-08-21)
 
 - **Phạm vi:** `apps/core/application/st/{st_scheduler.hpp,st_scheduler.cpp,st_process_image.cpp}`,

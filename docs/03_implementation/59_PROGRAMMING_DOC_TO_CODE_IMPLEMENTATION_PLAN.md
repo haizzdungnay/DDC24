@@ -1771,11 +1771,32 @@ Core đã bị bỏ nhánh** — mutation trên schema không mô phỏng đư�
 một action chưa có enum thoát khỏi luật này. Nay luật thuần schema được kiểm
 trước.
 
-**Ranh giới trung thực.** BE hiện gọi `TRACE_START`/`TRACE_STOP` thật, còn đường
-**đọc mẫu** vẫn dùng poll monitor làm nguồn: chuyển hẳn sang `TRACE_READ` cần đổi
-hình chiếu mẫu ở API và FE, thuộc lane sản phẩm chứ không thuộc task này. Lỗi khi
-gọi Core **không** huỷ phiên — mất trace hoàn toàn vì Core bận là tệ hơn. Số đo
-10k/10 phút là host, không phải 10 phút thật trên target (`T59-702`).
+**Đường đọc mẫu đã nối trọn (bổ sung trong W5).** Bản đầu của task này để
+`TRACE_READ` **không ai gọi**: Core lấy mẫu tại ranh giới quét rồi ghi vào một
+ring **không ai đọc**, còn người dùng vẫn xem dãy mẫu poll theo nhịp riêng của
+BE. Nghĩa là toàn bộ lý do tồn tại của `T59-408` — "mọi biến trong một mẫu đến từ
+đúng một chu kỳ" — **không tới được người dùng**, và dữ liệu Core thu thập là dữ
+liệu chết. Nay `runTrace` rút mẫu từ ring; poll monitor chỉ còn là **đường dự
+phòng** khi Core không nhận phiên.
+
+Ba điểm đi kèm, mỗi điểm sửa một cách nói dối:
+
+- **Không trộn hai nguồn trong một dãy.** Core nhận phiên thì mẫu đầu KHÔNG lấy
+  bằng poll nữa; trộn vào sẽ tạo một đồ thị mà điểm đầu tiên đến từ nơi khác các
+  điểm còn lại, và không có gì trên đồ thị nói ra điều đó.
+- **`valid=false` không được vẽ thành 0.** Ô không đọc được trả giá trị rỗng kèm
+  `quality=BAD`/`freshness=UNAVAILABLE`.
+- **Số mẫu rơi của Core hiện ra**, không bị giấu sau một dãy trông liền mạch.
+
+**Thay chứ không nối thêm.** Ring của Core bounded và có thể đã ghi đè mẫu cũ
+nhất; nối thêm sẽ tạo ra một dãy vừa trùng lặp vừa thiếu, và số `dropped` không
+còn giải thích được khoảng trống nào.
+
+**Ranh giới trung thực.** Lỗi khi gọi Core **không** huỷ phiên — mất trace hoàn
+toàn vì Core bận là tệ hơn. Bit thô được diễn giải theo kiểu đã khai trong
+package; kiểu không nhận ra trả `nil` thay vì đoán, vì một số sai kiểu trên đồ
+thị chẩn đoán tệ hơn một ô trống. Số đo 10k/10 phút là host, không phải 10 phút
+thật trên target (`T59-702`).
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
@@ -1860,6 +1881,21 @@ lúc chạy, nên watcher chỉ đem lại hai thứ: hàng chục nghìn inotif
 `e2e` ở đây vẫn dùng mock Programming — đường real-backend là `T59-505`.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### Sửa kèm W5 — đường trace debug chưa nối tới người dùng
+
+Cổng W5 chạy lần đầu đã lộ thêm một thứ mà không cổng nào của W4 gọi tới: BE
+**chưa bao giờ** gọi `TRACE_READ`. Chi tiết và cách sửa ghi ở §3.5 mục
+`T59-408`; ở đây chỉ ghi lại bài học lặp lại lần thứ hai trong hai wave liên
+tiếp — **một tính năng chỉ được coi là xong khi có người thật đọc được đầu ra
+của nó**, không phải khi mã của nó chạy. Cả `T59-408` (ring không ai đọc) và ba
+hồi quy FE của W3 (tab bấm không ăn) đều thuộc đúng một lớp lỗi: đường đi tồn
+tại, đầu cuối không nối.
+
+Một điểm nữa cùng lớp: test chống hồi quy đầu tiên của đường này **đua** — nó
+chờ `readCalls > 0` rồi đọc mẫu, trong khi lệnh đọc tới Core trước lúc mẫu được
+ghi vào phiên. Cổng `go` bắt được ở lần chạy thứ hai. Điều kiện chờ nay là **cả
+hai** (đã đọc ring **và** mẫu đã ghi); chạy lặp 5 lần đều xanh.
 
 ### W6 — Hardening, packaging và Release Candidate
 
