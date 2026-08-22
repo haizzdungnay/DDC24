@@ -8,6 +8,34 @@
 
 ## [Unreleased]
 
+### W7 — cài đè thật trên bo, V&V unified và verdict `NO-GO` (2026-08-23)
+
+- **Added — `docs/07_records/PROGRAMMING_RELEASE_RECORD_2026-08-23.md`**
+  (`PROG-RELEASE-RECORD-2026-08-23`, `T59-707`). Tổng hợp 14 cổng W7
+  (**10 PASS / 0 FAIL / 4 NOT_RUN**), 12 scenario `VS-PROG-U01..U12` (7 PASS ở
+  mức HOST, 2 PASS một phần, 3 NOT_RUN) và bảng Must. **Verdict: `NO-GO`** —
+  ba Must chưa có evidence và không được waive: physical AO/DO cho cả ST và FBD
+  (`T59-703`), soak 24 h trên target (`T59-702`), power-cut/RETAIN/LKG
+  (`T59-704`). Bảy điều kiện mở `GO` ghi trong record, gồm cả việc thay khoá
+  LAB bằng khoá hãng giữ trong HSM.
+- **Added — `docs/07_records/test-evidence/fw-som/2026-08-23-foxlinx-t59705-install-signed.md`**
+  (mức **TARGET**). Cài đè **thật** `main@29c59ec` lên bo Foxlinx: `sha256sum
+  --check` 7/7 OK, `install.sh` chạy trọn trên Buildroot, bốn dịch vụ trở lại
+  `active`, `/data/config/users.conf` không bị ghi đè. Binary cross-build
+  `-static-libstdc++` chạy được trên `GLIBCXX_3.4.30` của bo. Đường ký ADR-052
+  chạy trên phần cứng thật: compile **có** khoá thiết bị → `"integrityMode":
+  "SIGNED"`, `"signaturePresent":true`; compile **không** khoá → exit 2,
+  `ST-CLI-KEY-REQUIRED`. Core log `st_public_key=RELEASE
+  fingerprint=fdb9a30eea28b026` và `st_trusted_key_count=1`.
+- **Changed:** Plan 59 lên **v2.3** (`T59-705` PARTIAL cập nhật, `T59-707`
+  DONE với verdict NO-GO, bảng chặn W7 ghi lại điều kiện kỹ thuật của từng
+  lane); `CONTROL.md` thêm release record vào register.
+- **Ranh giới:** `T59-702` nay chặn bởi một điều kiện kỹ thuật cụ thể — chưa có
+  mật khẩu tài khoản `admin` của bo, mà đường đặt lại mật khẩu
+  (`POST /api/v1/users/{username}/reset-password`) lại **đã cần** một phiên
+  admin. Không có mật khẩu thì không Commission được 10-Program qua API, nên
+  soak không khởi động được bằng đường sản phẩm.
+
 ### T59-607 — bật `SIGNATURE_REQUIRED` cho artifact Programming (2026-08-23)
 
 - **Changed — contract:** `product_profile_v2.json` **2.0→2.1**, `integrityMode`

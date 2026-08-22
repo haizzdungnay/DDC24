@@ -1,10 +1,10 @@
 # Document Control
 
 **ID:** DOC-CTRL-001
-**Phiên bản:** 1.0
+**Phiên bản:** 1.2
 **Trạng thái:** Active
 **Chủ quản:** Project Engineering
-**Cập nhật:** 2026-08-23 (Programming Product v3.0 thống nhất; Plan59 v2.2 Active; W5 đóng sổ với 8/8 cổng HOST PASS; `PLAN_READY PASS`; `IMPLEMENT_READY PASS`; `RELEASE_READY NO-GO`; `12 DECIDED/0 OPEN`)
+**Cập nhật:** 2026-08-23 (Programming Product v3.0 thống nhất; Plan59 v2.3 Active; W5+W6 đóng sổ, W7 ký verdict **NO-GO**; `PLAN_READY PASS`; `IMPLEMENT_READY PASS`; `RELEASE_READY NO-GO`; `12 DECIDED/0 OPEN`)
 
 ## Mục tiêu
 
@@ -70,6 +70,7 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | risk/control/owner/evidence/residual gate |
 | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
 | [Programming Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | v2.0 — 32 scenario migration + 12 scenario Product thống nhất; release vẫn cần target/HIL record |
+| [Programming Release Record 2026-08-23](../07_records/PROGRAMMING_RELEASE_RECORD_2026-08-23.md) | `PROG-RELEASE-RECORD-2026-08-23` Active — verdict **NO-GO** đã ký; bảng 14 cổng W7, 12 scenario Product và bảy điều kiện mở `GO` |
 | [Programming Unified Baseline Manifest](../07_records/reviews/PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md) | SHA-256 của authority set Product/SRS/DDD/UX/VVP/Trace/Risk/Plan/Prompt |
 | [ADR-050](DECISIONS.md) | Quyết định hợp nhất một Product và supersede mô hình phạm vi Rev cũ |
 | [Plan 53/54/56 và WP tracker](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | `Superseded` — chỉ dùng truy nguyên As-Built/task/commit cũ; Plan59 sở hữu công việc tương lai |
@@ -137,5 +138,6 @@ contract, risk/trace, test result và bằng chứng target/HIL không bị lo�
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.2 | 2026-08-23 | Thêm `PROG-RELEASE-RECORD-2026-08-23` vào register và đổi dòng trạng thái theo Plan59 v2.3: W5+W6 đóng sổ, W7 đã **ký** verdict `NO-GO` (trước đây `RELEASE_READY=NO-GO` là trạng thái mặc định chờ đánh giá; nay là một quyết định có chữ ký, có bảng Must và bảy điều kiện mở). |
 | 1.1 | 2026-08-23 | Đồng bộ Plan59 v2.2 sau khi đóng sổ W5: cả tám cổng HOST của W5 PASS trong một lượt sau khi sửa `F-W5-CLOSE-01` (Core không biên dịch được) và `F-W5-CLOSE-02` (helper E2E coi `load` là "đã mount"). Không thay đổi Product/SRS/DDD/VVP và không mở `RELEASE_READY`. |
 | 1.0 | 2026-08-21 | Thiết lập revision có kiểm soát cho register; đồng bộ Programming Design Index v4.1, Readiness Matrix v2.1 và Plan59 v2.1 sau khi W5 hoàn tất ở mức HOST/LOCAL. Không thay đổi Product/SRS/DDD/VVP và không mở `RELEASE_READY`. |
