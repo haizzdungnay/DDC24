@@ -7,19 +7,19 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "c4be40618bb1e9ef37d93b3f7686bc4f7773a9f99aa50348c910f5f7116e7e9d",
+      "sha256": "8f148f166f4e3e03897be4a32539fdb0e599f1b689895f581f00f941f29dfc5b",
       "major": 1,
-      "version": "1.25.0",
-      "operationCount": 30
+      "version": "1.26.0",
+      "operationCount": 31
     },
     {
       "name": "ipc",
       "path": "contracts/ipc/programming_v1/schema.json",
-      "sha256": "4dd1e0661524a2351275ba9ad53fb2788bb97e528b198891cb0ae83ee6c83157",
+      "sha256": "6a3a23dc1449ab19fe923ac7facdd346d27af0091fd6510a6d3f6b4999c08de3",
       "goldenManifestPath": "contracts/ipc/programming_v1/golden/manifest.json",
-      "goldenManifestSha256": "0b885f00ab14db0f187f25407888a00fdbface7a1f7aa510dd930d4873bf449a",
+      "goldenManifestSha256": "f342108a3881948fc3c4dbfc571a89923525bcab7a4ea56d7ad16d3388403a65",
       "major": 1,
-      "minor": 2,
+      "minor": 3,
       "version": "1.0"
     },
     {

@@ -9,11 +9,27 @@
     "items": ["AO-01 đang có override"]
   },
   "cutover": {
-    "status": "NONE",
-    "items": []
+    "status": "PRESENT",
+    "items": ["GRAPH_ONLY→PROGRAM_ONLY"]
   },
   "outputMappingChanges": {
-    "status": "NONE",
-    "items": []
+    "status": "PRESENT",
+    "items": ["AO-01 đổi ánh xạ đầu ra"]
+  },
+  "publishedSignals": {
+    "status": "PRESENT",
+    "items": ["SupplyTemp đổi chính sách stale"]
+  },
+  "controlLibrary": {
+    "status": "PRESENT",
+    "items": ["SCALE_LIN đổi phiên bản"]
+  },
+  "programSet": {
+    "status": "PRESENT",
+    "items": ["AHU_MAIN được thêm vào Revision"]
+  },
+  "enableIntent": {
+    "status": "PRESENT",
+    "items": ["AHU_MAIN đang Enabled"]
   }
 }
