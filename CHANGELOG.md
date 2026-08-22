@@ -8,6 +8,106 @@
 
 ## [Unreleased]
 
+### Plan 60 v1.1 — chốt 7/7 quyết định (2026-08-23)
+
+- **Changed — `docs/03_implementation/60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md`**
+  lên v1.1, trạng thái `Draft` → **`PLAN_READY`**. Bảy quyết định D-01..D-07 đã chốt,
+  mọi task rời trạng thái `DECISION`; 27 task ≈ 34,5 người-ngày.
+- **Hai phát hiện khi review làm ĐỔI quyết định so với bản nháp:**
+  1. `StScheduler::start()/stop()/disable()` đổi trạng thái **đồng bộ, tức thì**
+     (`apps/core/application/st/st_scheduler.cpp:575,593,615`) — không có pha trung
+     gian; và BE đã ghi rõ điều này từ trước: *"Giữ STARTING/STOPPING sau OK sẽ làm
+     UI kẹt vĩnh viễn ở một chuyển tiếp không hề tồn tại"*
+     (`apps/web-api/internal/programming/application/runtime_intent.go:199-201`).
+     ⇒ **Loại** ánh xạ `ACTIVE → STARTING` của bản nháp Plan 60 v1.0.
+  2. `last_exec_ns` của Core là **THỜI LƯỢNG** một lần chạy
+     (`wall_clock_() - program_start`, `st_scheduler.cpp:829`), **không phải mốc thời
+     gian**. Cột `Last Exec` của thiết kế là mốc thời gian ⇒ `T60-001/002` phải thêm
+     trường `last_run_mono_ns` riêng, BE quy đổi sang UTC bằng mốc neo
+     monotonic/UTC sẵn có của historian.
+- **D-01 chốt `focus mode`** (rail Programming 220 px **thay** `NavRail` toàn cục
+  trong `/eng/programming`, bắt buộc mục `← Thoát Lập trình`). Lý do quyết định là
+  ngân sách ngang đo thật: `NavRail` rộng `232 px` (`NavRail.tsx:209-211`), để hai
+  rail thì ở 1280 px chỉ còn 828 px, và PGM-02 (cây POU 220 + inspector 280) sẽ chỉ
+  còn ~328 px cho editor — không dùng được. `NAV_GROUPS` không đổi nên `ADR-032` và
+  hợp đồng route↔menu không bị động tới.
+- **D-07 chốt bảng ánh xạ 11 → 7 trạng thái** (§4.1): `STOPPED`/`ACTIVE`/`ROLLED_BACK`
+  → `WAITING` (cả ba đều được `start()` chấp nhận nên là trạng thái **nghỉ**, không
+  phải lỗi); `REJECTED` → `FAULTED` (activate thất bại và không có gói cũ,
+  `st_scheduler.cpp:705`); `EMPTY/STAGED/VALIDATED/READY` → `UNKNOWN`; giá trị ngoài
+  bảng → `UNKNOWN` fail-closed. `STARTING`/`STOPPING` **không bao giờ được sinh ra**.
+- **D-04 chốt công thức `health`** 7 điều kiện xét theo thứ tự (§4.2), `health` để
+  **nullable** cho Program không chạy thay vì bịa thêm giá trị enum. Không dùng
+  `missedReleaseCount` tuyệt đối (bộ đếm tích luỹ sẽ ghim Program ở `DEGRADED` vĩnh
+  viễn sau một lần lỡ nhịp) ⇒ thêm `consecutive_missed_release`, **phép đo mới duy
+  nhất** của Plan này, đặt cùng chỗ đang cộng `missed_release_count`
+  (`st_scheduler.cpp:105-118`).
+- **Verification:** `python3 scripts/docs_iso_harness.py --expect` exit **0**; kiểm
+  27 ID task không có tham chiếu chết.
+
+### Plan 60 — FE theo gói Handoff v2.1: shell dùng chung + PGM-01 Overview (2026-08-23)
+
+- **Added — `docs/03_implementation/60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md`**
+  (`PLAN-FE-PGM-060` v1.0, Draft — chờ duyệt). Lập plan triển khai FE theo gói
+  `docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/` (README shell contract +
+  `PGM-01_OVERVIEW_FE_HANDOFF.md` + mockup `assets/PGM-01_overview.png`). Phạm vi:
+  shell dùng chung và **PGM-01 Overview trọn vẹn**; PGM-02..06 ngoài phạm vi.
+  Plan **bổ sung** Plan 59 chứ không thay thế — packaging/provenance/target/HIL và
+  `RELEASE_READY` vẫn thuộc Plan 59 W6/W7.
+- **Đối chiếu As-Built tại `a35f578`:** shell hiện dùng tab ngang (handoff yêu cầu
+  rail dọc 220 px), thanh context cao ~76 px không sticky (yêu cầu 36–40 px sticky)
+  và **hiện thẳng revision UUID** — vi phạm `AC-PGM01-01`; Overview thiếu bốn khối
+  (`SystemHealthHero`, `DraftActiveCompareCard`, `ProgramsSummaryTable`,
+  `QuickActions`), đang có **hai** nút primary cùng lúc — vi phạm `AC-PGM01-05`;
+  mọi mục "cần chú ý" deep-link về cùng một đích `/runtime`; bottom nav mobile 6
+  đích thay vì tối đa 4.
+- **Lỗ hổng dữ liệu chặn bảng Programs của mockup, phân bốn nhóm** (đọc từ code,
+  ghi ở §3/§3.1 của plan). **Nhóm A — đã có, chỉ cần nối FE:** tên/`language`/chu kỳ
+  khai báo của Program đang chạy lấy được từ `GET /revisions/{activeRevisionId}` →
+  `snapshot.objects[kind='PROGRAM']`
+  (`apps/web-api/internal/programming/application/projects.go:415-426`,
+  `application/draft_v2.go:120,376,794`). **Nhóm B — có trong DB, chưa lộ qua API:**
+  cờ `dirty` (so `drafts.content_sha256` với `content_hash` của base revision) và
+  `revisions.sequence` cho nhãn ngắn `Draft #14`. **Nhóm C — Core đã tính nhưng
+  không có đường xuất:** trạng thái sống theo Program, `last_exec_ns`, `max_exec_ns`,
+  `missed_release_count` được scheduler cập nhật thật
+  (`apps/core/application/st/st_scheduler.cpp:829-830,109-110`) nhưng payload
+  `STATUS` chỉ gồm 5 phần tử không có Program
+  (`apps/core/application/programming/program_ipc_server.cpp:453-457`) và
+  `point_snapshot` chỉ mang **một** khối `task` lấy từ `tasks().front()`
+  (`apps/core/application/runtime/scan_loop.cpp:262-263`); kèm theo, `runtimeState`
+  của `GET /projects/{id}/programs` **không phải giá trị sống** — người ghi duy nhất
+  là đường mutation intent
+  (`apps/web-api/internal/programming/application/runtime_intent.go:178`), không có
+  vòng đối soát nào. **Nhóm D — chưa tồn tại ở bất kỳ tầng nào:** `health`. Vì vậy
+  plan mở **pha P0** trước pha FE, nhưng phạm vi P0 hẹp: **mở đường truyền**, không
+  phải cài lại phép đo — điều kiện cần để không vi phạm `AC-PGM01-04` ("không render
+  thiếu-dữ-liệu thành `0`").
+- **Nội dung plan:** 27 task ≈ 33,5 người-ngày, chia P0-A (FW SOM 4 task), P0-B
+  (BE Go 6 task), P0-C (nối FE 1 task), P1 shell (4), P2 Overview (8), P3 kiểm
+  chứng (4). **P0-A không cài thêm phép đo nào** — scheduler đã đo đủ; bốn task chỉ
+  mở đường xuất qua `point_snapshot` (kênh JSON, tương thích ngược, **không** phải
+  bump `PROGRAM_IPC_PROTOCOL_MINOR` như đường CBOR `STATUS`), kèm ngân sách payload
+  thật: ~5 KiB hiện tại + ~3 KiB cho 16 Program trên trần
+  `KX_POINT_SNAPSHOT_MAX_PAYLOAD` = 64 KiB. `T60-002` sửa luôn khuyết tật
+  `scan_loop.cpp` đang lấy `tasks().front()` và báo cáo như thể là Task duy nhất —
+  sai từ khi `T59-402/403` cho Program chu kỳ và lane riêng. Đường găng:
+  `T60-001 → … → T60-016 → T60-205`. 7 quyết định chờ chốt (D-01 rail thứ cấp thay vì
+  đổi `NavRail` toàn cục của `ADR-032`; D-02 bỏ cột `Task` theo tài liệu; D-03
+  **không** chép con số 10 ms/100 ms trong ảnh vì profile Rev A chỉ có
+  1000/5000/30000 ms; D-04 `health` do server tính; D-05 lộ `sequence`; D-06 dùng
+  `useI18n().pick` thay vì in song ngữ cứng; **D-07 ánh xạ 11 trạng thái
+  `StProgramState` của Core sang 7 trạng thái hợp đồng API — không 1:1, mọi giá trị
+  ngoài bảng phải ra `UNKNOWN` fail-closed, vì ánh xạ sai sẽ làm Program đã chết
+  hiện `RUNNING`**); ma trận truy nguyên `AC-PGM01-01..06`
+  → task → bằng chứng; sáu rủi ro, trong đó `R60-02` ghim yêu cầu **không được
+  xoá** case test hiện có của `OverviewPage` khi viết lại bố cục (`BUG-016`,
+  `BUG-018`, `safeStateNoControllerOnly`, bốn nhánh Check của `WP-01`).
+- **Changed:** thêm dòng index cho Plan 60 ở `docs/03_implementation/README.md`.
+- **Verification:** thay đổi ở phiên này **chỉ là tài liệu** (2 file `.md`), không
+  chạm code nên không chạy gate C++/Go/FE. `python3 scripts/docs_iso_harness.py
+  --expect` exit **0**.
+
 ### T59-502 — Impact/ack cho mô hình đa Program (2026-08-21)
 
 - **Phạm vi:** `apps/web-api/internal/programming/store/{commands.go,schema.go}`,

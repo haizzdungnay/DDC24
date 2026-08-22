@@ -57,6 +57,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [57](57_WEB_UIUX_UC_UPGRADE_PLAN.md) | Nâng cấp Web UI/UX theo use case, phát hành theo wave | **Wave 0 + Wave 1 APPROVED, đã triển khai**; wave sau còn mở |
 | [TRACKER](PROGRAMMING_IMPLEMENTATION_TRACKER.md) | Snapshot tracker WP của Master Plan 56 | **Superseded — chỉ truy nguyên** |
 | [59](59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | Programming thống nhất: contract → code → test → evidence → release; 51 task/8 Wave | **Active — execution/tracker authority; PLAN/IMPLEMENT READY** |
+| [60](60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md) | FE theo gói Handoff v2.1: shell dùng chung + PGM-01 Overview; 27 task (FW SOM 4 · BE 6 · FE 17) ≈ 34,5 người-ngày | **PLAN_READY — 7/7 quyết định chốt 2026-08-23** |
 | [PROMPT-59](PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | Prompt tự động chọn và thi hành task Plan59, kiểm chứng, cập nhật tracker, commit/PR | **Active — dùng ngay; không thay target/HIL/release evidence** |
 
 ## Đã lưu trữ — [`archive/`](archive/)
