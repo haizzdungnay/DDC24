@@ -118,7 +118,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		}
 		checks, checkErr := programmingapplication.NewCheckService(programmingapplication.CheckServiceOptions{
 			Store: store, Artifacts: artifacts, TargetID: cfg.ProgrammingTargetID, LeaseDuration: 30 * time.Second,
-			Runner: programmingcompiler.ProcessRunner{BinaryPath: cfg.ProgrammingCompilerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout},
+			Runner: programmingcompiler.ProcessRunner{BinaryPath: cfg.ProgrammingCompilerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout, SigningKeyPath: cfg.ProgrammingSigningKeyPath},
 			// T59-302: container package v2 do CHÍNH writer production ghi; BE
 			// chỉ điều phối, không cài lại định dạng.
 			Packager: programmingcompiler.ProcessPackager{BinaryPath: cfg.ProgrammingPackagerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout},
