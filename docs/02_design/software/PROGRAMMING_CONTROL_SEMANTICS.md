@@ -3,13 +3,13 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-CTRL-PROG-001` |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; P3/P4 source/host DONE; target timing và Safety review còn mở** |
-| Ngày | 2026-08-13 |
+| Ngày | 2026-08-21 |
 | Chủ quản | Controls Lead + Core Lead |
 | Người review | Safety Lead, FW MCU Lead, Verification Lead |
 | Người phê duyệt | System Architect + Product Owner |
-| Nguồn | Product Spec v2.2, `SRS-PROG-001`, ADR-020/023/026..029 (`Accepted`), `PROG-OD-001` |
+| Nguồn | Product Spec v2.2, `SRS-PROG-001`, ADR-020/023/026..029/051 (`Accepted`), `PROG-OD-001` |
 | Phạm vi | Target Rev A: một Task, 1/5/30 s, process image, priority 5, fault semantics |
 
 > **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
@@ -140,22 +140,39 @@ ghi lại physical output và không chiếm quyền của source ưu tiên cao 
 - manual/safety override active: program vẫn có thể tính/monitor, proposal bị
   che; anti-windup nhận actual selected output, không assumed proposal.
 
-Giá trị/TTL mặc định vẫn `TARGET-PENDING`; decision phải khóa theo Point class.
+`holdTtl` = **60 s** kể từ lần publish thành công gần nhất (`ADR-051`, ký
+2026-08-21). Không còn `TARGET-PENDING`, và **không** khoá theo Point class: đích
+rơi về đã là `default` của chính điểm đó, nên TTL theo class chỉ là núm thứ hai
+cho cùng một kết quả — xem `ADR-051` mục "Vì sao KHÔNG khoá TTL theo Point class".
 
-**As-Built (`TASK-PROG-401`).** `st_withdraw_stale_outputs()`
-(`st_process_image.*`) hiện thực đúng hai nhánh chính sách trên: STOPPED/
-DISABLED rút NGAY tại safe boundary (không chờ TTL, gọi mỗi tick từ
-`ScanLoop::step()` sau `st_apply_all_outputs()`); FAULTED rút khi
-`base_step_count() >= output_commit_generation + hold_ttl_base_steps`.
-`hold_ttl_base_steps` là field mới ở `ScanDeps`, mặc định `0` — nghĩa là TTL
-CHƯA được Product+Controls ký (đúng như đoạn trên nói), giữ hold-last KHÔNG
-GIỚI HẠN như hành vi trước task này; đổi được bằng một tham số khi có quyết
-định field, không cần sửa lại cơ chế. `outputs_withdrawn` trên
-`StProgramInstance` chặn double-release và tự mở lại khi instance publish
-thành công trở lại (restart sau `reset_fault`/`start`). "Khóa theo Point
-class" (TTL khác nhau theo loại điểm) CHƯA làm — một `hold_ttl_base_steps`
-áp dụng đồng nhất mọi instance; phân biệt theo Point class vẫn là quyết định
-field chưa có, xem §15.
+**As-Built (`TASK-PROG-401`, cập nhật `ADR-051`).** `st_withdraw_stale_outputs()`
+(`st_process_image.*`) hiện thực hai nhánh chính sách trên: STOPPED/DISABLED rút
+NGAY tại safe boundary (không chờ TTL, gọi mỗi tick từ `ScanLoop::step()` sau
+`st_apply_all_outputs()`); mọi instance đã từng publish rút khi
+`last_tick_now_ns() >= output_commit_now_ns + hold_ttl_ns`.
+
+Ba điểm của `ADR-051` khác bản `TASK-PROG-401` và cần đọc kỹ:
+
+1. **Đo bằng đồng hồ, không đếm base step.** Số base step chỉ xấp xỉ thời gian
+   khi vòng quét chạy đúng nhịp; mọi đường chạy nhanh hơn nhịp thật (soak, replay,
+   catch-up sau khi trễ) sẽ co "60 s" thành mili giây mà không có gì báo. Mốc
+   `output_commit_now_ns` được ghi cùng chỗ với `output_commit_generation`.
+2. **Đo tuổi của LỆNH, không đo trạng thái.** Ràng điều kiện vào riêng `FAULTED`
+   để lọt đúng những đường im lặng khó thấy nhất: Task bị disable trong khi
+   Program vẫn `RUNNING`, hay instance đứng ở `ROLLED_BACK` — cả hai ngừng publish
+   mà không bao giờ mang trạng thái `FAULTED`.
+3. **Mặc định của `ScanDeps` là giá trị đã ký**, không phải `0`. Mặc định `0`
+   nghĩa là "giữ vô hạn", nên bất kỳ đường nối dây nào quên set field đều âm thầm
+   quay lại đúng hành vi `ADR-051` đóng.
+
+`hold_ttl_ns` ở `ScanDeps` mặc định `st_hold_ttl::kSignedTtlNs` (60 s); `0` chỉ
+còn là affordance test/chẩn đoán và bootstrap từ chối nó qua
+`--program-hold-ttl-ms` (dải hợp lệ 1..600000 ms). Ràng buộc "TTL ≥ 2× chu kỳ Task
+chậm nhất" được `static_assert` canh theo `allowedPeriodMs` của profile.
+`outputs_withdrawn` trên `StProgramInstance` chặn double-release và tự mở lại khi
+instance publish thành công trở lại (restart sau `reset_fault`/`start`). Instance
+CHƯA từng publish (`output_commit_now_ns == 0`) không bị rút và không vào sổ
+candidate.
 
 ## 7. PID và anti-windup
 
@@ -301,7 +318,7 @@ quality/source/freshness, không capture gì mới ngoài đường RT.
 | scheduler | `st_scheduler.*`: `StSchedulerProfile::REV_A`, `add_task()`, `add_program()`, `on_base_step()` tại `a831a0d`; overrun→Task FAULT (đồng hồ WCET riêng) tại `4d744ac` (TASK-PROG-304) | Task 306 chỉ bootstrap Rev A |
 | executor | `st_exec.*`, `st_cyclic_runtime.*` | instruction budget/non-finite/source fault |
 | process image | `st_process_image.*`, `st_io_map.*` tại `f080056` (TASK-PROG-302) | đã đạt quality/freshness/generation/all-or-nothing |
-| arbitration | `PriorityResolver::can_set_ao/can_set_do` tại `f080056`; `st_withdraw_stale_outputs()` (STOPPED/DISABLED ngay, FAULTED theo `holdTtl`) tại `9227d27` (TASK-PROG-401) | `hold_ttl_base_steps` mặc định `0` (vô hạn) — con số field decision theo Point class vẫn `TARGET-PENDING`, chưa gán task |
+| arbitration | `PriorityResolver::can_set_ao/can_set_do` tại `f080056`; `st_withdraw_stale_outputs()` (STOPPED/DISABLED ngay, mọi instance đã publish theo `holdTtl` đồng hồ) tại `9227d27` + `ADR-051` (T59-406) | `hold_ttl_ns` mặc định `st_hold_ttl::kSignedTtlNs` = 60 s; TTL theo Point class đã ĐÓNG (không làm), không còn `TARGET-PENDING` |
 | PID/library | `StFbType::PID` trong `st_program.*`/`st_exec.cpp`/`st_loader.cpp` tại `TASK-PROG-303` | back-calculation anti-windup + freeze-on-override đã có; tuning gain/tolerance field là Revision/Target decision |
 | monitor/trace | `StBoundedRuntimeTrace`, `program_status.monitorInputs`, `program_trace` tại `c6ab2bd` (TASK-PROG-305) | value-sampling historian session (`POST/GET/DELETE /runtime/traces`) còn mở |
 | integration | `apps/core/bootstrap/main.cpp` | instantiate scheduler/lifecycle; exclusive graph cutover |
@@ -344,18 +361,22 @@ tắt process/chép file thủ công. Data/RETAIN không xóa khi rollback binar
 |---|---|---|---|---|
 | normal | RUNNING | publish mới | resolver chọn theo priority | program/actual/owner |
 | manual priority 1–4 | RUNNING | vẫn tính/publish theo policy | manual thắng | overridden-by + TTL |
-| một cycle fault | RUNNING/DEGRADED | không publish mới | proposal trước tới hold TTL | fault + age |
+| một cycle fault | RUNNING/DEGRADED | không publish mới | proposal trước tới hold TTL (60 s) | fault + age |
 | ba overrun liên tiếp | FAULT | withdraw/hold theo decision | resolver/safety quyết định | Task fault, không tự plant safe |
 | stop/cutover | STOPPING→STOPPED | withdraw boundary | nguồn còn lại/safe policy | owner generation mới |
 
-Budget tuyệt đối cho từng phase và `holdTtl` vẫn `TARGET-PENDING`; implement phải
-đọc capability/profile đã duyệt, không hard-code số đề xuất trong tài liệu.
+Budget tuyệt đối cho từng phase vẫn `TARGET-PENDING`; implement phải đọc
+capability/profile đã duyệt, không hard-code số đề xuất trong tài liệu. `holdTtl`
+KHÔNG còn nằm trong diện đó: nó đã ký ở `ADR-051` (60 s) và authority là chính ADR
+đó — xem ở đấy lý do con số không đặt trong `product_profile_v2.json` (SHA-256 của
+profile bị ghim trong mọi build manifest artifact, biến mỗi lần chỉnh hẹn giờ
+thành sự kiện tương thích artifact).
 
 ## 15. Blocker, revision và sign-off
 
 | Blocker | Owner | Gate | Điều kiện mở |
 |---|---|---|---|
-| Hold TTL, PID set và capacity chưa ký | Product + Controls | DOC-G2 approval | decision package approved |
+| ~~Hold TTL~~ (ĐÓNG 2026-08-21 bởi `ADR-051`: 60 s đồng hồ), PID set và capacity chưa ký | Product + Controls | DOC-G2 approval | decision package approved cho phần PID/capacity còn lại |
 | Safety interaction chưa có HIL evidence | Safety + QA | implementation/release | fault injection + 199/200/201 ms PASS |
 | Graph cutover target chưa kiểm chứng | Core + Controls + QA | P6/G6 | Forlinx/HIL timing, power/restart và exclusive-output Test Result |
 
@@ -370,6 +391,7 @@ Budget tuyệt đối cho từng phase và `holdTtl` vẫn `TARGET-PENDING`; imp
 | 0.7 | 2026-08-13 | Đồng bộ `TASK-PROG-305` (`c6ab2bd`): `StBoundedRuntimeTrace` ring buffer cấp phát tĩnh (khác `StTraceLog`/`std::deque` cũ) log fault/overrun/rollback/activation; `program_status.monitorInputs` trả quality/source/freshness; sửa chính xác row arbitration (`holdTtl` withdraw còn mở, không phải Task 304); giữ target/HIL NOT TESTED | Core + Controls |
 | 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (`f35234c`): `bootstrap/main.cpp` dựng `StScheduler` REV_A thật lần đầu qua `--programming-mode`, `CutoverMode` khoá hẳn `graph->execute()` khi `PROGRAM_ONLY`; cập nhật §2 As-Built (không còn "bootstrap chưa cấp scheduler"); ghi gap UDS transport control API phát hiện khi wiring; giữ target/HIL NOT TESTED, transaction LIVE/rollback vẫn Task 404 | Core + Controls |
 | 0.9 | 2026-08-13 | Đồng bộ `TASK-PROG-401` (`9227d27`): `st_withdraw_stale_outputs()` đóng khoảng hở "hold-last không giới hạn" ở §6/§12 — STOPPED/DISABLED rút proposal mức 5 NGAY tại safe boundary, FAULTED rút theo `hold_ttl_base_steps` cấu hình được (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn TARGET-PENDING); giữ target/HIL NOT TESTED | Core + Controls |
+| 1.1 | 2026-08-21 | `ADR-051` ký TTL hold-last = **60 s đồng hồ** và đóng hàng blocker tương ứng ở §15. Ba đổi thay hành vi kèm theo: TTL đo bằng đồng hồ của tick (`output_commit_now_ns`) thay vì đếm base step; TTL đo tuổi của LỆNH nên phủ cả `ROLLED_BACK` và `RUNNING`-trong-Task-bị-disable chứ không riêng `FAULTED`; mặc định `ScanDeps` là giá trị đã ký thay vì `0`. "Khoá theo Point class" đóng là KHÔNG làm, có lý do ở ADR. Evidence host/local `ctest` 1205/1205; target/HIL vẫn NOT TESTED | Core + Controls |
 | 1.0 | 2026-08-13 | Đồng bộ `TASK-PROG-404/405` tại `10d9ad6`: Programming UDS/coordinator, exclusive owner tại safe boundary, first-output commit mới nâng LKG, first-cycle fault rollback và restart checkpoint recovery. Host gates PASS; target/HIL/power/IOP vẫn NOT TESTED. | Core + Controls + QA |
 
 | Vai trò | Trạng thái | Bằng chứng |

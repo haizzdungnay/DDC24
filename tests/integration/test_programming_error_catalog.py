@@ -48,6 +48,19 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # `set -e` cắt luôn phần còn lại — nó chỉ lộ ra sau khi 10 vi phạm
         # dependency boundary được sửa.
         #
+        # Cập nhật `T59-408`: 122→124 detail. Hai mã core-ipc cho trace giá trị:
+        # `IPC-TRACE-UNAVAILABLE` (chưa có bus trace → UNAVAILABLE, tính năng
+        # chẩn đoán chưa sẵn sàng chứ không phải request sai) và
+        # `IPC-TRACE-REJECTED` (tham số ngoài dải, hoặc thao tác nhầm phiên của
+        # người khác). Số public giữ nguyên 30.
+        #
+        # Cập nhật `T59-405`: 120→122 detail. Hai mã core-ipc mới cho intent
+        # Enable/Disable: `IPC-UNKNOWN-INSTANCE` (Program không có trong package
+        # đang chạy → NOT_FOUND, vì người gọi và thiết bị đang nói về hai gói
+        # khác nhau) và `IPC-RUNTIME-STATE` (trạng thái không cho phép hoặc vượt
+        # trần chạy đồng thời → CONFLICT, không phải payload hỏng). Số public
+        # giữ nguyên 30: hai mã này ánh xạ vào public code đã có.
+        #
         # Cập nhật `T59-006`: 26→30 public và 118→120 detail — thay sáu mã gộp
         # mà T59-004 tự đặt bằng đúng mười mã `DDD` §5.2 đã khóa.
         #
@@ -61,7 +74,7 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # trong cùng gate.
         catalog, raw, schema_raw = GENERATOR.load_and_validate()
         self.assertEqual(len(catalog["publicErrors"]), 30)
-        self.assertEqual(len(catalog["componentDetails"]), 120)
+        self.assertEqual(len(catalog["componentDetails"]), 124)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
 

@@ -1,9 +1,10 @@
 # Document Control
 
 **ID:** DOC-CTRL-001
+**Phiên bản:** 1.0
 **Trạng thái:** Active
 **Chủ quản:** Project Engineering
-**Cập nhật:** 2026-08-20 (Programming Product v3.0 thống nhất; Plan59 Active; `PLAN_READY PASS`; `IMPLEMENT_READY PASS`; `12 DECIDED/0 OPEN`)
+**Cập nhật:** 2026-08-23 (Programming Product v3.0 thống nhất; Plan59 v2.2 Active; W5 đóng sổ với 8/8 cổng HOST PASS; `PLAN_READY PASS`; `IMPLEMENT_READY PASS`; `RELEASE_READY NO-GO`; `12 DECIDED/0 OPEN`)
 
 ## Mục tiêu
 
@@ -60,11 +61,12 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 | [Programming Decision Register](PROGRAMMING_OPEN_DECISIONS.md) | `DEC-PROG-REGISTER-001` Active — 12 quyết định khóa, 0 Open Decision, không còn decision blocker implementation |
 | [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | `SRS-PROG-001` v1.0 — 82 requirement gồm migration baseline và Product Target thống nhất |
 | [Programming Unified Product Detailed Design](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | `DDD-SW-PROG-UNIFIED-001` Active — authority về data/contract/state/algorithm/error/source/test/deploy/rollback |
-| [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | `PROG-DOCSET-001` v4.0 — register và thứ tự đọc authority hiện hành |
+| [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | `PROG-DOCSET-001` v4.1 — register và thứ tự đọc authority hiện hành |
 | [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | ownership, process/failure boundary, package lifecycle và cutover target |
-| [Programming Document Readiness Matrix](PROGRAMMING_DOCUMENT_READINESS_MATRIX.md) | v2.0 — `PLAN_READY=PASS`, `IMPLEMENT_READY=PASS`; resource ngoài được quản bằng evidence queue |
-| [Programming Plan 59](../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | `PLAN-PROG-059` v2.0 Active — execution/tracker authority duy nhất, 51 task/8 Wave đến release |
+| [Programming Document Readiness Matrix](PROGRAMMING_DOCUMENT_READINESS_MATRIX.md) | v2.1 — `PLAN_READY=PASS`, `IMPLEMENT_READY=PASS`; resource ngoài được quản bằng evidence queue |
+| [Programming Plan 59](../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | `PLAN-PROG-059` v2.2 Active — execution/tracker authority duy nhất, 51 task/8 Wave đến release; W5 đóng sổ ở mức HOST/LOCAL |
 | [Prompt tự động Plan59](../03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | Prompt thi hành task Ready/Ordered, kiểm chứng và cập nhật Plan59; không tự nâng evidence host thành release |
+| [Prompt CTO Plan59 W6+W7](../03_implementation/PROMPT_PLAN59_CTO_W6_W7_EXECUTION.md) | `PROMPT-PLAN59-CTO-W6W7` v1.0 — quyền quyết định cho hardening/packaging/RC và target/HIL/V&V; Must physical/soak/RETAIN/install/SIGNED/provenance không được waive |
 | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | risk/control/owner/evidence/residual gate |
 | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
 | [Programming Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | v2.0 — 32 scenario migration + 12 scenario Product thống nhất; release vẫn cần target/HIL record |
@@ -130,3 +132,10 @@ trước khi dọn phục hồi được từ commit
 `b69fdf152fd1b424bb4ab2239b5cf97b0e86b554`; phải checkout/extract vào thư mục
 tạm, không ghi đè cây làm việc hiện hành. Gói thiết kế Programming 22 hồ sơ,
 contract, risk/trace, test result và bằng chứng target/HIL không bị loại.
+
+## Lịch sử sửa đổi
+
+| Phiên bản | Ngày | Nội dung |
+|---|---|---|
+| 1.1 | 2026-08-23 | Đồng bộ Plan59 v2.2 sau khi đóng sổ W5: cả tám cổng HOST của W5 PASS trong một lượt sau khi sửa `F-W5-CLOSE-01` (Core không biên dịch được) và `F-W5-CLOSE-02` (helper E2E coi `load` là "đã mount"). Không thay đổi Product/SRS/DDD/VVP và không mở `RELEASE_READY`. |
+| 1.0 | 2026-08-21 | Thiết lập revision có kiểm soát cho register; đồng bộ Programming Design Index v4.1, Readiness Matrix v2.1 và Plan59 v2.1 sau khi W5 hoàn tất ở mức HOST/LOCAL. Không thay đổi Product/SRS/DDD/VVP và không mở `RELEASE_READY`. |

@@ -9,7 +9,7 @@ const (
 	ProfileTargetABI      = 3841
 	ProfileMajor          = 2
 	ProfileMinor          = 0
-	ProfileSHA256         = "9b33db01a150816fc8b67f84e0aafa8750a29d20e9481a9ed8f1d67bbc9e6484"
+	ProfileSHA256         = "17d2eb86cb7a2a025c0675104d0da19dfc0f062cc0cd17c0c861835e735ce288"
 	ProfileLibraryVersion = "rev-a.1"
 	ProfileIntegrityMode  = "HASH_ONLY"
 )
@@ -59,3 +59,27 @@ var (
 	ProfileLanguages  = [2]string{"ST", "FBD"}
 	ProfilePointKinds = [3]string{"LOCAL", "VP", "MB_RTU"}
 )
+
+// ReviewGatedFeature là feature giữ nhãn REVIEW_REQUIRED trong registry.
+// Approved=false nghĩa là Check phải từ chối mọi Program dùng nó. Token không
+// đến từ payload hay UI — nó suy ra từ chính contract profile.
+type ReviewGatedFeature struct {
+	FeatureID     string
+	Approved      bool
+	ApprovalToken string
+}
+
+var ReviewGatedFeatures = [1]ReviewGatedFeature{
+	{FeatureID: "PID", Approved: false, ApprovalToken: ""},
+}
+
+// ReviewGateBlocks trả true khi feature bị chặn Check. Tên không có trong bảng
+// là feature không bị gate — chặn một thứ chưa ai khai là chặn mù.
+func ReviewGateBlocks(featureID string) bool {
+	for _, item := range ReviewGatedFeatures {
+		if item.FeatureID == featureID {
+			return !item.Approved
+		}
+	}
+	return false
+}

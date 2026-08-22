@@ -16,6 +16,7 @@ import {
   PROGRAMMING_PROFILE_MINOR,
   PROGRAMMING_PROFILE_SHA256,
   PROGRAMMING_RESOURCES,
+  PROGRAMMING_REVIEW_GATED_FEATURES,
   PROGRAMMING_SCHEDULER,
   PROGRAMMING_TARGET_ABI,
   PROGRAMMING_TYPES,
@@ -74,5 +75,20 @@ describe("Product profile v2 sinh tự động", () => {
     expect(PROGRAMMING_TYPES.map((item) => item.wireCode)).toEqual(
       contract.types.map((item: { wireCode: number }) => item.wireCode),
     );
+  });
+
+  it("giữ PID ở trạng thái chưa phê duyệt Controls/Safety", () => {
+    // FE chỉ HIỂN THỊ trạng thái này. Không có checkbox nào ở UI được coi là
+    // phê duyệt — token suy ra từ contract profile và chỉ generator dựng được.
+    expect(PROGRAMMING_REVIEW_GATED_FEATURES.map((item) => item.featureId)).toEqual(
+      contract.reviewGatedFeatures.map((item) => item.featureId),
+    );
+    for (const [index, item] of PROGRAMMING_REVIEW_GATED_FEATURES.entries()) {
+      expect(item.approved).toBe(contract.reviewGatedFeatures[index].approvalToken !== null);
+      expect(item.approved).toBe(item.approvalToken !== "");
+    }
+    const pid = PROGRAMMING_REVIEW_GATED_FEATURES.find((item) => item.featureId === "PID");
+    expect(pid, "PID phải nằm trong bảng review-gate").toBeDefined();
+    expect(pid?.approved, "PID chưa có evidence VS-PROG-U12 nên phải là false").toBe(false);
   });
 });

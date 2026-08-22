@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -189,6 +191,125 @@ func (s *RuntimeService) GetRuntime(ctx context.Context) (RuntimeView, error) {
 		ObservedAt:                observedAt,
 		Task:                      task,
 	}, nil
+}
+
+type RuntimeSignalView struct {
+	SignalID          *string `json:"signalId"`
+	Name              string  `json:"name"`
+	ProducerProgramID string  `json:"producerProgramId"`
+	DataType          string  `json:"dataType"`
+	Unit              *string `json:"unit"`
+	Value             any     `json:"value"`
+	Valid             bool    `json:"valid"`
+	Quality           string  `json:"quality"`
+	Freshness         string  `json:"freshness"`
+	StalePolicy       string  `json:"stalePolicy"`
+	FreshnessMS       uint32  `json:"freshnessMs"`
+	// Chuỗi thập phân giữ nguyên uint64 qua JSON/JavaScript. Monotonic ns
+	// vượt Number.MAX_SAFE_INTEGER sau khoảng 104 ngày uptime.
+	PublishedAtMonoNS string `json:"publishedAtMonoNs"`
+	Generation        string `json:"generation"`
+	DefinitionState   string `json:"definitionState"`
+}
+
+type RuntimeSignalPage struct {
+	SchemaVersion    string              `json:"schemaVersion"`
+	ProducerState    string              `json:"producerState"`
+	ActiveRevisionID *string             `json:"activeRevisionId"`
+	ObservedAt       string              `json:"observedAt"`
+	Items            []RuntimeSignalView `json:"items"`
+}
+
+type revisionSignalDefinition struct {
+	SignalID           string  `json:"signalId"`
+	Name               string  `json:"name"`
+	Type               string  `json:"type"`
+	Unit               *string `json:"unit"`
+	PublisherProgramID string  `json:"publisherProgramId"`
+	FreshnessMS        uint32  `json:"freshnessMs"`
+	StalePolicy        string  `json:"stalePolicy"`
+}
+
+// GetSignals ghép identity bền vững từ Revision với value/quality/freshness
+// authoritative của Core. Hai nguồn lệch nhau không được che bằng cách bỏ dòng:
+// dòng vẫn hiện nhưng `valid=false` + `definitionState=MISMATCH/CORE_ONLY`.
+func (s *RuntimeService) GetSignals(ctx context.Context) (RuntimeSignalPage, error) {
+	observedAt := s.now().UTC().Format(time.RFC3339Nano)
+	response, err := s.callStatus(ctx)
+	if err != nil {
+		return RuntimeSignalPage{SchemaVersion: "1.0", ProducerState: "UNAVAILABLE",
+			ObservedAt: observedAt, Items: []RuntimeSignalView{}}, nil
+	}
+	var payload runtimeImpactPayload
+	if err := coreipc.DecodePayload(response.Payload, &payload); err != nil {
+		return RuntimeSignalPage{}, err
+	}
+	activeRevisionID := firstNonNil(payload.ActiveRevisionID, response.ActiveRevisionID)
+	producerState := "READY"
+	// Core minor 2 vẫn cho phép BE đọc bốn field STATUS nền, nhưng
+	// không hề có snapshot signal. Gọi nó READY sẽ đánh đồng "không
+	// có signal" với "không đọc được signal".
+	if response.ProtocolMinor < 3 {
+		producerState = "DEGRADED"
+	}
+	page := RuntimeSignalPage{SchemaVersion: "1.0", ProducerState: producerState,
+		ActiveRevisionID: activeRevisionID, ObservedAt: observedAt, Items: []RuntimeSignalView{}}
+	if activeRevisionID == nil || s.store == nil {
+		return page, nil
+	}
+	revision, err := s.store.GetRevision(ctx, *activeRevisionID)
+	if err != nil {
+		return RuntimeSignalPage{}, err
+	}
+	definitions := make(map[string]revisionSignalDefinition)
+	for _, object := range revision.Objects {
+		if object.Kind != "SIGNAL" {
+			continue
+		}
+		var definition revisionSignalDefinition
+		if err := json.Unmarshal(object.PayloadJSON, &definition); err != nil {
+			return RuntimeSignalPage{}, fmt.Errorf("decode Published Signal runtime: %w", err)
+		}
+		definitions[definition.Name] = definition
+	}
+	seen := make(map[string]struct{}, len(payload.Signals))
+	for _, signal := range payload.Signals {
+		definition, matched := definitions[signal.Name]
+		view := RuntimeSignalView{Name: signal.Name, ProducerProgramID: signal.ProducerProgramID,
+			DataType: signal.DataType, Value: signal.Value, Valid: signal.Valid,
+			Quality: signal.Quality, Freshness: signal.Freshness, StalePolicy: signal.StalePolicy,
+			FreshnessMS: signal.FreshnessMS, PublishedAtMonoNS: strconv.FormatUint(signal.PublishedAtMonoNS, 10),
+			Generation: strconv.FormatUint(signal.Generation, 10), DefinitionState: "CORE_ONLY"}
+		if matched {
+			id := definition.SignalID
+			view.SignalID = &id
+			view.Unit = definition.Unit
+			view.DefinitionState = "MATCHED"
+			if definition.PublisherProgramID != signal.ProducerProgramID || definition.Type != signal.DataType ||
+				definition.FreshnessMS != signal.FreshnessMS || definition.StalePolicy != signal.StalePolicy {
+				view.DefinitionState = "MISMATCH"
+				view.Valid, view.Value, view.Quality, view.Freshness = false, nil, "BAD", "UNAVAILABLE"
+			}
+		}
+		if !signal.Valid {
+			view.Value = nil
+		}
+		page.Items = append(page.Items, view)
+		seen[signal.Name] = struct{}{}
+	}
+	for name, definition := range definitions {
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		id := definition.SignalID
+		page.Items = append(page.Items, RuntimeSignalView{SignalID: &id, Name: name,
+			ProducerProgramID: definition.PublisherProgramID, DataType: definition.Type,
+			Unit: definition.Unit, Value: nil, Valid: false, Quality: "BAD", Freshness: "UNAVAILABLE",
+			StalePolicy: definition.StalePolicy, FreshnessMS: definition.FreshnessMS,
+			PublishedAtMonoNS: "0", Generation: "0", DefinitionState: "REVISION_ONLY"})
+	}
+	sort.Slice(page.Items, func(left, right int) bool { return page.Items[left].Name < page.Items[right].Name })
+	return page, nil
 }
 
 func firstNonNil(preferred, fallback *string) *string {

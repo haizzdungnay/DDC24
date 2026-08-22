@@ -52,9 +52,23 @@ uint32_t read_u32(const uint8_t* data, std::size_t offset)
            (static_cast<uint32_t>(data[offset + 3]) << 24);
 }
 
+uint64_t read_u64(const uint8_t* data, std::size_t offset)
+{
+    uint64_t value = 0;
+    for (std::size_t index = 0; index < 8; ++index)
+        value |= static_cast<uint64_t>(data[offset + index]) << (8 * index);
+    return value;
+}
+
 void append_u32(std::vector<uint8_t>* buffer, uint32_t value)
 {
     for (std::size_t index = 0; index < 4; ++index)
+        buffer->push_back(static_cast<uint8_t>((value >> (8 * index)) & 0xFFu));
+}
+
+void append_u64(std::vector<uint8_t>* buffer, uint64_t value)
+{
+    for (std::size_t index = 0; index < 8; ++index)
         buffer->push_back(static_cast<uint8_t>((value >> (8 * index)) & 0xFFu));
 }
 
@@ -150,13 +164,27 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
         sections.push_back(std::move(plan));
     }
 
-    /* PROGRAM_TABLE: tên Program theo đúng thứ tự trong CODE_IR. */
+    /* PROGRAM_TABLE: tên Program theo đúng thứ tự trong CODE_IR, kèm chu kỳ
+     * release và ngân sách WCET riêng của từng Program (DDD §7.1). Chu kỳ đi
+     * TRONG package chứ không do runtime tự chọn: hai controller nạp cùng một
+     * package phải chạy cùng một dãy release, và điều đó chỉ đúng khi chu kỳ là
+     * dữ liệu của package. */
     {
         SectionPlan plan;
         plan.type = st_pkg::SEC_PROGRAM_TABLE;
         plan.item_count = static_cast<uint32_t>(input.programs.size());
-        for (const StPackageProgram& program : input.programs)
+        for (const StPackageProgram& program : input.programs) {
+            if (program.period_ms != 0 &&
+                std::find(st_profile_generated::kAllowedPeriodMs.begin(),
+                          st_profile_generated::kAllowedPeriodMs.end(),
+                          program.period_ms) == st_profile_generated::kAllowedPeriodMs.end())
+                return fail(error, "Program '" + program.program_name + "' có chu kỳ " +
+                                       std::to_string(program.period_ms) +
+                                       " ms ngoài ba lớp của profile");
             if (!append_string(&plan.payload, program.program_name, error)) return false;
+            append_u32(&plan.payload, program.period_ms);
+            append_u32(&plan.payload, program.budget_us);
+        }
         sections.push_back(std::move(plan));
     }
 
@@ -195,10 +223,20 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
         plan.type = st_pkg::SEC_SIGNAL_DEFS;
         plan.item_count = static_cast<uint32_t>(input.signals.size());
         for (const StPackageSignal& signal : input.signals) {
+            if (signal.stale_policy > 2)
+                return fail(error, "signal '" + signal.name + "' có chính sách stale không hợp lệ");
+            /* `USE_FALLBACK` không kèm giá trị dự phòng là chính sách rỗng; giá
+             * trị dự phòng ở chính sách khác là dữ liệu không bao giờ dùng tới
+             * nhưng vẫn làm người đọc tin rằng nó sẽ được dùng. */
+            if ((signal.stale_policy == 1u) != signal.has_fallback)
+                return fail(error, "signal '" + signal.name +
+                                       "': USE_FALLBACK và giá trị dự phòng phải đi liền nhau");
             if (!append_string(&plan.payload, signal.name, error)) return false;
             if (!append_string(&plan.payload, signal.producer_program, error)) return false;
             plan.payload.push_back(signal.data_type);
             append_u32(&plan.payload, signal.freshness_ms);
+            plan.payload.push_back(signal.stale_policy);
+            append_u64(&plan.payload, signal.fallback_bits);
         }
         sections.push_back(std::move(plan));
     }
@@ -297,11 +335,45 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
     return true;
 }
 
+namespace {
+
+/* Một parser duy nhất cho cả `LoadPackageV2` và `UnpackPackageV2`. `ir_out` khác
+ * nullptr thì blob CODE_IR được giữ lại; nếu không, chúng vẫn được KIỂM y hệt
+ * rồi bỏ đi. Tách thành hai parser sẽ tạo hai bộ ngữ nghĩa cho một định dạng. */
+bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_profile,
+                      uint32_t expected_abi, StPackageView* out,
+                      std::vector<std::vector<uint8_t>>* ir_out,
+                      std::vector<StPackageSignal>* signals_out, const char** error_code);
+
+} // namespace
+
 bool LoadPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_profile,
                    uint32_t expected_abi, StPackageView* out, const char** error_code)
 {
+    return parse_package_v2(data, size, expected_profile, expected_abi, out, nullptr, nullptr,
+                            error_code);
+}
+
+bool UnpackPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_profile,
+                     uint32_t expected_abi, StPackageContents* out, const char** error_code)
+{
+    if (out == nullptr) return false;
+    *out = StPackageContents{};
+    return parse_package_v2(data, size, expected_profile, expected_abi, &out->view,
+                            &out->program_ir, &out->signals, error_code);
+}
+
+namespace {
+
+bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_profile,
+                      uint32_t expected_abi, StPackageView* out,
+                      std::vector<std::vector<uint8_t>>* ir_out,
+                      std::vector<StPackageSignal>* signals_out, const char** error_code)
+{
     if (out == nullptr) return false;
     *out = StPackageView{};
+    if (ir_out != nullptr) ir_out->clear();
+    if (signals_out != nullptr) signals_out->clear();
     if (data == nullptr || size < st_pkg::kHeaderSize)
         return reject(error_code, st_pkg_error::kBadHeader);
     if (size > st_pkg::kMaxArtifactBytes)
@@ -398,7 +470,20 @@ bool LoadPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_prof
                 std::string name;
                 if (!read_string(payload, entry.bytes, &cursor, &name))
                     return reject(error_code, st_pkg_error::kBadRecord);
+                if (cursor + 8 > entry.bytes) return reject(error_code, st_pkg_error::kBadRecord);
+                const uint32_t period_ms = read_u32(payload, cursor);
+                const uint32_t budget_us = read_u32(payload, cursor + 4);
+                cursor += 8;
+                /* Chu kỳ lạ bị chặn ở LOADER, không chỉ ở writer: package tới đây
+                 * có thể do một writer khác phiên bản sinh ra. */
+                if (period_ms != 0 &&
+                    std::find(st_profile_generated::kAllowedPeriodMs.begin(),
+                              st_profile_generated::kAllowedPeriodMs.end(),
+                              period_ms) == st_profile_generated::kAllowedPeriodMs.end())
+                    return reject(error_code, st_pkg_error::kResourceLimit);
                 out->program_names.push_back(std::move(name));
+                out->program_periods_ms.push_back(period_ms);
+                out->program_budget_us.push_back(budget_us);
             }
             break;
         }
@@ -409,6 +494,8 @@ bool LoadPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_prof
                 cursor += 4;
                 if (blob == 0 || static_cast<uint64_t>(cursor) + blob > entry.bytes)
                     return reject(error_code, st_pkg_error::kBadRecord);
+                if (ir_out != nullptr)
+                    ir_out->emplace_back(payload + cursor, payload + cursor + blob);
                 cursor += blob;
             }
             break;
@@ -435,9 +522,24 @@ bool LoadPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_prof
                 std::string name, producer;
                 if (!read_string(payload, entry.bytes, &cursor, &name) ||
                     !read_string(payload, entry.bytes, &cursor, &producer) ||
-                    cursor + 5 > entry.bytes)
+                    cursor + 14 > entry.bytes)
                     return reject(error_code, st_pkg_error::kBadRecord);
-                cursor += 5;
+                /* Chính sách stale kiểm ở LOADER, không chỉ ở writer: gói tới
+                 * tay runtime có thể do một writer khác phiên bản sinh, và một
+                 * chính sách thứ tư buộc runtime phải đoán. */
+                if (payload[cursor + 5] > 2u) return reject(error_code, st_pkg_error::kBadRecord);
+                if (signals_out != nullptr) {
+                    StPackageSignal signal;
+                    signal.name = name;
+                    signal.producer_program = producer;
+                    signal.data_type = payload[cursor];
+                    signal.freshness_ms = read_u32(payload, cursor + 1);
+                    signal.stale_policy = payload[cursor + 5];
+                    signal.fallback_bits = read_u64(payload, cursor + 6);
+                    signal.has_fallback = signal.stale_policy == 1u;
+                    signals_out->push_back(std::move(signal));
+                }
+                cursor += 14;
                 /* Đúng MỘT publisher cho mỗi signal (DDD §4.5). Kiểm ở loader vì
                  * artifact có thể tới từ nơi khác chứ không chỉ từ writer này. */
                 if (!published.insert(name).second)
@@ -512,9 +614,16 @@ bool LoadPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_prof
     }
 
     if (out->program_names.empty()) return reject(error_code, st_pkg_error::kBadSectionTable);
+    /* Mỗi Program phải có đúng một blob IR. Lệch số nghĩa là gói thiếu thân
+     * chương trình cho một Program nào đó — nạp nó sẽ cho một instance không
+     * chạy được mà không ai báo. */
+    if (ir_out != nullptr && ir_out->size() != out->program_names.size())
+        return reject(error_code, st_pkg_error::kBadSectionTable);
     out->header = header;
     return true;
 }
+
+} // namespace
 
 bool ProbePackageFormat(const uint8_t* data, std::size_t size, bool* is_v2,
                         const char** error_code)

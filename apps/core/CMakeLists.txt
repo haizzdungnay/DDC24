@@ -71,9 +71,18 @@ add_library(core_application STATIC
     application/st/st_exec.cpp
     application/st/st_public_key.cpp
     application/st/st_scheduler.cpp
+    application/programming/program_candidate_registry.cpp
+    application/st/st_signal_bus.cpp
+    application/st/st_value_trace.cpp
     application/st/st_process_image.cpp
     application/st/st_retain.cpp
     application/st/st_journal.cpp
+    # T59-401: runtime cần LOADER package v2 để nạp gói nhiều Program.
+    # Chỉ thêm TU này, không kéo cả `st_compiler_lib` vào nhị phân điều
+    # khiển — compiler không có việc gì trên board đang chạy.
+    application/st/st_package_v2.cpp
+    application/st/st_pou_registry.cpp
+    application/st/st_fb_instance_layout.cpp
     application/st/st_control_api.cpp)
 target_link_libraries(core_application PUBLIC
     core_domain core_build_settings PkgConfig::SODIUM)
@@ -111,10 +120,12 @@ target_link_libraries(core_lib INTERFACE
 # làm cho điều đó thành ràng buộc LINK-TIME chứ không phải kỷ luật lập trình —
 # mkddc-core không liên kết st_compiler_lib nên không thể vô tình gọi parser.
 # Chiều phụ thuộc: st_compiler_lib -> core_lib (không bao giờ ngược lại).
+# `st_pou_registry`/`st_fb_instance_layout`/`st_package_v2` nay thuộc
+# `core_application` (T59-401: runtime cần loader package v2). `st_compiler_lib`
+# link `core_lib` nên vẫn dùng được — biên dịch lại ở đây sẽ tạo ký hiệu trùng.
 add_library(st_compiler_lib STATIC
-    application/st/st_parser.cpp application/st/st_pou_registry.cpp
-    application/st/st_fb_instance_layout.cpp application/st/st_package_v2.cpp
-    application/st/st_semantic.cpp
+    application/st/st_parser.cpp
+    application/st/st_semantic.cpp application/st/st_review_gate.cpp
     application/st/st_compile.cpp application/st/st_ir.cpp
     application/st/st_artifact_manifest.cpp
     application/st/st_fbd_model.cpp application/st/st_fbd_compile.cpp)
@@ -123,6 +134,14 @@ target_link_libraries(st_compiler_lib PUBLIC core_lib)
 add_executable(mkddc-core bootstrap/main.cpp)
 target_link_libraries(mkddc-core PRIVATE core_lib)
 mkddc_apply_provenance(mkddc-core)
+
+# T59-505: E2E host dùng cùng scheduler/coordinator/IPC/loader production
+# nhưng không giả vờ có I/O vật lý. Target riêng giữ ranh giới
+# bằng chứng rõ: PASS simulator không phải PASS target/HIL.
+add_executable(mkddc-programming-core-sim
+    application/programming/programming_core_sim_main.cpp)
+target_link_libraries(mkddc-programming-core-sim PRIVATE core_lib)
+mkddc_apply_provenance(mkddc-programming-core-sim)
 
 # FW-SOM-IEC-002 item 2: validate gateway CLI cho BE gọi (fixed argv, source
 # luôn qua file path, không shell-eval — xem st/st_validate_main.cpp).
@@ -135,6 +154,11 @@ target_link_libraries(mkddc-st-package-golden PRIVATE st_compiler_lib)
 
 add_executable(mkddc-st-compile application/st/st_compile_main.cpp)
 target_link_libraries(mkddc-st-compile PRIVATE st_compiler_lib)
+
+# T59-302/T59-305: lắp package v2 bằng ĐÚNG writer production, không cài lại
+# định dạng ở lớp BE.
+add_executable(mkddc-st-package application/st/st_package_main.cpp)
+target_link_libraries(mkddc-st-package PRIVATE st_compiler_lib)
 
 # SCHD-133: mô phỏng lịch bằng ĐÚNG engine của controller. Backend gọi binary
 # này thay vì cài lại thuật toán đánh giá trong Go — bản cài lại sẽ đúng cho tới
@@ -178,6 +202,7 @@ if(CORE_BUILD_TESTS)
       application/runtime/test_scan_loop.cpp
       application/programming/tests/test_program_ipc_server.cpp
       application/programming/tests/test_programming_runtime_coordinator.cpp
+      application/programming/tests/test_programming_package_v2_stage.cpp
       adapters/ipc/tests/test_program_ipc_unix.cpp
       application/programming/tests/test_program_error_catalog.cpp
       adapters/ipc/tests/test_web_ipc.cpp domain/graph/tests/test_graph_runtime.cpp
@@ -195,6 +220,8 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_artifact_manifest.cpp
       application/st/tests/test_st_fbd_model.cpp
       application/st/tests/test_st_library_registry.cpp
+      application/st/tests/test_st_review_gate.cpp
+      application/st/tests/test_st_mb_rtu_binding.cpp
       application/st/tests/test_st_pou_parser.cpp
       application/st/tests/test_st_pou_registry.cpp
       application/st/tests/test_st_function_purity.cpp
@@ -203,6 +230,12 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_package_v2.cpp
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
+      application/programming/tests/test_program_candidate_registry.cpp
+      application/programming/tests/test_programming_package_lifecycle.cpp
+      application/st/tests/test_st_program_lanes.cpp
+      application/st/tests/test_st_value_trace.cpp
+      application/st/tests/test_st_signal_bus.cpp
+      application/st/tests/test_st_program_release.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp
       application/st/tests/test_st_retain.cpp application/st/tests/test_st_control_api.cpp
       application/st/tests/test_st_journal.cpp
@@ -216,7 +249,8 @@ if(CORE_BUILD_TESTS)
       ST_COMPILE_CLI_PATH="$<TARGET_FILE:mkddc-st-compile>"
       ST_SAMPLE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/application/st/samples"
       PROGRAMMING_IPC_CONTRACT_DIR="${MKDDC_CONTRACTS_SOURCE_DIR}/ipc/programming_v1"
-      PROGRAMMING_PROFILE_CONTRACT_DIR="${CONTRACT_PROGRAMMING_DIR}")
+      PROGRAMMING_PROFILE_CONTRACT_DIR="${CONTRACT_PROGRAMMING_DIR}"
+      CORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   add_dependencies(core_tests mkddc-st-validate mkddc-st-compile)
   if(TARGET GTest::gtest_main)
     target_link_libraries(core_tests PRIVATE GTest::gtest_main)

@@ -51,3 +51,4 @@ ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Co
 [Decision Log](../00_governance/DECISIONS.md) khác nhau, Decision Log là register điều hành.
 | [ADR-040](ADR-040-easyset-parity-config-surfaces.md) | EasySet Parity Config Surfaces (trước đây phát hành nhầm là `ADR-010`) | Accepted |
 | [ADR-041](ADR-041-ui-raw-live-data-shm.md) | UI Raw Live Data In Shared Memory (trước đây phát hành nhầm là `ADR-011`) | Accepted |
+| [ADR-051](ADR-051-programming-ttl-hold-last-60s.md) | TTL hold-last Program = 60 s đồng hồ (đóng blocker `DDD-CTRL-PROG-001` §15) | Accepted |

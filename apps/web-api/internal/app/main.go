@@ -73,9 +73,11 @@ type App struct {
 	commissionLimit       commissionLimiter
 	programmingStore      *programmingstore.Store
 	programmingProjects   *programmingapplication.ProjectService
+	programmingLibrary    *programmingapplication.LibraryService
 	programmingChecks     *programmingapplication.CheckService
 	programmingOperations *programmingapplication.OperationService
 	programmingRuntime    *programmingapplication.RuntimeService
+	programmingIntents    *programmingapplication.RuntimeIntentService
 	// Plan 57 Wave 3
 	preferences   *UserPreferenceStore
 	systemHistory *SystemHistoryRing
@@ -117,6 +119,9 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		checks, checkErr := programmingapplication.NewCheckService(programmingapplication.CheckServiceOptions{
 			Store: store, Artifacts: artifacts, TargetID: cfg.ProgrammingTargetID, LeaseDuration: 30 * time.Second,
 			Runner: programmingcompiler.ProcessRunner{BinaryPath: cfg.ProgrammingCompilerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout},
+			// T59-302: container package v2 do CHÍNH writer production ghi; BE
+			// chỉ điều phối, không cài lại định dạng.
+			Packager: programmingcompiler.ProcessPackager{BinaryPath: cfg.ProgrammingPackagerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout},
 		})
 		if checkErr != nil {
 			_ = store.Close()
@@ -145,7 +150,24 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming Runtime service: %w", runtimeErr)
 		}
+		library, libraryErr := programmingapplication.NewLibraryService(store, []byte(cfg.JWTSecret))
+		if libraryErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming Library service: %w", libraryErr)
+		}
+		intents, intentErr := programmingapplication.NewRuntimeIntentService(
+			programmingapplication.RuntimeIntentServiceOptions{
+				Store:        store,
+				Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
+				ControllerID: cfg.ProgrammingTargetID,
+			})
+		if intentErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming Runtime Intent service: %w", intentErr)
+		}
+		app.programmingIntents = intents
 		app.programmingStore = store
+		app.programmingLibrary = library
 		app.programmingProjects = projects
 		app.programmingChecks = checks
 		app.programmingOperations = operations

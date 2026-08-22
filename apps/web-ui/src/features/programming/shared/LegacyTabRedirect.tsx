@@ -1,4 +1,4 @@
-import { Navigate, useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom'
 
 /**
  * UX-WEB-PROG-001 §11.1 — ba route cũ của IA sáu trang chuyển sang tab của
@@ -13,8 +13,30 @@ import { Navigate, useParams, useSearchParams } from 'react-router-dom'
  */
 export function LegacyTabRedirect({ tab }: { tab: 'programs' | 'mapping' | 'execution' }) {
   const { projectId } = useParams<{ projectId: string }>()
+  const { hash } = useLocation()
   const [searchParams] = useSearchParams()
+  if (!projectId) return <Navigate to="/eng/programming" replace />
   const query = new URLSearchParams(searchParams)
   query.set('tab', tab)
-  return <Navigate to={`/eng/programming/projects/${projectId}/design?${query.toString()}`} replace />
+  return <Navigate to={{ pathname: `/eng/programming/projects/${projectId}/design`, search: `?${query.toString()}`, hash }} replace />
+}
+
+/**
+ * T59-306 — `/design` là LỐI VÀO CŨ. IA sáu trang (DDD §8) đặt `programs` và
+ * `mapping` làm route đích, nên chuyển hướng đi theo `?tab=` mà deep-link cũ
+ * mang theo. Giữ nguyên mọi query khác (`program`, `line`, `column`) để một link
+ * lỗi cũ vẫn mở đúng chỗ.
+ */
+export function LegacyDesignRedirect() {
+  const { projectId } = useParams<{ projectId: string }>()
+  const { hash } = useLocation()
+  const [searchParams] = useSearchParams()
+  if (!projectId) return <Navigate to="/eng/programming" replace />
+  const query = new URLSearchParams(searchParams)
+  const tab = query.get('tab')
+  const route = tab === 'mapping' ? 'mapping' : 'programs'
+  query.delete('tab')
+  if (tab === 'execution') query.set('tab', 'execution')
+  const suffix = query.toString()
+  return <Navigate to={{ pathname: `/eng/programming/projects/${projectId}/${route}`, search: suffix ? `?${suffix}` : '', hash }} replace />
 }

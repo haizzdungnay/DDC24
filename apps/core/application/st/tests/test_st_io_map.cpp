@@ -83,6 +83,9 @@ TEST(StIoMap, AcceptsExactlyThreePointCategoriesWithDiscriminatedIdentity)
     entries[1].category = "MB_RTU";
     entries[1].device_id = "PUMP_VFD-01";
     entries[1].point_id = "speed_ref";
+    /* T59-303: slot EXT do Point Catalog phân giải; thiếu nó là dữ liệu chưa
+     * đủ, không phải identity hợp lệ. */
+    entries[1].ext_index = 9;
     std::vector<StDiagnostic> diags;
     EXPECT_TRUE(validate_io_map(prog, entries, &diags));
     EXPECT_TRUE(diags.empty());

@@ -97,6 +97,9 @@ bool read_io_map(const std::string& path, std::vector<core::StIoMapEntry>* out,
             entry.range_max = item.value("rangeMax", 0.0f);
             entry.category = item.value("category", std::string("LOCAL"));
             entry.device_id = item.value("deviceId", std::string());
+            /* T59-303: slot EXT do Point Catalog cấp. Mặc định 0 nghĩa là "chưa
+             * phân giải" và `validate_point_contract` sẽ từ chối — không đoán. */
+            entry.ext_index = static_cast<uint16_t>(item.value("extIndex", 0));
             entry.writable = item.value("writable", true);
         } catch (const std::exception& e) {
             *error_out = std::string("io_map entry missing/malformed field: ") + e.what();

@@ -10,15 +10,28 @@ import type {
   ProgrammingOperationPage,
   ProgrammingOverridePage,
   ProgrammingPointCatalogPage,
+  ProgrammingProgramIntentList,
+  ProgrammingLibraryPage,
   ProgrammingProjectPage,
   ProgrammingRevisionChanges,
   ProgrammingRuntime,
   ProgrammingMonitorPage,
+  ProgrammingRuntimeSignalPage,
   RemoteState
 } from '../model/types'
 
+type PickCopy = (vi: string, en: string) => string
+
+function programmingResourceErrorMessage(pick: PickCopy, reason: unknown): string {
+  return reason instanceof ProgrammingApiError
+    ? programmingErrorCopy(pick, reason.envelope.error.code)
+    : reason instanceof Error
+      ? reason.message
+      : pick('Lỗi không xác định.', 'Unknown error.')
+}
+
 /**
- * Hook đọc dùng chung cho bốn workspace — theo mẫu `useModbusRuntime`/
+ * Hook đọc dùng chung cho sáu workspace — theo mẫu `useModbusRuntime`/
  * `useModbusConfig` sẵn có trong repo (không dùng react-query, dự án này
  * chưa có dependency đó và không cần thêm cho một tập hook đọc/poll đơn
  * giản). `intervalMs` mặc định `0` = chỉ đọc lúc mount + khi gọi `refresh()`.
@@ -34,7 +47,10 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
 
   const run = useCallback(() => {
     const myGeneration = ++generation.current
-    loadRef.current().then(
+    // Một client validator hoặc test double có thể ném đồng bộ trước khi trả
+    // Promise. Chuẩn hoá cả hai đường vào cùng RemoteState error; nếu không một
+    // endpoint context mới đủ làm sập toàn bộ sáu-workspace layout.
+    Promise.resolve().then(() => loadRef.current()).then(
       (value) => {
         if (myGeneration !== generation.current) return
         setData(value)
@@ -43,13 +59,7 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
       },
       (reason: unknown) => {
         if (myGeneration !== generation.current) return
-        const message =
-          reason instanceof ProgrammingApiError
-            ? programmingErrorCopy(pick, reason.envelope.error.code)
-            : reason instanceof Error
-              ? reason.message
-              : pick('Lỗi không xác định.', 'Unknown error.')
-        setError(message)
+        setError(programmingResourceErrorMessage(pick, reason))
         setStatus('error')
       }
     )
@@ -95,6 +105,34 @@ export function useProgrammingProjects(): RemoteState<ProgrammingProjectPage> {
     [client]
   )
   return useProgrammingResource(load, 0)
+}
+
+/**
+ * `T59-503` — context PGM-01..06 phải đọc riêng desired intent và runtime
+ * read-back của từng Program. Khi chưa xác định được Project, trả danh sách
+ * rỗng cục bộ để không dựng request với định danh giả; dependency đổi sang
+ * `projectId` thật sẽ tự tải lại.
+ */
+export function useProgrammingProgramIntents(projectId: string | undefined): RemoteState<ProgrammingProgramIntentList> {
+  const client = useProgrammingApiClient()
+  const requestedProjectId = projectId ?? null
+  const load = useCallback((): Promise<{ projectId: string | null; value: ProgrammingProgramIntentList }> => {
+    if (!projectId) return Promise.resolve({ projectId: null, value: { items: [] } })
+    return client.request<ProgrammingProgramIntentList>('listProgrammingProgramIntents', { path: { projectId } })
+      .then((value) => ({ projectId, value }))
+  }, [client, projectId])
+  const resource = useProgrammingResource(load, 5000)
+  const belongsToCurrentProject = resource.data?.projectId === requestedProjectId
+
+  // Route có thể đổi Project trong khi request mới còn đang bay. Không được
+  // ghép tên/Draft của Project mới với intent/runtime-state còn giữ từ Project
+  // cũ; chuyển rõ sang loading cho tới khi snapshot đúng định danh về tới nơi.
+  return {
+    status: resource.status === 'ready' && !belongsToCurrentProject ? 'loading' : resource.status,
+    data: belongsToCurrentProject ? resource.data?.value ?? null : null,
+    error: resource.error,
+    refresh: resource.refresh
+  }
 }
 
 /** `GET /point-catalog` — tab Điểm & Ánh xạ có nhịp làm mới riêng (UX §0.1
@@ -219,11 +257,107 @@ export function useProgrammingOperations(limit = 20): RemoteState<ProgrammingOpe
   return useProgrammingResource(load, 0)
 }
 
-/** `GET /runtime/monitor` — snapshot cuối-scan authoritative, poll 1 Hz. Lỗi
- * nguồn giữ nguyên trạng thái error/offline; hook không tái sử dụng sample cũ
- * như dữ liệu LIVE. */
-export function useProgrammingRuntimeMonitor(): RemoteState<ProgrammingMonitorPage> {
+export type ProgrammingMonitorFailure = 'permission' | 'offline' | 'error' | null
+
+export interface ProgrammingRuntimeMonitorState extends RemoteState<ProgrammingMonitorPage> {
+  /** Phân loại theo HTTP/network authority để UI không biến mọi lỗi thành
+   * "offline" và không parse chuỗi message đã dịch. */
+  failure: ProgrammingMonitorFailure
+}
+
+export function classifyProgrammingMonitorFailure(reason: unknown): Exclude<ProgrammingMonitorFailure, null> {
+  if (reason instanceof ProgrammingApiError) {
+    if (reason.status === 401 || reason.status === 403) return 'permission'
+    if ([429, 502, 503, 504].includes(reason.status)) return 'offline'
+    return 'error'
+  }
+  // `fetch()` chỉ reject cho lỗi transport/abort; AbortError không phải bằng
+  // chứng Core offline nên vẫn thuộc lỗi chung.
+  if (reason instanceof TypeError) return 'offline'
+  return 'error'
+}
+
+/** `GET /runtime/monitor` — snapshot cuối-scan authoritative, poll 1 Hz. Khi
+ * nguồn lỗi, xoá snapshot khỏi state thay vì giữ mẫu cũ dưới nhãn LIVE. Hook
+ * chuyên biệt giữ thêm loại lỗi để Watch phân biệt permission/offline/error. */
+export function useProgrammingRuntimeMonitor(): ProgrammingRuntimeMonitorState {
+  const { pick } = useI18n()
   const client = useProgrammingApiClient()
   const load = useCallback(() => client.request<ProgrammingMonitorPage>('getProgrammingRuntimeMonitor'), [client])
+  const [status, setStatus] = useState<ProgrammingRuntimeMonitorState['status']>('loading')
+  const [data, setData] = useState<ProgrammingMonitorPage | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [failure, setFailure] = useState<ProgrammingMonitorFailure>(null)
+  const loadRef = useRef(load)
+  const generation = useRef(0)
+  loadRef.current = load
+
+  const run = useCallback(() => {
+    const myGeneration = ++generation.current
+    setStatus((current) => current === 'error' ? 'loading' : current)
+    Promise.resolve().then(() => loadRef.current()).then(
+      (value) => {
+        if (myGeneration !== generation.current) return
+        setData(value)
+        setError(null)
+        setFailure(null)
+        setStatus('ready')
+      },
+      (reason: unknown) => {
+        if (myGeneration !== generation.current) return
+        setData(null)
+        setError(programmingResourceErrorMessage(pick, reason))
+        setFailure(classifyProgrammingMonitorFailure(reason))
+        setStatus('error')
+      }
+    )
+  }, [pick])
+
+  useEffect(() => {
+    run()
+    const timer = window.setInterval(run, 1000)
+    return () => {
+      window.clearInterval(timer)
+      // Invalidate request đang bay; Promise hoàn tất sau unmount không được
+      // cập nhật state hoặc tái hiện snapshot của thế hệ cũ.
+      generation.current += 1
+    }
+  }, [run, load])
+
+  return { status, data, error, failure, refresh: run }
+}
+
+/** T59-504 — Published Signal có endpoint/snapshot riêng; tuyệt đối không join
+ * giả từ các row Binding của Point monitor. Poll cùng nhịp 1 Hz để người dùng
+ * đối chiếu Program producer, value, quality và freshness trên cùng màn hình. */
+export function useProgrammingRuntimeSignals(): RemoteState<ProgrammingRuntimeSignalPage> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(
+    () => client.request<ProgrammingRuntimeSignalPage>('getProgrammingRuntimeSignals'),
+    [client]
+  )
   return useProgrammingResource(load, 1000)
+}
+
+export interface LibrarySearchFilters {
+  projectId?: string
+  scope?: 'SYSTEM' | 'PROJECT'
+  kind?: 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
+  query?: string
+}
+
+/** `GET /libraries` — PGM-04. Bộ lọc nằm trong dependency của `load` nên đổi
+ * filter là tải lại, không phải lọc phía client trên một trang đã cắt. */
+export function useProgrammingLibrary(filters: LibrarySearchFilters): RemoteState<ProgrammingLibraryPage> {
+  const client = useProgrammingApiClient()
+  const { projectId, scope, kind, query } = filters
+  const load = useCallback(() => {
+    const search: Record<string, string | number> = { limit: 100 }
+    if (projectId) search.projectId = projectId
+    if (scope) search.scope = scope
+    if (kind) search.kind = kind
+    if (query) search.q = query
+    return client.request<ProgrammingLibraryPage>('searchProgrammingLibraries', { query: search })
+  }, [client, projectId, scope, kind, query])
+  return useProgrammingResource(load, 0)
 }

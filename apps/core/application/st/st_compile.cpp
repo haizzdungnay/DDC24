@@ -5,6 +5,7 @@
 #include "st/st_artifact.hpp"
 #include "st/st_limits.hpp"
 #include "st/st_parser.hpp"
+#include "st/st_review_gate.hpp"
 #include "st/st_semantic.hpp"
 
 namespace core {
@@ -480,9 +481,16 @@ bool compile_st_to_ir(const StProgram& prog, const std::string& source, StIrModu
 
 bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic* diag)
 {
+    return compile_st_source(source, out, diag, StCompileOptions{});
+}
+
+bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic* diag,
+                       const StCompileOptions& options)
+{
     StProgram prog;
     if (!parse_st_program(source, &prog, diag)) return false;
     if (!typecheck_st_program(&prog, diag)) return false;
+    if (options.enforce_review_gate && !st_review_gate_check(prog, diag)) return false;
     return compile_st_to_ir(prog, source, out, diag);
 }
 

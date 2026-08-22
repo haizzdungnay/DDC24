@@ -60,6 +60,7 @@ type Config struct {
 	ProgrammingSocket          string
 	ProgrammingCoreUID         uint32
 	ProgrammingCompilerPath    string
+	ProgrammingPackagerPath    string
 	ProgrammingTargetID        string
 	ProgrammingCompilerTimeout time.Duration
 	WebVersion                 string
@@ -116,6 +117,7 @@ func LoadConfig() (Config, error) {
 		ProgrammingSocket:          getenv("PROGRAMMING_SOCKET", "/run/mkddc/programming-v1.sock"),
 		ProgrammingCoreUID:         uint32(os.Getuid()),
 		ProgrammingCompilerPath:    getenv("PROGRAMMING_COMPILER", "/usr/sbin/mkddc-st-compile"),
+		ProgrammingPackagerPath:    getenv("PROGRAMMING_PACKAGER", "/usr/sbin/mkddc-st-package"),
 		ProgrammingTargetID:        getenv("PROGRAMMING_TARGET_ID", "controller-local"),
 		ProgrammingCompilerTimeout: 10 * time.Second,
 		WebVersion:                 getenv("WEB_VERSION", buildVersion),
@@ -150,6 +152,9 @@ func (c *Config) deriveProgrammingPaths() {
 	}
 	if c.ProgrammingScratchDir == "" {
 		c.ProgrammingScratchDir = filepath.Join(c.ProgrammingStateDir, "scratch")
+	}
+	if c.ProgrammingPackagerPath == "" {
+		c.ProgrammingPackagerPath = "/usr/sbin/mkddc-st-package"
 	}
 	if c.ProgrammingCompilerPath == "" {
 		c.ProgrammingCompilerPath = "/usr/sbin/mkddc-st-compile"

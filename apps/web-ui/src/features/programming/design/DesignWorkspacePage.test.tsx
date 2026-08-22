@@ -7,6 +7,7 @@ import type { UserRole } from '../../../shared/types'
 import { DesignWorkspacePage } from './DesignWorkspacePage'
 import { ProgrammingApiError } from '../api/generated/client'
 import type { ProgrammingDraftDocument, ProgrammingProject } from '../model/types'
+import type { ProgrammingRuntimeMonitorState } from '../api/queries'
 
 const auth = vi.hoisted(() => ({ role: 'admin' as UserRole }))
 vi.mock('../../auth', async (importOriginal) => {
@@ -25,6 +26,13 @@ vi.mock('../../auth', async (importOriginal) => {
 
 const client = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => client }))
+const runtimeMonitor = vi.hoisted(() => ({
+  state: null as unknown as ProgrammingRuntimeMonitorState
+}))
+vi.mock('../api/queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/queries')>()
+  return { ...actual, useProgrammingRuntimeMonitor: () => runtimeMonitor.state }
+})
 vi.mock('../layout/ProgrammingLayout', () => ({
   useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn() })
 }))
@@ -65,6 +73,13 @@ function renderWorkspace(initialPath = '/eng/programming/projects/project-1/desi
 beforeEach(() => {
   auth.role = 'admin'
   client.request.mockReset()
+  runtimeMonitor.state = {
+    status: 'ready',
+    data: { schemaVersion: '1.0', activeRevisionId: null, safeState: false, task: null, items: [] },
+    error: null,
+    failure: null,
+    refresh: vi.fn()
+  }
   localStorage.setItem('mkddc-lang', 'vi')
 })
 afterEach(() => {
@@ -86,7 +101,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
         const document = baseDocument()
-        document.programs.push({ programId: 'program-1', name: 'New program', kind: 'PROGRAM', language: 'ST', document: '' })
+        document.programs.push({ programId: 'program-1', name: 'NewProgram', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM NewProgram\nEND_PROGRAM\n' })
         document.task.programOrder = ['program-1']
         return Promise.resolve({ resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: document }, etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1' })
       }
@@ -105,12 +120,66 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
     expect(options.ifMatch).toBe('"draft-1:1"')
     const [upsertOp, setTaskOp] = options.body.operations
-    expect(upsertOp.op).toBe('upsertProgram')
-    expect(upsertOp.program.language).toBe('ST')
+    expect(upsertOp).toEqual({
+      op: 'upsertProgram',
+      program: {
+        programId: expect.any(String),
+        name: 'NewProgram',
+        kind: 'PROGRAM',
+        language: 'ST',
+        document: 'PROGRAM NewProgram\nEND_PROGRAM\n',
+      },
+    })
+    expect(upsertOp.program).not.toHaveProperty('executionOrder')
+    expect(upsertOp.program).not.toHaveProperty('functionalTags')
     expect(setTaskOp.op).toBe('setTask')
     expect(setTaskOp.task.programOrder).toEqual([upsertOp.program.programId])
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /New program/ })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: /NewProgram/ })).toBeInTheDocument())
+  })
+
+  it('ghi thuộc tính Program bằng payload v2 hẹp và chặn tên POU backend sẽ từ chối', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-1', name: 'ValidName', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM ValidName\nEND_PROGRAM\n', executionOrder: 0, functionalTags: ['legacy-view-only']
+    })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: project.draft },
+          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    fireEvent.click(await screen.findByText('ValidName'))
+    const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    expect(within(inspector).queryByText('Tag chức năng')).not.toBeInTheDocument()
+
+    const nameInput = within(inspector).getByLabelText('Tên')
+    fireEvent.change(nameInput, { target: { value: 'New program' } })
+    expect(nameInput).toHaveAttribute('aria-invalid', 'true')
+    expect(within(inspector).getByText(/Tên phải bắt đầu bằng chữ/)).toBeInTheDocument()
+    expect(within(inspector).getByRole('button', { name: 'Lưu thuộc tính' })).toBeDisabled()
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+
+    fireEvent.change(nameInput, { target: { value: 'New_Name' } })
+    fireEvent.click(within(inspector).getByRole('button', { name: 'Lưu thuộc tính' }))
+    await waitFor(() => expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(true))
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
+    expect(options.body.operations).toEqual([{
+      op: 'upsertProgram',
+      program: {
+        programId: 'program-1', name: 'New_Name', kind: 'PROGRAM', language: 'ST',
+        document: 'PROGRAM ValidName\nEND_PROGRAM\n'
+      }
+    }])
   })
 
   it('WP-11: bố cục 3 cột (Cây/Editor/Inspector) theo UX §16.2 — Inspector là cột riêng, không nằm dưới editor', async () => {
@@ -229,13 +298,13 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   })
 
   it('thêm chương trình FBD mount StructuredFbdEditor thật, không placeholder (TASK-PROG-502)', async () => {
-    client.request.mockImplementation((operationId: string, options?: { body?: { operations: Array<{ op: string; program?: { programId: string; document: unknown } }> } }) => {
+    client.request.mockImplementation((operationId: string, options?: { body?: { operations: Array<{ op: string; program?: { programId: string; name: string; document: unknown } }> } }) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
         const upsertOp = options?.body?.operations.find((op) => op.op === 'upsertProgram')
         const document = baseDocument()
-        document.programs.push({ programId: upsertOp!.program!.programId, name: 'FBD mới', kind: 'PROGRAM', language: 'FBD', document: upsertOp!.program!.document })
+        document.programs.push({ programId: upsertOp!.program!.programId, name: upsertOp!.program!.name, kind: 'PROGRAM', language: 'FBD', document: upsertOp!.program!.document })
         document.task.programOrder = [upsertOp!.program!.programId]
         return Promise.resolve({ resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: document }, etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1' })
       }
@@ -545,5 +614,114 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     fireEvent.click(screen.getByText('AO-01'))
     expect(textarea.value).toContain('AO-01')
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+  })
+})
+
+describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
+  it('nối monitor đúng Active Revision vào ST overlay; null không bị vẽ thành 0', async () => {
+    const project = baseProject()
+    project.activeRevisionId = 'revision-active'
+    project.draft!.programs.push({
+      programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM AHU\nEND_PROGRAM\n'
+    })
+    project.draft!.task.programOrder = ['program-1']
+    runtimeMonitor.state = {
+      status: 'ready', error: null, failure: null, refresh: vi.fn(),
+      data: {
+        schemaVersion: '1.0', activeRevisionId: 'revision-active', safeState: false, task: null,
+        items: [
+          {
+            variableId: 'variable-zero', variableName: 'OutputZero', programId: 'program-1',
+            point: { category: 'LOCAL', pointId: 'AO-01' }, direction: 'WRITE', dataType: 'REAL', unit: '%',
+            programValue: 0, actualValue: 0, overriddenBy: null, effectivePriority: 5,
+            overrideActor: null, overrideRemainingS: null, quality: 'GOOD',
+            observedAt: '2026-08-21T00:00:00Z', freshness: 'LIVE'
+          },
+          {
+            variableId: 'variable-missing', variableName: 'OutputMissing', programId: 'program-1',
+            point: { category: 'LOCAL', pointId: 'AO-02' }, direction: 'WRITE', dataType: 'REAL', unit: '%',
+            programValue: null, actualValue: null, overriddenBy: null, effectivePriority: null,
+            overrideActor: null, overrideRemainingS: null, quality: 'BAD', observedAt: '', freshness: 'UNAVAILABLE'
+          }
+        ]
+      }
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    fireEvent.click(await screen.findByText('Điều khiển AHU'))
+    const overlay = await screen.findByRole('region', { name: 'Lớp giá trị runtime ST' })
+    const zeroRow = within(overlay).getByText('OutputZero').closest('li')
+    const missingRow = within(overlay).getByText('OutputMissing').closest('li')
+    expect(zeroRow).not.toBeNull()
+    expect(missingRow).not.toBeNull()
+    expect(within(zeroRow!).getByText('0 %')).toBeInTheDocument()
+    expect(within(missingRow!).getByText('—')).toBeInTheDocument()
+    expect(within(missingRow!).queryByText(/^0(?:\s|$)/)).not.toBeInTheDocument()
+  })
+
+  it('mismatch Active Revision hiển thị unavailable, không giữ mẫu cũ', async () => {
+    const project = baseProject()
+    project.activeRevisionId = 'revision-active'
+    project.draft!.programs.push({
+      programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM AHU\nEND_PROGRAM\n'
+    })
+    runtimeMonitor.state = {
+      status: 'ready', error: null, failure: null, refresh: vi.fn(),
+      data: { schemaVersion: '1.0', activeRevisionId: 'revision-old', safeState: false, task: null, items: [] }
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    fireEvent.click(await screen.findByText('Điều khiển AHU'))
+    const overlay = await screen.findByRole('region', { name: 'Lớp giá trị runtime ST' })
+    expect(within(overlay).getByText('Không đọc được giá trị runtime.')).toBeInTheDocument()
+  })
+
+  it('nối interface Draft v2 vào palette FBD và lọc chính POU đang mở', async () => {
+    const fbdSource = JSON.stringify({
+      $schema: '../../fbd_v1.schema.json', schemaVersion: 1, profileId: 'revA-1t-1-5-30',
+      graphId: '10000000-0000-4000-8000-000000000001', name: 'SelfBlock',
+      networks: [{
+        id: '20000000-0000-4000-8000-000000000001', name: 'Main', order: 0, nodes: [], wires: []
+      }]
+    })
+    const project = baseProject()
+    project.draft = {
+      schemaVersion: 2,
+      project: { projectId: 'project-1', name: 'AHU-01', functionalTags: [] },
+      objects: [
+        {
+          objectId: 'fb-self', kind: 'FUNCTION_BLOCK', name: 'SelfBlock', language: 'FBD', source: fbdSource,
+          interface: { inputs: [{ name: 'In', type: 'REAL' }], outputs: [{ name: 'Out', type: 'REAL' }] },
+          locals: []
+        },
+        {
+          objectId: 'function-other', kind: 'FUNCTION', name: 'OtherFn', language: 'ST',
+          source: 'FUNCTION OtherFn : REAL\nEND_FUNCTION',
+          interface: { inputs: [{ name: 'X', type: 'REAL' }], returnType: 'REAL' }, locals: []
+        }
+      ],
+      programs: [], signals: [], bindings: [], library: {}, execution: {}
+    } as unknown as ProgrammingDraftDocument
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?program=fb-self')
+    await screen.findByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+    expect(screen.getByRole('option', { name: /OtherFn · FUNCTION/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /SelfBlock · FUNCTION_BLOCK/ })).not.toBeInTheDocument()
   })
 })

@@ -36,8 +36,8 @@ for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
 }
 
 endpoints.sort((left, right) => left.operationId.localeCompare(right.operationId));
-if (endpoints.length !== 25) {
-  throw new Error(`Programming OpenAPI phải có 25 operation, thực tế ${endpoints.length}`);
+if (endpoints.length !== 31) {
+  throw new Error(`Programming OpenAPI phải có 31 operation, thực tế ${endpoints.length}`);
 }
 if (new Set(endpoints.map(({ operationId }) => operationId)).size !== endpoints.length) {
   throw new Error("Programming OpenAPI có operationId trùng");
@@ -157,10 +157,7 @@ export interface ProgrammingImpactGroup {
 
 export interface ProgrammingImpact {
   impactRef: string;
-  retain: ProgrammingImpactGroup;
-  activeOverrides: ProgrammingImpactGroup;
-  cutover: ProgrammingImpactGroup;
-  outputMappingChanges: ProgrammingImpactGroup;
+${impactKeys.map((key) => `  ${key}: ProgrammingImpactGroup;`).join('\n')}
 }
 
 export interface ProgrammingCommissionRequest {

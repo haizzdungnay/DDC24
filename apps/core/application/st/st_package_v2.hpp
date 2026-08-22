@@ -80,6 +80,15 @@ struct StPackageProgram {
     std::string program_name;
     /* Blob v1 do `serialize_st_ir` sinh; container KHÔNG diễn giải lại nội dung. */
     std::vector<uint8_t> ir_blob;
+    /* Chu kỳ release riêng của Program (DDD §7.1). 0 = theo chu kỳ Task, giữ cho
+     * package một Program không phải khai gì thêm. Chu kỳ phải nằm trong ba lớp
+     * của profile: một lớp lập lịch không tồn tại chỉ biểu hiện thành deadline
+     * miss ở runtime chứ không thành một câu trả lời hiểu được. */
+    uint32_t period_ms = 0;
+    /* Ngân sách WCET của Program trong một lần release, đơn vị µs. 0 = chưa đo.
+     * Đi trong package chứ không suy ở runtime: đây là số Check đã tính trên
+     * toàn bộ Revision, còn runtime chỉ thấy từng lần chạy. */
+    uint32_t budget_us = 0;
 };
 
 struct StPackageSignal {
@@ -87,6 +96,14 @@ struct StPackageSignal {
     std::string producer_program;
     uint8_t     data_type = 0;
     uint32_t    freshness_ms = 1000;
+    /* Chính sách khi quá hạn (T59-404). Đi TRONG package vì nó là quyết định
+     * thiết kế của người dựng chương trình — để runtime chọn nghĩa là chọn thay
+     * họ xem thiết bị làm gì khi mất dữ liệu. */
+    uint8_t     stale_policy = 0; /* 0=HOLD_LAST, 1=USE_FALLBACK, 2=WAIT */
+    /* Giá trị dự phòng, 8 byte thô đúng như `StCell`. Chỉ có nghĩa khi
+     * `stale_policy == USE_FALLBACK`; writer từ chối mọi tổ hợp khác. */
+    uint64_t    fallback_bits = 0;
+    bool        has_fallback = false;
 };
 
 struct StPackageBinding {
@@ -127,6 +144,10 @@ struct StPackageHeaderView {
 struct StPackageView {
     StPackageHeaderView header;
     std::vector<std::string> program_names;
+    /* Song song 1-1 với `program_names`. Giữ hai vector thay vì một struct để
+     * caller chỉ cần tên (đa số) không phải kéo theo phần còn lại. */
+    std::vector<uint32_t> program_periods_ms;
+    std::vector<uint32_t> program_budget_us;
     std::vector<std::string> pou_names;
     std::vector<std::string> signal_names;
     std::vector<std::string> output_point_ids;
@@ -139,6 +160,24 @@ struct StPackageView {
  * dữ liệu bắt buộc; không bao giờ ghi ra artifact dở dang. */
 bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
                     std::string* error);
+
+/* Nội dung đã giải nén của package: cùng dữ liệu `StPackageView` kiểm, cộng các
+ * blob IR v1 theo đúng thứ tự Program trong bảng PROGRAM_TABLE. Coordinator cần
+ * blob để nạp từng Program; `StPackageView` cố ý không mang chúng vì phần lớn
+ * caller chỉ cần khung. */
+struct StPackageContents {
+    StPackageView view;
+    std::vector<std::vector<uint8_t>> program_ir;
+    /* Khai báo signal đầy đủ (tên/publisher/kiểu/freshness/chính sách/fallback).
+     * `StPackageView` cố ý chỉ mang tên vì đa số caller chỉ cần khung; runtime
+     * thì cần trọn khai báo để dựng bus. */
+    std::vector<StPackageSignal> signals;
+};
+
+/* Nạp package v2 VÀ giữ lại blob IR. Dùng đúng một parser với `LoadPackageV2` —
+ * hai bộ parser cho một định dạng là hai bộ ngữ nghĩa để trôi khỏi nhau. */
+bool UnpackPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_profile,
+                     uint32_t expected_abi, StPackageContents* out, const char** error_code);
 
 /* Nạp package v2. Kiểm toàn bộ offset/count/overflow, exact profile, hash, và hai
  * bất biến cấp package: một output binding chỉ có một Program owner, một signal

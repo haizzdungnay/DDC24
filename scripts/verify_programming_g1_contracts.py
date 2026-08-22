@@ -7,6 +7,7 @@ import argparse
 import copy
 import hashlib
 import json
+import struct
 from pathlib import Path
 import re
 import sys
@@ -43,6 +44,34 @@ BASELINE_STATE = {
     "active-lkg": "active-lkg-before",
     "commissionCount": 0,
 }
+
+
+SECTION_TYPE_NAMES = {
+    1: "POU_TABLE", 2: "PROGRAM_TABLE", 3: "TYPE_SIGNATURE_TABLE", 4: "CODE_IR",
+    5: "CONSTANTS", 6: "FB_LAYOUT", 7: "SIGNAL_DEFS", 8: "BINDING_MANIFEST",
+    9: "SOURCE_MAP", 10: "LIBRARY_LOCK", 11: "RETAIN_LAYOUT", 12: "RESOURCE_BUDGET",
+}
+
+
+def golden_sections(data: bytes) -> list[dict[str, Any]]:
+    """Đọc bảng section THẬT từ file package v2 (header 128 byte, entry 16 byte)."""
+    if len(data) < 128:
+        return []
+    count = struct.unpack_from("<H", data, 18)[0]
+    sections: list[dict[str, Any]] = []
+    for index in range(count):
+        base = 128 + index * 16
+        if base + 16 > len(data):
+            return []
+        type_code = struct.unpack_from("<H", data, base)[0]
+        offset, size, items = struct.unpack_from("<III", data, base + 4)
+        sections.append({
+            "type": SECTION_TYPE_NAMES.get(type_code, f"UNKNOWN_{type_code}"),
+            "offset": offset,
+            "bytes": size,
+            "itemCount": items,
+        })
+    return sections
 
 
 def digest(path: Path) -> str:
@@ -216,6 +245,17 @@ def validate(join: dict[str, Any]) -> list[str]:
         require(digest(ipc_manifest_path) == ipc_item["goldenManifestSha256"], "IPC golden manifest hash drift")
         require(ipc_manifest.get("schemaSha256") == ipc_item["sha256"], "IPC schema/golden hash lệch")
         require(ipc_manifest.get("protocolMajor") == 1, "IPC golden major phải là 1")
+        # `version` ở đây mirror hằng `schemaVersion` TRÊN DÂY, còn `minor` mirror
+        # `protocolMinor`. Hai thứ khác nhau có chủ ý: thêm một action là thay đổi
+        # tương thích ngược nên `protocolMinor` tăng, còn `schemaVersion` phải
+        # đứng yên — đổi nó sẽ làm mọi Core phiên bản cũ từ chối MỌI request, đúng
+        # thứ mà `protocolMinor` sinh ra để tránh. Vì vậy `version` KHÔNG phải
+        # "major.minor"; phép kiểm dưới đây khoá `minor` vào golden manifest để
+        # hai con số không trôi khỏi nhau.
+        require(
+            ipc_manifest.get("protocolMinor") == ipc_item["minor"],
+            "IPC protocolMinor lệch giữa join và golden manifest",
+        )
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"ipc: {error}")
 
@@ -381,6 +421,23 @@ def validate(join: dict[str, Any]) -> list[str]:
             == artifact_v2_item["goldenProgramCount"],
             "golden manifest v2 lệch số Program đã pin",
         )
+        # Bảng section trong manifest phải khớp BẢNG THẬT trong file golden.
+        # Không có phép kiểm này thì manifest chỉ là một mô tả viết tay đi kèm,
+        # và một lần đổi bố cục section sẽ để lại manifest mô tả một file không
+        # còn tồn tại — trong khi hash vẫn "khớp pin" vì pin cũng vừa được sửa.
+        if golden_path.is_file():
+            require(
+                golden_sections(golden_path.read_bytes()) == [
+                    {
+                        "type": section["type"],
+                        "offset": section["offset"],
+                        "bytes": section["bytes"],
+                        "itemCount": section["itemCount"],
+                    }
+                    for section in golden_manifest["sections"]
+                ],
+                "golden manifest v2 lệch bảng section thật trong file",
+            )
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"artifact-v2/dual-reader: {error}")
 
@@ -403,6 +460,43 @@ def validate(join: dict[str, Any]) -> list[str]:
             registry["libraryVersion"] == registry_item["libraryVersion"]
             == profile["coreLibrary"]["version"],
             "libraryVersion lệch giữa registry/pin/profile",
+        )
+        history = registry_item["versionHistory"]
+        require(
+            isinstance(history, list) and len(history) > 0,
+            "library registry thiếu versionHistory",
+        )
+        history_versions = [item["libraryVersion"] for item in history]
+        require(
+            len(history_versions) == len(set(history_versions)),
+            "library registry versionHistory trùng version",
+        )
+        current_history = next(
+            (item for item in history
+             if item["libraryVersion"] == registry["libraryVersion"]),
+            None,
+        )
+        require(
+            current_history is not None
+            and current_history["sha256"] == registry_item["sha256"],
+            "library registry tái sử dụng version với content hash khác",
+        )
+        gated = [item["featureId"] for item in profile["reviewGatedFeatures"]]
+        approved = [
+            item["featureId"] for item in profile["reviewGatedFeatures"]
+            if item["approvalToken"] is not None
+        ]
+        require(
+            gated == profile_item["reviewGatedFeatures"],
+            f"reviewGatedFeatures lệch pin: profile={gated} pin={profile_item['reviewGatedFeatures']}",
+        )
+        # Danh sách feature ĐÃ DUYỆT được ghim riêng. Mở một feature
+        # REVIEW_REQUIRED là quyết định Controls/Safety, không phải một dòng sửa
+        # contract lặng lẽ — nên nó phải làm gate đỏ cho tới khi pin đổi theo.
+        require(
+            approved == profile_item["approvedReviewGatedFeatures"],
+            f"approvedReviewGatedFeatures lệch pin: profile={approved} "
+            f"pin={profile_item['approvedReviewGatedFeatures']}",
         )
         require(
             "functions" not in profile["coreLibrary"],
@@ -582,14 +676,27 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
     def clear_review_required(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "library-registry")["reviewRequired"] = []
 
+    def approve_review_gated_feature(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "profile")["approvedReviewGatedFeatures"] = ["PID"]
+
+    def drop_review_gated_feature(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "profile")["reviewGatedFeatures"] = []
+
+    add("review-gate-approved-drift", "approvedReviewGatedFeatures lệch pin", approve_review_gated_feature)
+    add("review-gate-list-drift", "reviewGatedFeatures lệch pin", drop_review_gated_feature)
+
     def break_registry_schema_hash(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "library-registry")["schemaSha256"] = "0" * 64
+
+    def break_registry_version_history(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "library-registry")["versionHistory"][0]["sha256"] = "0" * 64
 
     add("registry-entry-count-drift", "số entry registry lệch pin", break_registry_entry_count)
     add("registry-fb-count-drift", "số entry FB_TYPE lệch pin", break_registry_fb_count)
     add("registry-library-version-drift", "libraryVersion lệch", break_registry_library_version)
     add("registry-review-required-cleared", "REVIEW_REQUIRED lệch pin", clear_review_required)
     add("registry-schema-hash-drift", "library registry schema SHA-256 drift", break_registry_schema_hash)
+    add("registry-version-history-drift", "tái sử dụng version", break_registry_version_history)
 
     def drop_v1_readable(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "dual-reader")["readableSchemaVersions"] = [2]
@@ -612,6 +719,11 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
 
     def break_golden_v2_program_count(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "artifact-v2")["goldenProgramCount"] += 1
+
+    def break_ipc_minor(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "ipc")["minor"] += 1
+
+    add("ipc-minor-drift", "IPC protocolMinor lệch", break_ipc_minor)
 
     add("golden-v2-hash-drift", "golden artifact v2 SHA-256 drift", break_golden_v2_hash)
     add("golden-v2-size-drift", "kích thước lệch pin", break_golden_v2_size)
@@ -693,6 +805,41 @@ def run_chain_self_test() -> int:
     return len(cases)
 
 
+def run_golden_section_self_test() -> int:
+    """Negative case cho phép so bảng section.
+
+    Không đi qua `build_mutations` được vì bộ đó chỉ đột biến file join, còn bảng
+    section nằm trong file manifest. Kiểm thẳng phép so: nó phải KHỚP với file
+    golden thật, và phải TỪ CHỐI khi một trường bất kỳ bị xê dịch.
+    """
+    golden = safe_path("contracts/programming/golden/package_v2_ahu.mkpkg").read_bytes()
+    manifest = json.loads(
+        safe_path("contracts/programming/golden/package_v2_manifest.json").read_text()
+    )
+    actual = golden_sections(golden)
+    declared = [
+        {key: section[key] for key in ("type", "offset", "bytes", "itemCount")}
+        for section in manifest["sections"]
+    ]
+    if actual != declared:
+        raise RuntimeError(f"bảng section golden lệch manifest: {actual} != {declared}")
+    cases = 0
+    for field in ("offset", "bytes", "itemCount"):
+        for index in range(len(declared)):
+            perturbed = copy.deepcopy(declared)
+            perturbed[index][field] += 1
+            if actual == perturbed:
+                raise RuntimeError(f"phép so bỏ qua sai lệch {field} ở section {index}")
+            cases += 1
+    perturbed = copy.deepcopy(declared)
+    perturbed[0]["type"] = "CONSTANTS"
+    if actual == perturbed:
+        raise RuntimeError("phép so bỏ qua sai lệch loại section")
+    cases += 1
+    print(f"PASS bảng section golden: {cases}/{cases} sai lệch bị bắt")
+    return cases
+
+
 def run_self_test(join: dict[str, Any]) -> None:
     mutations = build_mutations(join)
     for name, mutation, expected in mutations:
@@ -705,6 +852,7 @@ def run_self_test(join: dict[str, Any]) -> None:
             )
     print(f"PASS self-test: {len(mutations)}/{len(mutations)} mutation bị reject fail-closed đúng lý do")
 
+    run_golden_section_self_test()
     chain_cases = run_chain_self_test()
     print(f"PASS chuỗi migration: {chain_cases}/{chain_cases} manifest lỗi bị bắt đúng lý do")
 

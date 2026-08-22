@@ -335,7 +335,7 @@ TEST(StPackageV2, GoldenOnDiskLoadsAndMatchesPinnedHash)
     EXPECT_EQ(view.program_names.size(), 2U);
     EXPECT_EQ(view.pou_names.size(), 3U);
     EXPECT_EQ(view.fb_instance_count, 1U);
-    EXPECT_EQ(view.signal_names.size(), 1U);
+    EXPECT_EQ(view.signal_names.size(), 2U);
     EXPECT_EQ(view.output_point_ids.size(), 2U);
     EXPECT_EQ(view.library_system_version, st_profile_generated::kLibraryVersion);
 

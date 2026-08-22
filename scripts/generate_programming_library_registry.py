@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sinh allowlist C++ và palette TS từ registry POU/Control Library.
+"""Sinh registry C++/Go/TypeScript từ authority POU/Control Library.
 
 Vì sao cần: trước đây danh sách entry tồn tại **ba** bản chép tay —
 `st_fbd_model.cpp` (allowlist FBD của Core), `palette.ts` (palette FE) và
@@ -25,15 +25,17 @@ ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "contracts/programming/pou_library_registry_v1.json"
 SCHEMA = ROOT / "contracts/programming/pou_library_registry_v1.schema.json"
 PROFILE = ROOT / "contracts/programming/product_profile_v2.json"
+G1_JOIN = ROOT / "contracts/programming/g1_contract_join_v1.json"
 CPP_OUTPUT = ROOT / "apps/core/application/st/st_library_registry_generated.hpp"
 TS_OUTPUT = ROOT / "apps/web-ui/src/features/programming/api/generated/library_registry.ts"
+GO_OUTPUT = ROOT / "apps/web-api/internal/programming/domain/library_registry_generated.go"
 
 
 def q(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def load() -> tuple[dict[str, Any], str]:
+def load() -> tuple[dict[str, Any], str, bytes]:
     raw = REGISTRY.read_bytes()
     registry = json.loads(raw)
     schema = json.loads(SCHEMA.read_bytes())
@@ -48,11 +50,16 @@ def load() -> tuple[dict[str, Any], str]:
             for item in problems
         )
         raise ValueError(f"registry không khớp schema: {joined}")
-    validate(registry)
-    return registry, hashlib.sha256(raw).hexdigest()
+    registry_hash = hashlib.sha256(raw).hexdigest()
+    validate(registry, registry_hash)
+    return registry, registry_hash, raw
 
 
-def validate(registry: dict[str, Any]) -> None:
+def validate(
+    registry: dict[str, Any],
+    registry_hash: str,
+    join_override: dict[str, Any] | None = None,
+) -> None:
     entries = registry["entries"]
     identifiers = [item["id"] for item in entries]
     if len(set(identifiers)) != len(identifiers):
@@ -100,6 +107,37 @@ def validate(registry: dict[str, Any]) -> None:
         raise ValueError(
             "libraryVersion registry lệch profile: "
             f"{registry['libraryVersion']} vs {profile['coreLibrary']['version']}"
+        )
+
+    # G1 pin là sổ version->content được review. Nếu nội dung SYSTEM đổi mà
+    # libraryVersion không đổi, generator phải dừng trước khi tạo ba consumer
+    # cùng mang một version nhưng semantics khác nhau.
+    join = join_override or json.loads(G1_JOIN.read_bytes())
+    pin = next(
+        (item for item in join["contracts"] if item.get("name") == "library-registry"),
+        None,
+    )
+    if pin is None or pin.get("path") != str(REGISTRY.relative_to(ROOT)):
+        raise ValueError("G1 thiếu pin library-registry đúng authority")
+    if pin.get("libraryVersion") != registry["libraryVersion"]:
+        raise ValueError("libraryVersion registry lệch G1 pin")
+    if pin.get("sha256") != registry_hash:
+        raise ValueError(
+            "nội dung SYSTEM library đổi nhưng version/pin chưa được bump có kiểm soát"
+        )
+    history = pin.get("versionHistory")
+    if not isinstance(history, list) or not history:
+        raise ValueError("G1 thiếu lịch sử immutable version->content của SYSTEM library")
+    versions = [item.get("libraryVersion") for item in history]
+    if len(versions) != len(set(versions)):
+        raise ValueError("G1 versionHistory có libraryVersion trùng")
+    historical = next(
+        (item for item in history if item.get("libraryVersion") == registry["libraryVersion"]),
+        None,
+    )
+    if historical is None or historical.get("sha256") != registry_hash:
+        raise ValueError(
+            "semantic SYSTEM library đổi nhưng libraryVersion cũ vẫn được tái sử dụng"
         )
 
 
@@ -243,20 +281,125 @@ export const PROGRAMMING_LIBRARY_ENTRIES: readonly LibraryEntry[] = [
 """
 
 
-def outputs() -> list[tuple[Path, str]]:
-    registry, registry_hash = load()
-    return [
-        (CPP_OUTPUT, render_cpp(registry, registry_hash)),
-        (TS_OUTPUT, render_ts(registry, registry_hash)),
-    ]
+def gofmt(content: str) -> str:
+    """Để `--check` so đúng byte với file Go đã qua gofmt."""
+    result = subprocess.run(
+        ["gofmt"],
+        input=content,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    return result.stdout
+
+
+def render_go(registry: dict[str, Any], registry_hash: str, raw: bytes) -> str:
+    def entry_line(entry: dict[str, Any]) -> str:
+        # `SignatureJSON` giữ toàn bộ metadata canonical của registry. Hash này
+        # ghim signature/port/category/dispatch, KHÔNG phải hash executable
+        # implementation hoặc artifact đã biên dịch.
+        signature_json = json.dumps(
+            entry, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        content_hash = hashlib.sha256(signature_json.encode("utf-8")).hexdigest()
+        # FUNCTION và CONVERSION thuần/stateless nên 0 là giá trị authoritative.
+        # Registry hiện chưa mang layout state của FUNCTION_BLOCK; ghi unknown
+        # thay vì đoán. PROJECT FB chỉ được publish sau khi có layout riêng hợp lệ.
+        state_size_authoritative = entry["kind"] != "FUNCTION_BLOCK"
+        return (
+            "\t{"
+            f"EntryID: {q(entry['id'])}, Name: {q(entry['id'])}, "
+            f"Kind: LibraryEntryKind({q(entry['kind'])}), "
+            f"FeatureState: LibraryFeatureState({q(entry['featureState'])}), "
+            f"SignatureJSON: {q(signature_json)}, "
+            f"ContentSHA256Hex: {q(content_hash)}, "
+            "StateSizeBytes: 0, "
+            f"StateSizeAuthoritative: {'true' if state_size_authoritative else 'false'}"
+            "},"
+        )
+
+    entries = "\n".join(entry_line(item) for item in registry["entries"])
+    # Revision identity phải content-addressed: nếu một thay đổi có kiểm soát
+    # tạo snapshot mới, hai manifest không bao giờ dùng chung revisionId.
+    revision_id = (
+        f"{registry['registryId']}:{registry['libraryVersion']}:{registry_hash}"
+    )
+    source = f'''// Code generated by scripts/generate_programming_library_registry.py; DO NOT EDIT.
+package domain
+
+// Các token này và danh sách entry bên dưới cùng sinh từ
+// contracts/programming/pou_library_registry_v1.json. Không chép tay registry ở Go.
+const (
+\tSystemLibraryRegistryID = {q(registry['registryId'])}
+\tSystemLibraryRevisionID = {q(revision_id)}
+\tSystemLibraryVersion = {q(registry['libraryVersion'])}
+\tSystemLibraryRegistrySHA256 = {q(registry_hash)}
+\tSystemLibraryManifestJSON = {q(raw.decode('utf-8'))}
+)
+
+var systemLibraryEntryDefinitions = [...]LibraryEntryDefinition{{
+{entries}
+}}
+'''
+    return gofmt(source)
+
+
+def outputs() -> tuple[list[tuple[Path, str]], int]:
+    # Chỉ đọc authority đúng một lần; cùng snapshot byte cấp hash, entries và
+    # manifest Go. Không có cửa sổ TOCTOU giữa ba consumer sinh ra.
+    registry, registry_hash, raw = load()
+    return (
+        [
+            (CPP_OUTPUT, render_cpp(registry, registry_hash)),
+            (TS_OUTPUT, render_ts(registry, registry_hash)),
+            (GO_OUTPUT, render_go(registry, registry_hash, raw)),
+        ],
+        len(registry["entries"]),
+    )
+
+
+def self_test() -> None:
+    registry, _, _ = load()
+    mutated = json.loads(json.dumps(registry))
+    mutated["entries"][0]["labelVi"] += " drift"
+    mutated_hash = hashlib.sha256(
+        json.dumps(mutated, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    repinned_join = json.loads(G1_JOIN.read_bytes())
+    repinned = next(
+        item for item in repinned_join["contracts"]
+        if item.get("name") == "library-registry"
+    )
+    repinned["sha256"] = mutated_hash
+    try:
+        validate(mutated, mutated_hash, repinned_join)
+    except ValueError as error:
+        if "tái sử dụng" not in str(error):
+            raise AssertionError(f"fault content trả sai lỗi: {error}") from error
+    else:
+        raise AssertionError("semantic drift không bump version vẫn được chấp nhận")
+
+    bumped = json.loads(json.dumps(registry))
+    bumped["libraryVersion"] = registry["libraryVersion"] + ".1"
+    try:
+        validate(bumped, hashlib.sha256(b"bumped").hexdigest())
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("bump registry mà profile/G1 chưa pin vẫn được chấp nhận")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     try:
-        rendered = outputs()
+        if args.self_test:
+            self_test()
+            print("PASS: 2/2 fault SYSTEM library version/content bị chặn")
+            return 0
+        rendered, entry_count = outputs()
     except (OSError, ValueError, KeyError, json.JSONDecodeError,
             subprocess.CalledProcessError) as error:
         print(f"FAIL: registry không hợp lệ: {error}", file=sys.stderr)
@@ -271,9 +414,8 @@ def main() -> int:
             for path in drift:
                 print(f"DRIFT: {path.relative_to(ROOT)} không khớp registry", file=sys.stderr)
             return 1
-        registry = json.loads(REGISTRY.read_bytes())
         print(
-            f"PASS: registry {len(registry['entries'])} entry khớp hằng C++/TS "
+            f"PASS: registry {entry_count} entry khớp hằng C++/Go/TS "
             f"({len(rendered)}/{len(rendered)} tệp sinh)"
         )
         return 0

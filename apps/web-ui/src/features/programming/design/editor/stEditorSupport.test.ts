@@ -3,12 +3,17 @@ import { describe, expect, it } from 'vitest'
 import {
   ST_FB_TYPE_NAMES,
   ST_FUNCTION_NAMES,
+  ST_EDITOR_HISTORY_LIMIT,
   buildStCompletions,
   computeAutoIndent,
+  createStEditorHistory,
   currentWordPrefix,
   findMatchingBracket,
   mergeDiagnosticRanges,
+  recordStEditorEdit,
+  redoStEditorEdit,
   tokenizeStSource,
+  undoStEditorEdit,
 } from './stEditorSupport'
 
 describe('tokenizeStSource (WP-10 P0, đối chiếu ST_SUBSET_SPEC §10)', () => {
@@ -168,5 +173,46 @@ describe('buildStCompletions', () => {
     const labels = items.map((item) => `${item.kind}:${item.label}`)
     expect(new Set(labels).size).toBe(labels.length)
     expect(items.length).toBeLessThanOrEqual(20)
+  })
+})
+
+describe('lịch sử ST editor bền (T59-506)', () => {
+  it('hoàn tác/làm lại đủ 20 edit và khôi phục đúng cursor/selection của từng snapshot', () => {
+    let history = createStEditorHistory('PROGRAM P\nEND_PROGRAM\n', 8, 9)
+    const snapshots = [history.current]
+
+    for (let index = 1; index <= 20; index += 1) {
+      const source = `PROGRAM P\n  X := ${index};\nEND_PROGRAM\n`
+      const cursor = source.indexOf(String(index)) + String(index).length
+      const snapshot = { source, selectionStart: cursor, selectionEnd: cursor }
+      history = recordStEditorEdit(history, snapshot)
+      snapshots.push(snapshot)
+    }
+
+    expect(history.past).toHaveLength(20)
+    for (let index = 19; index >= 0; index -= 1) {
+      history = undoStEditorEdit(history)
+      expect(history.current).toEqual(snapshots[index])
+    }
+    expect(undoStEditorEdit(history)).toBe(history)
+
+    for (let index = 1; index <= 20; index += 1) {
+      history = redoStEditorEdit(history)
+      expect(history.current).toEqual(snapshots[index])
+    }
+    expect(redoStEditorEdit(history)).toBe(history)
+  })
+
+  it('giới hạn lịch sử đúng contract 50 snapshot và edit mới cắt nhánh redo', () => {
+    let history = createStEditorHistory('0')
+    for (let index = 1; index <= ST_EDITOR_HISTORY_LIMIT + 7; index += 1) {
+      history = recordStEditorEdit(history, { source: String(index), selectionStart: 1, selectionEnd: 1 })
+    }
+    expect(history.past).toHaveLength(ST_EDITOR_HISTORY_LIMIT)
+
+    history = undoStEditorEdit(history)
+    expect(history.future).toHaveLength(1)
+    history = recordStEditorEdit(history, { source: 'nhánh mới', selectionStart: 9, selectionEnd: 9 })
+    expect(history.future).toEqual([])
   })
 })

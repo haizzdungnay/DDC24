@@ -1,6 +1,7 @@
 #include "programming/program_ipc_server.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <utility>
@@ -31,6 +32,9 @@ std::string action_name(ProgramAction action)
     case ProgramAction::Restore: return "RESTORE";
     case ProgramAction::TraceStart: return "TRACE_START";
     case ProgramAction::RetainReset: return "RETAIN_RESET";
+    case ProgramAction::SetProgramEnabled: return "SET_PROGRAM_ENABLED";
+    case ProgramAction::TraceStop: return "TRACE_STOP";
+    case ProgramAction::TraceRead: return "TRACE_READ";
     }
     return {};
 }
@@ -45,6 +49,9 @@ bool parse_action(const std::string& value, ProgramAction* action)
     else if (value == "RESTORE") *action = ProgramAction::Restore;
     else if (value == "TRACE_START") *action = ProgramAction::TraceStart;
     else if (value == "RETAIN_RESET") *action = ProgramAction::RetainReset;
+    else if (value == "SET_PROGRAM_ENABLED") *action = ProgramAction::SetProgramEnabled;
+    else if (value == "TRACE_STOP") *action = ProgramAction::TraceStop;
+    else if (value == "TRACE_READ") *action = ProgramAction::TraceRead;
     else return false;
     return true;
 }
@@ -118,7 +125,9 @@ bool mutation_action(ProgramAction action)
 {
     return action == ProgramAction::Stage || action == ProgramAction::Activate ||
            action == ProgramAction::Restore || action == ProgramAction::TraceStart ||
-           action == ProgramAction::RetainReset;
+           action == ProgramAction::RetainReset ||
+           action == ProgramAction::SetProgramEnabled ||
+           action == ProgramAction::TraceStop;
 }
 
 bool canonical_cbor(const std::vector<uint8_t>& payload)
@@ -292,6 +301,72 @@ bool parse_retain_reset_payload(const ProgramRequest& request, RetainResetComman
     }
 }
 
+/* T59-405. Payload 2 phần tử: `[instance_id (string), enabled (bool)]`.
+ * `operation_id` lấy từ envelope chung như mọi mutation khác. */
+bool parse_set_enabled_payload(const ProgramRequest& request, ProgramEnableCommand* output)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 2 || !value[0].is_string() ||
+            !value[1].is_boolean()) return false;
+        output->operation_id = uuid_text(request.operation_id);
+        output->instance_id = value[0].get<std::string>();
+        output->enabled = value[1].get<bool>();
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+/* T59-408 — payload `TRACE_START`:
+ * `[sessionId, samplePeriodMs, durationMs, [[instanceId, slot], ...]]`.
+ * Biến khai bằng (instanceId, variableName). Số slot là kết quả của một lần
+ * biên dịch cụ thể và không tồn tại ở bất kỳ nơi nào BE nhìn thấy — Revision chỉ
+ * có tên biến. Core đã có bảng tên→slot trong chương trình đang nạp, nên phân
+ * giải ở đây là phân giải ở nơi dữ liệu sống. */
+bool parse_trace_start_payload(const ProgramRequest& request, std::string* session_id,
+                               uint32_t* period_ms, uint32_t* duration_ms,
+                               std::vector<StTraceVariable>* variables)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 4 || !value[0].is_string() ||
+            !value[1].is_number_unsigned() || !value[2].is_number_unsigned() ||
+            !value[3].is_array())
+            return false;
+        *session_id = value[0].get<std::string>();
+        *period_ms = value[1].get<uint32_t>();
+        *duration_ms = value[2].get<uint32_t>();
+        variables->clear();
+        for (const json& item : value[3]) {
+            if (!item.is_array() || item.size() != 2 || !item[0].is_string() ||
+                !item[1].is_string())
+                return false;
+            StTraceVariable variable;
+            variable.instance_id = item[0].get<std::string>();
+            variable.variable_name = item[1].get<std::string>();
+            if (variable.instance_id.empty() || variable.variable_name.empty()) return false;
+            variables->push_back(std::move(variable));
+        }
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+/* Payload `TRACE_STOP` và `TRACE_READ`: `[sessionId]`. */
+bool parse_trace_session_payload(const ProgramRequest& request, std::string* session_id)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 1 || !value[0].is_string()) return false;
+        *session_id = value[0].get<std::string>();
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
 ProgramResult result_for_state(LifecycleState state)
 {
     switch (state) {
@@ -309,15 +384,76 @@ ProgramResult result_for_state(LifecycleState state)
     return ProgramResult::Unavailable;
 }
 
-std::vector<uint8_t> status_payload(const RuntimeOperationSnapshot& snapshot)
+json signal_cell_json(const StSignalDefinition& definition, const StSignalRead& read,
+                      bool* valid)
+{
+    *valid = read.state != StSignalReadState::UNAVAILABLE &&
+             read.state != StSignalReadState::NOT_DECLARED;
+    if (!*valid) return nullptr;
+    switch (definition.type) {
+    case StType::BOOL: return read.value.b;
+    case StType::INT:
+    case StType::DINT: return read.value.i;
+    case StType::UINT: return static_cast<uint32_t>(read.value.i);
+    case StType::REAL:
+        if (!std::isfinite(read.value.r)) {
+            *valid = false;
+            return nullptr;
+        }
+        return read.value.r;
+    case StType::TIME: return read.value.t;
+    }
+    *valid = false;
+    return nullptr;
+}
+
+const char* signal_read_state_name(StSignalReadState state)
+{
+    switch (state) {
+    case StSignalReadState::FRESH: return "FRESH";
+    case StSignalReadState::STALE_HELD: return "STALE_HELD";
+    case StSignalReadState::STALE_FALLBACK: return "STALE_FALLBACK";
+    case StSignalReadState::UNAVAILABLE: return "UNAVAILABLE";
+    case StSignalReadState::NOT_DECLARED: return "NOT_DECLARED";
+    }
+    return "UNAVAILABLE";
+}
+
+std::vector<uint8_t> status_payload(const RuntimeOperationSnapshot& snapshot,
+                                    const StScheduler* scheduler, uint64_t now_mono_ns)
 {
     const json active = snapshot.active_revision_id.empty()
         ? json(nullptr) : json(snapshot.active_revision_id);
     const json lkg = snapshot.lkg_revision_id.empty()
         ? json(nullptr) : json(snapshot.lkg_revision_id);
+    json signals = json::array();
+    if (scheduler != nullptr && scheduler->signal_bus() != nullptr) {
+        const StSignalBus* bus = scheduler->signal_bus();
+        for (std::size_t index = 0; index < bus->size(); ++index) {
+            const StSignalDefinition& definition = bus->definition(static_cast<int>(index));
+            const StSignalRead read = bus->inspect(static_cast<int>(index), now_mono_ns);
+            bool valid = false;
+            const json value = signal_cell_json(definition, read, &valid);
+            const bool stale = read.state == StSignalReadState::STALE_HELD ||
+                               read.state == StSignalReadState::STALE_FALLBACK;
+            signals.push_back(json::array({
+                definition.name,
+                definition.publisher_program,
+                st_type_name(definition.type),
+                value,
+                valid,
+                valid ? (stale ? "UNCERTAIN" : "GOOD") : "BAD",
+                signal_read_state_name(read.state),
+                st_stale_policy_name(definition.stale_policy),
+                definition.freshness_ms,
+                read.published_at_ns,
+                read.generation,
+            }));
+        }
+    }
     return json::to_cbor(json::array({
         snapshot.producer_mode == CutoverMode::PROGRAM_ONLY ? "PROGRAM_ONLY" : "GRAPH_ONLY",
-        active, lkg, snapshot.active_override_ids,
+        active, lkg, snapshot.active_override_ids, signals,
     }));
 }
 
@@ -551,6 +687,62 @@ PeerCredentials ReadPeerCredentials(int socket_fd)
     return output;
 }
 
+ProgramResponse ProgramIpcServer::handle_trace(const ProgramRequest& request,
+                                               uint64_t now_mono_ns) const
+{
+    if (value_trace_ == nullptr || trace_scheduler_ == nullptr) {
+        /* Một `TRACE_START` "thành công" mà không có nơi lấy mẫu là lời hứa
+         * suông: BE sẽ chờ dữ liệu không bao giờ tới. */
+        return make_response(request, ProgramResult::Unavailable, "IPC-TRACE-UNAVAILABLE");
+    }
+    std::string session_id;
+    std::string error;
+    if (request.action == ProgramAction::TraceStart) {
+        uint32_t period_ms = 0;
+        uint32_t duration_ms = 0;
+        std::vector<StTraceVariable> variables;
+        if (!parse_trace_start_payload(request, &session_id, &period_ms, &duration_ms, &variables))
+            return make_response(request, ProgramResult::Rejected, "IPC-PAYLOAD");
+        /* Mốc bắt đầu là THỜI ĐIỂM HIỆN TẠI, không phải `deadline_mono_ns` —
+         * deadline là mốc tương lai của request, và dùng nó sẽ đẩy mẫu đầu tiên
+         * ra sau thời điểm người dùng bấm nút. */
+        if (!value_trace_->start(session_id, *trace_scheduler_, variables.data(), variables.size(),
+                                 period_ms, duration_ms, now_mono_ns, &error))
+            return make_response(request, ProgramResult::Rejected, "IPC-TRACE-REJECTED");
+        return make_response(request, ProgramResult::Accepted, nullptr);
+    }
+    if (!parse_trace_session_payload(request, &session_id))
+        return make_response(request, ProgramResult::Rejected, "IPC-PAYLOAD");
+    if (request.action == ProgramAction::TraceStop) {
+        if (!value_trace_->stop(session_id, &error))
+            return make_response(request, ProgramResult::Rejected, "IPC-TRACE-REJECTED");
+        return make_response(request, ProgramResult::Ok, nullptr);
+    }
+
+    /* TRACE_READ: `[state, droppedCount, [[timestampNs, [[valid, bits], ...]], ...]]`.
+     * Trả trọn nội dung ring; bounded theo trần Ô nên kích thước có giới hạn
+     * trên biết trước. */
+    const StTraceStatus status = value_trace_->status();
+    if (status.session_id != session_id)
+        return make_response(request, ProgramResult::Rejected, "IPC-TRACE-REJECTED");
+    json samples = json::array();
+    for (std::size_t index = 0; index < value_trace_->sample_count(); ++index) {
+        const StTraceSample sample = value_trace_->sample(index);
+        json values = json::array();
+        for (std::size_t variable = 0; variable < value_trace_->variable_count(); ++variable) {
+            uint64_t bits = 0;
+            std::memcpy(&bits, &sample.values[variable], sizeof(bits));
+            /* Gửi BIT thô của ô, không gửi số đã diễn giải: kiểu của ô là dữ
+             * liệu của package, và diễn giải hai lần ở hai bên là hai chỗ để
+             * lệch nhau. */
+            values.push_back(json::array({sample.valid[variable], bits}));
+        }
+        samples.push_back(json::array({sample.timestamp_ns, values}));
+    }
+    const json body = json::array({st_trace_state_name(status.state), status.dropped_count, samples});
+    return make_response(request, ProgramResult::Ok, nullptr, json::to_cbor(body));
+}
+
 ProgramResponse ProgramIpcServer::make_response(const ProgramRequest& request,
                                                 ProgramResult result,
                                                 const char* detail_code,
@@ -612,6 +804,14 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
         if (request.action == ProgramAction::Capabilities) {
             response = make_response(request, ProgramResult::Ok, nullptr,
                                      capabilities_payload());
+        } else if (request.action == ProgramAction::TraceStart ||
+                   request.action == ProgramAction::TraceStop ||
+                   request.action == ProgramAction::TraceRead) {
+            /* Trace KHÔNG cần coordinator: nó đọc trạng thái Program đang chạy,
+             * không đụng vòng đời gói. Bắt nó chờ coordinator sẽ làm chẩn đoán
+             * không dùng được đúng lúc cần nhất — khi chưa có gói nào commission
+             * thành công. */
+            response = handle_trace(request, now_mono_ns);
         } else if (coordinator_ == nullptr) {
             response = make_response(request, ProgramResult::Unavailable,
                                      "IPC-RUNTIME-NOT-CONFIGURED");
@@ -623,7 +823,8 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
             } else if (request.action == ProgramAction::Status) {
                 const RuntimeOperationSnapshot snapshot = coordinator_->snapshot();
                 response = snapshot.impact_snapshot_valid
-                    ? make_response(request, ProgramResult::Ok, nullptr, status_payload(snapshot))
+                    ? make_response(request, ProgramResult::Ok, nullptr,
+                                    status_payload(snapshot, trace_scheduler_, now_mono_ns))
                     : make_response(request, ProgramResult::Unavailable,
                                     "IPC-IMPACT-NOT-READY");
                 if (!snapshot.active_revision_id.empty()) {
@@ -643,7 +844,7 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
                     response = make_response(request, result_for_state(snapshot.state),
                                              snapshot.detail_code.empty()
                                                  ? nullptr : snapshot.detail_code.c_str(),
-                                             status_payload(snapshot));
+                                             status_payload(snapshot, trace_scheduler_, now_mono_ns));
                     response.keeps_running = snapshot.keeps_running;
                     if (!snapshot.active_revision_id.empty()) {
                         response.has_active_revision = true;
@@ -695,6 +896,16 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
                 response = make_response(request, result,
                                          result == ProgramResult::Ok ? nullptr
                                              : (detail.empty() ? "IPC-PAYLOAD" : detail.c_str()));
+            } else if (request.action == ProgramAction::SetProgramEnabled) {
+                ProgramEnableCommand command;
+                std::string detail;
+                std::string error;
+                const bool applied = parse_set_enabled_payload(request, &command) &&
+                    coordinator_->set_program_enabled(command, &detail, &error);
+                response = make_response(request, applied ? ProgramResult::Ok
+                                                          : ProgramResult::Rejected,
+                                         applied ? nullptr : (detail.empty()
+                                             ? "IPC-PAYLOAD" : detail.c_str()));
             } else {
                 response = make_response(request, ProgramResult::Unavailable,
                                          "IPC-ACTION-NOT-IMPLEMENTED");

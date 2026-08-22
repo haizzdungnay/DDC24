@@ -26,7 +26,13 @@ std::vector<uint8_t> build(const std::string& src)
 {
     StIrModule mod;
     StDiagnostic diag;
-    EXPECT_TRUE(compile_st_source(src, &mod, &diag))
+    /* T59-205: harness conformance của ngôn ngữ và runtime, gồm cả PID — nơi
+     * dựng evidence Controls/Safety mà review gate đang chờ. Bật gate ở đây sẽ
+     * khoá luôn thứ mở khoá nó. Đường production giữ mặc định BẬT và có test
+     * riêng ở test_st_review_gate.cpp. */
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    EXPECT_TRUE(compile_st_source(src, &mod, &diag, options))
         << diag.code << ": " << diag.message << " @" << diag.line << ":" << diag.column;
     std::vector<uint8_t> bytes;
     std::string err;

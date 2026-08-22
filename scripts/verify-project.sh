@@ -13,7 +13,7 @@ usage() {
     'Dùng: scripts/verify-project.sh [--component NAME] [--profile NAME]' \
     '     scripts/verify-project.sh --wave W0..W7 [--repeat N]' \
     '' \
-    'Component: layout | cpp | go | frontend | e2e | firmware | release | all' \
+    'Component: layout | cpp | go | frontend | e2e | e2e-real | firmware | release | all' \
     'Profile C++: baseline | modbus | bacnet | modbus-bacnet | full (mặc định)' \
     'Wave: chạy đúng bộ cổng bắt buộc của một Wave Plan 59 và in bảng tổng kết.' \
     '      Cổng cần CI/board/instrument hiện NOT_RUN kèm runbook, không bao giờ PASS.' \
@@ -60,6 +60,7 @@ run_layout() {
   python3 -m unittest "$repo_root/tests/integration/test_repository_dependency_guard.py"
   python3 "$repo_root/scripts/generate_programming_profile.py" --check
   python3 "$repo_root/scripts/generate_programming_library_registry.py" --check
+  python3 "$repo_root/scripts/generate_programming_library_registry.py" --self-test
   python3 "$repo_root/scripts/generate_programming_errors.py" --check
   python3 -m unittest "$repo_root/tests/integration/test_programming_error_catalog.py"
   python3 "$repo_root/scripts/verify_programming_ipc_actions.py" --self-test
@@ -79,7 +80,7 @@ run_cpp() {
     *) printf 'LỖI: profile C++ không hỗ trợ: %s\n' "$profile" >&2; exit 2 ;;
   esac
   local cpp_build="$build_root/cpp-$profile"
-  cmake -S "$repo_root" -B "$cpp_build" \
+  cmake --fresh -S "$repo_root" -B "$cpp_build" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror" \
     -DMKDDC_ENABLE_MODBUS="$modbus" \
@@ -118,6 +119,7 @@ run_frontend() {
 # chứ không bị quên — xem `MKDDC_E2E_QUARANTINE` bên dưới. Thêm một job biết
 # chắc đỏ chỉ làm cả cổng mất giá trị tín hiệu.
 MKDDC_E2E_QUARANTINE="e2e/point-names.spec.ts"
+MKDDC_E2E_REAL_SPEC="e2e/programming-real.spec.ts"
 
 run_e2e() {
   local frontend_dir specs=()
@@ -126,14 +128,24 @@ run_e2e() {
   # sửa script. Đó là cách duy nhất để danh sách này không lại tụt hậu.
   while IFS= read -r spec; do
     [ "$spec" = "$MKDDC_E2E_QUARANTINE" ] && continue
+    # Spec này sở hữu stack BE-Core simulator thật và có config riêng. Chạy nó
+    # lẫn với bộ mock sẽ vừa lặp test vừa làm sai failure boundary của hai gate.
+    [ "$spec" = "$MKDDC_E2E_REAL_SPEC" ] && continue
     specs+=("$spec")
   done < <(cd "$repo_root/$frontend_dir" && find e2e -maxdepth 1 -name '*.spec.ts' | sort)
   if [ "${#specs[@]}" -eq 0 ]; then
     printf 'LỖI: không tìm thấy spec e2e nào — kiểm tra lại đường dẫn\n' >&2
     exit 2
   fi
-  printf 'e2e: chạy %d spec (cách ly: %s)\n' "${#specs[@]}" "$MKDDC_E2E_QUARANTINE"
+  printf 'e2e: chạy %d spec mock (cách ly: %s; gate riêng: %s)\n' \
+    "${#specs[@]}" "$MKDDC_E2E_QUARANTINE" "$MKDDC_E2E_REAL_SPEC"
   (cd "$repo_root/$frontend_dir" && npx playwright test "${specs[@]}")
+}
+
+run_e2e_real() {
+  local frontend_dir
+  frontend_dir="$(active_path web-ui)"
+  (cd "$repo_root/$frontend_dir" && npm run test:e2e:programming-real)
 }
 
 run_firmware() {
@@ -158,6 +170,7 @@ case "$component" in
   go) run_go ;;
   frontend) run_frontend ;;
   e2e) run_e2e ;;
+  e2e-real) run_e2e_real ;;
   firmware) run_firmware ;;
   release) run_release ;;
   all)
@@ -166,6 +179,7 @@ case "$component" in
     run_go
     run_frontend
     run_e2e
+    run_e2e_real
     run_firmware
     ;;
   *) printf 'LỖI: component không hỗ trợ: %s\n' "$component" >&2; exit 2 ;;

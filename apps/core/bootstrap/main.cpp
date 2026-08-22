@@ -90,6 +90,9 @@ int main(int argc, char** argv)
     CutoverMode programming_mode = CutoverMode::GRAPH_ONLY;
     bool programming_runtime_enabled = false;
     std::string programming_sock_path = "/run/mkddc/programming-v1.sock";
+    /* ADR-051: TTL hold-last đã ký là 60 s. CLI chỉ để commissioning/HIL đo hai
+     * biên mà không phải build lại; không set thì dùng đúng số đã ký. */
+    uint32_t program_hold_ttl_ms = st_hold_ttl::kSignedTtlMs;
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
@@ -123,6 +126,20 @@ int main(int argc, char** argv)
             }
         }
         else if (a == "--programming-runtime") programming_runtime_enabled = true;
+        else if (a == "--program-hold-ttl-ms" && i + 1 < argc) {
+            const long long ms = std::atoll(argv[++i]);
+            /* 0 KHÔNG được chấp nhận ở đường sản phẩm: 0 nghĩa là giữ đầu ra vô
+             * hạn khi chương trình chết — đúng hành vi ADR-051 đóng lại. Muốn
+             * tắt TTL thì phải sửa quyết định, không phải truyền một cờ. */
+            if (ms <= 0 || ms > static_cast<long long>(st_hold_ttl::kMaxConfigurableMs)) {
+                std::fprintf(stderr,
+                             "ERROR core.bad_program_hold_ttl_ms '%s' (cần 1..%u ms; 0/vô hạn"
+                             " bị cấm bởi ADR-051)\n",
+                             argv[i], st_hold_ttl::kMaxConfigurableMs);
+                return 1;
+            }
+            program_hold_ttl_ms = static_cast<uint32_t>(ms);
+        }
         else if (a == "--programming-sock" && i + 1 < argc)
             programming_sock_path = argv[++i];
         else if (a == "--help") {
@@ -130,6 +147,7 @@ int main(int argc, char** argv)
                         " [--safe-state-conf FILE] [--io-conf FILE] [--alarm-conf FILE]"
                         " [--schedule-conf FILE] [--scan-ms N]"
                         " [--programming-mode graph_only|program_only] [--programming-runtime]"
+                        " [--program-hold-ttl-ms N]"
                         " [--programming-sock PATH]"
                         " [--log-level LVL]\n");
             return 0;
@@ -242,6 +260,21 @@ int main(int argc, char** argv)
                  static_cast<unsigned long long>(base_step_ns / 1000000ull),
                  programming_mode == CutoverMode::PROGRAM_ONLY ? "program_only" : "graph_only");
 
+    /* ADR-051 — TTL hold-last đo bằng đồng hồ, nên nó độc lập với base step.
+     * Chốt SAU khi base step đã thống nhất với graph.json chỉ để một lần log nói
+     * đủ hai con số cạnh nhau: TTL ngắn hơn một base step thì không lần publish
+     * nào kịp gia hạn, hold-last biến thành rút-ngay. */
+    const uint32_t base_step_ms = static_cast<uint32_t>(base_step_ns / 1000000ull);
+    if (program_hold_ttl_ms < base_step_ms) {
+        std::fprintf(stderr,
+                     "WARN  core.program_hold_ttl_ms=%u < base_step_ms=%u -> nâng lên 1 base step\n",
+                     program_hold_ttl_ms, base_step_ms);
+        program_hold_ttl_ms = base_step_ms;
+    }
+    const uint64_t program_hold_ttl_ns = st_hold_ttl::ns_from_ms(program_hold_ttl_ms);
+    std::fprintf(stderr, "INFO  core.program_hold_ttl_ms=%u signed_ms=%u base_step_ms=%u\n",
+                 program_hold_ttl_ms, st_hold_ttl::kSignedTtlMs, base_step_ms);
+
     PriorityResolver resolver;
 
     /* TASK-PROG-403/404: runtime có thể khởi động cùng GRAPH_ONLY; UDS worker
@@ -250,10 +283,20 @@ int main(int argc, char** argv)
     StScheduler programming_scheduler(programming_runtime_enabled
                                           ? StSchedulerProfile::REV_A
                                           : StSchedulerProfile::SUPPORTING_AS_BUILT);
+    /* T59-504 — bus phải tồn tại ở binary production, không chỉ trong unit
+     * test. Trước đây coordinator nhận package có Published Signal rồi từ chối
+     * ở `rebuild_signal_bus()` vì scheduler bootstrap chưa hề được gắn bus. */
+    StSignalBus programming_signal_bus;
+    programming_scheduler.set_signal_bus(&programming_signal_bus);
     ProgrammingCutover programming_cutover(programming_mode);
     std::unique_ptr<StRetainService> retain_service;
     std::unique_ptr<programming::ProgrammingRuntimeCoordinator> programming_coordinator;
     std::unique_ptr<programming::ProgramIpcServer> programming_ipc_server;
+    /* T59-406/T59-408: sổ candidate và trace giá trị. Cấp phát tĩnh, cùng tuổi
+     * thọ với scan loop — cả hai đều bị đọc từ đường quét nên không được huỷ
+     * trước nó. */
+    programming::ProgramCandidateRegistry programming_candidates;
+    StValueTrace programming_value_trace;
     std::unique_ptr<programming::ProgramIpcUnixEndpoint> programming_ipc_endpoint;
     std::thread programming_ipc_thread;
     if (programming_runtime_enabled) {
@@ -316,8 +359,10 @@ int main(int argc, char** argv)
         if (!programming_coordinator->recover(&recovery_error))
             std::fprintf(stderr, "ERROR programming.recovery_required error=%s\n",
                          recovery_error.c_str());
+        programming_coordinator->set_candidate_registry(&programming_candidates);
         programming_ipc_server = std::make_unique<programming::ProgramIpcServer>(
             static_cast<uint32_t>(::getuid()), programming_coordinator.get());
+        programming_ipc_server->set_value_trace(&programming_value_trace, &programming_scheduler);
         programming_ipc_endpoint = std::make_unique<programming::ProgramIpcUnixEndpoint>();
         std::string ipc_error;
         if (!programming_ipc_endpoint->open(programming_sock_path, &ipc_error)) {
@@ -394,6 +439,9 @@ int main(int argc, char** argv)
     scan_deps.mode = programming_mode;
     scan_deps.cutover = programming_runtime_enabled ? &programming_cutover : nullptr;
     scan_deps.programming_coordinator = programming_coordinator.get();
+    scan_deps.candidate_registry = programming_runtime_enabled ? &programming_candidates : nullptr;
+    scan_deps.value_trace = programming_runtime_enabled ? &programming_value_trace : nullptr;
+    scan_deps.program_hold_ttl_ns = program_hold_ttl_ns;
     ScanLoop loop(scan_deps);
 
     /* SIGHUP → reload io_config + io_safe_state + graph ở ranh giới scan;

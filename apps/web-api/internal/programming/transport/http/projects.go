@@ -242,6 +242,21 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 	status := http.StatusServiceUnavailable
 	public := domain.NewPublicError(domain.ErrUnavailable)
 	var operationError *programmingapplication.OperationPublicError
+	// Lỗi Control Library giữ ba nguyên nhân riêng (thiếu entry / lệch version /
+	// vòng phụ thuộc) tới tận lớp HTTP. Gộp chúng vào CONFLICT chung sẽ xoá đúng
+	// thông tin mà người vận hành cần để biết phải sửa gì.
+	if libraryPublic, mapped := programmingapplication.LibraryPublicError(err); mapped {
+		WriteProgrammingError(w, domain.DefaultHTTPStatus(libraryPublic.Code), libraryPublic, correlationID)
+		return
+	}
+	// Trần Program giữ mã riêng tới tận HTTP: người vận hành cần biết CON SỐ
+	// trần, không chỉ biết là request sai.
+	var programLimit *programmingapplication.ProgramLimitError
+	if errors.As(err, &programLimit) {
+		WriteProgrammingError(w, http.StatusConflict,
+			domain.NewPublicError(domain.ErrProgramLimit), correlationID)
+		return
+	}
 	switch {
 	case errors.As(err, &operationError):
 		public = operationError.Public

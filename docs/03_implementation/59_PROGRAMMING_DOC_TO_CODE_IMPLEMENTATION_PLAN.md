@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.0 |
+| Phiên bản | 2.2 |
 | Trạng thái | **Active — PLAN_READY / IMPLEMENT_READY** |
-| Ngày | 2026-08-20 |
+| Ngày | 2026-08-23 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04` |
 | Detailed Design | [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
@@ -690,46 +690,1475 @@ công cụ sinh, **không phải** mã đã biên dịch từ nguồn thật —
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-201` | P0 | Domain/store SYSTEM+PROJECT library revision/entry/usage | T59-005/102 | ORDERED | Immutable system, project versioning, reference guard, migration/restart tests. |
-| `T59-202` | P0 | Library REST/OpenAPI/RBAC/idempotency/audit | T59-201/006 | ORDERED | Route↔OpenAPI↔client exact; admin mutation, viewer/operator read, negative direct API. |
-| `T59-203` | P1 | FE PGM-04 library search/filter/detail/create/edit/version/usage | T59-202 | ORDERED | Desktop/mobile visual mapping; loading/empty/error/permission; component/a11y/E2E. |
-| `T59-204` | P1 | Library import/export/signature/version compatibility | T59-201/106 | ORDERED | Source-only hostile corpus; no executable/cache/path traversal; no Active mutation. |
-| `T59-205` | P0 | PID registry trạng thái `REVIEW_REQUIRED` + policy token | T59-003/004 | ORDERED | Commission blocked without controlled approval token; cannot bypass from FE payload. |
+| `T59-201` | P0 | Domain/store SYSTEM+PROJECT library revision/entry/usage | T59-005/102 | **DONE** | SYSTEM là snapshot **virtual** sinh từ registry (0 hàng SQLite, trigger chặn cả SQL trực tiếp); PROJECT có Draft→Publish→Deprecate bất biến ở **hai lớp** store+trigger; migration `0007` schema v6→v7 **dừng fail-closed** khi còn hàng library đời v6; 11 test domain + 10 test store gồm reference guard, clone version re-pin dependency, usage seal nguyên tử, restart và fail-closed SYSTEM provider; `go vet` sạch + `go test ./... -count=1` 18/18 package ok; G1 10/10 + self-test 32/32; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
+| `T59-202` | P0 | Library REST/OpenAPI/RBAC/idempotency/audit | T59-201/006 | **DONE** | 3 route DDD §5.1 (`GET /libraries`, `POST|DELETE /projects/{id}/library/entries[/{entryId}]`); OpenAPI `1.23.0` **28 operation** ↔ 28 route Go ↔ client TS sinh lại, cả ba khoá bằng test exact; RBAC kiểm bằng authorizer thật (viewer/operator đọc được, mutation 403); idempotency+audit nằm CÙNG transaction với mutation (migration `0008` mở enum receipt); mutation library dùng chung lane `If-Match` với Draft; 6 test application + 6 test transport gồm cursor ràng buộc filter và regression route-stealing; `go test ./... -count=1` 18/18; G1 10/10; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
+| `T59-203` | P1 | FE PGM-04 library search/filter/detail/create/edit/version/usage | T59-202 | **DONE** | Route `projects/{id}/library` + mục nav desktop; lọc theo scope/kind/từ khoá **tải lại từ server** (không lọc trên trang đã cắt); loading/empty/error/permission tách bạch; `stateLayoutKnown=false` hiện **"chưa biết"** chứ không phải `0 B`; PID hiện cảnh báo review-gate và **không có ô tick duyệt**; ETag Draft mới được dùng lại cho thao tác kế tiếp; 8 test component/a11y; FE 115 file / **1088 test**; `--wave W2` 6/6 PASS. **Còn thiếu:** E2E real-backend thuộc `T59-505`. Chi tiết §3.3. |
+| `T59-204` | P1 | Library import/export/signature/version compatibility | T59-201/106 | **DONE** | Control Library đi trong **bundle nguồn có sẵn** (DDD không mở route export library riêng); manifest thêm `systemLibraryVersion` + khối `library`; export tất định (hai lần cùng byte) và **không** mang artifact/IR/cache; import dựng lại library ở `DRAFT` với identity mới, hash entry khớp từng cái; lệch version registry SYSTEM cho **mã lỗi riêng**; corpus thù địch 10 biến thể đều bị từ chối và **0 mutation**; Seal nay publish+pin library trong cùng transaction; `go test ./... -count=1` 18/18; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
+| `T59-205` | P0 | PID registry trạng thái `REVIEW_REQUIRED` + policy token | T59-003/004 | **DONE** | `reviewGatedFeatures` vào profile v2 + schema; token suy ra từ chính contract (`featureId`+`libraryVersion`+`evidenceRef`), generator từ chối token bịa; gate ép ở **cả ba** đường Check (`compile_st_source` mặc định BẬT, validate CLI, `compile_fbd_source`) và độc lập producer; 8 test C++ + 1 test Go + 1 test FE + self-test generator 7/7 + G1 ghim `reviewGatedFeatures` và `approvedReviewGatedFeatures` (2 mutation mới); `ctest` 1138/1138; `go test ./... -count=1` 18/18; FE 114 file / 1080 test; `--wave W2` 6/6 PASS. Chi tiết §3.3. |
+
+### 3.3 Ghi chú thực thi W2
+
+#### `T59-201` — Domain/store Control Library SYSTEM và PROJECT
+
+**Quyết định lớn nhất: SYSTEM Library không nằm trong SQLite.** Nó là snapshot
+chỉ đọc sinh từ `pou_library_registry_v1.json` cùng compiler/firmware profile.
+Seed nó vào DB sẽ tạo ngay một đường đặc quyền để ghi thêm entry SYSTEM sau khi
+DB đã mở — và một khi tồn tại đường đó, mọi lời hứa "SYSTEM là read-only" chỉ còn
+là quy ước ở lớp application. Store nạp snapshot lúc mở, **validate** rồi giữ bản
+sao; `GetLibraryRevision`/`ListLibraryEntries`/`SearchLibraryEntries` trộn nó với
+PROJECT trong DB. Hai trigger `library_revisions_no_system_insert/update` chặn cả
+SQL trực tiếp, nên test khoá được cả hai chiều: đọc được, và không tạo được bản
+SYSTEM song song.
+
+**Snapshot hỏng thì store không mở.** Provider lỗi hoặc snapshot không hợp lệ đều
+làm `OpenProgrammingStore` fail-closed. Mở store rồi phân giải tên bằng dữ liệu
+không ai kiểm là cách hỏng tệ nhất — nó im lặng.
+
+**Version mới là revision mới, không phải sửa tại chỗ.**
+`CreateProjectLibraryVersion` clone snapshot parent đã publish, **re-pin
+dependency nội revision sang version mới** rồi tính lại content hash. Test khoá
+đúng hệ quả: entry không có dependency giữ **nguyên** content hash, entry có
+dependency **phải đổi** hash, và parent giữ nguyên state/manifest. Nếu clone
+không re-pin thì revision mới sẽ mang pin trỏ về version cũ — một tham chiếu chéo
+version mà không lớp nào phía sau phát hiện được.
+
+**Publish dựng manifest từ chính entries trong transaction.** Caller không được
+truyền manifest vào; nhờ vậy không thể ký một manifest khác với tập entry thực sự
+sắp bị đóng băng. Manifest tất định theo nội dung: dựng lại cùng tập entry theo
+thứ tự upsert **ngược lại** cho đúng cùng SHA-256 — có test riêng.
+
+**Trạng thái layout FB: `0 byte authoritative` khác `chưa biết`.**
+FUNCTION/CONVERSION có `state_size=0` authoritative. FUNCTION_BLOCK được phép ở
+Draft khi chưa biết layout, nhưng **không publish được** nếu thiếu
+version/size/hash. Đoán một con số ở đây sẽ **làm lệch mọi offset RETAIN phía
+sau** — sai lệch im lặng, tệ hơn hẳn là chưa biết. `CHECK` của schema và
+`validateLibraryStateLayout` khoá cùng một bất biến ở hai lớp.
+
+**Reference guard ở hai lớp khác nhau.** Trong Draft: entry đang bị entry khác
+khai dependency thì không xoá được (`ErrLibraryReferenced`), còn entry tự do vẫn
+xoá được — guard chặn tất cả cũng là guard sai. Sau khi Revision seal:
+`library_usages` giữ FK `RESTRICT` và trigger no-update/no-delete, nên usage của
+một Revision immutable không xoá được kể cả bằng SQL trực tiếp.
+
+**Migration v6→v7 dừng trước `ALTER` khi còn hàng library đời v6.** Một hàng v6
+không mang source, interface hay layout, nên nâng cấp nó là **bịa dữ liệu**.
+Preflight `CHECK (legacy_entry_count = 0)` bắt operator phục hồi/điều tra từ
+backup thay vì mở DB rồi hỏng muộn ở lần đọc đầu tiên. Test xác nhận migration
+thất bại giữ `user_version` ở 6, **không** để lại cột/trigger v7 nào, và dữ liệu
+v6 nguyên vẹn.
+
+**Finding sửa kèm trong task.** `normalizeLibraryDependencies` trả `nil` khi entry
+không có dependency, nên `json.Marshal` ghi `null` xuống `dependencies_json`
+trong khi hash canonical của entry đã dùng mảng rỗng `[]`. Hệ quả: **mọi** PROJECT
+library entry không có dependency đều bị `json_type(...)='array'` của schema từ
+chối — tức là đường phổ biến nhất của tính năng không chạy được, và không test nào
+chạm tới nó trước khi bộ test store này được viết. Đã sửa tại đúng điểm chuẩn hoá
+để cả `library_entries` lẫn `pou_objects` cùng ghi `[]`; content hash **không
+đổi** vì nó vốn đã canonicalize thành mảng rỗng.
+
+**Contract đi cùng code.** `programming_store_v1.manifest.json` lên `schemaVersion`
+7 với migration `0007`; G1 re-pin `store`. `immutableEntities` bỏ `library_entries`
+và thêm khối `draftMutableEntities` — sau v7, entry chỉ bất biến khi revision cha
+đã rời `DRAFT`, nên khai nó bất biến vô điều kiện là khai sai.
+
+**Ranh giới trung thực.** Đây là **domain + store**. REST/RBAC/audit thuộc
+`T59-202`, UI thuộc `T59-203`, import/export nguồn thù địch thuộc `T59-204`, và
+layout FB authoritative do compiler sinh vẫn chưa có — store chỉ từ chối những gì
+không authoritative chứ không tự tính được.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-202` — REST Control Library, RBAC, idempotency và audit
+
+**Chỉ ba route, đúng bằng DDD §5.1.** `GET /programming/libraries`,
+`POST /programming/projects/{id}/library/entries`,
+`DELETE .../entries/{entryId}`. Không thêm route "tạo library" hay "publish
+library": DDD khoá đúng ba dòng này, và tự thêm route thứ tư là tự chế contract.
+Hệ quả kéo theo được xử lý ở dưới.
+
+**Entry đầu tiên tự mở Draft library.** Nếu Project chưa có PROJECT Library nào,
+entry đầu tiên mở `1.0.0`; nếu đã có bản publish và chưa có Draft, hệ thống mở
+version **minor kế tiếp** clone từ bản publish mới nhất. Đây là hệ quả trực tiếp
+của việc chỉ có route entry: bắt người dùng "tạo library" trước khi thêm entry là
+dựng một bước không tồn tại trong luồng nào. Version mới chỉ tăng MINOR và bỏ
+patch/prerelease — một Draft vừa mở là tập thay đổi chưa biết, đoán PATCH sẽ nói
+sai mức tương thích ngay khi chưa có thay đổi nào.
+
+**Mutation library đi CHUNG lane concurrency với tài liệu Draft.** `If-Match` là
+ETag Draft của Project, và mutation library **tăng** ETag đó. Hai lane riêng sẽ
+cho phép một lần lưu tài liệu và một lần sửa library xen kẽ nhau mà không bên nào
+thấy — đúng lớp lỗi mà `If-Match` sinh ra để chặn. Test khoá cả chiều khẳng định
+(Project view thấy đúng ETag mới) lẫn chiều phủ định (ETag cũ bị 409).
+
+**Idempotency và audit nằm trong CÙNG transaction với thay đổi.** Migration
+`0008` mở enum `mutation_receipts.action` cho `LIBRARY_ENTRY_UPSERT/DELETE`. Enum
+đó đóng có chủ ý: nó ngăn một action tự chế lọt vào bảng biên nhận rồi "replay"
+một thứ không ai định nghĩa — nên thêm action mới bắt buộc là migration, không
+phải sửa hằng ở lớp Go.
+
+**`REVIEW_REQUIRED` không nhận từ payload.** Nó là cờ Controls/Safety của registry
+SYSTEM. Cho client tự dán nhãn review lên POU của mình sẽ làm nhoè ý nghĩa cờ đó
+ở đúng chỗ nó cần rõ nhất. Schema OpenAPI chỉ cho `AVAILABLE`, và service từ chối
+mọi giá trị khác.
+
+**Ba nguyên nhân phân giải giữ ba mã public tới tận HTTP.** `LibraryPublicError`
+dịch `ST-LIB-001/002` và `ST-POU-003` qua đúng catalog; reference guard trả
+`PRG-ERR-CONFLICT-001`. Gộp chúng vào một mã chung sẽ xoá đúng thông tin người
+vận hành cần để biết phải sửa gì.
+
+**Cursor ràng buộc luôn bộ lọc.** Trang sau phải cùng `scope/kind/q/projectId`
+với trang đầu; nếu không, một client đổi filter mà giữ cursor sẽ nhận trang có
+phạm vi khác mà không hay. Cursor ký HMAC, hết hạn 15 phút, sửa một ký tự là hỏng.
+
+**Hai finding thật, cả hai do test bắt.**
+
+1. *Handler library nuốt route Project khác.* Bản đầu nhận diện route bằng sự có
+   mặt của `PathValue("projectId")`. Nhiều route Project khác cũng mang biến đó,
+   nên `POST /projects/{id}/draft/revisions` rơi vào handler library và **seal
+   Revision trả lỗi request thay vì chạy** — `TestProgrammingProjectDraftRevisionHTTPAndRestart`
+   ở `internal/app` bắt được. Đã đổi sang khớp đường dẫn tường minh và thêm test
+   hồi quy riêng.
+2. *Actor rỗng cho 503 "retryable".* Khi middleware auth chưa gắn principal,
+   store từ chối bằng một lỗi không có sentinel và lớp HTTP dịch thành
+   `PRG-ERR-UNAVAILABLE-001` retryable — tức **bảo client thử lại một thứ không
+   bao giờ thành công**. Service library nay từ chối actor rỗng bằng lỗi REQUEST.
+   Các service Project/Check/Operation có cùng khoảng hở này; nó thuộc ma trận
+   RBAC/security đầy đủ của `T59-603` và được ghi ở đây để không rơi mất.
+
+**Ranh giới trung thực.** Đây là **BE**. UI PGM-04 thuộc `T59-203`; import/export
+nguồn thù địch thuộc `T59-204`; publish library gắn với seal Revision đa Program
+thuộc `T59-301`/`T59-305`. Layout FB authoritative vẫn phải do compiler cấp —
+API chỉ nhận hoặc từ chối, không tự tính.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-205` — Review gate PID: token từ contract, không từ checkbox
+
+**Nguyên văn DDD §9 là ràng buộc, không phải gợi ý.** "Check blocks Commission
+unless profile includes Controls/Safety approval token generated from controlled
+contract — **not a UI checkbox**." Ba mệnh đề đó dẫn tới ba quyết định:
+
+1. *Token nằm trong profile contract.* `product_profile_v2.json` thêm
+   `reviewGatedFeatures`; mỗi mục có `approvalEvidenceRef` và `approvalToken`,
+   **cùng có hoặc cùng rỗng**.
+2. *Token phải suy ra được.* Nó là
+   `sha256("mkddc-controls-safety-approval:v1" + featureId + libraryVersion + evidenceRef)`.
+   Generator tính lại và từ chối mọi token không khớp, nên **không thể bịa** một
+   token hợp lệ ở lớp ngoài. `libraryVersion` nằm trong miền băm có chủ ý: đổi
+   semantics của entry mà giữ nguyên tên sẽ làm token cũ mất hiệu lực, thay vì
+   âm thầm áp phê duyệt của bản cũ cho bản mới.
+3. *Không có đường payload.* Không có trường request, header hay cờ CLI nào đặt
+   được token. Consumer FE chỉ nhận `PROGRAMMING_REVIEW_GATED_FEATURES` để
+   **hiển thị** trạng thái.
+
+**Gate KHÔNG nằm trong typecheck — và đây là điểm dễ làm sai nhất.** Bản đầu đặt
+nó trong `typecheck_st_program`, kết quả là 12 test đỏ: toàn bộ bộ conformance
+của **chính PID** (`StExec.Pid*`, `StIntegration.Pid*`, `StRetain.*`) không
+compile được nữa. Mà bộ đó chính là nơi dựng evidence Controls/Safety
+(`VS-PROG-U12`) — thứ duy nhất mở khoá được gate. Đặt gate ở typecheck là **khoá
+luôn cái chìa**.
+
+Gate vì vậy là **chính sách sản phẩm ở biên Check**: `st_review_gate_check()`
+riêng, được gọi ở `compile_st_source` (mặc định BẬT), ở validate CLI và ở
+`compile_fbd_source`. Bộ conformance PID gọi `StCompileOptions{enforce_review_gate=false}`
+với chú thích nêu đúng lý do. Mặc định là BẬT có test riêng khoá — mặc định tắt
+sẽ làm mọi call site production mất gate trừ khi ai đó "nhớ bật", và nhớ bật
+không phải là biện pháp an toàn.
+
+**Ba đường Check, không hai.** Nếu chỉ gate `compile_st_source` thì validate CLI
+cho PID "hợp lệ" rồi chết ở compile, còn vẽ PID bằng FBD trở thành đường vòng
+hoàn toàn hợp lệ. Cả ba gọi **cùng một hàm**, và có test chứng minh gate độc lập
+producer bằng cách dựng AST thẳng tay không qua parser.
+
+**Guard hai chiều giữa profile và registry.** Entry `REVIEW_REQUIRED` trong
+registry **phải** được khai trong `reviewGatedFeatures`, và feature đã khai
+**phải** thật sự là `REVIEW_REQUIRED`. Bỏ chiều thứ nhất thì một feature gated
+mới lọt qua mà không ai chặn; bỏ chiều thứ hai thì một feature đã duyệt bị chặn
+vĩnh viễn.
+
+**G1 ghim cả trạng thái đã duyệt.** `reviewGatedFeatures: ["PID"]` và
+`approvedReviewGatedFeatures: []`. Mở PID là quyết định Controls/Safety, không
+phải một dòng sửa contract lặng lẽ — nên nó làm gate đỏ cho tới khi pin đổi theo.
+Test C++/Go/FE đều khoá **sự thật hiện tại**: PID đang bị chặn.
+
+**Golden sinh lại bằng compiler thật, không sửa tay.** Profile đổi nội dung nên
+`profile.sha256` và `buildKeySha256` của hai golden build manifest đổi theo. Chúng
+được sinh lại bằng `mkddc-st-compile`; byte `.mkir` **không đổi** (`cmp` khớp cả
+hai), xác nhận profile hash không nằm trong artifact.
+
+**Ranh giới trung thực.** Đây là **cổng**, không phải phê duyệt. PID vẫn
+`REVIEW_REQUIRED` vì `VS-PROG-U12` chưa chạy; task mở nhãn là `T59-706`. UI cảnh
+báo PID thuộc `T59-203`/`T59-506`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-204` — Control Library trong bundle nguồn: hostile corpus và version compatibility
+
+**Không thêm route export/import library.** DDD §5.1 khoá đúng ba route library
+và đã có sẵn `/programming/bundles/export|import` cho trao đổi **nguồn**. Control
+Library *là* nguồn của Project, nên nó đi trong bundle đó. Dựng một kênh trao đổi
+thứ hai sẽ tạo hai định dạng, hai bộ kiểm và hai cách hỏng.
+
+**Bundle mang gì và không mang gì.** `library/entries/<entryId>.json` chứa
+source, interface, dependency và — chỉ với FUNCTION_BLOCK có layout
+authoritative — khối `stateLayout`. Nó **không** mang `contentSha256` của bên
+gửi: hash được tính lại từ nội dung canonical ở phía nhận, nên một bundle khai
+hash sai không thể tự hợp thức hoá nội dung của chính nó. FUNCTION không mang
+`stateLayout`; khai lại "0" ở đó sẽ biến *0 vì đúng là 0* thành *0 vì bundle nói
+thế*.
+
+**Version compatibility là mã lỗi RIÊNG.** `systemLibraryVersion` phải khớp
+**chính xác** registry của controller. Bundle không hỏng — nó chỉ được xuất trên
+một registry khác — nên gộp vào `ErrInvalidBundle` sẽ bảo người vận hành đi tìm
+file hỏng thay vì xuất lại. Entry SYSTEM có thể đổi semantics giữa hai version;
+"gần đúng" nghĩa là chạy nguồn cũ trên ngữ nghĩa mới.
+
+**Import cấp identity MỚI cho library.** Giữ nguyên `libraryRevisionId` của bên
+gửi sẽ làm hai controller khác nhau có hai nội dung khác nhau dưới **cùng một
+identity**, và mọi pin sau đó trỏ mập mờ. Library nhập về ở trạng thái `DRAFT`,
+không phải `PUBLISHED`: bundle là nguồn, không phải bằng chứng đã publish.
+
+**Guard hai chiều giữa manifest và file set.** Có `library` thì phải có đúng số
+file; **không** có `library` thì không được có file library nào. Bỏ chiều thứ hai
+nghĩa là bundle có thể chở theo entry mà manifest không khai — đúng lối giấu nội
+dung.
+
+**Corpus thù địch, mỗi biến thể kiểm một luật.** Path traversal, đường dẫn tuyệt
+đối, file thực thi, entry không có trong manifest, đổi nội dung giữ hash cũ, tự
+dán `REVIEW_REQUIRED`, FUNCTION mang `stateLayout`, `entryCount` lệch, manifest
+xoá khối `library` mà vẫn còn file, dependency trỏ version khác. Với các biến thể
+nhắm vào luật *sau* phép so hash, test cập nhật lại descriptor để corpus kiểm
+đúng luật đang nhắm chứ không dừng sớm. Mỗi lần đều xác nhận **0 Project mới** và
+library nguồn không bị đụng.
+
+**Finding thuộc phạm vi, sửa trong task: Seal Revision không đóng băng library.**
+Trước task này, `SealRevision` không pin library nào — nghĩa là POU dependency
+của một Revision "đã đóng băng" trỏ vào một library **vẫn sửa được**. Nay Seal
+tìm Draft library của Project, publish nó và pin, **trong cùng một transaction**
+với việc đóng băng Revision (`publishProjectLibraryTx` tách ra cho đúng mục đích
+đó). Publish ở transaction riêng cho phép một lần crash để lại library đã publish
+mà không Revision nào trỏ tới — version bị tiêu mà không ai dùng.
+
+**Finding thứ hai: phép đếm descriptor.** `validateRevisionManifests` đếm mọi
+descriptor mang `revisionId` của Revision. File library cũng mang `revisionId`
+của Revision được chọn, nên phép đếm luôn lệch ngay khi bundle có library. Đã sửa
+để chỉ đếm object thật của Revision.
+
+**Ranh giới trung thực.** "Signature" ở tên task vẫn là `HASH_ONLY`: bundle có
+manifest hash đầy đủ và được xác minh, nhưng **chưa ký**. Artifact/library SIGNED
+cùng key custody/rotation thuộc `T59-602`. Seal đa Program (nhiều POU, nhiều
+Program) thuộc `T59-301`/`T59-305`; task này chỉ đóng băng library cùng Revision.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-203` — FE PGM-04 Control Library
+
+**Trang chỉ HIỂN THỊ review-gate, không có ô tick duyệt.** PID hiện nhãn "chờ
+review Controls/Safety" ở cả danh sách lẫn chi tiết, kèm câu nói thẳng rằng Check
+sẽ từ chối mọi Program dùng nó. Không có checkbox, không có nút "đánh dấu đã
+duyệt" — token phê duyệt suy ra từ contract profile và chỉ generator dựng được
+(`T59-205`). Có test khẳng định **không tồn tại** `role="checkbox"` trên trang.
+
+**`stateLayoutKnown=false` hiển thị là "chưa biết", không phải `0 B`.** Đây là
+chỗ dễ nhất để làm hỏng ý nghĩa mà `T59-201` bỏ công tách: hiện `0 B` sẽ làm
+người dùng tin một con số chưa ai tính. Test khoá cả hai chiều — thấy "chưa biết"
+và **không** thấy `0 B`.
+
+**Đổi bộ lọc là tải lại từ server.** Bộ lọc nằm trong dependency của `load`, nên
+`scope/kind/q` đi thẳng vào query. Lọc phía client trên một trang đã bị cắt ở 100
+item sẽ cho kết quả *đúng một phần* mà không có gì báo là thiếu.
+
+**ETag mới được dùng lại ngay.** Mutation library đi chung lane concurrency với
+tài liệu Draft (`T59-202`), nên hook trả ETag mới và trang giữ nó cho thao tác kế
+tiếp. Giữ ETag cũ sẽ làm lần bấm thứ hai bị 409 mà người dùng không hiểu vì sao —
+có test khoá đúng chuỗi hai mutation liên tiếp.
+
+**Permission tách khỏi lỗi.** Viewer/operator đọc được danh sách và chi tiết
+nhưng không thấy form tạo khối; trang nói rõ lý do thay vì để nút chết hoặc trả
+lỗi sau khi bấm. Khối SYSTEM luôn chỉ đọc, kể cả với admin.
+
+**Finding nhỏ, sửa trong task.** Test bản đầu đỏ vì `I18nProvider` chọn ngôn ngữ
+theo `navigator.language`, nên một test khoá chuỗi tiếng Việt sẽ xanh hay đỏ tuỳ
+locale của máy chạy. Đã ghim `mkddc-lang` trong `beforeEach`.
+
+**Ranh giới trung thực.** E2E real-backend cho vòng đời library thuộc `T59-505`
+(không có `page.route` mock). Trang này dùng **client sinh từ OpenAPI**, không tự
+viết fetch, nên hợp đồng route/role đã được khoá ở lớp generated.
+
+**Evidence level.** Host/local (vitest + jsdom). Không phải GitHub CI, không phải
+target/HIL, và **không phải** E2E trình duyệt thật.
 
 ### W3 — Multi-Program Project, Check và Mapping
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-301` | P0 | Project Draft/model/API cho 32 Program + POU + signal definitions | T59-005/006 | ORDERED | CRUD/rename/duplicate/search, ETag/idempotency/restart; 33rd Program reject. |
-| `T59-302` | P0 | Package Check toàn POU/Program/library/signal/resource | T59-106/201/301 | ORDERED | Aggregate diagnostics, deterministic build, no Active effect, concurrent Check bounded. |
-| `T59-303` | P0 | MB_RTU binding compiler adapter qua canonical Point contract | T59-302 | ORDERED | LOCAL/VP/MB_RTU input/output cases; endian/polling không tái định nghĩa; wrong direction reject. |
-| `T59-304` | P0 | Output owner/conflict + Published Signal publisher/consumer validation | T59-302/303 | ORDERED | Duplicate output/publisher reject; freshness/fallback/type graph tests. |
-| `T59-305` | P0 | Package manifest/topology/budget cho 32/16; Program mới Disabled | T59-302/304 | ORDERED | 32 compile, 16 enabled, one-over stable; manifest không chứa creation-order dependency. |
-| `T59-306` | P1 | FE PGM-02/03: POU tree, Program properties, mapping conflicts, signals | T59-301/304 | ORDERED | Sáu route target/legacy redirect; Function/FB hides invalid fields; E2E Draft save/reload. |
+| `T59-301` | P0 | Project Draft/model/API cho 32 Program + POU + signal definitions | T59-005/006 | **DONE** | Document **v2**: POU (`objects`) tách khỏi cấu hình Program, biến vào `locals` của POU, `signals` hạng nhất, bỏ `task.programOrder` theo DDD §4.1; migration v1→v2 **tất định + idempotent + giữ identity**; op mới `upsertObject/removeObject/renameObject/duplicateObject/upsertProgram(v2)/upsertSignal/...` cộng **lớp tương thích op v1** để FE đang chạy không gãy; **Program thứ 33 bị từ chối và Draft giữ đúng 32**; tên POU unique case-folded; không cascade ngầm; 7 test v2 + adapter FE 3 test; `go test ./... -count=1` 18/18; FE 116 file / 1091 test; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
+| `T59-302` | P0 | Package Check toàn POU/Program/library/signal/resource | T59-106/201/301 | **DONE** | Check biên dịch **mọi** Program (bỏ trần pipeline 1 của `T59-002`), **gộp** diagnostic của tất cả Program hỏng và gắn `programId` cho từng cái; `mkddc-st-package` mới lắp container v2 bằng **chính** `WritePackageV2()` production (byte-stable, đọc lại bằng loader trước khi ghi); migration `0009` cho artifact `schemaVersion∈{1,2}`; `contentSha256` tất định qua hai lần Check; Check **không** đụng Draft/Active và không sinh hành động triển khai; hai worker chia nhau Check qua lease; 5 test Check + 3 test packager; `go test ./... -count=1` 18/18; `ctest` 1138/1138; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
+| `T59-303` | P0 | MB_RTU binding compiler adapter qua canonical Point contract | T59-302 | **DONE** | Point contract thêm `extIndex` (slot EXT 1..256 do Point Catalog phân giải); `resolve_io_bindings` nhận MB_RTU và map thẳng sang `StPointKind::EXT` — compiler **không** tự suy slot nên không tái định nghĩa register/function code/endian/chu kỳ poll; LOCAL và MB_RTU sống chung trong một Program; thiếu `extIndex`, thiếu `deviceId`, vượt trần 256, sai chiều và kiểu `TIME` đều fail-closed; guard Go kiểm **hai chiều** (MB_RTU thiếu slot / category khác lại mang slot); 6 test C++ + 1 test Go; `ctest` **1145/1145**; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
+| `T59-304` | P0 | Output owner/conflict + Published Signal publisher/consumer validation | T59-302/303 | **DONE** | Bất biến cấp package kiểm ở **Check** (trước khi biên dịch) chứ không chỉ ở loader: một output binding có đúng một Program owner — nhận diện theo **điểm vật lý** (`deviceId`+`extIndex` với MB_RTU) chứ không theo tên; một signal có đúng một publisher (case-folded); publisher phải là Program có thật; freshness 1000..90000; kiểu trong hệ kiểu ST; `USE_FALLBACK` ghép cứng với giá trị dự phòng. Mọi vi phạm được **gộp** trong một lần Check; đọc chung điểm và ghi điểm riêng vẫn hợp lệ. 7 test; `go test ./... -count=1` 18/18; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
+| `T59-305` | P0 | Package manifest/topology/budget cho 32/16; Program mới Disabled | T59-302/304 | **DONE** | Manifest Check thêm `topology` (mỗi Program: id/tên/chu kỳ/`desiredEnabled=false`) và `budget` (32/16/20% + số Program theo từng lớp chu kỳ); topology sắp theo `programId` nên **không phụ thuộc thứ tự tạo** — hai Project cùng nội dung dựng khác thứ tự cho đúng cùng manifest; trần 32 được ép **lại** ở Check (Revision có thể tới từ bundle import) với one-over ổn định; chu kỳ ngoài ba lớp profile bị từ chối; `desiredEnabled` không có đường nào đặt true. 5 test; `go test ./... -count=1` 18/18; `--wave W3` 6/6 PASS. Chi tiết §3.4. |
+| `T59-306` | P1 | FE PGM-02/03: POU tree, Program properties, mapping conflicts, signals | T59-301/304 | **DONE** | IA sáu trang đảo chiều: `projects/{id}/programs` và `.../mapping` nay là **route đích** (DDD §8), `/design` thành lối vào cũ và chuyển hướng theo `?tab=` **giữ nguyên** query định vị lỗi; nav trỏ route mới; cây POU gom ba nhóm Programs/Functions/Function Blocks đọc document v2 **trực tiếp**; inspector **ẩn** chu kỳ và trạng thái bật với Function/FB (không hiện rồi xám); Program hiện `Tắt (mặc định cho Program mới)`; 11 test FE mới; FE **118 file / 1102 test**; `--wave W3` 6/6 PASS. **Còn thiếu:** E2E real-backend Draft save/reload thuộc `T59-505`. Chi tiết §3.4. |
+
+### 3.4 Ghi chú thực thi W3
+
+#### `T59-301` — Document v2: POU, 32 Program và Published Signal
+
+**Ba khác biệt bản chất so với v1, mỗi cái sửa một lỗi mô hình thật.**
+
+1. *POU tách khỏi cấu hình Program.* `objects` giữ mã nguồn và interface;
+   `programs` chỉ giữ chu kỳ và trỏ tới một object kind `PROGRAM`. Trộn hai thứ
+   như v1 làm "đổi chu kỳ" và "sửa mã" đụng cùng một bản ghi — mọi diff, mọi
+   impact và mọi hash đều không phân biệt được hai loại thay đổi đó.
+2. *Bỏ `task.programOrder`.* DDD §4.1 cấm expose Task order và §7.1 quy định mỗi
+   Program tự release theo deadline riêng. Giữ một mảng thứ tự là **hứa một ngữ
+   nghĩa mà runtime không thực hiện**.
+3. *`signals` là công dân hạng nhất*, không phải biến toàn cục ẩn, và mang đủ
+   publisher/freshness/policy/fallback ngay ở Draft.
+
+**Migration v1→v2 không sinh identity mới.** Chạy hai lần trên cùng document cho
+**đúng cùng byte**, và chạy lại trên chính kết quả v2 là no-op. Mọi `programId`,
+`variableId`, `bindingId` cũ được giữ nguyên: đổi identity khi migrate sẽ làm mọi
+Revision đã seal trỏ vào hư không. Chu kỳ của Task v1 trở thành chu kỳ của từng
+Program; biến v1 vào `locals` của đúng POU sở hữu; binding v1 được nối lại với
+`programId` + tên biến.
+
+**Lớp tương thích op v1 là bắt buộc, không phải tiện lợi.** FE đang chạy và mọi
+bundle/test hiện có nói ngôn ngữ v1. Đổi cả model lẫn toàn bộ consumer trong một
+bước là cách chắc chắn để một consumer bị bỏ quên rồi hỏng lặng lẽ. Op v1 giữ
+NGUYÊN tên và được dịch sang v2 tại một chỗ; phân biệt v1/v2 theo **hình dạng
+payload** (`program.objectId` chỉ có ở v2, `program.document` chỉ có ở v1).
+Binding v1 giữ hình dạng **mở** — Mapping tab ghi thêm `point`, `dataType`,
+`unit`, `writable`; giải mã chặt ở đây sẽ từ chối đúng dữ liệu mà lớp Check đang
+đọc.
+
+**Trần 32 là trần cứng và Draft không nhận nửa vời.** Program thứ 33 bị từ chối
+và cả POU đi kèm cũng **không** được ghi — test kiểm cả hai, vì một Draft nhận
+POU rồi từ chối Program sẽ để lại rác mà người dùng không thấy.
+
+**Không cascade ngầm.** Xoá POU đang có Program, hoặc xoá Program đang publish
+signal, đều **báo lỗi** thay vì xoá kèm. Xoá kèm làm người dùng mất cấu hình mà
+không ai nói.
+
+**`USE_FALLBACK` và giá trị dự phòng đi liền nhau.** Bắt buộc có với
+`USE_FALLBACK`, cấm có với ba chính sách còn lại — đúng lối "im lặng thay bằng 0"
+mà DDD §10 cấm. Dải `freshnessMs` 1000..90000 khớp **chính xác** `CHECK` của
+store: hai lớp nói khác nhau nghĩa là lớp trên nhận rồi lớp dưới chối.
+
+**Ba consumer được sửa theo, không nhân bản dữ liệu.**
+
+- `ioMapFromRevision` đọc `locals` của POU thay vì object kind `VARIABLE`. Nhân
+  bản biến ra một object thứ hai chỉ để lớp này đọc được là cách hai bản trôi
+  khỏi nhau ngay lần sửa sau.
+- `revisionChangeCategory` phân loại `RETAIN` từ **tập biến RETAIN** của POU. Bỏ
+  nhánh này thì impact RETAIN im lặng biến mất và Commission không còn hỏi
+  acknowledgement RETAIN nữa. So cả payload sẽ báo RETAIN cho mọi lần sửa mã, nên
+  chỉ so chữ ký của các biến `retain=true`.
+- `compilerInput` đọc **cả hai** tên (`objectId`/`source` và `programId`/
+  `document`): một Revision seal trước khi nâng model vẫn phải Check lại được.
+
+**Cấu hình Program đi trong payload POU, không thành object riêng.**
+`revision_objects` khoá theo `object_id` duy nhất và Program là quan hệ 1:1 với
+đúng một PROGRAM POU. Tách thành hai Revision object buộc phải **bịa một UUID
+thứ hai cho cùng một thứ**.
+
+**Trần dưới của Revision object hạ từ 2 xuống 1.** v2 bỏ object `TASK`, nên một
+Project chưa có POU nào seal ra đúng một object `METADATA` — đó là trạng thái hợp
+lệ, không phải bundle hỏng.
+
+**FE: một adapter, không sửa bốn tab.** `toWorkspaceDocument` chiếu v2 về view
+model mà bốn tab Design đang dùng. Đường **ghi** vẫn là op v1, nên đổi cả đọc lẫn
+ghi cùng lúc sẽ là hai thay đổi lớn chồng nhau. Chuyển tab sang mô hình v2 nguyên
+bản thuộc `T59-306`; tới lúc đó adapter biến mất. Chu kỳ lạ rơi về 1000 thay vì
+ép kiểu — giao diện không được hiện một chu kỳ mà profile không cho phép.
+
+**Ranh giới trung thực.** Đây là **model + Draft API**. Check đa Program thuộc
+`T59-302`; binding MB_RTU thuộc `T59-303`; kiểm output owner/publisher ở cấp
+package thuộc `T59-304`; UI PGM-02/03 thuộc `T59-306`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-302` — Check cấp package: mọi Program, gộp diagnostic, container thật
+
+**Bỏ trần pipeline "một Program mỗi lần chạy".** `T59-002` ghi rõ đây là giới hạn
+giai đoạn chứ không phải capacity sản phẩm, và task này gỡ nó: `compilerInputs`
+dựng input cho **mọi** Program, sắp theo `objectId` để thứ tự biên dịch — và do
+đó thứ tự diagnostic — không phụ thuộc thứ tự đọc DB.
+
+**Gộp diagnostic thay vì dừng ở Program đầu tiên hỏng.** Dừng sớm bắt người dùng
+sửa từng lỗi rồi chạy lại Check; với 32 Program đó là 32 vòng. Mỗi diagnostic
+được gắn `programId` của chính nó — compiler một-nguồn không biết nó đang ở
+Program nào nên luôn trả chuỗi rỗng, và **một mã lỗi không kèm Program là một mã
+lỗi không dùng được**: người đọc không biết mở file nào.
+
+**Container v2 do CHÍNH writer production ghi.** `mkddc-st-package` là CLI mới
+gọi đúng `WritePackageV2()` mà golden và fuzz của `T59-106` đang canh, rồi **đọc
+lại bằng chính loader** trước khi ghi ra đĩa. Cài lại định dạng bằng Go sẽ tạo bản
+thứ hai cho cùng một format, và bản thứ hai luôn là bản quên cập nhật. CLI
+**không** biên dịch lại gì: nó nhận đúng blob IR v1 mà Check vừa tạo, nên hash
+package suy được từ hash các thành phần.
+
+**Vì sao không để Check PASSED mà thiếu artifact.** Store ép bất biến "PASSED ⇒
+có Artifact" từ v1, và bất biến đó đúng: một Check báo *sẵn sàng* trong khi không
+có gì nạp được là một Check nói dối. Vì vậy multi-Program **phải** có container
+thật — đó là lý do packager được làm ngay ở task này thay vì đẩy sang `T59-305`.
+Khi không có packager, Check **fail-closed** và nêu đúng thứ còn thiếu.
+
+**Hai con số hash, hai câu hỏi khác nhau.** `contentSha256` băm dãy
+`(programId, artifactSha256)` — tất định theo **nội dung**, không phụ thuộc
+container. `containerSha256` là hash của chính package đã ghi. Gộp chúng lại sẽ
+làm mất khả năng trả lời riêng "nội dung có đổi không" và "byte nạp lên Core là
+gì".
+
+**Migration `0009` mở `schema_version ∈ {1,2}` cho `artifacts`.** CHECK cũ viết
+cứng `= 1` từ thời mỗi Revision chỉ có một Program; giữ nguyên nó sẽ chặn đúng
+thứ Check vừa dựng được, và chặn ở lớp DB nên lỗi hiện ra rất xa nguyên nhân.
+Rebuild giữ **nguyên** hình dạng mà migration v3 đã chốt: **không** có UNIQUE trên
+content hash (v3 bỏ có chủ ý — hai Check có byte deterministic giống nhau là
+chuyện bình thường), và giữ lại index cùng hai trigger bất biến.
+
+**Finding trong chính task.** Bản đầu của `0009` vô tình đưa lại UNIQUE trên
+`(sha256, profile, target_abi)` và làm rơi index/trigger, tái tạo đúng lỗi mà
+migration v3 đã sửa. Test `TestCheckLeaseIdempotencyAtomicArtifactAndDeterministicDedup`
+bắt được ngay — đó là giá trị của việc chạy **toàn bộ** bộ test sau mỗi migration.
+
+**Ba bất biến còn lại được khoá bằng test.** Check **không** đụng Draft (ETag và
+content hash không đổi) và **không** sinh hành động triển khai nào trong audit,
+kiểm ở **cả hai** chiều đạt/hỏng — chỉ kiểm chiều hỏng sẽ bỏ lọt đúng trường hợp
+Check đạt rồi tự ý kích hoạt. Hai worker chạy đồng thời chia nhau Check qua lease
+và Program chỉ được biên dịch đúng số lần cần thiết.
+
+**Ranh giới trung thực.** Bảng POU signature trong container hiện chỉ khai
+`PROGRAM`; signature đầy đủ (FUNCTION/FB, cổng, kiểu), signal defs, binding
+manifest, resource budget và `desiredEnabled=false` cho Program mới thuộc
+`T59-305`. Khai thiếu tốt hơn khai bừa: loader kiểm bảng này và một bản khai sai
+sẽ được nạp **như thật**.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-303` — MB_RTU đi qua Point contract, compiler không sở hữu giao thức
+
+**Ranh giới quyết định toàn bộ thiết kế.** Compiler **không biết** register,
+function code, endian hay chu kỳ poll — và nó không được biết. Ánh xạ một điểm
+Modbus sang vị trí trong SHM là việc của hệ Modbus RTU. Vì vậy contract Point
+thêm đúng một trường: `extIndex` — slot EXT `1..KX_N_EXT` mà **Point Catalog**
+phân giải. Compiler nhận nó nguyên trạng và map thẳng sang `StPointKind::EXT`.
+
+**Vì sao không suy `extIndex` từ `pointId`.** Suy nó ở đây nghĩa là định nghĩa
+lại ánh xạ Modbus ở lớp **không sở hữu** nó, và hai định nghĩa sẽ trôi khỏi nhau
+— đúng cơ chế đã sinh ra drift ở registry Control Library. Thiếu `extIndex` là
+**thiếu dữ liệu**, và câu trả lời đúng là từ chối chứ không đoán.
+
+**IR không cần đổi.** `StPointKind::EXT = 7` và `StPointCategory::MB_RTU` đã có
+sẵn từ trước với `st_point_kind_limit(EXT) = KX_N_EXT`; thứ thiếu duy nhất là
+`resolve_io_bindings` chặn category này. Container/artifact vì thế
+**byte-compatible** với bản cũ.
+
+**Identity là cặp `(deviceId, pointId)`.** Thiếu `deviceId` thì hai thiết bị có
+thể dùng cùng tên điểm và identity mất tính duy nhất — bị từ chối.
+
+**Guard hai chiều ở lớp BE.** `extIndex` chỉ có nghĩa với MB_RTU: MB_RTU thiếu
+slot bị chặn, và category khác **mang** slot cũng bị chặn. Bỏ chiều thứ hai là mở
+một trường vô nghĩa mà lớp sau phải đoán xem có nên tin hay không.
+
+**Hai test cũ được thay vì chúng khoá đúng thứ task này gỡ.**
+`RejectsUnsupportedCategoryMbRtu` khoá hành vi "MB_RTU không hỗ trợ" — nay thay
+bằng `RejectsMbRtuWithoutResolvedExtIndex` (đúng thứ vẫn phải bị từ chối) và
+`RejectsCategoryOutsideAllowlist` (giữ nguyên phép kiểm category cho `BACNET`).
+Xoá mà không thay thế sẽ để mất phép kiểm allowlist.
+
+**Ranh giới trung thực.** Point Catalog phía BE **chưa** phát `extIndex` cho
+Mapping tab; đường đó cùng UI chọn điểm MB_RTU thuộc `T59-306`. Nghiệm thu I/O
+Modbus thật trên board thuộc `T59-703`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-304` — Bất biến cấp package kiểm ở Check, không chỉ ở loader
+
+**Vì sao kiểm lại thứ loader đã kiểm.** Loader v2 (`T59-106`) kiểm "một output
+owner" và "một publisher" vì artifact có thể tới từ nơi khác. Nhưng loader chạy
+lúc **Commission** — báo lỗi ở đó nghĩa là báo ở chỗ **xa nguyên nhân nhất**, sau
+khi người dùng đã đi qua toàn bộ Check và bấm triển khai. Kiểm ở Check là thứ duy
+nhất cho người dùng biết **phải sửa gì**.
+
+**Kiểm TRƯỚC khi biên dịch.** Một package có hai Program cùng ghi một output là
+package sai bất kể từng Program compile sạch hay không; biên dịch 32 Program rồi
+mới báo là lãng phí đúng thứ người dùng đang chờ.
+
+**Nhận diện theo ĐIỂM VẬT LÝ, không theo chuỗi tên.** Với MB_RTU, hai binding
+cùng `(deviceId, extIndex)` là **cùng một thanh ghi** kể cả khi tên điểm viết
+khác nhau. So bằng tên sẽ bỏ lọt đúng trường hợp nguy hiểm — và đó là trường hợp
+dễ xảy ra nhất khi hai kỹ sư đặt tên khác nhau cho cùng một điểm.
+
+**Chiều khẳng định cũng được khoá.** Hai Program **đọc chung** một điểm là hợp
+lệ; mỗi Program ghi một điểm riêng là hợp lệ. Guard chặn tất cả cũng là guard sai
+và sẽ "xanh" ở mọi test phủ định.
+
+**Bốn luật của Published Signal.** Đúng một publisher (so **case-folded** — hai
+tên khác hoa/thường là một signal ở compiler); publisher phải là Program có thật
+(signal mất publisher là signal không ai ghi, consumer chờ vĩnh viễn); freshness
+`1000..90000` khớp chính xác dải mà store và runtime cùng dùng; và `USE_FALLBACK`
+ghép cứng với giá trị dự phòng — đúng lối "im lặng thay bằng 0" mà DDD §10 cấm.
+
+**Gộp, không dừng sớm.** Cùng lý do với `compilerInputs`: mọi vi phạm của package
+hiện ra trong **một** lần Check.
+
+**Đọc được cả hai đời binding.** Binding v1 để identity điểm ở cấp gốc, v2 gom
+vào `point`; hàm kiểm đọc cả hai để một Revision seal trước khi nâng model vẫn
+kiểm được.
+
+**Ranh giới trung thực.** Đây là kiểm **định nghĩa**. Consumer thật của signal
+(đọc giá trị trong ST/FBD), double-buffer, freshness runtime và fallback lúc chạy
+thuộc `T59-404`; trọng tài output và candidate withdrawal thuộc `T59-406`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-305` — Topology và budget: không bám thứ tự tạo, Program mới luôn Disabled
+
+**Thứ tự tạo là dữ liệu của quá khứ, không phải của package.** Topology sắp theo
+`programId` chứ không theo thứ tự xuất hiện trong tài liệu. Nếu manifest bám thứ
+tự tạo thì hai Project **cùng nội dung** nhưng dựng theo thứ tự khác nhau sẽ cho
+hai package khác nhau — và mọi so sánh provenance giữa hai controller mất nghĩa.
+Test đảo thứ tự đầu vào và đòi manifest **giống hệt**.
+
+**Program mới LUÔN `desiredEnabled=false`.** Package không được tự bật thứ vừa
+được nạp: bật là một quyết định vận hành riêng, có audit riêng, và người vận hành
+phải thấy nó **trước khi** nó chạy (DDD §0/§4.3). Không có đường nào đặt cờ này
+true ở lớp này, nhưng phép kiểm vẫn giữ — một package tự bật Program là một
+package tự triển khai chính nó.
+
+**Trần 32 được ép LẠI ở Check.** `T59-301` đã ép ở Draft, nhưng một Revision có
+thể tới từ **bundle import** hoặc từ một Draft cũ hơn. Check là biên cuối trước
+khi package thành artifact, nên nó không được tin lớp trước. One-over báo đúng
+`ST-LIM-009` với `limit` là trần sản phẩm thật, không phải một con số khác.
+
+**Chu kỳ ngoài ba lớp profile bị từ chối.** Một chu kỳ lạ là một lớp lập lịch
+**không tồn tại**; chấp nhận nó ở Check chỉ đẩy lỗi xuống runtime, nơi nó biểu
+hiện thành deadline miss chứ không thành một câu trả lời hiểu được.
+
+**Budget đếm theo từng lớp chu kỳ.** Đây là dữ liệu mà scheduler (`T59-402`) dùng
+để phân bổ, nên đếm sai ở đây là phân bổ sai ở đó. Trần `32/16/20%` lấy từ profile
+sinh, không phải hằng viết trong code.
+
+**Ranh giới trung thực.** Trần **16 Enabled** được *ghi* vào manifest nhưng chưa
+được *thi hành* ở đây: nó chỉ có nghĩa khi có intent enable thật, và đường đó là
+`T59-405`. Ngân sách thời gian thực (`budgetUs` theo Program, deadline, đo tải)
+thuộc `T59-402`. Bảng POU signature đầy đủ trong container vẫn thuộc phần còn lại
+của lane compiler.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-306` — IA sáu trang: đảo chiều route và cây POU kind-aware
+
+**Đảo chiều `design` ↔ `programs/mapping`.** DDD §8 khoá sáu route, trong đó
+`projects/{id}/programs` (PGM-02) và `.../mapping` (PGM-03) là **route đích**.
+Trước task này chúng chỉ là redirect **tới** `/design`; nay ngược lại. Lý do
+không giữ nguyên: IA là hợp đồng điều hướng, và để route đích làm redirect nghĩa
+là địa chỉ thật của trang không bao giờ xuất hiện trên thanh URL — mọi link chia
+sẻ, bookmark và báo lỗi đều trỏ vào lối vào cũ.
+
+**Route thắng query.** `DesignWorkspacePage` nhận `route` cố định tab; nếu query
+thắng thì `/mapping?tab=programs` sẽ hiện một trang **không khớp địa chỉ của
+chính nó**.
+
+**Lối vào cũ giữ nguyên query định vị lỗi.** Một link báo lỗi cũ mang theo
+`program/line/column`; mất chúng nghĩa là mất luôn vị trí lỗi. `tab=execution`
+chưa có route đích riêng trong IA sáu trang nên nó đi tiếp dưới dạng query trên
+`/programs` — giữ hành vi thay vì im lặng bỏ mất.
+
+**Cây POU đọc document v2 TRỰC TIẾP.** Ba nhóm `Programs`/`Functions`/
+`Function Blocks` với số đếm, sắp theo tên. Đây là phần IA mới nên nó không đi
+qua adapter tương thích của `T59-301`; editor cũ bên dưới vẫn dùng adapter cho
+tới khi lane editor chuyển sang v2.
+
+**Inspector ẨN trường không có nghĩa, không hiện rồi xám.** Một FUNCTION không có
+chu kỳ và không có trạng thái bật — nó không phải đơn vị lập lịch. Hiện một ô
+"chu kỳ" bị xám vẫn **nói rằng khái niệm đó tồn tại ở đây**, và người dùng sẽ đi
+tìm cách bật nó. Thay vào đó trang nói thẳng: POU dùng chung chỉ chạy khi được
+Program gọi. Program hiện `Tắt (mặc định cho Program mới)` — khớp đúng
+`desiredEnabled=false` mà `T59-305` ghi vào topology.
+
+**Ranh giới trung thực.** E2E real-backend cho Draft save/reload thuộc `T59-505`
+(không `page.route` mock). Mapping conflict **hiển thị** trên UI cần diagnostic
+của Check đi tới trang Mapping — đường đó gắn với `T59-503`; luật conflict đã
+được ép ở BE (`T59-304`) nên không có đường nào tạo được cấu hình xung đột mà
+Check bỏ qua.
+
+**Evidence level.** Host/local (vitest + jsdom). Không phải GitHub CI, không phải
+target/HIL, và **không phải** E2E trình duyệt thật.
 
 ### W4 — Runtime, scheduler, signal, Enable/Disable và output
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-401` | P0 | Package coordinator/loader v2 + topology image, bỏ hardcode `program-main` | T59-106/305 | ORDERED | v1/v2 prepared image; stage corrupt no mutation; package status/read-back. |
-| `T59-402` | P0 | Per-Program due queue/state/period/budget/metrics, max 16 | T59-401 | ORDERED | 10-Program/3-period host fixture; deterministic deadline; creation reorder same result. |
-| `T59-403` | P0 | Worker lanes/fault isolation/no-allocation RT | T59-402 | ORDERED | Single/multicore same semantics; TSan/no allocation/blocking; one Program fault isolated. |
-| `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | ORDERED | No torn read; fallback/hold/wait; producer disable/fault/recover tests. |
-| `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | ORDERED | RBAC/idempotency/restart intent; STARTING/RUNNING/STOPPING/DISABLED truth. |
-| `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | ORDERED | Disable/fault/TTL withdraw; next priority/default/safe path; no direct IOP. |
-| `T59-407` | P0 | Per-Program/FB RETAIN namespace/layout/restart/reset | T59-104/401 | ORDERED | Warm/cold/revision/corrupt/reset matrix; no half reset; Program isolation. |
-| `T59-408` | P1 | Core trace ring buffer + real `TRACE_START/STOP` | T59-402/006 | ORDERED | 10k/10 min bounded, no RT allocation; BE caller thật; action ma = 0. |
+| `T59-401` | P0 | Package coordinator/loader v2 + topology image, bỏ hardcode `program-main` | T59-106/305 | **DONE** | `UnpackPackageV2` dùng **chung một parser** với loader (không bản thứ hai); coordinator probe v1/v2 và dựng topology theo **chính package** — bootstrap không còn phải biết trước tên Program; `instance_id` bỏ hardcode `program-main`, thay bằng validator định dạng; stage/arm/rollback/start chạy trên **toàn bộ** tập instance; gói hỏng để lại **0 mutation** (mọi stage trước đó bị huỷ); `instance_ids()` cho read-back; 4 test mới; `ctest` **1149/1149**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
+| `T59-402` | P0 | Per-Program due queue/state/period/budget/metrics, max 16 | T59-401 | **DONE** | Chu kỳ release theo **từng Program** (`st_program_due`/`st_program_mark_released`), bù trôi theo mốc **lý thuyết**, lỡ chu kỳ thì **đếm và bỏ** chứ không chạy bù; chu kỳ đi **trong PROGRAM_TABLE của package** nên hai controller cùng gói chạy cùng dãy release; writer **và** loader cùng từ chối chu kỳ ngoài ba lớp profile; trần **16 Program chạy đồng thời** ép ở `start()`; thứ tự chạy độc lập thứ tự tạo; đo `last_exec_ns`/`max_exec_ns`/`missed_release_count` theo Program. Sửa kèm: package v2 **không sống sót reboot** (đường restore nạp nguyên container như artifact v1). 11 test mới; `ctest` **1159/1159**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
+| `T59-403` | P0 | Worker lanes/fault isolation/no-allocation RT | T59-402 | **DONE** | Lane là đơn vị song song (`StLaneMode::SEQUENTIAL|PARALLEL`, worker tạo sẵn ngoài chu kỳ, spin+yield không vào kernel); hai chế độ cho **đúng cùng** kết quả trên fixture 10 Program/3 chu kỳ/4 lane, ổn định qua 20 lần lặp; **đảo chiều** chính sách fault — fault của một Program **không** còn dừng cả Task (kiến trúc §8 `isolate Program`); đường quét **0 cấp phát** ở cả hai chế độ; lane vượt số worker vẫn chạy nốt trên luồng gọi. 7 test mới; `ctest` **1166/1166**; TSan 0 cảnh báo. Chi tiết §3.5. |
+| `T59-404` | P0 | Published Signal double-buffer/freshness/policy | T59-402/304 | **DONE** | `StSignalBus` double-buffer, commit ở **boundary** nên mọi consumer trong một chu kỳ thấy cùng một ảnh; **0 đọc rách** qua 20.000 vòng publisher/consumer song song trên `StCell` 8 byte; ba chính sách `HOLD_LAST`/`USE_FALLBACK`/`WAIT` cho ba hành vi khác nhau, "chưa ai publish" khác "quá hạn"; producer dừng thì giá trị **quá hạn theo freshness** chứ không biến mất tức thì, hồi phục ngay ở boundary kế. Sửa kèm: signal **chưa từng** đi vào container (bus runtime luôn rỗng) và `stalePolicy` **không phải enum đóng** ở Check. 15 test mới; `ctest` **1179/1179**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
+| `T59-405` | P0 | Product Enable/Disable store→API→IPC→Core→read-back/audit | T59-401/006 | **DONE** | Đường đầy đủ: store (`program_runtime_intents`, migration **v10**) → API (`PUT .../programs/{id}/runtime-intent`, `GET .../programs`, RBAC admin/viewer, idempotency) → IPC (**action mới** `SET_PROGRAM_ENABLED`, protocolMinor 0→1 tương thích ngược) → Core (`set_program_enabled` áp lên đúng một instance) → read-back + audit **cùng một transaction**. Intent và trạng thái là **hai trường riêng**; Core từ chối/không sẵn sàng vẫn giữ intent bền vững. Trần 16 Enabled ép ở **hai** lớp. Sửa kèm: trigger `generation` chặn cả read-back; biên nhận idempotency đòi ETag cho mutation không thuộc Draft. 10 test mới; `ctest` **1180/1180**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
+| `T59-406` | P0 | Candidate registry/withdrawal/output ownership/arbitration/interlock/safe-state | T59-403/405 | **DONE (đóng trọn 2026-08-21)** | `ProgramCandidateRegistry` trả lời **ai đang giữ output nào và vì sao không còn giữ** (enum lý do đóng: `OPERATOR_DISABLE`/`FAULT_TTL_EXPIRED`/`PACKAGE_REPLACED`); bất biến một-output-một-owner ép **lại** ở runtime; rút candidate → trọng tài rơi đúng **mức tiếp theo → default**, không kẹt ở giá trị cuối của Program đã dừng; gói mới xoá sạch quyền sở hữu cũ; luật **không có đường Program→IOP trực tiếp** kiểm bằng đọc chính mã nguồn. 9 test mới; `ctest` **1187/1187**; `--wave W4` 5/5 PASS. **Mục treo cuối cùng đã đóng 2026-08-21 bằng `ADR-051`:** TTL hold-last = **60 s đồng hồ**, đo tuổi của LỆNH (phủ cả `ROLLED_BACK`/Task-bị-disable, không riêng `FAULTED`), mặc định `ScanDeps` là giá trị đã ký thay vì `0`; 5 test mới, `ctest` **1205/1205**. Chi tiết §3.5. |
+| `T59-407` | P0 | Per-Program/FB RETAIN namespace/layout/restart/reset | T59-104/401 | **DONE** | Sửa lỗi **reset nửa vời**: reset trên Program đang DỪNG chỉ sạch trong RAM, file bền vững giữ giá trị cũ nên khởi động lại là giá trị cũ quay về. Nay reset công bố ảnh đã reset **ngay tại boundary**, không phụ thuộc trạng thái chạy. Ma trận warm/cold/revision/corrupt/reset đóng đủ; reset **cô lập** giữa Program; file hỏng của một Program **không** làm Program khác cold-init. 3 test mới; test chống hồi quy đã kiểm chứng bằng cách gỡ bản vá (đỏ đúng chỗ); `ctest` **1191/1191**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
+| `T59-408` | P1 | Core trace ring buffer + real `TRACE_START/STOP` | T59-402/006 | **DONE** | `StValueTrace` lấy mẫu tại **ranh giới quét**, bounded 10.000 Ô / 10 phút, **0 cấp phát**; ba action IPC thật `TRACE_START`/`TRACE_STOP`/`TRACE_READ` (protocolMinor 1→2, tương thích ngược); BE gọi **thật** xuống Core; **action ma = 0** — bảng handler không còn `NOT_IMPLEMENTED` nào, có test ở cả Go lẫn verifier. Sửa kèm: self-test verifier IPC bám vào `TRACE_START` nên thành no-op ngay khi nó được hiện thực; luật "`NOT_IMPLEMENTED` phải ghi task" thoát khỏi phép kiểm vì thoát sớm ở phép kiểm khác. 10 test mới; `ctest` **1200/1200**; `--wave W4` 5/5 PASS. Chi tiết §3.5. |
+
+### 3.5 Ghi chú thực thi W4
+
+#### `T59-401` — Coordinator nạp package v2, bỏ hardcode `program-main`
+
+**Một parser, không hai.** `UnpackPackageV2` giữ lại blob IR nhưng dùng **đúng
+cùng** hàm parse với `LoadPackageV2` — chỉ khác một tham số `ir_out`. Viết một
+parser thứ hai để "chỉ lấy blob" sẽ tạo hai bộ ngữ nghĩa cho một định dạng, và
+bản thứ hai luôn là bản quên cập nhật khi format đổi. Parser cũng ép **mỗi
+Program đúng một blob IR**: lệch số nghĩa là gói thiếu thân chương trình cho một
+Program nào đó, và nạp nó sẽ cho một instance không chạy được mà không ai báo.
+
+**Tên Program là dữ liệu của PACKAGE.** Trước task này, coordinator đòi
+`instance_id == "program-main"` và đòi bootstrap khai sẵn instance đó. Nghĩa là
+mỗi lần đổi tên Program phải sửa tiến trình khởi động — và chỉ nạp được đúng một
+Program mãi mãi. Nay `ensure_topology` **thêm instance còn thiếu** vào scheduler
+theo đúng danh sách trong package.
+
+**Bỏ hardcode KHÔNG có nghĩa là nhận mọi chuỗi.** `valid_instance_id` ép ASCII in
+được, không dấu phân cách đường dẫn, 1..64 ký tự — instance id đi vào scheduler
+và vào journal nên nó phải là identity ổn định. Test khoá bốn chuỗi độc hại
+(`../escape`, rỗng, 65 ký tự, có khoảng trắng).
+
+**Vòng đời chạy trên TOÀN BỘ tập instance.** Stage, arm (`commit_staged_activation`),
+rollback và `start` đều lặp qua `instance_ids_`. Chỉ xử lý instance chính sẽ để
+package ở trạng thái **nửa cũ nửa mới** ngay tại boundary kế tiếp — đúng loại
+trạng thái mà không lớp nào phía sau phát hiện được.
+
+**Gói hỏng để lại 0 mutation.** Một Program stage lỗi thì mọi Program đã stage
+trước đó bị `abort_staged_activation`. Nạp nửa gói là nạp một cấu hình **chưa
+từng được Check**.
+
+**Dual-reader còn sống.** Artifact v1 (một Program) vẫn nạp được qua đúng đường
+cũ; test khoá nó. Nếu probe từ chối v1 thì **một lần nâng cấp là mất bản LKG cuối
+cùng** (DDD §12.1).
+
+**Ranh giới CMake có chủ ý.** `st_package_v2.cpp` (+ `st_pou_registry`,
+`st_fb_instance_layout` mà nó cần) chuyển sang `core_application`; chúng bị **gỡ
+khỏi** `st_compiler_lib` vì lib đó link `core_lib`, biên dịch lại sẽ tạo ký hiệu
+trùng. Không link cả `st_compiler_lib` vào `mkddc-core`: compiler không có việc
+gì trên bộ điều khiển đang chạy.
+
+**Ranh giới trung thực.** Đây là **nạp và dựng topology**. Lập lịch từng Program
+theo chu kỳ riêng, hàng đợi due và ngân sách thuộc `T59-402`; `instance_id_` vẫn
+được giữ làm instance chính vì journal v1 ghi một id — đổi định dạng journal ở
+đây sẽ làm mọi bản ghi cũ không đọc được.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-402` — Chu kỳ, hàng đợi due và ngân sách theo từng Program
+
+**Task đến hạn KHÔNG có nghĩa mọi Program đến hạn.** Một package hợp lệ có ba lớp
+chu kỳ (1 s / 5 s / 30 s) chạy trong cùng một Task. Trước task này `run_task`
+chạy **mọi** Program mỗi lần Task tới hạn, nên một Program 30 s thực chất chạy
+30 lần nhiều hơn thiết kế — sai không phải ở chỗ chậm, mà ở chỗ **kết quả khác**
+với thứ người dùng cấu hình. Nay `st_program_due()` quyết định từng Program.
+
+**Bù trôi theo mốc LÝ THUYẾT, không theo thời điểm chạy thật.** `next_release_ns`
+cộng từ deadline trước đó chứ không từ `now`. Bám thời điểm thật sẽ làm một tick
+trễ 300 ms đẩy **mọi** deadline sau đó trôi theo, và sau vài giờ chu kỳ danh
+nghĩa 1 s không còn là 1 s. Test khoá đúng ca này: trễ 300 ms ở tick thứ hai
+nhưng deadline kế tiếp vẫn là mốc 2000 ms.
+
+**Lỡ chu kỳ thì ĐẾM và BỎ.** Nhảy từ 0 lên 5,4 s làm lỡ bốn mốc;
+`missed_release_count` tăng 4 và Program chạy **một** lần. Chạy bù bốn lần là
+cách chắc chắn nhất để một lần quá tải trở thành một chuỗi quá tải.
+
+**Chu kỳ là dữ liệu của PACKAGE.** `PROGRAM_TABLE` nay mang `periodMs` +
+`budgetUs` cho từng Program, và coordinator áp chúng lên instance mỗi lần dựng
+topology — kể cả khi instance đã tồn tại, vì một gói mới có thể đổi chu kỳ của
+Program cũ. Để runtime tự chọn chu kỳ nghĩa là hai controller nạp **cùng một
+gói** chạy hai dãy release khác nhau, và mọi tuyên bố "cùng package cho cùng
+hành vi" mất nghĩa. Golden v2 được sinh lại bằng chính writer production, mang
+**hai chu kỳ khác nhau** để phân biệt "đọc đúng trường" với "đọc trúng may".
+
+**Chu kỳ lạ bị chặn ở CẢ writer lẫn loader.** Loader không được tin writer: gói
+tới tay runtime có thể do một writer khác phiên bản sinh. Một lớp lập lịch không
+tồn tại chấp nhận ở đây chỉ đẩy lỗi xuống runtime, nơi nó biểu hiện thành
+deadline miss chứ không thành một câu trả lời hiểu được.
+
+**Trần 16 ép ở nơi Program THỰC SỰ bắt đầu tác động.** `start()` đếm số Program
+đang RUNNING. Ép ở lớp cấu hình chỉ chặn được *ý định*; ép ở đây chặn được *hành
+vi*. Trần là trần **động**: dừng một Program giải phóng đúng một suất.
+
+**Thứ tự chạy độc lập với thứ tự tạo.** `add_program` chèn theo `order` (rồi
+`instance_id` khi cần tie-break) thay vì nối đuôi. Hai controller nạp cùng một
+package theo thứ tự khác nhau phải chạy cùng một dãy. `order` vẫn phải **duy
+nhất** trong Task — cho phép trùng sẽ biến thứ tự chạy thành thứ phụ thuộc vào
+tie-break, tức là thành thứ có thể đổi khi ai đó sửa tie-break.
+
+**Sửa kèm — package v2 không sống sót reboot.** `load_active_checkpoint` nạp
+**nguyên khối** container vào một instance như thể là artifact v1; loader IR v1 từ
+chối magic `MKDDCIR2` và thiết bị tỉnh dậy **không có Program nào** — hỏng đúng
+vào lúc không ai đang nhìn. Nay đường khôi phục đi qua **đúng** `split_package` +
+`ensure_topology` như đường stage. Ma trận fault/power đầy đủ vẫn thuộc `T59-501`;
+đây chỉ là bịt lỗ do `T59-401` mở ra.
+
+**Sửa kèm — bảng section golden không được canh.** `verify_programming_g1_contracts.py`
+ghim hash golden và `artifactBytes` nhưng **không** đối chiếu bảng section trong
+manifest với bảng thật trong file. Nghĩa là một lần đổi bố cục section có thể để
+lại manifest mô tả một file không còn tồn tại, trong khi hash vẫn "khớp pin" vì
+pin cũng vừa được sửa. Nay có `golden_sections()` + self-test 25 ca sai lệch.
+
+**Ranh giới trung thực.** Đây là **luật release và trần chạy đồng thời**. Worker
+lane, cô lập lỗi và ràng buộc không cấp phát trong RT thuộc `T59-403`; đo tải
+theo lớp chu kỳ mới chỉ dừng ở `last_exec_ns`/`max_exec_ns` trên từng instance,
+chưa có đường công bố ra API.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-403` — Lane, cô lập lỗi và ràng buộc không cấp phát
+
+**Đảo chiều chính sách fault, có chủ ý.** Trước task này, fault của MỘT Program
+dừng cả Task (`break` trong vòng chạy). Lý do ghi trong code — "các Program trong
+một Task thường phối hợp" — thuộc về thời Task chỉ có một Program và mọi trao đổi
+là ngầm. Trong mô hình đa Program, kiến trúc §8 quy định `isolate Program`, và
+trao đổi giữa Program đi qua Published Signal có chính sách fallback **khai báo**
+cho đúng tình huống producer chết. Giữ hành vi cũ nghĩa là một Program hỏng làm
+mọi Program khác — kể cả Program không liên quan gì tới nó — ngừng tác động lên
+đầu ra, mà không có mục nào trong hồ sơ nói vì sao. Test cũ
+`ProgramFaultStopsRestOfTask` được thay bằng `ProgramFaultIsIsolatedFromRestOfTask`;
+`last_dispatch_succeeded()` vẫn `false` — **cô lập không có nghĩa là im lặng**.
+
+**Lane là đơn vị song song, không phải đơn vị cấu hình.** Program cùng lane chạy
+tuần tự theo `order`; lane khác nhau độc lập. Lane **không** được mang dữ liệu
+dùng chung: chia sẻ ngầm giữa hai lane là thứ làm kết quả phụ thuộc vào lane nào
+chạy trước, và đó chính là điều hai chế độ phải không bao giờ khác nhau.
+
+**Trộn theo SỐ HIỆU LANE, không theo thứ tự hoàn thành.** Mỗi lane gom kết quả và
+trace vào bộ đệm riêng (cấp phát tĩnh), trộn lại sau khi mọi lane xong. Trộn theo
+thứ tự hoàn thành sẽ làm trace và số đếm khác nhau giữa hai lần chạy cùng một cấu
+hình — và "single/multicore cùng ngữ nghĩa" mất nghĩa ngay ở chỗ dễ bỏ qua nhất.
+
+**Số đếm phải khớp LÝ THUYẾT, không chỉ khớp nhau.** Fixture kiểm cả hai: hai chế
+độ cho cùng dãy, **và** dãy đó bằng dãy release tính tay cho 30 chu kỳ. Hai chế độ
+cùng sai một kiểu vẫn cho hai kết quả bằng nhau.
+
+**Worker tạo sẵn, spin + yield, không vào kernel.** Condition variable sẽ đưa
+đường quét vào chờ ở kernel. Worker chỉ tồn tại khi `PARALLEL` được bật **tường
+minh** — chi phí spin là chi phí người dựng hệ đã chọn, không phải mặc định ai đó
+thừa hưởng. Đổi chế độ tạo/huỷ worker **ngoài** chu kỳ quét; destructor dừng
+worker trước khi bất cứ thứ gì chúng đọc bị huỷ.
+
+**Thiếu worker làm CHẬM, không làm BỎ SÓT.** Lane vượt số worker chạy nốt trên
+luồng gọi. Có test khoá đúng ca `kMaxLanes` lane trên máy ít nhân.
+
+**Không cấp phát trong đường quét.** Phân lane dùng bộ đệm cấp phát một lần của
+scheduler. `allocation_probe` đo 0 cấp phát ở **cả hai** chế độ. Bộ đếm là
+`thread_local` nên phép đo phủ luồng gọi — phân lane, điều phối, trộn kết quả, và
+ở chế độ tuần tự là toàn bộ thân lane; worker chạy **chính** `run_lane` đó nên
+phần thân đã được phủ. Nói phép đo phủ cả luồng worker sẽ là nói quá.
+
+**TSan tái lập được, không phải một lần chạy tay.** `scripts/run_core_tsan.sh`
+dựng cây build TSan riêng và chạy 54 test lập lịch: **0 cảnh báo**. Nó là script
+riêng chứ không phải một cổng của `verify-project.sh` vì instrumentation đổi cả
+layout bộ nhớ nên phải là cây build khác — gộp vào cổng mặc định bắt mọi task
+không liên quan tới đồng thời trả cái giá đó. Script bọc `setarch -R` quanh **cả**
+bước build lẫn bước chạy: kernel mới đặt `vm.mmap_rnd_bits` đủ cao để TSan thoát
+với "unexpected memory mapping" ngay ở bước `gtest_discover_tests`.
+
+**Ranh giới trung thực.** Đây là **cấu trúc chạy và chính sách fault**. Chính sách
+fallback khi consumer đọc signal của producer vừa fault thuộc `T59-404`; rút
+candidate và safe-state khi Program fault thuộc `T59-406`. Số đo TSan là host,
+trên fixture của bộ test — không phải 24 h trên target (`T59-702`).
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-404` — Published Signal: double-buffer, freshness và ba chính sách
+
+**Double-buffer chứ không phải một ô có khoá.** Publisher ghi trong lúc consumer
+đọc là chuyện bình thường khi hai Program ở hai lane khác nhau. Một ô nhớ chung
+sẽ cho consumer đọc được **nửa** giá trị mới và nửa giá trị cũ — với `StCell`
+8 byte trên bus 32 bit, đó là một số **chưa Program nào từng ghi**. Khoá thì đưa
+đường quét vào chờ, thứ mà `T59-403` vừa loại bỏ. Test tấn công thật: 20.000 vòng
+publisher/consumer song song, mọi giá trị publish đều là bội của
+`0x0001000100010001` nên một giá trị ghép từ hai bản sẽ lộ ra ngay — **0 lần**.
+
+**Commit ở BOUNDARY, không ngay khi publish.** Trong cùng một chu kỳ, hai consumer
+chạy ở hai thời điểm khác nhau phải thấy **cùng một** ảnh signal. Cho consumer
+thấy giá trị ngay khi publisher ghi sẽ làm kết quả phụ thuộc lane nào chạy trước —
+đúng thứ mà "single/multicore cùng ngữ nghĩa" của `T59-403` cấm. Cái giá là độ trễ
+một chu kỳ, và nó rẻ hơn nhiều so với kết quả phụ thuộc thứ tự chạy.
+
+**Bản nháp kế thừa bản cũ trước khi đổi.** Một signal chỉ publish mỗi 30 s sẽ
+"biến mất" ở chu kỳ kế tiếp nếu bản nháp không được chép từ bản live — và
+`HOLD_LAST` sẽ giữ một ô **rỗng** thay vì giá trị cuối, tức là đúng ngược với tên
+của nó.
+
+**"Chưa ai publish" KHÁC "quá hạn".** Chỉ `USE_FALLBACK` có câu trả lời khai báo
+cho trường hợp chưa có dữ liệu; hai chính sách kia phải nói thẳng `UNAVAILABLE`.
+Bịa một giá trị ở đây đúng là lối "im lặng thay bằng 0" mà DDD §10 cấm.
+
+**Producer dừng làm giá trị GIÀ ĐI, không biến mất.** `note_publisher_stopped`
+cố ý **không** xoá giá trị: xoá sẽ biến một sự cố có thời hạn thành một sự cố tức
+thì, và `HOLD_LAST` mất hết ý nghĩa đúng vào lúc nó cần có nghĩa nhất. Test đi
+trọn dừng → còn trong hạn → quá hạn → hồi phục.
+
+**Sửa kèm 1 — signal chưa từng đi vào container.** `mkddc-st-package` không có
+đường nhận signal và `ProcessPackager` không truyền, nên **mọi** khai báo Published
+Signal đã qua validate ở `T59-304` vẫn không tới được thiết bị: bus ở runtime
+luôn rỗng bất kể người dùng cấu hình gì. Nay `SIGNAL_DEFS` mang thêm chính sách +
+giá trị dự phòng, CLI nhận `--signals <file JSON>`, và Check truyền danh sách đã
+sắp theo tên. Signal đi bằng **file JSON** chứ không bằng argv vì tên signal là
+chuỗi người dùng đặt — mọi dấu phân cách ta chọn đều có thể xuất hiện trong chính
+dữ liệu. Giá trị dự phòng đi xuống dưới dạng **bit** của `StCell`: mỗi lần đổi
+biểu diễn là một lần làm tròn, và làm tròn một giá trị an toàn là đúng thứ không
+được phép xảy ra âm thầm.
+
+**Sửa kèm 2 — `stalePolicy` không phải enum đóng.** Check chỉ kiểm cặp
+policy↔fallback, nên `"MAGIC"`, chuỗi rỗng, hay `"HOLD_LAST "` thừa khoảng trắng
+đều đi lọt và buộc runtime phải **đoán** thiết bị làm gì khi mất dữ liệu. Nay
+đóng ở **ba** lớp độc lập: Check (Go), writer và loader package (C++), và
+`StSignalBus::declare`. Ba cài đặt của cùng một hợp đồng là ba chỗ cần phép kiểm
+riêng — một hằng dùng chung chỉ làm cả ba cùng sai một lúc.
+
+**Ranh giới trung thực.** Đây là **bus và chính sách đọc**. Thân chương trình
+chưa có opcode đọc/ghi signal — nối vào lowering thuộc phần còn lại của lane
+compiler. Trọng tài output khi consumer nhận `UNAVAILABLE` thuộc `T59-406`. Số đo
+"không đọc rách" là host, trên một cặp luồng — không phải 24 h trên target
+(`T59-702`).
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-405` — Enable/Disable đi trọn đường store → API → IPC → Core → read-back
+
+**Ý định KHÁC trạng thái, và phải nằm cạnh nhau.** "Đã bật" là điều người vận
+hành muốn; "đang chạy" là điều thiết bị đang làm. Gộp thành một trường sẽ làm một
+Program **bật-nhưng-FAULTED** trông y hệt một Program chưa ai bật — đúng lúc
+người vận hành cần phân biệt nhất. Vì vậy `desiredEnabled` và `runtimeState` là
+hai trường riêng ở cả store, API lẫn hình chiếu public.
+
+**STORE trước, Core sau.** Intent là thứ bền vững phải sống qua mất điện và qua
+việc Core chưa sẵn sàng. Đẩy xuống Core trước rồi mới ghi sẽ để lại một thiết bị
+đã đổi hành vi mà không ai biết ai ra lệnh, nếu tiến trình chết ở giữa. Biên nhận
+idempotency, audit và bản ghi intent đi trong **cùng một transaction**.
+
+**Core từ chối hay không sẵn sàng KHÔNG xoá intent.** Intent là ý định, không phải
+kết quả. Trạng thái ghi lại là `FAULTED` (bị từ chối) hoặc `UNKNOWN` (không liên
+lạc được) — **không phải** trạng thái mong muốn. Đoán rằng lệnh đã tới nơi là đúng
+thứ làm người vận hành tin nhầm.
+
+**Ghi trạng thái CHUYỂN TIẾP, không ghi thẳng đích.** Core nhận lệnh xong thì
+Program mới `STARTING`/`STOPPING`, chưa `RUNNING`/`DISABLED`. Nói nó đã tới đích
+khi nó mới lên đường là nói dối.
+
+**Enable và Disable là HAI action riêng ở lớp biên nhận.** Biên nhận khoá theo
+`(actor, action, target, key)`. Gộp hai chiều vào một action `PROGRAM_SET_ENABLED`
+sẽ làm một lần "bật" và một lần "tắt" **cùng idempotency key** trở thành cùng một
+ô — và lần thứ hai replay kết quả của lần thứ nhất thay vì đổi trạng thái. Có test
+khoá đúng ca này.
+
+**Replay không gửi lại lệnh xuống Core.** Một lần gửi lại vì mạng không được thành
+một lệnh vận hành thứ hai.
+
+**`PUT` chứ không phải `enable`/`disable`.** Intent là một **trạng thái mong
+muốn**; hai động từ riêng sẽ làm việc "đặt lại đúng thứ đang có" trở thành hai
+request khác nhau tuỳ giá trị hiện tại. Payload thiếu `desiredEnabled` bị từ chối
+chứ **không** mặc định `false` — mặc định sẽ biến một payload hỏng thành lệnh TẮT
+chương trình.
+
+**IPC: action mới, `protocolMinor` 0→1, `schemaVersion` ĐỨNG YÊN.** Thêm action là
+thay đổi tương thích ngược, và `protocolMinor` sinh ra đúng để diễn đạt điều đó.
+Đổi `schemaVersion` trên dây sẽ làm **mọi** Core phiên bản cũ từ chối **mọi**
+request — hỏng toàn diện thay vì thiếu một tính năng. Vì vậy `version` trong join
+G1 mirror hằng trên dây (giữ "1.0") còn `minor` mirror `protocolMinor` (thành 1);
+verifier nay khoá `minor` vào golden manifest để hai con số không trôi khỏi nhau.
+Có test khoá: client `minor=0` vẫn được nhận, `minor` cao hơn bị chặn ngay ở lớp
+mã hoá.
+
+**Trần 16 ép ở HAI lớp, không thừa.** Lớp application chặn **trước khi ghi**:
+intent là thứ bền vững, nên một intent vượt trần sẽ sống lại ở mỗi lần khởi động
+và bị Core từ chối mãi mãi mà không ai thấy vì sao. Lớp Core ép lại ở `start()` —
+nơi Program thực sự bắt đầu tác động lên đầu ra, và là nơi bất biến phải đúng kể
+cả khi intent tới từ đường khác.
+
+**Sửa kèm 1 — trigger `generation` siết quá tay.** Trigger v6 đòi `generation`
+tăng ở **mọi** UPDATE, nên read-back của Core không ghi được: SQLite trả
+"generation must increase" cho một UPDATE chẳng đụng tới `desired_enabled`. Thứ
+trigger sinh ra để bảo vệ là "intent cũ tới muộn không ghi đè intent mới", còn ghi
+lại một quan sát thì không có generation mới để mang. Migration v10 tách thành hai
+luật đúng với hai việc: đổi intent **bắt buộc** tăng generation; generation
+**không bao giờ** lùi.
+
+**Sửa kèm 2 — biên nhận idempotency đòi ETag cho mọi mutation.** Phép kiểm
+`result.ETag < 1` giả định mọi mutation thuộc một Draft. Intent tác động lên
+Project **đang chạy**, không lên Draft, nên nó sẽ phải bịa ra một số phiên bản
+Draft — và một số bịa ra thì phép kiểm không còn canh gì. Nay ETag chỉ bắt buộc
+khi biên nhận mang `DraftID`.
+
+**Ranh giới trung thực.** Đây là **đường intent và read-back**. Đối chiếu định kỳ
+(reconcile) giữa intent bền vững và trạng thái Core thật thuộc `T59-501`; rút
+candidate khi Disable thuộc `T59-406`. Trạng thái `RUNNING`/`DISABLED` cuối cùng
+chỉ được ghi khi có đường đọc trạng thái Program từ Core — hiện `STATUS` chưa mang
+trạng thái theo từng Program, đó là phần còn lại của lane runtime.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-406` — Sổ candidate, rút theo lý do, và đường rơi về
+
+**Vì sao cần một sổ riêng.** `PriorityResolver` chỉ biết "mức 5 đang active",
+không biết mức 5 đó là **của Program nào**. Với một Program thì hai câu đó trùng
+nhau; với 32 Program thì "ai đang giữ AO-3" trở thành câu hỏi **không có nơi nào
+trả lời** — và đó đúng là câu hỏi đầu tiên người vận hành hỏi khi một van không
+nghe lệnh. `ProgramCandidateRegistry` là mắt xích `owner registry` của kiến trúc
+§7; nó không tự ghi ra điểm nào và không thay resolver làm trọng tài.
+
+**Rút phải mang LÝ DO.** "Đã rút" mà không nói vì sao buộc người vận hành đoán
+giữa một **lệnh chủ ý** và một **sự cố** — hai thứ cần hai phản ứng khác nhau.
+Enum đóng ba lý do: `OPERATOR_DISABLE` (rút ngay tại safe boundary),
+`FAULT_TTL_EXPIRED`, `PACKAGE_REPLACED`.
+
+**Rút KHÔNG xoá bản ghi.** Xoá sẽ làm câu hỏi "vì sao van này về default" mất câu
+trả lời đúng vào lúc cần nó nhất. `owner_of()` trả rỗng cho claim đã rút vì nó
+trả lời "ai **đang** giữ", còn `find()` vẫn cho biết ai đã giữ và vì sao thôi.
+
+**Một output, một owner — ép LẠI ở runtime.** `T59-304` đã ép ở Check, nhưng gói
+có thể tới từ **bundle import** hoặc từ một writer khác phiên bản. Runtime không
+được tin lớp trước ở một bất biến an toàn: hai Program cùng giữ một output vật lý
+là hai nguồn sự thật cho cùng một van. Đăng ký chạy **trước** khi publish — phát
+hiện sau khi đã ghi ra thì đã muộn.
+
+**Chiếm chỗ đã rút vẫn bị từ chối.** Quyền sở hữu thuộc **package**, không thuộc
+thứ tự tới trước. Cùng Program claim lại sau khi bị rút là **hồi phục**, không
+phải xung đột.
+
+**Đường rơi về là thứ làm việc rút có nghĩa.** Test đi trọn: mức 4 thắng mức 5 →
+rút mức 4, rơi xuống mức 5 → rút nốt mức 5, về **DEFAULT**. Rút mà đầu ra kẹt ở
+giá trị cuối của Program đã chết thì rút chỉ là một dòng log. Test đầu-cuối chạy
+Program thật, publish qua resolver, rồi `stop()` và kiểm AO về `0.0`.
+
+**"Không có đường Program→IOP trực tiếp" kiểm bằng ĐỌC MÃ NGUỒN.** Một test hành
+vi không chứng minh được điều này — nó chỉ chứng minh đường hợp lệ chạy đúng,
+không chứng minh **không có** đường thứ hai. Test đọc chính
+`st_process_image.cpp` và khẳng định không có `plc_shm`/`iop_write`/`shm_write`,
+đồng thời khẳng định đường hợp lệ (`PRIO_LOCAL_LOGIC`, `resolver`) **thực sự có
+mặt** — nếu không, phép kiểm trên chỉ đang xác nhận một file rỗng.
+
+**TTL hold-last đã ký — `ADR-051`, 2026-08-21.** Mục treo duy nhất của `T59-406`
+nay đóng: **60 giây**. Chặn dưới là `2x` chu kỳ Task chậm nhất (2×30 s) — lúc
+Program chết, lệnh cuối đã có thể già trọn một chu kỳ, nên TTL nhỏ hơn làm thời
+gian giữ THỰC TẾ trôi xuống tận 0; chặn trên là dải fail-safe quen thuộc của thiết
+bị BAS (10..60 s) và hằng số thời gian nhiệt của tải. Ràng buộc `2x` không nằm ở
+ghi chú mà ở `static_assert` đọc `allowedPeriodMs` của profile: profile mọc thêm
+lớp chu kỳ chậm hơn thì gãy build, không gãy ngoài hiện trường.
+
+Ba thứ phải sửa cùng con số, vì nếu không thì con số chỉ đúng trên giấy:
+
+1. **Đo bằng đồng hồ, không đếm base step.** `TASK-PROG-401` đếm base step. Số
+   base step chỉ xấp xỉ thời gian khi vòng quét chạy đúng nhịp — soak test của
+   chính repo này quay 10.000 vòng trong 90 ms và làm "60 s" co lại thành mili
+   giây, không có gì báo. Nay so `last_tick_now_ns()` với `output_commit_now_ns`.
+2. **Đo tuổi của LỆNH, không đo trạng thái.** Điều kiện cũ ràng vào riêng
+   `FAULTED` nên để lọt đúng những đường im lặng khó thấy nhất: Task bị disable
+   trong khi Program vẫn `RUNNING`, và instance đứng ở `ROLLED_BACK`. Cả hai ngừng
+   publish mà không bao giờ mang trạng thái `FAULTED`, nghĩa là giữ lệnh cũ vĩnh
+   viễn ngay cả sau khi TTL được ký.
+3. **Mặc định `ScanDeps` là giá trị đã ký, không phải `0`.** `0` nghĩa "giữ vô
+   hạn"; để nó làm mặc định thì mọi đường nối dây quên set field đều âm thầm quay
+   lại đúng hành vi vừa đóng, và không test hành vi nào bắt được vì "không rút"
+   trông y hệt "chưa tới hạn". `0` chỉ còn dùng cho test/chẩn đoán; bootstrap từ
+   chối nó qua `--program-hold-ttl-ms`.
+
+"Khoá TTL theo Point class" (§6 bản cũ) **đóng là KHÔNG làm**, không phải hoãn:
+đích rơi về đã theo từng điểm (`default` của chính điểm đó), thêm TTL theo class
+là thêm núm thứ hai cho cùng một kết quả. Lý do đầy đủ ở `ADR-051`.
+
+Interlock và SafeState là hai mắt xích đã tồn tại (`safe_state.hpp`, ma trận
+trigger T1–T8); task này nối candidate vào đầu chuỗi chứ không viết lại chúng.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-407` — RETAIN theo Program: cô lập, và bịt lỗ "reset nửa vời"
+
+**Lỗi thật đã sửa: reset không bền vững khi Program đang dừng.**
+`publish_committed_retain_snapshots()` chỉ công bố ảnh RETAIN cho Program vừa
+**chạy** và vừa **commit output** trong base step đó. Nhưng Program hay bị reset
+nhất lại là Program đang `STOPPED`/`FAULTED` — đúng những Program không bao giờ
+thoả điều kiện đó. Kết quả: `reset_retained_state()` làm sạch RAM, rồi
+`flush(true)` ghi lại **ảnh CŨ** (hoặc không ghi gì), và lần khởi động sau giá
+trị trước reset quay về. Người vận hành thấy "reset thành công" rồi thấy nó tự
+đảo ngược sau lần mất điện đầu tiên.
+
+Nay `apply_pending_retain_resets()` công bố ảnh **đã reset** ngay tại boundary,
+không phụ thuộc trạng thái chạy: reset là một sự kiện của **dữ liệu**, không phải
+của việc chạy.
+
+**Test chống hồi quy đã được kiểm chứng.** Gỡ bản vá ra và chạy lại:
+`T59_407_ResetOnStoppedProgramIsPersistedNotHalfDone` đỏ đúng ở dòng "giá trị
+trước reset quay về sau khởi động lại". Một test xanh cả khi có lẫn khi không có
+bản vá thì không chứng minh gì.
+
+**Namespace theo instance là thứ làm cô lập có thật.** Mỗi Program có file riêng,
+đường dẫn dẫn xuất từ `SHA-256(controller_identity ‖ instance_id)`. Test khoá hai
+hệ quả: reset instance-1 **không** chạm instance-2, và làm hỏng file của một
+Program chỉ làm **một** Program cold-init — Program còn lại warm-restart bình
+thường. Nếu hai Program dùng chung một file thì một lần hỏng là mất trạng thái
+của cả hai.
+
+**Ma trận đã đóng đủ.** Cold (thiếu file), warm (khôi phục đúng giá trị), revision
+(đổi tên/kiểu biến RETAIN → `layout_identity` đổi → cold-init có lý do), corrupt
+(CRC sai, file cụt do mất điện, magic sai, version sai), reset (giá trị reset sống
+qua cả autosave tự nhiên lẫn warm restart). Phần lớn ma trận này đã có từ
+`TASK-PROG-402`; `T59-407` bổ sung tầng **Program isolation** và bịt lỗ trên.
+
+**Reset là all-or-nothing ở tầng dữ liệu.** `reset_retained_state()` đưa **cả**
+biến RETAIN **và** state của FB `retained` về giá trị khởi tạo trong cùng một
+lượt, tại safe boundary trước khi Program nào chạy. Không có cửa sổ nào mà biến
+đã reset còn FB thì chưa.
+
+**Ranh giới trung thực.** Đây là **cô lập và bền vững của reset**. Ma trận
+power-cut thật trên board thuộc `T59-704`; đường IPC `RETAIN_RESET` và ràng buộc
+trạng thái Commission đã có từ `WP-12`, task này không đổi chúng.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-408` — Trace giá trị lấy tại ranh giới quét, và diệt action ma
+
+**Vì sao lấy mẫu trong Core chứ không để BE poll.** BE poll ở nhịp riêng của nó,
+nên "mẫu tại t" thực chất là "thứ gì đó Core đã công bố quanh khoảng t" — hai
+biến trong cùng một mẫu có thể đến từ **hai chu kỳ khác nhau**. Với một đồ thị
+chẩn đoán, đó là dữ liệu nói dối theo cách khó thấy nhất: đường cong trông hợp lý
+nhưng quan hệ nhân quả giữa hai biến bị xáo. Lấy tại boundary thì mọi biến trong
+một mẫu đến từ **đúng một** chu kỳ.
+
+**Hai trần cùng tồn tại, trần nào chặt hơn thì thắng.** Thời lượng (10 phút ở
+chu kỳ 100 ms = 6.000 mẫu) và ngân sách Ô (32 biến chỉ được 10.000/32 = 312 mẫu).
+Biết rõ điều này là điều kiện để đọc đúng một đồ thị bị cắt cụt — và số mẫu **rơi**
+được đếm, vì giấu nó sẽ làm người đọc tưởng mình thấy toàn bộ.
+
+**Kho theo Ô, không theo struct mẫu.** Lưu 10.000 struct mẫu (32 ô + cờ + mốc
+thời gian) tốn ~3 MB tĩnh cho một tính năng chẩn đoán — không hợp lý trên một bộ
+điều khiển. Lưu theo ô cho ngân sách **cố định ~170 KB** không phụ thuộc số biến,
+và đó là một con số nói ra được.
+
+**Biến khai bằng TÊN, không bằng số slot.** Số slot là kết quả của một lần biên
+dịch cụ thể và **không tồn tại** ở bất kỳ nơi nào BE nhìn thấy — Revision chỉ có
+tên biến. Bắt BE gửi slot nghĩa là phải xuất bảng slot ra khỏi artifact chỉ để
+phục vụ chẩn đoán, rồi giữ hai bản đồ tên→slot ở hai bên. Core đã có bảng đó
+trong chương trình đang nạp; phân giải ở đó là phân giải ở nơi dữ liệu sống.
+
+**Biến không phân giải được KHÔNG làm hỏng cả phiên.** Nó vẫn được nhận, nhưng
+mọi mẫu của nó mang `valid=false`. Từ chối cả phiên vì một biến gõ sai sẽ làm mất
+luôn dữ liệu của những biến còn lại. Và `valid=false` khác `0`: "không đo được"
+và "đo được giá trị 0" là hai sự thật khác nhau.
+
+**`TRACE_READ` KHÔNG phải mutation.** Xếp một lệnh đọc vào nhóm mutation sẽ buộc
+nó mang `operationId` và đi qua kiểm idempotency mà nó không cần.
+
+**Trace không cần coordinator.** Nó đọc trạng thái Program đang chạy, không đụng
+vòng đời gói. Bắt nó chờ coordinator sẽ làm chẩn đoán không dùng được đúng lúc
+cần nhất — khi chưa có gói nào commission thành công.
+
+**`protocolMinor` 1→2, `schemaVersion` trên dây vẫn "1.0"** — cùng lý do đã ghi ở
+`T59-405`.
+
+**Action ma = 0.** Bảng handler nay không còn `NOT_IMPLEMENTED` nào. Khoá bằng hai
+phép kiểm độc lập: `TestNoGhostActionsInContract` (Go — mọi action khai phải
+IMPLEMENTED và phải có hằng ở codec Go, và ngược lại) và
+`verify_programming_ipc_actions.py` (đối chiếu schema ↔ enum C++ ↔ nhánh dispatch
+↔ codec Go).
+
+**Sửa kèm — self-test của chính verifier đã mục ruỗng.** Hai mutation dùng
+`TRACE_START` làm ví dụ "action chưa hiện thực". Ngay khi task này hiện thực nó,
+hai mutation trở thành **no-op** và self-test xanh mà không kiểm gì — đúng lớp lỗi
+mà self-test sinh ra để chặn. Nay mutation **tự tiêm** một action giả, và ca
+"khai IMPLEMENTED nhưng không có nhánh" được dựng bằng cách **tiêm nội dung nguồn
+Core đã bị bỏ nhánh** — mutation trên schema không mô phỏng được ca đó.
+
+**Sửa kèm — một luật thoát khỏi phép kiểm vì thoát sớm ở phép kiểm khác.** Luật
+"`NOT_IMPLEMENTED` phải ghi task sẽ hiện thực" nằm **sau** phép tra enum C++, nên
+một action chưa có enum thoát khỏi luật này. Nay luật thuần schema được kiểm
+trước.
+
+**Đường đọc mẫu đã nối trọn (bổ sung trong W5).** Bản đầu của task này để
+`TRACE_READ` **không ai gọi**: Core lấy mẫu tại ranh giới quét rồi ghi vào một
+ring **không ai đọc**, còn người dùng vẫn xem dãy mẫu poll theo nhịp riêng của
+BE. Nghĩa là toàn bộ lý do tồn tại của `T59-408` — "mọi biến trong một mẫu đến từ
+đúng một chu kỳ" — **không tới được người dùng**, và dữ liệu Core thu thập là dữ
+liệu chết. Nay `runTrace` rút mẫu từ ring; poll monitor chỉ còn là **đường dự
+phòng** khi Core không nhận phiên.
+
+Ba điểm đi kèm, mỗi điểm sửa một cách nói dối:
+
+- **Không trộn hai nguồn trong một dãy.** Core nhận phiên thì mẫu đầu KHÔNG lấy
+  bằng poll nữa; trộn vào sẽ tạo một đồ thị mà điểm đầu tiên đến từ nơi khác các
+  điểm còn lại, và không có gì trên đồ thị nói ra điều đó.
+- **`valid=false` không được vẽ thành 0.** Ô không đọc được trả giá trị rỗng kèm
+  `quality=BAD`/`freshness=UNAVAILABLE`.
+- **Số mẫu rơi của Core hiện ra**, không bị giấu sau một dãy trông liền mạch.
+
+**Thay chứ không nối thêm.** Ring của Core bounded và có thể đã ghi đè mẫu cũ
+nhất; nối thêm sẽ tạo ra một dãy vừa trùng lặp vừa thiếu, và số `dropped` không
+còn giải thích được khoảng trống nào.
+
+**Ranh giới trung thực.** Lỗi khi gọi Core **không** huỷ phiên — mất trace hoàn
+toàn vì Core bận là tệ hơn. Bit thô được diễn giải theo kiểu đã khai trong
+package; kiểu không nhận ra trả `nil` thay vì đoán, vì một số sai kiểu trên đồ
+thị chẩn đoán tệ hơn một ô trống. Số đo 10k/10 phút là host, không phải 10 phút
+thật trên target (`T59-702`).
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
 ### W5 — Lifecycle atomic và sản phẩm FE↔BE↔Core
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-501` | P0 | Package Commission/Restore first-cycle barrier, LKG/journal/recovery | T59-401..407 | ORDERED | Fault mọi phase/restart/power simulation; no partial active; old LKG exact. |
-| `T59-502` | P0 | Impact/ack cho multi-Program/library/signal/output/RETAIN/enable intent | T59-501 | ORDERED | BE authority diff; FE chỉ hiện impact thật; stale ack reject. |
-| `T59-503` | P1 | FE sáu workspace/navigation/context, PGM-05/06 lifecycle | T59-203/306/405/502 | ORDERED | Desktop/mobile, Draft vs Active vs intent/runtime, stale/offline/unknown/a11y. |
-| `T59-504` | P1 | Monitor đủ LOCAL/VP/MB_RTU, Program/signal/candidate/actual/priority | T59-303/404/406 | ORDERED | 3 category, programValue vs actual, source/freshness/quality đúng. |
-| `T59-505` | P0 | Real-backend E2E Draft→Check→Commission→Enable→Runtime→Disable→Restore | T59-501..504 | ORDERED | Không `page.route` mock Programming; compiler thật + Core simulator authority; CI lane. |
-| `T59-506` | P1 | ST editor durable history/runtime overlay + FBD POU UX polish | T59-503/504 | ORDERED | 20 edit undo/redo, cursor; live value quality/stale; browser Console/Network sạch. |
+| `T59-501` | P0 | Package Commission/Restore first-cycle barrier, LKG/journal/recovery | T59-401..407 | **DONE** | Barrier chu kỳ đầu và rollback nâng lên mức **GÓI**: trước đó chỉ xét `instance_id_` nên một Program chết vẫn được tuyên bố `FIRST_CYCLE_OK`, và rollback để lại gói **nửa cũ nửa mới**. LKG thăng cấp **all-or-nothing**. Restart ở cả 4 pha không để lại active một nửa. Hai test chống hồi quy **kiểm chứng bằng cách gỡ bản vá** (đỏ đúng dòng lý do). Sửa kèm ở FE (hồi quy W3 lộ ra vì W3 không có cổng `e2e`): thanh tab Thiết kế **bấm không ăn** trên `/programs`+`/mapping` và tab `execution` **mất chỗ hiển thị**; E2E còn ghi IA cũ. `ctest` **1209/1209**; `--wave W5` **7/7 PASS** (lần đầu chạy `frontend`+`e2e` trong Plan 59). Chi tiết §3.6. |
+| `T59-502` | P0 | Impact/ack cho multi-Program/library/signal/output/RETAIN/enable intent | T59-501 | **DONE** | Bốn nhóm impact mới: `publishedSignals`/`controlLibrary`/`programSet`/`enableIntent` (trước đó chỉ có 4 nhóm của Rev A một Program). **Lỗi thật:** `SIGNAL` không nằm trong whitelist kind của `revision_objects`, nên `SealRevision` từ chối MỌI Revision có Published Signal — cả lane `T59-304`/`T59-404` chưa từng chạm một Revision thật (migration **v11**). Đổi chính sách stale trước đây rơi vào `SOURCE` nên Commission không hỏi ack. Nhóm vắng mặt = `UNAVAILABLE` (fail-closed), không phải `NONE`. Kiểu TS sinh **từ enum contract** thay vì viết cứng. `--wave W5` **7/7 PASS**. Chi tiết §3.6. |
+| `T59-503` | P1 | FE sáu workspace/navigation/context, PGM-05/06 lifecycle | T59-203/306/405/502 | **DONE (HOST/LOCAL)** | Sáu route canonical có nav desktop/mobile; workspace theo Project chỉ mở khi có đúng `projectId`. Context tách **Draft đang sửa / Active Package / desired Enable intent / runtime read-back**, không suy intent thành `RUNNING`; loading/empty/error/permission/stale/offline/unknown đều có copy và hành vi fail-closed; deep-link/legacy redirect giữ ngữ cảnh. FE hiện hành **124 file / 1161 test**, E2E mock **61/61**; Chrome desktop/mobile không Console lỗi hay tràn ngang. Không dùng bằng chứng HOST/LOCAL để suy CI/target/release. Chi tiết §3.6. |
+| `T59-504` | P1 | Monitor đủ LOCAL/VP/MB_RTU, Program/signal/candidate/actual/priority | T59-303/404/406 | **DONE (HOST/LOCAL)** | Monitor lọc/đếm đủ `LOCAL`/`VP`/`MB_RTU`; tách `programValue` candidate mức 5 khỏi actual, source, priority, TTL, quality và freshness. Published Signal đọc từ snapshot `StSignalBus` riêng, ghép identity Revision; invalid/mismatch/core-only/unavailable hiện `—`, không biến thành `0`; trace hiện số mẫu rơi. IPC minor **2→3**, OpenAPI **1.25.0→1.26.0**; CTest Release/Debug **1211/1211**, Go và FE gate thành phần sạch. Chi tiết §3.6. |
+| `T59-505` | P0 | Real-backend E2E Draft→Check→Commission→Enable→Runtime→Disable→Restore | T59-501..504 | **DONE (HOST/LOCAL)** | Lane riêng dựng backend Go + compiler/packager production + Core simulator/Programming IPC thật, không `page`/`context`/`browserContext.route*` hay auth mock. Spec đi qua Project, PROJECT Library được publish khi Seal, Program/Signal/Variable/LOCAL Mapping, Check/Commission, Enable→`RUNNING`, signal invalid=`null`, Disable→`DISABLED`, Revision thứ hai và Restore; browser đăng nhập JWT rồi đọc lại Programs/Library/Mapping/Runtime. Finding vòng render do adapter Draft đổi identity theo poll đã được sửa bằng memoization theo payload Draft authority. `e2e-real` host **1/1 PASS**; job CI thứ 12 đã khai nhưng **chưa có CI verdict**. Chi tiết §3.6. |
+| `T59-506` | P1 | ST editor durable history/runtime overlay + FBD POU UX polish | T59-503/504 | **DONE (HOST/LOCAL)** | ST editor có history bounded 50 snapshot; acceptance 20 edit undo/redo khôi phục đúng cursor/selection, mọi đường sửa có kiểm soát đi chung history. Runtime overlay chỉ đọc snapshot của đúng Active Revision/Program; `0` hợp lệ vẫn hiện, BAD/OFFLINE/UNKNOWN/UNAVAILABLE hiện `—`, stale có nhãn. FBD lấy POU từ typed Draft interface (không parse ST ở FE), sinh pin/keyboard flow tất định, loại POU đang mở để chặn direct recursion và fail-closed interface lỗi. Component/editor/browser nằm trong FE **1161 test** và E2E mock **61/61** hiện hành. Chi tiết §3.6. |
+
+### 3.6 Ghi chú thực thi W5
+
+#### `T59-501` — Vòng đời Commission/Restore ở mức gói
+
+**Barrier chu kỳ đầu chỉ xét một Program.** `on_output_commit` đọc đúng
+`instance_id_`. Với gói nhiều Program, một Program hỏng chu kỳ đầu trong khi
+Program chính chạy sạch vẫn được tuyên bố `FIRST_CYCLE_OK` — gói đi tiếp với một
+Program đã chết. Chiều ngược lại tệ hơn: rollback cũng chỉ quay Program chính về,
+để lại gói **nửa cũ nửa mới**, tức đúng thứ "no partial active" cấm.
+
+**LKG thăng cấp theo từng Program.** Với gói trộn ba lớp chu kỳ, tập LKG trở
+thành một tổ hợp **chưa từng được Check**: Program 1 s mang bản mới, Program 30 s
+còn bản cũ. Rollback từ tập đó khôi phục một thứ chưa ai kiểm, và "old LKG exact"
+mất nghĩa. Nay thăng cấp là all-or-nothing trên cả gói.
+
+**Điều kiện là "đã commit ít nhất một lần kể từ activate", không phải "cùng
+commit ở một base step".** Đòi điều thứ hai là đòi một thứ **không bao giờ xảy
+ra** với gói nhiều chu kỳ — Program 30 s chỉ commit mỗi 30 base step. Vì vậy có
+cờ `committed_since_activation`, xoá sạch ở mỗi lần activate: tư cách của gói cũ
+không được thừa kế.
+
+**Program không chạy KHÔNG tham gia barrier, nhưng FAULTED thì có.** Đòi một
+Program `DISABLED` "chạy sạch một chu kỳ" là đòi một điều không thể xảy ra và sẽ
+treo barrier vĩnh viễn. `FAULTED` là **hỏng**, không phải vắng mặt.
+
+**Kiểm TRƯỚC, áp SAU khi rollback.** Quay về được một nửa rồi kẹt ở nửa còn lại
+để thiết bị ở một tổ hợp chưa từng được Check. Không instance nào có LKG thì
+`FAILED` — không có bản cũ nguyên vẹn để khôi phục.
+
+**Hai test chống hồi quy đã được kiểm chứng.** Gỡ từng bản vá ra và chạy lại: cả
+hai đỏ đúng ở dòng lý do ("gói có Program chết vẫn được tuyên bố thành công",
+"tập LKG thành nửa gói mới nửa gói cũ"). Một test xanh cả khi có lẫn khi không có
+bản vá thì không chứng minh gì.
+
+**Về `PENDING` — vì sao nó khó dựng.** `st_program_due` cho lần release **đầu
+tiên** chạy ngay (T59-402), nên mọi Program của gói đều chạy ở base step đầu và
+barrier thường qua ngay tại đó. Test khoá chính điều này lại: nếu ai đổi luật
+release thì đỏ ở đây chứ không đỏ ở hiện trường bằng một Commission treo. Luật
+all-or-nothing vì vậy được kiểm **thẳng** trên `promote_output_committed_artifacts()`
+thay vì dựng qua nhiều lớp.
+
+#### Sửa kèm — ba hồi quy FE/E2E của W3 lộ ra ở cổng `e2e`
+
+Ma trận cổng của W2–W4 **không có** `frontend` và `e2e`. W5 là wave đầu tiên gọi
+chúng, và ba lỗi đã nằm trong nhánh từ W3 mới hiện ra:
+
+1. **Thanh tab Thiết kế bấm không ăn.** `T59-306` đặt `tab = route ?? fromQuery`
+   — `route` **ghi đè** query. Nhưng nút tab chỉ ghi lại `?tab=`, thứ vừa bị ghi
+   đè. Trên `/programs` và `/mapping`, người dùng bấm tab và **không có gì xảy
+   ra**. Nay nút **điều hướng** sang đúng route của IA.
+2. **Tab `execution` mất chỗ hiển thị.** Nó không phải một trong sáu trang IA mà
+   là tab con, nên chỉ có địa chỉ dưới dạng `?tab=execution` — và đúng dạng đó bị
+   `route` ghi đè. Kết quả: `/task` (lối vào cũ) dẫn tới một trang không hiện thứ
+   nó hứa. Nay `execution` là ngoại lệ tường minh, query thắng route **chỉ** cho
+   giá trị này.
+3. **E2E còn ghi IA cũ.** `VS-PROG-032` kỳ vọng ba route dẫn về `/design`, trong
+   khi `T59-306` đã **đảo chiều**: `/programs`/`/mapping` nay là route thật còn
+   `/design` là lối vào cũ. Spec được viết lại theo chiều mới, phủ thêm
+   `/design?tab=mapping` và `/task`.
+
+**Sửa kèm — dev server E2E không cần watcher.** Playwright không sửa nguồn giữa
+lúc chạy, nên watcher chỉ đem lại hai thứ: hàng chục nghìn inotify watch (đủ để
+`ENOSPC` trên máy đang mở editor) và nguy cơ Vite rebuild giữa một assertion.
+`VITE_E2E_NO_WATCH=1` tắt hẳn cho đường E2E; đường dev thường giữ nguyên HMR.
+
+**Ranh giới trung thực.** Đây là **atomicity mức gói trên host**. Mô phỏng mất
+điện thật (cắt nguồn giữa fsync) và số đo phục hồi trên board thuộc `T59-704`;
+`e2e` ở đây vẫn dùng mock Programming — đường real-backend là `T59-505`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-502` — Impact/ack cho mô hình đa Program
+
+**Lỗi thật: Published Signal chưa từng seal được.** `revisionPayload` sinh object
+kind `SIGNAL` từ collection `signals` của document v2, nhưng `SIGNAL` **không nằm
+trong** whitelist kind của `revision_objects` — danh sách đó viết từ migration v1,
+trước khi Published Signal tồn tại, và chưa bao giờ được mở rộng. Hệ quả:
+`SealRevision` từ chối **mọi** Revision có signal với "CHECK constraint failed".
+Toàn bộ lane signal — validate ở Check (`T59-304`), đóng gói vào container
+(`T59-404`), bus ở runtime — **chưa từng chạm một Revision thật**. Không test nào
+bắt được vì chưa test nào seal một Revision có signal. Migration **v11** mở
+whitelist và khôi phục đúng hai trigger bất biến của bảng.
+
+**Bốn nhóm impact chỉ phủ Rev A một Program.** Với mô hình đa Program, bốn thứ
+sau đi qua Commission mà **không hỏi acknowledgement nào**:
+
+- **`publishedSignals`** — đổi freshness / chính sách stale / publisher đổi hành
+  vi của **mọi** consumer khi mất dữ liệu, và **không nhìn thấy được** trong diff
+  mã nguồn. Trước bản vá `SIGNAL` rơi vào nhánh mặc định `SOURCE`.
+- **`controlLibrary`** — đổi library đổi thân của mọi POU tham chiếu nó.
+- **`programSet`** — thêm/bớt Program đổi **tập** chương trình chạy trên thiết
+  bị; khác hẳn sửa thân một Program đã có, nên nó là một category riêng chứ
+  không phải một dòng `SOURCE`.
+- **`enableIntent`** — Program **đang Enabled** mà Revision này chạm tới. Đọc
+  intent bền vững ở store chứ không suy từ diff: "đang chạy" là trạng thái của
+  **thiết bị**, không phải thuộc tính của một Revision.
+
+**Nhóm vắng mặt là `UNAVAILABLE`, không phải `NONE`.** Một BE cũ hơn (hoặc một
+nhóm mới chưa nối) gửi thiếu nhóm thì Commission **fail-closed**. Coi "không
+thấy" là "không có" đúng là cách để một tác động thật đi qua mà không ai xác
+nhận. FE đọc phòng thủ nên trang vẫn sống thay vì trắng màn hình.
+
+**Khoá ack là enum đóng ở một chỗ.** Bản trước liệt kê bốn khoá bằng bốn phép so
+`!=` nối nhau — đúng dạng dễ thêm nhóm mà quên sửa phép kiểm.
+
+**Kiểu TS sinh từ enum của contract.** `ProgrammingImpact` trước đây viết cứng
+bốn trường trong generator, nên thêm nhóm ở contract mà quên sửa generator sẽ cho
+một kiểu **im lặng thiếu trường**. Nay sinh từ `ProgrammingImpactKey`.
+
+**Ack trong test dựng từ chính impact vừa tính**, không viết cứng danh sách: viết
+cứng làm mọi lần thêm nhóm phải sửa tay, và lần quên đầu tiên hiện ra dưới dạng
+"test hỏng" thay vì "Commission thiếu ack".
+
+**Ranh giới trung thực.** `impactRef` đã băm cả nội dung nhóm nên ack cũ tự thành
+stale — điều đó có sẵn từ trước, task này chỉ mở rộng thứ được băm. Thứ tự items
+được sắp để thứ tự đọc DB không lọt vào `impactRef`. FE hiện đủ tám nhóm; usability
+người thật thuộc `T59-503`.
+
+**Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
+
+#### `T59-503` — Sáu workspace và một thanh context không trộn bốn sự thật
+
+**Sáu workspace có route canonical ở cả desktop và mobile.** PGM-01..06 lần
+lượt là Tổng quan, Chương trình, Điểm & Ánh xạ, Thư viện điều khiển, Kiểm tra &
+Vận hành và Runtime & Bảo trì. Bốn workspace thuộc Project chỉ trở thành link
+khi layout đọc được đúng `projectId`; deep-link có ID không tồn tại không được
+âm thầm đổi sang Project đầu tiên. `/design` và `/task` chỉ còn là lối vào tương
+thích, giữ query/hash phục vụ định vị diagnostic rồi chuyển tới route chuẩn.
+
+**Thanh context tách bốn giá trị có vòng đời khác nhau.** `Draft đang sửa`,
+`Active Package`, `desiredEnabled` và runtime read-back không được gộp thành một
+nhãn "đang chạy". Một intent `true` nhưng Core trả `UNKNOWN` vẫn hiện cả hai sự
+thật; FE không tự suy thành `RUNNING`. Context giữ `dirty`/Check state của Draft,
+định danh Active từ runtime và tổng hợp trạng thái từng Program từ read-back.
+
+**Trạng thái không thuận lợi là acceptance, không phải phần trang trí.** Layout
+phân biệt loading, empty, lỗi Project/intent, thiếu quyền, Core offline, dữ liệu
+stale và kết quả unknown/reconcile. Khi read-back không đủ tin cậy, copy nói rõ
+thao tác runtime bị khoá; viewer vẫn đọc được context nhưng không được trao một
+nút mutation giả. Nav mobile có sáu target, tên truy cập đầy đủ và vùng bấm tối
+thiểu; nav desktop giữ focus-visible và trạng thái active.
+
+**Bằng chứng task.** Component tests phủ route/nav/context và các trạng thái
+fail-closed; Playwright mock phủ sáu workspace ở desktop/mobile cùng axe. Bộ FE
+hiện hành PASS **124 file / 1161 test**, E2E mock **61/61**; Chrome DevTools thật
+ở 1440×900 và 390×844 không Console warning/error/issue và không tràn ngang.
+
+**Evidence level.** Host/local (Vitest/jsdom/Playwright). Không phải GitHub CI,
+không phải target/HIL và không mở `RELEASE_READY`.
+
+#### `T59-504` — Monitor tách Point truth, candidate và Published Signal
+
+**Ba category là một contract đóng.** Watch lọc và đếm `LOCAL`, `VP`, `MB_RTU`;
+identity MB_RTU giữ `deviceId:pointId`. Mỗi hàng nói riêng Program/biến, Point,
+candidate đầu ra mức 5 (`programValue`), actual, nguồn hiệu lực, priority, TTL,
+quality và freshness. Một Point chỉ đọc không bị ép có candidate; một override
+không bị trình bày như Program đang thắng.
+
+**Không có dữ liệu khác giá trị số 0.** `OFFLINE`/`UNAVAILABLE` hoặc raw invalid
+hiện `—`; một giá trị `0` hợp lệ hoặc `0` stale vẫn hiện cùng nhãn tương ứng.
+Loading, permission, offline, payload lỗi, chưa có Active Revision và Active
+không có biến ánh xạ là sáu trạng thái riêng. Viewer xem được monitor nhưng chỉ
+admin mới chọn biến và tạo/dừng trace.
+
+**Published Signal có endpoint và snapshot riêng.** FE không suy signal từ
+Binding/Point. Hàng signal hiện publisher Program, typed value/unit,
+quality/freshness, stale policy, definition state và generation. `valid=false`,
+`MISMATCH`, `CORE_ONLY`, `REVISION_ONLY`, quality xấu hoặc freshness
+`UNAVAILABLE` đều fail-closed thành `—`, kể cả payload ngoài biên vẫn gửi raw
+`0`/`true`. Chỉ identity `MATCHED` và giá trị hợp lệ mới được trình bày như dữ
+liệu dùng được.
+
+**Trace giữ provenance của dữ liệu.** UI hiện `droppedSamples`; value trace
+invalid giữ null/`—`, không vẽ thành 0. Điều này nối tiếp sửa `TRACE_READ` của
+T59-408: một dãy dùng một nguồn snapshot Core khi Core đã nhận phiên, không trộn
+mẫu poll vào đầu dãy.
+
+**Bằng chứng task.** Component/fault/a11y tests phủ ba category, candidate↔actual,
+invalid zero, signal definition mismatch, state matrix và quyền trace. CTest
+Release/Debug **1211/1211**, Go gate và FE **1161 test** hiện hành đều sạch; đây
+vẫn không phải CI/target evidence.
+
+**Evidence level.** Host/local. Không phải bằng chứng timing target, I/O vật lý
+hay 24 h soak.
+
+#### `T59-505` — Lane real-backend riêng, DONE ở mức HOST/LOCAL
+
+**Không tái sử dụng mock Programming.** `playwright.programming-real.config.ts`
+khởi động một backend Go production, compiler/packager production và Core
+simulator dùng scheduler/coordinator/Programming IPC thật trong thư mục tạm.
+Spec không gọi `page.route`, `routeFromHAR` hay `routeWebSocket`; workflow có
+guard source riêng để mock lọt vào lane này phải làm job đỏ. Simulator không có
+process-I/O vật lý, vì vậy monitor Point trả 503 là trạng thái fail-closed dự
+kiến, không phải một verdict target/HIL.
+
+**Acceptance API đi hết vòng đời và cả hai miền dữ liệu W2/W3.** Fixture tạo
+Project và PROJECT Library, lưu Program + Published Signal + Variable + Binding
+`LOCAL`, đọc lại Library/Mapping, Seal rồi Check bằng compiler thật, Commission
+package, Enable tới read-back `RUNNING`, đọc signal invalid với `value=null`,
+Disable tới `DISABLED`, tạo/Commission Revision thứ hai rồi Restore chính xác
+Revision thứ nhất. Tám nhóm impact được đọc từ response hiện hành và ack đúng
+chính tập `PRESENT`, không viết cứng bốn nhóm đời cũ.
+
+**Acceptance trình duyệt phải đọc lại, không chỉ setup bằng API.** Browser đăng
+nhập bằng JWT thật và trở lại deep-link; sau đó tự điều hướng tới Programs,
+PROJECT Library, Mapping và Runtime để đọc lại source/entry/binding/signal từ
+backend. Guard gom response Programming 5xx, request failed và Console error;
+ngoại lệ duy nhất được khai là 503 monitor do simulator cố ý không giả process
+I/O. Invalid signal phải hiện `—`/`INVALID`/`BAD`/`UNAVAILABLE`, không chứa `0`.
+
+**Hai finding của lần chạy đầu đã được đóng, không hạ acceptance.** Adapter
+document v2 trước đó được dựng lại ở mỗi render; monitor poll làm identity tài
+liệu Draft đổi, `ProgramsTab` phát lại pending operation rỗng và tạo vòng render
+`Maximum update depth exceeded`, nên browser hết timeout khi chờ hàng POU sau
+Restore. Adapter nay được memoize theo đúng payload Draft authority, vì vậy poll
+runtime không làm tài liệu đang sửa đổi identity. Đồng thời read-back Library
+được sửa theo vòng đời thật: Seal publish PROJECT Library, nên API và browser đều
+phải thấy `PUBLISHED`, không giữ kỳ vọng `DRAFT` cũ.
+
+**Current-pass evidence.** `scripts/verify-project.sh --component e2e-real`
+thoát `0`, **1/1 PASS** trong 14,5 s (journey 7,6 s), `requestfailed=0`; không có
+Programming HTTP `>=500` hay `console.error` ngoài đúng monitor thường kỳ trả
+503/offline đã khai do simulator không giả process-I/O. Acceptance read-back
+Programs/Library/Mapping/Runtime vẫn giữ nguyên và toàn spec đi hết trên stack
+thật.
+
+**Gate mới không viết lại lịch sử.** W5 nay có tám cổng HOST vì thêm
+`e2e-real`. Kết quả **7/7** ở `T59-501`/`T59-502` là số đo lịch sử trước khi cổng
+này tồn tại và được giữ nguyên. Workflow đã khai job thứ 12 cho lane này, nhưng
+chưa chạy trên GitHub nên chỉ là cấu hình CI, không phải `T59-701` evidence.
+
+**Evidence level.** Host/local DONE. Không phải GitHub CI, target, HIL,
+physical I/O, soak hay release evidence.
+
+#### `T59-506` — History ST bền, overlay fail-closed và FBD dùng typed POU
+
+**ST undo/redo thuộc editor, không dựa native textarea.** Mọi edit từ gõ trực
+tiếp, autocomplete, Format, Replace và quick action đi qua một history bounded
+50 snapshot; snapshot giữ cả source lẫn hai đầu selection. Acceptance chạy 20
+edit, undo/redo toàn bộ và đòi cursor/selection trở lại đúng từng bước; edit mới
+sau undo phải cắt nhánh redo. Một lệnh Format là đúng một bước lịch sử.
+
+**Runtime overlay là read-only và có identity guard.** Workspace chỉ ghép
+monitor cho kind `PROGRAM`, theo `programId`, và chỉ khi Active Revision của
+monitor khớp Active Revision của Project. Loading/unavailable/empty tách riêng;
+`0`/`FALSE` hợp lệ vẫn hiện. `valid=false`, value không scalar, BAD, OFFLINE,
+UNKNOWN hoặc freshness UNAVAILABLE đều hiện `—`; stale được phép giữ last-known
+nhưng phải mang nhãn `STALE`, không được trang trí như live.
+
+**FBD dùng interface typed đã lưu trong Draft.** FE không parse source ST để tự
+dựng signature thứ hai. FUNCTION/FUNCTION_BLOCK hợp lệ xuất hiện trong nhóm POU
+Project/Library với pin và kiểu từ `objects[].interface`; POU đang mở bị loại để
+không chào direct recursion. Interface sai tên/kind/type/pin bị loại và báo rõ,
+không crash và không sinh pin đoán. Keyboard flow khoá `Insert`, chọn port bằng
+phím mũi tên, `Enter` nối, `Alt+↑/↓` đổi thứ tự, `Delete`, `Ctrl+Z/Y`; focus sau
+Insert quay về graph để lệnh kế tiếp không kích hoạt lại nút toolbar.
+
+**Bằng chứng task.** Unit/component tests phủ history/cursor, adapter
+Draft→overlay/POU, invalid/stale/valid-zero và keyboard/a11y FBD; browser editor
+spec giữ guard Console/Network. Các test này nằm trong FE **124 file / 1161
+test** và E2E mock **61/61** hiện hành; không dùng chúng để nâng CI/target/release.
+
+**Evidence level.** Host/local. Không phải runtime target, timing hay physical
+I/O evidence.
+
+#### Sửa kèm W5 — đường trace debug chưa nối tới người dùng
+
+Cổng W5 chạy lần đầu đã lộ thêm một thứ mà không cổng nào của W4 gọi tới: BE
+**chưa bao giờ** gọi `TRACE_READ`. Chi tiết và cách sửa ghi ở §3.5 mục
+`T59-408`; ở đây chỉ ghi lại bài học lặp lại lần thứ hai trong hai wave liên
+tiếp — **một tính năng chỉ được coi là xong khi có người thật đọc được đầu ra
+của nó**, không phải khi mã của nó chạy. Cả `T59-408` (ring không ai đọc) và ba
+hồi quy FE của W3 (tab bấm không ăn) đều thuộc đúng một lớp lỗi: đường đi tồn
+tại, đầu cuối không nối.
+
+Một điểm nữa cùng lớp: test chống hồi quy đầu tiên của đường này **đua** — nó
+chờ `readCalls > 0` rồi đọc mẫu, trong khi lệnh đọc tới Core trước lúc mẫu được
+ghi vào phiên. Cổng `go` bắt được ở lần chạy thứ hai. Điều kiện chờ nay là **cả
+hai** (đã đọc ring **và** mẫu đã ghi); chạy lặp 5 lần đều xanh.
+
+#### Sửa kèm W5 — ST+ chưa tương thích payload Draft v2 strict
+
+Chrome trên stack real-backend phát hiện nút **ST+** nhận `400`: FE trải cả
+`executionOrder` và `functionalTags` vào operation `upsertProgram`, trong khi
+backend Draft v2 strict chỉ chấp nhận đúng năm field `programId`, `name`, `kind`,
+`language`, `document`. Tên mặc định có khoảng trắng (`New program`/bản dịch)
+cũng vi phạm grammar POU, nên bỏ hai field thừa vẫn chưa đủ làm luồng tạo Program
+chạy được.
+
+Transport nay dùng type hẹp đúng năm field; tên sinh là `NewProgram`,
+`NewFbdProgram` và hậu tố `_2`, đồng thời validation client dùng cùng grammar và
+bộ từ khóa reserved của backend. Metadata Program không tồn tại trong Draft v2
+được bỏ khỏi Inspector thay vì tiếp tục gửi một khả năng giả. E2E real-backend
+khóa request body exact, PATCH `200`, heading UI và GET Project read-back; Chrome
+DevTools xác nhận cùng đường trên desktop/mobile. Nhãn `Name`/`Kind` được nối
+`htmlFor`/`id`, nên kiểm form accessibility không còn field vô danh.
+
+**Evidence level.** Host/local. Đây là compatibility fix của contract đã khóa,
+không thêm field hay semantics mới vào Unified DDD.
+
+#### Đóng sổ W5 — hai finding chặn cổng, phát hiện khi chạy lại toàn bộ ma trận
+
+`T59-501..506` được tuyên bố DONE bằng số đo chạy **từng cổng rời** ở các phiên
+trước. Khi chạy lại **cả tám cổng W5 trong một lượt** trên đúng cây làm việc sắp
+commit (2026-08-23), bốn cổng đỏ. Hai trong số đó là lỗi thật của source, không
+phải nhiễu môi trường; chúng được sửa trong chính change-set đóng sổ này.
+
+**`F-W5-CLOSE-01` — `apps/core/application/st/st_scheduler.cpp` không biên dịch
+được.** `stage_activation` được tách thành hai overload (một nhận
+`const std::string& instance_id`, một nhận `StProgramInstance*`), nhưng thân hàm
+của overload con trỏ vẫn còn hai chỗ đọc `instance_id` — biến chỉ tồn tại ở
+overload kia. `g++` báo `error: 'instance_id' was not declared in this scope` tại
+dòng `292` và `328`. Hệ quả kéo theo hai cổng: `cpp` FAIL sau 6,1 s và `e2e-real`
+FAIL sau 3,1 s vì `webServer` của lane real-backend dựng
+`mkddc-programming-core-sim` từ đúng source đó. Sửa: dùng `p->instance_id` cho cả
+hai chỗ. Đây là bằng chứng trực tiếp rằng số đo `ctest 1211/1211` ghi ở `T59-504`
+đã **không** được đo lại sau lần sửa scheduler cuối cùng.
+
+**`F-W5-CLOSE-02` — cổng `e2e` đỏ vì helper đăng nhập coi sự kiện `load` là
+"ứng dụng đã mount".** Test `pa3-dashboard.spec.ts:238` timeout 30 s tại
+`locator.fill`. Trace của lần đỏ cho thấy sáu request module bị
+`net::ERR_NETWORK_CHANGED` trong 65 ms sau `page.goto('/login')`, React không bao
+giờ mount, `page.goto(waitUntil:'load')` vẫn trả về bình thường nên test đi tiếp
+rồi chờ một selector không bao giờ xuất hiện. Repro tất định: `route.abort` đúng
+một module ⇒ lỗi giống từng ký tự. Sửa trong `apps/web-ui/e2e/pa3-dashboard.spec.ts`:
+helper chờ đúng điều kiện "ứng dụng đã mount" thay vì sự kiện `load`, và **chỉ**
+điều hướng lại khi đã ghi nhận abort tầng mạng của tài nguyên tĩnh. Ba control
+chứng minh không nới acceptance: abort một lần → PASS 13,0 s; abort mọi lần →
+vẫn FAIL 21,0 s; app hỏng mà không có abort mạng → vẫn FAIL, nhanh hơn (10,3 s).
+Bảy spec anh em còn dùng nguyên helper cũ (`fe-pages-health`, `pa3-a11y`,
+`point-names`, `scheduler`, `st-editor-alignment`, `programming`, `trends`) nên
+mang cùng lỗ hổng; việc gom helper dùng chung thuộc `T59-604`.
+
+**Số đo cổng W5 sau khi sửa (HOST, một lượt, `scripts/verify-project.sh --wave W5`).**
+
+| Cổng | Mức | Kết quả | Thời gian |
+|---|---|---|---|
+| `layout` | HOST | PASS | 3,2 s |
+| `cpp` | HOST | PASS — `ctest` **1211/1211** | 17,0 s |
+| `go` | HOST | PASS | 37,7 s |
+| `frontend` | HOST | PASS | 54,4 s |
+| `e2e` | HOST | PASS — **61/61** trên 8 spec | 53,0 s |
+| `e2e-real` | HOST | PASS — **1/1** | 15,5 s |
+| `docs` | HOST | PASS | 0,1 s |
+| `candidate-pin` | HOST | PASS sau khi phát hành manifest 1.37 | 0,0 s |
+
+**Evidence level.** Toàn bộ HOST/LOCAL. Không phải GitHub CI, target, HIL hay
+release evidence; `RELEASE_READY` giữ `NO-GO`.
 
 ### W6 — Hardening, packaging và Release Candidate
 
@@ -746,7 +2175,7 @@ công cụ sinh, **không phải** mã đã biên dịch từ nguồn thật —
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-701` | P0 | Khôi phục GitHub Actions account và chạy full RC workflow | RC T59-606 | EVIDENCE_QUEUE | 11 job khởi chạy thật; required checks PASS trên RC commit. |
+| `T59-701` | P0 | Khôi phục GitHub Actions account và chạy full RC workflow | RC T59-606 | EVIDENCE_QUEUE | **12 job** khởi chạy thật (gồm lane Programming real-backend); required checks PASS trên RC commit. Việc job tồn tại trong workflow không phải CI evidence. |
 | `T59-702` | P0 | Deploy target 10-Program fixture, timing/fault/Web-BE loss | T59-606 | EVIDENCE_QUEUE | 24 h; 3 period; no poll gap >=200 ms; fault isolation/signal freshness đúng. |
 | `T59-703` | P0 | Physical I/O HIL cho ST và FBD output | T59-606 | EVIDENCE_QUEUE | AO/DO đo bằng instrument; full candidate/safety path; Disable/rollback physical đúng. |
 | `T59-704` | P0 | RETAIN/power-cut/reboot/enable-intent/LKG matrix | T59-606 | EVIDENCE_QUEUE | >=10 power cuts; cold-init/recovery exact; no corrupt accepted/partial active. |
@@ -819,3 +2248,5 @@ truy nguyên As-Built đến 2026-08-20.
 |---|---|---|
 | 1.0/1.1 | 2026-08-20 | Bản nháp 37 task chia Rev A/Rev B; superseded. |
 | 2.0 | 2026-08-20 | Owner chốt một Product; 51 task/8 Wave từ contract đến release, đủ POU/library/multi-Program/signal/enable/output/HIL; mọi implementation task READY/ORDERED, không còn decision blocker. |
+| 2.2 | 2026-08-23 | Đóng sổ W5 trên cây làm việc thật: chạy lại cả tám cổng trong một lượt lộ ra `F-W5-CLOSE-01` (overload `stage_activation` mới không biên dịch được — kéo đỏ cả `cpp` lẫn `e2e-real`) và `F-W5-CLOSE-02` (helper đăng nhập E2E coi sự kiện `load` là "đã mount"), cả hai được sửa trong cùng change-set; W5 đạt **8/8 PASS** mức HOST. Không đổi `RELEASE_READY=NO-GO`. |
+| 2.1 | 2026-08-21 | Cập nhật W5 theo source/evidence host: đóng T59-503/504/506; sau khi sửa vòng render Draft adapter, read-back PROJECT Library `PUBLISHED` và payload ST+ đúng Draft v2 strict, đóng T59-505 bằng `e2e-real` 1/1 PASS. Mở gate `e2e-real` riêng, ép C++ `cmake --fresh`, mở anti-mock guard cho mọi BrowserContext và cập nhật T59-701 thành 12 job; chưa claim GitHub CI/target/HIL/release và không đổi `RELEASE_READY=NO-GO`. |

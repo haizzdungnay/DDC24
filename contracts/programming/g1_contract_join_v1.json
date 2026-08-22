@@ -7,36 +7,40 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "08fe3078a91f57352e91416b3b6d0569818fe868367e6b4b576f3d98943be4ae",
+      "sha256": "8f148f166f4e3e03897be4a32539fdb0e599f1b689895f581f00f941f29dfc5b",
       "major": 1,
-      "version": "1.22.0",
-      "operationCount": 25
+      "version": "1.26.0",
+      "operationCount": 31
     },
     {
       "name": "ipc",
       "path": "contracts/ipc/programming_v1/schema.json",
-      "sha256": "81aa88c6a68ca563929f73fbb34889eb3f3e47f1a19e0ac6fcc425842e3c7e16",
+      "sha256": "6a3a23dc1449ab19fe923ac7facdd346d27af0091fd6510a6d3f6b4999c08de3",
       "goldenManifestPath": "contracts/ipc/programming_v1/golden/manifest.json",
-      "goldenManifestSha256": "d1c44e344568e86f10dd890f4dd2ce4daba9a7e3a10dc51ca48bf2b3b25a41dd",
+      "goldenManifestSha256": "f342108a3881948fc3c4dbfc571a89923525bcab7a4ea56d7ad16d3388403a65",
       "major": 1,
-      "minor": 0,
+      "minor": 3,
       "version": "1.0"
     },
     {
       "name": "profile",
       "path": "contracts/programming/product_profile_v2.json",
-      "sha256": "9b33db01a150816fc8b67f84e0aafa8750a29d20e9481a9ed8f1d67bbc9e6484",
+      "sha256": "17d2eb86cb7a2a025c0675104d0da19dfc0f062cc0cd17c0c861835e735ce288",
       "major": 1,
       "minor": 0,
       "profileCode": 1,
       "schemaPath": "contracts/programming/product_profile_v2.schema.json",
-      "schemaSha256": "f27616855fa809d59181e6f287f14cb08680f537dccbe3cd640c249400e50104",
+      "schemaSha256": "74eecbd26d319031d90b879032099dd18090412553fc8449d6d568365de6fae7",
       "targetAbi": 3841,
       "integrityMode": "HASH_ONLY",
       "documentMajor": 2,
       "documentMinor": 0,
       "maxProgramsTotal": 32,
-      "maxProgramsEnabled": 16
+      "maxProgramsEnabled": 16,
+      "reviewGatedFeatures": [
+        "PID"
+      ],
+      "approvedReviewGatedFeatures": []
     },
     {
       "name": "artifact",
@@ -51,21 +55,21 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "1b6e96ef9ec0f1e8679a76d3f55660eae586b9d7cbd25efdd0f242c3f1df36c2",
+      "sha256": "43557a256909e98380fba044567a6792674b05e5ba07dc3c0b716660e80e79db",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "cdf2430c94cd9d89725cb07d79ed525f1a89de457c279773eaa0deee7b939c6d",
+      "manifestSha256": "de3d180ccf0fc93311465143b855589dd7a583e22098df80f7d33de211f137e0",
       "major": 1,
       "publicErrorCount": 30,
-      "componentDetailCount": 120
+      "componentDetailCount": 124
     },
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "ac724b11ca6cd3ca8f5d3d8508b845398efc7589029f588f1043cd4e93e2f754",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0006_product_model_v2.sql",
-      "migrationSha256": "18a608e76ed3490f9a19697841a4ce7097a311106710dc159cf4d8ed72bd8abb",
+      "sha256": "d7171bc3791c018230f36ec2ff7bb17d1303e166b63a86f2ee37a393123a45bd",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0011_revision_signal_objects.sql",
+      "migrationSha256": "c5d32ec655ca02c6b9fa0867604734b4e3efdcead226953163b1313543658626",
       "major": 1,
-      "schemaVersion": 6,
+      "schemaVersion": 11,
       "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {
@@ -85,6 +89,12 @@
       "major": 1,
       "schemaVersion": 1,
       "libraryVersion": "rev-a.1",
+      "versionHistory": [
+        {
+          "libraryVersion": "rev-a.1",
+          "sha256": "55c152d6a1456faf130a05a68788c9e15be918be359d9e642c8c215068540885"
+        }
+      ],
       "entryCount": 40,
       "operatorCount": 15,
       "funcTableCount": 20,
@@ -101,10 +111,10 @@
       "schemaVersion": 2,
       "magic": "MKDDCIR2",
       "goldenPath": "contracts/programming/golden/package_v2_ahu.mkpkg",
-      "goldenSha256": "69cb1dfef9259aa833b692170709131bb681beb5d0bf71d74a34ff13ff5ecb04",
+      "goldenSha256": "10709c2850cb3188e9d1a04e8b4d3a149bd46129f77f6e698304cae01f4e7f94",
       "goldenManifestPath": "contracts/programming/golden/package_v2_manifest.json",
-      "goldenManifestSha256": "cc227d86c61629305974baa1111f0aa8c33d9d9dbcb7f94f49829c8c56fd97f5",
-      "goldenArtifactBytes": 657,
+      "goldenManifestSha256": "2a7f8e65a4c51b052fc4d8a7c10e07196251b03e887a50518800bd25dd5fde88",
+      "goldenArtifactBytes": 717,
       "goldenProgramCount": 2
     },
     {

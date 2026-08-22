@@ -231,3 +231,116 @@ func TestGoldenManifestPinsSchemaAndCorpus(t *testing.T) {
 		assertHash(filepath.Join(directory, name), entry.SHA256)
 	}
 }
+
+// T59-405 — nâng `protocolMinor` 0 -> 1 phải TƯƠNG THÍCH NGƯỢC. Một client cũ
+// vẫn gửi minor=0 và server mới phải nhận; đó chính là lý do action mới được
+// thêm bằng cách tăng minor thay vì đổi `schemaVersion` trên dây — đổi
+// `schemaVersion` sẽ làm mọi Core phiên bản cũ từ chối MỌI request.
+func TestOlderProtocolMinorIsStillAccepted(t *testing.T) {
+	request := NewRequest(ActionCapabilities, make([]byte, 16), nil, "controller-1", "",
+		"correlation-id-0001", 2000000, EmptyPayload())
+	request.ProtocolMinor = 0
+	frame, err := EncodeRequestFrame(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeRequestFrame(frame)
+	if err != nil {
+		t.Fatalf("request minor=0 bị từ chối: %v", err)
+	}
+	if decoded.ProtocolMinor != 0 {
+		t.Fatalf("minor=%d", decoded.ProtocolMinor)
+	}
+
+	// Minor CAO hơn bị chặn ngay ở lớp mã hoá: dựng một frame tự nhận hiểu một
+	// hợp đồng chưa tồn tại là lỗi của phía gửi, không phải thứ để phía nhận
+	// phát hiện muộn.
+	request.ProtocolMinor = ProtocolMinor + 1
+	if _, err := EncodeRequestFrame(request); !errors.Is(err, ErrUnsupportedMinor) {
+		t.Fatalf("minor cao hơn không bị chặn: %v", err)
+	}
+}
+
+// Action mới phải được cả bảng `knownAction` lẫn bảng `isMutation` nhận. Thiếu
+// bảng thứ hai thì một mutation đi qua đường không cần `operationId`, và Core
+// mất khả năng đối chiếu lệnh với operation nào.
+func TestSetProgramEnabledIsAKnownMutation(t *testing.T) {
+	if !knownAction(ActionSetProgramEnabled) {
+		t.Fatal("SET_PROGRAM_ENABLED không nằm trong knownAction")
+	}
+	if !isMutation(ActionSetProgramEnabled) {
+		t.Fatal("SET_PROGRAM_ENABLED không được coi là mutation")
+	}
+}
+
+// T59-408 — "action ma = 0": mọi action khai trong contract phải có handler
+// THẬT ở Core, và mọi action Go biết phải có mặt trong contract.
+//
+// Một action khai mà không ai xử lý là một lời hứa suông: client thấy nó trong
+// hợp đồng, gọi nó, và nhận `UNAVAILABLE` — hoặc tệ hơn, nhận `OK` rỗng. Chiều
+// ngược lại cũng vậy: một action Go gửi mà contract không khai là một đường đi
+// không ai review.
+func TestNoGhostActionsInContract(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(contractGoldenDir(t), "..", "schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	handlers := findHandlerTable(document)
+	if len(handlers) == 0 {
+		t.Fatal("không tìm thấy bảng handler trong schema")
+	}
+	declared := make(map[string]struct{}, len(handlers))
+	for _, entry := range handlers {
+		item, ok := entry.(map[string]any)
+		if !ok {
+			t.Fatalf("handler entry không phải object: %v", entry)
+		}
+		action, _ := item["action"].(string)
+		status, _ := item["handlerStatus"].(string)
+		if status != "IMPLEMENTED" {
+			t.Fatalf("action ma: %q có handlerStatus=%q", action, status)
+		}
+		declared[action] = struct{}{}
+		if !knownAction(Action(action)) {
+			t.Fatalf("contract khai %q nhưng Go không biết action đó", action)
+		}
+	}
+	for _, action := range []Action{ActionCapabilities, ActionStatus, ActionStage, ActionActivate,
+		ActionOperationStatus, ActionRestore, ActionTraceStart, ActionRetainReset,
+		ActionSetProgramEnabled, ActionTraceStop, ActionTraceRead} {
+		if _, ok := declared[string(action)]; !ok {
+			t.Fatalf("Go biết action %q nhưng contract không khai", action)
+		}
+	}
+}
+
+// findHandlerTable tìm mảng handler trong schema mà không phụ thuộc vị trí — vị
+// trí là chi tiết trình bày, còn sự tồn tại của bảng mới là hợp đồng.
+func findHandlerTable(node any) []any {
+	switch value := node.(type) {
+	case map[string]any:
+		for _, child := range value {
+			if found := findHandlerTable(child); found != nil {
+				return found
+			}
+		}
+	case []any:
+		if len(value) > 0 {
+			if first, ok := value[0].(map[string]any); ok {
+				if _, has := first["handlerStatus"]; has {
+					return value
+				}
+			}
+		}
+		for _, child := range value {
+			if found := findHandlerTable(child); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
+}

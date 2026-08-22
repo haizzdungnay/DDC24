@@ -224,6 +224,98 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     expect(screen.queryByRole('button', { name: /Định dạng|Format/ })).not.toBeInTheDocument()
   })
 
+  it('T59-506: Ctrl+Z/Y hoàn tác/làm lại đủ 20 edit và giữ cursor của snapshot', () => {
+    const initial = 'PROGRAM P\nEND_PROGRAM\n'
+    const snapshots = [initial]
+    for (let index = 1; index <= 20; index += 1) {
+      snapshots.push(`PROGRAM P\n  X := ${index};\nEND_PROGRAM\n`)
+    }
+
+    function Harness() {
+      const [source, setSource] = useState(initial)
+      return (
+        <SourceEditor
+          program={program(initial)}
+          source={source}
+          canEdit
+          saving={false}
+          diagnostics={[]}
+          focusDiagnostic={null}
+          onChange={setSource}
+          onSave={vi.fn()}
+          pointCatalogStatus="idle"
+          pointCatalogItems={[]}
+          pointCatalogError={null}
+          onEnsurePointCatalogLoaded={vi.fn()}
+        />
+      )
+    }
+
+    render(<I18nProvider><Harness /></I18nProvider>)
+    const textarea = screen.getByLabelText(/Mã nguồn ST/) as HTMLTextAreaElement
+    for (const next of snapshots.slice(1)) {
+      fireEvent.change(textarea, { target: { value: next } })
+    }
+    expect(textarea.value).toBe(snapshots[20])
+    expect(screen.getByRole('button', { name: 'Hoàn tác thay đổi ST' })).toBeEnabled()
+
+    fireEvent.keyDown(textarea, { key: 'z', ctrlKey: true })
+    expect(textarea.value).toBe(snapshots[19])
+    expect(textarea.selectionStart).toBe(snapshots[19].length)
+    expect(textarea.selectionEnd).toBe(snapshots[19].length)
+
+    for (let index = 18; index >= 0; index -= 1) {
+      fireEvent.keyDown(textarea, { key: 'z', ctrlKey: true })
+      expect(textarea.value).toBe(snapshots[index])
+    }
+    expect(textarea.selectionStart).toBe(0)
+    expect(screen.getByRole('button', { name: 'Hoàn tác thay đổi ST' })).toBeDisabled()
+
+    for (let index = 1; index <= 20; index += 1) {
+      fireEvent.keyDown(textarea, { key: 'y', ctrlKey: true })
+      expect(textarea.value).toBe(snapshots[index])
+    }
+    expect(textarea.selectionStart).toBe(snapshots[20].length)
+    expect(screen.getByRole('button', { name: 'Làm lại thay đổi ST' })).toBeDisabled()
+  })
+
+  it('T59-506: Định dạng gọi từ Command Palette vẫn là một bước có thể undo', async () => {
+    const initial = 'PROGRAM test VAR Counter:INT; END_VAR Counter:=Counter+1; END_PROGRAM'
+
+    function Harness() {
+      const [source, setSource] = useState(initial)
+      const [nonce, setNonce] = useState(0)
+      return (
+        <>
+          <button type="button" onClick={() => setNonce((value) => value + 1)}>Format request</button>
+          <SourceEditor
+            program={program(initial)}
+            source={source}
+            canEdit
+            saving={false}
+            diagnostics={[]}
+            focusDiagnostic={null}
+            onChange={setSource}
+            onSave={vi.fn()}
+            pointCatalogStatus="idle"
+            pointCatalogItems={[]}
+            pointCatalogError={null}
+            onEnsurePointCatalogLoaded={vi.fn()}
+            formatRequest={nonce > 0 ? { programId: 'program-1', nonce } : undefined}
+          />
+        </>
+      )
+    }
+
+    render(<I18nProvider><Harness /></I18nProvider>)
+    const textarea = screen.getByLabelText(/Mã nguồn ST/) as HTMLTextAreaElement
+    fireEvent.click(screen.getByRole('button', { name: 'Format request' }))
+    await waitFor(() => expect(textarea.value).not.toBe(initial))
+
+    fireEvent.keyDown(textarea, { key: 'z', ctrlKey: true })
+    expect(textarea.value).toBe(initial)
+  })
+
   describe('FE-ST-008: trạng thái Lưu rõ ràng (Saving/Failed/Chưa lưu) thay vì chỉ disable nút không giải thích', () => {
     /** `renderEditor` (dùng cho phần lớn file này) cố ý KHÔNG có state thật
      *  đằng sau `source`/`program.document` — `onChange` mock không phản hồi

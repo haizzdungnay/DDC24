@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
+	"mkddc-web/internal/programming/coreipc"
 	programmingstore "mkddc-web/internal/programming/store"
 )
 
@@ -185,5 +187,162 @@ func TestTraceFailsClosedWhenMonitorSourceBecomesUnavailable(t *testing.T) {
 	}
 	if view.State != "FAILED" || view.StopReason == nil || *view.StopReason != "SOURCE_UNAVAILABLE" || view.DroppedSamples != 1 {
 		t.Fatalf("source unavailable không fail-closed: %+v err=%v", view, err)
+	}
+}
+
+// traceCoreReader mô phỏng Core CÓ ring trace: nhận `TRACE_START`, trả mẫu ở
+// `TRACE_READ`. Nó KHÔNG mô phỏng luật lấy mẫu — luật đó do test C++ canh. Ở
+// đây chỉ cần biết BE có thật sự đọc từ ring hay không.
+type traceCoreReader struct {
+	fakeRuntimeStatusReader
+	started     int
+	readCalls   int
+	stopCalls   int
+	rejectStart bool
+	samples     []traceReadSample
+	state       string
+	dropped     uint32
+}
+
+func (f *traceCoreReader) Call(ctx context.Context, request coreipc.Request) (coreipc.Response, error) {
+	switch request.Action {
+	case coreipc.ActionTraceStart:
+		f.started++
+		if f.rejectStart {
+			return coreipc.ResponseFor(request, coreipc.ResultRejected, "IPC-TRACE-REJECTED",
+				"core.programming.ipc", nil), nil
+		}
+		return coreipc.ResponseFor(request, coreipc.ResultAccepted, "", "core.programming.ipc", nil), nil
+	case coreipc.ActionTraceStop:
+		f.stopCalls++
+		return coreipc.ResponseFor(request, coreipc.ResultOK, "", "core.programming.ipc", nil), nil
+	case coreipc.ActionTraceRead:
+		f.readCalls++
+		state := f.state
+		if state == "" {
+			state = "RUNNING"
+		}
+		payload, err := coreipc.EncodePayload(traceReadReply{
+			State: state, Dropped: f.dropped, Samples: f.samples})
+		if err != nil {
+			return coreipc.Response{}, err
+		}
+		return coreipc.ResponseFor(request, coreipc.ResultOK, "", "core.programming.ipc", payload), nil
+	}
+	return f.fakeRuntimeStatusReader.Call(ctx, request)
+}
+
+// T59-408/T59-501 — mẫu trace phải đến từ RING CỦA CORE, không phải từ vòng poll
+// monitor của BE.
+//
+// Trước bản vá, `TRACE_READ` không được gọi ở bất kỳ đâu: Core lấy mẫu tại ranh
+// giới quét rồi ghi vào một ring KHÔNG AI ĐỌC, còn người dùng vẫn xem dãy mẫu
+// poll theo nhịp riêng của BE. Hai biến trong cùng một "mẫu" khi đó có thể đến
+// từ hai chu kỳ khác nhau — đồ thị trông hợp lý trong khi quan hệ nhân quả giữa
+// chúng đã bị xáo.
+func TestTraceSamplesComeFromCoreRingNotMonitorPolling(t *testing.T) {
+	service := newMonitorTraceService(t)
+	reader := &traceCoreReader{
+		fakeRuntimeStatusReader: fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)},
+		samples: []traceReadSample{
+			{TimestampNS: 1_000_000_000, Values: []traceReadCell{{Valid: true, Bits: uint64(math.Float32bits(21.5))}}},
+			{TimestampNS: 2_000_000_000, Values: []traceReadCell{{Valid: false}}},
+		},
+		dropped: 3,
+	}
+	service.runtime = reader
+
+	accepted, err := service.CreateTrace(context.Background(), TraceRequest{
+		SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID},
+		DurationMS: 2000, SamplePeriodMS: 100,
+	}, Actor{ID: "admin", Role: "admin"}, "trace-idem-core-0001", "monitor-test-core01")
+	if err != nil {
+		t.Fatalf("CreateTrace: %v", err)
+	}
+	if reader.started != 1 {
+		t.Fatalf("TRACE_START không được gửi xuống Core: %d", reader.started)
+	}
+
+	// Vòng lấy mẫu chạy nền; chờ tới khi có lần đọc ring đầu tiên.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		// Chờ CẢ HAI: đã đọc ring, VÀ mẫu đã được ghi vào phiên.
+		//
+		// Chỉ chờ "có mẫu" thì đường poll dự phòng cũng thoả, và test đo nhầm
+		// nguồn. Chỉ chờ `readCalls > 0` thì thoát ngay khi lệnh đọc vừa tới
+		// Core, trước khi `applyCoreTraceSamples` kịp ghi — một cuộc đua làm
+		// test đỏ ngẫu nhiên. Với Core đã nhận phiên, mẫu CHỈ có thể đến từ
+		// ring, nên hai điều kiện cùng đúng là mốc chắc chắn.
+		view, err := service.GetTrace(accepted.TraceID)
+		if reader.readCalls > 0 && err == nil && len(view.Samples) > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if reader.readCalls == 0 {
+		t.Fatal("BE không bao giờ gọi TRACE_READ — ring của Core không ai đọc")
+	}
+
+	view, err := service.GetTrace(accepted.TraceID)
+	if err != nil {
+		t.Fatalf("GetTrace: %v", err)
+	}
+	if len(view.Samples) != 2 {
+		t.Fatalf("số mẫu=%d, phải bằng số mẫu Core giữ", len(view.Samples))
+	}
+	first := view.Samples[0].Values[0]
+	if first.VariableID != monitorVariableID {
+		t.Fatalf("ô không dịch được về variableId: %+v", first)
+	}
+	// Bit thô được diễn giải theo kiểu đã khai trong package (REAL).
+	if value, ok := first.ProgramValue.(float32); !ok || value != 21.5 {
+		t.Fatalf("giá trị REAL diễn giải sai: %#v", first.ProgramValue)
+	}
+	// `valid=false` KHÁC giá trị 0: phải nói thẳng chất lượng, không vẽ điểm 0.
+	second := view.Samples[1].Values[0]
+	if second.ProgramValue != nil || second.Quality != "BAD" || second.Freshness != "UNAVAILABLE" {
+		t.Fatalf("ô không đo được bị trình bày như giá trị thật: %+v", second)
+	}
+	// Số mẫu rơi của Core phải hiện ra, không bị giấu.
+	if view.DroppedSamples != 3 {
+		t.Fatalf("droppedSamples=%d, phải lấy từ Core", view.DroppedSamples)
+	}
+
+	_ = service.StopTrace(context.Background(), accepted.TraceID, Actor{ID: "admin", Role: "admin"}, "monitor-test-core02")
+	if reader.stopCalls == 0 {
+		t.Fatal("TRACE_STOP không được gửi — Core lấy mẫu tiếp cho một phiên BE đã đóng")
+	}
+}
+
+// Core từ chối phiên: BE KHÔNG được coi như Core đang lấy mẫu. Đoán rằng ring có
+// dữ liệu trong khi Core chưa nhận là cách chắc chắn nhất để trả về một đồ thị
+// rỗng mà không nói vì sao.
+func TestTraceFallsBackToPollingWhenCoreRejectsSession(t *testing.T) {
+	service := newMonitorTraceService(t)
+	reader := &traceCoreReader{
+		fakeRuntimeStatusReader: fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)},
+		rejectStart:             true,
+	}
+	service.runtime = reader
+
+	accepted, err := service.CreateTrace(context.Background(), TraceRequest{
+		SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID},
+		DurationMS: 1000, SamplePeriodMS: 100,
+	}, Actor{ID: "admin", Role: "admin"}, "trace-idem-core-0002", "monitor-test-core03")
+	if err != nil {
+		t.Fatalf("CreateTrace: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if reader.readCalls != 0 {
+		t.Fatalf("BE đọc ring của một phiên Core chưa nhận: %d lần", reader.readCalls)
+	}
+	view, err := service.GetTrace(accepted.TraceID)
+	if err != nil {
+		t.Fatalf("GetTrace: %v", err)
+	}
+	// Đường dự phòng vẫn cho dữ liệu dùng được — mất trace hoàn toàn vì Core bận
+	// là tệ hơn.
+	if len(view.Samples) == 0 {
+		t.Fatal("đường dự phòng poll monitor không chạy khi Core từ chối")
 	}
 }

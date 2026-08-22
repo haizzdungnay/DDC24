@@ -49,7 +49,15 @@ def enum_actions(schema: dict[str, Any]) -> list[str]:
     raise ValueError("không tìm thấy trường action trong schema request")
 
 
-def validate(schema: dict[str, Any]) -> list[str]:
+def validate(schema: dict[str, Any], server_override: str | None = None) -> list[str]:
+    """`server_override` chỉ dùng cho self-test.
+
+    Mutation trên schema KHÔNG mô phỏng được ca "khai IMPLEMENTED nhưng Core
+    không có nhánh dispatch" — muốn dựng ca đó phải bỏ một nhánh khỏi mã nguồn
+    Core, mà mã nguồn thì mutation không chạm được. Cho phép tiêm nội dung nguồn
+    là cách duy nhất để self-test kiểm chính phép kiểm đó thay vì kiểm một ca
+    khác rồi tưởng là đã phủ.
+    """
     problems: list[str] = []
     meta = schema["x-mkddc-actions"]
     declared = {item["action"]: item for item in meta["entries"]}
@@ -62,7 +70,7 @@ def validate(schema: dict[str, Any]) -> list[str]:
     if extra:
         problems.append(f"action khai trạng thái nhưng không có trong enum wire: {extra}")
 
-    server = CORE_SERVER.read_text(encoding="utf-8")
+    server = server_override if server_override is not None else CORE_SERVER.read_text(encoding="utf-8")
     enum_by_action = {name: enum for enum, name in ACTION_ENUM.findall(server)}
     dispatched = set(DISPATCH.findall(server))
 
@@ -75,21 +83,23 @@ def validate(schema: dict[str, Any]) -> list[str]:
         entry = declared.get(action)
         if entry is None:
             continue
+        status = entry["handlerStatus"]
+        # Luật "NOT_IMPLEMENTED phải ghi task sẽ hiện thực" thuần schema — kiểm
+        # TRƯỚC khi tra codec C++. Đặt sau sẽ làm một action bịa (chưa có enum
+        # C++) thoát khỏi luật này chỉ vì nó thoát sớm ở phép kiểm khác.
+        if status == "NOT_IMPLEMENTED" and not entry.get("implementedBy"):
+            problems.append(f"{action}: NOT_IMPLEMENTED phải ghi task sẽ hiện thực")
         enum_name = enum_by_action.get(action)
         if enum_name is None:
             problems.append(f"{action}: codec C++ không khai enum tương ứng")
             continue
         has_branch = enum_name in dispatched
-        status = entry["handlerStatus"]
         if status == "IMPLEMENTED" and not has_branch:
             problems.append(f"{action}: khai IMPLEMENTED nhưng Core không có nhánh dispatch")
-        if status == "NOT_IMPLEMENTED":
-            if has_branch:
-                problems.append(
-                    f"{action}: khai NOT_IMPLEMENTED nhưng Core đã có nhánh dispatch"
-                )
-            if not entry.get("implementedBy"):
-                problems.append(f"{action}: NOT_IMPLEMENTED phải ghi task sẽ hiện thực")
+        if status == "NOT_IMPLEMENTED" and has_branch:
+            problems.append(
+                f"{action}: khai NOT_IMPLEMENTED nhưng Core đã có nhánh dispatch"
+            )
 
     detail = meta.get("notImplementedDetailCode")
     if not detail or detail not in server:
@@ -107,23 +117,50 @@ def validate(schema: dict[str, Any]) -> list[str]:
 def run_self_test(schema: dict[str, Any]) -> int:
     import copy
 
+    # Các mutation KHÔNG được bám vào một action cụ thể đang NOT_IMPLEMENTED.
+    # Bản trước dùng `TRACE_START` làm ví dụ, nên khi `T59-408` hiện thực nó thì
+    # hai mutation trở thành no-op và self-test xanh mà không kiểm gì — đúng lớp
+    # lỗi mà self-test sinh ra để chặn. Nay mutation TỰ TIÊM một action giả.
+    def add_wire_action(schema: dict[str, Any], name: str) -> None:
+        """Thêm `name` vào enum wire của cả request lẫn response."""
+        for prefix in ("request", "response"):
+            for item in schema["$defs"][prefix]["prefixItems"]:
+                if item.get("title") == "action":
+                    item["enum"].append(name)
+
+    def ghost_action(schema: dict[str, Any], status: str, owner_task: bool) -> None:
+        add_wire_action(schema, "GHOST_ACTION")
+        entry = {"action": "GHOST_ACTION", "handlerStatus": status,
+                 "mutation": False, "owner": "Core"}
+        if owner_task:
+            entry["implementedBy"] = "T99-999"
+        schema["x-mkddc-actions"]["entries"].append(entry)
+
     mutations = [
+        # Action bịa: không có ở codec nào, phải bị chặn vì chính lý do đó.
+        ("ghost-action-not-in-codec", "codec C++ không khai enum tương ứng",
+         lambda s: ghost_action(s, "IMPLEMENTED", False), None),
+        # Ca "IMPLEMENTED nhưng không có nhánh": tiêm nguồn Core đã bị bỏ nhánh
+        # `STATUS` — schema giữ nguyên.
         ("implemented-without-handler", "khai IMPLEMENTED nhưng Core không có nhánh dispatch",
-         lambda s: next(item for item in s["x-mkddc-actions"]["entries"]
-                        if item["action"] == "TRACE_START").__setitem__("handlerStatus", "IMPLEMENTED")),
+         lambda s: None,
+         lambda text: text.replace("request.action == ProgramAction::Status", "false")),
         ("not-implemented-with-handler", "khai NOT_IMPLEMENTED nhưng Core đã có nhánh dispatch",
          lambda s: next(item for item in s["x-mkddc-actions"]["entries"]
-                        if item["action"] == "STATUS").__setitem__("handlerStatus", "NOT_IMPLEMENTED")),
+                        if item["action"] == "STATUS").__setitem__("handlerStatus", "NOT_IMPLEMENTED"),
+         None),
         ("missing-owner-task", "phải ghi task sẽ hiện thực",
-         lambda s: next(item for item in s["x-mkddc-actions"]["entries"]
-                        if item["action"] == "TRACE_START").pop("implementedBy")),
+         lambda s: ghost_action(s, "NOT_IMPLEMENTED", False), None),
         ("undeclared-wire-action", "chưa khai trạng thái",
-         lambda s: s["x-mkddc-actions"]["entries"].pop()),
+         lambda s: s["x-mkddc-actions"]["entries"].pop(), None),
     ]
-    for name, expected, mutate in mutations:
+    for name, expected, mutate, mutate_server in mutations:
         candidate = copy.deepcopy(schema)
         mutate(candidate)
-        problems = validate(candidate)
+        server_text = None
+        if mutate_server is not None:
+            server_text = mutate_server(CORE_SERVER.read_text(encoding="utf-8"))
+        problems = validate(candidate, server_text)
         if not any(expected in problem for problem in problems):
             raise RuntimeError(f"self-test {name} không bị reject đúng lý do: {problems}")
     return len(mutations)

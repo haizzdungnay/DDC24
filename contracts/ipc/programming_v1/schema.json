@@ -40,6 +40,37 @@
    "maxLength": 43692,
    "description": "CBOR canonical action payload, tối đa 32 KiB trước base64."
   },
+  "runtimeSignalPayload": {
+   "type": "array",
+   "minItems": 11,
+   "maxItems": 11,
+   "description": "Published Signal do Core chụp từ StSignalBus; value null khi valid=false.",
+   "prefixItems": [
+    { "type": "string", "minLength": 1, "maxLength": 64, "title": "name" },
+    { "type": "string", "minLength": 1, "maxLength": 64, "title": "producerProgramId" },
+    { "type": "string", "enum": ["BOOL", "INT", "DINT", "UINT", "REAL", "TIME"], "title": "dataType" },
+    { "type": ["boolean", "integer", "number", "null"], "title": "value" },
+    { "type": "boolean", "title": "valid" },
+    { "type": "string", "enum": ["GOOD", "UNCERTAIN", "BAD"], "title": "quality" },
+    { "type": "string", "enum": ["FRESH", "STALE_HELD", "STALE_FALLBACK", "UNAVAILABLE", "NOT_DECLARED"], "title": "freshness" },
+    { "type": "string", "enum": ["WAIT", "HOLD_LAST", "USE_FALLBACK", "SAFE_STATE"], "title": "stalePolicy" },
+    { "type": "integer", "minimum": 1000, "maximum": 90000, "title": "freshnessMs" },
+    { "type": "integer", "minimum": 0, "title": "publishedAtMonoNs" },
+    { "type": "integer", "minimum": 0, "title": "generation" }
+   ]
+  },
+  "runtimeStatusPayloadV3": {
+   "type": "array",
+   "minItems": 5,
+   "maxItems": 5,
+   "prefixItems": [
+    { "type": "string", "enum": ["GRAPH_ONLY", "PROGRAM_ONLY"], "title": "producerMode" },
+    { "type": ["string", "null"], "maxLength": 128, "title": "activeRevisionId" },
+    { "type": ["string", "null"], "maxLength": 128, "title": "lkgRevisionId" },
+    { "type": "array", "maxItems": 256, "items": { "type": "string", "maxLength": 128 }, "title": "activeOverrideIds" },
+    { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/runtimeSignalPayload" }, "title": "signals" }
+   ]
+  },
   "request": {
    "type": "array",
    "minItems": 12,
@@ -99,7 +130,10 @@
       "OPERATION_STATUS",
       "RESTORE",
       "TRACE_START",
-      "RETAIN_RESET"
+      "RETAIN_RESET",
+      "SET_PROGRAM_ENABLED",
+      "TRACE_STOP",
+      "TRACE_READ"
      ],
      "title": "action"
     },
@@ -203,6 +237,17 @@
    ]
   }
  },
+ "x-mkddc-action-payloads": {
+  "STATUS": {
+   "sinceProtocolMinor": 3,
+   "responsePayload": { "$ref": "#/$defs/runtimeStatusPayloadV3" },
+   "backwardCompatibleReader": "Minor 2 có array 4 phần tử; BE minor 3 phải đọc được và coi Published Signal là UNAVAILABLE."
+  },
+  "OPERATION_STATUS": {
+   "sinceProtocolMinor": 3,
+   "responsePayload": { "$ref": "#/$defs/runtimeStatusPayloadV3" }
+  }
+ },
  "x-mkddc-actions": {
   "description": "Trạng thái handler của từng action. Enum wire phải giữ ổn định (gỡ giá trị enum là breaking change cho cả hai codec), nên action chưa có handler được khai NOT_IMPLEMENTED kèm chủ sở hữu và detail code trả về. `scripts/verify_programming_ipc_actions.py` kiểm hai chiều: IMPLEMENTED phải có nhánh dispatch thật trong Core, NOT_IMPLEMENTED thì không được có.",
   "notImplementedDetailCode": "IPC-ACTION-NOT-IMPLEMENTED",
@@ -251,10 +296,27 @@
    },
    {
     "action": "TRACE_START",
-    "handlerStatus": "NOT_IMPLEMENTED",
+    "handlerStatus": "IMPLEMENTED",
     "mutation": true,
-    "owner": "Core",
-    "implementedBy": "T59-408"
+    "owner": "Core"
+   },
+   {
+    "action": "SET_PROGRAM_ENABLED",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": true,
+    "owner": "Core"
+   },
+   {
+    "action": "TRACE_STOP",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": true,
+    "owner": "Core"
+   },
+   {
+    "action": "TRACE_READ",
+    "handlerStatus": "IMPLEMENTED",
+    "mutation": false,
+    "owner": "Core"
    }
   ]
  }

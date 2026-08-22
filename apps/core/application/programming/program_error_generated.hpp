@@ -7,7 +7,7 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "1b6e96ef9ec0f1e8679a76d3f55660eae586b9d7cbd25efdd0f242c3f1df36c2";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "43557a256909e98380fba044567a6792674b05e5ba07dc3c0b716660e80e79db";
 inline constexpr std::string_view kProgramErrorCatalogVersion = "1.7.0";
 
 enum class ProgramPublicError : uint8_t {
@@ -93,7 +93,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 120> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 124> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -185,12 +185,16 @@ inline constexpr std::array<ComponentErrorMapping, 120> kComponentErrorMappings 
     {"core-ipc", "IPC-RETAIN-RESET-TIMEOUT", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-RUNTIME-CONFIG", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-RUNTIME-NOT-CONFIGURED", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-RUNTIME-STATE", ProgramPublicError::Conflict },
     {"core-ipc", "IPC-STAGE-REJECTED", ProgramPublicError::Artifact },
     {"core-ipc", "IPC-STAGED-TOKEN", ProgramPublicError::Operation },
     {"core-ipc", "IPC-STAGING-HASH", ProgramPublicError::Artifact },
     {"core-ipc", "IPC-STAGING-LOCATOR", ProgramPublicError::Artifact },
     {"core-ipc", "IPC-STAGING-OPEN", ProgramPublicError::Artifact },
     {"core-ipc", "IPC-STAGING-TYPE-SIZE", ProgramPublicError::Artifact },
+    {"core-ipc", "IPC-TRACE-REJECTED", ProgramPublicError::Request },
+    {"core-ipc", "IPC-TRACE-UNAVAILABLE", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-UNKNOWN-INSTANCE", ProgramPublicError::NotFound },
     {"retain", "RT-RETAIN-001", ProgramPublicError::Retain },
     {"retain", "RT-RETAIN-002", ProgramPublicError::Retain },
     {"retain", "RT-RETAIN-003", ProgramPublicError::Retain },

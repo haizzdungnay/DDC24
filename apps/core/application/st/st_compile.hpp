@@ -24,8 +24,20 @@ namespace core {
 bool compile_st_to_ir(const StProgram& prog, const std::string& source, StIrModule* out,
                       StDiagnostic* diag);
 
-/* Tiện ích một bước cho CLI và test: source -> parse -> typecheck -> IR. */
+/* Chính sách compile ở biên Check. Mặc định BẬT review gate, nên mọi call site
+ * production (CLI Check, worker) được gate mà không phải nhớ bật.
+ * `enforce_review_gate=false` CHỈ dành cho bộ test conformance của chính feature
+ * đang bị gate — nó là nơi dựng evidence Controls/Safety. Không có cờ CLI, header
+ * HTTP hay trường payload nào đặt được giá trị này. */
+struct StCompileOptions {
+    bool enforce_review_gate = true;
+};
+
+/* Tiện ích một bước cho CLI và test: source -> parse -> typecheck -> review gate
+ * -> IR. */
 bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic* diag);
+bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic* diag,
+                       const StCompileOptions& options);
 
 } // namespace core
 

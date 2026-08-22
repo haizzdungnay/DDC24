@@ -94,5 +94,14 @@
   "coreLibrary": {
     "version": "rev-a.1"
   },
-  "integrityMode": "HASH_ONLY"
+  "integrityMode": "HASH_ONLY",
+  "reviewGatedFeatures": [
+    {
+      "featureId": "PID",
+      "registryEntryId": "PID",
+      "policy": "BLOCK_CHECK",
+      "approvalEvidenceRef": null,
+      "approvalToken": null
+    }
+  ]
 }

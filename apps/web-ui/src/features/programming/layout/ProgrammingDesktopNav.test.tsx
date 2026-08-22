@@ -19,25 +19,28 @@ beforeEach(() => localStorage.setItem('mkddc-lang', 'vi'))
 afterEach(cleanup)
 
 describe('ProgrammingDesktopNav (D-04)', () => {
-  it('không có projectId — Overview/Runtime là link thật, Design/Check bị vô hiệu, không dựng deep-link giả', () => {
+  it('không có projectId — PGM-01/06 là link thật, bốn workspace theo Project bị vô hiệu', () => {
     renderNav(null)
     expect(screen.getByRole('link', { name: 'Tổng quan' })).toHaveAttribute('href', '/eng/programming')
-    expect(screen.getByRole('link', { name: 'Runtime' })).toHaveAttribute('href', '/eng/programming/runtime')
-    expect(screen.queryByRole('link', { name: 'Thiết kế' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Kiểm tra' })).not.toBeInTheDocument()
-    const disabledDesign = screen.getByText('Thiết kế')
-    expect(disabledDesign.closest('span')).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('link', { name: 'Runtime & Bảo trì' })).toHaveAttribute('href', '/eng/programming/runtime')
+    expect(screen.queryByRole('link', { name: 'Chương trình' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Điểm & Ánh xạ' })).not.toBeInTheDocument()
+    expect(screen.getByText('Chương trình').closest('span')).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Thư viện điều khiển').closest('span')).toHaveAttribute('aria-disabled', 'true')
   })
 
-  it('có projectId — cả bốn mục đều là link thật, đúng route Design/Check của project đó', () => {
+  it('có projectId — cả sáu mục là link thật và trỏ đúng route PGM-01..06', () => {
     renderNav('project-1')
-    expect(screen.getByRole('link', { name: 'Thiết kế' })).toHaveAttribute('href', '/eng/programming/projects/project-1/design')
-    expect(screen.getByRole('link', { name: 'Kiểm tra' })).toHaveAttribute('href', '/eng/programming/projects/project-1/commission')
+    expect(screen.getAllByRole('link')).toHaveLength(6)
+    expect(screen.getByRole('link', { name: 'Chương trình' })).toHaveAttribute('href', '/eng/programming/projects/project-1/programs')
+    expect(screen.getByRole('link', { name: 'Điểm & Ánh xạ' })).toHaveAttribute('href', '/eng/programming/projects/project-1/mapping')
+    expect(screen.getByRole('link', { name: 'Thư viện điều khiển' })).toHaveAttribute('href', '/eng/programming/projects/project-1/library')
+    expect(screen.getByRole('link', { name: 'Kiểm tra & Vận hành' })).toHaveAttribute('href', '/eng/programming/projects/project-1/commission')
   })
 
   it('mục đang mở đúng route được đánh dấu active (aria-current)', () => {
-    renderNav('project-1', '/eng/programming/projects/project-1/design')
-    expect(screen.getByRole('link', { name: 'Thiết kế' })).toHaveAttribute('aria-current', 'page')
+    renderNav('project-1', '/eng/programming/projects/project-1/programs')
+    expect(screen.getByRole('link', { name: 'Chương trình' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Tổng quan' })).not.toHaveAttribute('aria-current')
   })
 })

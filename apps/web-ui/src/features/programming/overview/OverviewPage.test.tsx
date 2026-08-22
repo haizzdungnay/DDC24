@@ -42,6 +42,12 @@ function stubDefaultEndpoints(overrides: Record<string, () => Promise<unknown>> 
       })
     }
     if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: ACTIVE_ID }] })
+    if (operationId === 'listProgrammingProgramIntents') {
+      return Promise.resolve({ items: [
+        { programId: 'program-1', desiredEnabled: true, generation: 1, runtimeState: 'RUNNING', updatedBy: 'admin', updatedAtUtcMs: 1 },
+        { programId: 'program-2', desiredEnabled: false, generation: 2, runtimeState: 'DISABLED', updatedBy: 'admin', updatedAtUtcMs: 2 }
+      ] })
+    }
     if (operationId === 'listProgrammingAudit') return Promise.resolve({ items: [] })
     if (operationId === 'getProgrammingRuntimeMonitor') return Promise.reject(new Error('503 unavailable'))
     if (operationId === 'listProgrammingOperations') return Promise.resolve({ items: [] })
@@ -73,6 +79,18 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('OverviewPage — Việc cần chú ý (TR-MKDDC24-P2-20260814-02)', () => {
+  it('PGM-01 tách ý định Enable khỏi trạng thái runtime thực tế', async () => {
+    stubDefaultEndpoints({
+      listProgrammingProgramIntents: () => Promise.resolve({ items: [
+        { programId: 'program-1', desiredEnabled: true, generation: 1, runtimeState: 'FAULTED', updatedBy: 'admin', updatedAtUtcMs: 1 },
+        { programId: 'program-2', desiredEnabled: false, generation: 2, runtimeState: 'RUNNING', updatedBy: 'admin', updatedAtUtcMs: 2 }
+      ] })
+    })
+    renderOverview('vi')
+    expect(await screen.findAllByText('1/2 muốn bật')).not.toHaveLength(0)
+    expect(screen.getAllByText('FAULTED 1 · RUNNING 1')).toHaveLength(2)
+  })
+
   it('BUG-018: phạm vi PRG-SAFE-ACTIVE không rò tiếng Việt cứng khi ở chế độ EN', async () => {
     stubDefaultEndpoints()
     renderOverview('en')

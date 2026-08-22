@@ -12,6 +12,10 @@ import { ExecutionTab } from './task/ExecutionTab'
 import { Modal } from '../../../shared/components/Modal'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
+import { toWorkspaceDocument } from '../model/draftV2'
+import { PouTree } from './PouTree'
+import { useProgrammingRuntimeMonitor } from '../api/queries'
+import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
@@ -33,7 +37,24 @@ const EMPTY_DIAGNOSTICS: ProgrammingDiagnostic[] = []
  * (DDD-FE-PROG-001 §0.1). Tab là trạng thái URL, đọc/ghi bằng `replace`
  * trong `useEffect` (không setState lúc render).
  */
-export function DesignWorkspacePage() {
+/**
+ * T59-306: `route` cố định tab theo ROUTE ĐÍCH của IA sáu trang (DDD §8). Route
+ * thắng query vì URL đích là nguồn sự thật — nếu query thắng thì
+ * `/mapping?tab=programs` sẽ hiện một trang không khớp địa chỉ của chính nó.
+ *
+ * T59-501 sửa hai hệ quả mà `--wave W3` không bắt được vì ma trận cổng của W3
+ * không có `e2e`:
+ *
+ * 1. Thanh tab BẤM KHÔNG ĂN trên `/programs` và `/mapping`. Nút chỉ ghi lại
+ *    `?tab=`, mà `route` thì ghi đè query — người dùng bấm và không có gì xảy
+ *    ra. Nay nút ĐIỀU HƯỚNG sang đúng route của IA.
+ * 2. `execution` mất chỗ hiển thị. Nó KHÔNG phải một trong sáu trang IA mà là
+ *    một tab con, nên nó chỉ sống dưới dạng `?tab=execution` — và đúng dạng đó
+ *    lại bị `route` ghi đè. Nay `execution` là ngoại lệ tường minh: query
+ *    thắng route CHỈ cho giá trị này, đúng nơi mà `/task` (lối vào cũ) và nút
+ *    tab cùng trỏ tới.
+ */
+export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
   const { pick } = useI18n()
   const { session } = useAuth()
   const navigate = useNavigate()
@@ -42,7 +63,10 @@ export function DesignWorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const requested = searchParams.get('tab')
-  const tab: DesignTab = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as DesignTab) : 'programs'
+  const fromQuery: DesignTab = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as DesignTab) : 'programs'
+  /* `execution` là tab con, không phải trang IA: nó chỉ có địa chỉ dưới dạng
+   * `?tab=execution` trên route `programs`. Mọi giá trị khác thì route thắng. */
+  const tab: DesignTab = requested === 'execution' ? 'execution' : (route ?? fromQuery)
   // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-03
   // (Check) chọn sẵn đúng Program bị lỗi khi mở workspace Thiết kế.
   const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>(() => searchParams.get('program') ?? undefined)
@@ -69,6 +93,23 @@ export function DesignWorkspacePage() {
   const [savingBeforeNavigation, setSavingBeforeNavigation] = useState(false)
 
   useEffect(() => {
+    /* Trên route của IA sáu trang, ĐỊA CHỈ đã mang tab — ghi thêm `?tab=` chỉ
+     * tạo một URL thứ hai cho cùng một trang, và chính vòng ghi đó là thứ làm
+     * `/programs` điều hướng lại chính nó ở e2e. Chỉ đồng bộ query cho lối vào
+     * cũ (không có `route`) và cho `execution`, thứ không có route riêng. */
+    if (route && tab !== 'execution') {
+      if (requested && requested !== 'execution') {
+        setSearchParams(
+          (current) => {
+            const next = new URLSearchParams(current)
+            next.delete('tab')
+            return next
+          },
+          { replace: true }
+        )
+      }
+      return
+    }
     if (requested === tab) return
     setSearchParams(
       (current) => {
@@ -78,9 +119,20 @@ export function DesignWorkspacePage() {
       },
       { replace: true }
     )
-  }, [requested, tab, setSearchParams])
+  }, [requested, route, tab, setSearchParams])
 
   const workspace = useDraftWorkspace(projectId)
+  const monitor = useProgrammingRuntimeMonitor()
+  /* `toWorkspaceDocument` cấp object/array mới. Nếu gọi trực tiếp dưới render,
+   * mỗi lần monitor poll sẽ làm ProgramsTab tưởng Draft đổi, phát lại
+   * `onPendingOperationsChange([])` rồi cha set state bằng một mảng mới: vòng
+   * render vô hạn (`Maximum update depth exceeded`) chỉ lộ trên browser thật.
+   * Neo adapter theo đúng payload Draft authority; monitor thay đổi không được
+   * làm identity của tài liệu chỉnh sửa thay đổi theo. */
+  const workspaceDocument = useMemo(
+    () => workspace.project?.draft ? toWorkspaceDocument(workspace.project.draft) : null,
+    [workspace.project?.draft]
+  )
   const pendingOperations = useMemo(() => [...programOperations, ...executionOperations], [executionOperations, programOperations])
   const draftDirty = pendingOperations.length > 0
 
@@ -138,7 +190,10 @@ export function DesignWorkspacePage() {
   if (workspace.status === 'error' || !workspace.project?.draft) {
     return <StateBlock state="error" title={pick('Không tải được Project.', 'Could not load the project.')} detail={workspace.error ?? undefined} onRetry={workspace.reload} />
   }
-  const document = workspace.project.draft
+  // T59-301: BE trả document v2; adapter chiếu về view model của bốn tab.
+  const document = workspaceDocument as NonNullable<typeof workspaceDocument>
+  const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
+  const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
 
   return (
     <div className="space-y-3">
@@ -159,16 +214,20 @@ export function DesignWorkspacePage() {
               className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1.5 text-sm font-medium ${
                 candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
               }`}
-              onClick={() =>
-                setSearchParams(
-                  (current) => {
-                    const next = new URLSearchParams(current)
-                    next.set('tab', candidate)
-                    return next
-                  },
+              onClick={() => {
+                /* Điều hướng sang ROUTE của IA thay vì chỉ ghi `?tab=`: trên
+                 * `/programs` và `/mapping`, query bị `route` ghi đè nên ghi
+                 * query là bấm vào chỗ không có gì xảy ra. */
+                const query = new URLSearchParams(searchParams)
+                query.delete('tab')
+                if (candidate === 'execution') query.set('tab', 'execution')
+                const target = candidate === 'mapping' ? 'mapping' : 'programs'
+                const suffix = query.toString()
+                navigate(
+                  `/eng/programming/projects/${projectId}/${target}${suffix ? `?${suffix}` : ''}`,
                   { replace: true }
                 )
-              }
+              }}
             >
               {pick(...TAB_LABEL[candidate])}
             </button>
@@ -219,6 +278,17 @@ export function DesignWorkspacePage() {
           DDD-FE-PROG-001 §0.1 ràng buộc 1. Phát hiện qua Playwright E2E
           (TASK-PROG-506), sửa ngay trong cùng phiên. */}
       <div hidden={tab !== 'programs'}>
+        {/* T59-306/PGM-02: cây POU gom ba nhóm Programs/Functions/Function
+            Blocks và inspector kind-aware. Nó đọc document v2 TRỰC TIẾP, không
+            qua adapter — đây là phần IA mới, còn `ProgramsTab` bên dưới vẫn là
+            editor cũ cho tới khi lane editor chuyển sang v2. */}
+        <div className="mb-3 rounded border border-[var(--c-border)] p-3">
+          <PouTree
+            draft={workspace.project.draft}
+            selectedObjectId={selectedProgramId}
+            onSelect={setSelectedProgramId}
+          />
+        </div>
         <ProgramsTab
           document={document}
           saving={workspace.saving}
@@ -230,6 +300,8 @@ export function DesignWorkspacePage() {
           onPendingOperationsChange={updateProgramOperations}
           discardVersion={discardVersion}
           onRunCheck={goToCommission}
+          runtimeOverlayByProgramId={runtimeOverlays}
+          userPouInterfaces={userPouInterfaces}
         />
       </div>
       <div hidden={tab !== 'mapping'}>

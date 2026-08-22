@@ -9,6 +9,8 @@
 #include "programming/programming_cutover.hpp"
 #include "priority/priority_resolver.hpp"
 #include "st/st_journal.hpp"
+#include "programming/program_candidate_registry.hpp"
+#include "st/st_package_v2.hpp"
 #include "st/st_scheduler.hpp"
 
 namespace core::programming {
@@ -62,6 +64,16 @@ struct RetainResetCommand {
     std::string expected_active_revision_id;
 };
 
+/* T59-405 — intent Enable/Disable cho một Program. `enabled` là Ý ĐỊNH; trạng
+ * thái thật (`STARTING`/`RUNNING`/`STOPPING`/`DISABLED`/`FAULTED`) là thứ Core
+ * báo ngược về. Gộp hai thứ vào một trường sẽ làm một Program đã bật nhưng đang
+ * FAULTED trông y hệt một Program chưa ai bật. */
+struct ProgramEnableCommand {
+    std::string operation_id;
+    std::string instance_id;
+    bool        enabled = false;
+};
+
 enum class RetainResetOutcome : uint8_t {
     APPLIED = 0,      /* Đã áp dụng ở boundary VÀ force-flush persisted image thành công. */
     REJECTED,         /* Revision không khớp active, hoặc instance chưa có program loaded. */
@@ -71,12 +83,29 @@ enum class RetainResetOutcome : uint8_t {
 /* Coordinator duy nhất sở hữu thứ tự journal → arm → safe-boundary → first
  * output commit. Filesystem chỉ chạy trong method IPC/non-RT; hai hook scan
  * chỉ đọc/ghi atomic và gọi swap O(1) đã prepare. */
+/* Một Program đã tách ra khỏi package, đủ để stage: identity, mã, và chu kỳ
+ * release. Gộp ba thứ vào một struct thay vì ba vector song song vì chúng luôn
+ * đi cùng nhau — vector song song là chỗ để lệch độ dài. */
+struct PackageProgramSlice {
+    std::string instance_id;
+    std::vector<uint8_t> ir_blob;
+    uint32_t period_ms = 0;
+};
+
+/* T59-404 — bus signal mà coordinator dựng lại mỗi lần nạp package. Đặt ở đây
+ * chứ không ở scheduler vì signal là dữ liệu của PACKAGE: đổi package là đổi tập
+ * signal, và giữ lại khai báo cũ nghĩa là chạy gói mới với hợp đồng gói cũ. */
+
 class ProgrammingRuntimeCoordinator {
 public:
     ProgrammingRuntimeCoordinator(StScheduler* scheduler, ProgrammingCutover* cutover,
                                   std::string journal_path, std::string staging_root);
 
     bool recover(std::string* error);
+
+    /* Danh sách instance của package đang được coordinator quản lý. STATUS đọc
+     * nó để read-back đúng thứ đã nạp thay vì đoán theo một tên cố định. */
+    std::vector<std::string> instance_ids() const;
     bool stage(const StageCommand& command, std::string* detail_code, std::string* error);
     bool activate(const ActivateCommand& command, std::string* detail_code,
                   std::string* error);
@@ -88,6 +117,19 @@ public:
      * áp dụng, sau đó force-flush persisted image (`retain_service()->flush(true)`,
      * bỏ qua cửa sổ autosave 60s) trước khi trả về. Không giả định thành
      * công khi timeout — trả `TIMED_OUT` riêng biệt (§7). */
+    /* T59-406 — sổ candidate output. Coordinator XOÁ SẠCH sổ mỗi lần nạp gói
+     * mới: giữ claim của gói cũ nghĩa là trả lời sai câu "ai đang giữ điểm này",
+     * và câu đó là câu đầu tiên người vận hành hỏi khi một van không nghe lệnh.
+     * nullptr = không ghi sổ. */
+    void set_candidate_registry(ProgramCandidateRegistry* registry) { candidates_ = registry; }
+    ProgramCandidateRegistry* candidate_registry() const { return candidates_; }
+
+    /* Áp intent Enable/Disable lên đúng một Program. Trả false + `*detail_code`
+     * khi instance không có, khi trạng thái không cho phép, hoặc khi vượt trần
+     * 16 Program chạy đồng thời. */
+    bool set_program_enabled(const ProgramEnableCommand& command, std::string* detail_code,
+                             std::string* error);
+
     RetainResetOutcome reset_retain(const RetainResetCommand& command, std::string* detail_code,
                                     std::string* error);
 
@@ -112,6 +154,37 @@ private:
     bool stage_impl(const StageCommand& command, bool restore,
                     std::string* detail_code, std::string* error);
     bool ensure_instance(std::string* error);
+    /* Chuẩn bị topology cho đúng tập Program của package: thêm instance còn
+     * thiếu vào scheduler và áp chu kỳ release của từng Program. Bootstrap không
+     * còn phải biết trước tên Program — đó là dữ liệu của package, không phải
+     * của bootstrap. */
+    bool ensure_topology(const std::vector<PackageProgramSlice>& slices, std::string* error);
+    /* Tách artifact thành các lát Program. v1 -> đúng một lát dùng
+     * `command.instance_id`; v2 -> N lát lấy tên và chu kỳ từ chính package. */
+    bool split_package(const std::vector<uint8_t>& bytes, const std::string& fallback_instance,
+                       std::vector<PackageProgramSlice>* out,
+                       std::vector<StPackageSignal>* signals_out, std::string* detail_code,
+                       std::string* error) const;
+    /* Dựng lại bus signal theo đúng khai báo của package. Trả false nếu khai báo
+     * mâu thuẫn — một package tới đây có thể do writer khác phiên bản sinh, nên
+     * runtime không được tin nó chỉ vì writer của mình đã kiểm. */
+    bool rebuild_signal_bus(const std::vector<StPackageSignal>& signals, std::string* detail_code,
+                            std::string* error);
+
+    /* T59-501 — kết luận barrier chu kỳ đầu ở mức GÓI. */
+    enum class PackageCycleVerdict : uint8_t {
+        /* Còn Program chưa chạy xong chu kỳ đầu (ví dụ Program 30 s trong gói
+         * trộn chu kỳ). Chưa kết luận được — chờ tiếp. */
+        PENDING = 0,
+        /* MỌI Program đang chạy đã publish output thành công ít nhất một lần. */
+        PASSED,
+        /* Có Program hỏng. Cả gói phải quay về, không có "một nửa thành công". */
+        FAILED,
+    };
+    PackageCycleVerdict package_first_cycle_verdict(bool committed) const;
+    /* Quay về LKG cho TOÀN BỘ gói. Trả false nếu bất kỳ instance nào không có
+     * LKG để quay về — khi đó không có bản cũ nguyên vẹn nào để khôi phục. */
+    bool rollback_package(std::string* error);
     bool append_phase(StJournalPhase phase, std::string* error);
     bool read_staged_artifact(const StageCommand& command, std::vector<uint8_t>* bytes,
                               std::string* detail_code, std::string* error) const;
@@ -141,7 +214,14 @@ private:
     std::string artifact_hash_;
     std::string previous_artifact_hash_;
     std::string plan_hash_;
+    /* T59-401: một package có thể mang nhiều Program. `instance_id_` là instance
+     * CHÍNH (giữ nguyên nghĩa cho journal và cho artifact v1 một Program);
+     * `instance_ids_` là toàn bộ tập instance của package đang stage/active.
+     * Giữ cả hai thay vì chỉ vector: journal v1 ghi một instance id, và đổi
+     * định dạng journal ở đây sẽ làm mọi bản ghi cũ không đọc được. */
     std::string instance_id_ = "program-main";
+    std::vector<std::string> instance_ids_{"program-main"};
+    ProgramCandidateRegistry* candidates_ = nullptr;
     std::string detail_code_;
     uint64_t artifact_byte_size_ = 0;
     bool staged_restore_ = false;

@@ -39,6 +39,14 @@ func handleRuntimeRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		}
 		writeRuntimeJSON(w, http.StatusOK, correlationID, monitor)
 		return true
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/programming/runtime/signals":
+		signals, err := service.GetSignals(r.Context())
+		if err != nil {
+			writeMappedError(w, err, correlationID)
+			return true
+		}
+		writeRuntimeJSON(w, http.StatusOK, correlationID, signals)
+		return true
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/programming/runtime/traces":
 		var request programmingapplication.TraceRequest
 		decoder := json.NewDecoder(r.Body)

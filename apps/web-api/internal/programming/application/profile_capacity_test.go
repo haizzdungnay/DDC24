@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	programmingcompiler "mkddc-web/internal/programming/compiler"
 	"mkddc-web/internal/programming/domain"
 	programmingstore "mkddc-web/internal/programming/store"
 )
@@ -30,8 +31,19 @@ func snapshotWithPrograms(count int) programmingstore.RevisionSnapshot {
 // Một-trên-trần capacity phải bị từ chối ổn định và báo đúng trần sản phẩm.
 // Trước T59-002, mọi số Program khác 1 đều bị gộp thành cùng một lỗi "limit: 1",
 // tức là API tuyên bố sai capacity sản phẩm.
+// firstDiagnostic lấy diagnostic đầu của bộ đã GỘP. T59-302 đổi API từ "một lỗi
+// đầu tiên" sang "mọi lỗi của package", nên test cũ giữ nguyên ý nghĩa bằng cách
+// đọc phần tử đầu thay vì đổi thứ đang được khoá.
+func firstDiagnostic(diagnostics []DiagnosticView) *DiagnosticView {
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	return &diagnostics[0]
+}
+
 func TestCompilerInputRejectsOneOverProductCapacity(t *testing.T) {
-	_, diagnostic := compilerInput(snapshotWithPrograms(domain.MaxProgramsTotal + 1))
+	_, diagnostics := compilerInputs(snapshotWithPrograms(domain.MaxProgramsTotal + 1))
+	diagnostic := firstDiagnostic(diagnostics)
 	if diagnostic == nil {
 		t.Fatalf("%d Program phải bị từ chối", domain.MaxProgramsTotal+1)
 	}
@@ -49,7 +61,7 @@ func TestCompilerInputRejectsOneOverProductCapacity(t *testing.T) {
 }
 
 func TestCompilerInputRejectsEmptyProgramSet(t *testing.T) {
-	_, diagnostic := compilerInput(snapshotWithPrograms(0))
+	diagnostic := firstDiagnostic(secondOf(compilerInputs(snapshotWithPrograms(0))))
 	if diagnostic == nil {
 		t.Fatal("Revision không có PROGRAM nào phải bị từ chối")
 	}
@@ -58,29 +70,33 @@ func TestCompilerInputRejectsEmptyProgramSet(t *testing.T) {
 	}
 }
 
-// Trong trần capacity nhưng trên trần pipeline: đây là giới hạn giai đoạn của
-// compiler runner (multi-Program là T59-302/T59-305), phải báo riêng chứ không
-// mượn con số capacity sản phẩm.
-func TestCompilerInputSeparatesStagedPipelineLimitFromProductCapacity(t *testing.T) {
-	_, diagnostic := compilerInput(snapshotWithPrograms(2))
-	if diagnostic == nil {
-		t.Fatal("hai Program hiện chưa compile được, phải có diagnostic")
+// T59-302 gỡ trần pipeline "một Program mỗi lần chạy": Check nay biên dịch MỌI
+// Program của Revision. Test cũ khoá đúng trần giai đoạn đó nên nó được thay
+// bằng phép kiểm mới — hai Program phải cho HAI input, không phải một lỗi.
+func TestCompilerInputsBuildEveryProgramInStableOrder(t *testing.T) {
+	inputs, diagnostics := compilerInputs(snapshotWithPrograms(3))
+	if len(diagnostics) != 0 {
+		t.Fatalf("ba Program hợp lệ vẫn bị từ chối: %+v", diagnostics)
 	}
-	if limit, ok := diagnostic.Args["limit"].(int); !ok || limit != 1 {
-		t.Fatalf("limit giai đoạn = %v; want 1", diagnostic.Args["limit"])
+	if len(inputs) != 3 {
+		t.Fatalf("số input=%d; want 3", len(inputs))
 	}
-	if limit := diagnostic.Args["limit"]; limit == domain.MaxProgramsTotal {
-		t.Fatal("giới hạn pipeline không được báo bằng capacity sản phẩm")
+	// Thứ tự phải theo `objectId`, không theo thứ tự đọc DB: Check chạy lại trên
+	// cùng Revision phải cho đúng cùng dãy kết quả.
+	for index := 1; index < len(inputs); index++ {
+		if inputs[index-1].SourceID >= inputs[index].SourceID {
+			t.Fatalf("thứ tự input không ổn định: %+v", inputs)
+		}
 	}
 }
 
 func TestCompilerInputAcceptsSingleProgramAtProductProfile(t *testing.T) {
-	input, diagnostic := compilerInput(snapshotWithPrograms(1))
-	if diagnostic != nil {
-		t.Fatalf("một Program hợp lệ bị từ chối: %+v", diagnostic)
+	inputs, diagnostics := compilerInputs(snapshotWithPrograms(1))
+	if len(diagnostics) != 0 {
+		t.Fatalf("một Program hợp lệ bị từ chối: %+v", diagnostics)
 	}
-	if input.SourceID != "prog-0000" || input.Language != "ST" {
-		t.Fatalf("input compiler sai: %+v", input)
+	if len(inputs) != 1 || inputs[0].SourceID != "prog-0000" || inputs[0].Language != "ST" {
+		t.Fatalf("input compiler sai: %+v", inputs)
 	}
 }
 
@@ -88,7 +104,7 @@ func TestCompilerInputAcceptsSingleProgramAtProductProfile(t *testing.T) {
 func TestMalformedPayloadDoesNotReportFakeLimit(t *testing.T) {
 	snapshot := snapshotWithPrograms(1)
 	snapshot.Objects[0].PayloadJSON = []byte(`{"programId":"khong-khop","language":"ST","document":"x"}`)
-	_, diagnostic := compilerInput(snapshot)
+	diagnostic := firstDiagnostic(secondOf(compilerInputs(snapshot)))
 	if diagnostic == nil {
 		t.Fatal("payload sai phải bị từ chối")
 	}
@@ -110,11 +126,44 @@ func TestSourceOverProfileLimitReportsProfileSourceBytes(t *testing.T) {
 		"document":  json.RawMessage(document),
 	})
 	snapshot.Objects[0].PayloadJSON = payload
-	_, diagnostic := compilerInput(snapshot)
+	diagnostic := firstDiagnostic(secondOf(compilerInputs(snapshot)))
 	if diagnostic == nil {
 		t.Fatal("source vượt trần phải bị từ chối")
 	}
 	if limit, ok := diagnostic.Args["limit"].(int); !ok || limit != domain.MaxSourceBytes {
 		t.Fatalf("limit = %v; want %d", diagnostic.Args["limit"], domain.MaxSourceBytes)
+	}
+}
+
+func secondOf(_ []programmingcompiler.Input, diagnostics []DiagnosticView) []DiagnosticView {
+	return diagnostics
+}
+
+// T59-302: một Program hỏng KHÔNG được che các Program hỏng khác. Người dùng
+// phải thấy hết lỗi của package trong một lần Check, không phải sửa từng cái rồi
+// chạy lại 32 vòng.
+func TestCompilerInputsAggregateDiagnosticsAcrossPrograms(t *testing.T) {
+	snapshot := snapshotWithPrograms(3)
+	snapshot.Objects[0].PayloadJSON = []byte(`{"programId":"khong-khop","language":"ST","document":"x"}`)
+	snapshot.Objects[2].PayloadJSON = []byte(`{"programId":"cung-khong-khop","language":"ST","document":"x"}`)
+	inputs, diagnostics := compilerInputs(snapshot)
+	if inputs != nil {
+		t.Fatal("có lỗi thì không được trả input nửa vời")
+	}
+	if len(diagnostics) != 2 {
+		t.Fatalf("số diagnostic gộp=%d; want 2: %+v", len(diagnostics), diagnostics)
+	}
+	// Mỗi diagnostic phải trỏ đúng Program của nó, nếu không người đọc không
+	// biết mở file nào.
+	seen := map[string]struct{}{}
+	for _, diagnostic := range diagnostics {
+		programID, _ := diagnostic.Location["programId"].(string)
+		if programID == "" {
+			t.Fatalf("diagnostic không nêu Program: %+v", diagnostic)
+		}
+		seen[programID] = struct{}{}
+	}
+	if len(seen) != 2 {
+		t.Fatalf("hai lỗi phải thuộc hai Program khác nhau: %+v", seen)
 	}
 }

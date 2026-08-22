@@ -350,11 +350,17 @@ TEST(StScheduler, MultipleProgramsInOneTaskAllRun)
     EXPECT_EQ(counter_of(s, "p1"), 1);
 }
 
-TEST(StScheduler, ProgramFaultStopsRestOfTask)
+TEST(StScheduler, ProgramFaultIsIsolatedFromRestOfTask)
 {
-    /* Program 0 lỗi -> Program 1 KHÔNG chạy trong tick đó. Các Program trong
-     * một Task thường phối hợp, chạy tiếp sẽ đẩy đầu ra vào tổ hợp chưa từng
-     * được thiết kế. */
+    /* T59-403 ĐẢO CHIỀU hành vi cũ. Trước đây Program 0 lỗi làm Program 1 không
+     * chạy, với lý do "các Program trong một Task thường phối hợp". Lý do đó
+     * thuộc về thời Task chỉ có một Program và mọi trao đổi là ngầm.
+     *
+     * Trong mô hình đa Program, kiến trúc §8 quy định "isolate Program", và trao
+     * đổi giữa Program đi qua Published Signal có chính sách fallback KHAI BÁO
+     * cho đúng tình huống producer chết. Dừng cả Task nghĩa là một Program hỏng
+     * làm mọi Program khác — kể cả Program không liên quan gì tới nó — ngừng tác
+     * động lên đầu ra, mà không có mục nào trong hồ sơ nói vì sao. */
     StScheduler s;
     std::string err;
     ASSERT_TRUE(s.add_task(task_cfg("T", 0, 100), &err));
@@ -367,7 +373,11 @@ TEST(StScheduler, ProgramFaultStopsRestOfTask)
     const StSchedulerTickResult r = s.tick(100 * kMs);
     EXPECT_EQ(r.faults, 1u);
     EXPECT_EQ(s.find_program("bad")->state, StProgramState::FAULTED);
-    EXPECT_EQ(counter_of(s, "good"), 0) << "Program sau Program lỗi KHÔNG được chạy";
+    EXPECT_EQ(s.find_program("good")->state, StProgramState::RUNNING)
+        << "Program lành không được lây trạng thái fault";
+    EXPECT_EQ(counter_of(s, "good"), 1) << "Program lành phải vẫn chạy trong đúng tick đó";
+    EXPECT_FALSE(s.find_task("T")->last_dispatch_succeeded())
+        << "Task vẫn phải báo dispatch không sạch — cô lập không có nghĩa là im lặng";
 }
 
 TEST(StScheduler, FaultedProgramDoesNotCommitPartialState)

@@ -4,7 +4,7 @@ export const PROGRAMMING_PROFILE_CODE = 1 as const;
 export const PROGRAMMING_TARGET_ABI = 3841 as const;
 export const PROGRAMMING_PROFILE_MAJOR = 2 as const;
 export const PROGRAMMING_PROFILE_MINOR = 0 as const;
-export const PROGRAMMING_PROFILE_SHA256 = "9b33db01a150816fc8b67f84e0aafa8750a29d20e9481a9ed8f1d67bbc9e6484" as const;
+export const PROGRAMMING_PROFILE_SHA256 = "17d2eb86cb7a2a025c0675104d0da19dfc0f062cc0cd17c0c861835e735ce288" as const;
 export const PROGRAMMING_LIBRARY_VERSION = "rev-a.1" as const;
 
 /** Trần cấp package/Revision. */
@@ -55,4 +55,11 @@ export const PROGRAMMING_TYPES = [
   { name: "UINT", widthBits: 16, wireCode: 6 },
   { name: "REAL", widthBits: 32, wireCode: 3 },
   { name: "TIME", widthBits: 64, wireCode: 4 },
+] as const;
+
+// Feature giữ nhãn REVIEW_REQUIRED trong registry POU/Control Library.
+// `approved: false` nghĩa là Check chặn; FE chỉ HIỂN THỊ trạng thái này và
+// không được coi một checkbox nào là phê duyệt.
+export const PROGRAMMING_REVIEW_GATED_FEATURES = [
+  { featureId: "PID", approved: false, approvalToken: "" },
 ] as const;

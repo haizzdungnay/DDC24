@@ -23,14 +23,16 @@
     {"id": "candidate-pin", "evidenceLevel": "HOST", "command": ["python3", "scripts/candidate_pin_check.py"],
      "description": "Authority baseline khớp manifest đã ghim"},
     {"id": "e2e", "evidenceLevel": "HOST", "command": ["scripts/verify-project.sh", "--component", "e2e"],
-     "description": "Playwright e2e (trừ spec bị cách ly)"},
+     "description": "Playwright e2e dùng mock (trừ spec bị cách ly và spec real-backend)"},
+    {"id": "e2e-real", "evidenceLevel": "HOST", "command": ["scripts/verify-project.sh", "--component", "e2e-real"],
+     "description": "Playwright Programming với backend và Core simulator thật; không dùng route mock"},
     {"id": "firmware", "evidenceLevel": "HOST", "command": ["scripts/verify-project.sh", "--component", "firmware"],
      "description": "Build firmware STM32"},
     {"id": "release-package", "evidenceLevel": "HOST", "command": ["scripts/verify-project.sh", "--component", "release"],
      "description": "Đóng gói release và kiểm checksum"},
     {"id": "github-ci", "evidenceLevel": "CI", "requiresResource": "GitHub Actions account",
      "runbook": "Đẩy RC commit rồi kiểm required checks trên PR", "owner": "T59-701",
-     "description": "11 job workflow chạy thật trên RC commit"},
+     "description": "12 job workflow chạy thật trên RC commit"},
     {"id": "target-soak", "evidenceLevel": "TARGET", "requiresResource": "board Forlinx/Foxlinx",
      "runbook": "docs/03_implementation/47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md", "owner": "T59-702",
      "description": "10-Program fixture, 3 chu kỳ, 24 h, không poll gap >=200 ms"},
@@ -47,8 +49,8 @@
     {"wave": "W2", "title": "Control Library", "gates": ["layout", "cpp", "go", "frontend", "docs", "candidate-pin"]},
     {"wave": "W3", "title": "Multi-Program Project, Check và Mapping", "gates": ["layout", "cpp", "go", "frontend", "docs", "candidate-pin"]},
     {"wave": "W4", "title": "Runtime, scheduler, signal, enable và output", "gates": ["layout", "cpp", "go", "docs", "candidate-pin"]},
-    {"wave": "W5", "title": "Lifecycle atomic và sản phẩm FE-BE-Core", "gates": ["layout", "cpp", "go", "frontend", "e2e", "docs", "candidate-pin"]},
-    {"wave": "W6", "title": "Hardening, packaging và Release Candidate", "gates": ["layout", "cpp", "go", "frontend", "e2e", "firmware", "release-package", "docs", "candidate-pin"]},
-    {"wave": "W7", "title": "Target/HIL/V&V và quyết định phát hành", "gates": ["layout", "cpp", "go", "frontend", "e2e", "firmware", "release-package", "docs", "candidate-pin", "github-ci", "target-soak", "physical-io", "power-retain"]}
+    {"wave": "W5", "title": "Lifecycle atomic và sản phẩm FE-BE-Core", "gates": ["layout", "cpp", "go", "frontend", "e2e", "e2e-real", "docs", "candidate-pin"]},
+    {"wave": "W6", "title": "Hardening, packaging và Release Candidate", "gates": ["layout", "cpp", "go", "frontend", "e2e", "e2e-real", "firmware", "release-package", "docs", "candidate-pin"]},
+    {"wave": "W7", "title": "Target/HIL/V&V và quyết định phát hành", "gates": ["layout", "cpp", "go", "frontend", "e2e", "e2e-real", "firmware", "release-package", "docs", "candidate-pin", "github-ci", "target-soak", "physical-io", "power-retain"]}
   ]
 }

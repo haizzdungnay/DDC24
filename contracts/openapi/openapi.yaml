@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.22.0"
+  version: "1.26.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -2070,6 +2070,153 @@ paths:
         "403": { $ref: "#/components/responses/ProgrammingError" }
         "404": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/libraries:
+    get:
+      operationId: searchProgrammingLibraries
+      summary: Tìm entry Control Library SYSTEM và PROJECT
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-202
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingCursor" }
+        - { $ref: "#/components/parameters/ProgrammingLimit" }
+        - name: projectId
+          in: query
+          description: Bắt buộc khi cần entry PROJECT; thiếu nó thì chỉ SYSTEM được trả.
+          schema: { type: string, format: uuid }
+        - name: scope
+          in: query
+          schema: { type: string, enum: [SYSTEM, PROJECT] }
+        - name: kind
+          in: query
+          schema: { type: string, enum: [FUNCTION, FUNCTION_BLOCK, CONVERSION] }
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Trang entry Control Library đã trộn SYSTEM và PROJECT theo thứ tự ổn định
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingLibraryPage" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/library/entries:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    post:
+      operationId: upsertProgrammingLibraryEntry
+      summary: Tạo hoặc sửa Function/FB người dùng trong PROJECT Library Draft
+      x-rbac: [admin]
+      x-implementation-status: t59-202
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingLibraryEntryRequest" }
+      responses:
+        "200":
+          description: Entry đã ghi vào Draft library; ETag Draft của Project tăng
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/library/entries/{entryId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+      - { $ref: "#/components/parameters/ProgrammingLibraryEntryId" }
+    delete:
+      operationId: deleteProgrammingLibraryEntry
+      summary: Xoá entry Control Library; từ chối khi còn tham chiếu
+      x-rbac: [admin]
+      x-implementation-status: t59-202
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      responses:
+        "200":
+          description: Entry đã xoá khỏi Draft library; không có cascade ngầm
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/programs:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    get:
+      operationId: listProgrammingProgramIntents
+      summary: Đọc ý định Enable/Disable và trạng thái runtime của từng Program
+      description: >-
+        `desiredEnabled` là điều người vận hành muốn; `runtimeState` là điều
+        thiết bị đang làm. Hai trường riêng biệt có chủ ý — gộp chúng sẽ làm một
+        Program đã bật nhưng đang FAULTED trông y hệt một Program chưa ai bật.
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-405
+      responses:
+        "200":
+          description: Danh sách intent + trạng thái, sắp theo programId
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingProgramIntentList" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/programs/{programId}/runtime-intent:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+      - { $ref: "#/components/parameters/ProgrammingProgramId" }
+    put:
+      operationId: setProgrammingProgramIntent
+      summary: Đặt ý định Enable/Disable cho một Program
+      description: >-
+        `PUT` chứ không phải hai route `enable`/`disable`: intent là một TRẠNG
+        THÁI mong muốn, và hai động từ riêng sẽ làm việc đặt lại đúng thứ đang có
+        trở thành hai request khác nhau tuỳ giá trị hiện tại. Intent bền vững kể
+        cả khi Core chưa sẵn sàng; `runtimeState` khi đó là `UNKNOWN` chứ không
+        phải trạng thái mong muốn.
+      x-rbac: [admin]
+      x-implementation-status: t59-405
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingProgramIntentRequest" }
+      responses:
+        "200":
+          description: Intent đã ghi; resource mang trạng thái read-back mới nhất
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/point-catalog:
     get:
       operationId: getProgrammingPointCatalog
@@ -2115,6 +2262,25 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ProgrammingMonitorPage" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/runtime/signals:
+    get:
+      operationId: getProgrammingRuntimeSignals
+      summary: Đọc Published Signal từ cùng snapshot authoritative của Core
+      description: >-
+        Ghép định danh đã seal trong Revision với value, quality và freshness
+        do Core chụp từ StSignalBus. Signal invalid luôn có value=null;
+        CORE_ONLY, REVISION_ONLY hoặc MISMATCH phải hiển fail-closed.
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-504
+      responses:
+        "200":
+          description: Snapshot Published Signal hiện hành
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRuntimeSignalPage" }
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
@@ -2406,6 +2572,16 @@ components:
         example: "VP1"
     ProgrammingProjectId:
       name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProgrammingProgramId:
+      name: programId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 64 }
+    ProgrammingLibraryEntryId:
+      name: entryId
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -2709,9 +2885,12 @@ components:
       required: [objectId, kind, changeType, category, beforeSha256, afterSha256]
       properties:
         objectId: { type: string, format: uuid }
-        kind: { type: string, enum: [METADATA, PROGRAM, FUNCTION, FUNCTION_BLOCK, VARIABLE, BINDING, TASK] }
+        # Phải bằng whitelist revision_objects/validObjectKind; thiếu SIGNAL ở
+        # đây khiến client sinh từ contract không giải mã được diff của chính
+        # Revision Published Signal mà store v11 vừa cho phép seal.
+        kind: { type: string, enum: [METADATA, PROGRAM, FUNCTION, FUNCTION_BLOCK, VARIABLE, BINDING, TASK, SIGNAL] }
         changeType: { type: string, enum: [ADDED, REMOVED, MODIFIED] }
-        category: { type: string, enum: [SOURCE, MAPPING, OUTPUT_MAPPING, TASK, LIBRARY, RETAIN] }
+        category: { type: string, enum: [SOURCE, MAPPING, OUTPUT_MAPPING, TASK, LIBRARY, RETAIN, PUBLISHED_SIGNAL, PROGRAM_SET] }
         beforeSha256:
           oneOf:
             - { type: string, pattern: "^[a-f0-9]{64}$" }
@@ -2725,7 +2904,13 @@ components:
       enum: [NONE, PRESENT, UNAVAILABLE]
     ProgrammingImpactKey:
       type: string
-      enum: [retain, activeOverrides, cutover, outputMappingChanges]
+      # T59-502 bổ sung bốn nhóm cho mô hình đa Program. Bốn nhóm cũ chỉ phủ
+      # Rev A một Program, nên một Revision đổi Published Signal, đổi Control
+      # Library, thêm/bớt Program, hay chạm đúng Program đang Enabled đều đi qua
+      # Commission mà KHÔNG hỏi acknowledgement nào.
+      enum:
+        [retain, activeOverrides, cutover, outputMappingChanges,
+         publishedSignals, controlLibrary, programSet, enableIntent]
     ProgrammingImpactGroup:
       type: object
       additionalProperties: false
@@ -2738,13 +2923,26 @@ components:
     ProgrammingImpact:
       type: object
       additionalProperties: false
-      required: [impactRef, retain, activeOverrides, cutover, outputMappingChanges]
+      required:
+        [impactRef, retain, activeOverrides, cutover, outputMappingChanges,
+         publishedSignals, controlLibrary, programSet, enableIntent]
       properties:
         impactRef: { type: string, minLength: 8, maxLength: 128 }
         retain: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
         activeOverrides: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
         cutover: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
         outputMappingChanges: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Đổi freshness/chính sách stale/publisher của một Published Signal đổi
+        # hành vi của MỌI consumer khi mất dữ liệu — thứ không nhìn thấy được
+        # trong diff mã nguồn.
+        publishedSignals: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Đổi Control Library đổi thân của mọi POU tham chiếu nó.
+        controlLibrary: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Thêm/bớt Program đổi TẬP chương trình đang chạy trên thiết bị.
+        programSet: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Program đang Enabled mà Revision này chạm tới: người vận hành phải biết
+        # thứ đang chạy sắp bị thay, không phải phát hiện sau khi nó đã thay.
+        enableIntent: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
     ProgrammingCheckRequest:
       type: object
       additionalProperties: false
@@ -2952,7 +3150,7 @@ components:
         impactRef: { type: string, minLength: 8, maxLength: 128 }
         acknowledgements:
           type: array
-          maxItems: 4
+          maxItems: 8
           uniqueItems: true
           items: { $ref: "#/components/schemas/ProgrammingImpactKey" }
         cutover:
@@ -3078,9 +3276,147 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/ProgrammingTaskMetrics" }
             - { type: "null" }
+    ProgrammingRuntimeSignal:
+      type: object
+      additionalProperties: false
+      required: [signalId, name, producerProgramId, dataType, unit, value, valid, quality, freshness, stalePolicy, freshnessMs, publishedAtMonoNs, generation, definitionState]
+      properties:
+        signalId: { type: [string, "null"], format: uuid }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        producerProgramId: { type: string, minLength: 1, maxLength: 64 }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        unit: { type: [string, "null"], maxLength: 32 }
+        value:
+          description: null khi valid=false; không bao giờ thay null bằng 0/false.
+          type: [boolean, integer, number, "null"]
+        valid: { type: boolean }
+        quality: { type: string, enum: [GOOD, UNCERTAIN, BAD] }
+        freshness: { type: string, enum: [FRESH, STALE_HELD, STALE_FALLBACK, UNAVAILABLE, NOT_DECLARED] }
+        stalePolicy: { type: string, enum: [WAIT, HOLD_LAST, USE_FALLBACK, SAFE_STATE] }
+        freshnessMs: { type: integer, minimum: 1000, maximum: 90000 }
+        # uint64 đi qua JSON dưới dạng chuỗi để không mất bit trong JavaScript.
+        publishedAtMonoNs: { type: string, pattern: "^(0|[1-9][0-9]{0,19})$" }
+        generation: { type: string, pattern: "^(0|[1-9][0-9]{0,19})$" }
+        definitionState: { type: string, enum: [MATCHED, MISMATCH, CORE_ONLY, REVISION_ONLY] }
+    ProgrammingRuntimeSignalPage:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, producerState, activeRevisionId, observedAt, items]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        producerState: { type: string, enum: [READY, DEGRADED, UNAVAILABLE] }
+        activeRevisionId: { type: [string, "null"], format: uuid }
+        observedAt: { type: string, format: date-time }
+        items:
+          type: array
+          maxItems: 512
+          items: { $ref: "#/components/schemas/ProgrammingRuntimeSignal" }
     ProgrammingResource:
       type: object
       additionalProperties: true
+    ProgrammingLibraryDependency:
+      type: object
+      additionalProperties: false
+      required: [entryId, version]
+      properties:
+        entryId: { type: string, format: uuid }
+        version: { type: string, minLength: 1, maxLength: 64 }
+    ProgrammingLibraryEntry:
+      type: object
+      additionalProperties: false
+      required: [scope, libraryRevisionId, libraryVersion, libraryState, entryId, kind, name, featureState, contentSha256, dependencies, stateLayoutKnown, stateSizeBytes]
+      properties:
+        scope: { type: string, enum: [SYSTEM, PROJECT] }
+        libraryRevisionId: { type: string, minLength: 1, maxLength: 128 }
+        libraryVersion: { type: string, minLength: 1, maxLength: 64 }
+        libraryState: { type: string, enum: [DRAFT, PUBLISHED, DEPRECATED] }
+        entryId: { type: string, minLength: 1, maxLength: 128 }
+        kind: { type: string, enum: [FUNCTION, FUNCTION_BLOCK, CONVERSION] }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        language: { type: string, enum: [ST, FBD] }
+        featureState: { type: string, enum: [AVAILABLE, REVIEW_REQUIRED] }
+        contentSha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        interface: { type: object }
+        dependencies:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/ProgrammingLibraryDependency" }
+        # `stateLayoutKnown=false` nghĩa là layout CHƯA BIẾT, không phải bằng 0.
+        # Consumer không được coi `stateSizeBytes=0` là sự thật khi cờ này false.
+        stateLayoutKnown: { type: boolean }
+        stateSizeBytes: { type: integer, minimum: 0, maximum: 1048576 }
+    ProgrammingLibraryPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/ProgrammingLibraryEntry" }
+        nextCursor: { type: [string, "null"] }
+    ProgrammingLibraryStateLayout:
+      type: object
+      additionalProperties: false
+      required: [version, stateSizeBytes, sha256]
+      properties:
+        version: { type: integer, minimum: 1, maximum: 4294967295 }
+        stateSizeBytes: { type: integer, minimum: 0, maximum: 1048576 }
+        sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+    ProgrammingLibraryEntryRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, entryId, kind, name, language, source, interface]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        entryId: { type: string, format: uuid }
+        kind: { type: string, enum: [FUNCTION, FUNCTION_BLOCK] }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        language: { type: string, enum: [ST, FBD] }
+        # featureState chỉ nhận AVAILABLE. REVIEW_REQUIRED là cờ Controls/Safety
+        # của registry SYSTEM, không phải nhãn client tự dán cho POU của mình.
+        featureState: { type: string, enum: [AVAILABLE] }
+        source: { type: string, minLength: 1, maxLength: 65536 }
+        interface: { type: object }
+        dependencies:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/ProgrammingLibraryDependency" }
+        # Vắng mặt nghĩa là layout chưa biết. FUNCTION không được mang khối này.
+        stateLayout: { $ref: "#/components/schemas/ProgrammingLibraryStateLayout" }
+    ProgrammingProgramIntentRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, desiredEnabled]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        # BẮT BUỘC có mặt. Thiếu `desiredEnabled` KHÁC `desiredEnabled=false`:
+        # mặc định về false sẽ biến một payload hỏng thành lệnh TẮT chương trình.
+        desiredEnabled: { type: boolean }
+    ProgrammingProgramIntent:
+      type: object
+      additionalProperties: false
+      required: [programId, desiredEnabled, generation, runtimeState, updatedBy, updatedAtUtcMs]
+      properties:
+        programId: { type: string, minLength: 1, maxLength: 64 }
+        desiredEnabled: { type: boolean }
+        # Chỉ tăng, không bao giờ lùi: Core dùng nó để biết intent nào mới hơn mà
+        # KHÔNG phải tin đồng hồ tường của hai máy khác nhau.
+        generation: { type: integer, minimum: 1 }
+        runtimeState:
+          type: string
+          enum: [DISABLED, STARTING, RUNNING, WAITING, STOPPING, FAULTED, UNKNOWN]
+        updatedBy: { type: string, minLength: 1, maxLength: 128 }
+        updatedAtUtcMs: { type: integer, minimum: 0 }
+    ProgrammingProgramIntentList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 32
+          items: { $ref: "#/components/schemas/ProgrammingProgramIntent" }
     ProgrammingResourcePage:
       type: object
       additionalProperties: false

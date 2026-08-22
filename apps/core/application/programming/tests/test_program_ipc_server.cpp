@@ -237,12 +237,78 @@ TEST(ProgramIpcServer, CapabilitiesAndDuplicateRequestAreDeterministic)
     EXPECT_EQ(response.detail_code, "IPC-REQUEST-ID-CONFLICT");
 }
 
-TEST(ProgramIpcServer, NotImplementedActionFailsClosedWithStableDetail)
+TEST(ProgramIpcServer, StatusPublishesTypedSignalTruthWithoutInventingZero)
 {
-    /* `TRACE_START` nằm trong enum wire và trong cả hai codec, nhưng Core chưa có
-     * nhánh dispatch (T59-408 sẽ làm). Contract khai NOT_IMPLEMENTED, và test này
-     * khoá đúng hành vi tương ứng: từ chối ổn định bằng một detail code duy nhất,
-     * KHÔNG "ok" giả, và không đụng tới coordinator. */
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("mkddc-ipc-status-" + std::to_string(::getpid()));
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "staging");
+
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    StSignalBus signal_bus;
+    scheduler.set_signal_bus(&signal_bus);
+    StSignalDefinition definition;
+    definition.name = "SUPPLY_TEMP";
+    definition.publisher_program = "program-ahu";
+    definition.type = StType::REAL;
+    definition.freshness_ms = 5000;
+    definition.stale_policy = StStalePolicy::HOLD_LAST;
+    std::string error;
+    ASSERT_TRUE(signal_bus.declare(definition, &error)) << error;
+
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover,
+                                                (root / "journal.bin").string(),
+                                                (root / "staging").string());
+    PriorityResolver resolver;
+    coordinator.capture_priority_overrides(resolver);
+    StValueTrace trace;
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()), &coordinator);
+    server.set_value_trace(&trace, &scheduler);
+
+    ProgramCodecError codec_error = ProgramCodecError::None;
+    ProgramRequest status = request(ProgramAction::Status);
+    ProgramResponse response;
+    ASSERT_TRUE(DecodeResponseFrame(
+        server.HandleFrame(EncodeRequestFrame(status, &codec_error), allowed_peer(), 1),
+        &response, &codec_error));
+    ASSERT_EQ(response.result, ProgramResult::Ok);
+    const nlohmann::json unavailable = nlohmann::json::from_cbor(response.payload, true, true);
+    ASSERT_EQ(unavailable.size(), 5u);
+    ASSERT_EQ(unavailable[4].size(), 1u);
+    EXPECT_EQ(unavailable[4][0][0], "SUPPLY_TEMP");
+    EXPECT_TRUE(unavailable[4][0][3].is_null());
+    EXPECT_FALSE(unavailable[4][0][4].get<bool>());
+    EXPECT_EQ(unavailable[4][0][6], "UNAVAILABLE");
+    EXPECT_EQ(signal_bus.unavailable_read_count(), 0u)
+        << "poll status không được tính như consumer runtime";
+
+    StCell value{};
+    value.r = 21.5f;
+    ASSERT_TRUE(signal_bus.publish(0, value, 100, "program-ahu"));
+    signal_bus.commit_at_boundary();
+    status.request_id[0] = 0x77;
+    crypto_hash_sha256(status.payload_hash.data(), status.payload.data(), status.payload.size());
+    ASSERT_TRUE(DecodeResponseFrame(
+        server.HandleFrame(EncodeRequestFrame(status, &codec_error), allowed_peer(), 101),
+        &response, &codec_error));
+    const nlohmann::json live = nlohmann::json::from_cbor(response.payload, true, true);
+    EXPECT_TRUE(live[4][0][4].get<bool>());
+    EXPECT_FLOAT_EQ(live[4][0][3].get<float>(), 21.5f);
+    EXPECT_EQ(live[4][0][5], "GOOD");
+    EXPECT_EQ(live[4][0][6], "FRESH");
+
+    std::filesystem::remove_all(root);
+}
+
+TEST(ProgramIpcServer, UnconfiguredDependencyFailsClosedWithStableDetail)
+{
+    /* T59-408 đã hiện thực `TRACE_START`, nên nó không còn là ví dụ "action chưa
+     * hiện thực" — bảng handler nay 0 action ma (test `TestNoGhostActionsInContract`
+     * ở lớp Go khoá điều đó). Bất biến CÒN LẠI vẫn phải đúng và vẫn cần một test:
+     * khi phụ thuộc chưa được cấu hình, Core từ chối ổn định bằng một detail code
+     * duy nhất, KHÔNG BAO GIỜ trả "ok" giả. Ở đây là `TRACE_START` không có bus
+     * trace. */
     ProgramIpcServer server(static_cast<uint32_t>(::getuid()));
     ProgramCodecError error = ProgramCodecError::None;
     ProgramRequest original = request(ProgramAction::TraceStart);
@@ -256,10 +322,10 @@ TEST(ProgramIpcServer, NotImplementedActionFailsClosedWithStableDetail)
     ProgramResponse response;
     ASSERT_TRUE(DecodeResponseFrame(encoded, &response, &error));
     EXPECT_NE(response.result, ProgramResult::Ok);
-    /* Không có coordinator nên Core dừng ngay ở IPC-RUNTIME-NOT-CONFIGURED; điều
-     * bắt buộc là KHÔNG BAO GIỜ trả Ok cho action chưa hiện thực. */
+    /* Điều bắt buộc là KHÔNG BAO GIỜ trả Ok khi phụ thuộc chưa sẵn sàng. */
     EXPECT_TRUE(response.detail_code == "IPC-ACTION-NOT-IMPLEMENTED" ||
-                response.detail_code == "IPC-RUNTIME-NOT-CONFIGURED")
+                response.detail_code == "IPC-RUNTIME-NOT-CONFIGURED" ||
+                response.detail_code == "IPC-TRACE-UNAVAILABLE")
         << "detail=" << response.detail_code;
     EXPECT_FALSE(response.detail_code.empty());
 
@@ -363,4 +429,91 @@ TEST(ProgramIpcGolden, CrossLanguageCorpus)
 }
 
 } // namespace
+
+/* T59-408 — ba action trace đi trọn: START lấy mẫu, READ đọc ra, STOP dừng. */
+TEST(ProgramIpcServer, TraceStartReadStopRoundTrip)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    std::string error;
+    StTaskConfig task;
+    task.id = "main";
+    task.period_ms = 1000;
+    task.budget_ms = 199;
+    ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
+    ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
+    ASSERT_TRUE(scheduler.request_activation("P_ahu", signed_artifact(), &error)) << error;
+    scheduler.tick(0);
+    ASSERT_TRUE(scheduler.start("P_ahu", &error)) << error;
+
+    StValueTrace trace;
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()));
+    server.set_value_trace(&trace, &scheduler);
+
+    auto send = [&](ProgramAction action, const nlohmann::json& body, uint8_t seed) {
+        ProgramRequest input = request(action);
+        input.request_id = bytes(16, seed);
+        input.operation_id = bytes(16, static_cast<uint8_t>(seed + 1));
+        input.actor_id = "admin-1";
+        input.payload = nlohmann::json::to_cbor(body);
+        crypto_hash_sha256(input.payload_hash.data(), input.payload.data(), input.payload.size());
+        ProgramCodecError codec_error = ProgramCodecError::None;
+        const std::vector<uint8_t> frame = EncodeRequestFrame(input, &codec_error);
+        EXPECT_EQ(codec_error, ProgramCodecError::None);
+        const std::vector<uint8_t> reply = server.HandleFrame(frame, allowed_peer(), 1'000'000);
+        EXPECT_FALSE(reply.empty());
+        ProgramResponse response;
+        EXPECT_TRUE(DecodeResponseFrame(reply, &response, &codec_error));
+        return response;
+    };
+
+    const nlohmann::json start_body = nlohmann::json::array(
+        {"session-1", 1000u, 10000u, nlohmann::json::array({nlohmann::json::array({"P_ahu", "x"})})});
+    EXPECT_EQ(send(ProgramAction::TraceStart, start_body, 0x20).result, ProgramResult::Accepted);
+    EXPECT_EQ(trace.status().state, StTraceState::RUNNING);
+
+    /* Lấy mẫu ở boundary — đúng chỗ scan loop gọi. */
+    trace.on_boundary(scheduler, 1'000'000);
+    trace.on_boundary(scheduler, 1'001'000'000);
+    EXPECT_EQ(trace.sample_count(), 2u);
+
+    const ProgramResponse read =
+        send(ProgramAction::TraceRead, nlohmann::json::array({"session-1"}), 0x40);
+    ASSERT_EQ(read.result, ProgramResult::Ok);
+    const nlohmann::json body = nlohmann::json::from_cbor(read.payload, true, true);
+    ASSERT_TRUE(body.is_array());
+    ASSERT_EQ(body.size(), 3u);
+    EXPECT_EQ(body[0].get<std::string>(), "RUNNING");
+    EXPECT_EQ(body[1].get<uint32_t>(), 0u);
+    ASSERT_EQ(body[2].size(), 2u);
+    /* Mẫu mang cờ `valid` cho từng biến — "không đo được" khác "đo được 0". */
+    EXPECT_TRUE(body[2][0][1][0][0].get<bool>());
+
+    /* Đọc nhầm session của người khác bị từ chối. */
+    EXPECT_EQ(send(ProgramAction::TraceRead, nlohmann::json::array({"session-khac"}), 0x60).result,
+              ProgramResult::Rejected);
+
+    EXPECT_EQ(send(ProgramAction::TraceStop, nlohmann::json::array({"session-1"}), 0x80).result,
+              ProgramResult::Ok);
+    EXPECT_EQ(trace.status().state, StTraceState::STOPPED);
+}
+
+/* Không có bus trace: ba action trả UNAVAILABLE tường minh. Một `TRACE_START`
+ * "thành công" mà không có nơi lấy mẫu là lời hứa suông. */
+TEST(ProgramIpcServer, TraceActionsWithoutBusAreUnavailableNotSilentlyOk)
+{
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()));
+    ProgramRequest input = request(ProgramAction::TraceRead);
+    input.actor_id = "admin-1";
+    input.payload = nlohmann::json::to_cbor(nlohmann::json::array({"session-1"}));
+    crypto_hash_sha256(input.payload_hash.data(), input.payload.data(), input.payload.size());
+    ProgramCodecError codec_error = ProgramCodecError::None;
+    const std::vector<uint8_t> frame = EncodeRequestFrame(input, &codec_error);
+    ASSERT_EQ(codec_error, ProgramCodecError::None);
+    const std::vector<uint8_t> reply = server.HandleFrame(frame, allowed_peer(), 1'000'000);
+    ProgramResponse response;
+    ASSERT_TRUE(DecodeResponseFrame(reply, &response, &codec_error));
+    EXPECT_EQ(response.result, ProgramResult::Unavailable);
+    EXPECT_EQ(response.detail_code, "IPC-TRACE-UNAVAILABLE");
+}
+
 } // namespace core::programming

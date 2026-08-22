@@ -232,6 +232,91 @@ export interface StCompletionItem {
   detail: string
 }
 
+/**
+ * T59-506 — lịch sử của ST editor phải thuộc editor, không được phụ thuộc vào
+ * native undo stack của `<textarea>`. Các đường sửa bằng autocomplete, Format,
+ * Replace hoặc quick action đều ghi `.value` có kiểm soát, nên native stack có
+ * thể mất hoặc chỉ hoàn tác một phần. Snapshot giữ cả hai đầu selection để undo/
+ * redo trả người dùng về đúng ngữ cảnh đang sửa.
+ */
+export const ST_EDITOR_HISTORY_LIMIT = 50
+
+export interface StEditorSnapshot {
+  source: string
+  selectionStart: number
+  selectionEnd: number
+}
+
+export interface StEditorHistory {
+  past: StEditorSnapshot[]
+  current: StEditorSnapshot
+  future: StEditorSnapshot[]
+}
+
+function normalizedSnapshot(snapshot: StEditorSnapshot): StEditorSnapshot {
+  const start = Math.max(0, Math.min(snapshot.source.length, snapshot.selectionStart))
+  const end = Math.max(start, Math.min(snapshot.source.length, snapshot.selectionEnd))
+  return { ...snapshot, selectionStart: start, selectionEnd: end }
+}
+
+export function createStEditorHistory(
+  source: string,
+  selectionStart = 0,
+  selectionEnd = selectionStart,
+): StEditorHistory {
+  return {
+    past: [],
+    current: normalizedSnapshot({ source, selectionStart, selectionEnd }),
+    future: [],
+  }
+}
+
+/** Cập nhật selection hiện tại mà không tạo một bước undo giả. */
+export function updateStEditorSelection(
+  history: StEditorHistory,
+  selectionStart: number,
+  selectionEnd = selectionStart,
+): StEditorHistory {
+  return {
+    ...history,
+    current: normalizedSnapshot({ ...history.current, selectionStart, selectionEnd }),
+  }
+}
+
+/** Ghi một edit mới và cắt nhánh redo, bounded giống FBD editor. */
+export function recordStEditorEdit(history: StEditorHistory, next: StEditorSnapshot): StEditorHistory {
+  const current = normalizedSnapshot(history.current)
+  const normalizedNext = normalizedSnapshot(next)
+  if (current.source === normalizedNext.source) {
+    return { ...history, current: normalizedNext }
+  }
+  return {
+    past: [...history.past, current].slice(-ST_EDITOR_HISTORY_LIMIT),
+    current: normalizedNext,
+    future: [],
+  }
+}
+
+export function undoStEditorEdit(history: StEditorHistory): StEditorHistory {
+  const previous = history.past[history.past.length - 1]
+  if (!previous) return history
+  return {
+    past: history.past.slice(0, -1),
+    current: previous,
+    future: [history.current, ...history.future].slice(0, ST_EDITOR_HISTORY_LIMIT),
+  }
+}
+
+export function redoStEditorEdit(history: StEditorHistory): StEditorHistory {
+  const next = history.future[0]
+  if (!next) return history
+  return {
+    past: [...history.past, history.current].slice(-ST_EDITOR_HISTORY_LIMIT),
+    current: next,
+    future: history.future.slice(1),
+  }
+}
+
 /** Từ tại vị trí `offset` (đang gõ dở, không tính khoảng trắng) — trả
  *  `null` nếu con trỏ không nằm ngay sau một identifier prefix (ví dụ vừa
  *  gõ dấu cách/toán tử). */

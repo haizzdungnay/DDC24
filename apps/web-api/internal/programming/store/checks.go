@@ -292,7 +292,10 @@ func (s *Store) CompleteCheck(ctx context.Context, params CompleteCheckParams) (
 	if params.Artifact != nil {
 		a := params.Artifact
 		if err := validateUUIDs(a.ArtifactID); err != nil || a.RevisionID != revisionID || a.CheckID != params.CheckID ||
-			a.SchemaVersion != 1 || a.ByteSize < 1 || a.ByteSize > 1<<20 || a.SHA256 == ([32]byte{}) {
+			// v1 = artifact một Program; v2 = container package nhiều Program
+			// (T59-302). Khoá cứng ở 1 sẽ chặn đúng thứ Check vừa dựng được.
+			(a.SchemaVersion != 1 && a.SchemaVersion != 2) ||
+			a.ByteSize < 1 || a.ByteSize > 1<<20 || a.SHA256 == ([32]byte{}) {
 			return Check{}, fmt.Errorf("Artifact metadata không hợp lệ")
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO artifacts(artifact_id,revision_id,check_id,schema_version,profile,target_abi,

@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
+  // T59-505 dùng stack backend/Core simulator thật và có cấu hình riêng. Không
+  // để spec đó vô tình chạy trong lane mock mặc định (JWT/mock auth, cổng và
+  // vòng đời server khác nhau).
+  testIgnore: /programming-real\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,
@@ -44,10 +48,12 @@ export default defineConfig({
       VITE_DDC_MODE: 'live',
       VITE_AUTH_MODE: 'mock',
       VITE_HISTORIAN_V2_TRENDS: '1',
-      // TASK-PROG-500: bốn workspace Programming chỉ hiện sau cờ này; mặc
+      // Programming Rev A: sáu workspace chỉ hiện sau cờ này; mặc
       // định TẮT ở production, bật riêng cho dev server e2e để có bằng
       // chứng trình duyệt thật (không phải mock) cho toàn bộ P5.
-      VITE_PROGRAMMING_REV_A: '1'
+      VITE_PROGRAMMING_REV_A: '1',
+      // Tắt file watcher của Vite: xem ghi chú ở `vite.config.ts`.
+      VITE_E2E_NO_WATCH: '1'
     }
   }
 })

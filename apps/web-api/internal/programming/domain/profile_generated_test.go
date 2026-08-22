@@ -147,3 +147,25 @@ func sha256Sum(raw []byte) []byte {
 	sum := sha256.Sum256(raw)
 	return sum[:]
 }
+
+// T59-205: PID giữ nhãn REVIEW_REQUIRED cho tới khi có evidence Controls/Safety.
+// Test này khoá SỰ THẬT hiện tại: `VS-PROG-U12` chưa chạy nên PID phải đang bị
+// chặn. Ai đó "mở" PID mà không kèm evidence sẽ làm test đỏ, không lặng lẽ qua.
+func TestReviewGateBlocksPidUntilControlsSafetyEvidence(t *testing.T) {
+	if !ReviewGateBlocks("PID") {
+		t.Fatal("PID phải bị chặn khi chưa có approval token")
+	}
+	if ReviewGateBlocks("TON") {
+		t.Fatal("TON không bị gate mà vẫn bị chặn")
+	}
+	// Feature lạ KHÔNG bị chặn: chặn một thứ chưa ai khai là chặn mù, và sẽ
+	// khoá mọi feature mới ngay khi nó xuất hiện.
+	if ReviewGateBlocks("KHONG_CO_TRONG_BANG") {
+		t.Fatal("feature ngoài bảng không được bị chặn")
+	}
+	for _, item := range ReviewGatedFeatures {
+		if item.Approved != (item.ApprovalToken != "") {
+			t.Fatalf("cờ Approved lệch token: %+v", item)
+		}
+	}
+}

@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 3.0 |
+| Phiên bản | 4.19 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
-| Ngày | 2026-08-20 |
+| Ngày | 2026-08-21 |
 | Chủ quản | Product + Architecture + QA |
 | Người review | Risk owners, Safety, Security, Operations Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
@@ -21,7 +21,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **22 rủi ro** gồm 16 baseline và 6 rủi ro unified Product, kèm control/task/evidence để hạ mức. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 22/22 Open; source baseline có một phần treatment cho atomic/LKG/RETAIN, nhưng contract mới chưa có Test Result; không giảm residual. |
+| 3. Hệ thống hiện tại đang có gì? | 22/22 Open. Source W5 trên nhánh đã bổ sung sáu workspace/lifecycle, Monitor Point + Published Signal fail-closed, ST/FBD editor và lane E2E backend/compiler/Core simulator thật trên HOST/LOCAL. Các cổng HOST thành phần hiện hành đã PASS; chưa có GitHub CI verdict, Test Result được review, target/HIL hay residual được chấp nhận. |
 | 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Nó gắn từng rủi ro với biện pháp cụ thể, kịch bản kiểm chứng và mức tồn dư **mục tiêu** — mục tiêu, chưa phải kết quả. |
 | 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan59. Các rủi ro 20 điểm gồm runtime/IOP/compiler/HIL baseline và sáu rủi ro mới về signal, scheduler, POU, library, output, power-loss. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
@@ -463,6 +463,311 @@ dữ liệu tất định do công cụ sinh, **không phải** mã biên dịch
 rằng compiler đã sinh được package thật. 16/16 risk giữ `Open`, 11 Critical, S×L
 và residual không đổi.
 
+### 5.29 Cập nhật treatment source `T59-201` (Plan59 W2)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-020` | SYSTEM Library là snapshot **virtual read-only** sinh từ đúng registry, revision ID content-addressed và G1 giữ lịch sử `version→hash`, nên sửa semantics mà tái dùng version bị generator/gate từ chối. PROJECT Library có Draft mutable, Publish dựng manifest canonical trong transaction, Published/Deprecated bất biến ở cả store lẫn trigger; version mới clone từ parent đã publish. Hash entry phủ canonical source+interface+dependency, không dùng hash signature rút gọn | REST/RBAC/audit (`T59-202`), hostile source-only import/export (`T59-204`), signed library/artifact (`T59-602`), full API/security matrix (`T59-603`) và Test Result `U03` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-009` | FUNCTION có `state_size=0` authoritative; PROJECT FUNCTION_BLOCK chỉ được Publish khi version/size/hash layout đủ. Trạng thái unknown bắt buộc mọi field bằng zero/null, nên không thể mang số đoán hoặc stale rồi làm lệch offset phía sau | Compiler sinh layout authoritative và bundle compatibility (`T59-204`), runtime cold-init/RETAIN (`T59-407`) cùng power-cut target (`T59-704`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Resolver domain giữ riêng missing entry `ST-LIB-001`, version drift `ST-LIB-002` và dependency/POU cycle `ST-POU-003`; store gọi cùng validator thay vì gộp thành lỗi “unknown function” | Nối emitter vào Check/API thật (`T59-202/302`) và Test Result `U03`/`VS-PROG-019/024` | `OPEN — PARTIAL SOURCE` |
+
+Evidence mới chỉ ở host/local cho domain, migration/store, restart và fault
+injection. Chưa có REST/FE/compiler package/runtime/target/HIL/Test Result; vì vậy
+**22/22 risk vẫn Open**, S×L và residual không đổi.
+
+### 5.30 Cập nhật treatment source `T59-202` (Plan59 W2)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-020` | Ba route Control Library theo đúng DDD §5.1; mutation là **admin-only** kiểm bằng authorizer thật (viewer/operator đọc được nhưng 403 khi ghi); `If-Match` + idempotency bắt buộc và bị từ chối TRƯỚC khi chạm store; biên nhận idempotency và audit nằm cùng transaction với thay đổi; `featureState=REVIEW_REQUIRED` không nhận từ payload | UI (`T59-203`), import/export nguồn thù địch (`T59-204`), signed library (`T59-602`), ma trận security/RBAC đầy đủ (`T59-603`) và Test Result `U03` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | `LibraryPublicError` giữ `ST-LIB-001`/`ST-LIB-002`/`ST-POU-003` thành ba mã public khác nhau tới tận lớp HTTP; cursor tìm kiếm ký HMAC và ràng buộc luôn bộ lọc nên trang sau không đổi phạm vi âm thầm | Nối emitter vào Check thật (`T59-302`), copy FE (`T59-203`) và Test Result `VS-PROG-019/024` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Mutation library tăng ETag Draft của Project nên hai lane (tài liệu và library) không sửa xen kẽ nhau mà không bên nào thấy; ETag cũ bị 409 | E2E real-backend (`T59-505`) và ma trận concurrency (`T59-603`) | `OPEN — PARTIAL SOURCE` |
+
+Hai finding thật được sửa trong task: handler library nuốt route Project khác
+(làm seal Revision hỏng), và actor rỗng cho `503 retryable` thay vì lỗi REQUEST.
+Khoảng hở actor rỗng còn tồn tại ở Project/Check/Operation service và được ghi
+sang `T59-603`. Evidence vẫn chỉ ở host/local, chưa có FE/target/HIL/Test Result;
+**22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.31 Cập nhật treatment source `T59-205` (Plan59 W2)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-005` | PID giữ nhãn `REVIEW_REQUIRED` và Check **chặn** ở cả ba đường (`compile_st_source` mặc định BẬT, validate CLI, `compile_fbd_source`), gate độc lập producer nên lowering FBD không thành đường vòng. Token phê duyệt suy ra từ chính profile contract kèm `libraryVersion`, generator từ chối token bịa, và G1 ghim riêng `approvedReviewGatedFeatures` nên mở PID làm gate đỏ cho tới khi pin đổi | Evidence Controls/Safety thật (`VS-PROG-U12` qua `T59-706`): saturation/anti-windup/override/release trên target; UI cảnh báo (`T59-203`/`T59-506`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-020` | Chính sách feature-gate là contract máy đọc được, hai chiều với registry: entry `REVIEW_REQUIRED` phải được khai và feature đã khai phải thật sự `REVIEW_REQUIRED` | Ma trận security/RBAC đầy đủ (`T59-603`) và Test Result `U03` | `OPEN — PARTIAL SOURCE` |
+
+Bài học ghi lại vì nó suýt thành lỗi thiết kế: đặt gate trong `typecheck` làm
+**bộ conformance của chính PID** không compile được — tức khoá luôn thứ duy nhất
+mở khoá được gate. Gate vì vậy là chính sách ở biên Check, không phải luật ngôn
+ngữ. Evidence vẫn host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.32 Cập nhật treatment source `T59-204` (Plan59 W2)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-017` | Bundle nguồn mang Control Library nhưng **không** mang artifact/IR/cache; corpus thù địch 10 biến thể (path traversal, đường dẫn tuyệt đối, file thực thi, entry ngoài manifest, sửa nội dung giữ hash, tự dán `REVIEW_REQUIRED`, `stateLayout` sai kind, `entryCount` lệch, manifest giấu library, dependency lệch version) đều bị từ chối và để lại **0 mutation** | Ký bundle/artifact (`T59-602`), ma trận security đầy đủ (`T59-603`), Test Result `U03` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-020` | `systemLibraryVersion` phải khớp chính xác và có **mã lỗi riêng**; library nhập về nhận identity mới ở `DRAFT`; Seal publish+pin library trong cùng transaction nên Revision không còn pin một library vẫn sửa được | Compiler dùng library đã pin (`T59-302`), runtime (`T59-401`), target | `OPEN — PARTIAL SOURCE` |
+
+Hai finding thuộc phạm vi đã sửa: Seal Revision trước đây **không** đóng băng
+library, và phép đếm descriptor của bundle lệch ngay khi có file library. Trust
+vẫn là `HASH_ONLY` — bundle chưa ký; **22/22 risk giữ Open**, residual không đổi.
+
+### 5.33 Cập nhật treatment source `T59-203` (Plan59 W2 — đóng Wave)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-005` | PGM-04 hiển thị nhãn review-gate ở danh sách và chi tiết, nói thẳng rằng Check sẽ từ chối; **không có** checkbox hay nút duyệt nào ở UI (có test khẳng định không tồn tại `role="checkbox"`) | Evidence Controls/Safety thật (`T59-706`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | `stateLayoutKnown=false` hiển thị "chưa biết" chứ không phải `0 B`; lỗi tải dùng copy theo mã public; permission tách khỏi lỗi | E2E real-backend (`T59-505`), usability người thật | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | ETag Draft mới được dùng lại ngay cho thao tác kế tiếp, có test khoá chuỗi hai mutation liên tiếp | E2E real-backend (`T59-505`) | `OPEN — PARTIAL SOURCE` |
+
+Wave W2 đóng với 5/5 task DONE. Evidence vẫn là host/local (vitest + jsdom) —
+**không** phải E2E trình duyệt thật, không phải target/HIL. `22/22` risk giữ
+Open, S×L và residual không đổi.
+
+### 5.34 Cập nhật treatment source `T59-301` (Plan59 W3 — mở Wave)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-001` | Document v2 tách POU khỏi cấu hình Program và mang trần 32 Program là **trần cứng ở Draft**: Program thứ 33 bị từ chối và Draft giữ đúng 32, POU đi kèm cũng không được ghi | Check/compile 32 Program (`T59-302`), manifest/topology/budget (`T59-305`), runtime (`T59-402`), target 10-Program (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-006` | Migration v1→v2 **tất định + idempotent + giữ nguyên identity**, nên Revision đã seal không trỏ hư không; `compilerInput` đọc cả hai đời tên nên Revision cũ vẫn Check lại được | Migration trên board thật (`T59-705`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-012` | `signals` là công dân hạng nhất ở Draft với publisher/freshness/policy/fallback; `USE_FALLBACK` và giá trị dự phòng đi liền nhau; dải freshness khớp chính xác `CHECK` của store | Validation cấp package (`T59-304`), runtime double-buffer (`T59-404`) | `OPEN — PARTIAL SOURCE` |
+
+Ba consumer được sửa theo mà **không nhân bản dữ liệu**: io_map đọc `locals` của
+POU, phân loại RETAIN đọc tập biến RETAIN của POU, và `compilerInput` đọc cả hai
+đời tên. Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.35 Cập nhật treatment source `T59-302` (Plan59 W3)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-001` | Check biên dịch **mọi** Program của package (trần pipeline 1 đã gỡ) và lắp container v2 bằng chính writer production; thứ tự biên dịch ổn định theo `objectId` | Topology/budget/`desiredEnabled` (`T59-305`), runtime scheduler (`T59-402`), target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-003` | Container do `WritePackageV2()` ghi và được **đọc lại bằng chính loader** trước khi lưu; hash package tính lại từ byte đọc về, không nhận con số CLI báo; package byte-stable qua hai lần chạy | Ký artifact (`T59-602`), nạp trên target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Diagnostic của mọi Program hỏng được **gộp** trong một lần Check và mỗi cái mang `programId` của chính nó | Nối signal/output-owner vào Check (`T59-304`), FE hiển thị (`T59-306`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Check không đụng Draft và không sinh hành động triển khai (kiểm cả chiều đạt lẫn hỏng); hai worker chia nhau Check qua lease | E2E real-backend (`T59-505`) | `OPEN — PARTIAL SOURCE` |
+
+Một finding trong task: bản đầu của migration `0009` đưa lại UNIQUE trên content
+hash và làm rơi index/trigger, tái tạo đúng lỗi mà migration v3 đã sửa — bộ test
+đầy đủ bắt được ngay. Evidence host/local; **22/22 risk giữ Open**, S×L và
+residual không đổi.
+
+### 5.36 Cập nhật treatment source `T59-303` (Plan59 W3)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-011` | Binding MB_RTU đi qua Point contract canonical: compiler nhận `extIndex` do Point Catalog phân giải và **không** tự suy slot, nên không tái định nghĩa register/function code/endian/chu kỳ poll ở lớp không sở hữu chúng | Point Catalog phát `extIndex` cho Mapping tab (`T59-306`), nghiệm thu I/O Modbus trên board (`T59-703`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Thiếu `extIndex`, thiếu `deviceId`, vượt trần 256, sai chiều và kiểu `TIME` đều fail-closed với diagnostic riêng; guard BE kiểm hai chiều | Test Result `VS-PROG-019/024` | `OPEN — PARTIAL SOURCE` |
+
+Hai test cũ khoá hành vi "MB_RTU không hỗ trợ" được **thay** chứ không xoá, để
+không mất phép kiểm allowlist category. Evidence host/local; **22/22 risk giữ
+Open**, S×L và residual không đổi.
+
+### 5.37 Cập nhật treatment source `T59-304` (Plan59 W3)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-002` | Một output binding có đúng một Program owner, kiểm ở **Check** trước khi biên dịch và nhận diện theo **điểm vật lý** (`deviceId`+`extIndex` với MB_RTU) chứ không theo tên điểm | Trọng tài output/candidate withdrawal runtime (`T59-406`), HIL I/O vật lý (`T59-703`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-012` | Bốn luật Published Signal kiểm ở Check: đúng một publisher (case-folded), publisher phải tồn tại, freshness 1000..90000, `USE_FALLBACK` ghép cứng với giá trị dự phòng | Double-buffer/freshness/fallback lúc chạy (`T59-404`), Test Result `U05/U06` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Mọi vi phạm cấp package được **gộp** trong một lần Check, mỗi diagnostic mang `signalId`/`programId`/`pointId` của chính nó | FE hiển thị (`T59-306`), Test Result `VS-PROG-019/024` | `OPEN — PARTIAL SOURCE` |
+
+Kiểm ở Check **bổ sung** cho loader chứ không thay: loader vẫn phải kiểm vì
+artifact có thể tới từ nơi khác. Evidence host/local; **22/22 risk giữ Open**,
+S×L và residual không đổi.
+
+### 5.38 Cập nhật treatment source `T59-305` (Plan59 W3)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-001` | Manifest package mang topology và budget theo profile (32/16/20% + số Program từng lớp chu kỳ); trần 32 được ép **lại** ở Check vì Revision có thể tới từ bundle import; chu kỳ ngoài ba lớp profile bị từ chối | Thi hành trần 16 Enabled qua intent thật (`T59-405`), ngân sách thời gian thực (`T59-402`), target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-007` | Program mới luôn `desiredEnabled=false` trong topology: package không tự bật thứ vừa được nạp; phép kiểm giữ cả khi không có đường đặt cờ true | Enable/Disable end-to-end với audit và read-back (`T59-405`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-003` | Topology **không phụ thuộc thứ tự tạo**: hai Project cùng nội dung dựng khác thứ tự cho đúng cùng manifest, nên provenance so sánh được giữa hai controller | Reproducible build cấp RC (`T59-606`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.39 Cập nhật treatment source `T59-306` (Plan59 W3 — đóng Wave)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-014` | Inspector **ẩn** chu kỳ/trạng thái bật với Function/FB thay vì hiện rồi xám, và nói thẳng vì sao; Program hiện `Tắt (mặc định cho Program mới)` khớp `desiredEnabled=false` của topology | E2E real-backend (`T59-505`), usability người thật | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-016` | IA sáu trang đúng DDD §8: `programs`/`mapping` là route đích, `/design` là lối vào cũ giữ nguyên query định vị lỗi; route thắng query nên trang luôn khớp địa chỉ của chính nó | Ba workspace còn lại của IA (`T59-503`), E2E (`T59-505`) | `OPEN — PARTIAL SOURCE` |
+
+Wave W3 đóng với 6/6 task DONE. Evidence host/local (vitest + jsdom) — **không**
+phải E2E trình duyệt thật, không phải target/HIL. `22/22` risk giữ Open, S×L và
+residual không đổi.
+
+### 5.40 Cập nhật treatment source `T59-401` (Plan59 W4 — mở Wave)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-003` | Coordinator nạp package v2 qua **đúng một parser** dùng chung với loader; mỗi Program phải có đúng một blob IR; gói hỏng để lại **0 mutation** vì mọi stage trước đó bị huỷ | Ký artifact (`T59-602`), nạp trên target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-001` | Topology dựng theo **chính package**: bootstrap không còn khai trước tên Program, `instance_id` bỏ hardcode `program-main` nhưng vẫn bị ép định dạng; stage/arm/rollback/start chạy trên toàn bộ tập instance | Scheduler đa chu kỳ (`T59-402`), fault isolation (`T59-403`), target 10-Program (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-006` | Dual-reader còn sống: artifact v1 một Program vẫn nạp được, có test khoá — mất đường này là mất bản LKG cuối cùng sau một lần nâng cấp | Rollback trên target (`T59-705`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.41 Cập nhật treatment source `T59-402` (Plan59 W4)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-018` | Mỗi Program release theo **deadline riêng**, bù trôi theo mốc **lý thuyết** nên một tick trễ không đẩy mọi deadline sau đó; lỡ chu kỳ thì **đếm và bỏ** chứ không chạy bù, để một lần quá tải không thành chuỗi quá tải; thứ tự chạy theo `order` duy nhất, độc lập thứ tự tạo | Worker lane và ràng buộc không cấp phát trong RT (`T59-403`), đo tải thật trên target 10-Program (`T59-702`), Test Result `VS-PROG-U05` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-001` | Chu kỳ + ngân sách đi **trong `PROGRAM_TABLE` của package**, coordinator áp lên instance mỗi lần dựng topology kể cả instance đã tồn tại; writer **và** loader cùng từ chối chu kỳ ngoài ba lớp profile — loader không được tin writer vì gói có thể do writer khác phiên bản sinh | Publish số đo tải ra API (`T59-408`), nghiệm thu target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-005` | Trần **16 Program chạy đồng thời** ép ở `start()` — nơi Program thực sự bắt đầu tác động lên đầu ra, không phải ở lớp cấu hình vốn chỉ chặn được *ý định*; trần là trần **động**, dừng một Program giải phóng đúng một suất | Đường intent Enable/Disable đầu-cuối (`T59-405`), Test Result `VS-PROG-U07` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-022` | Đường khôi phục sau reboot nay đi qua **đúng** `split_package` + `ensure_topology` như đường stage. Trước bản vá, `load_active_checkpoint` nạp nguyên khối container v2 vào một instance như thể artifact v1: loader IR v1 từ chối và thiết bị tỉnh dậy **không có Program nào** | Ma trận fault/power-cut đầy đủ (`T59-501`, `T59-704`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.42 Cập nhật treatment source `T59-403` (Plan59 W4)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-018` | Hai chế độ lane cho **đúng cùng** kết quả trên fixture 10 Program/3 chu kỳ/4 lane, ổn định qua 20 lần lặp; kết quả lane trộn theo **số hiệu lane** chứ không theo thứ tự hoàn thành nên trace và số đếm không phụ thuộc lane nào chạy nhanh hơn; TSan 54 test **0 cảnh báo**, tái lập bằng `scripts/run_core_tsan.sh` | Chạy 24 h trên target (`T59-702`), Test Result `VS-PROG-U05` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-006` | **Đảo chiều** chính sách fault theo kiến trúc §8 `isolate Program`: fault của một Program không còn dừng cả Task, kể cả Program cùng lane; `last_dispatch_succeeded()` vẫn `false` nên cô lập không biến thành im lặng | Rút candidate và safe-state khi Program fault (`T59-406`), fault trên target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-021` | Đường quét **0 cấp phát** ở cả hai chế độ (đo bằng `allocation_probe`); worker tạo sẵn ngoài chu kỳ, spin+yield không vào kernel; lane vượt số worker chạy nốt trên luồng gọi nên thiếu worker làm chậm chứ không làm bỏ sót | Đo WCET thật trên target ít nhân (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.43 Cập nhật treatment source `T59-404` (Plan59 W4)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-017` | Double-buffer + commit ở boundary: consumer **không bao giờ** thấy giá trị chưa từng được publish, và mọi consumer trong một chu kỳ thấy **cùng một** ảnh signal nên kết quả không phụ thuộc lane nào chạy trước; 20.000 vòng publisher/consumer song song cho **0 lần đọc rách** | Nối opcode đọc/ghi signal vào thân chương trình, chạy 24 h trên target (`T59-702`), Test Result `VS-PROG-U08` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-012` | Ba chính sách stale cho ba hành vi **khác nhau**; "chưa ai publish" khác "quá hạn" — chỉ `USE_FALLBACK` có câu trả lời khai báo, hai chính sách kia nói thẳng `UNAVAILABLE` thay vì bịa 0; producer dừng làm giá trị **quá hạn theo freshness** chứ không biến mất tức thì | Trọng tài output khi consumer nhận `UNAVAILABLE` (`T59-406`), HIL | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-020` | Signal nay **thực sự đi trong container**: trước bản vá `mkddc-st-package` không có đường nhận signal nên mọi khai báo đã validate vẫn không tới thiết bị; `stalePolicy` đóng thành enum ở **ba** lớp độc lập (Check Go, writer + loader C++, `StSignalBus::declare`) | Ký artifact (`T59-602`), nạp trên target (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.44 Cập nhật treatment source `T59-405` (Plan59 W4)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-008` | Intent Enable/Disable đi trọn store → API → IPC → Core → read-back; biên nhận idempotency, audit và bản ghi intent trong **cùng một transaction**; Enable/Disable là **hai action riêng** ở lớp biên nhận nên cùng idempotency key cho hai chiều không bị replay nhầm; replay **không** gửi lại lệnh xuống Core | Đối chiếu định kỳ intent ↔ trạng thái Core (`T59-501`), Test Result `VS-PROG-U07` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | RBAC khai báo theo route (`admin` cho mutation, `viewer` cho đọc); actor rỗng bị từ chối bằng `ErrInvalidRequest` chứ không rơi vào 503 "hãy thử lại"; payload thiếu `desiredEnabled` bị từ chối chứ **không** mặc định `false` — mặc định sẽ biến payload hỏng thành lệnh TẮT chương trình | FE cho đường Enable/Disable, usability người thật | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-005` | Trần **16 Enabled** ép ở **hai lớp**: application chặn trước khi ghi (intent bền vững, nên intent vượt trần sẽ sống lại mỗi lần khởi động và bị từ chối mãi mãi), Core ép lại ở `start()` nơi Program thực sự tác động lên đầu ra | Nghiệm thu target với 16 Program chạy thật (`T59-702`) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-007` | Ý định và trạng thái là **hai trường riêng**; Core từ chối → `FAULTED`, Core không liên lạc được → `UNKNOWN`, và **không** trường hợp nào xoá intent; Core nhận lệnh → ghi trạng thái **chuyển tiếp** `STARTING`/`STOPPING` chứ không ghi thẳng đích | Đường đọc trạng thái theo từng Program từ Core (`STATUS` chưa mang), HIL | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.45 Cập nhật treatment source `T59-406` (Plan59 W4)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-021` | Sổ candidate trả lời **ai đang giữ output nào**; bất biến một-output-một-owner ép **lại** ở runtime vì gói có thể tới từ bundle import chứ không chỉ từ Check; đăng ký chạy **trước** khi publish nên xung đột lộ ra trước khi ghi ra van | Nghiệm thu I/O vật lý (`T59-702`/`T59-704`), Test Result `VS-PROG-U09` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-002` | Rút candidate mang **lý do** (enum đóng ba giá trị) và **không xoá** bản ghi; trọng tài rơi đúng mức tiếp theo → default, có test đầu-cuối chạy Program thật rồi `stop()` và kiểm AO về `0.0`. **Cập nhật 2026-08-21 (`ADR-051`):** TTL hold-last = 60 s đồng hồ, không còn `0`/vô hạn | HIL và I/O vật lý (đo thời gian rút thật trên board) | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-006` | Luật "không có đường Program→SHM/IOP/MCU trực tiếp" (kiến trúc §7) kiểm bằng **đọc chính mã nguồn** lớp process image, kèm phép kiểm ngược rằng đường hợp lệ thực sự có mặt — một test hành vi chỉ chứng minh đường hợp lệ chạy đúng, không chứng minh **không có** đường thứ hai | Kiểm cùng lớp cho các adapter I/O khác, target | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.46 Cập nhật treatment source `T59-407` (Plan59 W4)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-022` | **Lỗi thật đã sửa:** reset trên Program đang `STOPPED`/`FAULTED` chỉ sạch trong RAM còn file bền vững giữ giá trị cũ, nên khởi động lại là giá trị cũ quay về. Nay reset công bố ảnh đã reset **ngay tại boundary**, không phụ thuộc trạng thái chạy. Test chống hồi quy đã kiểm chứng bằng cách gỡ bản vá | Ma trận power-cut thật trên board (`T59-704`), Test Result `VS-PROG-029/030` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-009` | Namespace RETAIN theo instance (đường dẫn dẫn xuất từ `SHA-256(controller_identity ‖ instance_id)`): reset của một Program không chạm Program khác, và file hỏng của một Program chỉ làm **một** Program cold-init — Program còn lại warm-restart bình thường | Cold-init trên target sau đổi Revision (`T59-702`), `VS-PROG-029/030` | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.47 Cập nhật treatment source `T59-408` (Plan59 W4 — đóng Wave 8/8)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-021` | Trace giá trị lấy tại **ranh giới quét**, bounded 10.000 Ô / 10 phút, **0 cấp phát** trong vòng lấy mẫu; kho theo Ô nên ngân sách RAM tĩnh **cố định ~170 KB** không phụ thuộc số biến; số mẫu **rơi** được đếm thay vì giấu | Chạy 10 phút thật trên target (`T59-702`), Test Result `VS-PROG-U11` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | **Action ma = 0**: bảng handler IPC không còn `NOT_IMPLEMENTED` nào, khoá bằng hai phép kiểm độc lập (test Go đối chiếu hai chiều schema↔codec, và verifier đối chiếu schema↔enum C++↔nhánh dispatch↔codec Go). **Sửa kèm:** self-test của chính verifier bám vào `TRACE_START` nên thành no-op ngay khi nó được hiện thực — nay mutation tự tiêm action giả và tiêm cả nguồn Core đã bỏ nhánh | Đường đọc mẫu chuyển hẳn sang `TRACE_READ` (lane sản phẩm) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.48 Ký TTL hold-last — `ADR-051` (đóng mục treo của `T59-406`)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-002` | TTL hold-last **60 s đồng hồ** (`ADR-051`), thay cho `0` = giữ vô hạn. TTL đo **tuổi của lệnh** nên phủ cả `ROLLED_BACK` và `RUNNING`-trong-Task-bị-disable — hai đường ngừng publish mà không bao giờ mang trạng thái `FAULTED`, tức là trước đó giữ lệnh cũ vĩnh viễn kể cả khi TTL đã có số. Mặc định `ScanDeps` là giá trị đã ký nên đường nối dây quên set field không âm thầm quay lại "giữ vô hạn" | Đo thời gian rút thật trên board (`T59-702`/`T59-704`); Safety review cho ma trận rơi-về theo từng loại tải | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-006` | Ràng buộc "TTL ≥ 2× chu kỳ Task chậm nhất" không nằm ở ghi chú mà ở `static_assert` đọc `allowedPeriodMs` của profile: profile mọc thêm lớp chu kỳ chậm hơn thì gãy build chứ không gãy ngoài hiện trường | Kiểm cùng lớp cho các hằng số an toàn khác đang chỉ sống trong tài liệu | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local (`ctest` 1205/1205, có mutation check: gỡ nhánh tuổi-lệnh thì
+test Task-bị-disable đỏ đúng chỗ). **22/22 risk giữ Open**, S×L và residual không
+đổi — ký một con số không hạ residual khi chưa đo trên phần cứng thật.
+
+### 5.48 Cập nhật treatment source `T59-501` (Plan59 W5 — mở Wave)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-022` | Barrier chu kỳ đầu và rollback nâng lên mức **GÓI**: một Program hỏng làm **cả gói** quay về, không còn "một nửa thành công"; rollback kiểm TRƯỚC áp SAU nên không kẹt giữa chừng; LKG thăng cấp **all-or-nothing** nên không tồn tại tập LKG ghép từ hai gói; restart ở cả bốn pha không để lại active một nửa | Mô phỏng mất điện thật giữa fsync và số đo phục hồi trên board (`T59-704`), Test Result `VS-PROG-029/030` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Ba hồi quy FE/E2E của W3 được phát hiện và sửa ngay khi cổng `e2e` chạy lần đầu: thanh tab Thiết kế **bấm không ăn**, tab `execution` **mất chỗ hiển thị**, E2E còn ghi IA cũ. Đây là bằng chứng cho chính luận điểm ma trận cổng: thứ không được cổng nào gọi thì không ai biết nó hỏng | E2E real-backend (`T59-505`), usability người thật | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.49 Bổ sung treatment source `T59-408` (nối đường đọc trace, phát hiện ở W5)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-021` | Đường đọc trace nối trọn: BE rút mẫu từ **ring của Core** qua `TRACE_READ` thay vì poll monitor. Trước bản vá, Core lấy mẫu tại ranh giới quét rồi ghi vào một ring **không ai đọc** — lý do tồn tại của `T59-408` không tới được người dùng. Không trộn hai nguồn trong một dãy; `valid=false` không vẽ thành 0; số mẫu rơi của Core hiện ra | Đo 10 phút thật trên target (`T59-702`), Test Result `VS-PROG-U11` | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.50 Cập nhật treatment source `T59-502` (Plan59 W5)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-012` | **Lỗi thật đã sửa:** `SIGNAL` không nằm trong whitelist kind của `revision_objects`, nên `SealRevision` từ chối MỌI Revision có Published Signal — toàn bộ lane signal (`T59-304` validate, `T59-404` bus) chưa từng chạm một Revision thật. Migration **v11** mở whitelist và khôi phục đúng hai trigger bất biến | Nghiệm thu signal đầu-cuối trên target (`T59-702`), Test Result `VS-PROG-U08` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Impact/ack phủ **tám** nhóm: bốn nhóm Rev A cộng `publishedSignals`/`controlLibrary`/`programSet`/`enableIntent`. Đổi chính sách stale, đổi library, thêm/bớt Program, hay chạm Program **đang Enabled** nay đều phải được xác nhận; trước bản vá cả bốn đi qua Commission mà không hỏi gì | Usability người thật trên FE (`T59-503`), Test Result `VS-PROG-019` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Nhóm impact **vắng mặt** = `UNAVAILABLE`, không phải `NONE`: coi "không thấy" là "không có" đúng là cách để một tác động thật đi qua mà không ai xác nhận. Khoá ack là enum đóng một chỗ; kiểu TS sinh **từ enum contract** thay vì viết cứng | E2E real-backend (`T59-505`) | `OPEN — PARTIAL SOURCE` |
+
+Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.51 Cập nhật treatment source `T59-503` (Plan59 W5 — sáu workspace/lifecycle)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-007` | Sáu workspace dùng chung read-model ở `ProgrammingLayout`; `ProgrammingContextBar` tách bốn sự thật Draft, Active Revision, desired intent và runtime read-back, tuyệt đối không suy `desiredEnabled=true` thành `RUNNING`. PGM-05 dựng lifecycle từ trạng thái Check/operation authoritative, giữ riêng `UNKNOWN_RECONCILING` và không xem timeout là success | Test Result `VS-PROG-U07/U10`, target read-back và review độc lập; E2E real-backend HOST/LOCAL đã PASS | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Khi URL đã có `projectId`, API Project chưa trả hoặc lỗi không làm layout fallback sang Project đầu tiên; intent query giữ đúng định danh route. Test race đổi Project khóa việc rò intent/state của Project cũ | Ma trận concurrency/reload thật (`T59-505/603`) và Test Result `VS-PROG-024/U10` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-016` | Desktop/mobile đều có đúng sáu route canonical; workspace phụ thuộc Project bị vô hiệu khi thiếu Project thay vì dựng deep-link giả. PGM-05 hiển thị impact/read-back ở chế độ chỉ đọc, nhóm `UNAVAILABLE` vẫn chặn Commission; lifecycle và trạng thái permission/offline/unknown có nhãn chữ + `aria-live`/`aria-current` | Usability người thật và accessibility reviewer trên desktop/mobile; fault E2E thật `VS-PROG-011/019/031/U10` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Route canonical nằm trong một map; redirect cũ giữ query/hash định vị diagnostic; link lỗi Check về đúng `/programs`. Test route/nav/context khóa IA để copy cũ hoặc route cũ không âm thầm quay lại | Browser/Network current-pass và Test Result `VS-PROG-019/U10` | `OPEN — PARTIAL SOURCE` |
+
+Evidence hiện là source/component/browser HOST/LOCAL: FE **124 file / 1161
+test**, E2E mock **61/61**, Chrome desktop/mobile sạch. **22/22 risk giữ Open**,
+S×L và residual không đổi; chưa claim usability, CI, target/HIL hay Test Result.
+
+### 5.52 Cập nhật treatment source `T59-504` (Plan59 W5 — Monitor Point + Signal)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-010` | Watch phủ đúng ba category `LOCAL/VP/MB_RTU`, tách output candidate (`programValue`) khỏi `actualValue`, source/priority/quality/freshness. `valid=false`, BAD/OFFLINE/UNAVAILABLE và mismatch không vẽ thành `0`; số 0 chỉ giữ khi payload thật sự valid. Published Signal dùng snapshot/API riêng, không trộn với bảng Point | Positive binding trên target, producer clock/freshness fault, AO/DO read-back và Test Result `VS-PROG-017/018/U06` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-017` | Core `STATUS` minor 3 công bố Published Signal snapshot typed lấy từ bus committed; BE join theo Active Revision và phân biệt MATCHED/MISMATCH/CORE_ONLY/REVISION_ONLY; FE fail-closed khi producer offline hoặc snapshot mismatch | Opcode signal trong thân Program; TSan/soak 24 giờ trên target và Test Result `VS-PROG-U06` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-021` | Bảng Monitor hiện candidate, actual, owner/source và priority thành các cột riêng; trace đọc ring Core qua `TRACE_READ`, công bố `droppedSamples` và không trộn mẫu polling vào cùng dãy | Trace 10 phút + candidate withdrawal với I/O vật lý trên target; `VS-PROG-U09/U11` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | State loading/permission/offline/error/no-active/empty được phân loại bằng status/transport thay vì parse chuỗi lỗi. Viewer được xem monitor nhưng không thể chọn biến hay khởi tạo trace | Contract/browser current-pass, fault matrix và reviewer độc lập | `OPEN — PARTIAL SOURCE` |
+
+Evidence hiện là source/unit/component HOST/LOCAL: CTest Release/Debug
+**1211/1211**, Go và FE gate thành phần sạch. Simulator cố ý không có I/O vật lý,
+nên Monitor Point unavailable phải hiện fail-closed chứ không được dựng dữ liệu.
+**22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.53 Cập nhật treatment source `T59-505` (Plan59 W5 — lane real-backend HOST/LOCAL)
+
+| Risk | Control đã có trong source lane | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-007` | Spec đi Project→Draft→Seal→Check→Commission→Enable→Runtime→Disable→Revision mới→Restore qua HTTP/operation read-back thật; compiler/packager và Programming IPC production được gọi, không có optimistic Active | Target read-back, fault injection và Test Result `VS-PROG-U07/U08/U10`; HOST/LOCAL 1/1 đã PASS | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-008` | Lane dùng ETag mới qua chuỗi mutation, idempotency/correlation riêng cho từng request và kiểm actual Active Revision sau operation; Control Library, Signal và Binding cùng đi qua một Revision thật. ST+ khóa PATCH đúng năm field Draft v2 strict và GET Project read-back, không còn gửi metadata Program ngoài contract | Retry/concurrency/worker-restart matrix (`T59-603/604`) và reviewer độc lập | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-012` | Backend chạy JWT/authz thật với admin; mutation không bypass handler/service. CI có guard tĩnh làm đỏ nếu spec đưa `page`/`context`/`browserContext.route*`/HAR/WebSocket mock vào lane | Role matrix viewer/operator/admin, revocation/re-auth/CSRF/TLS và Test Result `VS-PROG-022/U10` | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-022` | `mkddc-programming-core-sim` tái dùng scheduler/coordinator/cutover/process-image/IPC production để buộc Commission và Restore đi qua barrier/read-back thay vì stub HTTP. Stack tạo DB/staging/state tạm và dọn sau suite | Power-cut/fsync/journal/RETAIN/LKG trên board thật (`T59-704/705`) và Test Result `VS-PROG-U08` | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-013` | Tên job, script, config và spec đều ghi rõ **HOST/LOCAL**; simulator không có physical I/O nên Monitor Point `UNAVAILABLE` là kết quả fail-closed dự kiến. Bằng chứng này chặn việc biến PASS simulator thành claim HIL bằng văn xuôi | Board/BSP/instrument/physical I/O evidence `VS-PROG-014/030/U09`; release authority ký | `OPEN — NO TARGET EVIDENCE` |
+| `RSK-PROG-014` | Lane real-backend có cấu hình Playwright riêng, bị loại khỏi suite mock mặc định và có component `e2e-real`; workflow khai báo job riêng để failure boundary không bị che bởi mock. Guard phủ cả ba receiver route và C++ gate dùng `cmake --fresh` | **Kết quả chạy CI của commit cuối** và Test Result review; sự tồn tại của YAML/job chưa phải CI PASS | `OPEN — SOURCE HOST PASS` |
+
+Ranh giới bắt buộc: lane HOST/LOCAL **1/1 PASS**, `requestfailed=0`; chỉ ngoại lệ
+HTTP `503`/Console resource error đã khai là Monitor Point do simulator cố ý
+không giả process-I/O. Kết quả này không nâng GitHub CI, target, HIL, physical
+I/O, Test Result hoặc `RELEASE_READY`. **22/22 risk giữ Open**.
+
+### 5.54 Cập nhật treatment source `T59-506` (Plan59 W5 — ST/FBD editor)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-014` | ST editor dùng history duy nhất cho gõ, format và command; giữ tối đa 50 snapshot, undo/redo phục hồi cả source lẫn selection/cursor, edit mới cắt nhánh redo. Test bắt buộc đủ 20 edit hai chiều nên undo không còn phụ thuộc textarea native hoặc mutation path riêng lẻ | Conflict/reload real-backend và Test Result `VS-PROG-U10`; save/Console/Network HOST đã PASS | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-010` | Runtime overlay chỉ nối monitor khi `activeRevisionId` khớp; mismatch/loading/error/no-active đều unavailable và không giữ mẫu cũ. Zero thật giữ nguyên khi valid; invalid/null/BAD/OFFLINE/UNKNOWN không thành 0; STALE được giữ last-known nhưng luôn kèm quality/freshness | Binding/producer fault trên target và Test Result `VS-PROG-017/018/U06` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-019` | FBD chỉ lấy interface POU typed từ Draft v2, giữ thứ tự pin và lọc type ngoài profile; interface thiếu/mâu thuẫn làm palette rỗng/cảnh báo thay vì đoán pin. POU đang mở bị lọc để không tạo direct recursion từ palette | Compiler/runtime round-trip POU, one-over/fuzz và Test Result `VS-PROG-U01/U02/U04` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-016` | Palette/Inspector có nhãn nguồn POU và lỗi interface; Insert/Arrow/Enter/Delete/Ctrl+Z hỗ trợ bàn phím, nhưng shortcut trong ô nhập giữ hành vi native để không xóa graph ngoài ý muốn | Browser/a11y/usability người thật desktop/mobile và reviewer độc lập | `OPEN — PARTIAL SOURCE` |
+
+Evidence hiện là source/component/browser HOST/LOCAL: FE **1161 test**, E2E mock
+**61/61**, real-backend **1/1** và Chrome desktop/mobile sạch. **22/22 risk giữ
+Open**, S×L và residual không đổi; chưa claim target/HIL, Test Result hay release.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -483,6 +788,10 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 4.19 | 2026-08-21 | Ghi `T59-506` và chốt evidence HOST/LOCAL của W5: ST history 50 snapshot/20 undo-redo + cursor, runtime overlay không biến invalid thành 0, FBD lấy POU interface typed; ST+ gửi đúng payload Draft v2 strict; FE 1161 test, E2E mock 61/61, real-backend 1/1 và Chrome desktop/mobile sạch. Giữ 22/22 Open; chưa có GitHub CI/Test Result/target/HIL |
+| 4.18 | 2026-08-21 | Ghi `T59-505`: lane Project→Restore dùng backend/compiler/Core simulator thật, cấu hình tách khỏi mock và CI job có guard cấm `page.route`. Giữ 22/22 Open; lane đang được gate, không claim CI PASS và không đổi HOST thành target/HIL/physical I/O/release |
+| 4.17 | 2026-08-21 | Ghi `T59-504`: Monitor LOCAL/VP/MB_RTU tách candidate/actual/source/priority, Published Signal snapshot riêng và trace công bố mẫu rơi; mọi invalid/mismatch/unavailable fail-closed. Giữ 22/22 Open vì binding/soak/I/O vật lý/Test Result chưa có |
+| 4.16 | 2026-08-21 | Ghi `T59-503`: sáu workspace desktop/mobile, Project race guard, context tách Draft/Active/intent/runtime và PGM-05 lifecycle authoritative. Giữ 22/22 Open vì real-backend current-pass/usability/Test Result/target chưa có |
 | 0.1 | 2026-08-09 | Đăng ký 15 risk Programming |
 | 0.2 | 2026-08-09 | Thêm scoring, cause-event-impact, trace control/test/evidence, target residual và lifecycle M3 |
 | 0.3 | 2026-08-09 | Bổ sung treatment/acceptance record schema và trigger reopen/invalidate; đổi trạng thái content sang Detailed Draft, giữ residual/evidence RED |
@@ -515,6 +824,29 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 3.0 | 2026-08-20 | Ghi `T59-104` (Plan59 W1) cho treatment partial RSK-006/009: layout instance FB bất biến khi sắp xếp lại nguồn, identity theo đường dẫn canonical, vòng chứa và trần package bị chặn. Giữ 16/16 Open, 11 Critical và mọi residual vì runtime cấp phát, power-cut và Test Result chưa có. |
 | 3.1 | 2026-08-20 | Ghi `T59-105` (Plan59 W1) cho treatment partial RSK-006/016: ST và FBD dùng chung một nút AST cho lời gọi POU (có test so trực tiếp), thứ tự đối số bám cổng, FE sinh pin từ interface và từ chối interface mâu thuẫn. Giữ 16/16 Open, 11 Critical và mọi residual vì codegen liên kết, UI cây POU và target chưa có. |
 | 3.2 | 2026-08-20 | Ghi `T59-106` (Plan59 W1, đóng Wave) cho treatment partial RSK-003/004/006: container package v2 với loader fail-closed trên mọi trường do bên ngoài kiểm soát, fuzz lật từng byte 0 false-accept, hai bất biến an toàn kiểm ở loader, và dual-reader giữ LKG v1 còn hiệu lực. Giữ 16/16 Open, 11 Critical và mọi residual vì lắp nội dung package, nạp prepared image và target chưa có. |
+| 4.15 | 2026-08-21 | Ghi `T59-502` (Plan59 W5) cho treatment partial RSK-008/012/014: impact/ack phủ tám nhóm cho mô hình đa Program; sửa lỗi `SIGNAL` chưa từng seal được vào Revision (migration v11); nhóm vắng mặt fail-closed. Giữ 22/22 Open vì nghiệm thu signal trên target và usability chưa có. |
+| 4.14 | 2026-08-21 | Bổ sung `T59-408` sau khi cổng W5 lộ ra đường đọc trace chưa nối: BE nay rút mẫu từ ring của Core qua `TRACE_READ`, không trộn nguồn, không vẽ ô không đo được thành 0, số mẫu rơi hiện ra. Giữ 22/22 Open. |
+| 4.13 | 2026-08-21 | Ghi `T59-501` (Plan59 W5, **mở Wave**) cho treatment partial RSK-014/022: barrier chu kỳ đầu và rollback lên mức gói, LKG all-or-nothing, restart bốn pha không để lại active một nửa; ba hồi quy FE/E2E của W3 lộ ra ở lần đầu chạy cổng `e2e` và đã sửa. Giữ 22/22 Open vì mô phỏng mất điện thật trên board chưa có. |
+| 4.12 | 2026-08-21 | Ghi `ADR-051` (ký TTL hold-last 60 s) cho treatment partial RSK-002/006: đóng mục treo cuối của `T59-406`. TTL đo bằng đồng hồ chứ không đếm base step, đo tuổi của LỆNH nên phủ cả `ROLLED_BACK`/Task-bị-disable, mặc định `ScanDeps` là giá trị đã ký thay vì `0`. Giữ 22/22 Open: ký số không hạ residual khi chưa đo trên phần cứng thật. |
+| 4.11 | 2026-08-21 | Ghi `T59-408` (Plan59 W4, **đóng Wave 8/8**) cho treatment partial RSK-014/021: trace giá trị bounded lấy tại ranh giới quét với 0 cấp phát, ba action IPC thật, action ma = 0 khoá bằng hai phép kiểm độc lập; sửa self-test verifier vốn đã mục ruỗng vì bám vào một action cụ thể. Giữ 22/22 Open vì đo 10 phút thật trên target chưa có. |
+| 4.10 | 2026-08-21 | Ghi `T59-407` (Plan59 W4) cho treatment partial RSK-009/022: bịt lỗ reset nửa vời (reset trên Program đang dừng nay bền vững qua khởi động lại), cô lập RETAIN giữa Program cho cả đường reset lẫn đường file hỏng. Giữ 22/22 Open vì power-cut thật trên board chưa có. |
+| 4.9 | 2026-08-21 | Ghi `T59-406` (Plan59 W4) cho treatment partial RSK-002/006/021: sổ candidate trả lời quyền sở hữu output và lý do rút, bất biến một-output-một-owner ép lại ở runtime, đường rơi về mức tiếp theo/default có test đầu-cuối, luật không-đường-tắt kiểm bằng đọc mã nguồn. Giữ 22/22 Open; **TTL hold-last vẫn 0** vì con số chưa được Product+Controls ký. |
+| 4.8 | 2026-08-21 | Ghi `T59-405` (Plan59 W4) cho treatment partial RSK-005/007/008/014: intent Enable/Disable đi trọn store→API→IPC→Core→read-back/audit trong một transaction, ý định và trạng thái là hai trường riêng, trần 16 ép ở hai lớp, IPC thêm action mới với `protocolMinor` 0→1 tương thích ngược. Giữ 22/22 Open vì đối chiếu định kỳ, đọc trạng thái theo Program từ Core và FE chưa có. |
+| 4.7 | 2026-08-21 | Ghi `T59-404` (Plan59 W4) cho treatment partial RSK-012/017/020: bus Published Signal double-buffer commit ở boundary với 0 đọc rách qua 20.000 vòng, ba chính sách stale phân biệt "chưa publish" với "quá hạn", signal lần đầu thực sự đi vào container, `stalePolicy` đóng ở ba lớp. Giữ 22/22 Open vì opcode signal trong thân chương trình, trọng tài output và target chưa có. |
+| 4.6 | 2026-08-21 | Ghi `T59-403` (Plan59 W4) cho treatment partial RSK-006/018/021: lane là đơn vị song song với hai chế độ cho cùng kết quả, đảo chiều chính sách fault sang cô lập theo kiến trúc §8, đường quét 0 cấp phát, TSan 54 test 0 cảnh báo tái lập bằng script. Giữ 22/22 Open vì đo trên target và rút candidate chưa có. |
+| 4.5 | 2026-08-21 | Ghi `T59-402` (Plan59 W4) cho treatment partial RSK-001/005/018/022: chu kỳ release theo từng Program với bù trôi theo mốc lý thuyết, lỡ chu kỳ đếm-và-bỏ, chu kỳ đi trong package và bị chặn ở cả writer lẫn loader, trần 16 chạy đồng thời ép ở `start()`, đường khôi phục package v2 sau reboot được bịt. Giữ 22/22 Open vì worker lane/đo tải target/intent Enable chưa có. |
+| 4.4 | 2026-08-21 | Ghi `T59-401` (Plan59 W4, **mở Wave**) cho treatment partial RSK-001/003/006: coordinator nạp package v2 bằng parser dùng chung, dựng topology theo chính package, bỏ hardcode `program-main`, gói hỏng 0 mutation, dual-reader v1 còn sống. Giữ 22/22 Open vì scheduler/fault-isolation/target chưa có. |
+| 4.3 | 2026-08-21 | Ghi `T59-306` (Plan59 W3, **đóng Wave 6/6**) cho treatment partial RSK-014/016: IA sáu trang đảo chiều đúng DDD §8, cây POU kind-aware và inspector ẩn trường không có nghĩa. Giữ 22/22 Open vì E2E real-backend và usability chưa có. |
+| 4.2 | 2026-08-21 | Ghi `T59-305` (Plan59 W3) cho treatment partial RSK-001/003/007: manifest package mang topology/budget theo profile, không bám thứ tự tạo, Program mới luôn Disabled, trần 32 ép lại ở Check. Giữ 22/22 Open vì thi hành trần 16 Enabled, ngân sách RT và target chưa có. |
+| 4.1 | 2026-08-21 | Ghi `T59-304` (Plan59 W3) cho treatment partial RSK-002/012/014: output owner nhận diện theo điểm vật lý và Published Signal đủ bốn luật, kiểm ở Check trước khi biên dịch và gộp mọi vi phạm. Giữ 22/22 Open vì runtime signal/output arbitration và HIL chưa có. |
+| 4.0 | 2026-08-21 | Ghi `T59-303` (Plan59 W3) cho treatment partial RSK-011/014: binding MB_RTU qua Point contract canonical với `extIndex` do Point Catalog phân giải; compiler không tự suy slot nên không tái định nghĩa giao thức. Giữ 22/22 Open vì Point Catalog/UI và nghiệm thu I/O thật chưa có. |
+| 3.9 | 2026-08-21 | Ghi `T59-302` (Plan59 W3) cho treatment partial RSK-001/003/008/014: Check biên dịch mọi Program và gộp diagnostic, container v2 do chính writer production ghi và được loader đọc lại trước khi lưu, Check không đụng Draft/Active. Giữ 22/22 Open vì topology/budget, ký artifact và target chưa có. |
+| 3.8 | 2026-08-21 | Ghi `T59-301` (Plan59 W3, **mở Wave**) cho treatment partial RSK-001/006/012: document v2 tách POU khỏi cấu hình Program, trần 32 là trần cứng ở Draft, migration v1→v2 tất định giữ identity, signal hạng nhất với fallback ghép cứng vào policy. Giữ 22/22 Open vì Check/runtime/target chưa có. |
+| 3.7 | 2026-08-20 | Ghi `T59-203` (Plan59 W2, **đóng Wave 5/5**) cho treatment partial RSK-005/008/014: PGM-04 chỉ hiển thị review-gate mà không có ô tick duyệt, phân biệt state chưa biết với 0, và dùng lại ETag mới. Giữ 22/22 Open vì E2E real-backend và evidence Controls/Safety chưa có. |
+| 3.6 | 2026-08-20 | Ghi `T59-204` (Plan59 W2) cho treatment partial RSK-017/020: Control Library đi trong bundle nguồn có sẵn, export tất định không mang artifact, corpus thù địch 10 biến thể 0 mutation, lệch version registry SYSTEM có mã riêng, Seal publish+pin library cùng transaction. Giữ 22/22 Open vì bundle chưa ký (`T59-602`) và chưa có Test Result. |
+| 3.5 | 2026-08-20 | Ghi `T59-205` (Plan59 W2) cho treatment partial RSK-005/020: review gate PID ép ở ba đường Check và độc lập producer; token phê duyệt suy ra từ contract profile, generator từ chối token bịa, G1 ghim riêng danh sách đã duyệt. Giữ 22/22 Open và mọi residual vì evidence Controls/Safety thật (`VS-PROG-U12`/`T59-706`) chưa có. |
+| 3.4 | 2026-08-20 | Ghi `T59-202` (Plan59 W2) cho treatment partial RSK-008/014/020: ba route Control Library admin-only theo DDD §5.1, `If-Match`+idempotency+audit cùng transaction, cursor ký HMAC ràng buộc filter, ba mã lỗi phân giải giữ riêng. Hai finding thật (handler nuốt route Project, actor rỗng cho 503 retryable) đã sửa. Giữ 22/22 Open và mọi residual vì FE/import/signature/target/Test Result còn thiếu. |
+| 3.3 | 2026-08-20 | Ghi `T59-201` (Plan59 W2) cho treatment partial RSK-009/014/020: SYSTEM registry virtual/content-addressed có lịch sử version→hash; PROJECT Library versioned, Published bất biến, canonical source/interface/dependency hash, DAG/reference/layout guard và migration/restart fail-closed. Giữ 22/22 Open và mọi residual vì REST/import/signature/compiler/runtime/target/Test Result còn thiếu. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 | 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
 | 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |

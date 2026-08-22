@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-SW-PROG-UNIFIED-001` |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Trạng thái | **Active — IMPLEMENT_READY** |
-| Ngày | 2026-08-20 |
+| Ngày | 2026-08-21 |
 | Chủ quản | System/Runtime Architecture |
 | Reviewer | Compiler, Core, BE, FE, Controls, Security, Verification |
 | Approver | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` |
@@ -244,7 +244,7 @@ execute released Programs against immutable inputs + committed signal snapshot
 collect private next-state, signal publishes and output candidates per Program
 commit successful Program private state
 swap signal double-buffer once all publishers in the release set complete
-withdraw failed/disabled/expired candidates
+withdraw failed/disabled/expired candidates   (expired = lệnh cuối già hơn 60 s, ADR-051)
 resolve priority → interlock → safe-state → OutputWriter
 publish status/metrics/trace; kick watchdog after full base step
 ```
@@ -310,7 +310,7 @@ stale/offline/unknown. Breakpoints: desktop >=1280, tablet 768..1279, mobile
 | Library missing/drift | Check/stage | Reject candidate | Pin compatible version or migrate source. |
 | Duplicate signal/output owner | Check | No runtime mutation | Resolve owner/dependency. |
 | Enable unknown/uncommissioned Program | Core | Intent unchanged | Refresh active package; explicit error. |
-| Program WCET/exception | Core | Fault only Program; candidates withdrawn | Diagnose, Disable/Restore; independent Programs continue. |
+| Program WCET/exception | Core | Fault only Program; candidates withdrawn sau tối đa 60 s hold-last (`ADR-051`) | Diagnose, Disable/Restore; independent Programs continue. |
 | Signal stale | Core | Apply explicit consumer policy | Producer recovery or operator action. |
 | Commission timeout/restart | BE/Core journal | `UNKNOWN/RECONCILING`, old Active or deterministic recovery | Operation read-back; never replay with new ID. |
 | Corrupt artifact/RETAIN/journal | Loader/recovery | Fail closed; LKG/cold-init policy | Restore LKG, alert/audit. |
@@ -404,4 +404,5 @@ rollback. Residual risk chỉ giảm bằng evidence, không bằng tài liệu 
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.1 | 2026-08-21 | `ADR-051` ký TTL hold-last: "expired candidate" ở §7.1 và hàng WCET/exception ở §9 nay có con số — lệnh cuối của Program ngừng publish sống tối đa **60 s** rồi bị rút, resolver/interlock/safe-state chọn giá trị tiếp theo. Không đổi kiến trúc, contract hay capacity. |
 | 1.0 | 2026-08-20 | Khóa thiết kế thống nhất multi-Program, POU, library, signal, lifecycle, scheduler, output safety, migration và verification; không còn Open Decision/TBD chặn implementation. |

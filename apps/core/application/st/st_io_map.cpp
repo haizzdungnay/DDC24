@@ -105,8 +105,11 @@ bool validate_point_contract(const StIoMapEntry& entry, bool expect_output,
                          (prefix == "MSV" && entry.type == StType::UINT);
         }
     } else if (entry.category == "MB_RTU") {
+        /* Slot EXT phải do Point Catalog cấp và nằm trong dải SHM. Suy nó từ
+         * `point_id` ở đây là định nghĩa lại ánh xạ Modbus ở lớp không sở hữu nó. */
         identity_valid = valid_device_id(entry.device_id) &&
-                         valid_ascii_identity(entry.point_id);
+                         valid_ascii_identity(entry.point_id) &&
+                         entry.ext_index >= 1 && entry.ext_index <= KX_N_EXT;
         type_valid = entry.type != StType::TIME;
     } else {
         push_diag(diagnostics, st_diag_code::kIoMapBadPointId,
@@ -232,11 +235,10 @@ bool resolve_io_bindings(StIrModule* module, const std::vector<StIoMapEntry>& en
             return false;
         }
 
-        if (e.category != "LOCAL" && e.category != "VP") {
+        if (e.category != "LOCAL" && e.category != "VP" && e.category != "MB_RTU") {
             push_diag(diagnostics, st_diag_code::kIoMapUnsupportedCategory,
                      "io_map entry for '" + e.variable + "' targets category '" + e.category +
-                         "' — chỉ 'LOCAL'/'VP' được resolve_io_bindings() hỗ trợ trong bản này "
-                         "(xem F-PROG-ASBUILT-013/014/016)");
+                         "' (allowlist: LOCAL, VP, MB_RTU)");
             return false;
         }
         if (e.category == "VP" && expect_output) {
@@ -256,7 +258,14 @@ bool resolve_io_bindings(StIrModule* module, const std::vector<StIoMapEntry>& en
         std::string prefix;
         StPointKind kind{};
         uint16_t index_1based = 0;
-        {
+        if (e.category == "MB_RTU") {
+            /* MB_RTU không dùng cú pháp `PREFIX-NN`: identity của nó là
+             * (deviceId, pointId) do hệ Modbus RTU đặt, còn vị trí trong SHM là
+             * `ext_index` mà Point Catalog phân giải. `validate_point_contract`
+             * đã ép dải 1..KX_N_EXT ở trên. */
+            kind = StPointKind::EXT;
+            index_1based = e.ext_index;
+        } else {
             std::string parsed_prefix;
             split_numbered_id(e.point_id, &parsed_prefix);
             const bool mapped = (e.category == "LOCAL")

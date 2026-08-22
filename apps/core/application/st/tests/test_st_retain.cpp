@@ -6,6 +6,7 @@
  */
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -28,7 +29,11 @@ std::vector<uint8_t> build(const std::string& src)
 {
     StIrModule mod;
     StDiagnostic d;
-    EXPECT_TRUE(compile_st_source(src, &mod, &d)) << d.code << ": " << d.message;
+    /* T59-205: harness conformance của ngôn ngữ và runtime, gồm cả PID — xem
+     * chú thích ở test_st_exec.cpp. Đường production giữ mặc định BẬT. */
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    EXPECT_TRUE(compile_st_source(src, &mod, &d, options)) << d.code << ": " << d.message;
     std::vector<uint8_t> bytes;
     std::string err;
     EXPECT_TRUE(serialize_st_ir(mod, &bytes, &err)) << err;
@@ -701,6 +706,187 @@ TEST(StRetain, TC_RETAIN_02_WarmRestartAfterResetKeepsResetValueNotOld)
     EXPECT_EQ(counter(restarted), 1);
 
     ::unlink(path.c_str());
+}
+
+
+/* T59-407 — reset khi Program đang DỪNG vẫn phải bền vững qua khởi động lại.
+ *
+ * Triệu chứng trước bản vá: reset xong RAM sạch, nhưng file giữ giá trị cũ nên
+ * khởi động lại là giá trị cũ quay về — đúng nghĩa "reset nửa vời".
+ *
+ * Nguyên nhân: `publish_committed_retain_snapshots()` chỉ công bố cho Program
+ * vừa CHẠY và vừa COMMIT output trong base step này. Mà Program hay bị reset
+ * nhất lại là Program đang STOPPED/FAULTED — đúng những Program không bao giờ
+ * thoả điều kiện đó. Force-flush sau đó chỉ ghi lại ảnh CŨ. */
+TEST(StRetain, T59_407_ResetOnStoppedProgramIsPersistedNotHalfDone)
+{
+    const std::string root = temp_dir();
+    const std::vector<uint8_t> art = build(kCounter);
+    {
+        StRetainService service(root, "controller-A", false);
+        ASSERT_TRUE(service.ready()) << service.error();
+        StScheduler scheduler;
+        scheduler.set_retain_service(&service);
+        StTaskConfig config;
+        config.id = "T";
+        config.period_ms = 100;
+        config.budget_ms = 100;
+        std::string error;
+        ASSERT_TRUE(scheduler.add_task(config, &error)) << error;
+        ASSERT_TRUE(scheduler.add_program("T", "instance-1", 0, &error)) << error;
+        ASSERT_TRUE(scheduler.request_activation("instance-1", art, &error)) << error;
+        scheduler.tick(0);
+        ASSERT_TRUE(scheduler.start("instance-1", &error)) << error;
+
+        PointTable table;
+        PriorityResolver resolver;
+        StIoBridgeStats stats;
+        for (int step = 1; step <= 4; ++step) {
+            scheduler.tick(static_cast<uint64_t>(step) * 100000000ull);
+            ASSERT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &stats));
+        }
+        ASSERT_EQ(counter(scheduler.find_program("instance-1")->runtime), 4);
+        service.flush(true);
+
+        /* Người vận hành DỪNG Program rồi mới reset — đúng thứ tự thực tế. */
+        ASSERT_TRUE(scheduler.stop("instance-1", &error)) << error;
+        ASSERT_TRUE(scheduler.request_retain_reset("instance-1", &error)) << error;
+        scheduler.apply_pending_retain_resets_at_boundary();
+        ASSERT_EQ(counter(scheduler.find_program("instance-1")->runtime), 0);
+        service.flush(true);
+    }
+
+    /* Tiến trình MỚI, cùng thư mục: giá trị khôi phục phải là 0. */
+    StRetainService restarted(root, "controller-A", false);
+    ASSERT_TRUE(restarted.ready()) << restarted.error();
+    /* Phải đăng ký lại instance trước khi khôi phục — đó là đường mà scheduler
+     * đi khi dựng lại topology. Bỏ bước này thì service trả "chưa đăng ký" và
+     * test sẽ đo nhầm một lỗi setup thành một lỗi khôi phục. */
+    ASSERT_NE(restarted.register_instance("instance-1"), nullptr);
+    StProgramRuntime fresh;
+    ASSERT_TRUE(load(&fresh, art));
+    const StRetainResult result =
+        restarted.restore("instance-1", const_cast<StLoadedProgram*>(fresh.program()), 0);
+    ASSERT_TRUE(result.restored)
+        << "không đọc lại được bản ghi sau reset: " << result.message;
+    EXPECT_EQ(counter(fresh), 0)
+        << "giá trị trước reset quay về sau khởi động lại — reset nửa vời";
+    std::filesystem::remove_all(root);
+}
+
+/* T59-407 — reset của Program này KHÔNG chạm Program khác. Namespace RETAIN
+ * theo instance chỉ có nghĩa nếu nó cô lập được cả đường reset. */
+TEST(StRetain, T59_407_ResetIsIsolatedBetweenPrograms)
+{
+    const std::string root = temp_dir();
+    const std::vector<uint8_t> art = build(kCounter);
+    StRetainService service(root, "controller-A", false);
+    ASSERT_TRUE(service.ready()) << service.error();
+    StScheduler scheduler;
+    scheduler.set_retain_service(&service);
+    StTaskConfig config;
+    config.id = "T";
+    config.period_ms = 100;
+    config.budget_ms = 100;
+    std::string error;
+    ASSERT_TRUE(scheduler.add_task(config, &error)) << error;
+    for (const char* id : {"instance-1", "instance-2"}) {
+        ASSERT_TRUE(scheduler.add_program("T", id, id[9] == '1' ? 0 : 1, &error)) << error;
+        ASSERT_TRUE(scheduler.request_activation(id, art, &error)) << error;
+    }
+    scheduler.tick(0);
+    for (const char* id : {"instance-1", "instance-2"})
+        ASSERT_TRUE(scheduler.start(id, &error)) << error;
+
+    PointTable table;
+    PriorityResolver resolver;
+    StIoBridgeStats stats;
+    for (int step = 1; step <= 3; ++step) {
+        scheduler.tick(static_cast<uint64_t>(step) * 100000000ull);
+        ASSERT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &stats));
+    }
+    ASSERT_EQ(counter(scheduler.find_program("instance-1")->runtime), 3);
+    ASSERT_EQ(counter(scheduler.find_program("instance-2")->runtime), 3);
+
+    ASSERT_TRUE(scheduler.request_retain_reset("instance-1", &error)) << error;
+    scheduler.apply_pending_retain_resets_at_boundary();
+    EXPECT_EQ(counter(scheduler.find_program("instance-1")->runtime), 0);
+    EXPECT_EQ(counter(scheduler.find_program("instance-2")->runtime), 3)
+        << "reset lây sang Program khác";
+    std::filesystem::remove_all(root);
+}
+
+/* T59-407 — file RETAIN hỏng của Program này không làm Program khác cold-init.
+ * Namespace theo instance là thứ duy nhất bảo đảm điều đó; nếu hai Program dùng
+ * chung một file thì một lần hỏng là mất trạng thái của cả hai. */
+TEST(StRetain, T59_407_CorruptRecordIsIsolatedToOneProgram)
+{
+    const std::string root = temp_dir();
+    const std::vector<uint8_t> art = build(kCounter);
+    {
+        StRetainService service(root, "controller-A", false);
+        ASSERT_TRUE(service.ready()) << service.error();
+        StScheduler scheduler;
+        scheduler.set_retain_service(&service);
+        StTaskConfig config;
+        config.id = "T";
+        config.period_ms = 100;
+        config.budget_ms = 100;
+        std::string error;
+        ASSERT_TRUE(scheduler.add_task(config, &error)) << error;
+        uint16_t order = 0;
+        for (const char* id : {"instance-1", "instance-2"}) {
+            ASSERT_TRUE(scheduler.add_program("T", id, order++, &error)) << error;
+            ASSERT_TRUE(scheduler.request_activation(id, art, &error)) << error;
+        }
+        scheduler.tick(0);
+        for (const char* id : {"instance-1", "instance-2"})
+            ASSERT_TRUE(scheduler.start(id, &error)) << error;
+        PointTable table;
+        PriorityResolver resolver;
+        StIoBridgeStats stats;
+        for (int step = 1; step <= 6; ++step) {
+            scheduler.tick(static_cast<uint64_t>(step) * 100000000ull);
+            ASSERT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &stats));
+        }
+        service.flush(true);
+    }
+
+    /* Hai file riêng biệt: hỏng đúng MỘT file. */
+    std::vector<std::filesystem::path> records;
+    for (const auto& item : std::filesystem::directory_iterator(root))
+        if (item.path().extension() == ".bin") records.push_back(item.path());
+    ASSERT_EQ(records.size(), 2u) << "hai Program phải có hai file RETAIN riêng";
+    std::sort(records.begin(), records.end());
+    {
+        std::fstream corrupt(records[0], std::ios::binary | std::ios::in | std::ios::out);
+        ASSERT_TRUE(corrupt.good());
+        corrupt.seekp(st_retain::kHeaderSize + 1);
+        const char garbage = static_cast<char>(0xA5);
+        corrupt.write(&garbage, 1);
+    }
+
+    StRetainService restarted(root, "controller-A", false);
+    ASSERT_TRUE(restarted.ready()) << restarted.error();
+    int cold = 0;
+    int warm = 0;
+    for (const char* id : {"instance-1", "instance-2"}) {
+        ASSERT_NE(restarted.register_instance(id), nullptr);
+        StProgramRuntime fresh;
+        ASSERT_TRUE(load(&fresh, art));
+        const StRetainResult result =
+            restarted.restore(id, const_cast<StLoadedProgram*>(fresh.program()), 0);
+        if (result.restored) {
+            ++warm;
+            EXPECT_EQ(counter(fresh), 6) << id;
+        } else {
+            ++cold;
+            EXPECT_EQ(counter(fresh), 0) << id;
+        }
+    }
+    EXPECT_EQ(cold, 1) << "một file hỏng phải chỉ làm MỘT Program cold-init";
+    EXPECT_EQ(warm, 1) << "Program còn lại phải warm-restart bình thường";
+    std::filesystem::remove_all(root);
 }
 
 } // namespace core

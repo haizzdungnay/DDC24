@@ -11,17 +11,44 @@ import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import { useProgrammingCheck, useProgrammingOverrides, useProgrammingRevisionChanges } from '../api/queries'
 import { useDraftWorkspace, useCheckWorkflow } from '../design/useDraftWorkspace'
-import { useCommissionWorkflow } from './useCommissionWorkflow'
+import { useCommissionWorkflow, type CommissionWorkflowState } from './useCommissionWorkflow'
 import type { ProgrammingImpactKey } from '../api/generated/client'
+import type { ProgrammingCheck } from '../model/types'
 import { ProblemsDrawer } from '../shared/ProblemsDrawer'
 
-const IMPACT_GROUP_ORDER: ProgrammingImpactKey[] = ['retain', 'activeOverrides', 'cutover', 'outputMappingChanges']
+// T59-502: thứ tự đi từ thứ tác động MẠNH NHẤT lên thiết bị đang chạy xuống
+// thứ nhẹ hơn. Người vận hành đọc từ trên xuống, nên thứ có thể làm hỏng quá
+// trình phải nằm trên.
+const IMPACT_GROUP_ORDER: ProgrammingImpactKey[] = [
+  'enableIntent', 'programSet', 'retain', 'activeOverrides',
+  'cutover', 'outputMappingChanges', 'publishedSignals', 'controlLibrary'
+]
 const IMPACT_GROUP_LABEL: Record<ProgrammingImpactKey, [string, string]> = {
   retain: ['Trạng thái lưu (RETAIN) sẽ khởi tạo lại', 'RETAIN state will be re-initialised'],
   activeOverrides: ['Override thủ công đang giữ đầu ra', 'Manual overrides currently holding outputs'],
   cutover: ['Chuyển quyền điều khiển graph → program', 'Cutover from graph to program control'],
-  outputMappingChanges: ['Thay đổi ánh xạ Điểm ảnh hưởng đầu ra vật lý', 'Point mapping changes affecting physical outputs']
+  outputMappingChanges: ['Thay đổi ánh xạ Điểm ảnh hưởng đầu ra vật lý', 'Point mapping changes affecting physical outputs'],
+  enableIntent: ['Chương trình ĐANG CHẠY sẽ bị thay', 'Programs currently running will be replaced'],
+  programSet: ['Thêm hoặc bớt chương trình trên thiết bị', 'Programs added to or removed from the controller'],
+  publishedSignals: ['Đổi tín hiệu công bố: freshness / chính sách khi mất dữ liệu', 'Published signal changes: freshness / stale policy'],
+  controlLibrary: ['Đổi Control Library dùng chung', 'Shared Control Library changes']
 }
+
+type RevisionLifecycleState =
+  | 'DRAFT'
+  | 'CHECKING'
+  | 'READY'
+  | 'STAGING'
+  | 'ACTIVATING'
+  | 'VERIFYING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'UNKNOWN_RECONCILING'
+
+const REVISION_LIFECYCLE: RevisionLifecycleState[] = [
+  'DRAFT', 'CHECKING', 'READY', 'STAGING', 'ACTIVATING', 'VERIFYING',
+  'SUCCEEDED', 'FAILED', 'UNKNOWN_RECONCILING'
+]
 
 interface NavState {
   revisionId?: string
@@ -29,7 +56,7 @@ interface NavState {
 }
 
 /**
- * PGM-03 Kiểm tra & Đưa vào vận hành — `UJ-PROG-05/06` (TASK-PROG-504). Trang
+ * PGM-05 Kiểm tra & Đưa vào vận hành — `UJ-PROG-06` (`T59-503`). Trang
  * nhận `revisionId/checkId` từ query canonical và dùng `location.state` làm
  * tương thích điều hướng trong phiên. Deep-link/reload không suy đoán Check
  * "mới nhất": chỉ đọc đúng hai định danh bất biến đã có trong URL.
@@ -72,8 +99,16 @@ export function CheckCommissionPage() {
   const [password, setPassword] = useState('')
 
   const impact = changes.data?.impact
-  const presentKeys = useMemo(() => IMPACT_GROUP_ORDER.filter((key) => impact?.[key].status === 'PRESENT'), [impact])
-  const hasUnavailable = useMemo(() => IMPACT_GROUP_ORDER.some((key) => !impact || impact[key].status !== 'NONE' && impact[key].status !== 'PRESENT'), [impact])
+  // Nhóm impact VẮNG MẶT là `UNAVAILABLE`, không phải `NONE`. Một BE cũ hơn (hoặc
+  // một nhóm mới chưa được nối) gửi thiếu nhóm thì Commission phải fail-closed —
+  // coi "không thấy" là "không có" đúng là cách để một tác động thật đi qua mà
+  // không ai xác nhận. Đọc phòng thủ cũng giữ trang sống thay vì trắng màn hình.
+  const groupStatus = (key: ProgrammingImpactKey) => impact?.[key]?.status ?? 'UNAVAILABLE'
+  const presentKeys = useMemo(() => IMPACT_GROUP_ORDER.filter((key) => groupStatus(key) === 'PRESENT'), [impact])
+  const hasUnavailable = useMemo(
+    () => IMPACT_GROUP_ORDER.some((key) => groupStatus(key) !== 'NONE' && groupStatus(key) !== 'PRESENT'),
+    [impact]
+  )
   const checkPassed = check.data?.state === 'PASSED'
   /* `safeState=true` một mình không chặn Commission: nếu lý do DUY NHẤT là
    * `safeStateNoControllerOnly` (Core trigger T7 — chưa Program nào đang
@@ -118,6 +153,8 @@ export function CheckCommissionPage() {
           nhánh trạng thái rỗng/lỗi — đó chính là chỗ finding gốc chỉ ra ở
           `SchedulerGridPage`. `<h1>` của route nằm ở `ProgrammingLayout`. */}
         <h2 className="sr-only">{pick('Kiểm tra & Đưa vào vận hành', 'Check & Commission')}</h2>
+        <RevisionLifecycle current={phase === 'sealing' || phase === 'checking' ? 'CHECKING' : phase === 'error' ? 'FAILED' : 'DRAFT'} />
+        {!canEdit ? <ReadOnlyCommissionNotice /> : null}
         {phase === 'error' ? (
           <StateBlock state="error" title={checkWorkflow.state.message} onRetry={checkWorkflow.reset} />
         ) : (
@@ -151,8 +188,8 @@ export function CheckCommissionPage() {
         )}
         {projectId && (
           <div>
-            <Link className="text-sm font-medium text-[var(--c-accent)] underline" to={`/eng/programming/projects/${projectId}/design`}>
-              {pick('Về workspace Thiết kế', 'Back to the Design workspace')}
+            <Link className="text-sm font-medium text-[var(--c-accent)] underline" to={`/eng/programming/projects/${projectId}/programs`}>
+              {pick('Về workspace Chương trình', 'Back to the Programs workspace')}
             </Link>
           </div>
         )}
@@ -188,6 +225,8 @@ export function CheckCommissionPage() {
   return (
     <div className="space-y-4">
       <h2 className="sr-only">{pick('Kiểm tra & Đưa vào vận hành', 'Check & Commission')}</h2>
+      <RevisionLifecycle current={commissionLifecycleState(check.status, check.data, commission.state)} />
+      {!canEdit ? <ReadOnlyCommissionNotice /> : null}
       <Panel title={pick('Kết quả Kiểm tra', 'Check result')}>
         {check.status === 'loading' ? (
           <StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} />
@@ -213,7 +252,7 @@ export function CheckCommissionPage() {
                   if (typeof diagnostic.location.line === 'number') params.set('line', String(diagnostic.location.line))
                   if (typeof diagnostic.location.column === 'number') params.set('column', String(diagnostic.location.column))
                   if (typeof diagnostic.location.length === 'number') params.set('length', String(diagnostic.location.length))
-                  navigate(`/eng/programming/projects/${projectId}/design?${params.toString()}`)
+                  navigate(`/eng/programming/projects/${projectId}/programs?${params.toString()}`)
                 }}
               />
             )}
@@ -249,7 +288,7 @@ export function CheckCommissionPage() {
         ) : (
           <ul className="space-y-2 text-sm">
             {IMPACT_GROUP_ORDER.map((key) => {
-              const group = impact[key]
+              const group = impact[key] ?? { status: 'UNAVAILABLE' as const, items: [] }
               return (
                 <li key={key} className="flex items-start justify-between gap-3">
                   <span className="text-[var(--c-text)]">{pick(...IMPACT_GROUP_LABEL[key])}</span>
@@ -277,26 +316,28 @@ export function CheckCommissionPage() {
         ) : overrides.data.items.length === 0 ? (
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Không có override nào đang giữ đầu ra.', 'No override is currently holding an output.')}</p>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-xs uppercase text-[var(--c-text-dim)]">
-                <th className="py-1 pr-3">Point</th>
-                <th className="py-1 pr-3">{pick('Giá trị', 'Value')}</th>
-                <th className="py-1 pr-3">{pick('Người thực hiện', 'Actor')}</th>
-                <th className="py-1">{pick('Còn lại', 'Remaining')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {overrides.data.items.map((entry) => (
-                <tr key={`${entry.category}-${entry.pointId}`}>
-                  <td className="py-1 pr-3 font-mono text-xs">{entry.pointId}</td>
-                  <td className="py-1 pr-3">{String(entry.value)}</td>
-                  <td className="py-1 pr-3">{entry.actorId || '—'}</td>
-                  <td className="py-1">{entry.remainingS !== null ? `${entry.remainingS}s` : '—'}</td>
+          <div className="overflow-x-auto">
+            <table className="min-w-[520px] w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase text-[var(--c-text-dim)]">
+                  <th className="py-1 pr-3">Point</th>
+                  <th className="py-1 pr-3">{pick('Giá trị', 'Value')}</th>
+                  <th className="py-1 pr-3">{pick('Người thực hiện', 'Actor')}</th>
+                  <th className="py-1">{pick('Còn lại', 'Remaining')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {overrides.data.items.map((entry) => (
+                  <tr key={`${entry.category}-${entry.pointId}`}>
+                    <td className="py-1 pr-3 font-mono text-xs">{entry.pointId}</td>
+                    <td className="py-1 pr-3">{String(entry.value)}</td>
+                    <td className="py-1 pr-3">{entry.actorId || '—'}</td>
+                    <td className="py-1">{entry.remainingS !== null ? `${entry.remainingS}s` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Panel>
 
@@ -427,6 +468,87 @@ export function CheckCommissionPage() {
           />
         </div>
       </Modal>
+    </div>
+  )
+}
+
+function commissionLifecycleState(
+  checkStatus: 'loading' | 'ready' | 'error',
+  check: ProgrammingCheck | null,
+  commission: CommissionWorkflowState
+): RevisionLifecycleState {
+  if (commission.phase === 'unknown') return 'UNKNOWN_RECONCILING'
+  if (commission.phase === 'terminal') return commission.operation.state === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED'
+  if (commission.phase === 'error') return 'FAILED'
+  if (commission.phase === 'submitting') return 'STAGING'
+  if (commission.phase === 'polling') {
+    if (commission.operation?.state === 'APPLYING') return 'ACTIVATING'
+    if (commission.operation?.state === 'VERIFYING') return 'VERIFYING'
+    return 'STAGING'
+  }
+  if (checkStatus === 'loading') return 'CHECKING'
+  if (checkStatus === 'error' || !check) return 'FAILED'
+  if (check.state === 'QUEUED' || check.state === 'RUNNING') return 'CHECKING'
+  if (check.state === 'PASSED') return 'READY'
+  return 'FAILED'
+}
+
+function RevisionLifecycle({ current }: { current: RevisionLifecycleState }) {
+  const { pick } = useI18n()
+  const labels: Record<RevisionLifecycleState, string> = {
+    DRAFT: 'DRAFT',
+    CHECKING: 'CHECKING',
+    READY: 'READY',
+    STAGING: 'STAGING',
+    ACTIVATING: 'ACTIVATING',
+    VERIFYING: 'VERIFYING',
+    SUCCEEDED: 'SUCCEEDED',
+    FAILED: 'FAILED',
+    UNKNOWN_RECONCILING: 'UNKNOWN / RECONCILING'
+  }
+
+  return (
+    <Panel
+      title={pick('Vòng đời Revision', 'Revision lifecycle')}
+      subtitle={pick('Trạng thái lấy từ Check và operation read-back; timeout không được xem là thành công.', 'State comes from Check and operation read-back; a timeout is never treated as success.')}
+    >
+      <ol
+        aria-label={pick('Tiến trình Kiểm tra và Đưa vào vận hành', 'Check and Commission progress')}
+        tabIndex={0}
+        className="flex gap-2 overflow-x-auto pb-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--c-accent)]"
+      >
+        {REVISION_LIFECYCLE.map((state) => {
+          const active = state === current
+          return (
+            <li
+              key={state}
+              aria-current={active ? 'step' : undefined}
+              className={`min-h-11 shrink-0 rounded-[var(--radius)] border px-3 py-2 font-mono text-xs ${
+                active
+                  ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)] font-bold text-[var(--c-accent)]'
+                  : 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]'
+              }`}
+            >
+              {labels[state]}
+            </li>
+          )
+        })}
+      </ol>
+      <p role="status" aria-live="polite" className="mt-2 text-xs text-[var(--c-text-dim)]">
+        {pick('Trạng thái hiện tại', 'Current state')}: <strong className="font-mono text-[var(--c-text)]">{labels[current]}</strong>
+      </p>
+    </Panel>
+  )
+}
+
+function ReadOnlyCommissionNotice() {
+  const { pick } = useI18n()
+  return (
+    <div role="status" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
+      <strong className="text-[var(--c-text)]">{pick('Bạn không có quyền thực hiện thao tác này', 'You do not have permission to perform this action')}</strong>
+      <span className="mt-1 block">
+        {pick('Kết quả Check, impact và read-back vẫn hiển thị ở chế độ chỉ đọc.', 'Check results, impact, and read-back remain visible in read-only mode.')}
+      </span>
     </div>
   )
 }

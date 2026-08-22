@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -72,9 +73,116 @@ func TestProgrammingImpactGoldenPayload(t *testing.T) {
 	request := CommissionRequest{
 		SchemaVersion:    "1.0",
 		ImpactRef:        impact.ImpactRef,
-		Acknowledgements: []ImpactKey{ImpactRetain, ImpactActiveOverrides},
+		Acknowledgements: append([]ImpactKey(nil), allImpactKeys...),
 	}
 	if public := ValidateImpactAcknowledgements(impact, request); public != nil {
 		t.Fatalf("golden payload bị từ chối: %+v", public)
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	expectedFields := map[string]bool{"impactRef": true}
+	for _, key := range allImpactKeys {
+		expectedFields[string(key)] = true
+	}
+	if got, want := len(fields), len(expectedFields); got != want {
+		t.Fatalf("golden có %d field; want %d (impactRef + đúng tám nhóm)", got, want)
+	}
+	for field := range expectedFields {
+		if _, ok := fields[field]; !ok {
+			t.Errorf("golden thiếu field %q", field)
+		}
+	}
+}
+
+func TestProgrammingImpactOpenAPIStaysSynchronized(t *testing.T) {
+	openAPIPath := filepath.Join("..", "..", "..", "..", "..", "..", "contracts", "openapi", "openapi.yaml")
+	raw, err := os.ReadFile(openAPIPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := string(raw)
+
+	impactKeys := make([]string, 0, len(allImpactKeys))
+	for _, key := range allImpactKeys {
+		impactKeys = append(impactKeys, string(key))
+	}
+	assertOpenAPIEnum(t, schemaSection(t, spec, "ProgrammingImpactKey"), impactKeys)
+
+	commission := schemaSection(t, spec, "ProgrammingCommissionRequest")
+	acknowledgements := fieldSection(t, commission, "acknowledgements", "cutover")
+	if !strings.Contains(acknowledgements, "maxItems: 8") {
+		t.Fatalf("ProgrammingCommissionRequest.acknowledgements phải có maxItems: 8:\n%s", acknowledgements)
+	}
+
+	change := schemaSection(t, spec, "ProgrammingRevisionChange")
+	kind := fieldSection(t, change, "kind", "changeType")
+	// Danh sách này đối chiếu trực tiếp với store.validObjectKind và CHECK của
+	// revision_objects ở migration v11. Contract không được hẹp hơn dữ liệu mà
+	// backend có thể trả.
+	assertOpenAPIEnum(t, kind, []string{
+		"METADATA", "PROGRAM", "FUNCTION", "FUNCTION_BLOCK",
+		"VARIABLE", "BINDING", "TASK", "SIGNAL",
+	})
+	category := fieldSection(t, change, "category", "beforeSha256")
+	assertOpenAPIEnum(t, category, []string{
+		"SOURCE", "MAPPING", "OUTPUT_MAPPING", "TASK", "LIBRARY", "RETAIN",
+		"PUBLISHED_SIGNAL", "PROGRAM_SET",
+	})
+}
+
+func schemaSection(t *testing.T, spec, schema string) string {
+	t.Helper()
+	marker := "\n    " + schema + ":"
+	start := strings.Index(spec, marker)
+	if start < 0 {
+		t.Fatalf("không tìm thấy schema %s", schema)
+	}
+	section := spec[start+1:]
+	headerLength := len(marker) - 1
+	nextSchema := regexp.MustCompile(`(?m)^    [A-Za-z_][A-Za-z0-9_]*:`)
+	if location := nextSchema.FindStringIndex(section[headerLength:]); location != nil {
+		section = section[:headerLength+location[0]]
+	}
+	return section
+}
+
+func fieldSection(t *testing.T, schema, field, nextField string) string {
+	t.Helper()
+	marker := "        " + field + ":"
+	start := strings.Index(schema, marker)
+	if start < 0 {
+		t.Fatalf("không tìm thấy field %s", field)
+	}
+	section := schema[start:]
+	if nextField != "" {
+		endMarker := "\n        " + nextField + ":"
+		if end := strings.Index(section, endMarker); end >= 0 {
+			section = section[:end]
+		}
+	}
+	return section
+}
+
+func assertOpenAPIEnum(t *testing.T, section string, expected []string) {
+	t.Helper()
+	match := regexp.MustCompile(`(?s)enum:\s*\[([^]]*)\]`).FindStringSubmatch(section)
+	if match == nil {
+		t.Fatalf("không tìm thấy enum inline trong:\n%s", section)
+	}
+	actual := make([]string, 0)
+	for _, item := range strings.Split(match[1], ",") {
+		item = strings.Trim(strings.TrimSpace(item), `"'`)
+		if item != "" {
+			actual = append(actual, item)
+		}
+	}
+	want := append([]string(nil), expected...)
+	sort.Strings(actual)
+	sort.Strings(want)
+	if strings.Join(actual, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("enum lệch:\nactual=%v\nwant=%v", actual, want)
 	}
 }

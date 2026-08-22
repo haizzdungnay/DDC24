@@ -2,7 +2,7 @@ import { expect, test, type Page, type Route } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
 /**
- * TASK-PROG-506 — nghiệm thu trình duyệt thật cho bốn workspace Programming
+ * TASK-PROG-506/T59-503 — nghiệm thu trình duyệt thật cho sáu workspace Programming
  * (`playwright.config.ts` bật `VITE_PROGRAMMING_REV_A=1` chỉ cho dev server
  * e2e). Không có backend Go/Core thật trong CI này (đúng thực tế của phiên
  * làm việc — không có `codex mcp`/board thật), nên toàn bộ `/api/v1/programming/**`
@@ -22,8 +22,8 @@ interface MockProgram {
   kind: 'PROGRAM'
   language: 'ST' | 'FBD'
   document: unknown
-  executionOrder: number
-  functionalTags: string[]
+  executionOrder?: number
+  functionalTags?: string[]
 }
 
 function initialDraft() {
@@ -147,7 +147,19 @@ async function installProgrammingMocks(page: Page, state: MockState) {
           retain: { status: 'NONE', items: [] },
           activeOverrides: { status: 'NONE', items: [] },
           cutover: { status: 'PRESENT', items: ['GRAPH_ONLY→PROGRAM_ONLY'] },
-          outputMappingChanges: { status: 'NONE', items: [] }
+          outputMappingChanges: { status: 'NONE', items: [] },
+
+          // T59-502: bốn nhóm impact của mô hình đa Program. Thiếu nhóm nào
+
+          // thì trang fail-closed — "không thấy" không phải "không có".
+
+          publishedSignals: { status: 'NONE', items: [] },
+
+          controlLibrary: { status: 'NONE', items: [] },
+
+          programSet: { status: 'NONE', items: [] },
+
+          enableIntent: { status: 'NONE', items: [] }
         }
       })
     }
@@ -160,7 +172,19 @@ async function installProgrammingMocks(page: Page, state: MockState) {
           retain: { status: 'PRESENT', items: ['SupplySetpoint', 'FanRuntimeHours'] },
           activeOverrides: { status: 'NONE', items: [] },
           cutover: { status: 'NONE', items: [] },
-          outputMappingChanges: { status: 'NONE', items: [] }
+          outputMappingChanges: { status: 'NONE', items: [] },
+
+          // T59-502: bốn nhóm impact của mô hình đa Program. Thiếu nhóm nào
+
+          // thì trang fail-closed — "không thấy" không phải "không có".
+
+          publishedSignals: { status: 'NONE', items: [] },
+
+          controlLibrary: { status: 'NONE', items: [] },
+
+          programSet: { status: 'NONE', items: [] },
+
+          enableIntent: { status: 'NONE', items: [] }
         }
       })
     }
@@ -272,7 +296,7 @@ async function navigate(page: Page, path: string) {
   await page.waitForLoadState('networkidle').catch(() => undefined)
 }
 
-test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)', () => {
+test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
   test.beforeEach(async ({ page }) => {
     // Mô phỏng chính xác secure-context=false của endpoint HTTP trên board:
     // randomUUID/subtle không tồn tại, nhưng getRandomValues vẫn có. Toàn bộ
@@ -296,18 +320,28 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await expect(page.getByRole('tab', { name: /Phiên bản & Bảo trì/ })).toHaveAttribute('aria-selected', 'true')
   })
 
-  test('VS-PROG-032: ba route cũ chuyển hướng đúng đích và giữ projectId', async ({ page }) => {
+  test('VS-PROG-032: lối vào cũ chuyển hướng đúng đích IA sáu trang và giữ projectId', async ({ page }) => {
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     await login(page)
 
-    for (const [from, expectedTab] of [
-      [`/eng/programming/projects/${PROJECT_ID}/programs`, 'programs'],
-      [`/eng/programming/projects/${PROJECT_ID}/mapping`, 'mapping'],
-      [`/eng/programming/projects/${PROJECT_ID}/task`, 'execution']
+    // T59-306 ĐẢO CHIỀU: `programs`/`mapping` nay là ROUTE THẬT của IA sáu
+    // trang, còn `/design` mới là lối vào cũ. Bảng dưới đi theo chiều mới —
+    // bản trước còn ghi chiều cũ và không ai phát hiện vì ma trận cổng của W3
+    // không có `e2e`.
+    for (const [from, expectedPath, expectedTab] of [
+      // Route thật: đứng nguyên, KHÔNG kèm `?tab=` thừa.
+      [`/eng/programming/projects/${PROJECT_ID}/programs`, `/eng/programming/projects/${PROJECT_ID}/programs`, null],
+      [`/eng/programming/projects/${PROJECT_ID}/mapping`, `/eng/programming/projects/${PROJECT_ID}/mapping`, null],
+      // Lối vào cũ `/design`: rơi về `programs`, và `?tab=mapping` dẫn sang `/mapping`.
+      [`/eng/programming/projects/${PROJECT_ID}/design`, `/eng/programming/projects/${PROJECT_ID}/programs`, null],
+      [`/eng/programming/projects/${PROJECT_ID}/design?tab=mapping`, `/eng/programming/projects/${PROJECT_ID}/mapping`, null],
+      // `execution` là TAB CON, không phải trang IA — nó chỉ có địa chỉ dưới
+      // dạng `?tab=execution` trên route `programs`.
+      [`/eng/programming/projects/${PROJECT_ID}/task`, `/eng/programming/projects/${PROJECT_ID}/programs`, 'execution']
     ] as const) {
       await navigate(page, from)
-      await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/design`, { timeout: 10_000 })
+      await page.waitForURL((url) => url.pathname === expectedPath, { timeout: 10_000 })
       expect(new URL(page.url()).searchParams.get('tab')).toBe(expectedTab)
     }
   })
@@ -335,13 +369,13 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
 
     // UJ-PROG-02 — mở workspace Thiết kế qua Project trong Draft panel
     await page.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }).click()
-    await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/design`)
+    await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/programs`)
     await expect(page.getByText('Chưa có chương trình. Bấm + để tạo.')).toBeVisible()
 
     // Thêm chương trình ST bằng bàn phím hoàn toàn (Tab tới nút, Enter kích hoạt)
     await page.getByTitle('Thêm chương trình ST').focus()
     await page.keyboard.press('Enter')
-    await expect(page.getByRole('heading', { name: 'Chương trình mới' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'NewProgram' })).toBeVisible()
     const sourceBox = page.getByLabel(/Mã nguồn ST/)
     await sourceBox.fill('AO1 := UI1 * 2.0;')
     await page.getByRole('button', { name: 'Lưu', exact: true }).click()
@@ -479,7 +513,7 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     expect(unexpectedConsoleErrors, `Console error ngoài dự kiến: ${unexpectedConsoleErrors.join(' | ')}`).toEqual([])
   })
 
-  test('VS-PROG-028: bốn workspace không có vi phạm WCAG A/AA tự động phát hiện được', async ({ page }) => {
+  test('VS-PROG-028: sáu workspace không có vi phạm WCAG A/AA tự động phát hiện được', async ({ page }) => {
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     state.draft.programs.push({
       programId: '44444444-4444-4444-8444-444444444444',
@@ -496,7 +530,7 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
 
     const screens = [
       { path: '/eng/programming', ready: page.getByRole('heading', { name: 'Lập trình điều khiển' }) },
-      { path: `/eng/programming/projects/${PROJECT_ID}/design`, ready: page.getByRole('button', { name: /Điều khiển AHU/ }) },
+      { path: `/eng/programming/projects/${PROJECT_ID}/programs`, ready: page.getByRole('button', { name: /Điều khiển AHU/ }) },
       {
         path: `/eng/programming/projects/${PROJECT_ID}/commission?revisionId=revision-mock-0001&checkId=check-mock-0001`,
         ready: page.getByText('PASSED')
@@ -515,16 +549,18 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     }
   })
 
-  test('F-PROG-LIVE-008: mobile có điều hướng bốn workspace và lịch sử không bị cắt', async ({ page }, testInfo) => {
+  test('F-PROG-LIVE-008: mobile có điều hướng sáu workspace và lịch sử không bị cắt', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 })
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     await login(page)
     await navigate(page, '/eng/programming/runtime?tab=service')
 
-    const nav = page.getByRole('navigation', { name: 'Điều hướng workspace Lập trình' })
+    const nav = page.getByRole('navigation', { name: 'Điều hướng sáu workspace Lập trình' })
     await expect(nav).toBeVisible()
-    for (const label of ['Tổng quan', 'Thiết kế', 'Kiểm tra', 'Runtime']) await expect(nav.getByText(label, { exact: true })).toBeVisible()
+    for (const label of ['Tổng quan', 'Chương trình', 'Ánh xạ', 'Thư viện', 'Kiểm tra', 'Runtime']) {
+      await expect(nav.getByText(label, { exact: true })).toBeVisible()
+    }
     await expect(page.getByText('COMMISSION').first()).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await page.screenshot({ path: testInfo.outputPath('mobile-service-history.png'), fullPage: true })

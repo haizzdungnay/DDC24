@@ -8,9 +8,9 @@ import { Button } from '../../../shared/components/Button'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
-import { useProgrammingProjects, useProgrammingRecentAudit } from '../api/queries'
+import { useProgrammingRecentAudit } from '../api/queries'
 import { useCreateProgrammingProject } from '../api/mutations'
-import type { ProgrammingProject, ProgrammingRuntime } from '../model/types'
+import type { ProgrammingProgramIntentList, ProgrammingProject, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
 
 /**
  * `OverviewPage` (PGM-01) — `UJ-PROG-01`. Trong `≤5 giây` phải thấy: Core,
@@ -19,8 +19,7 @@ import type { ProgrammingProject, ProgrammingRuntime } from '../model/types'
  */
 export function OverviewPage() {
   const { pick } = useI18n()
-  const { runtime } = useProgrammingRuntimeContext()
-  const projects = useProgrammingProjects()
+  const { runtime, projects, programIntents } = useProgrammingRuntimeContext()
   const audit = useProgrammingRecentAudit(5)
 
   return (
@@ -31,7 +30,7 @@ export function OverviewPage() {
           Ẩn thị giác vì thanh tab đã hiện tên — thứ còn thiếu là mốc điều
           hướng cho trình đọc màn hình, không phải thêm chữ lên màn hình. */}
       <h2 className="sr-only">{pick('Tổng quan lập trình', 'Programming overview')}</h2>
-      <RunningApplicationPanel runtime={runtime.data} status={runtime.status} />
+      <RunningApplicationPanel runtime={runtime.data} status={runtime.status} programIntents={programIntents} />
       <CoreSafeStatePanel runtime={runtime.data} status={runtime.status} />
       <DraftAttentionPanel projects={projects} />
       <div className="lg:col-span-2">
@@ -42,7 +41,15 @@ export function OverviewPage() {
   )
 }
 
-function RunningApplicationPanel({ runtime, status }: { runtime: ProgrammingRuntime | null; status: 'loading' | 'ready' | 'error' }) {
+function RunningApplicationPanel({
+  runtime,
+  status,
+  programIntents
+}: {
+  runtime: ProgrammingRuntime | null
+  status: 'loading' | 'ready' | 'error'
+  programIntents: RemoteState<ProgrammingProgramIntentList>
+}) {
   const { pick } = useI18n()
   const navigate = useNavigate()
   if (status === 'loading') return <Panel title={pick('Ứng dụng đang vận hành', 'Running application')}><StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} /></Panel>
@@ -73,11 +80,44 @@ function RunningApplicationPanel({ runtime, status }: { runtime: ProgrammingRunt
           <span className="text-[var(--c-text-dim)]">{pick('Tác vụ', 'Task')}</span>
           <StatusBadge state={runtime.taskState === 'RUNNING' ? 'online' : runtime.taskState === 'FAULT' ? 'fault' : 'unknown'} label={runtime.taskState} />
         </div>
+        <ProgramIntentRuntimeSummary state={programIntents} />
         <Button size="sm" variant="secondary" icon={<PlayCircle className="h-4 w-4" aria-hidden="true" />} onClick={() => navigate('/eng/programming/runtime')}>
           {pick('Mở runtime', 'Open runtime')}
         </Button>
       </div>
     </Panel>
+  )
+}
+
+function ProgramIntentRuntimeSummary({ state }: { state: RemoteState<ProgrammingProgramIntentList> }) {
+  const { pick } = useI18n()
+  if (state.status === 'loading') {
+    return <p role="status" className="text-xs text-[var(--c-text-dim)]">{pick('Đang tải ý định và trạng thái Program…', 'Loading Program intent and runtime state…')}</p>
+  }
+  if (state.status === 'error' || !state.data) {
+    return <p role="alert" className="text-xs text-[var(--c-fault-fg)]">{pick('Không đọc được ý định/trạng thái Program.', 'Program intent/runtime state is unavailable.')}</p>
+  }
+  if (state.data.items.length === 0) {
+    return <p className="text-xs text-[var(--c-text-dim)]">{pick('Chưa có chương trình', 'No programs yet')}</p>
+  }
+  const desired = state.data.items.filter((item) => item.desiredEnabled).length
+  const runtimeCounts = new Map<string, number>()
+  for (const item of state.data.items) runtimeCounts.set(item.runtimeState, (runtimeCounts.get(item.runtimeState) ?? 0) + 1)
+  const runtime = ['FAULTED', 'UNKNOWN', 'STARTING', 'STOPPING', 'WAITING', 'RUNNING', 'DISABLED']
+    .filter((runtimeState) => runtimeCounts.has(runtimeState))
+    .map((runtimeState) => `${runtimeState} ${runtimeCounts.get(runtimeState)}`)
+    .join(' · ')
+  return (
+    <dl className="space-y-2 border-t border-[var(--c-border)] pt-2">
+      <div className="flex items-center justify-between gap-3">
+        <dt className="text-[var(--c-text-dim)]">{pick('Ý định Enable', 'Enable intent')}</dt>
+        <dd><StatusBadge state={desired > 0 ? 'on' : 'off'} label={pick(`${desired}/${state.data.items.length} muốn bật`, `${desired}/${state.data.items.length} enabled by intent`)} /></dd>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <dt className="text-[var(--c-text-dim)]">{pick('Runtime thực tế', 'Actual runtime')}</dt>
+        <dd className="text-right font-mono text-xs text-[var(--c-text)]">{runtime}</dd>
+      </div>
+    </dl>
   )
 }
 
@@ -114,7 +154,7 @@ function CoreSafeStatePanel({ runtime, status }: { runtime: ProgrammingRuntime |
   )
 }
 
-function DraftAttentionPanel({ projects }: { projects: ReturnType<typeof useProgrammingProjects> }) {
+function DraftAttentionPanel({ projects }: { projects: RemoteState<ProgrammingProjectPage> }) {
   const { pick } = useI18n()
   const { session } = useAuth()
   const navigate = useNavigate()
@@ -143,7 +183,7 @@ function DraftAttentionPanel({ projects }: { projects: ReturnType<typeof useProg
             onSubmit={(event) => {
               event.preventDefault()
               void createProject(nameDraft || pick('Ứng dụng điều khiển', 'Control application')).then((created) => {
-                if (created) navigate(`/eng/programming/projects/${created.projectId}/design`)
+                if (created) navigate(`/eng/programming/projects/${created.projectId}/programs`)
               })
             }}
           >
@@ -243,7 +283,7 @@ function DraftCheckStatus({ project }: { project: ProgrammingProject }) {
 function DraftPrimaryAction({ project, navigate }: { project: ProgrammingProject; navigate: (path: string) => void }) {
   const { pick } = useI18n()
   const state = draftAttentionState(project)
-  const designPath = `/eng/programming/projects/${project.projectId}/design`
+  const designPath = `/eng/programming/projects/${project.projectId}/programs`
   const commissionPath = `/eng/programming/projects/${project.projectId}/commission`
   if (state === 'checking') {
     return (
