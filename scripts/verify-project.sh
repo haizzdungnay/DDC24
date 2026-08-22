@@ -170,6 +170,10 @@ run_firmware() {
 run_release() {
   "$repo_root/$(active_path packaging)/build-release.sh"
   (cd "$repo_root" && sha256sum --check build/release/checksums.sha256)
+  # T59-606: diễn tập CÀI MỚI → NÂNG CẤP → ROLLBACK trên chính gói vừa dựng.
+  # Đặt ở đây chứ không ở `layout` vì nó cần build/release có thật; đặt ở
+  # `layout` sẽ thành một test tự SKIP mãi mãi — tức một cổng chỉ trông như cổng.
+  python3 -m unittest "$repo_root/tests/integration/test_release_dryrun.py"
 }
 
 # `--wave` là đường đi MỘT LỆNH cho cả ma trận cổng. Nó cố ý KHÔNG dùng `set -e`
