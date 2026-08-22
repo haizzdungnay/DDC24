@@ -3,6 +3,7 @@
  * @brief Entry: init → SCHED_FIFO 80 → attach shm (retry) → scan loop 1s →
  *        sd_notify → signal. Core KHÔNG mở UART, KHÔNG tạo io_shm (07 §0).
  */
+#include <array>
 #include <atomic>
 #include <csignal>
 #include <cstdio>
@@ -12,6 +13,8 @@
 #include <memory>
 #include <string>
 #include <filesystem>
+#include <fstream>
+#include <vector>
 #include <thread>
 
 #include <pthread.h>
@@ -70,6 +73,27 @@ static void notify_systemd(const char* state)
     ::close(fd);
 }
 
+/* hex -> byte cho khoá công khai đọc từ file (ADR-052). Trả false khi gặp ký tự
+ * không phải hex: một khoá đọc sai còn tệ hơn không có khoá, vì nó vẫn là "một
+ * khoá tin cậy" trong mắt phần còn lại của hệ. */
+static bool hex_to_bytes(const std::string& hex, uint8_t* out, std::size_t out_size)
+{
+    if (hex.size() != out_size * 2) return false;
+    auto value = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    for (std::size_t i = 0; i < out_size; i++) {
+        const int hi = value(hex[i * 2]);
+        const int lo = value(hex[i * 2 + 1]);
+        if (hi < 0 || lo < 0) return false;
+        out[i] = static_cast<uint8_t>((hi << 4) | lo);
+    }
+    return true;
+}
+
 int main(int argc, char** argv)
 {
     using namespace core;
@@ -94,6 +118,11 @@ int main(int argc, char** argv)
     /* ADR-051: TTL hold-last đã ký là 60 s. CLI chỉ để commissioning/HIL đo hai
      * biên mà không phải build lại; không set thì dùng đúng số đã ký. */
     uint32_t program_hold_ttl_ms = st_hold_ttl::kSignedTtlMs;
+    /* ADR-052 — khoá công khai của CHÍNH bo này, nạp vào tập khoá tin cậy bên
+     * cạnh khoá hãng nhúng trong build. Artifact do bo tự biên dịch được ký
+     * bằng khoá thiết bị; khoá hãng ký thứ hãng phát hành. Bo không tin khoá
+     * thiết bị của bo khác, nên một bo bị chiếm không ký được cho bo bên cạnh. */
+    std::vector<std::string> trusted_key_paths;
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
@@ -109,6 +138,7 @@ int main(int argc, char** argv)
                         st_public_key_is_test_key() ? "TEST" : "RELEASE");
             return 0;
         }
+        else if (a == "--st-trusted-key" && i + 1 < argc) trusted_key_paths.push_back(argv[++i]);
         else if (a == "--log-level" && i + 1 < argc) { ++i; /* Rev A: log level cố định */ }
         else if (a == "--sock" && i + 1 < argc) sock_path = argv[++i];
         else if (a == "--fieldbus-sock" && i + 1 < argc) fieldbus_sock_path = argv[++i];
@@ -159,7 +189,7 @@ int main(int argc, char** argv)
                         " [--safe-state-conf FILE] [--io-conf FILE] [--alarm-conf FILE]"
                         " [--schedule-conf FILE] [--scan-ms N]"
                         " [--programming-mode graph_only|program_only] [--programming-runtime]"
-                        " [--program-hold-ttl-ms N] [--st-key-info]"
+                        " [--program-hold-ttl-ms N] [--st-key-info] [--st-trusted-key FILE]"
                         " [--programming-sock PATH]"
                         " [--log-level LVL]\n");
             return 0;
@@ -189,6 +219,40 @@ int main(int argc, char** argv)
             std::fprintf(stderr, "INFO  core.st_public_key=RELEASE fingerprint=%s\n",
                          fingerprint);
         }
+    }
+
+    /* ADR-052 — nạp khoá thiết bị vào tập khoá tin cậy.
+     *
+     * Đọc ở đây, một lần lúc khởi động, chứ không đọc lại giữa đường quét: tập
+     * khoá tin cậy là chính sách, và một chính sách đổi được trong lúc chạy thì
+     * kẻ tấn công ghi được file cũng đổi được nó. Khoá hỏng/thiếu là lỗi CẤU
+     * HÌNH và phải nói ra, không được lặng lẽ chạy tiếp với ít khoá hơn — đó là
+     * cách một bo tự hạ mức bảo vệ mà không ai biết. */
+    std::vector<std::array<uint8_t, 32>> trusted_keys;
+    for (const std::string& path : trusted_key_paths) {
+        if (trusted_keys.size() >= kMaxTrustedKeys) {
+            std::fprintf(stderr, "ERROR core.st_trusted_key_overflow max=%zu\n",
+                         static_cast<std::size_t>(kMaxTrustedKeys));
+            return 1;
+        }
+        std::ifstream file(path);
+        if (!file) {
+            std::fprintf(stderr, "ERROR core.st_trusted_key_missing path=%s\n", path.c_str());
+            return 1;
+        }
+        std::string hex;
+        file >> hex;
+        std::array<uint8_t, 32> key{};
+        if (hex.size() != 64 || !hex_to_bytes(hex, key.data(), key.size())) {
+            std::fprintf(stderr, "ERROR core.st_trusted_key_malformed path=%s (can 64 ky tu hex)\n",
+                         path.c_str());
+            return 1;
+        }
+        char fingerprint[17] = {0};
+        st_public_key_fingerprint(key.data(), fingerprint, sizeof(fingerprint));
+        std::fprintf(stderr, "INFO  core.st_trusted_key=%s fingerprint=%s\n",
+                     path.c_str(), fingerprint);
+        trusted_keys.push_back(key);
     }
 
     /* RT + mlockall. Đo lại trạng thái THẬT sau khi cố đặt, thay vì tin vào
@@ -314,6 +378,17 @@ int main(int argc, char** argv)
     StScheduler programming_scheduler(programming_runtime_enabled
                                           ? StSchedulerProfile::REV_A
                                           : StSchedulerProfile::SUPPORTING_AS_BUILT);
+    /* ADR-052: tập khoá tin cậy phải được đặt TRƯỚC khi bất kỳ artifact nào được
+     * nạp — đặt sau nghĩa là gói đầu tiên (thường là gói đang chạy, phục hồi sau
+     * reboot) đi qua bằng chính sách cũ. */
+    if (!trusted_keys.empty()) {
+        StLoaderOptions loader_options;
+        for (const std::array<uint8_t, 32>& key : trusted_keys)
+            loader_options.trusted_keys[loader_options.trusted_key_count++] = key.data();
+        programming_scheduler.set_loader_options(loader_options);
+        std::fprintf(stderr, "INFO  core.st_trusted_key_count=%zu\n", trusted_keys.size());
+    }
+
     ProgrammingCutover programming_cutover(programming_mode);
     std::unique_ptr<StRetainService> retain_service;
     std::unique_ptr<programming::ProgrammingRuntimeCoordinator> programming_coordinator;

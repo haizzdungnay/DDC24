@@ -388,6 +388,12 @@ bool sign_st_artifact(std::vector<uint8_t>* artifact, const uint8_t secret_key[6
     return true;
 }
 
+bool generate_signing_keypair(uint8_t public_key[32], uint8_t secret_key[64])
+{
+    if (sodium_init() < 0) return false;
+    return crypto_sign_keypair(public_key, secret_key) == 0;
+}
+
 bool EncodeArtifactDeterministic(const StIrModule& module, std::vector<uint8_t>* artifact,
                                  std::string* error)
 {

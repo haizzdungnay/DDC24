@@ -183,6 +183,68 @@ TEST(StArtifactTrust, AfterOverlapWindowClosesOldKeyNoLongerVerifies)
     EXPECT_EQ(error.code, std::string(st_ir_error::kBadSignature));
 }
 
+/* ---- ADR-052: khoá THIẾT BỊ ---- */
+
+TEST(StArtifactTrust, DeviceKeySignedArtifactVerifiesWhenDeviceKeyIsTrusted)
+{
+    /* Đây là đường đi thật của sản phẩm: người dùng soạn Program trên bo, bo
+     * biên dịch tại chỗ rồi tự ký bằng khoá của CHÍNH nó. Không có khoá hãng nào
+     * tham gia — khoá hãng theo định nghĩa không nằm trên bo. */
+    uint8_t device_public[crypto_sign_PUBLICKEYBYTES] = {0};
+    uint8_t device_secret[crypto_sign_SECRETKEYBYTES] = {0};
+    ASSERT_TRUE(generate_signing_keypair(device_public, device_secret));
+
+    std::vector<uint8_t> artifact = compile_unsigned();
+    ASSERT_TRUE(sign_st_artifact(&artifact, device_secret));
+
+    StLoadError error;
+    EXPECT_TRUE(loads_with(artifact, required_with(device_public), &error))
+        << "artifact do bo tự ký phải nạp được khi khoá thiết bị nằm trong tập tin cậy";
+}
+
+TEST(StArtifactTrust, DeviceKeyOfAnotherBoardIsNotTrusted)
+{
+    /* Bất biến quan trọng nhất của mô hình khoá thiết bị: một bo bị chiếm KHÔNG
+     * ký được artifact cho bo bên cạnh. Nếu phép kiểm này đỏ thì "khoá thiết bị"
+     * chỉ là một khoá dùng chung được đặt tên khác. */
+    uint8_t this_board_public[crypto_sign_PUBLICKEYBYTES] = {0};
+    uint8_t this_board_secret[crypto_sign_SECRETKEYBYTES] = {0};
+    ASSERT_TRUE(generate_signing_keypair(this_board_public, this_board_secret));
+
+    uint8_t other_board_public[crypto_sign_PUBLICKEYBYTES] = {0};
+    uint8_t other_board_secret[crypto_sign_SECRETKEYBYTES] = {0};
+    ASSERT_TRUE(generate_signing_keypair(other_board_public, other_board_secret));
+
+    std::vector<uint8_t> artifact = compile_unsigned();
+    ASSERT_TRUE(sign_st_artifact(&artifact, other_board_secret));
+
+    StLoadError error;
+    EXPECT_FALSE(loads_with(artifact, required_with(this_board_public), &error))
+        << "artifact ký bằng khoá của bo khác KHÔNG được nạp";
+    EXPECT_EQ(error.code, st_ir_error::kBadSignature);
+}
+
+TEST(StArtifactTrust, VendorKeyAndDeviceKeyCoexistInTheSameTrustSet)
+{
+    /* Hai nguồn gốc, hai khoá, một tập tin cậy: thư viện hãng phát hành và
+     * chương trình người dùng viết phải cùng nạp được trên một bo — nếu không,
+     * bật SIGNATURE_REQUIRED sẽ chặn đúng một trong hai. */
+    KeyPair vendor = make_key_pair();
+    uint8_t device_public[crypto_sign_PUBLICKEYBYTES] = {0};
+    uint8_t device_secret[crypto_sign_SECRETKEYBYTES] = {0};
+    ASSERT_TRUE(generate_signing_keypair(device_public, device_secret));
+
+    std::vector<uint8_t> from_vendor = compile_unsigned();
+    ASSERT_TRUE(sign_st_artifact(&from_vendor, vendor.secret_key));
+    std::vector<uint8_t> from_device = compile_unsigned();
+    ASSERT_TRUE(sign_st_artifact(&from_device, device_secret));
+
+    const StLoaderOptions options = required_with(vendor.public_key, device_public);
+    StLoadError error;
+    EXPECT_TRUE(loads_with(from_vendor, options, &error)) << "artifact hãng phải nạp được";
+    EXPECT_TRUE(loads_with(from_device, options, &error)) << "artifact bo tự ký phải nạp được";
+}
+
 TEST(StArtifactTrust, BuildEmbedsTestKeyAndTheGateCanSeeIt)
 {
     /* Trước T59-602, `st_public_key_is_test_key()` không có call site nào ngoài

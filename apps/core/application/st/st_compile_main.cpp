@@ -29,6 +29,11 @@
 #include <sys/syscall.h>
 #endif
 
+#include <fcntl.h>
+#include <sodium.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <nlohmann/json.hpp>
 
 #include "st/st_control_api.hpp"
@@ -149,6 +154,73 @@ bool read_file(const std::string& path, std::string* out, std::size_t max_bytes)
     if (f.bad()) return false;
     *out = ss.str();
     return out->size() <= max_bytes;
+}
+
+/* ADR-052 — provisioning khoá thiết bị.
+ *
+ * Ghi `device.key` (khoá riêng, 0600) và `device.pub` (khoá công khai, 0644).
+ * TỪ CHỐI ghi đè khi đã có khoá: sinh lại khoá thiết bị làm mọi artifact đang
+ * chạy trên bo mất hiệu lực cùng lúc — gồm cả LKG, tức đúng bản dùng để lùi khi
+ * bản mới hỏng. Một lệnh provisioning chạy nhầm lần thứ hai không được phép có
+ * hậu quả đó, nên nó phải dừng chứ không phải ghi đè.
+ */
+int generate_device_key(const std::string& dir)
+{
+    const std::string secret_path = dir + "/device.key";
+    const std::string public_path = dir + "/device.pub";
+
+    for (const std::string& path : {secret_path, public_path}) {
+        struct stat st{};
+        if (::stat(path.c_str(), &st) == 0)
+            return fail("ST-CLI-KEY-EXISTS",
+                        "da co khoa thiet bi tai " + path +
+                            " — sinh lai se vo hieu hoa moi artifact dang chay, gom ca LKG",
+                        2);
+    }
+
+    uint8_t public_key[32];
+    uint8_t secret_key[64];
+    if (!core::generate_signing_keypair(public_key, secret_key))
+        return fail("ST-CLI-KEY", "khong sinh duoc cap khoa Ed25519", 2);
+
+    auto to_hex = [](const uint8_t* bytes, std::size_t count) {
+        static const char* kDigits = "0123456789abcdef";
+        std::string hex;
+        hex.reserve(count * 2);
+        for (std::size_t i = 0; i < count; i++) {
+            hex += kDigits[bytes[i] >> 4];
+            hex += kDigits[bytes[i] & 0x0F];
+        }
+        return hex;
+    };
+
+    /* Khoá riêng ghi bằng open() với mode 0600 NGAY từ lúc tạo file. Ghi rồi
+     * chmod sau để lại một khe thời gian mà file khoá đọc được bởi mọi tiến
+     * trình — khe đó nhỏ nhưng không có lý do gì để tồn tại. */
+    const int fd = ::open(secret_path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0) return fail("ST-CLI-IO", "khong tao duoc " + secret_path, 2);
+    const std::string secret_hex = to_hex(secret_key, 64) + "\n";
+    const ssize_t written = ::write(fd, secret_hex.data(), secret_hex.size());
+    ::close(fd);
+    sodium_memzero(secret_key, sizeof(secret_key));
+    if (written != static_cast<ssize_t>(secret_hex.size()))
+        return fail("ST-CLI-IO", "ghi khoa rieng that bai", 2);
+
+    std::ofstream pub(public_path, std::ios::trunc);
+    if (!pub) return fail("ST-CLI-IO", "khong tao duoc " + public_path, 2);
+    pub << to_hex(public_key, 32) << "\n";
+    if (!pub) return fail("ST-CLI-IO", "ghi khoa cong khai that bai", 2);
+    pub.close();
+
+    nlohmann::json j;
+    j["ok"] = true;
+    j["secretKeyPath"] = secret_path;
+    j["publicKeyPath"] = public_path;
+    j["publicKeyHex"] = to_hex(public_key, 32);
+    j["fingerprint"] = to_hex(public_key, 8);
+    std::fputs(j.dump().c_str(), stdout);
+    std::fputc('\n', stdout);
+    return 0;
 }
 
 /* Khoá riêng dạng 128 ký tự hex (64 byte). */
@@ -297,6 +369,10 @@ int main(int argc, char** argv)
         else if (a == "--source-id" && i + 1 < argc) source_id = argv[++i];
         else if (a == "--language" && i + 1 < argc) language = argv[++i];
         else if (a == "--key" && i + 1 < argc) key_path = argv[++i];
+        /* ADR-052: provisioning khoá thiết bị. Đứng riêng, không đi cùng đường
+         * biên dịch — nó là thao tác một lần của vòng đời bo, không phải một
+         * tuỳ chọn của lệnh compile. */
+        else if (a == "--gen-device-key" && i + 1 < argc) return generate_device_key(argv[++i]);
         else if (a == "--out" && i + 1 < argc) out_path = argv[++i];
         else if (a == "--manifest-out" && i + 1 < argc) manifest_out_path = argv[++i];
         else if (a == "--io-map-in" && i + 1 < argc) io_map_path = argv[++i];
@@ -312,7 +388,7 @@ int main(int argc, char** argv)
         }
         else if (a == "--help") {
             std::printf("usage: mkddc-st-compile --source <path> [--language ST|FBD] "
-                        "[--source-id <opaque>] [--key <hexfile>] [--out <artifact>] "
+                        "[--source-id <opaque>] [--key <hexfile>] [--gen-device-key <dir>] [--out <artifact>] "
                         "[--manifest-out <json>] [--io-map-in <json>] [--sandbox] "
                         "[--version]\n");
             return 0;
