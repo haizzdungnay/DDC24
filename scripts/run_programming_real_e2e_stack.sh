@@ -52,10 +52,20 @@ if [[ "${PROGRAMMING_REAL_SKIP_BUILD:-0}" != "1" ]]; then
   )
 fi
 
+# T59-607 — lane này phải đi ĐÚNG đường ký của bản thật: backend ký bằng khoá
+# thiết bị, Core tin đúng khoá đó. Khoá sinh mới cho mỗi lần chạy và nằm trong
+# thư mục runtime tạm — không dùng chung, không cam kết vào repo.
+keys_dir="${runtime_root}/keys"
+mkdir -p "${keys_dir}"
+if [[ ! -f "${keys_dir}/device.key" ]]; then
+  "${build_root}/cpp/core/mkddc-st-compile" --gen-device-key "${keys_dir}" >/dev/null
+fi
+
 core_socket="${runtime_root}/programming.sock"
 "${build_root}/cpp/core/mkddc-programming-core-sim" \
   --socket "${core_socket}" \
   --state-dir "${runtime_root}/core" \
+  --st-trusted-key "${keys_dir}/device.pub" \
   --tick-ms 20 &
 core_pid=$!
 
@@ -96,6 +106,7 @@ env \
   PROGRAMMING_STAGING_DIR="${runtime_root}/core/staging" \
   PROGRAMMING_SCRATCH_DIR="${runtime_root}/programming/scratch" \
   PROGRAMMING_SOCKET="${core_socket}" \
+  PROGRAMMING_SIGNING_KEY="${keys_dir}/device.key" \
   PROGRAMMING_COMPILER="${build_root}/cpp/core/mkddc-st-compile" \
   PROGRAMMING_PACKAGER="${build_root}/cpp/core/mkddc-st-package" \
   PROGRAMMING_TARGET_ID="host-programming-real-e2e" \
