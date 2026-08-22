@@ -8,6 +8,20 @@
 
 ## [Unreleased]
 
+### Số đo cổng W6 sau đợt 2026-08-22
+
+`MKDDC_ALLOW_TEST_KEY=1 python3 scripts/verify_wave_gates.py --wave W6` →
+**9 PASS / 0 FAIL / 0 NOT_RUN trên 9 cổng**, exit `0`:
+`layout` 3,0s · `cpp` 16,1s · `go` 40,9s · `frontend` 52,0s · `e2e` 29,4s ·
+`firmware` 0,1s · `release-package` 33,1s · `docs` 0,1s · `candidate-pin` 0,0s.
+`ctest` full **1223/1223**. Mọi dòng là **HOST/LOCAL** — không phải GitHub CI,
+không phải target, không phải HIL.
+
+Hai cổng đỏ trên đường tới số đo này, cả hai đều đúng ý đồ và được sửa chứ không
+được nới: guard đóng gói `T59-605` bắt `install.sh` sau khi đường dẫn bị tham số
+hoá (dạy guard đọc cả hai dạng, giữ nguyên bất biến), và G1 contract join bắt mã
+lỗi mới chưa phát hành lại bản ghim (re-pin, không đổi validator).
+
 ### T59-604 — Flake e2e là spec đua với redirect, không phải đói CPU (2026-08-22)
 
 - **Đính chính chẩn đoán ngày 2026-08-21.** Kết luận "đói CPU" là **sai**, và bản
