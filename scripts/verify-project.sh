@@ -146,8 +146,14 @@ run_e2e() {
   # bảy spec; bản vá "chờ điều kiện thay vì đua với dev server" chỉ áp được cho
   # một bản, nên sáu bản còn lại giữ nguyên cuộc đua và cổng vẫn đỏ ngắt quãng ở
   # chỗ khác. Một bản vá nằm ở một trong bảy bản sao không phải bản vá.
+  #
+  # Spec real-backend nằm NGOÀI phép kiểm này một cách có chủ ý: nó đăng nhập vào
+  # backend Go thật bằng JWT thật, còn `helpers/session.ts` là đường đăng nhập của
+  # lane mock. Ép chung một helper sẽ buộc helper phải biết cả hai chế độ xác
+  # thực — đúng kiểu trừu tượng hoá làm hỏng ranh giới lỗi của hai gate.
   local dup
-  dup="$(cd "$repo_root/$frontend_dir" && grep -rln 'async function login' e2e --include='*.spec.ts' || true)"
+  dup="$(cd "$repo_root/$frontend_dir" && grep -rln 'async function login' e2e --include='*.spec.ts' \
+    | grep -v -F "$MKDDC_E2E_REAL_SPEC" || true)"
   if [ -n "$dup" ]; then
     printf 'LỖI: spec định nghĩa lại helper đăng nhập thay vì dùng e2e/helpers/session.ts:\n%s\n' \
       "$dup" >&2
