@@ -2,9 +2,12 @@ package compiler
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -12,7 +15,40 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"mkddc-web/internal/programming/domain"
 )
+
+// testSigningKeyPath — T59-607: profile đòi `SIGNATURE_REQUIRED`, nên mọi
+// ProcessRunner trong test phải có khoá ký như đường production. Khoá sinh từ
+// seed cố định để test tất định, và chỉ sống trong thư mục tạm của test.
+func testSigningKeyPath(t *testing.T) string {
+	t.Helper()
+	seed := make([]byte, ed25519.SeedSize)
+	for i := range seed {
+		seed[i] = byte(0xC0 + i)
+	}
+	secret := ed25519.NewKeyFromSeed(seed)
+	path := filepath.Join(t.TempDir(), "device.key")
+	if err := os.WriteFile(path, []byte(hex.EncodeToString(secret)), 0o600); err != nil {
+		t.Fatalf("không ghi được khoá test: %v", err)
+	}
+	return path
+}
+
+// T59-607 — worker không có khoá thì mọi artifact nó sinh ra đều bị Core từ
+// chối. Lỗi phải nổ ở BIÊN cấu hình, không phải ở bước Commission xa phía sau.
+func TestProcessRunnerFailsClosedWithoutSigningKey(t *testing.T) {
+	if domain.ProfileIntegrityMode != "SIGNATURE_REQUIRED" {
+		t.Skip("profile hiện không đòi chữ ký")
+	}
+	runner := ProcessRunner{BinaryPath: "/bin/true", ScratchRoot: t.TempDir(), Timeout: time.Second}
+	_, err := runner.Compile(context.Background(), Input{SourceID: "11111111-1111-4111-8111-111111111111",
+		Language: "ST", Source: []byte("PROGRAM P\nEND_PROGRAM\n")})
+	if err == nil || !strings.Contains(err.Error(), "PROGRAMMING_SIGNING_KEY") {
+		t.Fatalf("phải từ chối vì thiếu khoá ký, nhận: %v", err)
+	}
+}
 
 func TestProcessRunnerKillsWholeProcessGroupOnTimeout(t *testing.T) {
 	dir := t.TempDir()
@@ -22,7 +58,7 @@ func TestProcessRunnerKillsWholeProcessGroupOnTimeout(t *testing.T) {
 	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runner := ProcessRunner{BinaryPath: script, ScratchRoot: filepath.Join(dir, "scratch"), Timeout: time.Second}
+	runner := ProcessRunner{BinaryPath: script, ScratchRoot: filepath.Join(dir, "scratch"), Timeout: time.Second, SigningKeyPath: testSigningKeyPath(t)}
 	_, err := runner.Compile(context.Background(), Input{SourceID: "11111111-1111-4111-8111-111111111111", Language: "ST", Source: []byte("PROGRAM P END_PROGRAM")})
 	if !errors.Is(err, ErrTimeout) {
 		t.Fatalf("timeout err=%v", err)
@@ -53,7 +89,7 @@ func TestProcessRunnerFailsClosedOnOOMLikeSignalAndCleansScratch(t *testing.T) {
 		t.Fatal(err)
 	}
 	scratch := filepath.Join(dir, "scratch")
-	runner := ProcessRunner{BinaryPath: script, ScratchRoot: scratch, Timeout: 2 * time.Second}
+	runner := ProcessRunner{BinaryPath: script, ScratchRoot: scratch, Timeout: 2 * time.Second, SigningKeyPath: testSigningKeyPath(t)}
 	_, err := runner.Compile(context.Background(), Input{SourceID: "11111111-1111-4111-8111-111111111111",
 		Language: "ST", Source: []byte("PROGRAM P END_PROGRAM")})
 	if !errors.Is(err, ErrCrashed) {
@@ -75,7 +111,7 @@ func TestProcessRunnerBoundsOutputAndDoesNotLeakStderr(t *testing.T) {
 	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runner := ProcessRunner{BinaryPath: script, ScratchRoot: filepath.Join(dir, "scratch"), Timeout: 2 * time.Second}
+	runner := ProcessRunner{BinaryPath: script, ScratchRoot: filepath.Join(dir, "scratch"), Timeout: 2 * time.Second, SigningKeyPath: testSigningKeyPath(t)}
 	_, err := runner.Compile(context.Background(), Input{SourceID: "11111111-1111-4111-8111-111111111111",
 		Language: "ST", Source: []byte("PROGRAM P END_PROGRAM")})
 	if !errors.Is(err, ErrInvalidOutput) {
@@ -93,7 +129,7 @@ func TestProcessRunnerRejectsSourceOneOverBeforeSpawn(t *testing.T) {
 	if err := os.WriteFile(script, []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runner := ProcessRunner{BinaryPath: script, ScratchRoot: filepath.Join(dir, "scratch"), Timeout: 2 * time.Second}
+	runner := ProcessRunner{BinaryPath: script, ScratchRoot: filepath.Join(dir, "scratch"), Timeout: 2 * time.Second, SigningKeyPath: testSigningKeyPath(t)}
 	_, err := runner.Compile(context.Background(), Input{SourceID: "11111111-1111-4111-8111-111111111111",
 		Language: "ST", Source: []byte(strings.Repeat("x", 65537))})
 	if err == nil {
@@ -104,17 +140,47 @@ func TestProcessRunnerRejectsSourceOneOverBeforeSpawn(t *testing.T) {
 	}
 }
 
+// officialCompilerBinary — T59-607: chọn binary compiler THẬT và từ chối một
+// binary đã lạc hậu so với contract.
+//
+// Hai test dưới đây trước đây trỏ cứng vào `build/fw`, trong khi cổng `cpp` của
+// `verify-project.sh` dựng ở `build/verify/cpp-full`. Hệ quả: đổi contract xong
+// chạy `--wave W6` thì cổng `go` đỏ bằng một binary CŨ — thông báo lỗi nói
+// "metadata success thiếu/sai", nghe như hồi quy code chứ không như "hãy dựng
+// lại". Nay thử cả hai thư mục và so `profileSha256` của binary với hằng sinh
+// từ contract; lệch thì SKIP kèm lý do thật, không FAIL giả.
+func officialCompilerBinary(t *testing.T) string {
+	t.Helper()
+	_, current, _, _ := runtime.Caller(0)
+	repo := filepath.Clean(filepath.Join(filepath.Dir(current), "..", "..", "..", "..", ".."))
+	candidates := []string{
+		filepath.Join(repo, "build", "verify", "cpp-full", "core", "mkddc-st-compile"),
+		filepath.Join(repo, "build", "fw", "core", "mkddc-st-compile"),
+	}
+	for _, binary := range candidates {
+		if _, err := os.Stat(binary); err != nil {
+			continue
+		}
+		out, err := exec.Command(binary, "--version").Output()
+		if err != nil {
+			continue
+		}
+		if strings.Contains(string(out), "profile_sha256="+domain.ProfileSHA256) {
+			return binary
+		}
+		t.Skipf("binary %s dựng từ profile cũ (contract hiện tại %s) — chạy lại cổng cpp",
+			binary, domain.ProfileSHA256[:12])
+	}
+	t.Skip("hãy build CMake gate trước Go integration")
+	return ""
+}
+
 func TestProcessRunnerWithOfficialCompiler(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("sandbox compiler chỉ hỗ trợ Linux")
 	}
-	_, current, _, _ := runtime.Caller(0)
-	repo := filepath.Clean(filepath.Join(filepath.Dir(current), "..", "..", "..", "..", ".."))
-	binary := filepath.Join(repo, "build", "fw", "core", "mkddc-st-compile")
-	if _, err := os.Stat(binary); err != nil {
-		t.Skip("hãy build CMake gate trước Go integration")
-	}
-	runner := ProcessRunner{BinaryPath: binary, ScratchRoot: filepath.Join(t.TempDir(), "scratch"), Timeout: 10 * time.Second}
+	binary := officialCompilerBinary(t)
+	runner := ProcessRunner{BinaryPath: binary, ScratchRoot: filepath.Join(t.TempDir(), "scratch"), Timeout: 10 * time.Second, SigningKeyPath: testSigningKeyPath(t)}
 	result, err := runner.Compile(context.Background(), Input{SourceID: "11111111-1111-4111-8111-111111111111", Language: "ST",
 		Source: []byte("PROGRAM P\nVAR_OUTPUT X : BOOL; END_VAR\nX := TRUE;\nEND_PROGRAM\n")})
 	if err != nil || !result.OK || len(result.Artifact) == 0 || len(result.Manifest) == 0 || result.TargetABI != 3841 {
@@ -134,13 +200,8 @@ func TestProcessRunnerWithOfficialCompilerResolvesIoMapIntoArtifact(t *testing.T
 	if runtime.GOOS != "linux" {
 		t.Skip("sandbox compiler chỉ hỗ trợ Linux")
 	}
-	_, current, _, _ := runtime.Caller(0)
-	repo := filepath.Clean(filepath.Join(filepath.Dir(current), "..", "..", "..", "..", ".."))
-	binary := filepath.Join(repo, "build", "fw", "core", "mkddc-st-compile")
-	if _, err := os.Stat(binary); err != nil {
-		t.Skip("hãy build CMake gate trước Go integration")
-	}
-	runner := ProcessRunner{BinaryPath: binary, ScratchRoot: filepath.Join(t.TempDir(), "scratch"), Timeout: 10 * time.Second}
+	binary := officialCompilerBinary(t)
+	runner := ProcessRunner{BinaryPath: binary, ScratchRoot: filepath.Join(t.TempDir(), "scratch"), Timeout: 10 * time.Second, SigningKeyPath: testSigningKeyPath(t)}
 	source := []byte("PROGRAM P\nVAR_INPUT SupplyTemp : REAL; END_VAR\nVAR_OUTPUT FanEnable : BOOL; END_VAR\n" +
 		"FanEnable := SupplyTemp > 25.0;\nEND_PROGRAM\n")
 	ioMap := []IoMapEntry{

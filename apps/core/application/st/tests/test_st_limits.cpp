@@ -74,8 +74,8 @@ TEST(StProfile, MachineReadableContractMatchesGeneratedConstants)
     EXPECT_EQ(profile.at("version").at("minor"), st_profile_generated::kProfileMinor);
     EXPECT_EQ(profile.at("coreLibrary").at("version"),
               st_profile_generated::kLibraryVersion);
-    EXPECT_EQ(profile.at("integrityMode"), "HASH_ONLY");
-    EXPECT_STREQ(st_profile_generated::kIntegrityMode, "HASH_ONLY");
+    EXPECT_EQ(profile.at("integrityMode"), "SIGNATURE_REQUIRED");
+    EXPECT_STREQ(st_profile_generated::kIntegrityMode, "SIGNATURE_REQUIRED");
     EXPECT_EQ(sha256_hex(raw), st_profile_generated::kProfileSha256);
 
     struct TypeLock { const char* name; uint8_t code; uint8_t bits; };

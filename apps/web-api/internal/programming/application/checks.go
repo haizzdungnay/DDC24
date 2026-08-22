@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"sync"
 	"time"
@@ -337,7 +338,17 @@ func (s *CheckService) run(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		for {
-			processed, _ := s.ProcessNext(ctx)
+			// T59-607 — lỗi của ProcessNext PHẢI được nói ra.
+			//
+			// Trước đây nó bị nuốt bằng `_`. Khi worker claim được một Check rồi
+			// hỏng ở giữa (ví dụ compiler trả metadata không hợp lệ), Check nằm
+			// `RUNNING` cho tới hết lease rồi bị `FailExhaustedChecks` đóng bằng
+			// một mã chung — không dòng log nào nói vì sao. Chẩn đoán khi đó phải
+			// dựng lại toàn bộ stack và dump goroutine, đúng thứ vừa xảy ra.
+			processed, err := s.ProcessNext(ctx)
+			if err != nil && ctx.Err() == nil {
+				log.Printf("WARN programming_check_worker err=%v", err)
+			}
 			if !processed || ctx.Err() != nil {
 				break
 			}

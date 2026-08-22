@@ -74,7 +74,7 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # trong cùng gate.
         catalog, raw, schema_raw = GENERATOR.load_and_validate()
         self.assertEqual(len(catalog["publicErrors"]), 30)
-        self.assertEqual(len(catalog["componentDetails"]), 125)
+        self.assertEqual(len(catalog["componentDetails"]), 126)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
 

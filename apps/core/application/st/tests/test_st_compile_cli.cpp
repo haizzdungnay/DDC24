@@ -96,13 +96,49 @@ CliRun run_cli(const std::vector<std::string>& arguments)
     return result;
 }
 
+/* T59-607 — profile nay đòi `SIGNATURE_REQUIRED`, nên MỌI lệnh biên dịch phải
+ * kèm khoá. Khoá được sinh một lần cho cả bộ test từ seed cố định: test cần
+ * tất định, và khoá này không bao giờ rời thư mục tạm của tiến trình test. */
+const std::string& shared_signing_key_path()
+{
+    static const std::string path = [] {
+        std::array<unsigned char, crypto_sign_SEEDBYTES> seed{};
+        for (std::size_t index = 0; index < seed.size(); ++index)
+            seed[index] = static_cast<unsigned char>(0xA0u + index);
+        std::array<unsigned char, crypto_sign_PUBLICKEYBYTES> public_key{};
+        std::array<unsigned char, crypto_sign_SECRETKEYBYTES> secret_key{};
+        if (crypto_sign_seed_keypair(public_key.data(), secret_key.data(), seed.data()) != 0)
+            return std::string();
+        static constexpr char kHex[] = "0123456789abcdef";
+        std::string key_hex;
+        key_hex.reserve(secret_key.size() * 2u);
+        for (const unsigned char byte : secret_key) {
+            key_hex.push_back(kHex[byte >> 4u]);
+            key_hex.push_back(kHex[byte & 0x0Fu]);
+        }
+        const std::string key_file = temporary_path("/tmp/mkddc-cli-shared-key-XXXXXX");
+        if (key_file.empty() || !write_text(key_file, key_hex)) return std::string();
+        return key_file;
+    }();
+    return path;
+}
+
+/* Chạy CLI với khoá ký mặc định. Test nào cố ý kiểm đường KHÔNG khoá thì gọi
+ * thẳng `run_cli`. */
+CliRun run_cli_signed(std::vector<std::string> arguments)
+{
+    arguments.push_back("--key");
+    arguments.push_back(shared_signing_key_path());
+    return run_cli(arguments);
+}
+
 } // namespace
 
 TEST(StCompileCli, EmitsDeterministicStructuredTextArtifactAndManifest)
 {
     const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
-    const CliRun first = run_cli({"--source", source, "--source-id", "cli-st"});
-    const CliRun second = run_cli({"--source", source, "--source-id", "cli-st"});
+    const CliRun first = run_cli_signed({"--source", source, "--source-id", "cli-st"});
+    const CliRun second = run_cli_signed({"--source", source, "--source-id", "cli-st"});
     ASSERT_EQ(first.exit_code, 0);
     ASSERT_EQ(second.exit_code, 0);
     EXPECT_EQ(first.stdout_text, second.stdout_text);
@@ -139,7 +175,7 @@ TEST(StCompileCli, CompilesFbdAndWritesByteExactOutputs)
     ::unlink(artifact_path.c_str());
     ::unlink(manifest_path.c_str());
 
-    const CliRun run = run_cli({"--source", source, "--language", "FBD", "--source-id",
+    const CliRun run = run_cli_signed({"--source", source, "--language", "FBD", "--source-id",
                                 "cli-fbd", "--out", artifact_path, "--manifest-out",
                                 manifest_path});
     ASSERT_EQ(run.exit_code, 0) << run.stdout_text;
@@ -168,7 +204,7 @@ TEST(StCompileCli, WorkerSandboxCompilesWithoutOpeningAdditionalResources)
     ASSERT_FALSE(manifest_path.empty());
     ::unlink(artifact_path.c_str());
     ::unlink(manifest_path.c_str());
-    const CliRun run = run_cli({"--source", source, "--source-id", "sandbox-st",
+    const CliRun run = run_cli_signed({"--source", source, "--source-id", "sandbox-st",
                                 "--out", artifact_path, "--manifest-out", manifest_path,
                                 "--sandbox"});
     ASSERT_EQ(run.exit_code, 0) << run.stdout_text;
@@ -183,7 +219,7 @@ TEST(StCompileCli, WorkerSandboxCompilesWithoutOpeningAdditionalResources)
 TEST(StCompileCli, RejectsHostPathSourceIdWithoutPublishingArtifact)
 {
     const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
-    const CliRun run = run_cli({"--source", source, "--source-id", "../../secret"});
+    const CliRun run = run_cli_signed({"--source", source, "--source-id", "../../secret"});
     EXPECT_EQ(run.exit_code, 1);
     const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
     EXPECT_FALSE(result.at("ok"));
@@ -195,7 +231,7 @@ TEST(StCompileCli, RejectsHostPathSourceIdWithoutPublishingArtifact)
 TEST(StCompileCli, RejectsUnknownLanguageAtArgumentBoundary)
 {
     const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
-    const CliRun run = run_cli({"--source", source, "--language", "LD"});
+    const CliRun run = run_cli_signed({"--source", source, "--language", "LD"});
     EXPECT_EQ(run.exit_code, 2);
     const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
     EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-CLI-ARGS");
@@ -207,7 +243,7 @@ TEST(StCompileCli, PreservesStructuredTextDiagnosticLocation)
     ASSERT_FALSE(source_path.empty());
     ASSERT_TRUE(write_text(source_path,
                            "PROGRAM BAD\nVAR_OUTPUT X : BOOL; END_VAR\nX := ;\nEND_PROGRAM\n"));
-    const CliRun run = run_cli({"--source", source_path, "--source-id", "bad-st"});
+    const CliRun run = run_cli_signed({"--source", source_path, "--source-id", "bad-st"});
     ::unlink(source_path.c_str());
     ASSERT_EQ(run.exit_code, 1);
     const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
@@ -233,7 +269,7 @@ TEST(StCompileCli, IoMapInBindsVariablesIntoArtifactBindingSection)
         })},
     };
     ASSERT_TRUE(write_text(io_map_path, io_map.dump()));
-    const CliRun run = run_cli({"--source", source, "--source-id", "cli-io-map",
+    const CliRun run = run_cli_signed({"--source", source, "--source-id", "cli-io-map",
                                 "--io-map-in", io_map_path});
     ::unlink(io_map_path.c_str());
     ASSERT_EQ(run.exit_code, 0) << run.stdout_text;
@@ -257,7 +293,7 @@ TEST(StCompileCli, IoMapInRejectsBindingBoolOutputToReadOnlyPoint)
         })},
     };
     ASSERT_TRUE(write_text(io_map_path, io_map.dump()));
-    const CliRun run = run_cli({"--source", source, "--source-id", "cli-io-map-bad",
+    const CliRun run = run_cli_signed({"--source", source, "--source-id", "cli-io-map-bad",
                                 "--io-map-in", io_map_path});
     ::unlink(io_map_path.c_str());
     ASSERT_EQ(run.exit_code, 1);
@@ -282,13 +318,29 @@ TEST(StCompileCli, IoMapInRejectsVirtualPointCategoryForOutputDirection)
         })},
     };
     ASSERT_TRUE(write_text(io_map_path, io_map.dump()));
-    const CliRun run = run_cli({"--source", source, "--source-id", "cli-io-map-vp",
+    const CliRun run = run_cli_signed({"--source", source, "--source-id", "cli-io-map-vp",
                                 "--io-map-in", io_map_path});
     ::unlink(io_map_path.c_str());
     ASSERT_EQ(run.exit_code, 1);
     const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
     EXPECT_FALSE(result.at("ok"));
     EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-IOMAP-008");
+}
+
+/* T59-607 — thiếu khoá phải hỏng NGAY và nói đúng lý do.
+ *
+ * Trước bản vá, biên dịch không khoá vẫn chạy hết rồi hỏng ở bước dựng manifest
+ * với `IR-E-007: artifact is not signed` — một câu đúng về hiện tượng nhưng chỉ
+ * sai chỗ: người đọc đi tìm lỗi trong artifact, trong khi thứ thiếu là cấu hình
+ * khoá của worker. */
+TEST(StCompileCli, MissingSigningKeyFailsWithConfigurationError)
+{
+    const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
+    const CliRun run = run_cli({"--source", source, "--source-id", "no-key-st"});
+    ASSERT_NE(run.exit_code, 0) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_FALSE(result.at("ok"));
+    EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-CLI-KEY-REQUIRED");
 }
 
 TEST(StCompileCli, SignedCompatibilityPathUsesPublicHalfOfProvidedKey)
@@ -319,5 +371,5 @@ TEST(StCompileCli, SignedCompatibilityPathUsesPublicHalfOfProvidedKey)
     const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
     EXPECT_TRUE(result.at("signaturePresent"));
     EXPECT_TRUE(result.at("manifest").at("artifact").at("signaturePresent"));
-    EXPECT_EQ(result.at("integrityMode"), "HASH_ONLY");
+    EXPECT_EQ(result.at("integrityMode"), "SIGNED");
 }

@@ -2,15 +2,29 @@
 
 #include <cmath>
 #include <cstring>
+#include <string>
 #include <new>
 #include <utility>
 
 #include <sodium.h>
 
 #include "st/st_limits.hpp"
+#include "st/st_profile_generated.hpp"
 #include "st/st_public_key.hpp"
 
 namespace core {
+
+/* T59-607 — dịch chuỗi contract sang enum của loader.
+ *
+ * Không có nhánh mặc định "cho qua": một giá trị lạ trong profile là lỗi cấu
+ * hình nghiêm trọng, và đoán bừa `HASH_ONLY` chính là hạ mức bảo vệ mà không ai
+ * thấy. `SIGNATURE_REQUIRED` là lựa chọn an toàn duy nhất khi không đọc được. */
+StIntegrityMode st_profile_integrity_mode()
+{
+    const std::string mode = st_profile_generated::kIntegrityMode;
+    if (mode == "HASH_ONLY") return StIntegrityMode::HASH_ONLY;
+    return StIntegrityMode::SIGNATURE_REQUIRED;
+}
 namespace {
 
 uint16_t rd_u16(const uint8_t* p) { return static_cast<uint16_t>(p[0] | (p[1] << 8)); }

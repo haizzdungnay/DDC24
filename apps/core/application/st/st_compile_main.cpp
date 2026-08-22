@@ -40,6 +40,7 @@
 #include "st/st_artifact_manifest.hpp"
 #include "st/st_io_map.hpp"
 #include "st/st_ir.hpp"
+#include "st/st_loader.hpp"
 #include "st/st_limits.hpp"
 #include "st/st_profile_generated.hpp"
 
@@ -400,8 +401,29 @@ int main(int argc, char** argv)
         return fail("ST-CLI-ARGS", "usage: mkddc-st-compile --source <path>", 2);
     if (language != "ST" && language != "FBD")
         return fail("ST-CLI-ARGS", "--language must be ST or FBD", 2);
-    if (sandbox && !key_path.empty())
-        return fail("ST-CLI-SANDBOX", "sandbox worker does not accept signing keys", 2);
+    /* T59-607 — worker sandbox nay ĐƯỢC ký.
+     *
+     * Ràng buộc cũ "sandbox không nhận khoá" sinh ra ở thời Rev A `HASH_ONLY`,
+     * khi ký chỉ là đường tương thích. Với `ADR-052`, artifact do CHÍNH BO biên
+     * dịch phải được ký bằng khoá thiết bị — mà đường biên dịch của bo chính là
+     * worker sandbox do backend gọi. Giữ ràng buộc cũ nghĩa là không đường nào
+     * sinh được artifact hợp lệ.
+     *
+     * An toàn giữ nguyên nhờ THỨ TỰ: khoá được đọc ở dưới, trước
+     * `apply_worker_sandbox()`, nên seccomp vẫn cấm mọi thao tác mở path sau
+     * điểm đó. Khoá không bao giờ đi qua stdin/tham số dạng giá trị, chỉ là một
+     * đường dẫn file `0600` của chính bo.
+     *
+     * Fail-closed ở biên: profile đòi chữ ký mà không có khoá thì mọi artifact
+     * sinh ra đều bị loader từ chối. Báo tại đây để lỗi chỉ đúng vào cấu hình,
+     * thay vì lòi ra ở bước dựng manifest dưới dạng "artifact is not signed". */
+    if (core::st_profile_integrity_mode() == core::StIntegrityMode::SIGNATURE_REQUIRED &&
+        key_path.empty()) {
+        return fail("ST-CLI-KEY-REQUIRED",
+                    "profile yeu cau SIGNATURE_REQUIRED: phai truyen --key <hexfile> "
+                    "(khoa thiet bi, xem ADR-052)",
+                    2);
+    }
 
     /* F-PROG-ASBUILT-013/D-07: đọc io_map TRƯỚC sandbox (nếu bật) vì sandbox
      * cấm mọi open/openat sau điểm này — cùng lý do out/manifest đã mở file
@@ -526,7 +548,11 @@ int main(int argc, char** argv)
     j["profileId"] = core::st_profile_generated::kProfileId;
     j["profileSha256"] = core::st_profile_generated::kProfileSha256;
     j["libraryVersion"] = core::st_profile_generated::kLibraryVersion;
-    j["integrityMode"] = "HASH_ONLY";
+    /* T59-607 — output mô tả ARTIFACT vừa dựng, nên giá trị ở đây là trạng thái
+     * của nó (`SIGNED`/`HASH_ONLY`), không phải tên chính sách của profile
+     * (`SIGNATURE_REQUIRED`). Viết cứng `HASH_ONLY` như trước làm một artifact
+     * đã ký vẫn tự khai chưa ký. */
+    j["integrityMode"] = key_path.empty() ? "HASH_ONLY" : "SIGNED";
     j["signaturePresent"] = !key_path.empty();
     j["targetAbi"] = core::st_ir::kTargetAbi;
     return emit(j, 0);

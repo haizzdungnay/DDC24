@@ -61,6 +61,9 @@ type Config struct {
 	ProgrammingCoreUID         uint32
 	ProgrammingCompilerPath    string
 	ProgrammingPackagerPath    string
+	// ProgrammingSigningKeyPath — khoá riêng của chính bo (ADR-052). Compiler
+	// worker ký artifact bằng khoá này; Core tin nó qua `--st-trusted-key`.
+	ProgrammingSigningKeyPath string
 	ProgrammingTargetID        string
 	ProgrammingCompilerTimeout time.Duration
 	WebVersion                 string
@@ -118,6 +121,7 @@ func LoadConfig() (Config, error) {
 		ProgrammingCoreUID:         uint32(os.Getuid()),
 		ProgrammingCompilerPath:    getenv("PROGRAMMING_COMPILER", "/usr/sbin/mkddc-st-compile"),
 		ProgrammingPackagerPath:    getenv("PROGRAMMING_PACKAGER", "/usr/sbin/mkddc-st-package"),
+		ProgrammingSigningKeyPath:  getenv("PROGRAMMING_SIGNING_KEY", "/data/mkddc/keys/device.key"),
 		ProgrammingTargetID:        getenv("PROGRAMMING_TARGET_ID", "controller-local"),
 		ProgrammingCompilerTimeout: 10 * time.Second,
 		WebVersion:                 getenv("WEB_VERSION", buildVersion),

@@ -137,10 +137,21 @@ enum class StIntegrityMode : uint8_t {
  * bị thay) nhưng để 4 để một lần rotate lỡ dở không phải sửa lại cấu trúc. */
 constexpr std::size_t kMaxTrustedKeys = 4;
 
+/* T59-607 — chính sách toàn vẹn mặc định LẤY TỪ PROFILE CONTRACT, không viết
+ * cứng ở đây.
+ *
+ * Viết cứng là cách cũ, và nó có một hệ quả im lặng: contract đổi sang
+ * `SIGNATURE_REQUIRED` mà mọi chỗ tạo `StLoaderOptions` không truyền gì thì
+ * loader vẫn chạy ở `HASH_ONLY`. Khi đó hồ sơ nói "artifact phải có chữ ký" còn
+ * thiết bị thì không đòi — đúng loại sai lệch mà `DOC-CTRL-001` gọi là As-Built
+ * không khớp baseline. Hằng dưới đây được dịch từ `st_profile_generated.hpp`,
+ * nên đổi profile là đổi hành vi thật, không cần nhớ sửa thêm chỗ nào. */
+StIntegrityMode st_profile_integrity_mode();
+
 struct StLoaderOptions {
-    /* Rev A khóa ở HASH_ONLY: SHA-256 luôn bắt buộc. SIGNATURE_OPTIONAL bị
-     * từ chối fail-closed, không phải một cách viết khác của HASH_ONLY. */
-    StIntegrityMode integrity_mode = StIntegrityMode::HASH_ONLY;
+    /* SHA-256 luôn bắt buộc ở mọi chế độ. `SIGNATURE_OPTIONAL` bị từ chối
+     * fail-closed, không phải một cách viết khác của `HASH_ONLY`. */
+    StIntegrityMode integrity_mode = st_profile_integrity_mode();
     /* Khoá công khai Ed25519 32 byte. nullptr = dùng khoá nhúng trong build. */
     const uint8_t* public_key = nullptr;
 

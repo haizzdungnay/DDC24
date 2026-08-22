@@ -17,6 +17,7 @@ Thiếu thì test SKIP — cổng release riêng đã canh việc dựng gói.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -138,6 +139,42 @@ class ReleaseDryRunTest(unittest.TestCase):
         unit = (self.root / "etc/systemd/system/mkddc-core.service").read_text(encoding="utf-8")
         self.assertIn("--st-trusted-key /data/mkddc/keys/device.pub", unit,
                       "unit Core không nạp khoá thiết bị vào tập khoá tin cậy")
+
+    def test_1_duong_ky_noi_lien_tu_provisioning_toi_compiler(self) -> None:
+        """T59-607 — khoá sinh ra phải là ĐÚNG khoá backend đem đi ký.
+
+        Ba mảnh này nằm ở ba file khác nhau (`install.sh` sinh khoá, `config.go`
+        chọn đường dẫn mặc định, unit Core nạp khoá công khai). Chúng từng khớp
+        nhau chỉ nhờ trùng hợp; một lần đổi thư mục ở bất kỳ mảnh nào sẽ làm
+        compiler ký bằng khoá mà Core không tin — và triệu chứng chỉ lộ ra ở lần
+        Commission kế tiếp, dưới dạng "artifact bị từ chối" chẳng chỉ vào đâu.
+        """
+        install = INSTALL.read_text(encoding="utf-8")
+        self.assertIn("/mkddc/keys", install, "install.sh không còn provisioning khoá thiết bị")
+
+        config = (ROOT / "apps/web-api/internal/app/config.go").read_text(encoding="utf-8")
+        self.assertIn('getenv("PROGRAMMING_SIGNING_KEY", "/data/mkddc/keys/device.key")', config,
+                      "backend không lấy khoá ký ở đúng chỗ install.sh sinh ra")
+
+        unit = (self.root / "etc/systemd/system/mkddc-core.service").read_text(encoding="utf-8")
+        self.assertIn("/data/mkddc/keys/device.pub", unit,
+                      "Core tin một khoá khác với khoá backend dùng để ký")
+
+    def test_1_profile_phat_hanh_doi_chu_ky(self) -> None:
+        """T59-607 — bản phát hành phải đóng đường `HASH_ONLY`.
+
+        Kiểm ở mức contract chứ không mức binary: `integrityMode` của profile là
+        thứ sinh ra hằng cho cả Core, backend lẫn FE, nên nó là một chỗ duy nhất
+        để khoá chính sách."""
+        profile = json.loads((ROOT / "contracts/programming/product_profile_v2.json").read_text(encoding="utf-8"))
+        self.assertEqual(profile["integrityMode"], "SIGNATURE_REQUIRED",
+                         "bản phát hành không được đi ra với artifact chưa ký")
+        go_const = (ROOT / "apps/web-api/internal/programming/domain/profile_generated.go").read_text(encoding="utf-8")
+        self.assertIn('ProfileIntegrityMode  = "SIGNATURE_REQUIRED"', go_const,
+                      "hằng Go lệch khỏi profile — generator chưa chạy?")
+        cpp_const = (ROOT / "apps/core/application/st/st_profile_generated.hpp").read_text(encoding="utf-8")
+        self.assertIn('kIntegrityMode = "SIGNATURE_REQUIRED"', cpp_const,
+                      "hằng C++ lệch khỏi profile — generator chưa chạy?")
 
     # ---- 2. Nâng cấp bo đang chạy -----------------------------------------
 

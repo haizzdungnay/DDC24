@@ -109,6 +109,13 @@ type ProcessRunner struct {
 	BinaryPath  string
 	ScratchRoot string
 	Timeout     time.Duration
+	// SigningKeyPath — khoá RIÊNG của chính bo, dùng để ký artifact do bo biên
+	// dịch (ADR-052 lớp khoá thiết bị). Bắt buộc khi profile contract đặt
+	// `SIGNATURE_REQUIRED`: thiếu nó thì compiler sinh artifact không ký, Core
+	// từ chối lúc nạp, và triệu chứng chỉ lộ ra ở bước Commission — xa chỗ hỏng.
+	// Vì vậy Compile() từ chối NGAY khi thiếu, thay vì đẻ ra một artifact chắc
+	// chắn vô dụng.
+	SigningKeyPath string
 }
 
 type cliResponse struct {
@@ -142,6 +149,12 @@ type cliResponse struct {
 }
 
 func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error) {
+	// T59-607 — fail-closed ngay ở biên: profile đòi chữ ký mà worker không có
+	// khoá thì mọi artifact sinh ra đều bị Core từ chối. Báo tại đây để lỗi chỉ
+	// tay vào cấu hình, không tay vào Commission.
+	if domain.ProfileIntegrityMode == "SIGNATURE_REQUIRED" && r.SigningKeyPath == "" {
+		return Result{}, fmt.Errorf("profile %s đòi SIGNATURE_REQUIRED nhưng compiler worker không được cấu hình khoá ký (PROGRAMMING_SIGNING_KEY)", domain.ProfileID)
+	}
 	if r.BinaryPath == "" || r.ScratchRoot == "" || r.Timeout < time.Second || r.Timeout > time.Minute ||
 		(input.Language != "ST" && input.Language != "FBD") || len(input.Source) == 0 || len(input.Source) > 65536 ||
 		len(input.SourceID) < 1 || len(input.SourceID) > 128 || strings.ContainsAny(input.SourceID, "/\\") {
@@ -186,6 +199,9 @@ func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error)
 	}
 	args := []string{"--source", sourcePath, "--language", input.Language, "--source-id", input.SourceID,
 		"--out", artifactPath, "--manifest-out", manifestPath}
+	if r.SigningKeyPath != "" {
+		args = append(args, "--key", r.SigningKeyPath)
+	}
 	if len(input.IoMap) > 0 {
 		ioMapPath := filepath.Join(jobRoot, "io_map.json")
 		ioMapJSON, err := json.Marshal(struct {
@@ -276,11 +292,26 @@ func decodeCLIResponse(raw []byte) (cliResponse, error) {
 	return response, nil
 }
 
+// expectedArtifactIntegrityMode — T59-607: CHÍNH SÁCH và TRẠNG THÁI có hai bộ
+// tên khác nhau, và trộn chúng là một lỗi tốn tiền.
+//
+// `profile.integrityMode` nói hệ thống ĐÒI gì: `HASH_ONLY` hoặc
+// `SIGNATURE_REQUIRED`. Còn một artifact cụ thể thì `HASH_ONLY` hoặc `SIGNED` —
+// đúng bộ tên của `artifact_v2.schema.json` và của cột `integrity_mode` trong
+// store (cột đó có CHECK constraint, nên ghi nhầm tên chính sách vào đây làm
+// INSERT hỏng ở tận tầng DB, và Check kẹt `RUNNING` cho tới hết lease).
+func expectedArtifactIntegrityMode() string {
+	if domain.ProfileIntegrityMode == "SIGNATURE_REQUIRED" {
+		return "SIGNED"
+	}
+	return "HASH_ONLY"
+}
+
 func validateSuccess(response cliResponse, artifactPath, manifestPath string, input Input) (Result, error) {
 	if response.Artifact == nil || response.ArtifactBytes == nil || response.ArtifactSHA256 == nil ||
 		response.ArtifactFileSHA256 == nil || response.ArtifactIntegritySHA256 == nil || response.Manifest == nil || response.CompilerProfile == nil ||
 		response.ProfileID == nil || response.ProfileSHA256 == nil || response.LibraryVersion == nil ||
-		response.IntegrityMode == nil || response.SignaturePresent == nil || *response.SignaturePresent ||
+		response.IntegrityMode == nil || response.SignaturePresent == nil ||
 		response.SourceSHA256 == nil || response.BuildKeySHA256 == nil ||
 		response.SourceID == nil || *response.SourceID != input.SourceID || response.Language == nil || *response.Language != input.Language ||
 		response.IoBindingCount == nil || *response.IoBindingCount != int64(len(input.IoMap)) ||
@@ -290,8 +321,21 @@ func validateSuccess(response cliResponse, artifactPath, manifestPath string, in
 		*response.CompilerProfile != domain.ProfileCode || *response.ProfileID != domain.ProfileID ||
 		*response.ProfileSHA256 != domain.ProfileSHA256 ||
 		*response.LibraryVersion != domain.ProfileLibraryVersion ||
-		*response.IntegrityMode != domain.ProfileIntegrityMode {
+		*response.IntegrityMode != expectedArtifactIntegrityMode() {
 		return Result{}, fmt.Errorf("%w: metadata success thiếu/sai", ErrInvalidOutput)
+	}
+	// T59-607 — chữ ký phải KHỚP CHÍNH SÁCH, theo cả hai chiều.
+	//
+	// Ràng buộc cũ là `!SignaturePresent` — hợp lý ở thời Rev A `HASH_ONLY`, khi
+	// một artifact ký bất ngờ nghĩa là ai đó đã đổi đường build. Nay chính sách
+	// đảo lại, và chiều ngược cũng quan trọng không kém: nhận một artifact CHƯA
+	// ký khi profile đòi chữ ký nghĩa là để một gói chắc chắn bị Core từ chối đi
+	// tiếp tới tận Commission rồi mới hỏng.
+	if domain.ProfileIntegrityMode == "SIGNATURE_REQUIRED" && !*response.SignaturePresent {
+		return Result{}, fmt.Errorf("%w: profile đòi chữ ký nhưng compiler trả artifact chưa ký", ErrInvalidOutput)
+	}
+	if domain.ProfileIntegrityMode == "HASH_ONLY" && *response.SignaturePresent {
+		return Result{}, fmt.Errorf("%w: profile HASH_ONLY nhưng compiler trả artifact đã ký", ErrInvalidOutput)
 	}
 	artifact, err := readBoundedRegularFile(artifactPath, MaxArtifactBytes)
 	if err != nil {
@@ -357,8 +401,13 @@ func validateSuccess(response cliResponse, artifactPath, manifestPath string, in
 	if json.Unmarshal(canonicalManifest, &envelope) != nil || envelope.ManifestVersion != 1 ||
 		envelope.Source.SourceID != input.SourceID || envelope.Source.Language != input.Language || envelope.Source.CanonicalSHA256 != *response.SourceSHA256 ||
 		envelope.Artifact.Bytes != int64(len(artifact)) || envelope.Artifact.FileSHA256 != *response.ArtifactFileSHA256 ||
-		envelope.Artifact.IntegritySHA256 != *response.ArtifactIntegritySHA256 || envelope.Artifact.IntegrityMode != "HASH_ONLY" ||
-		envelope.Artifact.SchemaVersion != 1 || envelope.Artifact.SignaturePresent || envelope.Profile.Code != 1 ||
+		envelope.Artifact.IntegritySHA256 != *response.ArtifactIntegritySHA256 ||
+		// T59-607 — manifest mô tả chính artifact này, nên hai trường phải nhất
+		// quán với nhau VÀ với chính sách; so với hằng sinh từ contract thay vì
+		// một literal, để đổi profile không phải nhớ sửa chỗ này.
+		envelope.Artifact.IntegrityMode != expectedArtifactIntegrityMode() ||
+		envelope.Artifact.SignaturePresent != *response.SignaturePresent ||
+		envelope.Artifact.SchemaVersion != 1 || envelope.Profile.Code != 1 ||
 		envelope.Profile.ID != *response.ProfileID || envelope.Profile.SHA256 != *response.ProfileSHA256 || envelope.Profile.LibraryVersion != *response.LibraryVersion ||
 		envelope.Target.ABI != response.TargetABI || envelope.Compiler.Version != response.CompilerVersion || envelope.BuildKeySHA256 != *response.BuildKeySHA256 {
 		return Result{}, fmt.Errorf("%w: manifest metadata/provenance", ErrInvalidOutput)

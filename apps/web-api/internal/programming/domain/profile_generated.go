@@ -8,10 +8,10 @@ const (
 	ProfileCode           = 1
 	ProfileTargetABI      = 3841
 	ProfileMajor          = 2
-	ProfileMinor          = 0
-	ProfileSHA256         = "17d2eb86cb7a2a025c0675104d0da19dfc0f062cc0cd17c0c861835e735ce288"
+	ProfileMinor          = 1
+	ProfileSHA256         = "e4f235a8f994f552a5f76d7678d404f671b648ae47de450f0094c33e87f69bad"
 	ProfileLibraryVersion = "rev-a.1"
-	ProfileIntegrityMode  = "HASH_ONLY"
+	ProfileIntegrityMode  = "SIGNATURE_REQUIRED"
 )
 
 // Trần cấp package/Revision.

@@ -25,16 +25,16 @@
     {
       "name": "profile",
       "path": "contracts/programming/product_profile_v2.json",
-      "sha256": "17d2eb86cb7a2a025c0675104d0da19dfc0f062cc0cd17c0c861835e735ce288",
+      "sha256": "e4f235a8f994f552a5f76d7678d404f671b648ae47de450f0094c33e87f69bad",
       "major": 1,
       "minor": 0,
       "profileCode": 1,
       "schemaPath": "contracts/programming/product_profile_v2.schema.json",
-      "schemaSha256": "74eecbd26d319031d90b879032099dd18090412553fc8449d6d568365de6fae7",
+      "schemaSha256": "f53a7192860391a2d1d42f26e200794f5ca13c1ec04c5bb83ea04ba917af2c5c",
       "targetAbi": 3841,
-      "integrityMode": "HASH_ONLY",
+      "integrityMode": "SIGNATURE_REQUIRED",
       "documentMajor": 2,
-      "documentMinor": 0,
+      "documentMinor": 1,
       "maxProgramsTotal": 32,
       "maxProgramsEnabled": 16,
       "reviewGatedFeatures": [
@@ -55,12 +55,12 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "76fd86e1ef9f538d65af73431a7f6cc30a8a8c7d4994d1d1f5e942fc65b83fef",
+      "sha256": "69178447b0996c5110748c0d76365bf977db324807aab0a2ffac67e0e9f3e7dc",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "23f5db595a6fd3e5bb0ef07968bfdb36696cbb102dece115039eb0a5b65e29e5",
+      "manifestSha256": "bed1f4d1ffb9b3a76981d6562ec45f2a7472bdd2a3c82ab08265e04c992de16a",
       "major": 1,
       "publicErrorCount": 30,
-      "componentDetailCount": 125
+      "componentDetailCount": 126
     },
     {
       "name": "store",

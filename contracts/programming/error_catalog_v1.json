@@ -600,6 +600,11 @@
     },
     {
       "component": "compiler",
+      "detailCode": "ST-CLI-KEY-REQUIRED",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
       "detailCode": "ST-CLI-LIMIT",
       "publicCode": "PRG-ERR-SCOPE-001"
     },
