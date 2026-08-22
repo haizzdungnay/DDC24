@@ -122,6 +122,23 @@ class ReleaseDryRunTest(unittest.TestCase):
         self.assertFalse(backups.exists() and any(backups.iterdir()),
                          "cài mới không được sinh snapshot rollback")
 
+    def test_1_provisioning_sinh_khoa_thiet_bi_dung_quyen(self) -> None:
+        """ADR-052: bo phải có khoá ký của chính nó sau khi cài."""
+        secret = self.root / "data/mkddc/keys/device.key"
+        public = self.root / "data/mkddc/keys/device.pub"
+        self.assertTrue(secret.is_file(), "cài xong mà bo không có khoá ký thiết bị")
+        self.assertTrue(public.is_file(), "thiếu khoá công khai để Core nạp vào tập tin cậy")
+        self.assertEqual(oct(secret.stat().st_mode & 0o777), "0o600",
+                         "khoá riêng phải 0600 — quyền file là lớp bảo vệ duy nhất ở bản này")
+        self.assertEqual(len(public.read_text(encoding="utf-8").strip()), 64,
+                         "khoá công khai phải là 64 ký tự hex")
+
+    def test_1_core_service_tin_khoa_cua_chinh_bo(self) -> None:
+        """Sinh khoá mà không ai nạp thì cũng chỉ là một file nằm đó."""
+        unit = (self.root / "etc/systemd/system/mkddc-core.service").read_text(encoding="utf-8")
+        self.assertIn("--st-trusted-key /data/mkddc/keys/device.pub", unit,
+                      "unit Core không nạp khoá thiết bị vào tập khoá tin cậy")
+
     # ---- 2. Nâng cấp bo đang chạy -----------------------------------------
 
     def test_2_nang_cap_giu_du_lieu_va_chup_snapshot(self) -> None:
@@ -135,6 +152,7 @@ class ReleaseDryRunTest(unittest.TestCase):
         env_path = root / "etc/mkddc-web.env"
         secret_before = [l for l in env_path.read_text(encoding="utf-8").splitlines()
                          if l.startswith("JWT_SECRET=")][0]
+        key_before = (root / "data/mkddc/keys/device.key").read_bytes()
 
         # Đánh dấu "bản đang chạy" để phân biệt với bản sắp cài đè: chỉ có cách
         # này mới kiểm được rollback có thực sự khôi phục ĐÚNG file cũ hay không.
@@ -159,6 +177,11 @@ class ReleaseDryRunTest(unittest.TestCase):
                          "nâng cấp ghi đè cấu hình người vận hành")
         self.assertEqual(artifact.read_bytes(), b"artifact cua khach",
                          "nâng cấp làm mất artifact đã commission")
+        # ADR-052: nâng cấp KHÔNG được sinh lại khoá thiết bị — sinh lại làm mọi
+        # artifact đang chạy mất hiệu lực cùng lúc, gồm cả LKG.
+        self.assertEqual((root / "data/mkddc/keys/device.key").read_bytes(), key_before,
+                         "nâng cấp sinh lại khoá thiết bị — vô hiệu hoá cả LKG, phá đường lùi")
+
         env_after = env_path.read_text(encoding="utf-8")
         self.assertIn(secret_before, env_after, "nâng cấp cấp lại JWT_SECRET — mọi phiên đăng nhập chết")
         self.assertEqual(env_after.count("PROGRAMMING_REV_A="), 1,

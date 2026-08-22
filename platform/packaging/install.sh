@@ -208,6 +208,27 @@ if ! grep -q '^PROGRAMMING_REV_A=' "$ETCDIR/mkddc-web.env" 2>/dev/null; then
     echo "INFO: bật PROGRAMMING_REV_A=1 trong $ETCDIR/mkddc-web.env (T59-605)"
 fi
 
+# ADR-052 — provisioning khoá ký của THIẾT BỊ này.
+#
+# Artifact do bo tự biên dịch được ký bằng khoá của chính bo; khoá hãng không bao
+# giờ nằm trên thiết bị. Sinh MỘT LẦN: khối `if` dưới đây bỏ qua khi khoá đã có,
+# và `--gen-device-key` cũng tự từ chối ghi đè. Sinh lại khoá làm mọi artifact
+# đang chạy mất hiệu lực cùng lúc, GỒM CẢ LKG — tức phá đúng đường lùi, và phá
+# vào đúng lúc nâng cấp là lúc cần nó nhất.
+inst -d -m 0750 -o mkddc -g mkddc "$DATADIR/mkddc/keys"
+if [ ! -f "$DATADIR/mkddc/keys/device.key" ]; then
+    if "$BUILD/core/mkddc-st-compile" --gen-device-key "$DATADIR/mkddc/keys" >/dev/null; then
+        [ "$DRY" -eq 1 ] || chown mkddc:mkddc "$DATADIR/mkddc/keys/device.key" \
+                                              "$DATADIR/mkddc/keys/device.pub"
+        echo "INFO: đã sinh khoá ký thiết bị tại $DATADIR/mkddc/keys (ADR-052)"
+    else
+        echo "ERROR: không sinh được khoá thiết bị — Programming sẽ không ký được artifact" >&2
+        exit 1
+    fi
+else
+    echo "INFO: khoá thiết bị đã có, giữ nguyên (sinh lại sẽ vô hiệu hoá cả LKG)"
+fi
+
 # Chụp bản đang cài trước khi ghi đè, để rollback là thao tác có quy trình thay vì
 # ứng biến. Trước đây không có bước này nên /usr/sbin tích tụ các bản sao tay kiểu
 # mkddc-core.bak-*/.prev-*, và rollback phụ thuộc trí nhớ người trực.
