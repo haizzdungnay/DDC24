@@ -9,7 +9,9 @@ Wants=mkddc-iobus.service
 Type=notify
 # Runtime coordinator/UDS khởi động trong GRAPH_ONLY; feature flag phía Web vẫn
 # OFF mặc định nên chưa mở mutation user-facing trước release gate.
-ExecStart=/usr/sbin/mkddc-core --programming-runtime
+# ADR-052: khoá công khai của CHÍNH bo này vào tập khoá tin cậy. Thiếu file
+# thì core dừng với lỗi cấu hình rõ ràng thay vì lặng lẽ chạy với ít khoá hơn.
+ExecStart=/usr/sbin/mkddc-core --programming-runtime --st-trusted-key /data/mkddc/keys/device.pub
 ExecReload=/bin/kill -HUP $MAINPID
 User=mkddc
 Group=mkddc

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { login } from './helpers/session'
 
 /**
  * Chốt bằng trình duyệt thật những gì review FE 2026-08-05 đã tìm ra và sửa —
@@ -13,14 +14,6 @@ import { expect, test, type Page } from '@playwright/test'
  * và KHÔNG dựng backend, nên mọi endpoint trả 502. Đó chính là fixture cần cho
  * nhóm FE-DATA: một trang chỉ "đúng" khi nó nói ra là không đọc được.
  */
-
-async function login(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
-  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin')
-  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 })
-}
 
 /* Điều hướng phía client. KHÔNG dùng `page.goto`: phiên đăng nhập chỉ nằm trong
  * React state (lựa chọn an ninh có chủ ý, record 2026-08-01 §4ter.2), nên mọi lần

@@ -3,6 +3,7 @@
  * @brief Entry: init → SCHED_FIFO 80 → attach shm (retry) → scan loop 1s →
  *        sd_notify → signal. Core KHÔNG mở UART, KHÔNG tạo io_shm (07 §0).
  */
+#include <array>
 #include <atomic>
 #include <csignal>
 #include <cstdio>
@@ -12,6 +13,8 @@
 #include <memory>
 #include <string>
 #include <filesystem>
+#include <fstream>
+#include <vector>
 #include <thread>
 
 #include <pthread.h>
@@ -31,6 +34,7 @@
 #include "persistence/state_snapshot.hpp"
 #include "ipc/program_ipc_unix.hpp"
 #include "programming/programming_cutover.hpp"
+#include "st/st_public_key.hpp"
 #include "programming/programming_runtime_coordinator.hpp"
 #include "build_info.h"
 
@@ -69,6 +73,27 @@ static void notify_systemd(const char* state)
     ::close(fd);
 }
 
+/* hex -> byte cho khoá công khai đọc từ file (ADR-052). Trả false khi gặp ký tự
+ * không phải hex: một khoá đọc sai còn tệ hơn không có khoá, vì nó vẫn là "một
+ * khoá tin cậy" trong mắt phần còn lại của hệ. */
+static bool hex_to_bytes(const std::string& hex, uint8_t* out, std::size_t out_size)
+{
+    if (hex.size() != out_size * 2) return false;
+    auto value = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    for (std::size_t i = 0; i < out_size; i++) {
+        const int hi = value(hex[i * 2]);
+        const int lo = value(hex[i * 2 + 1]);
+        if (hi < 0 || lo < 0) return false;
+        out[i] = static_cast<uint8_t>((hi << 4) | lo);
+    }
+    return true;
+}
+
 int main(int argc, char** argv)
 {
     using namespace core;
@@ -93,10 +118,27 @@ int main(int argc, char** argv)
     /* ADR-051: TTL hold-last đã ký là 60 s. CLI chỉ để commissioning/HIL đo hai
      * biên mà không phải build lại; không set thì dùng đúng số đã ký. */
     uint32_t program_hold_ttl_ms = st_hold_ttl::kSignedTtlMs;
+    /* ADR-052 — khoá công khai của CHÍNH bo này, nạp vào tập khoá tin cậy bên
+     * cạnh khoá hãng nhúng trong build. Artifact do bo tự biên dịch được ký
+     * bằng khoá thiết bị; khoá hãng ký thứ hãng phát hành. Bo không tin khoá
+     * thiết bị của bo khác, nên một bo bị chiếm không ký được cho bo bên cạnh. */
+    std::vector<std::string> trusted_key_paths;
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
         if (a == "--version") { std::printf("version=%s git_commit=%s build_time=%s toolchain=%s\n", MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN); return 0; }
+        /* T59-602: gate đóng gói phát hành đọc đúng dòng này để biết binary đang
+         * nhúng khoá TEST hay khoá phát hành. Trước đó `st_public_key_is_test_key()`
+         * có sẵn nhưng KHÔNG nơi nào gọi, nên "build release phải truyền
+         * -DMKDDC_ST_PUBLIC_KEY_HEX" chỉ là một câu trong tài liệu. */
+        else if (a == "--st-key-info") {
+            char fingerprint[17] = {0};
+            st_public_key_fingerprint(st_builtin_public_key(), fingerprint, sizeof(fingerprint));
+            std::printf("st_public_key fingerprint=%s mode=%s\n", fingerprint,
+                        st_public_key_is_test_key() ? "TEST" : "RELEASE");
+            return 0;
+        }
+        else if (a == "--st-trusted-key" && i + 1 < argc) trusted_key_paths.push_back(argv[++i]);
         else if (a == "--log-level" && i + 1 < argc) { ++i; /* Rev A: log level cố định */ }
         else if (a == "--sock" && i + 1 < argc) sock_path = argv[++i];
         else if (a == "--fieldbus-sock" && i + 1 < argc) fieldbus_sock_path = argv[++i];
@@ -147,7 +189,7 @@ int main(int argc, char** argv)
                         " [--safe-state-conf FILE] [--io-conf FILE] [--alarm-conf FILE]"
                         " [--schedule-conf FILE] [--scan-ms N]"
                         " [--programming-mode graph_only|program_only] [--programming-runtime]"
-                        " [--program-hold-ttl-ms N]"
+                        " [--program-hold-ttl-ms N] [--st-key-info] [--st-trusted-key FILE]"
                         " [--programming-sock PATH]"
                         " [--log-level LVL]\n");
             return 0;
@@ -159,6 +201,59 @@ int main(int argc, char** argv)
     /* scan_ms log SAU khi chốt với graph.json (tránh log giá trị không dùng) */
     std::fprintf(stderr, "INFO  core.start version=%s git_commit=%s build_time=%s toolchain=%s pid=%d\n",
                  MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN, getpid());
+
+    /* T59-602, DDD-ARTIFACT-TRUST-PROG-001 §1: khoá TEST được cam kết vào repo
+     * CÓ CHỦ Ý để CI ký/verify được. Rủi ro đi kèm là nó lặng lẽ theo binary ra
+     * hiện trường: mọi người đều có khoá riêng tương ứng, nên "artifact có chữ
+     * ký" khi đó không chứng minh điều gì. Log ở mức CRITICAL để dòng này không
+     * lẫn vào INFO khi ai đó đọc log board. */
+    {
+        char fingerprint[17] = {0};
+        st_public_key_fingerprint(st_builtin_public_key(), fingerprint, sizeof(fingerprint));
+        if (st_public_key_is_test_key()) {
+            std::fprintf(stderr,
+                         "CRITICAL core.st_public_key=TEST fingerprint=%s"
+                         " — build này KHÔNG dùng được cho phát hành (T59-602)\n",
+                         fingerprint);
+        } else {
+            std::fprintf(stderr, "INFO  core.st_public_key=RELEASE fingerprint=%s\n",
+                         fingerprint);
+        }
+    }
+
+    /* ADR-052 — nạp khoá thiết bị vào tập khoá tin cậy.
+     *
+     * Đọc ở đây, một lần lúc khởi động, chứ không đọc lại giữa đường quét: tập
+     * khoá tin cậy là chính sách, và một chính sách đổi được trong lúc chạy thì
+     * kẻ tấn công ghi được file cũng đổi được nó. Khoá hỏng/thiếu là lỗi CẤU
+     * HÌNH và phải nói ra, không được lặng lẽ chạy tiếp với ít khoá hơn — đó là
+     * cách một bo tự hạ mức bảo vệ mà không ai biết. */
+    std::vector<std::array<uint8_t, 32>> trusted_keys;
+    for (const std::string& path : trusted_key_paths) {
+        if (trusted_keys.size() >= kMaxTrustedKeys) {
+            std::fprintf(stderr, "ERROR core.st_trusted_key_overflow max=%zu\n",
+                         static_cast<std::size_t>(kMaxTrustedKeys));
+            return 1;
+        }
+        std::ifstream file(path);
+        if (!file) {
+            std::fprintf(stderr, "ERROR core.st_trusted_key_missing path=%s\n", path.c_str());
+            return 1;
+        }
+        std::string hex;
+        file >> hex;
+        std::array<uint8_t, 32> key{};
+        if (hex.size() != 64 || !hex_to_bytes(hex, key.data(), key.size())) {
+            std::fprintf(stderr, "ERROR core.st_trusted_key_malformed path=%s (can 64 ky tu hex)\n",
+                         path.c_str());
+            return 1;
+        }
+        char fingerprint[17] = {0};
+        st_public_key_fingerprint(key.data(), fingerprint, sizeof(fingerprint));
+        std::fprintf(stderr, "INFO  core.st_trusted_key=%s fingerprint=%s\n",
+                     path.c_str(), fingerprint);
+        trusted_keys.push_back(key);
+    }
 
     /* RT + mlockall. Đo lại trạng thái THẬT sau khi cố đặt, thay vì tin vào
      * mã trả về: trên hệ có CONFIG_RT_GROUP_SCHED + cgroup v2, systemd có thể
@@ -288,6 +383,17 @@ int main(int argc, char** argv)
      * ở `rebuild_signal_bus()` vì scheduler bootstrap chưa hề được gắn bus. */
     StSignalBus programming_signal_bus;
     programming_scheduler.set_signal_bus(&programming_signal_bus);
+    /* ADR-052: tập khoá tin cậy phải được đặt TRƯỚC khi bất kỳ artifact nào được
+     * nạp — đặt sau nghĩa là gói đầu tiên (thường là gói đang chạy, phục hồi sau
+     * reboot) đi qua bằng chính sách cũ. */
+    if (!trusted_keys.empty()) {
+        StLoaderOptions loader_options;
+        for (const std::array<uint8_t, 32>& key : trusted_keys)
+            loader_options.trusted_keys[loader_options.trusted_key_count++] = key.data();
+        programming_scheduler.set_loader_options(loader_options);
+        std::fprintf(stderr, "INFO  core.st_trusted_key_count=%zu\n", trusted_keys.size());
+    }
+
     ProgrammingCutover programming_cutover(programming_mode);
     std::unique_ptr<StRetainService> retain_service;
     std::unique_ptr<programming::ProgrammingRuntimeCoordinator> programming_coordinator;

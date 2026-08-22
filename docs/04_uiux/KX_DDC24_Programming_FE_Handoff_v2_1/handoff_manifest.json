@@ -1,0 +1,35 @@
+{
+  "package": "KX-DDC24 Programming FE Handoff v2.1",
+  "pages": [
+    {
+      "id": "PGM-01",
+      "doc": "PGM-01_OVERVIEW_FE_HANDOFF.md",
+      "asset": "assets/PGM-01_overview.png"
+    },
+    {
+      "id": "PGM-02",
+      "doc": "PGM-02_PROGRAMS_FE_HANDOFF.md",
+      "asset": "assets/PGM-02_programs.png"
+    },
+    {
+      "id": "PGM-03",
+      "doc": "PGM-03_MAPPING_FE_HANDOFF.md",
+      "asset": "assets/PGM-03_mapping.png"
+    },
+    {
+      "id": "PGM-04",
+      "doc": "PGM-04_LIBRARY_FE_HANDOFF.md",
+      "asset": "assets/PGM-04_library.png"
+    },
+    {
+      "id": "PGM-05",
+      "doc": "PGM-05_COMMISSION_FE_HANDOFF.md",
+      "asset": "assets/PGM-05_commission.png"
+    },
+    {
+      "id": "PGM-06",
+      "doc": "PGM-06_RUNTIME_FE_HANDOFF.md",
+      "asset": "assets/PGM-06_runtime.png"
+    }
+  ]
+}

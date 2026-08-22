@@ -595,6 +595,11 @@
     },
     {
       "component": "compiler",
+      "detailCode": "ST-CLI-KEY-EXISTS",
+      "publicCode": "PRG-ERR-CONFLICT-001"
+    },
+    {
+      "component": "compiler",
       "detailCode": "ST-CLI-LIMIT",
       "publicCode": "PRG-ERR-SCOPE-001"
     },

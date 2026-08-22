@@ -1,4 +1,5 @@
-import { expect, test, type Page, type Request } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+import { login } from './helpers/session'
 
 /**
  * Nghiệm thu PA3 trên trình duyệt thật — PA3-602.
@@ -11,63 +12,6 @@ import { expect, test, type Page, type Request } from '@playwright/test'
  * Các đường có dữ liệu thật được phủ bằng `page.route()` để nạp một snapshot
  * `/overview` cố định, nên khẳng định về bố cục không phụ thuộc vào bo.
  */
-
-/* Thời gian chờ cho bước bootstrap SPA. Đây KHÔNG phải một con số nới ra để
- * chữa flake: đồ thị ES module của Vite dev server về đích trong ~100 ms trên máy
- * này, nên 10 s là trần rộng gấp trăm lần; nó chỉ tồn tại để phân biệt “trang chưa
- * mount” với “trang không bao giờ mount” sớm hơn trần 30 s của cả bài test. */
-const APP_BOOTSTRAP_TIMEOUT_MS = 10_000
-
-/**
- * Đăng nhập, chịu được việc một request module bị huỷ ở TẦNG MẠNG.
- *
- * Chromium trên Linux theo dõi RTNETLINK: máy nào có container dựng/xoá veth
- * (docker) thì `NetworkChangeNotifier` bắn sự kiện đổi mạng, và MỌI request đang
- * bay — kể cả request loopback tới dev server — bị cắt với `net::ERR_NETWORK_CHANGED`.
- *
- * Điểm chết: một module script bị cắt như vậy KHÔNG làm `page.goto` ném lỗi và
- * cũng không chặn sự kiện `load`: tài liệu “tải xong”, còn React thì không bao
- * giờ mount và không ai fetch lại. Chờ thêm bao lâu cũng vô ích — điều kiện cần
- * chờ sẽ KHÔNG BAO GIỜ đúng. Đó là nguyên nhân bài này timeout ngày 2026-08-23
- * (`Error: locator.fill ... waiting for getByLabel(/Tên đăng nhập|Username/i)`).
- *
- * Vì vậy: chờ đúng điều kiện “ứng dụng đã mount”, và CHỈ điều hướng lại khi đã
- * ghi nhận đúng một request tài nguyên tĩnh bị huỷ ở tầng mạng. Nếu form không
- * hiện MÀ không có request nào bị huỷ thì đó là lỗi sản phẩm thật: ném nguyên lỗi,
- * không thử lại, không nới tiêu chuẩn nghiệm thu.
- */
-async function login(page: Page) {
-  const abortedAssets: string[] = []
-  const onRequestFailed = (request: Request) => {
-    const errorText = request.failure()?.errorText ?? ''
-    // Chỉ tính tài nguyên tĩnh: đường `/api/` ở lane này không có backend nên
-    // hỏng là chuyện bình thường và không liên quan tới bootstrap.
-    if (!request.url().includes('/api/') && errorText.startsWith('net::ERR_')) {
-      abortedAssets.push(`${request.url()} — ${errorText}`)
-    }
-  }
-  page.on('requestfailed', onRequestFailed)
-  try {
-    const username = page.getByLabel(/Tên đăng nhập|Username/i)
-    await page.goto('/login')
-    try {
-      await username.waitFor({ state: 'visible', timeout: APP_BOOTSTRAP_TIMEOUT_MS })
-    } catch (error) {
-      if (abortedAssets.length === 0) throw error
-      // Đồ thị module bị cắt giữa chừng — không có cách nào khác ngoài nạp lại để
-      // trình duyệt fetch lại những module đã mất. Điều kiện nghiệm thu giữ nguyên.
-      abortedAssets.length = 0
-      await page.goto('/login')
-      await username.waitFor({ state: 'visible', timeout: APP_BOOTSTRAP_TIMEOUT_MS })
-    }
-    await username.fill('admin')
-    await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin')
-    await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
-    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 })
-  } finally {
-    page.off('requestfailed', onRequestFailed)
-  }
-}
 
 async function navigate(page: Page, path: string) {
   await page.evaluate((target) => {

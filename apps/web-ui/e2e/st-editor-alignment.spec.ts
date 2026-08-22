@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import { login } from './helpers/session'
 
 /**
  * FE-ST-001..006/010 — báo cáo trực tiếp 2026-08-17 kèm ảnh chụp cho thấy
@@ -75,14 +76,6 @@ async function installMocks(page: Page, source: string) {
     }
     await json(route, { error: { code: 'PRG-ERR-UNAVAILABLE-001', messageKey: 'programming.error.unavailable', retryable: true, keepsRunningRevision: true, correlationId: 'e2e' } }, 503)
   })
-}
-
-async function login(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
-  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin')
-  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 })
 }
 
 async function navigate(page: Page, path: string) {

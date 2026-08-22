@@ -671,6 +671,11 @@ FbdLowerResult lower_fbd_source_to_program(std::string_view source)
 
 FbdCompileResult compile_fbd_source(std::string_view source)
 {
+    return compile_fbd_source(source, StCompileOptions{});
+}
+
+FbdCompileResult compile_fbd_source(std::string_view source, const StCompileOptions& options)
+{
     FbdCompileResult result;
     const FbdValidationResult validated = validate_and_canonicalize_fbd(source);
     if (!validated.ok) {
@@ -693,7 +698,7 @@ FbdCompileResult compile_fbd_source(std::string_view source)
 
     /* FBD đi cùng một chính sách Check với ST. Nếu chỉ ST bị gate thì vẽ PID
      * bằng FBD trở thành đường vòng hợp lệ. */
-    if (!st_review_gate_check(program, &diagnostic)) {
+    if (options.enforce_review_gate && !st_review_gate_check(program, &diagnostic)) {
         add_issue(&result.issues, diagnostic.code.c_str(), "$.reviewGate");
         return result;
     }

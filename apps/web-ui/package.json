@@ -20,7 +20,8 @@
     "test:e2e": "playwright test",
     "test:e2e:programming-real": "playwright test --config playwright.programming-real.config.ts",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "build:e2e": "VITE_DDC_MODE=live VITE_AUTH_MODE=mock VITE_HISTORIAN_V2_TRENDS=1 VITE_PROGRAMMING_REV_A=1 vite build"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",

@@ -87,6 +87,34 @@ add_library(core_application STATIC
 target_link_libraries(core_application PUBLIC
     core_domain core_build_settings PkgConfig::SODIUM)
 
+# T59-607 — KHOÁ PHÁT HÀNH PHẢI THỰC SỰ ĐI ĐƯỢC VÀO BINARY.
+#
+# `st_public_key.hpp` ghi từ lâu: "build release phải truyền
+# -DMKDDC_ST_PUBLIC_KEY_HEX=<64 hex> để thay khoá test". Nhưng KHÔNG file CMake
+# nào biến biến đó thành compile definition, nên `#ifdef MKDDC_ST_PUBLIC_KEY_HEX`
+# trong `st_public_key.cpp` chưa bao giờ đúng: mọi binary từng dựng — kể cả bản
+# đem deploy — đều nhúng KHOÁ TEST cam kết trong repo. CMake chỉ lặng lẽ cảnh
+# báo "Manually-specified variables were not used by the project", một dòng dễ
+# trôi giữa hàng trăm dòng cấu hình.
+#
+# Kiểm độ dài ngay tại configure: một khoá hex thiếu ký tự sẽ làm `decode_key()`
+# thất bại lúc chạy và **âm thầm rơi về khoá test** — đúng thứ cần chặn.
+if(DEFINED MKDDC_ST_PUBLIC_KEY_HEX AND NOT MKDDC_ST_PUBLIC_KEY_HEX STREQUAL "")
+    string(LENGTH "${MKDDC_ST_PUBLIC_KEY_HEX}" _mkddc_st_key_len)
+    if(NOT _mkddc_st_key_len EQUAL 64)
+        message(FATAL_ERROR
+            "MKDDC_ST_PUBLIC_KEY_HEX phải là đúng 64 ký tự hex (hiện ${_mkddc_st_key_len})")
+    endif()
+    if(NOT "${MKDDC_ST_PUBLIC_KEY_HEX}" MATCHES "^[0-9a-fA-F]+$")
+        message(FATAL_ERROR "MKDDC_ST_PUBLIC_KEY_HEX chứa ký tự không phải hex")
+    endif()
+    target_compile_definitions(core_application PRIVATE
+        MKDDC_ST_PUBLIC_KEY_HEX="${MKDDC_ST_PUBLIC_KEY_HEX}")
+    message(STATUS "ST public key: RELEASE (từ -DMKDDC_ST_PUBLIC_KEY_HEX)")
+else()
+    message(STATUS "ST public key: TEST (khoá cam kết trong repo — không dùng cho phát hành)")
+endif()
+
 # Adapter được phép phụ thuộc application/domain; hai target phía trong không
 # link ngược target này.
 add_library(core_adapters STATIC
@@ -229,6 +257,8 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_fbd_user_pou.cpp
       application/st/tests/test_st_package_v2.cpp
       application/st/tests/test_st_fbd_compile.cpp
+      application/st/tests/test_st_library_conformance.cpp
+      application/st/tests/test_st_artifact_trust.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/programming/tests/test_program_candidate_registry.cpp
       application/programming/tests/test_programming_package_lifecycle.cpp
