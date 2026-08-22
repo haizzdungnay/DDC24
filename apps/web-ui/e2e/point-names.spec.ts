@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createPointNameFixture, installPointNameApiFixture, type FixturePoint, type FixtureVirtualPoint, type PointNameFixtureState } from './point-name-fixtures'
+import { login } from './helpers/session'
 
 const updatedAt = '2026-07-23T00:00:00.000Z'
 const pointKinds = ['UI', 'AO', 'DO', 'VP'] as const
@@ -30,18 +31,6 @@ function virtualPoint(overrides: Partial<FixtureVirtualPoint> = {}): FixtureVirt
     updatedAt,
     ...overrides
   }
-}
-
-async function login(page: Page) {
-  // Spec này kiểm chính xác copy tiếng Anh. Khai báo locale thay vì phụ thuộc
-  // ngôn ngữ mặc định của ứng dụng (profile mới hiện mặc định tiếng Việt theo
-  // navigator.language — xem playwright.config.ts và network-qa.spec.ts).
-  await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'en'))
-  await page.goto('/login')
-  await page.getByLabel('Username', { exact: true }).fill('admin')
-  await page.getByLabel('Password', { exact: true }).fill('e2e')
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).not.toHaveURL(/\/login$/)
 }
 
 async function openVirtualPoints(page: Page) {
@@ -97,7 +86,7 @@ for (const origin of pointKinds) {
     test(`${origin} rename rejects the Unicode/case/whitespace name reserved by ${owner}`, async ({ page }) => {
       const state = namespaceFixture(origin, owner)
       await installPointNameApiFixture(page, state)
-      await login(page)
+      await login(page, { lang: 'en', password: 'e2e' })
       await openPointEditor(page, origin)
 
       const name = displayNameField(page, origin)
@@ -137,7 +126,7 @@ for (const [index, origin] of pointKinds.entries()) {
   test(`${origin} resolves a legacy duplicate with ${owner} through a name-only recovery`, async ({ page }) => {
     const state = namespaceFixture(origin, owner, true)
     await installPointNameApiFixture(page, state)
-    await login(page)
+    await login(page, { lang: 'en', password: 'e2e' })
     await openPointEditor(page, origin)
 
     await expect(page.getByRole('alert').filter({ hasText: `${pointId(origin)} also matches ${pointId(owner)}` })).toBeVisible()
@@ -169,7 +158,7 @@ test('shows disabled VP cross-kind conflict and preserves the draft after a stru
     virtualPoints: [virtualPoint({ id: 'VP9', channel: 33, tag: 'DISABLED_VP', name: ' Reserved by   disabled VP ', label: ' Reserved by   disabled VP ', enabled: false, generation: 3 })]
   })
   await installPointNameApiFixture(page, state)
-  await login(page)
+  await login(page, { lang: 'en', password: 'e2e' })
   await openVirtualPoints(page)
 
   const name = page.getByRole('textbox', { name: 'Label' })
@@ -198,7 +187,7 @@ test('keeps canonical history identity through rename, delete, and recreate gene
     nextGeneration: 8
   })
   await installPointNameApiFixture(page, state)
-  await login(page)
+  await login(page, { lang: 'en', password: 'e2e' })
   await openVirtualPoints(page)
 
   await expect(page.getByRole('region', { name: /Logging for Zone Temperature/ })).toContainText(/Generation\s*7/)

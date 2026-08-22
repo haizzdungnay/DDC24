@@ -2164,12 +2164,219 @@ release evidence; `RELEASE_READY` giữ `NO-GO`.
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-601` | P1 | ST↔FBD corpus mọi registry entry + state traces; 3 fuzz harness CI | T59-105/106 | ORDERED | Registry presence 100%; stateful/conversion vectors; parser/loader/FBD fuzz. |
-| `T59-602` | P0 | Artifact/library trust SIGNED + key custody/rotation/rollback | T59-106/204 | ORDERED | Valid/tampered/wrong key/rotation/rollback tests; no `HASH_ONLY` release. |
-| `T59-603` | P1 | Security/RBAC/audit/malicious input/concurrency full matrix | T59-202/405/501 | ORDERED | Direct API negative, zero mutation, audit completeness/no secret, rate/resource bounds. |
-| `T59-604` | P1 | E2E stability, remove stale quarantine, deterministic workers/retry policy | T59-505 | ORDERED | 5 consecutive full runs; all spec included; retry không che deterministic defect. |
-| `T59-605` | P0 | Release packaging: Programming default ON, artifact/compiler/library/systemd/env | T59-501/602 | ORDERED | Fresh install + upgrade package manifest/checksum; services/routes visible; rollback package. |
-| `T59-606` | P0 | RC reproducible build/provenance/SBOM/backup/restore/upgrade dry-run | T59-601..605 | ORDERED | Same source reproducible hashes or explained variance; dry-run fresh/upgrade/rollback PASS. |
+| `T59-601` | P1 | ST↔FBD corpus mọi registry entry + state traces; 3 fuzz harness CI | T59-105/106 | **DONE (HOST/LOCAL)** | Corpus phủ **40/40 entry** registry (20→35 cặp stateless + 5 trace nhiều chu kỳ), kiểm phủ **hai chiều** tính từ chính registry sinh máy nên entry mới không có vector sẽ đỏ. **Ba lỗi thật lộ ra ngay khi corpus chạm tới vùng chưa ai chạy:** (1) `compile_fbd_source` không có affordance `enforce_review_gate` như ST ⇒ nhánh lower **PID sang FBD chưa từng được một vector nào chạy**; (2) corpus cũ dựng node `FUNCTION` cho entry chuyển kiểu trong khi model đòi kind `CONVERSION`; (3) verifier hợp đồng FBD thiếu `SQRT` trong danh sách chép tay. Harness fuzz FBD có trong repo nhưng **không job CI nào chạy** — nay chạy cùng parser/loader. `ctest` **1213/1213**; `verify_programming_fbd_contract.py` PASS. Chi tiết §3.7. |
+| `T59-602` | P0 | Artifact/library trust SIGNED + key custody/rotation/rollback | T59-106/204 | **PARTIAL — quyết định đã ký, cơ chế đủ; bật mặc định là migration profile riêng (`T59-607`)** | Bộ test tin cậy đi trọn vòng đời (ký hợp lệ, ký lại bằng khoá lạ sau khi tính lại hash, sửa byte, rotation có overlap, rollback về LKG) đã xong ở vòng trước. **Vòng này đóng đúng thứ đang chặn: quyết định.** `ADR-052` chốt mô hình **hai lớp khoá theo nguồn gốc artifact** — khoá hãng ký thứ hãng phát hành; **khoá thiết bị** sinh trên từng bo lúc provisioning ký artifact do chính bo biên dịch. Hai phương án cũ đều không dùng được: (a) ký lúc release giả định Program có trước khi phát hành — sai với sản phẩm cho khách tự viết; (b) service ký từ xa đặt phụ thuộc mạng vào giữa đường Commission và buộc chọn giữa "mất mạng thì chặn điều khiển" hay "mất mạng thì tự hạ mức bảo vệ". **Đã hiện thực:** `mkddc-st-compile --gen-device-key` (khoá riêng `0600` tạo bằng `O_EXCL`, **từ chối ghi đè** vì sinh lại sẽ vô hiệu hoá cả LKG); `mkddc-core --st-trusted-key` nạp khoá bo vào tập tin cậy, khoá thiếu/hỏng là **lỗi cấu hình dừng hẳn** chứ không lặng lẽ chạy với ít khoá hơn; `install.sh` provisioning một lần và unit Core nạp sẵn; 3 test mới khoá bất biến **"bo này không tin khoá của bo khác"** và "khoá hãng + khoá thiết bị cùng sống trong một tập". `ctest` `StArtifactTrust` **10/10**. **Còn lại, có tên và có chủ:** bật `SIGNATURE_REQUIRED` mặc định đổi `integrityMode` trong **profile contract** (v2.0→v2.1) nên kéo theo re-pin G1 + golden manifest và migration cho artifact đang chạy — một task riêng có kế hoạch lùi, không phải một dòng sửa. Xem `T59-607`. |
+| `T59-603` | P1 | Security/RBAC/audit/malicious input/concurrency full matrix | T59-202/405/501 | **DONE (HOST/LOCAL)** | Ma trận RBAC **sinh từ `routeDefinitions`**, không chép tay: 30/30 route kiểm chưa-xác-thực → 401 và handler **không được gọi** (zero mutation ở mức mạnh hơn "store không đổi"); 14/14 route mutation kiểm viewer → 403; chiều ngược lại kiểm route đọc không được đòi hơn viewer (siết quá tay cũng là lỗi, và không bao giờ tự lộ trong happy-path). Mutation check: hạ một route xuống viewer thì đỏ đúng dòng. Audit: `VerifyAuditChain` trước đây **chỉ từng chạy trên chuỗi lành** — một hàm luôn trả `nil` cũng qua; nay có test gỡ trigger rồi sửa/xoá và đòi chuỗi phải gãy, cộng test khẳng định trigger DB chặn UPDATE/DELETE. Đồng thời: 8 goroutine cùng idempotency key → đúng 1 Project, 1 dòng audit, chuỗi không gãy. Go `vet` + `test ./... -count=1` PASS. Chi tiết §3.7. |
+| `T59-604` | P1 | E2E stability, remove stale quarantine, deterministic workers/retry policy | T59-505 | **DONE (HOST/LOCAL)** | **Chẩn đoán trước đó SAI, và cái sai đó giữ cổng đỏ thêm một vòng.** W6 kết luận flake là "đói CPU" và vá bằng chờ điều kiện 60 s. Hai chỗ hỏng: (1) phép chờ 60 s nằm trong test có ngân sách 30 s nên **không bao giờ chạy hết hạn của chính nó**; (2) helper đăng nhập được chép tay ở **bảy** spec, bản vá chỉ áp cho một — sáu bản còn lại giữ nguyên cuộc đua, và lần chạy kế đỏ ở `pa3-a11y.spec.ts`. **Nguyên nhân thật, có bằng chứng từ trace:** sau khi bấm "Tiếp tục chỉnh sửa", URL thật là `/programs`, còn spec chờ `/design` — mà `design` chính là **lối vào cũ được W5 đổi thành redirect sang `programs`**. Spec đang đua với redirect: máy chậm thì Playwright kịp thấy trạng thái trung gian và test xanh; máy nhanh thì redirect xong trước và test treo tới hết giờ. **Ba bản sửa:** một helper đăng nhập duy nhất (`e2e/helpers/session.ts`) + guard cổng chặn spec định nghĩa lại; e2e phục vụ **bản đã build** (`vite preview`) thay vì dev server, bỏ hẳn lớp biên dịch-theo-yêu-cầu; spec chờ đích cuối của redirect. `retries: 0` giữ nguyên. **Acceptance đạt: 5 lần chạy LIÊN TIẾP 79/79 PASS, exit 0, 28–29 s/lần** (trước: 64/79/79/78+1F/78+1F, 78–88 s). Chi tiết §3.7. |
+| `T59-605` | P0 | Release packaging: Programming default ON, artifact/compiler/library/systemd/env | T59-501/602 | **DONE (HOST/LOCAL + TARGET DEPLOY)** | **Lỗi thật, kiểm chứng trên chính board Foxlinx:** `/usr/sbin/mkddc-st-package` **không tồn tại** trên bo — binary được build, có test riêng, nhưng chưa bao giờ được cài, trong khi BE gọi đúng đường dẫn đó ở bước Commission (`ProgrammingPackagerPath`). Cài + đưa vào `checksums.sha256`/`runtime-checksums`. `PROGRAMMING_REV_A=1` nay do `install.sh` ghi, **cả nhánh nâng cấp** (bo cũ có file env sẵn nên khối khởi tạo lần đầu không chạy — thiếu nhánh này thì bo cũ mãi ở trạng thái FE-bật/BE-tắt). 6/6 guard đóng gói PASS. Deploy thật lên board: core/web/st-compile/st-package/dist mới, ba service `active`, `/api/v1/programming/projects` trả **401** (route có, cờ ON) thay vì 404. Chi tiết §3.7. |
+| `T59-606` | P0 | RC reproducible build/provenance/SBOM/backup/restore/upgrade dry-run | T59-601..605 | **DONE (HOST/LOCAL)** | Tái lập **7/7** artifact và SBOM 92 component đã xong ở vòng trước (chi tiết §3.7). Vòng này đóng nốt **dry-run cài mới/nâng cấp/rollback**: `install.sh` và `rollback.sh` nhận `MKDDC_INSTALL_ROOT` để ghi vào **cây giả** và bỏ thao tác cần quyền hệ thống, nhờ đó ba thao tác cuối cùng của một bản phát hành kiểm được BẰNG MÁY thay vì bằng cách đọc script rồi tin. **Lỗi thật tìm thấy ngay khi có phép kiểm:** `rollback.sh` **không khôi phục `mkddc-st-package`** — sau khi lùi, bo giữ writer artifact của bản MỚI trong khi compiler/loader/Core đã về bản cũ, và chỗ hỏng chỉ lộ ra ở lần Commission kế tiếp. Đúng lớp lỗi mà `T59-605` vừa vá cho `install.sh` (build nhưng không cài), lần này ở đường lùi. 6 test mới đi trọn ba kịch bản trên gói vừa dựng: cài mới đủ binary/metadata/cờ Programming và checksum khớp file thật; nâng cấp giữ nguyên `JWT_SECRET`, cấu hình đã sửa và artifact đã commission, đồng thời chụp snapshot đúng bản đang chạy; rollback khôi phục **đủ 7 binary** và không mất dữ liệu. **Test được kiểm chứng bằng cách gỡ bản vá:** đỏ đúng dòng `rollback KHÔNG khôi phục mkddc-st-package`. Nối vào cổng `release`. `python3 -m unittest test_release_dryrun` **6/6 OK**. |
+| `T59-607` | P0 | Bật `SIGNATURE_REQUIRED`: profile v2.1, re-pin G1/golden, migration artifact đang chạy | T59-602 | ORDERED | `integrityMode` đổi trong profile contract, re-pin cùng PR sau review; artifact đang chạy (gồm LKG) được ký lại hoặc biên dịch lại trước khi bật; có đường lùi về `HASH_ONLY` chứng minh bằng diễn tập. |
+
+### 3.7 Ghi chú thực thi W6
+
+#### `T59-601` — Corpus phủ registry, và ba chỗ nó chạm vào vùng chưa ai chạy
+
+**Vì sao đếm phủ phải tính từ registry, không ghim số.** Bộ 20 cặp cũ khoá đúng
+20 entry nó liệt kê. Thêm một entry mới vào Control Library **không làm test nào
+đỏ** — entry đó chỉ đơn giản không được ai chạy, trong khi FE vẫn chào nó cho
+người dùng cuối. Nay phép kiểm đọc `pou_library_registry_v1.json` và so **hai
+chiều**: entry không có vector ⇒ đỏ; vector trỏ tới entry đã gỡ ⇒ cũng đỏ (chiều
+sau giữ cho số phủ không đẹp hơn sự thật).
+
+**Entry có state không kiểm được bằng một chu kỳ.** Cái sai điển hình của
+TON/TOF/R_TRIG/F_TRIG/PID là **chuyển state giữa các chu kỳ**, không phải công
+thức trong một chu kỳ. Vì thế 5 entry này đi bằng trace nhiều chu kỳ, chạy song
+song ST và FBD trên **cùng mốc thời gian** và so **từng chu kỳ**: TOF giữ Q thêm
+đúng `PT` sau khi IN xuống, R_TRIG chỉ bắn một chu kỳ, PID tích luỹ tích phân
+theo `dt` rồi **đóng băng integrator** khi `ACTUAL` lệch khỏi đề xuất trước
+(TRACKING lên) — đúng ngữ nghĩa §7 của `DDD-CTRL-PROG-001`.
+
+**Lỗi thật 1 — PID chưa từng được chạy qua đường FBD.** `compile_fbd_source`
+không có affordance `enforce_review_gate` mà đường ST đã có, nên bộ conformance
+**không thể** dựng PID bằng FBD. Nghĩa là nhánh lower PID sang FBD chưa có một
+vector nào chạy, trong khi chính bộ conformance này là thứ dựng evidence để mở
+review gate cho PID. Nay có overload nhận `StCompileOptions`; đường production
+`compile_fbd_source(source)` giữ mặc định BẬT, và có test khoá đúng điều đó —
+cửa hậu vừa mở phải không chạm được từ production.
+
+**Lỗi thật 2 — corpus dựng sai node kind cho chuyển kiểu.** Model FBD có kind
+`CONVERSION` riêng và từ chối `INT_TO_REAL` trên node `FUNCTION` bằng
+`FBD-SEM-TYPE-REF-001`. Nó từ chối ĐÚNG; harness mới là chỗ sai, và nay lấy kind
+từ registry sinh máy thay vì đoán.
+
+**Lỗi thật 3 — verifier hợp đồng thiếu `SQRT`.** Danh sách `PURE_FUNCTIONS` trong
+`verify_programming_fbd_contract.py` được chép tay và đã trôi khỏi registry. Cùng
+loại lỗi mà `st_fbd_model.cpp` đã sửa trước đó bằng cách sinh từ registry.
+
+**Fuzz: harness thứ ba có trong repo nhưng không ai chạy.** `fuzz_st_fbd_model`
+tồn tại từ trước, job CI chỉ build parser + loader. Đồ thị FBD là input thù địch
+đến từ BE/FE y hệt source ST và artifact, nên bỏ nó ngoài CI là bỏ trống đúng một
+trong ba cửa vào. Nay job chạy cả ba, seed corpus FBD lấy từ golden thật.
+
+**Evidence level.** Host/local. `ctest` 1213/1213, `verify_programming_fbd_contract.py`
+PASS, `docs_iso_harness.py --expect` PASS. Chưa phải GitHub CI, chưa phải target.
+
+#### `T59-602` — Tin cậy artifact: cơ chế đã đủ, chữ ký chính sách thì chưa
+
+**Khoảng cách thật không nằm ở crypto.** Cả hai chiều đã có từ lâu: `st_ir.cpp`
+ký Ed25519, `st_loader.cpp` verify constant-time. Cái thiếu là **quy trình**, và
+hai chỗ nó rò ra thành lỗ thật:
+
+**Lỗ 1 — nguyên tắc không có cổng nào đọc.** `st_public_key.hpp` ghi "build
+release PHẢI truyền `-DMKDDC_ST_PUBLIC_KEY_HEX`" và có sẵn
+`st_public_key_is_test_key()`, nhưng **không call site nào** gọi nó. Khoá TEST
+được cam kết vào repo có chủ ý (ai cũng có khoá riêng tương ứng) nên nó có thể
+lặng lẽ đi theo binary ra hiện trường — và khi đó "artifact có chữ ký" không
+chứng minh được gì. Nay: `mkddc-core --st-key-info` in fingerprint + TEST/RELEASE,
+bootstrap log **CRITICAL** khi đang chạy khoá TEST, `build-release.sh` **chặn**
+đóng gói. Bản lab mở bằng `MKDDC_ALLOW_TEST_KEY=1` và cờ đó được **ghi vào
+`provenance.json`** — không có bản nào mang khoá test mà hồ sơ không nói.
+
+**Lỗ 2 — rotate khoá sẽ tự chặn đường lùi.** `StLoaderOptions` chỉ nhận MỘT
+khoá. Đổi khoá tức thời làm mọi artifact ký bằng khoá cũ bị từ chối ngay lúc
+đổi — kể cả **LKG**, tức bản duy nhất để lùi khi bản mới hỏng. Cơ chế bảo vệ khi
+đó khoá đúng đường thoát, và đúng vào lúc cần thoát nhất. Nay verify nhận **tập**
+khoá tin cậy (trần 4), thử lần lượt; `StLoadedProgram.verified_public_key` ghi lại
+**khoá nào đã tin bản này** để audit trả lời được "còn bao nhiêu artifact đang
+sống nhờ khoá cũ" — thứ mà một dòng "verify PASS" không nói.
+
+**Vì sao chưa bật `SIGNATURE_REQUIRED` ở production.** `DDD-ARTIFACT-TRUST-PROG-001`
+§2/§3 **cố ý để mở** hai câu hỏi và ghi rõ không tự chọn: ký ở khâu build/release
+(a) hay ký on-demand sau khi Check PASSED qua một service tách biệt (b), và khoá
+riêng nằm ở đâu. Câu trả lời đổi trực tiếp UX "biên dịch ngay trên board" đã cam
+kết: mô hình (a) giả định Program cố định lúc phát hành — không đúng với sản phẩm
+này; mô hình (b) thêm một phụ thuộc mạng vào đúng đường Commission, nên phải trả
+lời trước "mất mạng thì Check chặn hẳn hay rơi về `HASH_ONLY`". Đó là quyết định
+threat-model của Security + Product, không phải của lane implementation — và nó
+là thứ **duy nhất** còn giữ `T59-602` ở `PARTIAL`. Mã đã sẵn sàng cho cả hai lựa
+chọn: bật mode là một tham số, tập khoá đã có, audit đã có trường.
+
+**Evidence level.** Host/local, `ctest` 1220/1220.
+
+#### `T59-605` — Gói phát hành thiếu đúng binary mà bước cuối cần
+
+**Lỗi thật, và nó chỉ lộ ra ở thao tác cuối cùng của người vận hành.**
+`mkddc-st-package` là writer artifact v2; BE gọi nó ở bước Commission qua
+`ProgrammingPackagerPath` (mặc định `/usr/sbin/mkddc-st-package`). Binary này
+được build, có test riêng, có golden — nhưng `install.sh` **chưa bao giờ cài
+nó**, và `checksums.sha256` cũng không phủ nó. Kiểm trên chính board Foxlinx:
+`ls /usr/sbin/mkddc-st-package` → **No such file or directory**. Nghĩa là một bo
+cài từ gói phát hành sẽ đi trọn Draft → Check → và **hỏng ở Commission**, với
+thông báo lỗi trỏ vào một đường dẫn không tồn tại. Không cổng nào phía trước bắt
+được: build xanh, test xanh, install xanh.
+
+**Nửa còn lại của cùng một tính năng.** FE bật Programming lúc build
+(`build:release`), BE bật bằng env `PROGRAMMING_REV_A`. Trước task này chỉ FE
+được bật trong gói: bo hiện đủ bốn workspace nhưng mọi endpoint sau lưng trả
+404 — triệu chứng giống hệt "backend hỏng" trong khi thật ra chưa ai bật cờ. Nay
+`install.sh` ghi cờ, và **có nhánh riêng cho bo nâng cấp**: file env đã tồn tại
+từ bản trước nên khối khởi tạo lần đầu không chạy, thiếu nhánh này thì mọi bo cũ
+ở lại vĩnh viễn trong trạng thái FE-bật/BE-tắt.
+
+**Guard chống tái phát.** `tests/integration/test_release_packaging_guard.py` thêm
+ba phép kiểm: packager có trong `install.sh` và trong checksums; cờ Programming
+có ở cả hai nhánh cài mới/nâng cấp; cổng khoá TEST của `T59-602` thực sự `exit 1`
+chứ không chỉ cảnh báo.
+
+**Evidence level.** Host/local cho guard; **target deploy thật** cho phần cài đặt
+(xem `docs/07_records/test-evidence/fw-som/2026-08-21-foxlinx-w6-deploy.md`).
+Chưa phải soak 24 h, chưa phải I/O vật lý.
+
+#### `T59-603` — Ma trận sinh từ bảng khai báo, và một hàm verify chưa từng bị thử
+
+**RBAC phải là ma trận, không phải vài case chọn tay.** Sai quyền ở MỘT route là
+đủ mở một đường mutation cho viewer, và route mới thêm vào bảng sẽ không có test
+nào phủ nếu danh sách case được chép tay. Bộ test sinh thẳng từ
+`routeDefinitions`: 30/30 route kiểm 401-khi-chưa-xác-thực, 14/14 route mutation
+kiểm 403-với-viewer. Điều kiện dừng mạnh hơn "store không đổi": handler **không
+được gọi**, vì một handler chạy rồi mới lỗi vẫn có thể đã ghi audit, cấp scratch
+hoặc chạm Core.
+
+**Chiều ngược lại cũng là lỗi.** Route đọc mà đòi `admin` sẽ làm người vận hành
+quyền viewer không xem được trạng thái đúng lúc sự cố — happy-path không bao giờ
+lộ ra điều đó, nên nó được kiểm riêng.
+
+**`VerifyAuditChain` chưa từng bị thử bằng một chuỗi HỎNG.** Hàm này được gọi ở
+nhiều test, nhưng luôn trên chuỗi lành: một hàm luôn trả `nil` cũng qua hết. Nay
+có hai lớp được tách bạch:
+- lớp DB: trigger `audit_records_no_update`/`_no_delete` **chặn** sửa/xoá — mạnh
+  hơn phát hiện, nhưng chỉ với ai đi qua chính kết nối đó;
+- lớp hash chain: gỡ trigger (mô phỏng kẻ có file DB trong tay) rồi sửa actor và
+  xoá bản ghi giữa chuỗi — chuỗi phải gãy. Đây mới là lý do chuỗi tồn tại.
+
+**Đồng thời.** Cùng một idempotency key gửi từ 8 goroutine là kịch bản thật
+(người bấm hai lần, client retry khi request đầu chưa xong). Kết quả phải là đúng
+một Project, đúng một dòng audit, và chuỗi audit không gãy.
+
+**Evidence level.** Host/local: `go vet ./...` + `go test ./... -count=1` PASS.
+
+#### `T59-604` / `T59-606` — Cách ly cũ, và một binary không dựng lại được
+
+**Cách ly cũ giấu một spec đã LÀNH.** `point-names.spec.ts` bị đưa ra ngoài cổng
+vì 14 test hỏng sẵn. Chạy lại 2026-08-21: **18/18 PASS**. Nguyên nhân đã được sửa
+ở đâu đó trong W5, nhưng cách ly thì không ai gỡ — và đó là dạng mục ruỗng thứ
+hai của một cổng: không chỉ giấu spec đang hỏng, nó giữ luôn spec đã lành ở ngoài
+để mọi hồi quy sau này trong file ấy không ai bắt. Nay cổng **tự kiểm**: spec còn
+trong danh sách cách ly mà chạy PASS thì cổng đỏ kèm yêu cầu gỡ.
+
+**Chẩn đoán "đói CPU" là SAI, và cái sai đó tự nó giữ cổng đỏ thêm một vòng.**
+W6 kết luận flake đến từ đói CPU, vá bằng chờ điều kiện `toBeEditable` 60 s. Hai
+chỗ hỏng trong chính bản vá đó:
+
+1. **Phép chờ 60 s nằm trong một test có ngân sách 30 s** — nó không bao giờ chạy
+   hết hạn của chính nó. Test chết trước, mang theo thông điệp sai.
+2. **Helper đăng nhập được chép tay ở BẢY spec**, bản vá chỉ áp cho một
+   (`point-names`). Sáu bản còn lại giữ nguyên cuộc đua, nên lần chạy kế tiếp
+   không xanh mà chỉ đổi chỗ đỏ, sang `pa3-a11y.spec.ts`. Một bản vá nằm ở một
+   trong bảy bản sao không phải bản vá, chỉ là một lần may.
+
+**Nguyên nhân thật, đọc ra từ trace chứ không từ suy đoán.** `frame-snapshot` của
+lần đỏ ghi URL sau cú bấm "Tiếp tục chỉnh sửa" là
+`/eng/programming/projects/{id}/programs`, trong khi spec chờ `.../design`. Mà
+`design` chính là **lối vào cũ mà W5 đã đổi thành redirect sang `programs`** —
+bảng redirect ở test ngay phía trên trong cùng file đã ghi đúng điều đó, chỉ có
+assertion này là chưa đuổi kịp. Spec đang chờ một **trạng thái trung gian của
+redirect**: máy chậm thì Playwright kịp nhìn thấy `design` và test xanh; máy nhanh
+thì redirect xong trước khi phép chờ bắt đầu và test treo tới hết giờ. Vì vậy nó
+đỏ **ngắt quãng** và đổi chỗ giữa desktop/mobile — dấu hiệu kinh điển bị đọc nhầm
+thành "hạ tầng yếu".
+
+**Ba bản sửa, theo đúng thứ tự nguyên nhân:**
+
+- **Một helper đăng nhập duy nhất** (`e2e/helpers/session.ts`), bảy bản sao bị gỡ,
+  và cổng e2e **tự kiểm**: spec nào định nghĩa lại `async function login` thì cổng
+  đỏ. Bản vá tiếp theo cho đường đăng nhập từ nay chỉ có một chỗ để áp.
+- **E2E phục vụ bản ĐÃ BUILD** (`vite preview`) thay vì dev server. Dev server
+  biên dịch route theo yêu cầu, và khoản biên dịch ấy tính vào ngân sách thời gian
+  của chính test chạm route đầu tiên. Nới timeout chỉ dời ngưỡng vỡ; bỏ hẳn lớp
+  biên dịch-theo-yêu-cầu mới là bỏ nguyên nhân. `preview` được cấp cùng proxy với
+  dev để hai đường phục vụ không cho ra hai hành vi mạng khác nhau.
+- **Spec chờ đích cuối của redirect**, không chờ lối vào cũ.
+
+**Acceptance đạt.** Năm lần chạy LIÊN TIẾP cổng `e2e`: **79/79 PASS, exit 0, mỗi
+lần 28–29 s** (trước: 64 / 79 / 79 / 78+1F / 78+1F, 78–88 s mỗi lần). Thời gian
+giảm một nửa là hệ quả trực tiếp của việc bỏ dev server và bỏ một test treo 60 s.
+`retries` vẫn để `0`: bật retry ở đây sẽ biến đúng lỗi vừa tìm ra thành màu xanh
+và xoá luôn tín hiệu — đã có một vòng chẩn đoán sai vì thiếu tín hiệu, không lặp
+lại lần nữa.
+
+**`mkddc-iobus` không dựng lại được.** Build hai lần từ cùng một mã nguồn vào hai
+thư mục cho ra hai file khác nhau. `strings` chỉ thẳng nguyên nhân: đường dẫn
+tuyệt đối của mã `bacnet-stack` kéo về qua FetchContent bị nhúng vào binary
+(`__FILE__` trong assert/log của `ports/linux`). Hệ quả nặng hơn "hash lệch": gói
+phát hành mang theo đường dẫn máy build của người đóng gói, và **bên thứ ba không
+thể dựng lại để đối chiếu** — provenance mất tính kiểm chứng độc lập, đúng thứ mà
+`checksums.sha256` được cho là bảo đảm.
+
+Vá bằng `-ffile-prefix-map`. Bản vá ĐẦU vẫn lệch vì đặt sai thứ tự: thư mục build
+nằm lồng trong thư mục nguồn, gcc áp map sau đè map trước, nên map nguồn phải
+đứng trước map build. Sau khi sửa thứ tự: **7/7 artifact tái lập**.
+
+**SBOM.** `provenance.json` nói bản này build TỪ ĐÂU; SBOM nói nó CHỨA GÌ — không
+có SBOM thì câu "bo của tôi có dính CVE này không" phải trả lời bằng cách đọc lại
+mã nguồn của đúng commit. 92 component, mỗi dòng ghi `resolvedFrom`: phiên bản
+`libsodium`/`libmodbus` là của **máy build**, không phải của Buildroot trên board,
+và một SBOM nói dối chỗ đó còn tệ hơn không có.
 
 ### W7 — Target/HIL/V&V và quyết định phát hành
 
@@ -2179,9 +2386,42 @@ release evidence; `RELEASE_READY` giữ `NO-GO`.
 | `T59-702` | P0 | Deploy target 10-Program fixture, timing/fault/Web-BE loss | T59-606 | EVIDENCE_QUEUE | 24 h; 3 period; no poll gap >=200 ms; fault isolation/signal freshness đúng. |
 | `T59-703` | P0 | Physical I/O HIL cho ST và FBD output | T59-606 | EVIDENCE_QUEUE | AO/DO đo bằng instrument; full candidate/safety path; Disable/rollback physical đúng. |
 | `T59-704` | P0 | RETAIN/power-cut/reboot/enable-intent/LKG matrix | T59-606 | EVIDENCE_QUEUE | >=10 power cuts; cold-init/recovery exact; no corrupt accepted/partial active. |
-| `T59-705` | P0 | Fresh install/upgrade/controller replacement/rollback rehearsal | T59-606 | EVIDENCE_QUEUE | Image/config/hash/backup/restore/read-back; rollback không mất data/audit. |
+| `T59-705` | P0 | Fresh install/upgrade/controller replacement/rollback rehearsal | T59-606 | **PARTIAL — diễn tập trên BO THẬT xong; cài đè thật và thay bo còn lại** | Cross-build aarch64 + `GOARCH=arm64`, dựng cây `build/release` rồi chạy trọn **cài mới → nâng cấp → rollback** trên chính bo Foxlinx với `MKDDC_INSTALL_ROOT` (ghi vào cây giả, không cài đè). Trả lời được câu mà `T59-606` trên host không trả lời được: script chạy đúng trên Buildroot (BusyBox `adduser`/`addgroup`, không có `getent`/`useradd`). Provisioning khoá thiết bị chạy trên bo, `device.key` mode `0600`, nâng cấp không sinh lại; rollback khôi phục `mkddc-st-package`; cấu hình và artifact còn nguyên. **Sự cố lần chạy đầu, đã ghi đầy đủ:** bản diễn tập làm **dừng `mkddc-iobus` thật** ~50 s — wrapper `systemctl` bỏ sót lời gọi sau `&&` và trả `0` cho `is-enabled`, nên nhánh `&& systemctl restart mkddc-pty` chạy thật và PTY biến mất. Vá lộ thêm lỗi nặng hơn: thân wrapper trong `rollback.sh` gọi **chính nó** — rollback THẬT trên bo sẽ đệ quy vô hạn, lỗi chưa bao giờ chạy vì mọi lần trước đều ở chế độ diễn tập. Sau vá, chạy lại trên bo: mốc `ExecMainStartTimestamp` của iobus/core/pty **không đổi** — không dịch vụ nào bị chạm. 2 test đọc mã nguồn khoá cả ba điều kiện. **Còn lại:** cài đè thật (cần cửa sổ bảo trì vì sẽ restart iobus/netcfg), thay controller (cần bo thứ hai), backup/restore trên dữ liệu vận hành thật. Evidence: `docs/07_records/test-evidence/fw-som/2026-08-22-foxlinx-t59705-rehearsal.md`. |
 | `T59-706` | P0 | PID Controls/Safety target review và evidence | T59-602/703 | EVIDENCE_QUEUE | Saturation/anti-windup/override/release pass; approval token; label READY. |
 | `T59-707` | P0 | Chạy full V&V unified + trace/risk/release record | T59-701..706 | ORDERED | Mọi Must disposition PASS hoặc waiver có authority; 0 silent NOT_RUN; GO/NO-GO ký. |
+
+### 3.8 Ghi chú thực thi W7 — cái gì đã có bằng chứng, cái gì chặn bởi cái gì
+
+**Đã có bằng chứng thật (`T59-705`, một phần).** Diễn tập cài mới → nâng cấp →
+rollback chạy trên **chính bo Foxlinx**, không phải trên host. Đó là khác biệt có
+nội dung: host không chứng minh được script sống được trên Buildroot, nơi
+`getent`/`useradd` không tồn tại và `adduser`/`addgroup` là BusyBox. Chi tiết và
+sự cố kèm theo ở `docs/07_records/test-evidence/fw-som/2026-08-22-foxlinx-t59705-rehearsal.md`.
+
+**Bài học rút ra, áp cho cả phần W7 còn lại.** Một bài *diễn tập* đã làm dừng một
+dịch vụ *thật* trong 50 giây, vì wrapper chặn `systemctl` bỏ sót các lời gọi sau
+`&&` và trả `0` cho truy vấn trạng thái. Khi làm những task W7 còn lại — vốn đều
+chạm vào bo đang vận hành — giả định "chế độ an toàn thì không có tác dụng phụ"
+phải được **kiểm**, không được **tin**.
+
+**Ranh giới của phần còn lại.** Không task nào dưới đây bị chặn bởi mã nguồn; tất
+cả bị chặn bởi tài nguyên vật lý hoặc bởi một cửa sổ thời gian.
+
+| Task | Chặn bởi | Cần gì để mở |
+|---|---|---|
+| `T59-701` | Chưa chạy được trên GitHub Actions | Một lần chạy thật trên RC commit |
+| `T59-702` | Thời gian và cửa sổ bảo trì | Cài đè thật + **24 h** chạy liên tục với fixture 10 Program; không đo được bằng cách rút ngắn |
+| `T59-703` | **Thiết bị đo và người tại tủ** | Đồng hồ/scope đo AO/DO thật; không có đường thay thế bằng phần mềm |
+| `T59-704` | **Thao tác vật lý** | ≥10 lần cắt nguồn thật; nguồn lập trình được hoặc người trực |
+| `T59-705` (phần còn lại) | Cửa sổ bảo trì + phần cứng | Cài đè thật (sẽ restart `iobus`/`netcfg`); bo **thứ hai** cho kịch bản thay controller |
+| `T59-706` | `T59-703` | Evidence PID trên target trước, review Controls/Safety sau |
+| `T59-707` | `T59-701..706` | Không tổng hợp được một verdict từ các ô còn trống |
+
+**Một điểm của `ADR-052` phải vào runbook thay bo (`T59-705`).** Artifact được ký
+bằng khoá của **chính bo**, nên bê artifact từ bo cũ sang bo mới sẽ bị từ chối —
+đúng theo thiết kế. Quy trình thay controller phải **biên dịch lại từ Revision**.
+Đây là hệ quả trực tiếp của quyết định ký, và nó phải nằm trong runbook trước khi
+có người thay bo lần đầu, không phải sau.
 
 ## 4. Bảng ownership
 

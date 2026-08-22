@@ -12,6 +12,7 @@
 
 #include "st/st_compile.hpp"
 #include "st/st_fbd_compile.hpp"
+#include "st/st_library_registry_generated.hpp"
 #include "st/st_runtime.hpp"
 #include "st/st_test_key.hpp"
 
@@ -80,7 +81,17 @@ json make_pair_graph(const json& pair)
     function_ports.push_back({{"id", function_output}, {"name", "OUT"},
                               {"direction", "OUTPUT"}, {"dataType", pair["outputType"]},
                               {"unit", nullptr}, {"order", pair["inputs"].size()}});
-    nodes.push_back({{"id", function_node}, {"kind", "FUNCTION"},
+    /* T59-601: entry chuyển kiểu là node kind `CONVERSION` trong FBD, không phải
+     * `FUNCTION` — model từ chối `INT_TO_REAL` trên node FUNCTION bằng
+     * `FBD-SEM-TYPE-REF-001`, và nó từ chối ĐÚNG. Kind lấy từ registry sinh máy
+     * để corpus không phải chép tay danh sách lần thứ hai. */
+    const std::string type_ref = pair["typeRef"].get<std::string>();
+    const bool is_conversion =
+        std::any_of(st_library_registry_generated::kExplicitConversions.begin(),
+                    st_library_registry_generated::kExplicitConversions.end(),
+                    [&](std::string_view item) { return item == type_ref; });
+    nodes.push_back({{"id", function_node},
+                     {"kind", is_conversion ? "CONVERSION" : "FUNCTION"},
                      {"typeRef", pair["typeRef"]},
                      {"executionOrder", pair["inputs"].size()},
                      {"parameters", json::object()}, {"ports", function_ports}});
@@ -225,10 +236,14 @@ bool has_issue(const FbdCompileResult& result, const char* code)
                        [&](const FbdIssue& issue) { return issue.code == code; });
 }
 
-TEST(StFbdCompile, TwentyGoldenPairsProduceByteEquivalentExecutableIrAndOutputs)
+TEST(StFbdCompile, EveryGoldenPairProducesByteEquivalentExecutableIrAndOutputs)
 {
     const json corpus = read_json("/fbd/equivalence_v1.json");
-    ASSERT_EQ(corpus["pairs"].size(), 20u);
+    /* T59-601: KHÔNG khoá con số 20 nữa. Ghim một con số ở đây nghĩa là mỗi lần
+     * corpus lớn thêm lại phải sửa test, và tệ hơn: một entry registry mới thêm
+     * vector vẫn có thể bị bỏ quên mà không ai đỏ. Phép đếm đúng là phủ registry,
+     * canh ở `test_st_library_conformance.cpp`. */
+    ASSERT_GE(corpus["pairs"].size(), 20u);
     for (const auto& pair : corpus["pairs"]) {
         SCOPED_TRACE(pair["id"].get<std::string>());
         const std::string fbd_source = make_pair_graph(pair).dump();

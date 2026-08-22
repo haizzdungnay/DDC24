@@ -258,7 +258,7 @@ jobs:
           ctest --test-dir build/ubsan --output-on-failure --parallel 4
 
   fuzz-smoke:
-    name: Fuzz smoke (parser + loader)
+    name: Fuzz smoke (parser + loader + FBD)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -269,13 +269,19 @@ jobs:
           CXX=clang++ CC=clang cmake -S . -B build/fuzz -DCMAKE_BUILD_TYPE=Debug \
             -DMKDDC_BUILD_FUZZ=ON -DMKDDC_SANITIZE=address \
             -DCORE_BUILD_TESTS=OFF -DIOBUS_BUILD_TESTS=OFF
-          cmake --build build/fuzz --target fuzz_st_parser fuzz_st_loader --parallel $(nproc)
+          cmake --build build/fuzz --target fuzz_st_parser fuzz_st_loader fuzz_st_fbd_model --parallel $(nproc)
       - name: Fuzz smoke 60s mỗi harness
         run: |
           # PR chạy smoke ngắn để bắt hồi quy rõ ràng; chiến dịch fuzz dài chạy
           # nightly. Corpus seed lấy từ sample thật để bắt đầu từ input hợp lệ.
-          mkdir -p /tmp/cp /tmp/cl
+          #
+          # T59-601: harness FBD trước đây có trong repo nhưng KHÔNG job nào chạy —
+          # đồ thị FBD là input thù địch đến từ BE/FE y hệt source ST và artifact,
+          # nên bỏ nó ngoài CI là bỏ trống đúng một trong ba cửa vào.
+          mkdir -p /tmp/cp /tmp/cl /tmp/cf
           cp apps/core/application/st/samples/*.st /tmp/cp/ || true
           cp apps/core/application/st/samples/*.mkir /tmp/cl/ || true
+          cp contracts/programming/fbd/golden/*.json /tmp/cf/ || true
           ./build/fuzz/core/fuzz_st_parser /tmp/cp -max_total_time=60 -rss_limit_mb=2048
           ./build/fuzz/core/fuzz_st_loader /tmp/cl -max_total_time=60 -rss_limit_mb=2048
+          ./build/fuzz/core/fuzz_st_fbd_model /tmp/cf -max_total_time=60 -rss_limit_mb=2048

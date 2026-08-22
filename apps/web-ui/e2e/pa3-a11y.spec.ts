@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { login } from './helpers/session'
 
 /**
  * Kiểm accessibility PA3 — PA3-603 / WCAG 2.2 AA.
@@ -14,14 +15,6 @@ import { expect, test, type Page } from '@playwright/test'
  * bằng ảnh chụp trình duyệt vừa chậm vừa dễ vỡ vì antialiasing, trong khi token
  * mới là nguồn thật của bảng màu.
  */
-
-async function login(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
-  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin')
-  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 })
-}
 
 async function navigate(page: Page, path: string) {
   await page.evaluate((target) => {

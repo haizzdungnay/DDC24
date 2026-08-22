@@ -114,11 +114,18 @@ run_frontend() {
 # và đang mục dần đúng theo kịch bản `F-07` mà chính comment trong workflow cảnh
 # báo.
 #
-# `point-names.spec.ts` CỐ Ý nằm ngoài: 14 test trong đó hỏng sẵn, đã kiểm chứng
-# là hỏng độc lập với thay đổi FE (stash toàn bộ, lỗi giữ nguyên). Nó bị cách ly
-# chứ không bị quên — xem `MKDDC_E2E_QUARANTINE` bên dưới. Thêm một job biết
-# chắc đỏ chỉ làm cả cổng mất giá trị tín hiệu.
-MKDDC_E2E_QUARANTINE="e2e/point-names.spec.ts"
+# CÁCH LY (T59-604): `point-names.spec.ts` từng nằm ngoài vì 14 test trong đó hỏng
+# sẵn, độc lập với thay đổi FE. Chạy lại 2026-08-21: **18/18 PASS** — nguyên nhân
+# đã được sửa ở đâu đó trong W5 nhưng cách ly thì không ai gỡ.
+#
+# Đó là dạng mục ruỗng thứ hai của cổng: cách ly cũ không chỉ giấu một spec đang
+# hỏng, nó còn giấu một spec đã LÀNH khỏi cổng — mọi hồi quy sau đó trong file ấy
+# lại không ai bắt. Nay danh sách cách ly rỗng, và `run_e2e` tự kiểm: spec còn
+# trong cách ly mà PASS thì cổng ĐỎ kèm yêu cầu gỡ, để lần sau không mục lại.
+MKDDC_E2E_QUARANTINE=""
+# Spec real-backend KHÔNG phải cách ly: nó sở hữu stack BE-Core simulator thật và
+# có config Playwright riêng, nên chạy lẫn với bộ mock sẽ vừa lặp test vừa làm sai
+# failure boundary của hai gate. Nó có cổng riêng `e2e-real`.
 MKDDC_E2E_REAL_SPEC="e2e/programming-real.spec.ts"
 
 run_e2e() {
@@ -127,9 +134,7 @@ run_e2e() {
   # Liệt kê động: một spec mới thêm vào thư mục sẽ tự vào cổng, không phải nhớ
   # sửa script. Đó là cách duy nhất để danh sách này không lại tụt hậu.
   while IFS= read -r spec; do
-    [ "$spec" = "$MKDDC_E2E_QUARANTINE" ] && continue
-    # Spec này sở hữu stack BE-Core simulator thật và có config riêng. Chạy nó
-    # lẫn với bộ mock sẽ vừa lặp test vừa làm sai failure boundary của hai gate.
+    [ -n "$MKDDC_E2E_QUARANTINE" ] && [ "$spec" = "$MKDDC_E2E_QUARANTINE" ] && continue
     [ "$spec" = "$MKDDC_E2E_REAL_SPEC" ] && continue
     specs+=("$spec")
   done < <(cd "$repo_root/$frontend_dir" && find e2e -maxdepth 1 -name '*.spec.ts' | sort)
@@ -137,9 +142,31 @@ run_e2e() {
     printf 'LỖI: không tìm thấy spec e2e nào — kiểm tra lại đường dẫn\n' >&2
     exit 2
   fi
-  printf 'e2e: chạy %d spec mock (cách ly: %s; gate riêng: %s)\n' \
-    "${#specs[@]}" "$MKDDC_E2E_QUARANTINE" "$MKDDC_E2E_REAL_SPEC"
+  # T59-604 — CHỈ MỘT helper đăng nhập. Trước đây helper này được chép tay ở
+  # bảy spec; bản vá "chờ điều kiện thay vì đua với dev server" chỉ áp được cho
+  # một bản, nên sáu bản còn lại giữ nguyên cuộc đua và cổng vẫn đỏ ngắt quãng ở
+  # chỗ khác. Một bản vá nằm ở một trong bảy bản sao không phải bản vá.
+  local dup
+  dup="$(cd "$repo_root/$frontend_dir" && grep -rln 'async function login' e2e --include='*.spec.ts' || true)"
+  if [ -n "$dup" ]; then
+    printf 'LỖI: spec định nghĩa lại helper đăng nhập thay vì dùng e2e/helpers/session.ts:\n%s\n' \
+      "$dup" >&2
+    exit 1
+  fi
+
+  printf 'e2e: chạy %d spec (cách ly: %s; gate riêng: %s)\n' \
+    "${#specs[@]}" "${MKDDC_E2E_QUARANTINE:-<rỗng>}" "$MKDDC_E2E_REAL_SPEC"
   (cd "$repo_root/$frontend_dir" && npx playwright test "${specs[@]}")
+  # Cách ly phải TỰ HẾT HẠN: spec đang bị cách ly mà chạy PASS nghĩa là lý do
+  # cách ly đã hết, và giữ nó ngoài cổng từ đó trở đi chỉ giấu hồi quy tương lai.
+  if [ -n "$MKDDC_E2E_QUARANTINE" ]; then
+    if (cd "$repo_root/$frontend_dir" && npx playwright test "$MKDDC_E2E_QUARANTINE" >/dev/null 2>&1); then
+      printf 'LỖI: spec cách ly %s nay PASS — gỡ khỏi MKDDC_E2E_QUARANTINE\n' \
+        "$MKDDC_E2E_QUARANTINE" >&2
+      exit 1
+    fi
+    printf 'e2e: spec cách ly %s vẫn đỏ (đúng như ghi nhận)\n' "$MKDDC_E2E_QUARANTINE"
+  fi
 }
 
 run_e2e_real() {
@@ -155,6 +182,10 @@ run_firmware() {
 run_release() {
   "$repo_root/$(active_path packaging)/build-release.sh"
   (cd "$repo_root" && sha256sum --check build/release/checksums.sha256)
+  # T59-606: diễn tập CÀI MỚI → NÂNG CẤP → ROLLBACK trên chính gói vừa dựng.
+  # Đặt ở đây chứ không ở `layout` vì nó cần build/release có thật; đặt ở
+  # `layout` sẽ thành một test tự SKIP mãi mãi — tức một cổng chỉ trông như cổng.
+  python3 -m unittest "$repo_root/tests/integration/test_release_dryrun.py"
 }
 
 # `--wave` là đường đi MỘT LỆNH cho cả ma trận cổng. Nó cố ý KHÔNG dùng `set -e`

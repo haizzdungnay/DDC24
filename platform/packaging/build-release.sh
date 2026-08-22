@@ -66,12 +66,45 @@ mkdir -p "$(dirname "$web_binary")" "$release_dir"
   npm run build:release
 )
 
+# T59-602 — chặn khoá TEST đi ra bản phát hành.
+#
+# `st_public_key.hpp` ghi nguyên tắc "build release PHẢI truyền
+# -DMKDDC_ST_PUBLIC_KEY_HEX" từ lâu, và `st_public_key_is_test_key()` cũng có
+# sẵn từ lâu — nhưng KHÔNG nơi nào gọi nó. Một nguyên tắc không có cổng nào đọc
+# là một câu trong tài liệu, không phải một bất biến: khoá TEST cam kết vào repo
+# (ai cũng có khoá riêng tương ứng) có thể lặng lẽ theo binary ra hiện trường, và
+# khi đó "artifact có chữ ký" không chứng minh được gì.
+#
+# Lab/bench vẫn cần đóng gói bằng khoá test khi chưa có hạ tầng khoá phát hành:
+# đặt MKDDC_ALLOW_TEST_KEY=1 để đi tiếp. Cờ đó cố ý ồn ào và được ghi vào
+# provenance.json, nên không có bản nào "vô tình" mang khoá test mà hồ sơ không nói.
+key_info="$("$build_dir/core/mkddc-core" --st-key-info)"
+key_mode="$(printf '%s' "$key_info" | sed -n 's/.*mode=\([A-Z]*\).*/\1/p')"
+key_fingerprint="$(printf '%s' "$key_info" | sed -n 's/.*fingerprint=\([0-9a-f]*\).*/\1/p')"
+if [ "$key_mode" != "RELEASE" ]; then
+  if [ "${MKDDC_ALLOW_TEST_KEY:-0}" != "1" ]; then
+    printf 'LỖI: binary nhúng KHOÁ TEST (fingerprint=%s).\n' "$key_fingerprint" >&2
+    printf '     Build lại với -DMKDDC_ST_PUBLIC_KEY_HEX=<64 hex> của khoá phát hành,\n' >&2
+    printf '     hoặc đặt MKDDC_ALLOW_TEST_KEY=1 cho bản lab/bench (T59-602).\n' >&2
+    exit 1
+  fi
+  printf 'CẢNH BÁO: đóng gói bằng KHOÁ TEST theo MKDDC_ALLOW_TEST_KEY=1 (fingerprint=%s)\n' \
+    "$key_fingerprint" >&2
+fi
+
 toolchain="$(c++ --version | head -n1 | tr ' ' '-')"
-printf '{\n  "version": "%s",\n  "git_commit": "%s",\n  "dirty": %s,\n  "build_time": "%s",\n  "toolchain": "%s",\n  "mcu_firmware": "not-included"\n}\n' \
-  "$version" "$commit" "$dirty" "$build_time" "$toolchain" > "$release_dir/provenance.json"
+printf '{\n  "version": "%s",\n  "git_commit": "%s",\n  "dirty": %s,\n  "build_time": "%s",\n  "toolchain": "%s",\n  "mcu_firmware": "not-included",\n  "st_public_key_mode": "%s",\n  "st_public_key_fingerprint": "%s"\n}\n' \
+  "$version" "$commit" "$dirty" "$build_time" "$toolchain" "$key_mode" "$key_fingerprint" \
+  > "$release_dir/provenance.json"
+# T59-606 — SBOM đi cùng gói. `provenance.json` nói bản này build TỪ ĐÂU; SBOM nói
+# bản này CHỨA GÌ. Khi có CVE trong một thư viện, thiếu SBOM nghĩa là câu "bo của
+# tôi có dính không" phải trả lời bằng cách đọc lại mã nguồn của đúng commit đó.
+python3 "$MKDDC_REPOSITORY_ROOT/scripts/generate_release_sbom.py" \
+  --version "$version" --commit "$commit" --output "$release_dir/sbom.json"
+
 sha256sum \
   "$build_dir/core/mkddc-core" "$build_dir/core/mkddc-schedule-sim" \
-  "$build_dir/core/mkddc-st-compile" \
+  "$build_dir/core/mkddc-st-compile" "$build_dir/core/mkddc-st-package" \
   "$build_dir/iobus/mkddc-iobus" \
   "$build_dir/netcfg/mkddc-netcfg" "$web_binary" \
   > "$release_dir/checksums.sha256"

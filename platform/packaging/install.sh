@@ -21,11 +21,70 @@ for arg in "$@"; do
     esac
 done
 
-[ "$(id -u)" -eq 0 ] || { echo "ERROR: cần root (sudo)" >&2; exit 1; }
+# T59-606 — CÀI VÀO CÂY GIẢ ĐỂ DIỄN TẬP.
+#
+# `MKDDC_INSTALL_ROOT=DIR` đặt mọi đường đích dưới DIR và bỏ các thao tác cần
+# quyền hệ thống (user/group, systemctl). Nhờ đó "cài mới / nâng cấp / rollback"
+# kiểm chứng được BẰNG MÁY trước khi chạm bo thật, thay vì chỉ đọc script rồi
+# tin. Cây thật là trường hợp DIR rỗng, đi đúng những dòng cũ.
+DESTDIR="${MKDDC_INSTALL_ROOT:-}"
+if [ -n "$DESTDIR" ]; then
+    DRY=1
+    mkdir -p "$DESTDIR"
+    DESTDIR="$(cd "$DESTDIR" && pwd)"
+    echo "INFO: DIỄN TẬP — cài vào cây giả $DESTDIR (không chạm hệ thống thật)"
+else
+    DRY=0
+    [ "$(id -u)" -eq 0 ] || { echo "ERROR: cần root (sudo)" >&2; exit 1; }
+fi
+
+# Cài file: bỏ -o/-g khi diễn tập (không phải root nên không chown được).
+inst() {
+    if [ "$DRY" -eq 1 ]; then
+        local args=() skip=0
+        for a in "$@"; do
+            if [ "$skip" -eq 1 ]; then skip=0; continue; fi
+            case "$a" in
+                -o|-g) skip=1 ;;
+                *) args+=("$a") ;;
+            esac
+        done
+        install "${args[@]}"
+    else
+        install "$@"
+    fi
+}
+
+# systemctl chỉ tồn tại trên bo thật; diễn tập ghi lại ý định để test đọc được.
+sysctl_do() {
+    if [ "$DRY" -eq 1 ]; then
+        printf '%s\n' "$*" >> "$DESTDIR/dry-run-systemctl.log"
+        # Xem ghi chú cùng tên ở rollback.sh: truy vấn trạng thái trả "KHÔNG"
+        # khi diễn tập, nếu không các nhánh `... && <lệnh thật>` sẽ chạy thật.
+        case "${1:-}" in
+            is-enabled|is-active|is-failed) return 1 ;;
+        esac
+        return 0
+    fi
+    systemctl "$@"
+}
+
+SBIN="$DESTDIR/usr/sbin"
+WEBDIR="$DESTDIR/opt/mkddc-web"
+UNITDIR="$DESTDIR/etc/systemd/system"
+SHAREDIR="$DESTDIR/usr/share/mkddc"
+ETCDIR="$DESTDIR/etc"
+DATADIR="$DESTDIR/data"
+BACKUP_ROOT="$DESTDIR/var/backups/mkddc"
+LIBEXECDIR="$DESTDIR/usr/libexec/mkddc"
+
+# Trên bo thật các thư mục hệ thống này luôn có sẵn; trong cây giả thì chưa.
+# `install -d` idempotent nên khối này không đổi gì ở đường cài thật.
+inst -d -m 0755 "$SBIN" "$WEBDIR" "$UNITDIR" "$SHAREDIR" "$ETCDIR" "$LIBEXECDIR"
 
 # ADR-022 §7: không được chạm mkddc-netcfg khi còn giao dịch mạng dở dang.
 # Kiểm tra TRƯỚC khi ghi bất kỳ file nào để huỷ deploy sạch, không để nửa vời.
-NETCFG_JOURNAL=/data/mkddc/netcfg-transaction.json
+NETCFG_JOURNAL="$DATADIR/mkddc/netcfg-transaction.json"
 if [ -f "$NETCFG_JOURNAL" ] && grep -qE '"state"[[:space:]]*:[[:space:]]*"(staged|applying|awaiting_confirmation)"' "$NETCFG_JOURNAL" 2>/dev/null; then
     echo "ERROR: mkddc-netcfg còn giao dịch mạng chưa kết thúc ($NETCFG_JOURNAL)." >&2
     echo "       Huỷ deploy theo ADR-022 §7. Chờ giao dịch confirm hoặc rollback xong rồi chạy lại." >&2
@@ -40,6 +99,11 @@ fi
 # không lộ trên bo lab vì tools/deploy/deploy_board.sh có copy riêng.
 [ -x "$BUILD/core/mkddc-schedule-sim" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-schedule-sim" >&2; exit 1; }
 [ -x "$BUILD/core/mkddc-st-compile" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-st-compile" >&2; exit 1; }
+# T59-605: `mkddc-st-package` là writer artifact v2 mà BE gọi ở bước Commission
+# (`ProgrammingPackagerPath`, mặc định "$SBIN/mkddc-st-package)." Nó được build
+# nhưng KHÔNG được cài, nên trên bo mới cài, Commission gọi vào một đường dẫn
+# không tồn tại — lỗi chỉ lộ ra ở đúng thao tác cuối của người vận hành.
+[ -x "$BUILD/core/mkddc-st-package" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-st-package" >&2; exit 1; }
 [ -x "$MKDDC_GO_BINARY_REL" ] || { echo "ERROR: chưa build $MKDDC_GO_BINARY_REL (chạy platform/packaging/build-release.sh)" >&2; exit 1; }
 [ -f "$MKDDC_WEB_UI_DIST_REL/index.html" ] || { echo "ERROR: chưa build frontend $MKDDC_WEB_UI_DIST_REL" >&2; exit 1; }
 [ -f build/release/provenance.json ] || { echo "ERROR: thiếu provenance.json" >&2; exit 1; }
@@ -62,7 +126,7 @@ has_user() {
     fi
 }
 
-if ! has_group mkddc; then
+if [ "$DRY" -eq 0 ] && ! has_group mkddc; then
     if command -v groupadd >/dev/null 2>&1; then
         groupadd --system mkddc
     elif command -v addgroup >/dev/null 2>&1; then
@@ -70,7 +134,7 @@ if ! has_group mkddc; then
     fi
 fi
 
-if ! has_user mkddc; then
+if [ "$DRY" -eq 0 ] && ! has_user mkddc; then
     if command -v useradd >/dev/null 2>&1; then
         useradd --system --gid mkddc --groups dialout --no-create-home \
                 --shell /usr/sbin/nologin mkddc
@@ -79,7 +143,7 @@ if ! has_user mkddc; then
     fi
 fi
 
-if has_group dialout; then
+if [ "$DRY" -eq 0 ] && has_group dialout; then
     if command -v usermod >/dev/null 2>&1; then
         usermod -a -G dialout mkddc 2>/dev/null || true
     elif command -v addgroup >/dev/null 2>&1; then
@@ -87,7 +151,7 @@ if has_group dialout; then
     fi
 fi
 
-for group in video input; do
+for group in $([ "$DRY" -eq 0 ] && echo video input); do
     if has_group "$group"; then
         if command -v usermod >/dev/null 2>&1; then
             usermod -a -G "$group" mkddc 2>/dev/null || true
@@ -98,8 +162,8 @@ for group in video input; do
 done
 
 # /data/config: web ghi, service đọc (CONFIG_SCHEMA D-5)
-install -d -m 0775 -o mkddc -g mkddc /data/config
-install -d -m 0775 -o mkddc -g mkddc /data/config/profiles
+inst -d -m 0775 -o mkddc -g mkddc "$DATADIR/config"
+inst -d -m 0775 -o mkddc -g mkddc "$DATADIR/config/profiles"
 # /data/mkddc: persist state.snap cho RuntimeCounter/PulseCounter (COR-010, GAP-08)
 # và journal giao dịch mạng của mkddc-netcfg.
 #
@@ -112,91 +176,131 @@ install -d -m 0775 -o mkddc -g mkddc /data/config/profiles
 # JOURNAL_WRITE_FAILED và toàn bộ cơ chế giao dịch mạng chết ngay ở bước đầu.
 # Quan sát được trên bo Foxlinx 2026-08-08. `mkddc-time-helper` đã xin sẵn
 # CAP_DAC_OVERRIDE cho đúng lớp vấn đề này; netcfg thì bị bỏ sót.
-install -d -m 0775 -o mkddc -g mkddc /data/mkddc
-install -d -m 0750 -o mkddc -g mkddc /data/mkddc/programming
-install -d -m 0750 -o mkddc -g mkddc /data/mkddc/programming/artifacts
-install -d -m 0700 -o mkddc -g mkddc /data/mkddc/programming/scratch
-install -d -m 0755 /etc/mkddc
-[ -e /etc/mkddc/netcfg.conf ] || install -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/netcfg.conf" /etc/mkddc/netcfg.conf
-[ -e /data/config/io_config.conf ] || install -m 0644 -o mkddc -g mkddc "$MKDDC_PACKAGING_SOURCE_REL/io_config.conf" /data/config/io_config.conf
-[ -e /data/config/users.conf ] || install -m 0644 -o mkddc -g mkddc "$MKDDC_PACKAGING_SOURCE_REL/users.conf" /data/config/users.conf
-if [ ! -s /etc/mkddc-web.env ]; then
+inst -d -m 0775 -o mkddc -g mkddc "$DATADIR/mkddc"
+inst -d -m 0750 -o mkddc -g mkddc "$DATADIR/mkddc/programming"
+inst -d -m 0750 -o mkddc -g mkddc "$DATADIR/mkddc/programming/artifacts"
+inst -d -m 0700 -o mkddc -g mkddc "$DATADIR/mkddc/programming/scratch"
+inst -d -m 0755 "$ETCDIR/mkddc"
+[ -e "$ETCDIR/mkddc/netcfg.conf" ] || inst -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/netcfg.conf" "$ETCDIR/mkddc/netcfg.conf"
+[ -e "$DATADIR/config/io_config.conf" ] || inst -m 0644 -o mkddc -g mkddc "$MKDDC_PACKAGING_SOURCE_REL/io_config.conf" "$DATADIR/config/io_config.conf"
+[ -e "$DATADIR/config/users.conf" ] || inst -m 0644 -o mkddc -g mkddc "$MKDDC_PACKAGING_SOURCE_REL/users.conf" "$DATADIR/config/users.conf"
+if [ ! -s "$ETCDIR/mkddc-web.env" ]; then
     sec="$(head -c 32 /dev/urandom | tr -dc 'a-f0-9' | head -c 64 2>/dev/null || echo "mkddc-secret-$(date +%s)")"
-    printf 'JWT_SECRET=%s\n' "$sec" > /etc/mkddc-web.env
+    printf 'JWT_SECRET=%s\n' "$sec" > "$ETCDIR/mkddc-web.env"
     # REV-PLT-01: file này từng chỉ có JWT_SECRET, nên CORS_ORIGIN không bao giờ
     # được đặt trên bo và biên CORS/WebSocket chạy bằng allowlist của chế độ dev.
     # Nay mặc định là fail-closed (chỉ same-origin) và dòng dưới đây ghi sẵn để
     # người triển khai thấy chỗ cần sửa khi FE chạy ở origin khác.
-    printf '# CORS_ORIGIN=https://ddc.toanha.local,http://192.168.1.110:8082\n' >> /etc/mkddc-web.env
-    printf '# CORS_ALLOW_LOOPBACK=1   # CHỈ máy dev; mở mọi cổng loopback\n' >> /etc/mkddc-web.env
-    chmod 0600 /etc/mkddc-web.env
-    chown root:root /etc/mkddc-web.env
+    printf '# CORS_ORIGIN=https://ddc.toanha.local,http://192.168.1.110:8082\n' >> "$ETCDIR/mkddc-web.env"
+    printf '# CORS_ALLOW_LOOPBACK=1   # CHỈ máy dev; mở mọi cổng loopback\n' >> "$ETCDIR/mkddc-web.env"
+    chmod 0600 "$ETCDIR/mkddc-web.env"
+    [ "$DRY" -eq 1 ] || chown root:root "$ETCDIR/mkddc-web.env"
+fi
+
+# T59-605 — Programming BẬT mặc định trong gói phát hành.
+#
+# BE đọc `PROGRAMMING_REV_A` qua `envTruthy` (mặc định TẮT), còn FE lấy cờ lúc
+# build (`npm run build:release`). Trước đây chỉ FE được bật: bo cài xong hiện
+# đủ bốn workspace Programming nhưng MỌI endpoint phía sau trả 404 — triệu chứng
+# giống hệt "backend hỏng" trong khi thật ra chưa ai bật cờ. Hai nửa của cùng một
+# tính năng phải bật cùng một chỗ.
+#
+# Dòng này đặt cả ở nhánh nâng cấp: file env đã tồn tại từ bản trước sẽ KHÔNG
+# được sửa bởi khối `if` phía trên, nên nâng cấp mà thiếu bước này sẽ để bo cũ
+# mãi mãi ở trạng thái FE-bật/BE-tắt.
+if ! grep -q '^PROGRAMMING_REV_A=' "$ETCDIR/mkddc-web.env" 2>/dev/null; then
+    printf 'PROGRAMMING_REV_A=1\n' >> "$ETCDIR/mkddc-web.env"
+    echo "INFO: bật PROGRAMMING_REV_A=1 trong $ETCDIR/mkddc-web.env (T59-605)"
+fi
+
+# ADR-052 — provisioning khoá ký của THIẾT BỊ này.
+#
+# Artifact do bo tự biên dịch được ký bằng khoá của chính bo; khoá hãng không bao
+# giờ nằm trên thiết bị. Sinh MỘT LẦN: khối `if` dưới đây bỏ qua khi khoá đã có,
+# và `--gen-device-key` cũng tự từ chối ghi đè. Sinh lại khoá làm mọi artifact
+# đang chạy mất hiệu lực cùng lúc, GỒM CẢ LKG — tức phá đúng đường lùi, và phá
+# vào đúng lúc nâng cấp là lúc cần nó nhất.
+inst -d -m 0750 -o mkddc -g mkddc "$DATADIR/mkddc/keys"
+if [ ! -f "$DATADIR/mkddc/keys/device.key" ]; then
+    if "$BUILD/core/mkddc-st-compile" --gen-device-key "$DATADIR/mkddc/keys" >/dev/null; then
+        [ "$DRY" -eq 1 ] || chown mkddc:mkddc "$DATADIR/mkddc/keys/device.key" \
+                                              "$DATADIR/mkddc/keys/device.pub"
+        echo "INFO: đã sinh khoá ký thiết bị tại $DATADIR/mkddc/keys (ADR-052)"
+    else
+        echo "ERROR: không sinh được khoá thiết bị — Programming sẽ không ký được artifact" >&2
+        exit 1
+    fi
+else
+    echo "INFO: khoá thiết bị đã có, giữ nguyên (sinh lại sẽ vô hiệu hoá cả LKG)"
 fi
 
 # Chụp bản đang cài trước khi ghi đè, để rollback là thao tác có quy trình thay vì
 # ứng biến. Trước đây không có bước này nên /usr/sbin tích tụ các bản sao tay kiểu
 # mkddc-core.bak-*/.prev-*, và rollback phụ thuộc trí nhớ người trực.
-if [ -x /usr/sbin/mkddc-core ]; then
+if [ -x "$SBIN/mkddc-core" ]; then
     prev_ver=unknown
-    [ -f /usr/share/mkddc/provenance.json ] && \
+    [ -f "$SHAREDIR/provenance.json" ] && \
         prev_ver="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-                    /usr/share/mkddc/provenance.json | head -1)"
+                    "$SHAREDIR/provenance.json" | head -1)"
     [ -n "$prev_ver" ] || prev_ver=unknown
-    SNAP="/var/backups/mkddc/${prev_ver}-$(date +%Y%m%d-%H%M%S)"
-    install -d -m 0755 "$SNAP"
-    for f in /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
-             /usr/sbin/mkddc-st-compile \
-             /usr/sbin/mkddc-fake-mcu /usr/sbin/mkddc-hmi /opt/mkddc-web/mkddc-web \
-             /opt/mkddc-web/mkddc-schedule-sim \
-             /usr/share/mkddc/provenance.json /usr/share/mkddc/checksums.sha256; do
+    SNAP="$BACKUP_ROOT/${prev_ver}-$(date +%Y%m%d-%H%M%S)"
+    inst -d -m 0755 "$SNAP"
+    for f in "$SBIN/mkddc-core" "$SBIN/mkddc-iobus" "$SBIN/mkddc-netcfg" \
+             "$SBIN/mkddc-st-compile" "$SBIN/mkddc-st-package" \
+             "$SBIN/mkddc-fake-mcu" "$SBIN/mkddc-hmi" "$WEBDIR/mkddc-web" \
+             "$WEBDIR/mkddc-schedule-sim" \
+             "$SHAREDIR/provenance.json" "$SHAREDIR/checksums.sha256"; do
         [ -e "$f" ] && cp -a "$f" "$SNAP/" || true
     done
-    ln -sfn "$SNAP" /var/backups/mkddc/previous
+    ln -sfn "$SNAP" "$BACKUP_ROOT/previous"
     echo "INFO: đã chụp bản đang chạy ($prev_ver) vào $SNAP"
 fi
 
 # Cài đặt shared libraries phụ trợ (nếu có trong gói release)
 if [ -d build/release/lib ]; then
-    cp -a build/release/lib/* /usr/lib/ 2>/dev/null || true
+    inst -d -m 0755 "$DESTDIR/usr/lib"
+    cp -a build/release/lib/* "$DESTDIR/usr/lib/" 2>/dev/null || true
 fi
 
-install -m 0755 "$BUILD/iobus/mkddc-iobus" /usr/sbin/mkddc-iobus
-install -m 0755 "$BUILD/core/mkddc-core"   /usr/sbin/mkddc-core
-install -m 0755 "$BUILD/netcfg/mkddc-netcfg" /usr/sbin/mkddc-netcfg
-install -m 0755 "$BUILD/core/mkddc-st-compile" /usr/sbin/mkddc-st-compile
+inst -m 0755 "$BUILD/iobus/mkddc-iobus" "$SBIN/mkddc-iobus"
+inst -m 0755 "$BUILD/core/mkddc-core"   "$SBIN/mkddc-core"
+inst -m 0755 "$BUILD/netcfg/mkddc-netcfg" "$SBIN/mkddc-netcfg"
+inst -m 0755 "$BUILD/core/mkddc-st-compile" "$SBIN/mkddc-st-compile"
+inst -m 0755 "$BUILD/core/mkddc-st-package" "$SBIN/mkddc-st-package"
 # SRC-F-01: đặt cạnh mkddc-web, KHÔNG vào /usr/sbin. `scheduleSimBinary()` dò
 # theo thứ tự env → PATH → thư mục chứa chính nó; service chạy `User=mkddc` với
 # PATH systemd mặc định (không có /usr/sbin), nên chỉ nhánh "cạnh binary" là
 # chắc chắn tìm thấy.
-install -d -m 0755 /opt/mkddc-web
-install -m 0755 "$BUILD/core/mkddc-schedule-sim" /opt/mkddc-web/mkddc-schedule-sim
-install -m 0755 "$MKDDC_GO_BINARY_REL" /opt/mkddc-web/mkddc-web
-install -d -m 0755 /opt/mkddc-web/dist
-cp -a "$MKDDC_WEB_UI_DIST_REL/." /opt/mkddc-web/dist/
-install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-iobus.service" /etc/systemd/system/
-install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-core.service"  /etc/systemd/system/
-install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-netcfg.service" /etc/systemd/system/
-install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-web-pi.service" /etc/systemd/system/
-install -d -m 0755 /usr/libexec/mkddc /usr/share/mkddc/avahi
-install -m 0644 build/release/provenance.json /usr/share/mkddc/provenance.json
-install -m 0644 build/release/checksums.sha256 /usr/share/mkddc/checksums.sha256
+inst -d -m 0755 "$WEBDIR"
+inst -m 0755 "$BUILD/core/mkddc-schedule-sim" "$WEBDIR/mkddc-schedule-sim"
+inst -m 0755 "$MKDDC_GO_BINARY_REL" "$WEBDIR/mkddc-web"
+inst -d -m 0755 "$WEBDIR/dist"
+cp -a "$MKDDC_WEB_UI_DIST_REL/." "$WEBDIR/dist/"
+inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-iobus.service" "$UNITDIR/"
+inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-core.service"  "$UNITDIR/"
+inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-netcfg.service" "$UNITDIR/"
+inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-web-pi.service" "$UNITDIR/"
+inst -d -m 0755 "$LIBEXECDIR" "$SHAREDIR/avahi"
+inst -m 0644 build/release/provenance.json "$SHAREDIR/provenance.json"
+inst -m 0644 build/release/checksums.sha256 "$SHAREDIR/checksums.sha256"
 {
-    /usr/sbin/mkddc-core --version
-    /usr/sbin/mkddc-iobus --version
-    /usr/sbin/mkddc-netcfg --version
-    /usr/sbin/mkddc-st-compile --version
-    /opt/mkddc-web/mkddc-web --version
-} > /usr/share/mkddc/runtime-build-info.txt
-sha256sum /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
-    /usr/sbin/mkddc-st-compile \
-    /opt/mkddc-web/mkddc-web /opt/mkddc-web/mkddc-schedule-sim \
-    > /usr/share/mkddc/runtime-checksums.sha256
-install -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/configure-web-hostname.sh" /usr/libexec/mkddc/configure-web-hostname
-install -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/avahi/mkddc-web.service" /usr/share/mkddc/avahi/mkddc-web.service
-if [ -e /etc/systemd/system/mkddc-web-pi.service ]; then
-    install -d -m 0755 /etc/systemd/system/mkddc-web-pi.service.d
-    install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-web-pi-netcfg.conf" \
-        /etc/systemd/system/mkddc-web-pi.service.d/netcfg.conf
+    "$SBIN/mkddc-core" --version
+    "$SBIN/mkddc-iobus" --version
+    "$SBIN/mkddc-netcfg" --version
+    "$SBIN/mkddc-st-compile" --version
+    "$SBIN/mkddc-st-package" --version
+    "$WEBDIR/mkddc-web" --version
+} > "$SHAREDIR/runtime-build-info.txt"
+sha256sum "$SBIN/mkddc-core" "$SBIN/mkddc-iobus" "$SBIN/mkddc-netcfg" \
+    "$SBIN/mkddc-st-compile" "$SBIN/mkddc-st-package" \
+    "$WEBDIR/mkddc-web" "$WEBDIR/mkddc-schedule-sim" \
+    > "$SHAREDIR/runtime-checksums.sha256"
+inst -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/configure-web-hostname.sh" "$LIBEXECDIR/configure-web-hostname"
+inst -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/avahi/mkddc-web.service" "$SHAREDIR/avahi/mkddc-web.service"
+if [ -e "$UNITDIR/mkddc-web-pi.service" ]; then
+    inst -d -m 0755 "$UNITDIR/mkddc-web-pi.service.d"
+    inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-web-pi-netcfg.conf" \
+        "$UNITDIR/mkddc-web-pi.service.d/netcfg.conf"
 fi
 
 # fake MCU chỉ dành cho board lab/no-MCU. Cài khi được yêu cầu tường minh, hoặc
@@ -204,10 +308,10 @@ fi
 # bao giờ tự đưa fake MCU lên board có MCU thật.
 FAKE_MCU_INSTALLED=0
 if [ -x "$BUILD/iobus/fake_mcu" ] && \
-   { [ "$WITH_FAKE_MCU" -eq 1 ] || [ -e /etc/systemd/system/mkddc-fakemcu.service ]; }; then
-    install -m 0755 "$BUILD/iobus/fake_mcu" /usr/sbin/mkddc-fake-mcu
-    install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-fakemcu.service" /etc/systemd/system/
-    install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-pty.service" /etc/systemd/system/
+   { [ "$WITH_FAKE_MCU" -eq 1 ] || [ -e "$UNITDIR/mkddc-fakemcu.service" ]; }; then
+    inst -m 0755 "$BUILD/iobus/fake_mcu" "$SBIN/mkddc-fake-mcu"
+    inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-fakemcu.service" "$UNITDIR/"
+    inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-pty.service" "$UNITDIR/"
     FAKE_MCU_INSTALLED=1
 fi
 
@@ -216,37 +320,37 @@ HMI_INSTALLED=0
 # chỉ vì binary tồn tại, làm board không có panel rơi vào vòng lặp restart
 # (`HMI DRM no connected connector`).
 HMI_WAS_ENABLED=0
-systemctl is-enabled mkddc-hmi >/dev/null 2>&1 && HMI_WAS_ENABLED=1
+sysctl_do is-enabled mkddc-hmi >/dev/null 2>&1 && HMI_WAS_ENABLED=1
 if [ -x "$BUILD/hmi/mkddc-hmi" ]; then
-    install -m 0755 "$BUILD/hmi/mkddc-hmi" /usr/sbin/mkddc-hmi
-    install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-hmi.service" /etc/systemd/system/
-    install -d -m 0755 /usr/share/mkddc
-    [ -e /etc/mkddc/hmi.conf ] || install -m 0640 -o root -g mkddc "$MKDDC_HMI_SOURCE_REL/packaging/hmi.conf" /etc/mkddc/hmi.conf
-    [ -e /data/config/point_db.json ] || install -m 0640 -o mkddc -g mkddc "$MKDDC_HMI_SOURCE_REL/packaging/point_db.example.json" /data/config/point_db.json
+    inst -m 0755 "$BUILD/hmi/mkddc-hmi" "$SBIN/mkddc-hmi"
+    inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-hmi.service" "$UNITDIR/"
+    inst -d -m 0755 "$SHAREDIR"
+    [ -e "$ETCDIR/mkddc/hmi.conf" ] || inst -m 0640 -o root -g mkddc "$MKDDC_HMI_SOURCE_REL/packaging/hmi.conf" "$ETCDIR/mkddc/hmi.conf"
+    [ -e "$DATADIR/config/point_db.json" ] || inst -m 0640 -o mkddc -g mkddc "$MKDDC_HMI_SOURCE_REL/packaging/point_db.example.json" "$DATADIR/config/point_db.json"
     HMI_INSTALLED=1
 fi
 
-systemctl daemon-reload
+sysctl_do daemon-reload
 if [ "$ENABLE" -eq 1 ]; then
-    systemctl enable mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi >/dev/null
+    sysctl_do enable mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi >/dev/null
     if [ "$FAKE_MCU_INSTALLED" -eq 1 ]; then
         if command -v socat >/dev/null 2>&1; then
-            systemctl enable mkddc-pty >/dev/null 2>&1 || true
-            systemctl restart mkddc-pty >/dev/null 2>&1 || true
+            sysctl_do enable mkddc-pty >/dev/null 2>&1 || true
+            sysctl_do restart mkddc-pty >/dev/null 2>&1 || true
         fi
-        systemctl enable mkddc-fakemcu >/dev/null 2>&1 || true
-        systemctl restart mkddc-fakemcu
+        sysctl_do enable mkddc-fakemcu >/dev/null 2>&1 || true
+        sysctl_do restart mkddc-fakemcu
     fi
-    systemctl restart mkddc-iobus
-    systemctl restart mkddc-core
-    systemctl restart mkddc-web-pi
+    sysctl_do restart mkddc-iobus
+    sysctl_do restart mkddc-core
+    sysctl_do restart mkddc-web-pi
 
     # netcfg đã qua kiểm tra journal ở đầu script nên restart được an toàn.
-    systemctl restart mkddc-netcfg
+    sysctl_do restart mkddc-netcfg
 
     if [ "$HMI_INSTALLED" -eq 1 ]; then
         if [ "$HMI_WAS_ENABLED" -eq 1 ]; then
-            systemctl restart mkddc-hmi
+            sysctl_do restart mkddc-hmi
         else
             echo "INFO: mkddc-hmi đã cài nhưng giữ nguyên trạng thái disabled."
             echo "      Bật thủ công khi board có panel: systemctl enable --now mkddc-hmi"
@@ -256,7 +360,7 @@ if [ "$ENABLE" -eq 1 ]; then
     # Xác minh tiến trình thực sự chạy binary mới, không còn giữ inode đã xoá.
     stale=0
     for unit in mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi; do
-        pid="$(systemctl show "$unit" -p MainPID --value)"
+        pid="$(sysctl_do show "$unit" -p MainPID --value)"
         [ -n "$pid" ] && [ "$pid" != "0" ] || continue
         if readlink "/proc/$pid/exe" 2>/dev/null | grep -q '(deleted)'; then
             echo "ERROR: $unit (pid $pid) vẫn chạy binary cũ đã bị thay." >&2
@@ -265,7 +369,7 @@ if [ "$ENABLE" -eq 1 ]; then
     done
     [ "$stale" -eq 0 ] || { echo "ERROR: install chưa hoàn tất — có service chạy code cũ." >&2; exit 1; }
 
-    systemctl --no-pager status mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi || true
+    sysctl_do --no-pager status mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi || true
 else
     echo "OK: đã install, chưa enable (chạy: systemctl enable --now mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi)"
 fi

@@ -15,12 +15,17 @@
 #ifndef CORE_ST_PUBLIC_KEY_HPP
 #define CORE_ST_PUBLIC_KEY_HPP
 
+#include <cstddef>
 #include <cstdint>
 
 namespace core {
 
 /* Trả về 32 byte khoá công khai đang được nhúng trong build này. */
 const uint8_t* st_builtin_public_key();
+
+/* Vân tay 8 byte đầu của khoá, viết hex vào `out` (>= 17 byte). Log/audit/gate
+ * đóng gói đọc chuỗi ngắn này thay vì in cả khoá. */
+void st_public_key_fingerprint(const uint8_t* key, char* out, std::size_t out_size);
 
 /* true nếu build đang dùng KHOÁ TEST — dùng để cảnh báo lúc khởi động và để
  * gate release chặn được. */

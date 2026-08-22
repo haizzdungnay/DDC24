@@ -291,6 +291,17 @@ bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::stri
  * offset 64 và bật cờ kSigned. Trả false nếu buffer không hợp lệ. */
 bool sign_st_artifact(std::vector<uint8_t>* artifact, const uint8_t secret_key[64]);
 
+/* ADR-052 — sinh cặp khoá ký cho MỘT thiết bị.
+ *
+ * Khoá thiết bị là thứ duy nhất cho phép bật `SIGNATURE_REQUIRED` mà vẫn giữ
+ * được cam kết "biên dịch ngay trên bo": artifact do bo tự sinh phải được ký
+ * bởi một khoá mà bo có, và khoá hãng thì theo định nghĩa không bao giờ nằm
+ * trên bo. Khoá này sinh MỘT LẦN lúc provisioning; sinh lại đồng nghĩa vô hiệu
+ * hoá mọi artifact đang chạy, kể cả LKG — tức phá đúng đường lùi.
+ *
+ * Trả false nếu libsodium chưa khởi tạo được. */
+bool generate_signing_keypair(uint8_t public_key[32], uint8_t secret_key[64]);
+
 /* SHA-256 của artifact theo quy tắc §3.1 (vùng hash và chữ ký coi như 0). */
 bool compute_artifact_sha256(const uint8_t* data, std::size_t size, uint8_t out[32]);
 

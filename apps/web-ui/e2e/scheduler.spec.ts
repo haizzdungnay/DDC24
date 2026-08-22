@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { login } from './helpers/session'
 
 /**
  * E2E cho Lịch vận hành v3.1 (Plan 50 SCHD-263).
@@ -56,14 +57,6 @@ const SAMPLE_SCHEDULE = {
       actual_value: 'ACTIVE', overridden_by: null, error_code: null, last_write_at: null
     }]
   }
-}
-
-async function login(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
-  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin')
-  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 })
 }
 
 /* Điều hướng phía client. KHÔNG dùng `page.goto`: phiên đăng nhập chỉ nằm trong

@@ -1,5 +1,6 @@
 #include "st/st_public_key.hpp"
 
+#include <cstddef>
 #include <cstring>
 
 namespace core {
@@ -52,6 +53,18 @@ const uint8_t* st_builtin_public_key()
 #else
     return kTestPublicKey;
 #endif
+}
+
+void st_public_key_fingerprint(const uint8_t* key, char* out, std::size_t out_size)
+{
+    static const char kHex[] = "0123456789abcdef";
+    if (out == nullptr || out_size == 0) return;
+    if (key == nullptr || out_size < 17) { out[0] = '\0'; return; }
+    for (int i = 0; i < 8; ++i) {
+        out[i * 2] = kHex[(key[i] >> 4) & 0x0F];
+        out[i * 2 + 1] = kHex[key[i] & 0x0F];
+    }
+    out[16] = '\0';
 }
 
 bool st_public_key_is_test_key()

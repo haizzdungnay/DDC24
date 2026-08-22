@@ -1,5 +1,5 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "43557a256909e98380fba044567a6792674b05e5ba07dc3c0b716660e80e79db" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "76fd86e1ef9f538d65af73431a7f6cc30a8a8c7d4994d1d1f5e942fc65b83fef" as const;
 export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.7.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
@@ -56,6 +56,7 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-CLI-ARGS": "PRG-ERR-REQ-001",
   "compiler\u0000ST-CLI-IO": "PRG-ERR-UNAVAILABLE-001",
   "compiler\u0000ST-CLI-KEY": "PRG-ERR-UNAVAILABLE-001",
+  "compiler\u0000ST-CLI-KEY-EXISTS": "PRG-ERR-CONFLICT-001",
   "compiler\u0000ST-CLI-LIMIT": "PRG-ERR-SCOPE-001",
   "compiler\u0000ST-CLI-SANDBOX": "PRG-ERR-UNAVAILABLE-001",
   "compiler\u0000ST-CLI-TOOLARGE": "PRG-ERR-SCOPE-001",

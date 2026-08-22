@@ -7,7 +7,7 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "43557a256909e98380fba044567a6792674b05e5ba07dc3c0b716660e80e79db";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "76fd86e1ef9f538d65af73431a7f6cc30a8a8c7d4994d1d1f5e942fc65b83fef";
 inline constexpr std::string_view kProgramErrorCatalogVersion = "1.7.0";
 
 enum class ProgramPublicError : uint8_t {
@@ -93,7 +93,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 124> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 125> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -112,6 +112,7 @@ inline constexpr std::array<ComponentErrorMapping, 124> kComponentErrorMappings 
     {"compiler", "ST-CLI-ARGS", ProgramPublicError::Request },
     {"compiler", "ST-CLI-IO", ProgramPublicError::Unavailable },
     {"compiler", "ST-CLI-KEY", ProgramPublicError::Unavailable },
+    {"compiler", "ST-CLI-KEY-EXISTS", ProgramPublicError::Conflict },
     {"compiler", "ST-CLI-LIMIT", ProgramPublicError::Scope },
     {"compiler", "ST-CLI-SANDBOX", ProgramPublicError::Unavailable },
     {"compiler", "ST-CLI-TOOLARGE", ProgramPublicError::Scope },
