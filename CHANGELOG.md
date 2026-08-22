@@ -8,6 +8,14 @@
 
 ## [Unreleased]
 
+### Dọn tracker cuối Plan 59 (2026-08-23)
+
+- **Changed:** `T59-602` chuyển **PARTIAL → DONE** — phần còn lại của nó (bật
+  `SIGNATURE_REQUIRED` mặc định) chính là `T59-607`, nay đã đóng ở cả HOST và
+  TARGET. Plan 59 §6 thêm bảng đối chiếu **từng dòng** gate release với verdict
+  đã ký, để `RELEASE_READY=NO-GO` đọc được lý do ngay tại chỗ thay vì phải suy
+  từ bảng task. Manifest baseline **1.43**.
+
 ### W7 — cài đè thật trên bo, V&V unified và verdict `NO-GO` (2026-08-23)
 
 - **Added — `docs/07_records/PROGRAMMING_RELEASE_RECORD_2026-08-23.md`**
