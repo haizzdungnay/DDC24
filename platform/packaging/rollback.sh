@@ -44,9 +44,17 @@ inst() {
 sysctl_do() {
     if [ "$DRY" -eq 1 ]; then
         printf '%s\n' "$*" >> "$DESTDIR/dry-run-systemctl.log"
+        # Truy vấn trạng thái phải trả "KHÔNG" khi diễn tập. Trả 0 cho
+        # `is-enabled`/`is-active` làm mọi nhánh `... && <lệnh thật>` phía sau
+        # chạy — và trong bản đầu, đúng nhánh đó đã restart mkddc-pty trên bo
+        # thật, kéo theo mkddc-iobus tự thoát vì PTY biến mất. Một diễn tập
+        # không được có tác dụng phụ, kể cả gián tiếp.
+        case "${1:-}" in
+            is-enabled|is-active|is-failed) return 1 ;;
+        esac
         return 0
     fi
-    sysctl_do "$@"
+    systemctl "$@"
 }
 
 if [ "${1:-}" = "--list" ]; then
@@ -114,13 +122,13 @@ done
 
 # Thứ tự như install.sh: nguồn dữ liệu trước, tiêu thụ sau. iobus và core dùng
 # chung SHM nên phải restart cùng nhau.
-sysctl_do is-enabled mkddc-pty     >/dev/null 2>&1 && systemctl restart mkddc-pty     || true
-sysctl_do is-enabled mkddc-fakemcu >/dev/null 2>&1 && systemctl restart mkddc-fakemcu || true
+sysctl_do is-enabled mkddc-pty     >/dev/null 2>&1 && sysctl_do restart mkddc-pty     || true
+sysctl_do is-enabled mkddc-fakemcu >/dev/null 2>&1 && sysctl_do restart mkddc-fakemcu || true
 sysctl_do restart mkddc-iobus
 sysctl_do restart mkddc-core
 sysctl_do restart mkddc-web-pi
 sysctl_do restart mkddc-netcfg
-sysctl_do is-active mkddc-hmi >/dev/null 2>&1 && systemctl restart mkddc-hmi || true
+sysctl_do is-active mkddc-hmi >/dev/null 2>&1 && sysctl_do restart mkddc-hmi || true
 
 # Ghi lại runtime info theo bản vừa khôi phục, nếu không provenance sẽ nói dối.
 {
@@ -138,7 +146,7 @@ sha256sum "$SBIN"/mkddc-core "$SBIN"/mkddc-iobus "$SBIN"/mkddc-netcfg \
 # Không service nào được giữ inode đã bị thay.
 stale=0
 for unit in mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi; do
-    pid="$(systemctl show "$unit" -p MainPID --value)"
+    pid="$(sysctl_do show "$unit" -p MainPID --value)"
     [ -n "$pid" ] && [ "$pid" != "0" ] || continue
     if readlink "/proc/$pid/exe" 2>/dev/null | grep -q '(deleted)'; then
         echo "ERROR: $unit (pid $pid) vẫn chạy binary cũ đã bị thay." >&2

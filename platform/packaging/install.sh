@@ -59,6 +59,11 @@ inst() {
 sysctl_do() {
     if [ "$DRY" -eq 1 ]; then
         printf '%s\n' "$*" >> "$DESTDIR/dry-run-systemctl.log"
+        # Xem ghi chú cùng tên ở rollback.sh: truy vấn trạng thái trả "KHÔNG"
+        # khi diễn tập, nếu không các nhánh `... && <lệnh thật>` sẽ chạy thật.
+        case "${1:-}" in
+            is-enabled|is-active|is-failed) return 1 ;;
+        esac
         return 0
     fi
     systemctl "$@"

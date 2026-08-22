@@ -32,6 +32,32 @@
   --component e2e` chạy **5 lần LIÊN TIẾP** → `79/79 passed`, exit `0`, 28–29 s mỗi
   lần. Trước bản sửa: 64 / 79 / 79 / 78+1F / 78+1F, 78–88 s.
 
+### T59-705 — Diễn tập trên bo thật, và một sự cố do chính bài diễn tập (2026-08-22)
+
+- **Added — bằng chứng TARGET DRY-RUN** tại
+  `docs/07_records/test-evidence/fw-som/2026-08-22-foxlinx-t59705-rehearsal.md`:
+  cross-build aarch64, chạy trọn cài mới → nâng cấp → rollback trên chính bo
+  Foxlinx với `MKDDC_INSTALL_ROOT`. Trả lời câu mà diễn tập trên host không trả
+  lời được: script chạy đúng trên Buildroot (BusyBox `adduser`/`addgroup`, không
+  có `getent`/`useradd`).
+- **Sự cố, ghi đầy đủ:** lần chạy ĐẦU làm **dừng `mkddc-iobus` trên bo thật** ~50
+  giây. Wrapper `systemctl` của chế độ diễn tập bỏ sót các lời gọi nằm sau `&&`,
+  và trả `0` cho `is-enabled`, nên `... && systemctl restart mkddc-pty` chạy
+  THẬT; PTY biến mất và iobus thoát theo. Dịch vụ được bật lại ngay khi phát
+  hiện.
+- **Fixed — hai lỗi cùng nguồn gốc.** (1) Mọi lời gọi nay đi qua wrapper, và
+  wrapper trả **1** cho truy vấn trạng thái (`is-enabled`/`is-active`/
+  `is-failed`) để không nhánh phụ nào được kích hoạt — nhưng giữ **0** cho `show`
+  vì dưới `set -e`, phép gán `pid="$(... show ...)"` trả khác 0 sẽ giết chính
+  script. (2) Thân wrapper trong `rollback.sh` đã bị phép thay tự động biến thành
+  `sysctl_do "$@"` — **hàm gọi chính nó**, tức rollback THẬT trên bo sẽ đệ quy vô
+  hạn. Lỗi này chưa bao giờ chạy vì mọi lần trước đều ở chế độ diễn tập.
+- **Added — 2 test** đọc thẳng mã nguồn khoá cả ba điều kiện (không còn
+  `systemctl` ngoài wrapper; truy vấn trả "không"; wrapper không tự gọi).
+- **Verification:** chạy lại trọn ba kịch bản trên bo — mốc
+  `ExecMainStartTimestamp` của `mkddc-iobus`/`mkddc-core`/`mkddc-pty` **không
+  đổi**, ba dịch vụ `active`; `test_release_dryrun` **10/10 OK**.
+
 ### T59-606 — Diễn tập cài/nâng cấp/rollback, và một đường lùi nửa vời (2026-08-22)
 
 - **Added — `MKDDC_INSTALL_ROOT`** cho `install.sh` + `rollback.sh`: ghi vào cây

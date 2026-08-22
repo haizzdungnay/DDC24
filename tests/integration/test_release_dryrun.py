@@ -191,6 +191,44 @@ class ReleaseDryRunTest(unittest.TestCase):
             self.assertNotEqual(sha256(root / rel), old_digests[rel],
                                 f"nâng cấp không thay {rel}")
 
+    # ---- 2b. Diễn tập không được có tác dụng phụ ---------------------------
+
+    def test_2_dien_tap_khong_goi_systemctl_that(self) -> None:
+        """Bất biến sống còn: một diễn tập KHÔNG được chạm hệ thống thật.
+
+        Đây là hồi quy có thật, không phải giả định. Bản đầu của chế độ diễn tập
+        chuyển `systemctl` sang wrapper CHỈ ở đầu dòng, nên bốn lời gọi nằm sau
+        `&&` vẫn chạy thật; và wrapper trả `0` cho `is-enabled`, nên chính những
+        nhánh `&&` đó được kích hoạt. Chạy trên bo Foxlinx ngày 2026-08-22, nó
+        restart `mkddc-pty` thật — PTY biến mất và `mkddc-iobus` tự thoát theo.
+        Một dịch vụ điều khiển dừng vì một bài diễn tập là kết cục không được
+        phép lặp lại, nên nó được khoá ở đây bằng cách đọc chính mã nguồn.
+        """
+        for name in ("install.sh", "rollback.sh"):
+            text = (ROOT / "platform/packaging" / name).read_text(encoding="utf-8")
+            body = [l for l in text.splitlines()
+                    if "systemctl" in l
+                    and not l.strip().startswith("#")
+                    and "dry-run-systemctl.log" not in l
+                    and 'systemctl "$@"' not in l
+                    and "echo" not in l]
+            self.assertEqual(body, [], f"{name} còn lời gọi systemctl không đi qua wrapper: {body}")
+
+            self.assertIn("is-enabled|is-active|is-failed) return 1", text,
+                          f"{name}: wrapper diễn tập phải trả KHÔNG cho truy vấn trạng thái, "
+                          "nếu không mọi nhánh '... && <lệnh thật>' sẽ chạy thật")
+
+        # Wrapper không được tự gọi chính nó: ở chế độ THẬT đó là đệ quy vô hạn.
+        rollback = (ROOT / "platform/packaging/rollback.sh").read_text(encoding="utf-8")
+        self.assertNotIn("    sysctl_do \"$@\"", rollback,
+                         "sysctl_do gọi chính nó — rollback thật sẽ đệ quy vô hạn")
+
+    def test_2_dien_tap_ghi_lai_y_dinh_systemctl(self) -> None:
+        """Bỏ qua systemctl không có nghĩa là giấu nó: ý định phải đọc lại được."""
+        log = self.root / "dry-run-systemctl.log"
+        self.assertTrue(log.is_file(), "diễn tập không ghi lại ý định systemctl nào")
+        self.assertIn("daemon-reload", log.read_text(encoding="utf-8"))
+
     # ---- 3. Lùi về bản trước ----------------------------------------------
 
     def test_3_rollback_khoi_phuc_du_binary_va_giu_du_lieu(self) -> None:
