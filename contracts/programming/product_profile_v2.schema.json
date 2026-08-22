@@ -238,7 +238,8 @@
       "description": "Chỉ giữ version. Danh sách entry Control Library SYSTEM nằm ở `pou_library_registry_v1.json` — giữ bản sao ở đây từng khiến profile khai SCALE/DEADBAND/CTU/PI vốn không tồn tại trong compiler."
     },
     "integrityMode": {
-      "const": "HASH_ONLY"
+      "description": "Chính sách toàn vẹn mà loader áp cho MỌI artifact. `SIGNATURE_REQUIRED` là giá trị của bản phát hành (T59-607): artifact không có chữ ký Ed25519 khớp một khoá trong tập tin cậy bị từ chối fail-closed. `HASH_ONLY` giữ lại làm ĐƯỜNG LÙI có kiểm soát — đổi giá trị này là một thay đổi contract phải re-pin G1 và có diễn tập, không phải một cờ chạy được lúc khởi động.",
+      "enum": ["HASH_ONLY", "SIGNATURE_REQUIRED"]
     },
     "reviewGatedFeatures": {
       "description": "Feature giữ nhãn REVIEW_REQUIRED trong registry POU/Control Library (DDD §9). Check CHẶN mọi Program dùng chúng cho tới khi có approval token Controls/Safety. Token KHÔNG đến từ payload FE hay checkbox UI: nó được suy ra từ chính contract này (`featureId` + `coreLibrary.version` + `approvalEvidenceRef`) và generator từ chối mọi token không suy ra đúng, nên không thể bịa một token hợp lệ ở lớp ngoài.",
@@ -293,7 +294,7 @@
           "const": 2
         },
         "minor": {
-          "const": 0
+          "const": 1
         }
       }
     },

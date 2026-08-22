@@ -304,9 +304,28 @@ def validate(join: dict[str, Any]) -> list[str]:
             and artifact_manifest["compilerProfile"] == artifact_item["compilerProfile"],
             "artifact golden version lệch",
         )
+        # T59-607 — TÁCH hai khái niệm từng bị trộn làm một.
+        #
+        # `profile.integrityMode` là CHÍNH SÁCH của hệ thống: loader áp nó cho mọi
+        # artifact. `artifact_manifest.integrityMode` là THUỘC TÍNH của đúng một
+        # file golden — fixture byte-exact dùng để kiểm layout/section/source-map.
+        # Buộc hai thứ bằng nhau nghĩa là mỗi lần siết chính sách lại phải ký lại
+        # fixture, và tệ hơn: mất luôn fixture "artifact chưa ký" vốn là thứ duy
+        # nhất chứng minh đường dual-reader của DDD §12 còn đọc được gói cũ.
         require(
-            profile["integrityMode"] == artifact_manifest["integrityMode"] == profile_item["integrityMode"],
-            "integrity mode lệch",
+            profile["integrityMode"] == profile_item["integrityMode"],
+            "integrity mode của profile lệch so với pin",
+        )
+        require(
+            artifact_manifest["integrityMode"] in {"HASH_ONLY", profile["integrityMode"]},
+            f"golden artifact khai integrityMode lạ: {artifact_manifest['integrityMode']}",
+        )
+        # Fixture chưa ký phải giữ nguyên tư cách chưa ký, không được trôi thành
+        # "đã ký một nửa" — đó mới là bất biến thật của golden này.
+        require(
+            artifact_manifest["integrityMode"] != "HASH_ONLY"
+            or artifact_manifest.get("signatureReservedZero") is True,
+            "golden HASH_ONLY nhưng vùng chữ ký không còn là zero",
         )
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"profile/artifact: {error}")
@@ -660,7 +679,8 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
     add("profile-capacity-enabled-drift", "capacity drift", shrink_enabled)
     add("profile-schema-hash-drift", "profile schema SHA-256 drift", break_profile_schema_hash)
     add("profile-target-abi-drift", "targetAbi drift", break_target_abi)
-    add("profile-integrity-mode-drift", "integrity mode lệch", break_integrity_mode)
+    add("profile-integrity-mode-drift", "integrity mode của profile lệch so với pin",
+        break_integrity_mode)
     add("required-contract-missing", "thiếu contract bắt buộc", drop_required_contract)
     add("duplicate-contract-name", "tên contract bị trùng", duplicate_contract_name)
 
