@@ -19,9 +19,36 @@ build_dir="$MKDDC_CPP_BUILD_REL"
 release_dir="build/release"
 web_binary="$MKDDC_GO_BINARY_REL"
 
+# T59-607 — KHOÁ PHÁT HÀNH ĐI TỪ NGOÀI CÂY NGUỒN VÀO BUILD.
+#
+# Trước đây `build-release.sh` không có đường nào truyền khoá phát hành, nên bản
+# duy nhất dựng được là bản nhúng KHOÁ TEST — và cách duy nhất để cổng `release`
+# xanh là đặt `MKDDC_ALLOW_TEST_KEY=1`, tức là tự tắt chính cái gác đang canh.
+# Một cổng chỉ xanh khi bị tắt thì không phải cổng.
+#
+# Khoá công khai đọc từ một file NGOÀI repo (mặc định
+# `~/.config/mkddc/release-signing/release.pub`, đổi được bằng
+# `MKDDC_RELEASE_KEY_DIR`). Khoá RIÊNG không bao giờ được script này đụng tới:
+# nó nằm cạnh khoá công khai với quyền `0600` và chỉ dùng khi ký, không dùng khi
+# build. Sinh khoá:
+#
+#   mkddc-st-compile --gen-device-key ~/.config/mkddc/release-signing
+#   mv device.pub release.pub && mv device.key release.key
+release_key_dir="${MKDDC_RELEASE_KEY_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mkddc/release-signing}"
+release_key_args=()
+if [ -f "$release_key_dir/release.pub" ]; then
+  release_public_hex="$(tr -d '[:space:]' < "$release_key_dir/release.pub")"
+  if [ "${#release_public_hex}" -ne 64 ]; then
+    printf 'LỖI: %s/release.pub phải là đúng 64 ký tự hex (hiện %d).\n' \
+      "$release_key_dir" "${#release_public_hex}" >&2
+    exit 1
+  fi
+  release_key_args=(-DMKDDC_ST_PUBLIC_KEY_HEX="$release_public_hex")
+fi
+
 cmake -S "$MKDDC_CPP_SOURCE" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release \
   -DMKDDC_VERSION="$version" -DMKDDC_ENABLE_MODBUS=ON \
-  -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON
+  -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON "${release_key_args[@]}"
 cmake --build "$build_dir" -j"$(nproc)"
 
 # 2026-08-20 — Firmware STM32 KHÔNG còn là release artifact.
@@ -84,7 +111,9 @@ key_fingerprint="$(printf '%s' "$key_info" | sed -n 's/.*fingerprint=\([0-9a-f]*
 if [ "$key_mode" != "RELEASE" ]; then
   if [ "${MKDDC_ALLOW_TEST_KEY:-0}" != "1" ]; then
     printf 'LỖI: binary nhúng KHOÁ TEST (fingerprint=%s).\n' "$key_fingerprint" >&2
-    printf '     Build lại với -DMKDDC_ST_PUBLIC_KEY_HEX=<64 hex> của khoá phát hành,\n' >&2
+    printf '     Đặt khoá công khai phát hành vào %s/release.pub (64 hex),\n' \
+      "$release_key_dir" >&2
+    printf '     sinh bằng: mkddc-st-compile --gen-device-key %s\n' "$release_key_dir" >&2
     printf '     hoặc đặt MKDDC_ALLOW_TEST_KEY=1 cho bản lab/bench (T59-602).\n' >&2
     exit 1
   fi
