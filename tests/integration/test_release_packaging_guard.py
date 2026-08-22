@@ -107,11 +107,25 @@ class ProgrammingRuntimePackagingTest(unittest.TestCase):
         không có lỗi nào sớm hơn để bắt.
         """
         install = _uncommented_lines(self.INSTALL_SCRIPT.read_text(encoding="utf-8"))
-        installs = [l for l in install if "mkddc-st-package" in l and l.strip().startswith("install ")]
+        # `inst` là wrapper của `install` do chế độ diễn tập T59-606 thêm vào; đích
+        # ghi là "$SBIN/..." thay cho đường tuyệt đối. Guard đọc CẢ HAI dạng: nó
+        # canh bất biến "packager được cài", không canh cách viết đường dẫn — buộc
+        # một cách viết cố định sẽ làm guard đỏ mỗi lần script được dọn, và một
+        # guard hay đỏ vì lý do sai là guard sắp bị tắt.
+        installs = [
+            l for l in install
+            if "mkddc-st-package" in l and l.strip().split()[0] in ("install", "inst")
+        ]
         self.assertTrue(
             installs,
             "install.sh phải cài mkddc-st-package — BE mặc định gọi "
             "/usr/sbin/mkddc-st-package (config.go ProgrammingPackagerPath)",
+        )
+        # Đích phải là thư mục sbin mà BE trỏ tới, dù viết trực tiếp hay qua biến.
+        self.assertTrue(
+            any("/usr/sbin/mkddc-st-package" in l or '"$SBIN/mkddc-st-package"' in l
+                for l in installs),
+            f"packager được cài nhưng không vào sbin: {installs}",
         )
 
         release = _uncommented_lines(RELEASE_SCRIPT.read_text(encoding="utf-8"))

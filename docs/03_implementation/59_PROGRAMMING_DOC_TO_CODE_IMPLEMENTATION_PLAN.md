@@ -2176,6 +2176,39 @@ và một SBOM nói dối chỗ đó còn tệ hơn không có.
 | `T59-706` | P0 | PID Controls/Safety target review và evidence | T59-602/703 | EVIDENCE_QUEUE | Saturation/anti-windup/override/release pass; approval token; label READY. |
 | `T59-707` | P0 | Chạy full V&V unified + trace/risk/release record | T59-701..706 | ORDERED | Mọi Must disposition PASS hoặc waiver có authority; 0 silent NOT_RUN; GO/NO-GO ký. |
 
+### 3.8 Ghi chú thực thi W7 — cái gì đã có bằng chứng, cái gì chặn bởi cái gì
+
+**Đã có bằng chứng thật (`T59-705`, một phần).** Diễn tập cài mới → nâng cấp →
+rollback chạy trên **chính bo Foxlinx**, không phải trên host. Đó là khác biệt có
+nội dung: host không chứng minh được script sống được trên Buildroot, nơi
+`getent`/`useradd` không tồn tại và `adduser`/`addgroup` là BusyBox. Chi tiết và
+sự cố kèm theo ở `docs/07_records/test-evidence/fw-som/2026-08-22-foxlinx-t59705-rehearsal.md`.
+
+**Bài học rút ra, áp cho cả phần W7 còn lại.** Một bài *diễn tập* đã làm dừng một
+dịch vụ *thật* trong 50 giây, vì wrapper chặn `systemctl` bỏ sót các lời gọi sau
+`&&` và trả `0` cho truy vấn trạng thái. Khi làm những task W7 còn lại — vốn đều
+chạm vào bo đang vận hành — giả định "chế độ an toàn thì không có tác dụng phụ"
+phải được **kiểm**, không được **tin**.
+
+**Ranh giới của phần còn lại.** Không task nào dưới đây bị chặn bởi mã nguồn; tất
+cả bị chặn bởi tài nguyên vật lý hoặc bởi một cửa sổ thời gian.
+
+| Task | Chặn bởi | Cần gì để mở |
+|---|---|---|
+| `T59-701` | Chưa chạy được trên GitHub Actions | Một lần chạy thật trên RC commit |
+| `T59-702` | Thời gian và cửa sổ bảo trì | Cài đè thật + **24 h** chạy liên tục với fixture 10 Program; không đo được bằng cách rút ngắn |
+| `T59-703` | **Thiết bị đo và người tại tủ** | Đồng hồ/scope đo AO/DO thật; không có đường thay thế bằng phần mềm |
+| `T59-704` | **Thao tác vật lý** | ≥10 lần cắt nguồn thật; nguồn lập trình được hoặc người trực |
+| `T59-705` (phần còn lại) | Cửa sổ bảo trì + phần cứng | Cài đè thật (sẽ restart `iobus`/`netcfg`); bo **thứ hai** cho kịch bản thay controller |
+| `T59-706` | `T59-703` | Evidence PID trên target trước, review Controls/Safety sau |
+| `T59-707` | `T59-701..706` | Không tổng hợp được một verdict từ các ô còn trống |
+
+**Một điểm của `ADR-052` phải vào runbook thay bo (`T59-705`).** Artifact được ký
+bằng khoá của **chính bo**, nên bê artifact từ bo cũ sang bo mới sẽ bị từ chối —
+đúng theo thiết kế. Quy trình thay controller phải **biên dịch lại từ Revision**.
+Đây là hệ quả trực tiếp của quyết định ký, và nó phải nằm trong runbook trước khi
+có người thay bo lần đầu, không phải sau.
+
 ## 4. Bảng ownership
 
 | Boundary | R | A | Consumer/reviewer |

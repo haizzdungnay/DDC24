@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.37 |
+| Phiên bản | 1.39 |
 | Trạng thái | Active |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -41,7 +41,7 @@ target, HIL hoặc release.
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `2d26255dda3f9431c79a2553e11f37de5641f04d377a8de0075af3a9cb672968` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `17e9d0ddd059ec0602a1b752303841e2c621b703b825b95498083e808ee12692` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
 | 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `d3bb0bb7a8e9c5486896ae7f2616b5bbc3ce636f07462edfc0bc4342b6631ec9` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `71a7b5b16e6dd543ba37e2f004e31198775c8849ac482464f05d9c6928ea5ec6` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `fdf793d820f101da56cc9a592c977476300a8430ae89a806b26c3f200547286c` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `8dd7bd227861ded3a1da3478aec522826dc60716280bdd40b79fa23f7f1ef29a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 
 ## 3. Disposition baseline cũ
@@ -115,3 +115,5 @@ evidence release.
 | 1.27 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-403`. **Đánh giá impact:** dòng 13 thêm §5.42 và lịch sử 4.6, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence lane/cô lập lỗi vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status `T59-403` + ghi chú §3.5. **Đổi hành vi có chủ ý:** fault của một Program không còn dừng cả Task — theo kiến trúc §8 `isolate Program`; Unified DDD không đổi vì §7 không quy định hành vi cũ, nó đến từ `PROGRAM_TASK_SCHEDULER_SPEC` thời một Program. SRS và VVP không đổi. |
 | 1.26 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-402`. **Đánh giá impact:** dòng 13 thêm §5.41 và lịch sử 4.5, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence lập lịch theo Program vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status `T59-402` + ghi chú §3.5. Unified DDD **không đổi** — §7.1 vốn đã khoá ba lớp chu kỳ và trần 16/32. SRS và VVP không đổi. Golden package v2 đổi byte (PROGRAM_TABLE mang `periodMs`/`budgetUs`) nên `g1_contract_join_v1.json` được ghim lại cùng phiên. |
 | 1.25 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-401` (**mở Wave W4**). **Đánh giá impact:** dòng 13 thêm §5.40 và lịch sử 4.4, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence coordinator package v2 vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status W4 + mục ghi chú mới §3.5. Unified DDD **không đổi** — §5.3/§12.1 vốn đã khoá container và dual-reader. SRS và VVP không đổi. |
+| 1.38 | 2026-08-22 | Re-pin dòng 15 sau đợt W6/W7 phiên 2026-08-22. **Đánh giá impact:** thay đổi nằm trọn trong bảng §3 W6/W7 và ghi chú §3.7 — `T59-604`/`T59-606` đóng, `T59-602` giữ `PARTIAL` với ranh giới mới (quyết định `ADR-052` đã ký, cơ chế khoá thiết bị đã hiện thực; bật `SIGNATURE_REQUIRED` tách sang `T59-607` vì nó đổi profile contract), `T59-705` chuyển sang `PARTIAL` với bằng chứng TARGET DRY-RUN. Unified DDD, SRS, Risk Register và Traceability Matrix **không đổi**: không có contract, bất biến an toàn hay capability sản phẩm nào bị sửa — `ADR-052` trả lời đúng câu hỏi mà `DDD-ARTIFACT-TRUST-PROG-001` §2/§3 cố ý để mở, và mở thêm một task chứ không thu hẹp phạm vi. |
+| 1.39 | 2026-08-22 | Re-pin dòng 15 sau khi thêm §3.8 (ghi chú thực thi W7). **Đánh giá impact:** chỉ thêm một mục ghi chú — trạng thái `T59-705` đã được ghi ở lần re-pin trước, §3.8 nêu bài học sự cố diễn tập và bảng "chặn bởi cái gì / cần gì để mở" cho `T59-701..707`, cùng một điểm của `ADR-052` phải vào runbook thay bo. Không đổi contract, capability, hay bất kỳ trạng thái task nào. |
