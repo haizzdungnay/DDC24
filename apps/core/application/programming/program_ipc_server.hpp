@@ -15,11 +15,10 @@
 namespace core::programming {
 
 constexpr uint16_t PROGRAM_IPC_PROTOCOL_MAJOR = 1;
-/* T59-405 nâng minor 0 -> 1: thêm action `SET_PROGRAM_ENABLED` là thay đổi
- * TƯƠNG THÍCH NGƯỢC (client cũ không gửi action mới, server cũ trả
- * `IPC-ACTION-NOT-IMPLEMENTED`). Giữ nguyên minor sẽ làm hai bên không có
- * cách nào biết đối phương có hiểu action mới hay không. */
-constexpr uint16_t PROGRAM_IPC_PROTOCOL_MINOR = 2;
+/* T59-504 nâng minor 2 -> 3: STATUS thêm snapshot Published Signal ở phần tử
+ * thứ năm. Client minor cũ không giải mã array dài hơn, nên phải nhận biết
+ * phiên bản thay vì âm thầm coi payload hỏng. */
+constexpr uint16_t PROGRAM_IPC_PROTOCOL_MINOR = 3;
 constexpr std::size_t PROGRAM_IPC_MAX_FRAME = 64U * 1024U;
 constexpr std::size_t PROGRAM_IPC_MAX_PAYLOAD = 32U * 1024U;
 constexpr std::size_t PROGRAM_IPC_MAX_QUEUE = 32;

@@ -839,24 +839,37 @@ bool ProgrammingRuntimeCoordinator::set_program_enabled(const ProgramEnableComma
         return false;
     }
     if (command.enabled) {
-        /* `start` từ chối khi trạng thái không cho phép (ví dụ FAULTED chưa
-         * reset) và khi vượt trần 16. Cả hai đều là câu trả lời ĐÚNG cho người
-         * vận hành, không phải lỗi cần che. */
+        /* Disable là trạng thái bền vững, không chỉ là STOPPED. Phải
+         * enable trước khi start; bỏ bước này làm lệnh Enable luôn bị
+         * scheduler từ chối ngay sau một lệnh Disable thành công. */
         if (program->state == StProgramState::RUNNING) return true;
+        if (program->state == StProgramState::DISABLED &&
+            !scheduler_->enable(command.instance_id, error)) {
+            if (detail_code) *detail_code = "IPC-RUNTIME-STATE";
+            return false;
+        }
+        /* `start` từ chối khi trạng thái không cho phép (ví dụ FAULTED chưa
+         * reset) và khi vượt trần 16. Cả hai đều là câu trả lời đúng cho
+         * người vận hành, không phải lỗi cần che. */
         if (!scheduler_->start(command.instance_id, error)) {
             if (detail_code) *detail_code = "IPC-RUNTIME-STATE";
             return false;
         }
         return true;
     }
-    /* Tắt một Program đã dừng là no-op thành công: intent đã đạt. Trả lỗi ở đây
-     * sẽ làm một lần gửi lại (retry) biến thành một lỗi giả. */
-    if (program->state != StProgramState::RUNNING) return true;
-    if (!scheduler_->stop(command.instance_id, error)) {
+    /* Disable phải kết thúc ở DISABLED. Chỉ stop sẽ để `enabled=true`,
+     * khiến desiredEnabled=false nhưng runtime vẫn công bố Program đang bật. */
+    if (program->state == StProgramState::DISABLED) return true;
+    if (program->state == StProgramState::RUNNING &&
+        !scheduler_->stop(command.instance_id, error)) {
         if (detail_code) *detail_code = "IPC-RUNTIME-STATE";
         return false;
     }
-    return true;
+    if (!scheduler_->disable(command.instance_id, error)) {
+        if (detail_code) *detail_code = "IPC-RUNTIME-STATE";
+        return false;
+    }
+    return scheduler_->find_program(command.instance_id)->state == StProgramState::DISABLED;
 }
 
 RetainResetOutcome ProgrammingRuntimeCoordinator::reset_retain(

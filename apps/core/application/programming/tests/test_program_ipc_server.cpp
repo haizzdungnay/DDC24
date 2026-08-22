@@ -237,6 +237,70 @@ TEST(ProgramIpcServer, CapabilitiesAndDuplicateRequestAreDeterministic)
     EXPECT_EQ(response.detail_code, "IPC-REQUEST-ID-CONFLICT");
 }
 
+TEST(ProgramIpcServer, StatusPublishesTypedSignalTruthWithoutInventingZero)
+{
+    const std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("mkddc-ipc-status-" + std::to_string(::getpid()));
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "staging");
+
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    StSignalBus signal_bus;
+    scheduler.set_signal_bus(&signal_bus);
+    StSignalDefinition definition;
+    definition.name = "SUPPLY_TEMP";
+    definition.publisher_program = "program-ahu";
+    definition.type = StType::REAL;
+    definition.freshness_ms = 5000;
+    definition.stale_policy = StStalePolicy::HOLD_LAST;
+    std::string error;
+    ASSERT_TRUE(signal_bus.declare(definition, &error)) << error;
+
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover,
+                                                (root / "journal.bin").string(),
+                                                (root / "staging").string());
+    PriorityResolver resolver;
+    coordinator.capture_priority_overrides(resolver);
+    StValueTrace trace;
+    ProgramIpcServer server(static_cast<uint32_t>(::getuid()), &coordinator);
+    server.set_value_trace(&trace, &scheduler);
+
+    ProgramCodecError codec_error = ProgramCodecError::None;
+    ProgramRequest status = request(ProgramAction::Status);
+    ProgramResponse response;
+    ASSERT_TRUE(DecodeResponseFrame(
+        server.HandleFrame(EncodeRequestFrame(status, &codec_error), allowed_peer(), 1),
+        &response, &codec_error));
+    ASSERT_EQ(response.result, ProgramResult::Ok);
+    const nlohmann::json unavailable = nlohmann::json::from_cbor(response.payload, true, true);
+    ASSERT_EQ(unavailable.size(), 5u);
+    ASSERT_EQ(unavailable[4].size(), 1u);
+    EXPECT_EQ(unavailable[4][0][0], "SUPPLY_TEMP");
+    EXPECT_TRUE(unavailable[4][0][3].is_null());
+    EXPECT_FALSE(unavailable[4][0][4].get<bool>());
+    EXPECT_EQ(unavailable[4][0][6], "UNAVAILABLE");
+    EXPECT_EQ(signal_bus.unavailable_read_count(), 0u)
+        << "poll status không được tính như consumer runtime";
+
+    StCell value{};
+    value.r = 21.5f;
+    ASSERT_TRUE(signal_bus.publish(0, value, 100, "program-ahu"));
+    signal_bus.commit_at_boundary();
+    status.request_id[0] = 0x77;
+    crypto_hash_sha256(status.payload_hash.data(), status.payload.data(), status.payload.size());
+    ASSERT_TRUE(DecodeResponseFrame(
+        server.HandleFrame(EncodeRequestFrame(status, &codec_error), allowed_peer(), 101),
+        &response, &codec_error));
+    const nlohmann::json live = nlohmann::json::from_cbor(response.payload, true, true);
+    EXPECT_TRUE(live[4][0][4].get<bool>());
+    EXPECT_FLOAT_EQ(live[4][0][3].get<float>(), 21.5f);
+    EXPECT_EQ(live[4][0][5], "GOOD");
+    EXPECT_EQ(live[4][0][6], "FRESH");
+
+    std::filesystem::remove_all(root);
+}
+
 TEST(ProgramIpcServer, UnconfiguredDependencyFailsClosedWithStableDetail)
 {
     /* T59-408 đã hiện thực `TRACE_START`, nên nó không còn là ví dụ "action chưa

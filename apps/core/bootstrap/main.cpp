@@ -283,6 +283,11 @@ int main(int argc, char** argv)
     StScheduler programming_scheduler(programming_runtime_enabled
                                           ? StSchedulerProfile::REV_A
                                           : StSchedulerProfile::SUPPORTING_AS_BUILT);
+    /* T59-504 — bus phải tồn tại ở binary production, không chỉ trong unit
+     * test. Trước đây coordinator nhận package có Published Signal rồi từ chối
+     * ở `rebuild_signal_bus()` vì scheduler bootstrap chưa hề được gắn bus. */
+    StSignalBus programming_signal_bus;
+    programming_scheduler.set_signal_bus(&programming_signal_bus);
     ProgrammingCutover programming_cutover(programming_mode);
     std::unique_ptr<StRetainService> retain_service;
     std::unique_ptr<programming::ProgrammingRuntimeCoordinator> programming_coordinator;

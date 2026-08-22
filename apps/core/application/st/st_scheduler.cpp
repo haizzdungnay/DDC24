@@ -280,8 +280,16 @@ bool StScheduler::stage_activation(const std::string& instance_id,
 {
     StProgramInstance* p = find_program(instance_id);
     if (!p) { if (error) *error = "unknown instance '" + instance_id + "'"; return false; }
+    return stage_activation(p, artifact, error, is_rollback);
+}
+
+bool StScheduler::stage_activation(StProgramInstance* p,
+                                   const std::vector<uint8_t>& artifact, std::string* error,
+                                   bool is_rollback)
+{
+    if (!p) { if (error) *error = "null program instance"; return false; }
     if (p->has_pending) {
-        if (error) *error = "an activation is already pending for '" + instance_id + "'";
+        if (error) *error = "an activation is already pending for '" + p->instance_id + "'";
         return false;
     }
 
@@ -317,7 +325,7 @@ bool StScheduler::stage_activation(const std::string& instance_id,
     StRetainResult retain_result;
     if (prepared->program.has_retain()) {
         if (retain_service_ && p->retain_mailbox) {
-            retain_result = retain_service_->restore(instance_id, &prepared->program,
+            retain_result = retain_service_->restore(p->instance_id, &prepared->program,
                                                       wall_clock_());
         } else {
             retain_result.state = StRetainRestoreState::COLD_INIT_MISSING;
@@ -342,6 +350,162 @@ bool StScheduler::stage_activation(const std::string& instance_id,
     p->pending_is_rollback = false;
     if (p->pending_changed_state) p->state = StProgramState::STAGED;
     p->has_pending.store(true, std::memory_order_release);
+    return true;
+}
+
+bool StScheduler::prepare_program_set(const std::string& task_id,
+                                      const std::vector<StProgramSetEntry>& entries,
+                                      StPreparedProgramSet* prepared, std::string* error)
+{
+    auto fail = [&](const std::string& message) {
+        if (error) *error = message;
+        return false;
+    };
+    if (prepared == nullptr) return fail("null prepared program set");
+    StTask* task = find_task(task_id);
+    if (task == nullptr) return fail("unknown task '" + task_id + "'");
+    if (entries.empty()) return fail("package has no program instance");
+
+    const std::size_t max_per_task = profile_ == StSchedulerProfile::REV_A
+                                         ? st_profile_generated::kMaxProgramsPerTask
+                                         : st_sched_limits::kMaxProgramsPerTask;
+    const std::size_t max_total = profile_ == StSchedulerProfile::REV_A
+                                      ? st_profile_generated::kMaxProgramsTotal
+                                      : st_sched_limits::kMaxProgramsTotal;
+    if (entries.size() > max_per_task || entries.size() > max_total)
+        return fail("too many program instances in prepared package");
+
+    std::size_t enabled_count = 0;
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+        const StProgramSetEntry& entry = entries[index];
+        if (entry.instance_id.empty() || entry.instance_id.size() > 64)
+            return fail("instance id must be 1..64 characters");
+        if (profile_ == StSchedulerProfile::REV_A && entry.period_ms != 0 &&
+            !st_limits::RevAAllowsPeriod(entry.period_ms))
+            return fail("program period_ms is not allowed by Rev A profile");
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            if (entries[prior].instance_id == entry.instance_id)
+                return fail("duplicate instance id '" + entry.instance_id + "'");
+            if (entries[prior].order == entry.order)
+                return fail("duplicate order " + std::to_string(entry.order) +
+                            " in task '" + task_id + "'");
+        }
+        if (entry.enabled) ++enabled_count;
+    }
+    const std::size_t max_enabled = profile_ == StSchedulerProfile::REV_A
+                                        ? st_profile_generated::kMaxProgramsEnabled
+                                        : st_sched_limits::kMaxProgramsTotal;
+    if (enabled_count > max_enabled)
+        return fail("too many enabled programs in prepared package");
+
+    StPreparedProgramSet shadow;
+    try {
+        shadow.reserve(entries.size());
+        for (const StProgramSetEntry& entry : entries) {
+            auto program = std::make_unique<StProgramInstance>();
+            program->instance_id = entry.instance_id;
+            program->order = entry.order;
+            program->period_ms = entry.period_ms;
+            program->enabled = entry.enabled;
+            if (retain_service_) {
+                program->retain_mailbox = retain_service_->register_instance(entry.instance_id);
+                if (!program->retain_mailbox)
+                    return fail("cannot register RETAIN identity for instance '" +
+                                entry.instance_id + "'");
+            }
+            if (!stage_activation(program.get(), entry.artifact, error, false)) return false;
+            shadow.push_back(std::move(program));
+        }
+    } catch (const std::bad_alloc&) {
+        return fail("program set staging allocation failed");
+    }
+    prepared->swap(shadow);
+    return true;
+}
+
+bool StScheduler::arm_prepared_program_set(StPreparedProgramSet* prepared, bool rollback,
+                                           std::string* error)
+{
+    if (prepared == nullptr || prepared->empty()) {
+        if (error) *error = "prepared program set is empty";
+        return false;
+    }
+    std::size_t enabled_count = 0;
+    for (const auto& program : *prepared) {
+        if (!program || !program->has_pending.load(std::memory_order_acquire) ||
+            program->pending_commit_requested.load(std::memory_order_acquire) ||
+            !program->pending_program) {
+            if (error) *error = "prepared program set is incomplete";
+            return false;
+        }
+        if (program->enabled) ++enabled_count;
+    }
+    const std::size_t max_enabled = profile_ == StSchedulerProfile::REV_A
+                                        ? st_profile_generated::kMaxProgramsEnabled
+                                        : st_sched_limits::kMaxProgramsTotal;
+    if (enabled_count > max_enabled) {
+        if (error) *error = "too many enabled programs in prepared package";
+        return false;
+    }
+    /* Chỉ ghi sau khi MỌI phần tử đã qua preflight: không có prefix armed. */
+    for (auto& program : *prepared) {
+        program->pending_is_rollback = rollback;
+        program->pending_commit_requested.store(true, std::memory_order_release);
+    }
+    return true;
+}
+
+bool StScheduler::swap_prepared_program_set_at_boundary(
+    const std::string& task_id, StPreparedProgramSet* prepared) noexcept
+{
+    StTask* task = find_task(task_id);
+    if (task == nullptr || prepared == nullptr || prepared->empty()) return false;
+    for (const auto& program : *prepared) {
+        if (!program || !program->has_pending.load(std::memory_order_acquire) ||
+            !program->pending_commit_requested.load(std::memory_order_acquire) ||
+            !program->pending_program || program->runtime.has_retired())
+            return false;
+    }
+
+    /* Mọi mutation dưới đây chỉ chạm topology shadow. Nếu một handle bất ngờ bị
+     * từ chối, topology live vẫn chưa swap và caller có thể discard cả shadow. */
+    for (auto& program : *prepared) {
+        if (!program->runtime.activate_prepared(std::move(program->pending_program))) return false;
+        program->process_input_count = 0;
+        program->input_snapshot_generation = 0;
+        program->input_snapshot_valid = true;
+        program->last_successful_base_step = 0;
+        program->output_commit_generation = 0;
+        program->output_commit_now_ns = 0;
+        /* Program Disabled không có output cycle để chờ; nó đã qua loader và
+         * không thể publish, nên đủ điều kiện package barrier ngay. */
+        program->committed_since_activation = !program->enabled;
+        program->outputs_withdrawn = false;
+        program->retain_restore_state = program->pending_retain_restore_state;
+        program->retain_reject_code = program->pending_retain_reject_code;
+        program->retain_generation = program->pending_retain_generation;
+        program->last_successful_now_ns = 0;
+        program->activated_artifact.swap(program->pending_artifact);
+        program->state = program->enabled ? StProgramState::RUNNING
+                                          : StProgramState::DISABLED;
+        program->pending_is_rollback = false;
+        program->pending_changed_state = false;
+        program->pending_retain_restore_state = StRetainRestoreState::NOT_APPLICABLE;
+        program->pending_retain_reject_code = nullptr;
+        program->pending_retain_generation = 0;
+        program->pending_commit_requested.store(false, std::memory_order_relaxed);
+        program->has_pending.store(false, std::memory_order_release);
+    }
+    task->programs().swap(*prepared);
+    return true;
+}
+
+bool StScheduler::restore_program_set_at_boundary(
+    const std::string& task_id, StPreparedProgramSet* previous) noexcept
+{
+    StTask* task = find_task(task_id);
+    if (task == nullptr || previous == nullptr) return false;
+    task->programs().swap(*previous);
     return true;
 }
 

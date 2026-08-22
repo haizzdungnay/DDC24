@@ -277,6 +277,22 @@ TEST(StSignalBus, ReadsWithinOneCycleAreStable)
     EXPECT_FLOAT_EQ(second.value.r, 1.0f);
 }
 
+/* Poll monitor không được tự biến thành một consumer lỗi. Nếu `inspect()` tăng
+ * bộ đếm, chỉ cần mở trang Runtime là số unavailable nhảy liên tục dù không
+ * Program nào từng đọc signal. */
+TEST(StSignalBus, DiagnosticInspectDoesNotCountUnavailableConsumerRead)
+{
+    StSignalBus bus;
+    std::string error;
+    ASSERT_TRUE(bus.declare(make_signal("SUPPLY", StStalePolicy::WAIT), &error)) << error;
+    const int index = bus.index_of("SUPPLY");
+
+    EXPECT_EQ(bus.inspect(index, 0).state, StSignalReadState::UNAVAILABLE);
+    EXPECT_EQ(bus.unavailable_read_count(), 0u);
+    EXPECT_EQ(bus.read(index, 0).state, StSignalReadState::UNAVAILABLE);
+    EXPECT_EQ(bus.unavailable_read_count(), 1u);
+}
+
 /* Publish/commit/read không cấp phát: đây là đường quét. */
 TEST(StSignalBus, HotPathDoesNotAllocate)
 {

@@ -23,6 +23,7 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "st/st_loader.hpp"
 #include "st/st_program.hpp"
@@ -97,7 +98,18 @@ public:
     bool declare(const StSignalDefinition& definition, std::string* error);
     void clear();
 
-    std::size_t size() const { return count_; }
+    /* Chuẩn bị một contract thay thế ở bank không-live. Mọi copy/validate chuỗi
+     * diễn ra ở luồng non-RT; safe boundary chỉ đổi chỉ số bank bằng atomic.
+     * Bank live cũ được giữ lại cho tới commit/rollback nên IPC reader đã chụp
+     * contract cũ không bao giờ đọc vùng đang bị ghi lại. */
+    bool prepare_replacement(const std::vector<StSignalDefinition>& definitions,
+                             std::string* error);
+    void discard_prepared_replacement() noexcept;
+    bool activate_prepared_replacement_at_boundary() noexcept;
+    bool rollback_replacement_at_boundary() noexcept;
+    void commit_replacement() noexcept;
+
+    std::size_t size() const;
     /* Chỉ số nội bộ để consumer tra một lần lúc nạp thay vì so chuỗi mỗi chu kỳ.
      * Trả -1 nếu không có. */
     int index_of(const std::string& name) const;
@@ -117,31 +129,57 @@ public:
     StSignalRead read(int index, uint64_t now_ns) const;
     StSignalRead read(const std::string& name, uint64_t now_ns) const;
 
+    /* Ảnh chẩn đoán chỉ-đọc cho IPC/monitor. Khác `read()`, phép này KHÔNG
+     * tăng `unavailable_read_count`: một màn hình poll trạng thái không phải là
+     * consumer runtime và không được làm méo số đo lỗi của consumer thật. */
+    StSignalRead inspect(int index, uint64_t now_ns) const;
+
     /* Producer bị disable/fault: giá trị dừng lại ở lần publish cuối và sẽ quá
      * hạn theo đúng freshness của nó. KHÔNG xoá giá trị — xoá nghĩa là biến một
      * sự cố có thời hạn thành một sự cố tức thì, và `HOLD_LAST` mất nghĩa. */
     void note_publisher_stopped(const std::string& publisher_program);
     /* Số lần một consumer nhận `UNAVAILABLE`. Số đo cho `T59-408`. */
-    uint32_t unavailable_read_count() const { return unavailable_reads_.load(std::memory_order_relaxed); }
+    uint32_t unavailable_read_count() const;
 
-    const StSignalDefinition& definition(int index) const { return definitions_[static_cast<std::size_t>(index)]; }
+    /* Trả bằng giá trị để reference không thoát khỏi lease bank. STATUS là
+     * đường non-RT; copy hai string ở đây không đi vào scan hot path. */
+    StSignalDefinition definition(int index) const;
 
 private:
-    /* Hai bản: `[0]` và `[1]`. `live_` chỉ bản đang đọc được; publisher luôn ghi
-     * vào `1 - live_`. Đổi bản là MỘT lần ghi atomic, nên consumer hoặc thấy
-     * trọn bản cũ hoặc trọn bản mới — không bao giờ thấy nửa nọ nửa kia. */
+    static constexpr std::size_t kContractBanks = 3;
+
     struct Slot {
         StCell   value{};
         uint64_t published_at_ns = 0;
         bool     ever_published = false;
     };
 
-    std::array<StSignalDefinition, kMaxRuntimeSignals> definitions_{};
-    std::array<std::array<Slot, kMaxRuntimeSignals>, 2> buffers_{};
-    std::size_t count_ = 0;
-    std::atomic<std::size_t> live_{0};
-    std::atomic<uint64_t> generation_{0};
-    mutable std::atomic<uint32_t> unavailable_reads_{0};
+    struct Bank {
+        std::array<StSignalDefinition, kMaxRuntimeSignals> definitions{};
+        std::array<std::array<Slot, kMaxRuntimeSignals>, 2> buffers{};
+        std::size_t count = 0;
+        std::atomic<std::size_t> live{0};
+        std::atomic<uint64_t> generation{0};
+        mutable std::atomic<uint32_t> unavailable_reads{0};
+    };
+
+    uint8_t acquire_active_bank() const noexcept;
+    void release_bank(uint8_t bank) const noexcept;
+    static int index_of(const Bank& bank, const std::string& name);
+    static bool declare(Bank* bank, const StSignalDefinition& definition, std::string* error);
+    StSignalRead read_impl(uint8_t bank, int index, uint64_t now_ns,
+                           bool count_unavailable) const;
+
+    /* Hai bản: `[0]` và `[1]`. `live_` chỉ bản đang đọc được; publisher luôn ghi
+     * vào `1 - live_`. Đổi bản là MỘT lần ghi atomic, nên consumer hoặc thấy
+     * trọn bản cũ hoặc trọn bản mới — không bao giờ thấy nửa nọ nửa kia. */
+    std::array<Bank, kContractBanks> banks_{};
+    mutable std::array<std::atomic<uint32_t>, kContractBanks> bank_readers_{};
+    std::atomic<uint8_t> active_bank_{0};
+    /* Chỉ coordinator IPC ghi và scan boundary đọc sau publish state release;
+     * -1 nghĩa là không có bank được reserve. */
+    int8_t prepared_bank_ = -1;
+    int8_t previous_bank_ = -1;
 };
 
 } // namespace core

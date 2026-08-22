@@ -491,7 +491,8 @@ TEST(ProgrammingPackageV2Stage, SetProgramEnabledAppliesToOneInstance)
     enable.instance_id = "P_ahu";
     enable.enabled = false;
     ASSERT_TRUE(coordinator.set_program_enabled(enable, &detail, &error)) << detail << ": " << error;
-    EXPECT_EQ(scheduler.find_program("P_ahu")->state, StProgramState::STOPPED);
+    EXPECT_EQ(scheduler.find_program("P_ahu")->state, StProgramState::DISABLED);
+    EXPECT_FALSE(scheduler.find_program("P_ahu")->enabled);
     /* Chỉ MỘT Program bị tác động: lệnh cho một instance không được làm gì với
      * instance khác. */
     EXPECT_EQ(scheduler.find_program("P_boiler")->state, StProgramState::RUNNING);
@@ -503,6 +504,7 @@ TEST(ProgrammingPackageV2Stage, SetProgramEnabledAppliesToOneInstance)
     enable.enabled = true;
     ASSERT_TRUE(coordinator.set_program_enabled(enable, &detail, &error)) << detail << ": " << error;
     EXPECT_EQ(scheduler.find_program("P_ahu")->state, StProgramState::RUNNING);
+    EXPECT_TRUE(scheduler.find_program("P_ahu")->enabled);
 
     /* Instance không có trong package đang chạy: KHÔNG tự tạo. Bật một Program
      * không tồn tại nghĩa là người gọi và thiết bị đang nói về hai gói khác

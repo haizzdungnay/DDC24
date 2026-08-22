@@ -36,9 +36,17 @@ bool st_stale_policy_from_name(const char* name, StStalePolicy* out)
     return false;
 }
 
-bool StSignalBus::declare(const StSignalDefinition& definition, std::string* error)
+int StSignalBus::index_of(const Bank& bank, const std::string& name)
 {
-    if (count_ >= kMaxRuntimeSignals) {
+    for (std::size_t index = 0; index < bank.count; ++index)
+        if (bank.definitions[index].name == name) return static_cast<int>(index);
+    return -1;
+}
+
+bool StSignalBus::declare(Bank* bank, const StSignalDefinition& definition, std::string* error)
+{
+    if (bank == nullptr) return false;
+    if (bank->count >= kMaxRuntimeSignals) {
         if (error) *error = "vượt trần " + std::to_string(kMaxRuntimeSignals) + " signal";
         return false;
     }
@@ -46,7 +54,7 @@ bool StSignalBus::declare(const StSignalDefinition& definition, std::string* err
         if (error) *error = "signal không có tên";
         return false;
     }
-    if (index_of(definition.name) >= 0) {
+    if (index_of(*bank, definition.name) >= 0) {
         /* Một tên, một publisher, một nguồn sự thật. Hai khai báo cùng tên nghĩa
          * là consumer không có cách nào biết đọc cái nào. */
         if (error) *error = "signal '" + definition.name + "' đã được khai báo";
@@ -60,81 +68,189 @@ bool StSignalBus::declare(const StSignalDefinition& definition, std::string* err
             *error = "signal '" + definition.name + "': USE_FALLBACK và giá trị dự phòng phải đi liền nhau";
         return false;
     }
-    definitions_[count_] = definition;
-    buffers_[0][count_] = Slot{};
-    buffers_[1][count_] = Slot{};
-    count_++;
+    bank->definitions[bank->count] = definition;
+    bank->buffers[0][bank->count] = Slot{};
+    bank->buffers[1][bank->count] = Slot{};
+    bank->count++;
     return true;
+}
+
+uint8_t StSignalBus::acquire_active_bank() const noexcept
+{
+    for (;;) {
+        const uint8_t bank = active_bank_.load(std::memory_order_acquire);
+        bank_readers_[bank].fetch_add(1, std::memory_order_acq_rel);
+        if (active_bank_.load(std::memory_order_acquire) == bank) return bank;
+        bank_readers_[bank].fetch_sub(1, std::memory_order_release);
+    }
+}
+
+void StSignalBus::release_bank(uint8_t bank) const noexcept
+{
+    bank_readers_[bank].fetch_sub(1, std::memory_order_release);
+}
+
+bool StSignalBus::declare(const StSignalDefinition& definition, std::string* error)
+{
+    /* API bootstrap/test cũ: chỉ hợp lệ khi chưa có reader concurrent. Runtime
+     * package phải đi qua prepare_replacement(). */
+    return declare(&banks_[active_bank_.load(std::memory_order_relaxed)], definition, error);
 }
 
 void StSignalBus::clear()
 {
-    count_ = 0;
-    live_.store(0, std::memory_order_release);
-    generation_.store(0, std::memory_order_release);
-    unavailable_reads_.store(0, std::memory_order_relaxed);
+    Bank& bank = banks_[active_bank_.load(std::memory_order_relaxed)];
+    bank.count = 0;
+    bank.live.store(0, std::memory_order_release);
+    bank.generation.store(0, std::memory_order_release);
+    bank.unavailable_reads.store(0, std::memory_order_relaxed);
+}
+
+bool StSignalBus::prepare_replacement(
+    const std::vector<StSignalDefinition>& definitions, std::string* error)
+{
+    if (prepared_bank_ >= 0) {
+        if (error) *error = "đã có signal contract đang chờ activate";
+        return false;
+    }
+    const uint8_t active = active_bank_.load(std::memory_order_acquire);
+    int selected = -1;
+    for (std::size_t index = 0; index < kContractBanks; ++index) {
+        if (index == active || static_cast<int>(index) == previous_bank_) continue;
+        if (bank_readers_[index].load(std::memory_order_acquire) == 0) {
+            selected = static_cast<int>(index);
+            break;
+        }
+    }
+    if (selected < 0) {
+        if (error) *error = "không có signal contract bank rảnh; reader cũ chưa kết thúc";
+        return false;
+    }
+
+    Bank& bank = banks_[static_cast<std::size_t>(selected)];
+    bank.count = 0;
+    bank.live.store(0, std::memory_order_relaxed);
+    bank.generation.store(0, std::memory_order_relaxed);
+    bank.unavailable_reads.store(0, std::memory_order_relaxed);
+    for (const StSignalDefinition& definition : definitions) {
+        if (!declare(&bank, definition, error)) {
+            bank.count = 0;
+            return false;
+        }
+    }
+    prepared_bank_ = static_cast<int8_t>(selected);
+    return true;
+}
+
+void StSignalBus::discard_prepared_replacement() noexcept
+{
+    prepared_bank_ = -1;
+}
+
+bool StSignalBus::activate_prepared_replacement_at_boundary() noexcept
+{
+    if (prepared_bank_ < 0 || previous_bank_ >= 0) return false;
+    previous_bank_ = static_cast<int8_t>(active_bank_.load(std::memory_order_relaxed));
+    active_bank_.store(static_cast<uint8_t>(prepared_bank_), std::memory_order_release);
+    prepared_bank_ = -1;
+    return true;
+}
+
+bool StSignalBus::rollback_replacement_at_boundary() noexcept
+{
+    if (previous_bank_ < 0) return false;
+    active_bank_.store(static_cast<uint8_t>(previous_bank_), std::memory_order_release);
+    previous_bank_ = -1;
+    return true;
+}
+
+void StSignalBus::commit_replacement() noexcept
+{
+    previous_bank_ = -1;
+}
+
+std::size_t StSignalBus::size() const
+{
+    const uint8_t bank = acquire_active_bank();
+    const std::size_t result = banks_[bank].count;
+    release_bank(bank);
+    return result;
 }
 
 int StSignalBus::index_of(const std::string& name) const
 {
-    for (std::size_t index = 0; index < count_; ++index)
-        if (definitions_[index].name == name) return static_cast<int>(index);
-    return -1;
+    const uint8_t bank = acquire_active_bank();
+    const int result = index_of(banks_[bank], name);
+    release_bank(bank);
+    return result;
 }
 
 bool StSignalBus::publish(int index, const StCell& value, uint64_t now_ns, const char* publisher)
 {
-    if (index < 0 || static_cast<std::size_t>(index) >= count_) return false;
-    const StSignalDefinition& definition = definitions_[static_cast<std::size_t>(index)];
+    const uint8_t bank_index = acquire_active_bank();
+    Bank& bank = banks_[bank_index];
+    if (index < 0 || static_cast<std::size_t>(index) >= bank.count) {
+        release_bank(bank_index);
+        return false;
+    }
+    const StSignalDefinition& definition = bank.definitions[static_cast<std::size_t>(index)];
     if (publisher != nullptr && definition.publisher_program != publisher) {
         /* Chỉ publisher đã khai mới được ghi. Cho Program khác ghi nghĩa là tên
          * signal có hai nguồn sự thật, và không ai đọc được cấu hình để biết
          * nguồn nào đang thắng. */
+        release_bank(bank_index);
         return false;
     }
     /* Ghi vào bản NHÁP — bản mà không consumer nào đang đọc. */
-    const std::size_t draft = 1u - live_.load(std::memory_order_acquire);
-    Slot& slot = buffers_[draft][static_cast<std::size_t>(index)];
+    const std::size_t draft = 1u - bank.live.load(std::memory_order_acquire);
+    Slot& slot = bank.buffers[draft][static_cast<std::size_t>(index)];
     slot.value = value;
     slot.published_at_ns = now_ns;
     slot.ever_published = true;
+    release_bank(bank_index);
     return true;
 }
 
 void StSignalBus::commit_at_boundary()
 {
-    const std::size_t live = live_.load(std::memory_order_acquire);
+    const uint8_t bank_index = acquire_active_bank();
+    Bank& bank = banks_[bank_index];
+    const std::size_t live = bank.live.load(std::memory_order_acquire);
     const std::size_t draft = 1u - live;
     /* Chép các ô KHÔNG được publish trong chu kỳ này sang bản nháp trước khi
      * đổi bản. Không chép thì một signal chỉ publish mỗi 30 s sẽ "biến mất" ở
      * chu kỳ kế tiếp, và `HOLD_LAST` sẽ giữ một ô rỗng thay vì giá trị cuối. */
-    for (std::size_t index = 0; index < count_; ++index) {
-        Slot& draft_slot = buffers_[draft][index];
-        const Slot& live_slot = buffers_[live][index];
+    for (std::size_t index = 0; index < bank.count; ++index) {
+        Slot& draft_slot = bank.buffers[draft][index];
+        const Slot& live_slot = bank.buffers[live][index];
         if (draft_slot.published_at_ns < live_slot.published_at_ns || !draft_slot.ever_published)
             draft_slot = live_slot;
     }
-    generation_.fetch_add(1, std::memory_order_acq_rel);
+    bank.generation.fetch_add(1, std::memory_order_acq_rel);
     /* Đổi bản là MỘT lần ghi atomic: consumer hoặc thấy trọn bản cũ hoặc trọn
      * bản mới. */
-    live_.store(draft, std::memory_order_release);
+    bank.live.store(draft, std::memory_order_release);
+    release_bank(bank_index);
 }
 
-StSignalRead StSignalBus::read(int index, uint64_t now_ns) const
+StSignalRead StSignalBus::read_impl(uint8_t bank_index, int index, uint64_t now_ns,
+                                    bool count_unavailable) const
 {
     StSignalRead result;
-    if (index < 0 || static_cast<std::size_t>(index) >= count_) {
+    const Bank& bank = banks_[bank_index];
+    if (index < 0 || static_cast<std::size_t>(index) >= bank.count) {
         result.state = StSignalReadState::NOT_DECLARED;
         return result;
     }
-    const std::size_t live = live_.load(std::memory_order_acquire);
-    const StSignalDefinition& definition = definitions_[static_cast<std::size_t>(index)];
-    const Slot& slot = buffers_[live][static_cast<std::size_t>(index)];
-    result.generation = generation_.load(std::memory_order_acquire);
+    const std::size_t live = bank.live.load(std::memory_order_acquire);
+    const StSignalDefinition& definition = bank.definitions[static_cast<std::size_t>(index)];
+    const Slot& slot = bank.buffers[live][static_cast<std::size_t>(index)];
+    result.generation = bank.generation.load(std::memory_order_acquire);
     result.published_at_ns = slot.published_at_ns;
 
     auto unavailable = [&]() {
-        unavailable_reads_.fetch_add(1, std::memory_order_relaxed);
+        if (count_unavailable)
+            bank.unavailable_reads.fetch_add(1, std::memory_order_relaxed);
         result.state = StSignalReadState::UNAVAILABLE;
         if (definition.has_fallback) result.value = definition.fallback;
         return result;
@@ -174,9 +290,46 @@ StSignalRead StSignalBus::read(int index, uint64_t now_ns) const
     return unavailable();
 }
 
+StSignalRead StSignalBus::read(int index, uint64_t now_ns) const
+{
+    const uint8_t bank = acquire_active_bank();
+    const StSignalRead result = read_impl(bank, index, now_ns, true);
+    release_bank(bank);
+    return result;
+}
+
+StSignalRead StSignalBus::inspect(int index, uint64_t now_ns) const
+{
+    const uint8_t bank = acquire_active_bank();
+    const StSignalRead result = read_impl(bank, index, now_ns, false);
+    release_bank(bank);
+    return result;
+}
+
 StSignalRead StSignalBus::read(const std::string& name, uint64_t now_ns) const
 {
-    return read(index_of(name), now_ns);
+    const uint8_t bank = acquire_active_bank();
+    const StSignalRead result = read_impl(bank, index_of(banks_[bank], name), now_ns, true);
+    release_bank(bank);
+    return result;
+}
+
+StSignalDefinition StSignalBus::definition(int index) const
+{
+    const uint8_t bank = acquire_active_bank();
+    StSignalDefinition result;
+    if (index >= 0 && static_cast<std::size_t>(index) < banks_[bank].count)
+        result = banks_[bank].definitions[static_cast<std::size_t>(index)];
+    release_bank(bank);
+    return result;
+}
+
+uint32_t StSignalBus::unavailable_read_count() const
+{
+    const uint8_t bank = acquire_active_bank();
+    const uint32_t result = banks_[bank].unavailable_reads.load(std::memory_order_relaxed);
+    release_bank(bank);
+    return result;
 }
 
 void StSignalBus::note_publisher_stopped(const std::string& publisher_program)

@@ -135,6 +135,14 @@ add_executable(mkddc-core bootstrap/main.cpp)
 target_link_libraries(mkddc-core PRIVATE core_lib)
 mkddc_apply_provenance(mkddc-core)
 
+# T59-505: E2E host dùng cùng scheduler/coordinator/IPC/loader production
+# nhưng không giả vờ có I/O vật lý. Target riêng giữ ranh giới
+# bằng chứng rõ: PASS simulator không phải PASS target/HIL.
+add_executable(mkddc-programming-core-sim
+    application/programming/programming_core_sim_main.cpp)
+target_link_libraries(mkddc-programming-core-sim PRIVATE core_lib)
+mkddc_apply_provenance(mkddc-programming-core-sim)
+
 # FW-SOM-IEC-002 item 2: validate gateway CLI cho BE gọi (fixed argv, source
 # luôn qua file path, không shell-eval — xem st/st_validate_main.cpp).
 add_executable(mkddc-st-validate application/st/st_validate_main.cpp)

@@ -1,6 +1,7 @@
 #include "programming/program_ipc_server.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <utility>
@@ -383,15 +384,76 @@ ProgramResult result_for_state(LifecycleState state)
     return ProgramResult::Unavailable;
 }
 
-std::vector<uint8_t> status_payload(const RuntimeOperationSnapshot& snapshot)
+json signal_cell_json(const StSignalDefinition& definition, const StSignalRead& read,
+                      bool* valid)
+{
+    *valid = read.state != StSignalReadState::UNAVAILABLE &&
+             read.state != StSignalReadState::NOT_DECLARED;
+    if (!*valid) return nullptr;
+    switch (definition.type) {
+    case StType::BOOL: return read.value.b;
+    case StType::INT:
+    case StType::DINT: return read.value.i;
+    case StType::UINT: return static_cast<uint32_t>(read.value.i);
+    case StType::REAL:
+        if (!std::isfinite(read.value.r)) {
+            *valid = false;
+            return nullptr;
+        }
+        return read.value.r;
+    case StType::TIME: return read.value.t;
+    }
+    *valid = false;
+    return nullptr;
+}
+
+const char* signal_read_state_name(StSignalReadState state)
+{
+    switch (state) {
+    case StSignalReadState::FRESH: return "FRESH";
+    case StSignalReadState::STALE_HELD: return "STALE_HELD";
+    case StSignalReadState::STALE_FALLBACK: return "STALE_FALLBACK";
+    case StSignalReadState::UNAVAILABLE: return "UNAVAILABLE";
+    case StSignalReadState::NOT_DECLARED: return "NOT_DECLARED";
+    }
+    return "UNAVAILABLE";
+}
+
+std::vector<uint8_t> status_payload(const RuntimeOperationSnapshot& snapshot,
+                                    const StScheduler* scheduler, uint64_t now_mono_ns)
 {
     const json active = snapshot.active_revision_id.empty()
         ? json(nullptr) : json(snapshot.active_revision_id);
     const json lkg = snapshot.lkg_revision_id.empty()
         ? json(nullptr) : json(snapshot.lkg_revision_id);
+    json signals = json::array();
+    if (scheduler != nullptr && scheduler->signal_bus() != nullptr) {
+        const StSignalBus* bus = scheduler->signal_bus();
+        for (std::size_t index = 0; index < bus->size(); ++index) {
+            const StSignalDefinition& definition = bus->definition(static_cast<int>(index));
+            const StSignalRead read = bus->inspect(static_cast<int>(index), now_mono_ns);
+            bool valid = false;
+            const json value = signal_cell_json(definition, read, &valid);
+            const bool stale = read.state == StSignalReadState::STALE_HELD ||
+                               read.state == StSignalReadState::STALE_FALLBACK;
+            signals.push_back(json::array({
+                definition.name,
+                definition.publisher_program,
+                st_type_name(definition.type),
+                value,
+                valid,
+                valid ? (stale ? "UNCERTAIN" : "GOOD") : "BAD",
+                signal_read_state_name(read.state),
+                st_stale_policy_name(definition.stale_policy),
+                definition.freshness_ms,
+                read.published_at_ns,
+                read.generation,
+            }));
+        }
+    }
     return json::to_cbor(json::array({
         snapshot.producer_mode == CutoverMode::PROGRAM_ONLY ? "PROGRAM_ONLY" : "GRAPH_ONLY",
-        active, lkg, snapshot.active_override_ids,
+        active, lkg, snapshot.active_override_ids, signals,
     }));
 }
 
@@ -761,7 +823,8 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
             } else if (request.action == ProgramAction::Status) {
                 const RuntimeOperationSnapshot snapshot = coordinator_->snapshot();
                 response = snapshot.impact_snapshot_valid
-                    ? make_response(request, ProgramResult::Ok, nullptr, status_payload(snapshot))
+                    ? make_response(request, ProgramResult::Ok, nullptr,
+                                    status_payload(snapshot, trace_scheduler_, now_mono_ns))
                     : make_response(request, ProgramResult::Unavailable,
                                     "IPC-IMPACT-NOT-READY");
                 if (!snapshot.active_revision_id.empty()) {
@@ -781,7 +844,7 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
                     response = make_response(request, result_for_state(snapshot.state),
                                              snapshot.detail_code.empty()
                                                  ? nullptr : snapshot.detail_code.c_str(),
-                                             status_payload(snapshot));
+                                             status_payload(snapshot, trace_scheduler_, now_mono_ns));
                     response.keeps_running = snapshot.keeps_running;
                     if (!snapshot.active_revision_id.empty()) {
                         response.has_active_revision = true;

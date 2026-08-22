@@ -264,6 +264,19 @@ struct StProgramInstance {
     std::atomic<uint64_t> retain_reset_ack_generation{0};
 };
 
+/* Ảnh topology/IR của cả package được dựng ngoài scheduler sống. Safe boundary
+ * chỉ activate các handle đã chuẩn bị rồi swap vector ownership O(1); vì vậy
+ * STAGE không đổi period/state/membership của Revision đang chạy. */
+struct StProgramSetEntry {
+    std::string instance_id;
+    std::vector<uint8_t> artifact;
+    uint16_t order = 0;
+    uint32_t period_ms = 0;
+    bool enabled = false;
+};
+
+using StPreparedProgramSet = std::vector<std::unique_ptr<StProgramInstance>>;
+
 struct StTaskConfig {
     std::string id;
     uint8_t     priority = 0;       /* 0 = cao nhất */
@@ -434,6 +447,20 @@ public:
                                   std::string* error);
     bool abort_staged_activation(const std::string& instance_id, std::string* error);
 
+    /* Package-atomic lifecycle. `prepare_program_set` làm toàn bộ loader/RETAIN/
+     * heap ở non-RT trên một topology shadow. `arm` kiểm trước toàn bộ rồi mới
+     * đặt cờ, không thể để nửa package armed. Safe boundary activate shadow và
+     * swap cả vector; `*prepared` nhận lại nguyên topology cũ để rollback. */
+    bool prepare_program_set(const std::string& task_id,
+                             const std::vector<StProgramSetEntry>& entries,
+                             StPreparedProgramSet* prepared, std::string* error);
+    bool arm_prepared_program_set(StPreparedProgramSet* prepared, bool rollback,
+                                  std::string* error);
+    bool swap_prepared_program_set_at_boundary(const std::string& task_id,
+                                               StPreparedProgramSet* prepared) noexcept;
+    bool restore_program_set_at_boundary(const std::string& task_id,
+                                         StPreparedProgramSet* previous) noexcept;
+
     /* Lệnh vòng đời (SPEC §7.3). Trả false nếu chuyển trạng thái không hợp lệ. */
     bool start(const std::string& instance_id, std::string* error);
     bool stop(const std::string& instance_id, std::string* error);
@@ -534,6 +561,8 @@ private:
     void start_workers(std::size_t count);
     void stop_workers();
     void apply_pending_activations(StTask& task);
+    bool stage_activation(StProgramInstance* program, const std::vector<uint8_t>& artifact,
+                          std::string* error, bool is_rollback);
     void apply_pending_retain_resets(StTask& task);
     void log_trace(StTraceEventKind kind, uint64_t now_ns, bool ok, const char* task_id,
                    const char* instance_id, const char* code);
