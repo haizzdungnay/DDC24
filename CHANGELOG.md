@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### Hợp nhất W5 + W6 và mở đường khoá phát hành thật (2026-08-23)
+
+- **Fixed — `F-W6-MERGE-01`: đường dựng bản RELEASE chưa bao giờ tồn tại.**
+  `st_public_key.hpp` yêu cầu build phát hành truyền
+  `-DMKDDC_ST_PUBLIC_KEY_HEX=<64 hex>`, nhưng **không file CMake nào** biến biến
+  đó thành compile definition — `#ifdef MKDDC_ST_PUBLIC_KEY_HEX` chưa bao giờ
+  đúng, nên mọi binary từng dựng (kể cả bản đã deploy lên bo) đều nhúng **khoá
+  test** cam kết trong repo. CMake chỉ in `Manually-specified variables were not
+  used by the project`. Hệ quả: gate chặn khoá test của `T59-602` chặn đúng,
+  nhưng vì không có đường tạo bản `RELEASE`, cách duy nhất để cổng `release`
+  xanh là `MKDDC_ALLOW_TEST_KEY=1` — tự tắt cái gác đang canh. Sửa:
+  `apps/core/CMakeLists.txt` nối biến thành `target_compile_definitions` kèm
+  kiểm 64 ký tự hex ngay tại configure; `platform/packaging/build-release.sh`
+  đọc khoá công khai ngoài cây nguồn (`MKDDC_RELEASE_KEY_DIR`, mặc định
+  `~/.config/mkddc/release-signing/release.pub`). `provenance.json` nay ghi
+  `"st_public_key_mode": "RELEASE"` + fingerprint.
+- **Fixed — `F-W6-MERGE-02`:** guard "một helper đăng nhập duy nhất" của
+  `T59-604` bắt nhầm `programming-real.spec.ts`, vốn đăng nhập backend Go thật
+  bằng JWT thật. Guard nay loại trừ đúng `MKDDC_E2E_REAL_SPEC`.
+- **Fixed — `F-W6-MERGE-03`:** helper dùng chung `e2e/helpers/session.ts` được
+  ghép thêm lớp chống `net::ERR_NETWORK_CHANGED` của W5 — nạp lại đúng một lần
+  và chỉ khi đã ghi nhận abort tầng mạng của tài nguyên tĩnh.
+- **Changed:** hợp nhất `feat/t59-w6-hardening` (18 commit: `T59-601..606`,
+  `ADR-052`, `T59-705` diễn tập trên bo) vào `main` đã có W5; sáu chỗ va nhau
+  được hoà giải theo hướng **giữ cả hai** ở `verify-project.sh` (cách ly rỗng +
+  guard tự hết hạn của W6, `MKDDC_E2E_REAL_SPEC` của W5) và ở
+  `bootstrap/main.cpp` (`StSignalBus` của W5 + tập khoá tin cậy ADR-052).
+- **Security:** khoá ký đang dùng là **khoá LAB** (Ed25519, khoá riêng `0600`
+  ngoài repo). Bản thương mại phải dùng khoá hãng giữ trong HSM; fingerprint
+  nằm trong `provenance.json` nên hai thứ không lẫn được.
+- **Verification (HOST):** `--component release` PASS (10 test đóng gói OK,
+  `sha256sum --check` OK, `st_public_key_mode=RELEASE`
+  fingerprint `fdb9a30eea28b026`); `--component e2e` PASS **79/79** trong 30,0 s.
+
 ### Số đo cổng W6 sau đợt 2026-08-22
 
 `MKDDC_ALLOW_TEST_KEY=1 python3 scripts/verify_wave_gates.py --wave W6` →

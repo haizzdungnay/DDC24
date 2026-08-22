@@ -2170,7 +2170,7 @@ release evidence; `RELEASE_READY` giữ `NO-GO`.
 | `T59-604` | P1 | E2E stability, remove stale quarantine, deterministic workers/retry policy | T59-505 | **DONE (HOST/LOCAL)** | **Chẩn đoán trước đó SAI, và cái sai đó giữ cổng đỏ thêm một vòng.** W6 kết luận flake là "đói CPU" và vá bằng chờ điều kiện 60 s. Hai chỗ hỏng: (1) phép chờ 60 s nằm trong test có ngân sách 30 s nên **không bao giờ chạy hết hạn của chính nó**; (2) helper đăng nhập được chép tay ở **bảy** spec, bản vá chỉ áp cho một — sáu bản còn lại giữ nguyên cuộc đua, và lần chạy kế đỏ ở `pa3-a11y.spec.ts`. **Nguyên nhân thật, có bằng chứng từ trace:** sau khi bấm "Tiếp tục chỉnh sửa", URL thật là `/programs`, còn spec chờ `/design` — mà `design` chính là **lối vào cũ được W5 đổi thành redirect sang `programs`**. Spec đang đua với redirect: máy chậm thì Playwright kịp thấy trạng thái trung gian và test xanh; máy nhanh thì redirect xong trước và test treo tới hết giờ. **Ba bản sửa:** một helper đăng nhập duy nhất (`e2e/helpers/session.ts`) + guard cổng chặn spec định nghĩa lại; e2e phục vụ **bản đã build** (`vite preview`) thay vì dev server, bỏ hẳn lớp biên dịch-theo-yêu-cầu; spec chờ đích cuối của redirect. `retries: 0` giữ nguyên. **Acceptance đạt: 5 lần chạy LIÊN TIẾP 79/79 PASS, exit 0, 28–29 s/lần** (trước: 64/79/79/78+1F/78+1F, 78–88 s). Chi tiết §3.7. |
 | `T59-605` | P0 | Release packaging: Programming default ON, artifact/compiler/library/systemd/env | T59-501/602 | **DONE (HOST/LOCAL + TARGET DEPLOY)** | **Lỗi thật, kiểm chứng trên chính board Foxlinx:** `/usr/sbin/mkddc-st-package` **không tồn tại** trên bo — binary được build, có test riêng, nhưng chưa bao giờ được cài, trong khi BE gọi đúng đường dẫn đó ở bước Commission (`ProgrammingPackagerPath`). Cài + đưa vào `checksums.sha256`/`runtime-checksums`. `PROGRAMMING_REV_A=1` nay do `install.sh` ghi, **cả nhánh nâng cấp** (bo cũ có file env sẵn nên khối khởi tạo lần đầu không chạy — thiếu nhánh này thì bo cũ mãi ở trạng thái FE-bật/BE-tắt). 6/6 guard đóng gói PASS. Deploy thật lên board: core/web/st-compile/st-package/dist mới, ba service `active`, `/api/v1/programming/projects` trả **401** (route có, cờ ON) thay vì 404. Chi tiết §3.7. |
 | `T59-606` | P0 | RC reproducible build/provenance/SBOM/backup/restore/upgrade dry-run | T59-601..605 | **DONE (HOST/LOCAL)** | Tái lập **7/7** artifact và SBOM 92 component đã xong ở vòng trước (chi tiết §3.7). Vòng này đóng nốt **dry-run cài mới/nâng cấp/rollback**: `install.sh` và `rollback.sh` nhận `MKDDC_INSTALL_ROOT` để ghi vào **cây giả** và bỏ thao tác cần quyền hệ thống, nhờ đó ba thao tác cuối cùng của một bản phát hành kiểm được BẰNG MÁY thay vì bằng cách đọc script rồi tin. **Lỗi thật tìm thấy ngay khi có phép kiểm:** `rollback.sh` **không khôi phục `mkddc-st-package`** — sau khi lùi, bo giữ writer artifact của bản MỚI trong khi compiler/loader/Core đã về bản cũ, và chỗ hỏng chỉ lộ ra ở lần Commission kế tiếp. Đúng lớp lỗi mà `T59-605` vừa vá cho `install.sh` (build nhưng không cài), lần này ở đường lùi. 6 test mới đi trọn ba kịch bản trên gói vừa dựng: cài mới đủ binary/metadata/cờ Programming và checksum khớp file thật; nâng cấp giữ nguyên `JWT_SECRET`, cấu hình đã sửa và artifact đã commission, đồng thời chụp snapshot đúng bản đang chạy; rollback khôi phục **đủ 7 binary** và không mất dữ liệu. **Test được kiểm chứng bằng cách gỡ bản vá:** đỏ đúng dòng `rollback KHÔNG khôi phục mkddc-st-package`. Nối vào cổng `release`. `python3 -m unittest test_release_dryrun` **6/6 OK**. |
-| `T59-607` | P0 | Bật `SIGNATURE_REQUIRED`: profile v2.1, re-pin G1/golden, migration artifact đang chạy | T59-602 | ORDERED | `integrityMode` đổi trong profile contract, re-pin cùng PR sau review; artifact đang chạy (gồm LKG) được ký lại hoặc biên dịch lại trước khi bật; có đường lùi về `HASH_ONLY` chứng minh bằng diễn tập. |
+| `T59-607` | P0 | Bật `SIGNATURE_REQUIRED`: profile v2.1, re-pin G1/golden, migration artifact đang chạy | T59-602 | **READY — đường khoá phát hành đã thông (xem §3.7)** | `integrityMode` đổi trong profile contract, re-pin cùng PR sau review; artifact đang chạy (gồm LKG) được ký lại hoặc biên dịch lại trước khi bật; có đường lùi về `HASH_ONLY` chứng minh bằng diễn tập. |
 
 ### 3.7 Ghi chú thực thi W6
 
@@ -2377,6 +2377,52 @@ có SBOM thì câu "bo của tôi có dính CVE này không" phải trả lời 
 mã nguồn của đúng commit. 92 component, mỗi dòng ghi `resolvedFrom`: phiên bản
 `libsodium`/`libmodbus` là của **máy build**, không phải của Buildroot trên board,
 và một SBOM nói dối chỗ đó còn tệ hơn không có.
+
+#### Hợp nhất W5 + W6 và ba chỗ chỉ lộ ra khi hai nhánh nằm chung một cây
+
+W5 và W6 được làm trên hai nhánh tách cùng từ `a35f578` và **không thấy nhau**.
+Hợp nhất là một bước công việc thật, không phải thao tác git: ba lỗi dưới đây chỉ
+tồn tại ở trạng thái hợp nhất, nên không nhánh nào có thể tự phát hiện.
+
+**`F-W6-MERGE-01` — cổng `release` chưa bao giờ dựng được bản RELEASE.**
+`st_public_key.hpp` ghi từ lâu rằng build phát hành "PHẢI truyền
+`-DMKDDC_ST_PUBLIC_KEY_HEX=<64 hex>`", và `T59-602` đã dựng gate chặn khoá TEST
+đi ra bản phát hành. Nhưng **không file CMake nào biến biến đó thành compile
+definition**: `#ifdef MKDDC_ST_PUBLIC_KEY_HEX` trong `st_public_key.cpp` chưa bao
+giờ đúng, nên MỌI binary từng dựng — kể cả bản đã deploy lên bo — đều nhúng khoá
+test cam kết trong repo. CMake chỉ in một dòng cảnh báo `Manually-specified
+variables were not used by the project`, trôi giữa hàng trăm dòng cấu hình. Hệ
+quả kép: gate mới chặn đúng, nhưng vì không có đường nào tạo ra bản `RELEASE`,
+cách duy nhất để cổng xanh là `MKDDC_ALLOW_TEST_KEY=1` — tức là tự tắt chính cái
+gác đang canh. **Sửa:** `apps/core/CMakeLists.txt` nối biến thành
+`target_compile_definitions` và kiểm 64 ký tự hex ngay tại configure (khoá thiếu
+ký tự sẽ làm `decode_key()` thất bại lúc chạy rồi **âm thầm rơi về khoá test**);
+`build-release.sh` đọc khoá công khai từ ngoài cây nguồn
+(`MKDDC_RELEASE_KEY_DIR`, mặc định `~/.config/mkddc/release-signing/release.pub`)
+và truyền vào cmake. **Kết quả đo:** `provenance.json` nay ghi
+`"st_public_key_mode": "RELEASE"` với fingerprint của khoá phát hành, cổng
+`release-package` PASS **mà không cần** `MKDDC_ALLOW_TEST_KEY`.
+
+**`F-W6-MERGE-02` — guard "một helper đăng nhập duy nhất" bắt nhầm lane thật.**
+`T59-604` thêm guard chặn spec định nghĩa lại `login`. Sau hợp nhất, guard bắt
+`programming-real.spec.ts` của `T59-505` — spec đăng nhập vào backend Go **thật**
+bằng JWT thật, trong khi `helpers/session.ts` là đường đăng nhập của lane mock.
+Ép chung một helper sẽ buộc helper phải biết cả hai chế độ xác thực, làm hỏng
+ranh giới lỗi của hai cổng. **Sửa:** guard loại trừ đúng `MKDDC_E2E_REAL_SPEC`.
+
+**`F-W6-MERGE-03` — helper dùng chung thiếu lớp chống cắt mạng.** Helper của
+`T59-604` chờ đúng điều kiện editable, nhưng không xử lý ca `F-W5-CLOSE-02`: khi
+Chromium nhận sự kiện đổi mạng RTNETLINK, module script bị cắt, React không mount
+và `page.goto` vẫn trả về bình thường — chờ 20 s rồi đỏ. **Sửa:** ghép cơ chế của
+W5 vào helper dùng chung — nạp lại đúng một lần và **chỉ** khi đã ghi nhận request
+tài nguyên tĩnh bị huỷ ở tầng mạng; không có abort thì ném nguyên lỗi.
+
+**Khoá phát hành hiện dùng là khoá LAB.** Cặp Ed25519 sinh bằng
+`mkddc-st-compile --gen-device-key`, khoá riêng `0600` nằm **ngoài repo** tại
+`~/.config/mkddc/release-signing/release.key`. Nó đủ để chứng minh đường ký hoạt
+động và để cổng xanh trung thực, nhưng **không phải khoá hãng**: bản thương mại
+phải dùng khoá do hãng giữ trong HSM, và `provenance.json` ghi fingerprint nên
+không bản nào lẫn được hai thứ.
 
 ### W7 — Target/HIL/V&V và quyết định phát hành
 
