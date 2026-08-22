@@ -8,6 +8,68 @@
 
 ## [Unreleased]
 
+### T59-604 — Flake e2e là spec đua với redirect, không phải đói CPU (2026-08-22)
+
+- **Đính chính chẩn đoán ngày 2026-08-21.** Kết luận "đói CPU" là **sai**, và bản
+  vá theo nó có hai lỗ: (1) phép chờ `toBeEditable` 60 s nằm trong test có ngân
+  sách 30 s nên không bao giờ chạy hết hạn của chính nó; (2) helper đăng nhập
+  được chép tay ở **bảy** spec, bản vá chỉ áp cho một — lần chạy kế tiếp chỉ đổi
+  chỗ đỏ sang `pa3-a11y.spec.ts`.
+- **Fixed — nguyên nhân thật, đọc từ trace.** Sau cú bấm "Tiếp tục chỉnh sửa",
+  URL thật là `/eng/programming/projects/{id}/programs`, còn spec chờ `.../design`
+  — mà `design` là **lối vào cũ W5 đã đổi thành redirect sang `programs`**. Spec
+  chờ một trạng thái TRUNG GIAN của redirect: máy chậm thì kịp thấy và xanh, máy
+  nhanh thì treo tới hết giờ. Sửa: chờ đích cuối (`programming.spec.ts`).
+- **Changed — một helper đăng nhập duy nhất.** `apps/web-ui/e2e/helpers/session.ts`
+  thay bảy bản sao; cổng `e2e` tự kiểm và ĐỎ nếu spec nào định nghĩa lại
+  `async function login` (`scripts/verify-project.sh`).
+- **Changed — e2e phục vụ bản ĐÃ BUILD** (`vite preview` + script `build:e2e`)
+  thay vì dev server: bỏ hẳn lớp biên dịch-theo-yêu-cầu vốn tính vào ngân sách
+  thời gian của test chạm route đầu tiên. `preview` được cấp cùng proxy với dev
+  để hai đường phục vụ không cho ra hai hành vi mạng khác nhau (`vite.config.ts`).
+  Ngân sách một test nâng 30 → 60 s; `retries` giữ `0`.
+- **Verification (đo trong phiên, không dẫn số cũ):** cổng `scripts/verify-project.sh
+  --component e2e` chạy **5 lần LIÊN TIẾP** → `79/79 passed`, exit `0`, 28–29 s mỗi
+  lần. Trước bản sửa: 64 / 79 / 79 / 78+1F / 78+1F, 78–88 s.
+
+### T59-606 — Diễn tập cài/nâng cấp/rollback, và một đường lùi nửa vời (2026-08-22)
+
+- **Added — `MKDDC_INSTALL_ROOT`** cho `install.sh` + `rollback.sh`: ghi vào cây
+  giả, bỏ thao tác cần quyền hệ thống (user/group, systemctl). Ba thao tác cuối
+  của một bản phát hành — cài lên bo trắng, nâng cấp bo đang chạy, lùi khi bản mới
+  hỏng — từ nay kiểm được **bằng máy**, không phải bằng cách đọc script rồi tin.
+- **Fixed — `rollback.sh` không khôi phục `mkddc-st-package`.** Sau khi lùi, bo
+  giữ **writer artifact của bản MỚI** trong khi compiler/loader/Core đã về bản cũ;
+  hai nửa của cùng một định dạng gói lệch phiên bản, và chỗ hỏng chỉ lộ ra ở lần
+  Commission kế tiếp. Cùng lớp lỗi mà `T59-605` vừa vá cho `install.sh`, lần này
+  nằm ở đường lùi — đúng nơi không còn đường lùi nào khác.
+- **Added — `tests/integration/test_release_dryrun.py`** (6 test): cài mới đủ
+  binary/metadata/cờ Programming và `runtime-checksums` khớp file thật; nâng cấp
+  giữ `JWT_SECRET`, cấu hình người vận hành đã sửa và artifact đã commission, đồng
+  thời chụp snapshot đúng bản đang chạy; rollback khôi phục **đủ 7 binary** và
+  không mất dữ liệu. Nối vào cổng `release`.
+- **Verification:** `python3 -m unittest tests/integration/test_release_dryrun.py`
+  → **6/6 OK**. **Kiểm chứng test bằng cách gỡ bản vá**: đỏ đúng dòng
+  `rollback KHÔNG khôi phục usr/sbin/mkddc-st-package`, khôi phục vá → xanh lại.
+  Gói dựng bằng `verify-project.sh --component release` (exit 0, cần
+  `MKDDC_ALLOW_TEST_KEY=1` cho bản lab — cổng khoá TEST của `T59-602` chặn đúng).
+
+### T59-602 — Chốt mô hình ký artifact: khoá của chính bo (2026-08-22)
+
+- **Added — `docs/adr/ADR-052-programming-ky-artifact-bang-khoa-thiet-bi.md`**
+  (Accepted). Đóng câu hỏi mở §2/§3 của `DDD-ARTIFACT-TRUST-PROG-001`: artifact do
+  hãng phát hành ký bằng **khoá hãng** lúc build; artifact do **bo tự biên dịch**
+  ký bằng **khoá thiết bị** sinh tại chỗ lúc provisioning, ngay sau khi Check
+  PASSED. Core tin một TẬP khoá gồm khoá hãng (có cửa sổ overlap) + khoá công khai
+  của chính bo đó.
+- **Vì sao không chọn hai phương án cũ:** (a) ký lúc release giả định Program tồn
+  tại trước khi phát hành — sai với sản phẩm cho khách tự viết chương trình; (b)
+  service ký từ xa đặt phụ thuộc mạng vào giữa đường Commission, và buộc phải chọn
+  giữa "mất mạng thì chặn điều khiển" hay "mất mạng thì tự hạ mức bảo vệ".
+- **Ranh giới ghi thẳng trong ADR:** khoá riêng thiết bị bảo vệ bằng quyền file
+  `0600` vì bo chưa có secure element — nâng chi phí tấn công từ "ghi được một
+  file" lên "chiếm được quyền service", **không** chống được kẻ đã có root.
+
 ### T59-604 — Flake e2e không phải lỗi spec, là đói CPU (2026-08-21)
 
 - **Phạm vi:** `apps/web-ui/e2e/point-names.spec.ts`, Plan 59 §3.
