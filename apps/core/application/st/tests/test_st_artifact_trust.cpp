@@ -111,6 +111,7 @@ TEST(StArtifactTrust, UnsignedArtifactIsRejectedWhenSignatureRequired)
      * và là lý do `SIGNATURE_REQUIRED` phải đọc từ cấu hình phía server chứ
      * không từ artifact tự khai (chống downgrade, §1 của DDD trust). */
     StLoaderOptions hash_only;
+    hash_only.integrity_mode = StIntegrityMode::HASH_ONLY;
     EXPECT_TRUE(loads_with(artifact, hash_only, &error)) << error.code;
 }
 

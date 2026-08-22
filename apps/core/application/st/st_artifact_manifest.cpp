@@ -253,6 +253,19 @@ bool CreateArtifactManifest(std::string_view source_id, StSourceLanguage languag
     StArtifactSummary artifact_summary;
     StLoadError load_error;
     StLoaderOptions options;
+    /* T59-607 — manifest builder là công cụ CẤU TRÚC, không phải điểm thực thi
+     * chính sách toàn vẹn. Nó được gọi hai lần trong một lần biên dịch: lần đầu
+     * trên artifact CHƯA ký (chữ ký chỉ đặt được sau khi thân artifact đã cố
+     * định), lần sau trên artifact đã ký. Nếu nó đi theo mặc định
+     * `SIGNATURE_REQUIRED` của profile thì lần gọi đầu luôn hỏng, và thông báo
+     * "artifact is not signed" chỉ vào đúng chỗ sai — bước dựng manifest — thay
+     * vì vào cấu hình khoá.
+     *
+     * Hạ xuống `HASH_ONLY` ở đây KHÔNG nới bảo vệ: SHA-256 vẫn bắt buộc, và
+     * artifact đã đặt cờ signed vẫn bị loader verify chữ ký đầy đủ. Chính sách
+     * "phải có chữ ký" được thực thi ở loader runtime của Core, nơi artifact
+     * thật sự được nạp để chạy. */
+    options.integrity_mode = StIntegrityMode::HASH_ONLY;
     options.public_key = public_key;
     if (!VerifyArtifact(artifact, artifact_size, options, &artifact_summary, &load_error)) {
         return fail(error, st_manifest_error::kArtifact,
@@ -297,7 +310,14 @@ bool CreateArtifactManifest(std::string_view source_id, StSourceLanguage languag
           {"bytes", artifact_size},
           {"fileSha256", compute_file_sha256(artifact, artifact_size)},
           {"integritySha256", compute_artifact_integrity_sha256(artifact, artifact_size)},
-          {"integrityMode", "HASH_ONLY"},
+          /* T59-607 — manifest mô tả CHÍNH artifact này, nên `integrityMode` ở
+           * đây là chế độ của nó: có chữ ký thì `SIGNED`, chưa ký thì
+           * `HASH_ONLY` — cùng bộ tên với `artifact_v2.schema.json` và cột
+           * `integrity_mode` của store. `SIGNATURE_REQUIRED` là tên của CHÍNH
+           * SÁCH ở profile, không phải tên trạng thái của một artifact. Viết cứng `HASH_ONLY` như trước làm manifest
+           * của một artifact ĐÃ ký vẫn tự khai là chưa ký — provenance nói sai
+           * về chính vật nó mô tả. */
+          {"integrityMode", artifact_summary.signature_present ? "SIGNED" : "HASH_ONLY"},
           {"signaturePresent", artifact_summary.signature_present}}},
         {"buildKeySha256", build_key_sha256(source, compiler, profile, target)},
         {"sourceMap", {{"version", 1}, {"entries", std::move(entries)}}},
@@ -372,6 +392,9 @@ bool VerifyArtifactManifest(std::string_view manifest_text,
     StLoadedProgram loaded;
     StLoadError load_error;
     StLoaderOptions options;
+    /* Cùng lý do như `CreateArtifactManifest`: đây là phép kiểm CẤU TRÚC của
+     * manifest, không phải cổng chính sách. Artifact đã ký vẫn bị verify chữ ký. */
+    options.integrity_mode = StIntegrityMode::HASH_ONLY;
     if (!LoadArtifact(artifact, artifact_size, options, &loaded, &load_error)) {
         return fail(error, st_manifest_error::kArtifact,
                     load_error.code + ": " + load_error.message);
@@ -382,8 +405,9 @@ bool VerifyArtifactManifest(std::string_view manifest_text,
         artifact_value.at("fileSha256") != compute_file_sha256(artifact, artifact_size) ||
         artifact_value.at("integritySha256") !=
             compute_artifact_integrity_sha256(artifact, artifact_size) ||
-        artifact_value.at("integrityMode") != "HASH_ONLY" ||
-        !artifact_value.at("signaturePresent").is_boolean()) {
+        !artifact_value.at("signaturePresent").is_boolean() ||
+        artifact_value.at("integrityMode") !=
+            (artifact_value.at("signaturePresent").get<bool>() ? "SIGNED" : "HASH_ONLY")) {
         return fail(error, st_manifest_error::kHash, "artifact hash/metadata không khớp");
     }
     const bool signed_flag = (artifact[26] & st_ir::kFlagSigned) != 0;

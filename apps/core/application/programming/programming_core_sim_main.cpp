@@ -13,6 +13,9 @@
 #include <csignal>
 #include <cstdlib>
 #include <cstdio>
+#include <vector>
+#include <fstream>
+#include <array>
 #include <filesystem>
 #include <string>
 #include <thread>
@@ -55,6 +58,11 @@ int main(int argc, char** argv)
 
     std::string socket_path;
     std::string state_dir;
+    /* T59-607 — simulator dùng ĐÚNG loader production, nên khi profile đòi chữ
+     * ký nó cũng phải biết tin khoá nào. Không có tuỳ chọn này thì lane
+     * real-backend đứng ở Check với `ST-CLI-IO`/`IR-E-007` và người đọc log
+     * tưởng compiler hỏng. */
+    std::vector<std::string> trusted_key_paths;
     uint32_t tick_ms = 20;
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
@@ -69,8 +77,11 @@ int main(int argc, char** argv)
                 return 2;
             }
             tick_ms = static_cast<uint32_t>(parsed);
+        } else if (argument == "--st-trusted-key" && index + 1 < argc) {
+            trusted_key_paths.push_back(argv[++index]);
         } else if (argument == "--help") {
-            std::printf("usage: mkddc-programming-core-sim --socket PATH --state-dir DIR [--tick-ms N]\n");
+            std::printf("usage: mkddc-programming-core-sim --socket PATH --state-dir DIR "
+                        "[--tick-ms N] [--st-trusted-key FILE]\n");
             return 0;
         } else {
             std::fprintf(stderr, "tham số không hợp lệ: %s\n", argument.c_str());
@@ -100,6 +111,30 @@ int main(int argc, char** argv)
     if (!scheduler.add_task(task, &error)) {
         std::fprintf(stderr, "không tạo được task: %s\n", error.c_str());
         return 1;
+    }
+
+    /* Nạp tập khoá tin cậy TRƯỚC khi coordinator phục hồi lifecycle: phục hồi
+     * có thể nạp lại gói đang active, và nạp nó bằng chính sách cũ thì cửa đã mở
+     * trước khi khoá được gắn. */
+    std::vector<std::array<uint8_t, 32>> trusted_keys;
+    for (const std::string& path : trusted_key_paths) {
+        std::ifstream key_file(path);
+        std::string hex;
+        if (!key_file || !(key_file >> hex) || hex.size() != 64) {
+            std::fprintf(stderr, "khoá tin cậy không đọc được hoặc sai độ dài: %s\n", path.c_str());
+            return 2;
+        }
+        std::array<uint8_t, 32> key{};
+        for (std::size_t i = 0; i < 32; ++i)
+            key[i] = static_cast<uint8_t>(std::stoul(hex.substr(i * 2, 2), nullptr, 16));
+        trusted_keys.push_back(key);
+    }
+    if (!trusted_keys.empty()) {
+        StLoaderOptions loader_options;
+        for (const std::array<uint8_t, 32>& key : trusted_keys)
+            loader_options.trusted_keys[loader_options.trusted_key_count++] = key.data();
+        scheduler.set_loader_options(loader_options);
+        std::fprintf(stderr, "INFO  sim.st_trusted_key_count=%zu\n", trusted_keys.size());
     }
 
     StSignalBus signal_bus;

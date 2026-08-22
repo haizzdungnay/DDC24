@@ -99,6 +99,9 @@ TEST(StFuzzRegression, TenThousandDeterministicMutationsFailClosed)
         }
         StLoadedProgram loaded;
         StLoaderOptions options;
+        /* Fuzz corpus là artifact THÔ chưa ký: mục tiêu là kiểm loader không
+         * crash/OOB trên đầu vào hỏng, không phải kiểm chính sách chữ ký. */
+        options.integrity_mode = StIntegrityMode::HASH_ONLY;
         StLoadError load_error;
         ASSERT_TRUE(load_st_artifact(artifact.data(), artifact.size(), options, &loaded,
                                      &load_error))
