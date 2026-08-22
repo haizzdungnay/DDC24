@@ -8,6 +8,37 @@
 
 ## [Unreleased]
 
+### Đóng sổ Plan 59 W5 — hai finding chặn cổng, tám cổng HOST xanh (2026-08-23)
+
+- **Fixed — `apps/core/application/st/st_scheduler.cpp` không biên dịch được
+  (`F-W5-CLOSE-01`).** `stage_activation` đã tách thành hai overload nhưng thân
+  hàm của overload nhận `StProgramInstance*` vẫn đọc `instance_id` — biến chỉ có
+  ở overload nhận `const std::string&`. `g++` báo
+  `error: 'instance_id' was not declared in this scope` tại dòng `292` và `328`.
+  Hai cổng đỏ theo: `cpp` FAIL sau 6,1 s và `e2e-real` FAIL sau 3,1 s (webServer
+  của lane real-backend dựng `mkddc-programming-core-sim` từ cùng source). Sửa
+  bằng `p->instance_id`. Đây là bằng chứng số đo `ctest 1211/1211` ghi ở
+  `T59-504` chưa được đo lại sau lần sửa scheduler cuối.
+- **Fixed — cổng `e2e` đỏ vì helper đăng nhập coi sự kiện `load` là "ứng dụng đã
+  mount" (`F-W5-CLOSE-02`).** `pa3-dashboard.spec.ts:238` timeout 30 s tại
+  `locator.fill`. Trace lần đỏ: sáu request module bị `net::ERR_NETWORK_CHANGED`
+  trong 65 ms sau `page.goto('/login')` nên React không mount, nhưng
+  `goto(waitUntil:'load')` vẫn trả về bình thường. Repro tất định bằng
+  `route.abort` đúng một module. Helper nay chờ điều kiện mount thật và **chỉ**
+  điều hướng lại khi đã ghi nhận abort tầng mạng của tài nguyên tĩnh; abort dai
+  dẳng hoặc app hỏng vẫn FAIL (21,0 s / 10,3 s) nên acceptance không bị nới.
+  Bảy spec anh em còn dùng helper cũ — gom helper dùng chung thuộc `T59-604`.
+- **Changed — hồ sơ:** Plan 59 lên **v2.2** (mục §3.6 "Đóng sổ W5" + bảng số đo
+  tám cổng), `CONTROL.md` lên **1.1**, manifest baseline lên **1.37** (re-pin
+  dòng 1/4/6/13/14/15 kèm đánh giá impact — 22/22 risk giữ Open, `D/I/T/P/R` của
+  Trace không đổi).
+- **Verification (mức HOST, một lượt `scripts/verify-project.sh --wave W5`):**
+  `layout` PASS 3,2 s · `cpp` PASS 17,0 s (**ctest 1211/1211**) · `go` PASS
+  37,7 s · `frontend` PASS 54,4 s · `e2e` PASS 53,0 s (**61/61**, 8 spec) ·
+  `e2e-real` PASS 15,5 s (**1/1**) · `docs` PASS 0,1 s · `candidate-pin` PASS
+  sau khi phát hành manifest 1.37 (16/16 khớp). Tổng **8/8 PASS**. Đây là
+  HOST/LOCAL, không phải GitHub CI, target hay HIL; `RELEASE_READY` giữ `NO-GO`.
+
 ### Plan 60 v1.1 — chốt 7/7 quyết định (2026-08-23)
 
 - **Changed — `docs/03_implementation/60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md`**
@@ -107,6 +138,172 @@
 - **Verification:** thay đổi ở phiên này **chỉ là tài liệu** (2 file `.md`), không
   chạm code nên không chạy gate C++/Go/FE. `python3 scripts/docs_iso_harness.py
   --expect` exit **0**.
+
+### Prompt CTO thi hành phần còn lại Plan 59 — W6 + W7 (2026-08-23)
+
+- **Added — `docs/03_implementation/PROMPT_PLAN59_CTO_W6_W7_EXECUTION.md`**
+  (`PROMPT-PLAN59-CTO-W6W7` v1.0). Rà lại bảng nhiệm vụ Plan 59 §3 trên cây làm
+  việc: `W0..W5` đã **DONE** (38/38 task, mức HOST/LOCAL), còn **13 task chưa
+  bắt đầu** — W6 `T59-601..606` (ORDERED) và W7 `T59-701..707`
+  (EVIDENCE_QUEUE/ORDERED) — nên Plan 59 **chưa triển khai xong** và
+  `RELEASE_READY` vẫn `NO-GO`.
+- **Nội dung prompt:** cấp cho vai CTO/Release Owner **13 quyền quyết định**
+  (chuyển ORDERED→READY, chọn hệ chữ ký và custody khóa cho `T59-602`, cấu hình
+  packaging `T59-605`, công cụ SBOM/provenance và chấp nhận variance giải thích
+  được ở `T59-606`, chính sách quarantine/retry `T59-604`, ngưỡng tài nguyên
+  `T59-603`, chọn đường evidence thay thế, chấp nhận residual risk P2/P3, ký
+  GO/NO-GO `T59-707`, tự commit/PR/merge, tự sửa finding trong phạm vi) kèm
+  **8 giới hạn quyền** (cấm hạ acceptance, cấm waive Must physical AO/DO ST+FBD
+  / soak 24 h / power-cut-RETAIN-LKG / install-upgrade-rollback / SIGNED /
+  provenance, cấm gọi HOST là CI/TARGET/HIL, cấm phát hành `HASH_ONLY`, cấm xoá
+  dữ liệu-Active-LKG-audit, cấm đụng production thật, cấm đổi semantics đã khóa
+  trong Unified DDD, cấm dùng trạng thái BLOCKED cho task code).
+- **Việc 0 trong prompt:** đóng sổ W5 trước khi mở W6 — cây làm việc còn **83
+  file `M` + 13 file `??`** thuộc `T59-503/504/505/506` chưa commit, và
+  `candidate_pin_check.py` đang **FAIL** vì 6 hồ sơ authority (`CONTROL.md`,
+  `PROGRAMMING_DOCUMENT_READINESS_MATRIX.md`, `PROGRAMMING_DESIGN_INDEX.md`,
+  `PROGRAMMING_RISK_REGISTER.md`, `PROGRAMMING_TRACEABILITY_MATRIX.md`, Plan 59)
+  đã đổi so với manifest đã ghim; tại `HEAD` cả sáu vẫn khớp, nên việc phát hành
+  manifest mới thuộc bước đóng sổ W5.
+- **Changed:** thêm dòng index cho prompt mới ở
+  `docs/03_implementation/README.md` và `docs/00_governance/CONTROL.md`.
+- **Verification:** `python3 scripts/docs_iso_harness.py --expect` exit **0**
+  (`PASS — mọi phép kiểm bắt buộc đạt`, `EXPECT: khớp toàn bộ ngưỡng`);
+  `python3 scripts/candidate_pin_check.py` exit **1** — drift có từ trước phiên
+  này (thay đổi W5 chưa commit), phiên này chỉ thêm một dòng index vào
+  `CONTROL.md` vốn đã drift.
+
+### Chẩn đoán "lỗi FE toàn bộ các page /eng/programming" trên bo Foxlinx + deploy lại FE (2026-08-22)
+
+- **Phạm vi:** `http://mekong-fac.ddns.net:8082/eng/programming` (`PGM-01..06`);
+  chỉ deploy **frontend**, không đụng `mkddc-web` và `mkddc-core` trên bo.
+- **Xác định chính xác bản đang chạy trên bo:** dựng lại FE tại đúng `a35f578`
+  rồi so `sha256` với artifact bo đang phục vụ — `programming-D1ziPj1t.js` và
+  `index-CO6r8sP2.js` **trùng tuyệt đối**. Backend cũng là `a35f578`: bản
+  `arm64 -ldflags="-s -w"` dựng lại có kích thước **14 287 010 byte** khớp từng
+  byte với `/opt/mkddc-web/mkddc-web`, và `/api/v1/programming/runtime/signals`
+  trả **404** (endpoint `T59-504` chưa có trên bo).
+- **Fixed — nguyên nhân gốc: mọi thao tác Lưu ở workspace Thiết kế đều bị chặn.**
+  Triệu chứng trên bo: `PATCH /api/v1/programming/projects/{id}/draft` trả
+  **400 `PRG-ERR-REQ-001`** (nhật ký `mkddc-web-pi`, `2026-08-22T06:52:02Z`,
+  phiên `admin`). Nguyên nhân gốc: `ProgramsTab.tsx` bản `a35f578` dựng payload
+  `upsertProgram` bằng cách **spread nguyên đối tượng Program**
+  (`{ ...program, name, kind, functionalTags }`), kéo theo `executionOrder` và
+  `functionalTags`; decoder Go `upsertProgramCompat` dùng `decodeStrict`
+  (`DisallowUnknownFields`) và chỉ nhận đúng năm field
+  `programId/name/kind/language/document`, nên **mọi** lần Lưu đều bị từ chối
+  trước khi chạm store. Cách sửa (đã có sẵn trong cây làm việc, nay được build
+  và deploy): hàm `programDraftInput()` thu payload về đúng năm field.
+- **Kiểm chứng nguyên nhân gốc bằng tái hiện đối chứng** (backend Go +
+  compiler/packager + Core simulator production, không mock): cùng một draft,
+  cùng `If-Match`/`baseRevisionId` —
+  payload kiểu bản đang chạy trên bo → **HTTP 400 `PRG-ERR-REQ-001`**;
+  payload năm field sau bản vá → **HTTP 200**.
+- **Fixed — cột "Chất lượng" ở Điểm & Ánh xạ không bao giờ đổi màu.** Kiểm trên
+  chính CSS bo đang phục vụ (`index-BN4Kz8Vb.css`): `--c-online-fg`,
+  `--c-stale-fg`, `--c-unknown-fg` xuất hiện **0 lần**. Bảng tra tĩnh
+  `QUALITY_CLASS` nay chỉ dùng token có thật; CSS mới trên bo
+  (`index-YBWy74z0.css`) có đủ `--c-good-fg`/`--c-warn-fg`/`--c-fault-fg`.
+- **Fixed — chữ lỗi ở Thư viện điều khiển không mang màu lỗi** (`--c-danger`
+  không tồn tại → đổi sang `--c-fault-fg`).
+- **Ghi nhận — không tái hiện được lỗi render trang.** Quét sáu trang bằng
+  Chrome thật trên đúng bundle `a35f578` với dữ liệu dựng theo hình dạng dữ
+  liệu bo (không có object `SIGNAL`, `published_signal_defs`/`library_entries`/
+  `program_runtime_intents` đều rỗng, POU `PROGRAM` không nằm trong `programs`)
+  và 7 biến thể payload `runtime` (Core khoẻ, overrun, thiếu field, null,
+  enum lạ, safe-state, thiếu `observedAt`) — **42/42 tổ hợp không có
+  pageerror, không có error boundary**. Lỗi người dùng gặp vì vậy được quy về
+  nhóm "thao tác bị chặn + phản hồi màu sai", không phải crash render.
+- **Deploy:** sao lưu `dist` cũ thành `/opt/mkddc-web/dist.prev-20260822T145245`,
+  copy bằng `scp` (bo Buildroot không có `rsync`), đổi chỗ nguyên thư mục.
+  Guard cờ Programming: `grep -c REVA_SCOPE_ROADMAP` = **0** (cờ BẬT).
+  Đối chiếu `sha256` qua HTTP sau deploy: `index-DJxVm5TB.js`,
+  `programming-gytcRu-U.js`, `index-YBWy74z0.css` **khớp** bản dựng cục bộ.
+- **Verification (đo lại trong phiên):** `npx vitest --run --environment jsdom src`
+  → **1161/1161 pass** (124 file); `npm run lint` → sạch (kể cả
+  `check_ui_strings`); `npm run build:release` → thành công; quét sáu trang
+  Chrome thật trên bundle mới với backend `a35f578` → **6/6 trang sạch**, panel
+  Published Signal của tab Theo dõi fail-closed đúng thiết kế khi endpoint
+  `runtime/signals` trả 404. Đây **không** phải bằng chứng target/HIL, không
+  phải I/O vật lý, không phải Test Result phát hành.
+- **Chưa sửa, nằm ngoài phạm vi FE được giao:** `apps/core/application/st/st_scheduler.cpp`
+  trong cây làm việc **không biên dịch được** — overload mới
+  `stage_activation(StProgramInstance*, …)` tham chiếu `instance_id` không còn
+  trong scope (dòng 292 và 328; đúng ra là `p->instance_id`). Đây là phần việc
+  C++ đang dở của một phiên khác; sửa vào đó có nguy cơ ghi đè chỉnh sửa chưa
+  lưu của phiên đó, nên phiên này không đụng tới. Hệ quả: mọi cổng C++ và mọi
+  bản dựng `mkddc-core`/`mkddc-programming-core-sim` từ cây làm việc đang hỏng.
+
+
+### Review UI/UX họ trang Programming + hai bản vá màu (2026-08-21)
+
+- **Phạm vi:** sáu trang `PGM-01..06` tại `/eng/programming/*`; theo yêu cầu
+  Owner *"thiết kế này không hiện đại và không thân thiện người dùng"*.
+- **Added — tài liệu:**
+  `docs/04_uiux/KX-DDC24-UIUX-WEB-PROGRAMMING-REDESIGN-PROPOSAL-001_VI.md`
+  (DRAFT 0.1, chưa được phép code). Ghi 19 phát hiện có địa chỉ `file:dòng` và
+  ảnh chụp Chrome thật, phương án thiết kế lại (rail feature thay tab, thanh
+  trạng thái một dòng thay thanh context sáu cột, editor toàn chiều cao, canvas
+  FBD), lộ trình 5 đợt và 5 điểm cần Owner chốt.
+- **Fixed — cột "Chất lượng" ở Điểm & Ánh xạ chưa bao giờ đổi màu**
+  (`MappingTab.tsx`). Triệu chứng: GOOD không xanh, OFFLINE không đỏ, mọi giá
+  trị đều xám. Nguyên nhân gốc **kép**: (1) class được ghép bằng nội suy chuỗi
+  `text-[var(--c-${...}-fg,…)]`, mà Tailwind quét class theo **văn bản nguồn**
+  nên không utility nào được sinh — kiểm chứng trên chính CSS đang chạy ở board
+  `mekong-fac.ddns.net:8082`: `--c-online-fg` xuất hiện **0 lần**; (2) các biến
+  `--c-online-fg`/`--c-stale-fg`/`--c-unknown-fg` cũng không có trong
+  `TOKEN_NAMES` của `shared/theme/tokens.ts`. Cách sửa: bảng tra **tĩnh**
+  `QUALITY_CLASS` viết đủ tên class, chỉ dùng token có thật.
+- **Fixed — thông báo lỗi ở Thư viện điều khiển không hiện màu lỗi**
+  (`LibraryPage.tsx`). `text-[var(--c-danger)]` trỏ vào token không tồn tại và
+  là chỗ **duy nhất** trong repo dùng biến này mà không có fallback `,#c00`,
+  nên chữ lỗi thừa hưởng màu chữ thường. Đổi sang `--c-fault-fg`.
+- **Verification (đo lại trong phiên, không dẫn số cũ):**
+  `npx vitest --run --environment jsdom src` → **1161/1161 pass** (124 file);
+  `npm run lint` → sạch, `check_ui_strings` OK;
+  `npx playwright test e2e/programming.spec.ts --project=desktop-chrome -g "UJ-PROG-01"`
+  → **1 passed** (12,6 s), 11 ảnh chụp dùng làm bằng chứng review.
+
+
+### Plan 59 W5 — hoàn tất luồng sản phẩm sáu workspace trên HOST/LOCAL (2026-08-21)
+
+- **Phạm vi:** `T59-503..506`; Core/IPC Published Signal, API runtime Go,
+  sáu workspace React, Monitor ba category, ST/FBD editor, Playwright
+  real-backend, ma trận cổng W5 và hồ sơ Plan/Risk/Trace.
+- **T59-503 — sáu workspace và lifecycle:** desktop/mobile có đủ PGM-01..06;
+  deep-link không âm thầm đổi Project; thanh context tách Draft, Active,
+  desired Enable intent và runtime read-back; loading/empty/error/permission/
+  stale/offline/unknown đều fail-closed.
+- **T59-504 — Monitor không bịa dữ liệu:** Point `LOCAL`/`VP`/`MB_RTU` tách
+  candidate, actual, source, priority, quality và freshness. Published Signal
+  đọc từ snapshot Core riêng; `valid=false`, mismatch hoặc unavailable hiện
+  `—`, không thành `0`; trace công bố số mẫu rơi. IPC minor **2→3**, OpenAPI
+  **1.25.0→1.26.0**; store giữ **v11**.
+- **T59-505 — E2E không mock Programming:** thêm lane dựng backend Go,
+  compiler/packager và Core simulator dùng scheduler/coordinator/process-image/
+  Programming IPC production. Journey đi Project→Draft có Library/Signal/
+  Mapping→Seal→Check→Commission→Enable→Runtime→Disable→Revision mới→Restore;
+  spec bị guard cấm `page`/`context`/`browserContext.route*` và tách khỏi suite
+  mock. Cổng C++ dùng `cmake --fresh` để không tái sử dụng cache build.
+- **T59-506 — editor:** ST giữ history bounded 50 snapshot, kiểm 20 bước
+  undo/redo cả cursor/selection; runtime overlay chỉ ghép đúng Active Revision
+  và không biến invalid thành zero. FBD lấy interface POU typed từ Draft v2,
+  không tự parse ST hoặc đoán pin.
+- **Fixed — ST+ gửi payload Draft v2 sai:** FE trước đây gửi thêm
+  `executionOrder`/`functionalTags` vào `upsertProgram` dù backend strict chỉ
+  nhận `programId/name/kind/language/document`; tên mặc định có khoảng trắng
+  cũng vi phạm grammar POU. Nay transport được thu hẹp đúng năm field, tên mặc
+  định là `NewProgram`/`NewFbdProgram`, validation client khớp backend và
+  read-back API khóa bằng E2E thật. Inspector bỏ metadata Program không tồn tại
+  trong contract Draft v2 và bổ sung liên kết nhãn form cho accessibility.
+- **Kiểm chứng HOST/LOCAL trước cổng tổng:** CTest Release **1211/1211** và Debug
+  **1211/1211**; Go `vet` + test sạch; FE **124 file / 1161 test**, lint/build
+  sạch; E2E mock **61/61**; E2E real-backend **1/1**; Chrome DevTools thật kiểm
+  PATCH ST+ `200` với đúng năm field, desktop 1440×900 và mobile 390×844 không
+  tràn ngang, không Console warning/error/issue. Đây không phải CI, target, HIL,
+  I/O vật lý, soak, Test Result hay bằng chứng phát hành.
+- **Refs:** `PLAN-PROG-059` §3.6 `T59-503..506`, `RSK-PROG-001` v4.19,
+  `TRACE-PROG-001` v6.4, `RELEASE_READY=NO-GO`.
 
 ### T59-502 — Impact/ack cho mô hình đa Program (2026-08-21)
 

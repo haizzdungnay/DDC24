@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 6.3 |
+| Phiên bản | 6.4 |
 | Trạng thái | **Active — 60 requirement legacy + 22 unified requirement; 0 Open Decision; release evidence chưa đủ** |
 | Cập nhật | 2026-08-21 |
 | Chủ quản | Verification Lead |
@@ -16,11 +16,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối Product v3.0 → 82 requirement → Unified DDD → Plan 59 task → scenario/evidence/release. Legacy matrix phía dưới giữ history. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có design/source target/scenario. Baseline merged có 22/60 `I=Y`. Corrective 508..510 đã qua full host gate và supporting target/browser evidence `EV-PROG-P5-510`; vòng live HTTP cuối bổ sung auth deep-link, ST save/restore, export/import fault, safe-state/RETAIN fail-closed và responsive/a11y. Source corrective **chưa merge**, nên theo §8 chưa được đổi `I`. Hai record `BLOCKED`, 30 scenario `NOT_RUN`, 0/32 PASS; mọi `T/P/R=N`. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement legacy có design/source target/scenario; baseline merged giữ 22/60 `I=Y`. Trên nhánh Plan59 hiện có source W5 cho sáu workspace, Monitor Point + Published Signal fail-closed, ST/FBD editor và lane E2E dùng backend/compiler/Core simulator thật trên **HOST/LOCAL**. Các cổng HOST thành phần hiện hành đã PASS nhưng chưa có GitHub CI verdict, Test Result được review và source chưa merge, nên không đổi `I/T/P/R`. Hai record legacy `BLOCKED`, 30 scenario `NOT_RUN`, 0/32 PASS; release vẫn `RED / NO-GO`. |
 | 4. Thiết kế mới thay đổi điều gì? | ADR-050 thêm 22 requirement và 12 scenario unified; Plan 59 thay Plan 53/56. Evidence legacy không tự kế thừa sang contract v2. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
 | 6. Điều gì còn bị chặn? | Không còn decision/document blocker cho implementation. Target/HIL/physical I/O/soak/CI/provenance còn thiếu chỉ chặn Release. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với bản thân ma trận: 60/60 dòng giải được về ID canonical, không trùng ID, không có dòng vi phạm `P=Y khi T=N` hay `R=Y khi P=N` — kiểm bằng harness ở [`PROG-REV-2026-08-09`](reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §2. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Harness tài liệu hiện PASS: 82 requirement canonical, 60 dòng D/I/T/P/R legacy, 0 link/ID/invariant lỗi. Riêng `trace_bidirectional_check.py` còn chỉ hiểu 60 requirement + 32 scenario legacy nên trả FAIL vì chưa nhập 22 requirement unified ở §0; không được dùng lệnh đó làm bằng chứng current-pass cho toàn bộ 82 requirement cho tới khi drift ở §8.1 được sửa. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
 nghĩa code tồn tại, cũng không nghĩa test đã PASS.
@@ -32,15 +32,29 @@ nghĩa code tồn tại, cũng không nghĩa test đã PASS.
 | `SYS-REQ-PROG-109` | Unified DDD §4–§6; Language/registry v2 | T59-003, T59-101..106 | U01/U02 | `T59-101..106`: parser/model/registry/package host-local; compile package thật/runtime/target còn thiếu; U01/U02 NOT_RUN |
 | `SYS-REQ-PROG-110` | Unified DDD §4–§6; Control Library | T59-003, T59-201..205 | U03/U12 | `T59-205`: review gate PID ép ở ba đường Check, token từ contract, G1 ghim trạng thái chưa duyệt — `U12` vẫn NOT_RUN vì evidence Controls/Safety thuộc `T59-706`. `T59-201`: SYSTEM virtual immutable + PROJECT revision/entry/usage store, canonical hash/DAG/layout/reference/migration/restart host-local. `T59-202`: REST/RBAC/idempotency/audit host-local. `T59-204`: export/import nguồn có Control Library, corpus thù địch và version compatibility host-local; bundle vẫn `HASH_ONLY`. FE/import/compiler/runtime/target còn thiếu; U03 NOT_RUN |
 | `SYS-REQ-PROG-111` | Unified DDD §4.1/§7; profile v2 | T59-002, T59-301/305/402 | U04/U05 | `T59-301`: document v2 32 Program, Program thứ 33 bị từ chối và Draft giữ đúng 32. `T59-302`: Check biên dịch mọi Program và lắp container v2, hash tất định. `T59-305`: manifest mang topology/budget theo profile, không bám thứ tự tạo, Program mới Disabled (host/local). Thi hành trần 16 Enabled và runtime còn thiếu; U04/U05 NOT_RUN |
-| `SYS-REQ-PROG-112` | Unified DDD §4.5/§7.3 | T59-301/304/404 | U05/U06 | `T59-301`: định nghĩa Published Signal ở Draft. `T59-304`: validation cấp package ở Check — một publisher, publisher tồn tại, freshness, fallback ghép policy (host/local). Runtime double-buffer còn thiếu; U05/U06 NOT_RUN |
-| `SYS-REQ-PROG-113` | Unified DDD §4.3/§5.1–5.2/§7.2 | T59-405/501/503 | U07/U08/U10 | NOT_RUN |
+| `SYS-REQ-PROG-112` | Unified DDD §4.5/§7.3 | T59-301/304/404/504/505 | U05/U06/U10 | `T59-301/304/404`: định nghĩa, validation package và double-buffer committed snapshot đã có ở host/local. `T59-504` nối snapshot signal riêng tới UI, giữ `valid=false`/BAD/OFFLINE/UNAVAILABLE là không có giá trị thay vì 0; `T59-505` có fixture signal trong vòng đời Revision thật trên lane HOST/LOCAL đang được gate. Opcode signal trong thân Program và target/soak còn thiếu; U05/U06/U10 NOT_RUN |
+| `SYS-REQ-PROG-113` | Unified DDD §4.3/§5.1–5.2/§7.2 | T59-405/501/503/505 | U07/U08/U10 | `T59-503`: PGM-05 hiển thị lifecycle từ Check/operation read-back và context tách desired intent khỏi runtime state. `T59-505`: source lane Project→Draft→Check→Commission→Enable→Runtime→Disable→Restore qua backend/compiler/Core simulator thật, không dùng Programming mock; lane HOST/LOCAL đang được gate, chưa phải Test Result/target/HIL. U07/U08/U10 NOT_RUN |
 | `SYS-REQ-PROG-114` | Unified DDD §4.6/§7/§9 | T59-303/304/406 | U07/U09 | `T59-303`: binding MB_RTU resolve qua `extIndex` của Point Catalog. `T59-304`: output owner duy nhất kiểm ở Check theo điểm vật lý (host/local). Candidate/arbitration runtime còn thiếu; U07/U09 NOT_RUN |
 | `SYS-REQ-PROG-115` | Unified DDD §7 | T59-402/403/702 | U05/U11 | NOT_RUN |
-| `SWR-REQ-PROG-FE-116..118` | Unified DDD §8; UX unified section | T59-203/503/504/506 | U03/U06/U07/U10 | `T59-203`: PGM-04 search/filter/detail/create/delete, review-gate chỉ hiển thị. `T59-306`: IA sáu trang đúng DDD §8, cây POU ba nhóm, inspector ẩn trường không có nghĩa (host/local). E2E real-backend thuộc T59-505; U03 NOT_RUN |
+| `SWR-REQ-PROG-FE-116..118` | Unified DDD §8; UX unified section | T59-203/503/504/506 | U03/U06/U07/U10 | `T59-203`: Control Library search/filter/detail/create/delete và review-gate chỉ hiển thị. `T59-503`: đúng sáu route/nav desktop-mobile, context Draft/Active/intent/runtime không trộn và PGM-05 lifecycle fail-closed. `T59-504`: Watch phủ LOCAL/VP/MB_RTU, Point candidate/actual/source/priority/quality/freshness và Published Signal ở snapshot riêng. `T59-506`: lịch sử ST 50 snapshot, kiểm 20 undo/redo + cursor, runtime overlay giữ null/invalid; FBD lấy interface POU typed từ Draft v2 và không đoán pin. Source/component test ở host/local; E2E thật thuộc `T59-505` đang được gate; U03/U06/U07/U10 NOT_RUN |
 | `SWR-REQ-PROG-BE-111` | Unified DDD §4–§6 | T59-005/201/202 | U03 | `T59-201`: domain/store + schema v7 có immutable/version/reference guard. `T59-202`: 3 route DDD §5.1, OpenAPI 1.23.0 28 operation ↔ route Go ↔ client TS exact, RBAC admin-only cho mutation, `If-Match`+idempotency+audit cùng transaction. FE/import/target còn thiếu; U03 NOT_RUN |
-| `SWR-REQ-PROG-BE-112..115` | Unified DDD §4–§6 | T59-006/302/405/408 | U04/U07/U10 | NOT_RUN |
-| `SWR-REQ-PROG-CORE-111..116` | Unified DDD §5.3/§7 | T59-401..408/501 | U02/U05..U09/U11 | `T59-401`: coordinator nạp package v2, dựng topology theo package, dual-reader v1 còn sống, gói hỏng 0 mutation (host/local). `T59-402`: mỗi Program release theo deadline riêng bù trôi theo mốc lý thuyết, lỡ chu kỳ đếm-và-bỏ, chu kỳ+ngân sách đi trong `PROGRAM_TABLE` và bị chặn ở cả writer lẫn loader, trần 16 chạy đồng thời ép ở `start()`, thứ tự chạy độc lập thứ tự tạo, package v2 sống sót reboot (host/local). `T59-403`: lane là đơn vị song song, hai chế độ cho cùng kết quả (fixture 10 Program/3 chu kỳ/4 lane, 20 lần lặp), fault của một Program được cô lập theo kiến trúc §8, đường quét 0 cấp phát, TSan 54 test 0 cảnh báo (host/local). `T59-404`: bus Published Signal double-buffer commit ở boundary (0 đọc rách qua 20.000 vòng song song), ba chính sách stale phân biệt "chưa publish" với "quá hạn", producer dừng thì giá trị quá hạn theo freshness, signal lần đầu thực sự đi trong container và `stalePolicy` đóng ở ba lớp (host/local). `T59-405`: intent Enable/Disable đi trọn store (migration v10) → API (RBAC/idempotency) → IPC (`SET_PROGRAM_ENABLED`, protocolMinor 0→1) → Core → read-back + audit cùng transaction; ý định và trạng thái là hai trường riêng; trần 16 ép ở hai lớp (host/local). `T59-406`: sổ candidate trả lời ai giữ output nào và vì sao không còn giữ, bất biến một-output-một-owner ép lại ở runtime, rút candidate rơi đúng mức tiếp theo/default, luật không-đường-tắt kiểm bằng đọc mã nguồn (host/local); **TTL hold-last đã ký `ADR-051` 2026-08-21 = 60 s đồng hồ** — đo tuổi của LỆNH nên phủ cả `ROLLED_BACK` và `RUNNING`-trong-Task-bị-disable, mặc định `ScanDeps` là giá trị đã ký thay vì `0`, `static_assert` ràng TTL ≥ 2× chu kỳ Task chậm nhất của profile. `T59-407`: bịt lỗ reset nửa vời (reset trên Program đang dừng nay bền vững qua khởi động lại, kiểm chứng bằng cách gỡ bản vá), RETAIN cô lập giữa Program cho cả đường reset lẫn đường file hỏng (host/local). `T59-408`: trace giá trị bounded 10.000 Ô/10 phút lấy tại ranh giới quét, 0 cấp phát; ba action IPC thật; action ma = 0 (host/local). **W4 đóng đủ 8/8 task.** `T59-501` (W5): barrier chu kỳ đầu và rollback ở mức gói, LKG all-or-nothing, restart bốn pha không để lại active một nửa; ba hồi quy FE/E2E của W3 lộ ra ở lần đầu chạy cổng `e2e` và đã sửa; đường đọc trace của `T59-408` (BE chưa bao giờ gọi `TRACE_READ`) đã nối trọn. `T59-502`: impact/ack phủ tám nhóm; sửa lỗi `SIGNAL` chưa từng seal được vào Revision — lane Published Signal trước đó không chạm một Revision thật (host/local). Opcode signal trong thân chương trình, đọc trạng thái theo Program từ Core và đường đọc mẫu qua `TRACE_READ` còn thiếu; U02/U05..U09/U11 NOT_RUN |
+| `SWR-REQ-PROG-BE-112..115` | Unified DDD §4–§6 | T59-006/302/405/408/504/505 | U04/U07/U10 | `BE-112/115`: Check/package v2 đã có source host/local từ W3/W4. `BE-113`: Enable/Disable đã có RBAC/idempotency/audit/reconcile/read-back source. `BE-114`: `TRACE_READ` là nguồn mẫu chính; Monitor Point và `GET /runtime/signals` giữ unavailable explicit, không trộn hai nguồn trong một dãy. `T59-505` gọi đúng HTTP/worker/compiler/packager/IPC trong lane HOST/LOCAL đang được gate; chưa có Test Result/target. U04/U07/U10 NOT_RUN |
+| `SWR-REQ-PROG-CORE-111..116` | Unified DDD §5.3/§7 | T59-401..408/501/504/505 | U02/U05..U09/U11 | `T59-401..408`: package v2/dual-reader, per-Program scheduler/lane, signal double-buffer, Enable/Disable safe-boundary, candidate withdrawal, RETAIN cô lập và trace bounded đã có source host/local. `T59-501`: barrier first-cycle/LKG/rollback ở mức gói và restart bốn pha. `T59-502`: sửa `SIGNAL` không seal được. `T59-504`: `STATUS` minor 3 công bố snapshot Published Signal typed; API đọc trạng thái Program và `TRACE_READ` đã nối tới consumer, unavailable/null giữ fail-closed. `T59-505`: Core simulator chỉ dùng scheduler/coordinator/cutover/process-image/IPC production để gate tích hợp HOST/LOCAL, không giả I/O vật lý. Opcode signal trong thân Program, target timing/soak/power/HIL vẫn thiếu; U02/U05..U09/U11 NOT_RUN |
 | `NFR-REQ-PROG-111` | Unified DDD §11–§12 | T59-606/702/707 | U05/U11 | NOT_RUN |
+
+### Evidence source W5 `T59-503..506` — chưa phải Test Result
+
+| Task | Requirement đúng phạm vi | Source/control hiện có | Phép kiểm gắn trực tiếp | Trạng thái bằng chứng |
+|---|---|---|---|---|
+| `T59-503` | `SYS-REQ-PROG-113`; `SWR-REQ-PROG-FE-116..118` | `ProgrammingRoutes.tsx` khai báo sáu route canonical; `ProgrammingDesktopNav.tsx`/`ProgrammingMobileNav.tsx` giữ đủ sáu workspace; `ProgrammingLayout.tsx` không fallback sang Project khác khi URL đã có `projectId`; `ProgrammingContextBar.tsx` tách Draft, Active, desired intent và runtime read-back; `CheckCommissionPage.tsx` hiển thị lifecycle DRAFT→CHECKING→READY→STAGING→ACTIVATING→VERIFYING→terminal/unknown | `ProgrammingRoutes.test.tsx`; `ProgrammingDesktopNav.test.tsx`; `ProgrammingMobileNav.test.tsx`; `ProgrammingLayout.test.tsx`; `ProgrammingContextBar.test.tsx`; `CheckCommissionPage.test.tsx`; `OverviewPage.test.tsx` | Source/component/browser HOST/LOCAL PASS trong FE 1161 test, E2E mock 61/61 và Chrome desktop/mobile. Không đổi `I/T/P/R`, không phải usability/Test Result/target |
+| `T59-504` | `SYS-REQ-PROG-112`; `SWR-REQ-PROG-FE-118`; `SWR-REQ-PROG-BE-114`; hỗ trợ `SWR-REQ-PROG-CORE-113/116` | `WatchTab.tsx` phủ LOCAL/VP/MB_RTU và tách candidate/actual/source/priority/quality/freshness; signal đọc snapshot riêng qua `GET /api/v1/programming/runtime/signals`; `valid=false`, BAD/OFFLINE/UNAVAILABLE và mismatch không thành `0`; trace công bố số mẫu rơi | `WatchTab.test.tsx`; `runtime_test.go`; `router_test.go`; `test_program_ipc_server.cpp`; `test_st_signal_bus.cpp` | Source/unit/component HOST/LOCAL; chưa có binding vật lý, soak 10 phút/24 giờ hay Test Result U06/U11 |
+| `T59-505` | `SYS-REQ-PROG-112/113`; `SWR-REQ-PROG-FE-116..118`; `SWR-REQ-PROG-BE-112..115`; `SWR-REQ-PROG-CORE-111/113/114/115` | `programming-real.spec.ts` không dùng Programming mock; `playwright.programming-real.config.ts` dựng backend JWT thật; `run_programming_real_e2e_stack.sh` chạy compiler/packager/BE thật và `mkddc-programming-core-sim` dùng scheduler/coordinator/cutover/process-image/IPC production; CI có job `programming-real-e2e` và chặn cả `page`/`context`/`browserContext.route*` | Vòng Project→Control Library→Draft có Signal/Binding→Seal→Check→Commission→Enable→Runtime/Signal→Disable→Revision mới→Restore; thêm ST+ PATCH exact năm field Draft v2, UI heading và GET Project read-back; `scripts/verify-project.sh --component e2e-real` 1/1 PASS | **HOST/LOCAL PASS**. Không phải target/HIL/physical I/O; monitor Point không có I/O thật phải fail-closed; chưa có Test Result/reviewer/GitHub CI run của commit cuối |
+| `T59-506` | `SYS-REQ-PROG-109`; `SWR-REQ-PROG-FE-118`; legacy `SWR-REQ-PROG-FE-103/104`; hỗ trợ `SWR-REQ-PROG-BE-114` | `stEditorSupport.ts` giữ tối đa 50 snapshot; mọi edit/format qua history và khôi phục cursor; `StRuntimeValueOverlay.tsx` giữ zero thật nhưng không dựng zero cho invalid, gắn quality/freshness; `workspaceAdapters.ts` chỉ nối monitor khi Active Revision khớp và chỉ lấy interface POU typed từ Draft v2; `StructuredFbdEditor.tsx` dùng interface đó cho palette/pin và giữ shortcut native trong ô nhập | `SourceEditor.test.tsx` (20 undo/redo + cursor); `stEditorSupport.test.ts`; `StRuntimeValueOverlay.test.tsx`; `workspaceAdapters.test.ts`; `DesignWorkspacePage.test.tsx`; `StructuredFbdEditor.test.tsx`; `userPou.test.ts` | Source/component/browser HOST/LOCAL PASS trong FE 1161 test/E2E mock 61/61. Chưa phải usability người thật, target hay Test Result |
+
+Ranh giới: bảng này ghi **evidence source** để review phạm vi W5. Chỉ khi source
+được merge, gate current-pass có artifact và Test Result được reviewer ký mới
+được nâng các trục tương ứng; job CI mới tồn tại trong YAML không đồng nghĩa CI
+đã chạy thành công.
 
 ## 1. Quy tắc đọc
 
@@ -118,9 +132,10 @@ scenario tương ứng có Test Result được review.
   tất cả có design owner và scenario group.
 - Proposal: 7 nhóm `PRG-*`, 24 `UX-REQ-*`, 10 NFR proposal có crosswalk.
 - Scenario: `VS-PROG-001..032`, không có ID trùng requirement/error.
-- Truy vết **hai chiều** trên đúng bảng máy đọc được: `32/32` kịch bản đều xuất
-  hiện ở cột “Scenario” của ít nhất một dòng §6, và mọi kịch bản dẫn ở §6 đều
-  tồn tại trong `VVP-PROG-001`. Kiểm bằng lệnh ở §8.1.
+- Truy vết **hai chiều legacy**: `32/32` kịch bản đều xuất hiện ở cột “Scenario”
+  của ít nhất một dòng §6, và mọi kịch bản dẫn ở §6 đều tồn tại trong
+  `VVP-PROG-001`. Lệnh §8.1 xác nhận phần legacy này nhưng vẫn trả FAIL cho toàn
+  bộ corpus vì chưa nhập 22 requirement + 12 scenario unified.
 - Test Result: `2/32` record (`VS-001/019` đều `BLOCKED`), `0/32 PASS`.
 - Release gate: **RED / NO-GO**.
 
@@ -239,19 +254,26 @@ phải phát hiện canonical ID thiếu/trùng, scenario ngoài `001..032`, `P=
 `T=N`, `R=Y` khi `P=N`, evidence path thiếu và alias không giải được. Không sửa
 chỉ số tổng bằng tay trước khi **cả 60 dòng** ở §6 được kiểm lại.
 
-### 8.1 Lệnh kiểm truy vết hai chiều
+### 8.1 Lệnh kiểm truy vết hai chiều — drift unified đang mở
 
-Phép kiểm ở §5 phải chạy lại được, không dựa vào đọc mắt. Lệnh dưới đây giải
-alias của §6 về ID canonical trong SRS, rồi đối chiếu tập kịch bản của §6 với
-`VVP-PROG-001`:
+Lệnh dưới đây giải alias của §6 về ID canonical trong SRS và đối chiếu tập kịch
+bản legacy của §6 với `VVP-PROG-001`:
 
 ```bash
 python3 scripts/trace_bidirectional_check.py
 ```
 
-Ba điều kiện `PASS`: `60/60` alias giải được và khớp SRS; `0` requirement thiếu
-dòng §6; `0` kịch bản `VS-PROG-*` mồ côi theo cả hai chiều. Lệnh trả exit code,
-dùng được trong CI cùng `scripts/docs_iso_harness.py`.
+Kết quả current-worktree ngày 2026-08-21: `60/60` alias legacy giải được và
+`32/32` scenario legacy được phủ, nhưng lệnh trả **FAIL** vì SRS đã có 82
+requirement còn §6/parser chỉ có 60; danh sách thiếu chính là 22 ID unified ở
+§0 (`SYS-109..115`, `FE-116..118`, `BE-111..115`, `CORE-111..116`, `NFR-111`).
+
+Owner: Verification tooling + Document Control. Ảnh hưởng: không được trích lệnh
+này như bằng chứng hai chiều current-pass cho Product v3.0. Gate: `T59-707` và
+`RELEASE_READY`. Điều kiện mở: mở rộng bảng máy đọc được/parser cho đủ 82
+requirement và 44 scenario (32 legacy + 12 unified), chạy lại exit `0`, rồi cập
+nhật số đếm trong §5/§7/§11. `docs_iso_harness.py --expect` vẫn PASS vì nó kiểm
+ID/link/invariant D/I/T/P/R, không thay thế phép join hai chiều này.
 
 ## 9. Blocker, revision và phê duyệt
 
@@ -261,10 +283,13 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | Source Target chưa implement end-to-end | Dev Leads | commit/build mapping per requirement |
 | Test Result PASS 0/32; 2 record `BLOCKED` | QA + discipline leads | hoàn tất workflow E2E, rerun và independent review theo VVP |
 | Corrective source 508/509 chưa merge | Dev Leads | commit/PR/merge thật để nâng `I`; target supporting evidence đã có nhưng không nâng `T/P/R` |
+| W5 `T59-503..506` đang ở cây làm việc, chưa merge | FE/BE/Core Dev Leads + QA | các cổng HOST thành phần current-worktree đã PASS; cần commit/push/CI rồi mới review Test Result `VS-PROG-U06/U07/U08/U10/U11`. Job CI mới khai báo không được dùng như kết quả CI |
+| Join hai chiều chưa hiểu 22 requirement/12 scenario unified | Verification tooling + Document Control | mở rộng §6/parser cho 82 requirement + 44 scenario và chạy `trace_bidirectional_check.py` exit `0`; thuộc `T59-707`, không chặn implementation W5 nhưng chặn dùng join làm release evidence |
 | Positive Monitor/Trace target có binding và review độc lập | QA + FE/BE/Core + Accessibility Reviewer | fixture read-only an toàn, raw output start/get/stop + row truth; review axe/bundle và ký Test Result theo VVP |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 6.4 | 2026-08-21 | Ghi evidence source W5 `T59-503..506`: sáu workspace/lifecycle; Monitor Point + Published Signal fail-closed; ST history/runtime overlay và FBD POU typed; lane real-backend Project→Restore không dùng Programming mock; ST+ gửi đúng payload Draft v2 strict và có API read-back. Ghi số đo HOST/LOCAL current-worktree đã PASS nhưng giữ nguyên 22/60 `I=Y`, 0/32 PASS và mọi `T/P/R`; không claim GitHub CI/target/HIL/release. Ghi đúng finding join hai chiều: script hiện chỉ hiểu 60/32 legacy và FAIL trước 22/12 unified; owner/gate/điều kiện mở ở §8.1 |
 | 2.0 | 2026-08-09 | Trace nhóm SRS/proposal tới 30 scenario, evidence RED |
 | 2.1 | 2026-08-09 | Thêm 55 dòng requirement-level, 5 design lõi, source target, D/I/T/P/R và evidence rule M3 |
 | 2.2 | 2026-08-09 | Bổ sung canonical requirement alias, bằng chứng/authority cho từng trục D/I/T/P/R và rule inconsistency/invalidation; chuyển Detailed Draft chờ review |
@@ -366,10 +391,10 @@ qua journey hoặc qua kịch bản xuyên suốt tương ứng.
 | Mọi link trỏ tới ID hoặc mục có thật | PASS | harness: local link missing `0`, anchor missing `0`; §6 alias giải được về ID canonical trong SRS |
 | Không trùng ID | PASS | 60 dòng requirement duy nhất; 8 `UJ-PROG-*`; 17 `UC-PROG-*`; harness `duplicate doc ID = 0` |
 | Phân biệt planned/documented/implemented/tested/passed/released | PASS | §6 năm trục `D/I/T/P/R`; §1 nêu rõ `DOCUMENTED` **không** nghĩa code tồn tại |
-| Coverage requirement | PASS | §7: 60/60 có thiết kế, 60/60 có source target, 60/60 có kịch bản; §10 phủ 8 journey và 17 UC; §5 và §8.1: `32/32` kịch bản có đường về requirement |
+| Coverage requirement | PASS có giới hạn | §7: 60/60 legacy có thiết kế/source target/kịch bản; §0 phủ 22 unified bằng crosswalk; §10 phủ 8 journey và 17 UC. Join máy cho toàn bộ 82/44 còn BLOCKED ở §8.1 |
 | Bằng chứng cho phép đổi trạng thái | PASS | §8 quy định cho từng trục: ai xác nhận và điều kiện hạ ngược `Y→N` |
 | Quy tắc vô hiệu hóa | PASS | §7 và §8: đổi requirement/design/contract/source/board làm mất hiệu lực Test Result phía dưới; không giữ `P` cũ |
-| Kiểm tính nhất quán tự động | PASS | §8 liệt kê các phép kiểm; đã chạy: thiếu/trùng ID canonical, kịch bản ngoài `001..032`, `P=Y` khi `T=N`, `R=Y` khi `P=N` — vi phạm `0` |
+| Kiểm tính nhất quán tự động | **BLOCKED FOR RELEASE** | `docs_iso_harness.py --expect` PASS (82 ID canonical, link/duplicate/invariant sạch), nhưng `trace_bidirectional_check.py` FAIL vì chưa hiểu 22 requirement/12 scenario unified. Owner/gate/điều kiện mở đầy đủ tại §8.1; không chặn implementation W5 |
 | Trạng thái bằng chứng trung thực | PASS | §5 và §7: 2/32 record `BLOCKED`, 0/32 PASS, 0/60 passed, release gate `RED / NO-GO` |
 | Quyền implementation | **PASS** | §9: baseline approved, 17/17 decision `DECIDED`, chữ ký còn thiếu được miễn cho implementation. Source/Test Result chưa có là công việc cần thực hiện, không phải blocker quyền viết code |
 

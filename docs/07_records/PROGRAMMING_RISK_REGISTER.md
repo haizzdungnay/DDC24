@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.15 |
+| Phiên bản | 4.19 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
 | Ngày | 2026-08-21 |
 | Chủ quản | Product + Architecture + QA |
@@ -21,7 +21,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **22 rủi ro** gồm 16 baseline và 6 rủi ro unified Product, kèm control/task/evidence để hạ mức. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 22/22 Open; source baseline có một phần treatment cho atomic/LKG/RETAIN, nhưng contract mới chưa có Test Result; không giảm residual. |
+| 3. Hệ thống hiện tại đang có gì? | 22/22 Open. Source W5 trên nhánh đã bổ sung sáu workspace/lifecycle, Monitor Point + Published Signal fail-closed, ST/FBD editor và lane E2E backend/compiler/Core simulator thật trên HOST/LOCAL. Các cổng HOST thành phần hiện hành đã PASS; chưa có GitHub CI verdict, Test Result được review, target/HIL hay residual được chấp nhận. |
 | 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Nó gắn từng rủi ro với biện pháp cụ thể, kịch bản kiểm chứng và mức tồn dư **mục tiêu** — mục tiêu, chưa phải kết quả. |
 | 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan59. Các rủi ro 20 điểm gồm runtime/IOP/compiler/HIL baseline và sáu rủi ro mới về signal, scheduler, POU, library, output, power-loss. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
@@ -712,6 +712,62 @@ Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
 Evidence host/local; **22/22 risk giữ Open**, S×L và residual không đổi.
 
+### 5.51 Cập nhật treatment source `T59-503` (Plan59 W5 — sáu workspace/lifecycle)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-007` | Sáu workspace dùng chung read-model ở `ProgrammingLayout`; `ProgrammingContextBar` tách bốn sự thật Draft, Active Revision, desired intent và runtime read-back, tuyệt đối không suy `desiredEnabled=true` thành `RUNNING`. PGM-05 dựng lifecycle từ trạng thái Check/operation authoritative, giữ riêng `UNKNOWN_RECONCILING` và không xem timeout là success | Test Result `VS-PROG-U07/U10`, target read-back và review độc lập; E2E real-backend HOST/LOCAL đã PASS | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Khi URL đã có `projectId`, API Project chưa trả hoặc lỗi không làm layout fallback sang Project đầu tiên; intent query giữ đúng định danh route. Test race đổi Project khóa việc rò intent/state của Project cũ | Ma trận concurrency/reload thật (`T59-505/603`) và Test Result `VS-PROG-024/U10` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-016` | Desktop/mobile đều có đúng sáu route canonical; workspace phụ thuộc Project bị vô hiệu khi thiếu Project thay vì dựng deep-link giả. PGM-05 hiển thị impact/read-back ở chế độ chỉ đọc, nhóm `UNAVAILABLE` vẫn chặn Commission; lifecycle và trạng thái permission/offline/unknown có nhãn chữ + `aria-live`/`aria-current` | Usability người thật và accessibility reviewer trên desktop/mobile; fault E2E thật `VS-PROG-011/019/031/U10` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Route canonical nằm trong một map; redirect cũ giữ query/hash định vị diagnostic; link lỗi Check về đúng `/programs`. Test route/nav/context khóa IA để copy cũ hoặc route cũ không âm thầm quay lại | Browser/Network current-pass và Test Result `VS-PROG-019/U10` | `OPEN — PARTIAL SOURCE` |
+
+Evidence hiện là source/component/browser HOST/LOCAL: FE **124 file / 1161
+test**, E2E mock **61/61**, Chrome desktop/mobile sạch. **22/22 risk giữ Open**,
+S×L và residual không đổi; chưa claim usability, CI, target/HIL hay Test Result.
+
+### 5.52 Cập nhật treatment source `T59-504` (Plan59 W5 — Monitor Point + Signal)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-010` | Watch phủ đúng ba category `LOCAL/VP/MB_RTU`, tách output candidate (`programValue`) khỏi `actualValue`, source/priority/quality/freshness. `valid=false`, BAD/OFFLINE/UNAVAILABLE và mismatch không vẽ thành `0`; số 0 chỉ giữ khi payload thật sự valid. Published Signal dùng snapshot/API riêng, không trộn với bảng Point | Positive binding trên target, producer clock/freshness fault, AO/DO read-back và Test Result `VS-PROG-017/018/U06` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-017` | Core `STATUS` minor 3 công bố Published Signal snapshot typed lấy từ bus committed; BE join theo Active Revision và phân biệt MATCHED/MISMATCH/CORE_ONLY/REVISION_ONLY; FE fail-closed khi producer offline hoặc snapshot mismatch | Opcode signal trong thân Program; TSan/soak 24 giờ trên target và Test Result `VS-PROG-U06` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-021` | Bảng Monitor hiện candidate, actual, owner/source và priority thành các cột riêng; trace đọc ring Core qua `TRACE_READ`, công bố `droppedSamples` và không trộn mẫu polling vào cùng dãy | Trace 10 phút + candidate withdrawal với I/O vật lý trên target; `VS-PROG-U09/U11` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | State loading/permission/offline/error/no-active/empty được phân loại bằng status/transport thay vì parse chuỗi lỗi. Viewer được xem monitor nhưng không thể chọn biến hay khởi tạo trace | Contract/browser current-pass, fault matrix và reviewer độc lập | `OPEN — PARTIAL SOURCE` |
+
+Evidence hiện là source/unit/component HOST/LOCAL: CTest Release/Debug
+**1211/1211**, Go và FE gate thành phần sạch. Simulator cố ý không có I/O vật lý,
+nên Monitor Point unavailable phải hiện fail-closed chứ không được dựng dữ liệu.
+**22/22 risk giữ Open**, S×L và residual không đổi.
+
+### 5.53 Cập nhật treatment source `T59-505` (Plan59 W5 — lane real-backend HOST/LOCAL)
+
+| Risk | Control đã có trong source lane | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-007` | Spec đi Project→Draft→Seal→Check→Commission→Enable→Runtime→Disable→Revision mới→Restore qua HTTP/operation read-back thật; compiler/packager và Programming IPC production được gọi, không có optimistic Active | Target read-back, fault injection và Test Result `VS-PROG-U07/U08/U10`; HOST/LOCAL 1/1 đã PASS | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-008` | Lane dùng ETag mới qua chuỗi mutation, idempotency/correlation riêng cho từng request và kiểm actual Active Revision sau operation; Control Library, Signal và Binding cùng đi qua một Revision thật. ST+ khóa PATCH đúng năm field Draft v2 strict và GET Project read-back, không còn gửi metadata Program ngoài contract | Retry/concurrency/worker-restart matrix (`T59-603/604`) và reviewer độc lập | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-012` | Backend chạy JWT/authz thật với admin; mutation không bypass handler/service. CI có guard tĩnh làm đỏ nếu spec đưa `page`/`context`/`browserContext.route*`/HAR/WebSocket mock vào lane | Role matrix viewer/operator/admin, revocation/re-auth/CSRF/TLS và Test Result `VS-PROG-022/U10` | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-022` | `mkddc-programming-core-sim` tái dùng scheduler/coordinator/cutover/process-image/IPC production để buộc Commission và Restore đi qua barrier/read-back thay vì stub HTTP. Stack tạo DB/staging/state tạm và dọn sau suite | Power-cut/fsync/journal/RETAIN/LKG trên board thật (`T59-704/705`) và Test Result `VS-PROG-U08` | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-013` | Tên job, script, config và spec đều ghi rõ **HOST/LOCAL**; simulator không có physical I/O nên Monitor Point `UNAVAILABLE` là kết quả fail-closed dự kiến. Bằng chứng này chặn việc biến PASS simulator thành claim HIL bằng văn xuôi | Board/BSP/instrument/physical I/O evidence `VS-PROG-014/030/U09`; release authority ký | `OPEN — NO TARGET EVIDENCE` |
+| `RSK-PROG-014` | Lane real-backend có cấu hình Playwright riêng, bị loại khỏi suite mock mặc định và có component `e2e-real`; workflow khai báo job riêng để failure boundary không bị che bởi mock. Guard phủ cả ba receiver route và C++ gate dùng `cmake --fresh` | **Kết quả chạy CI của commit cuối** và Test Result review; sự tồn tại của YAML/job chưa phải CI PASS | `OPEN — SOURCE HOST PASS` |
+
+Ranh giới bắt buộc: lane HOST/LOCAL **1/1 PASS**, `requestfailed=0`; chỉ ngoại lệ
+HTTP `503`/Console resource error đã khai là Monitor Point do simulator cố ý
+không giả process-I/O. Kết quả này không nâng GitHub CI, target, HIL, physical
+I/O, Test Result hoặc `RELEASE_READY`. **22/22 risk giữ Open**.
+
+### 5.54 Cập nhật treatment source `T59-506` (Plan59 W5 — ST/FBD editor)
+
+| Risk | Control đã có trên nhánh `feat/t59-201-control-library-domain` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-014` | ST editor dùng history duy nhất cho gõ, format và command; giữ tối đa 50 snapshot, undo/redo phục hồi cả source lẫn selection/cursor, edit mới cắt nhánh redo. Test bắt buộc đủ 20 edit hai chiều nên undo không còn phụ thuộc textarea native hoặc mutation path riêng lẻ | Conflict/reload real-backend và Test Result `VS-PROG-U10`; save/Console/Network HOST đã PASS | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-010` | Runtime overlay chỉ nối monitor khi `activeRevisionId` khớp; mismatch/loading/error/no-active đều unavailable và không giữ mẫu cũ. Zero thật giữ nguyên khi valid; invalid/null/BAD/OFFLINE/UNKNOWN không thành 0; STALE được giữ last-known nhưng luôn kèm quality/freshness | Binding/producer fault trên target và Test Result `VS-PROG-017/018/U06` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-019` | FBD chỉ lấy interface POU typed từ Draft v2, giữ thứ tự pin và lọc type ngoài profile; interface thiếu/mâu thuẫn làm palette rỗng/cảnh báo thay vì đoán pin. POU đang mở bị lọc để không tạo direct recursion từ palette | Compiler/runtime round-trip POU, one-over/fuzz và Test Result `VS-PROG-U01/U02/U04` | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-016` | Palette/Inspector có nhãn nguồn POU và lỗi interface; Insert/Arrow/Enter/Delete/Ctrl+Z hỗ trợ bàn phím, nhưng shortcut trong ô nhập giữ hành vi native để không xóa graph ngoài ý muốn | Browser/a11y/usability người thật desktop/mobile và reviewer độc lập | `OPEN — PARTIAL SOURCE` |
+
+Evidence hiện là source/component/browser HOST/LOCAL: FE **1161 test**, E2E mock
+**61/61**, real-backend **1/1** và Chrome desktop/mobile sạch. **22/22 risk giữ
+Open**, S×L và residual không đổi; chưa claim target/HIL, Test Result hay release.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -732,6 +788,10 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 4.19 | 2026-08-21 | Ghi `T59-506` và chốt evidence HOST/LOCAL của W5: ST history 50 snapshot/20 undo-redo + cursor, runtime overlay không biến invalid thành 0, FBD lấy POU interface typed; ST+ gửi đúng payload Draft v2 strict; FE 1161 test, E2E mock 61/61, real-backend 1/1 và Chrome desktop/mobile sạch. Giữ 22/22 Open; chưa có GitHub CI/Test Result/target/HIL |
+| 4.18 | 2026-08-21 | Ghi `T59-505`: lane Project→Restore dùng backend/compiler/Core simulator thật, cấu hình tách khỏi mock và CI job có guard cấm `page.route`. Giữ 22/22 Open; lane đang được gate, không claim CI PASS và không đổi HOST thành target/HIL/physical I/O/release |
+| 4.17 | 2026-08-21 | Ghi `T59-504`: Monitor LOCAL/VP/MB_RTU tách candidate/actual/source/priority, Published Signal snapshot riêng và trace công bố mẫu rơi; mọi invalid/mismatch/unavailable fail-closed. Giữ 22/22 Open vì binding/soak/I/O vật lý/Test Result chưa có |
+| 4.16 | 2026-08-21 | Ghi `T59-503`: sáu workspace desktop/mobile, Project race guard, context tách Draft/Active/intent/runtime và PGM-05 lifecycle authoritative. Giữ 22/22 Open vì real-backend current-pass/usability/Test Result/target chưa có |
 | 0.1 | 2026-08-09 | Đăng ký 15 risk Programming |
 | 0.2 | 2026-08-09 | Thêm scoring, cause-event-impact, trace control/test/evidence, target residual và lifecycle M3 |
 | 0.3 | 2026-08-09 | Bổ sung treatment/acceptance record schema và trigger reopen/invalidate; đổi trạng thái content sang Detailed Draft, giữ residual/evidence RED |

@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.0 |
+| Phiên bản | 2.2 |
 | Trạng thái | **Active — PLAN_READY / IMPLEMENT_READY** |
-| Ngày | 2026-08-20 |
+| Ngày | 2026-08-23 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04` |
 | Detailed Design | [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
@@ -1806,10 +1806,10 @@ thật trên target (`T59-702`).
 |---|---|---|---|---|---|
 | `T59-501` | P0 | Package Commission/Restore first-cycle barrier, LKG/journal/recovery | T59-401..407 | **DONE** | Barrier chu kỳ đầu và rollback nâng lên mức **GÓI**: trước đó chỉ xét `instance_id_` nên một Program chết vẫn được tuyên bố `FIRST_CYCLE_OK`, và rollback để lại gói **nửa cũ nửa mới**. LKG thăng cấp **all-or-nothing**. Restart ở cả 4 pha không để lại active một nửa. Hai test chống hồi quy **kiểm chứng bằng cách gỡ bản vá** (đỏ đúng dòng lý do). Sửa kèm ở FE (hồi quy W3 lộ ra vì W3 không có cổng `e2e`): thanh tab Thiết kế **bấm không ăn** trên `/programs`+`/mapping` và tab `execution` **mất chỗ hiển thị**; E2E còn ghi IA cũ. `ctest` **1209/1209**; `--wave W5` **7/7 PASS** (lần đầu chạy `frontend`+`e2e` trong Plan 59). Chi tiết §3.6. |
 | `T59-502` | P0 | Impact/ack cho multi-Program/library/signal/output/RETAIN/enable intent | T59-501 | **DONE** | Bốn nhóm impact mới: `publishedSignals`/`controlLibrary`/`programSet`/`enableIntent` (trước đó chỉ có 4 nhóm của Rev A một Program). **Lỗi thật:** `SIGNAL` không nằm trong whitelist kind của `revision_objects`, nên `SealRevision` từ chối MỌI Revision có Published Signal — cả lane `T59-304`/`T59-404` chưa từng chạm một Revision thật (migration **v11**). Đổi chính sách stale trước đây rơi vào `SOURCE` nên Commission không hỏi ack. Nhóm vắng mặt = `UNAVAILABLE` (fail-closed), không phải `NONE`. Kiểu TS sinh **từ enum contract** thay vì viết cứng. `--wave W5` **7/7 PASS**. Chi tiết §3.6. |
-| `T59-503` | P1 | FE sáu workspace/navigation/context, PGM-05/06 lifecycle | T59-203/306/405/502 | ORDERED | Desktop/mobile, Draft vs Active vs intent/runtime, stale/offline/unknown/a11y. |
-| `T59-504` | P1 | Monitor đủ LOCAL/VP/MB_RTU, Program/signal/candidate/actual/priority | T59-303/404/406 | ORDERED | 3 category, programValue vs actual, source/freshness/quality đúng. |
-| `T59-505` | P0 | Real-backend E2E Draft→Check→Commission→Enable→Runtime→Disable→Restore | T59-501..504 | ORDERED | Không `page.route` mock Programming; compiler thật + Core simulator authority; CI lane. |
-| `T59-506` | P1 | ST editor durable history/runtime overlay + FBD POU UX polish | T59-503/504 | ORDERED | 20 edit undo/redo, cursor; live value quality/stale; browser Console/Network sạch. |
+| `T59-503` | P1 | FE sáu workspace/navigation/context, PGM-05/06 lifecycle | T59-203/306/405/502 | **DONE (HOST/LOCAL)** | Sáu route canonical có nav desktop/mobile; workspace theo Project chỉ mở khi có đúng `projectId`. Context tách **Draft đang sửa / Active Package / desired Enable intent / runtime read-back**, không suy intent thành `RUNNING`; loading/empty/error/permission/stale/offline/unknown đều có copy và hành vi fail-closed; deep-link/legacy redirect giữ ngữ cảnh. FE hiện hành **124 file / 1161 test**, E2E mock **61/61**; Chrome desktop/mobile không Console lỗi hay tràn ngang. Không dùng bằng chứng HOST/LOCAL để suy CI/target/release. Chi tiết §3.6. |
+| `T59-504` | P1 | Monitor đủ LOCAL/VP/MB_RTU, Program/signal/candidate/actual/priority | T59-303/404/406 | **DONE (HOST/LOCAL)** | Monitor lọc/đếm đủ `LOCAL`/`VP`/`MB_RTU`; tách `programValue` candidate mức 5 khỏi actual, source, priority, TTL, quality và freshness. Published Signal đọc từ snapshot `StSignalBus` riêng, ghép identity Revision; invalid/mismatch/core-only/unavailable hiện `—`, không biến thành `0`; trace hiện số mẫu rơi. IPC minor **2→3**, OpenAPI **1.25.0→1.26.0**; CTest Release/Debug **1211/1211**, Go và FE gate thành phần sạch. Chi tiết §3.6. |
+| `T59-505` | P0 | Real-backend E2E Draft→Check→Commission→Enable→Runtime→Disable→Restore | T59-501..504 | **DONE (HOST/LOCAL)** | Lane riêng dựng backend Go + compiler/packager production + Core simulator/Programming IPC thật, không `page`/`context`/`browserContext.route*` hay auth mock. Spec đi qua Project, PROJECT Library được publish khi Seal, Program/Signal/Variable/LOCAL Mapping, Check/Commission, Enable→`RUNNING`, signal invalid=`null`, Disable→`DISABLED`, Revision thứ hai và Restore; browser đăng nhập JWT rồi đọc lại Programs/Library/Mapping/Runtime. Finding vòng render do adapter Draft đổi identity theo poll đã được sửa bằng memoization theo payload Draft authority. `e2e-real` host **1/1 PASS**; job CI thứ 12 đã khai nhưng **chưa có CI verdict**. Chi tiết §3.6. |
+| `T59-506` | P1 | ST editor durable history/runtime overlay + FBD POU UX polish | T59-503/504 | **DONE (HOST/LOCAL)** | ST editor có history bounded 50 snapshot; acceptance 20 edit undo/redo khôi phục đúng cursor/selection, mọi đường sửa có kiểm soát đi chung history. Runtime overlay chỉ đọc snapshot của đúng Active Revision/Program; `0` hợp lệ vẫn hiện, BAD/OFFLINE/UNKNOWN/UNAVAILABLE hiện `—`, stale có nhãn. FBD lấy POU từ typed Draft interface (không parse ST ở FE), sinh pin/keyboard flow tất định, loại POU đang mở để chặn direct recursion và fail-closed interface lỗi. Component/editor/browser nằm trong FE **1161 test** và E2E mock **61/61** hiện hành. Chi tiết §3.6. |
 
 ### 3.6 Ghi chú thực thi W5
 
@@ -1931,6 +1931,151 @@ người thật thuộc `T59-503`.
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
+#### `T59-503` — Sáu workspace và một thanh context không trộn bốn sự thật
+
+**Sáu workspace có route canonical ở cả desktop và mobile.** PGM-01..06 lần
+lượt là Tổng quan, Chương trình, Điểm & Ánh xạ, Thư viện điều khiển, Kiểm tra &
+Vận hành và Runtime & Bảo trì. Bốn workspace thuộc Project chỉ trở thành link
+khi layout đọc được đúng `projectId`; deep-link có ID không tồn tại không được
+âm thầm đổi sang Project đầu tiên. `/design` và `/task` chỉ còn là lối vào tương
+thích, giữ query/hash phục vụ định vị diagnostic rồi chuyển tới route chuẩn.
+
+**Thanh context tách bốn giá trị có vòng đời khác nhau.** `Draft đang sửa`,
+`Active Package`, `desiredEnabled` và runtime read-back không được gộp thành một
+nhãn "đang chạy". Một intent `true` nhưng Core trả `UNKNOWN` vẫn hiện cả hai sự
+thật; FE không tự suy thành `RUNNING`. Context giữ `dirty`/Check state của Draft,
+định danh Active từ runtime và tổng hợp trạng thái từng Program từ read-back.
+
+**Trạng thái không thuận lợi là acceptance, không phải phần trang trí.** Layout
+phân biệt loading, empty, lỗi Project/intent, thiếu quyền, Core offline, dữ liệu
+stale và kết quả unknown/reconcile. Khi read-back không đủ tin cậy, copy nói rõ
+thao tác runtime bị khoá; viewer vẫn đọc được context nhưng không được trao một
+nút mutation giả. Nav mobile có sáu target, tên truy cập đầy đủ và vùng bấm tối
+thiểu; nav desktop giữ focus-visible và trạng thái active.
+
+**Bằng chứng task.** Component tests phủ route/nav/context và các trạng thái
+fail-closed; Playwright mock phủ sáu workspace ở desktop/mobile cùng axe. Bộ FE
+hiện hành PASS **124 file / 1161 test**, E2E mock **61/61**; Chrome DevTools thật
+ở 1440×900 và 390×844 không Console warning/error/issue và không tràn ngang.
+
+**Evidence level.** Host/local (Vitest/jsdom/Playwright). Không phải GitHub CI,
+không phải target/HIL và không mở `RELEASE_READY`.
+
+#### `T59-504` — Monitor tách Point truth, candidate và Published Signal
+
+**Ba category là một contract đóng.** Watch lọc và đếm `LOCAL`, `VP`, `MB_RTU`;
+identity MB_RTU giữ `deviceId:pointId`. Mỗi hàng nói riêng Program/biến, Point,
+candidate đầu ra mức 5 (`programValue`), actual, nguồn hiệu lực, priority, TTL,
+quality và freshness. Một Point chỉ đọc không bị ép có candidate; một override
+không bị trình bày như Program đang thắng.
+
+**Không có dữ liệu khác giá trị số 0.** `OFFLINE`/`UNAVAILABLE` hoặc raw invalid
+hiện `—`; một giá trị `0` hợp lệ hoặc `0` stale vẫn hiện cùng nhãn tương ứng.
+Loading, permission, offline, payload lỗi, chưa có Active Revision và Active
+không có biến ánh xạ là sáu trạng thái riêng. Viewer xem được monitor nhưng chỉ
+admin mới chọn biến và tạo/dừng trace.
+
+**Published Signal có endpoint và snapshot riêng.** FE không suy signal từ
+Binding/Point. Hàng signal hiện publisher Program, typed value/unit,
+quality/freshness, stale policy, definition state và generation. `valid=false`,
+`MISMATCH`, `CORE_ONLY`, `REVISION_ONLY`, quality xấu hoặc freshness
+`UNAVAILABLE` đều fail-closed thành `—`, kể cả payload ngoài biên vẫn gửi raw
+`0`/`true`. Chỉ identity `MATCHED` và giá trị hợp lệ mới được trình bày như dữ
+liệu dùng được.
+
+**Trace giữ provenance của dữ liệu.** UI hiện `droppedSamples`; value trace
+invalid giữ null/`—`, không vẽ thành 0. Điều này nối tiếp sửa `TRACE_READ` của
+T59-408: một dãy dùng một nguồn snapshot Core khi Core đã nhận phiên, không trộn
+mẫu poll vào đầu dãy.
+
+**Bằng chứng task.** Component/fault/a11y tests phủ ba category, candidate↔actual,
+invalid zero, signal definition mismatch, state matrix và quyền trace. CTest
+Release/Debug **1211/1211**, Go gate và FE **1161 test** hiện hành đều sạch; đây
+vẫn không phải CI/target evidence.
+
+**Evidence level.** Host/local. Không phải bằng chứng timing target, I/O vật lý
+hay 24 h soak.
+
+#### `T59-505` — Lane real-backend riêng, DONE ở mức HOST/LOCAL
+
+**Không tái sử dụng mock Programming.** `playwright.programming-real.config.ts`
+khởi động một backend Go production, compiler/packager production và Core
+simulator dùng scheduler/coordinator/Programming IPC thật trong thư mục tạm.
+Spec không gọi `page.route`, `routeFromHAR` hay `routeWebSocket`; workflow có
+guard source riêng để mock lọt vào lane này phải làm job đỏ. Simulator không có
+process-I/O vật lý, vì vậy monitor Point trả 503 là trạng thái fail-closed dự
+kiến, không phải một verdict target/HIL.
+
+**Acceptance API đi hết vòng đời và cả hai miền dữ liệu W2/W3.** Fixture tạo
+Project và PROJECT Library, lưu Program + Published Signal + Variable + Binding
+`LOCAL`, đọc lại Library/Mapping, Seal rồi Check bằng compiler thật, Commission
+package, Enable tới read-back `RUNNING`, đọc signal invalid với `value=null`,
+Disable tới `DISABLED`, tạo/Commission Revision thứ hai rồi Restore chính xác
+Revision thứ nhất. Tám nhóm impact được đọc từ response hiện hành và ack đúng
+chính tập `PRESENT`, không viết cứng bốn nhóm đời cũ.
+
+**Acceptance trình duyệt phải đọc lại, không chỉ setup bằng API.** Browser đăng
+nhập bằng JWT thật và trở lại deep-link; sau đó tự điều hướng tới Programs,
+PROJECT Library, Mapping và Runtime để đọc lại source/entry/binding/signal từ
+backend. Guard gom response Programming 5xx, request failed và Console error;
+ngoại lệ duy nhất được khai là 503 monitor do simulator cố ý không giả process
+I/O. Invalid signal phải hiện `—`/`INVALID`/`BAD`/`UNAVAILABLE`, không chứa `0`.
+
+**Hai finding của lần chạy đầu đã được đóng, không hạ acceptance.** Adapter
+document v2 trước đó được dựng lại ở mỗi render; monitor poll làm identity tài
+liệu Draft đổi, `ProgramsTab` phát lại pending operation rỗng và tạo vòng render
+`Maximum update depth exceeded`, nên browser hết timeout khi chờ hàng POU sau
+Restore. Adapter nay được memoize theo đúng payload Draft authority, vì vậy poll
+runtime không làm tài liệu đang sửa đổi identity. Đồng thời read-back Library
+được sửa theo vòng đời thật: Seal publish PROJECT Library, nên API và browser đều
+phải thấy `PUBLISHED`, không giữ kỳ vọng `DRAFT` cũ.
+
+**Current-pass evidence.** `scripts/verify-project.sh --component e2e-real`
+thoát `0`, **1/1 PASS** trong 14,5 s (journey 7,6 s), `requestfailed=0`; không có
+Programming HTTP `>=500` hay `console.error` ngoài đúng monitor thường kỳ trả
+503/offline đã khai do simulator không giả process-I/O. Acceptance read-back
+Programs/Library/Mapping/Runtime vẫn giữ nguyên và toàn spec đi hết trên stack
+thật.
+
+**Gate mới không viết lại lịch sử.** W5 nay có tám cổng HOST vì thêm
+`e2e-real`. Kết quả **7/7** ở `T59-501`/`T59-502` là số đo lịch sử trước khi cổng
+này tồn tại và được giữ nguyên. Workflow đã khai job thứ 12 cho lane này, nhưng
+chưa chạy trên GitHub nên chỉ là cấu hình CI, không phải `T59-701` evidence.
+
+**Evidence level.** Host/local DONE. Không phải GitHub CI, target, HIL,
+physical I/O, soak hay release evidence.
+
+#### `T59-506` — History ST bền, overlay fail-closed và FBD dùng typed POU
+
+**ST undo/redo thuộc editor, không dựa native textarea.** Mọi edit từ gõ trực
+tiếp, autocomplete, Format, Replace và quick action đi qua một history bounded
+50 snapshot; snapshot giữ cả source lẫn hai đầu selection. Acceptance chạy 20
+edit, undo/redo toàn bộ và đòi cursor/selection trở lại đúng từng bước; edit mới
+sau undo phải cắt nhánh redo. Một lệnh Format là đúng một bước lịch sử.
+
+**Runtime overlay là read-only và có identity guard.** Workspace chỉ ghép
+monitor cho kind `PROGRAM`, theo `programId`, và chỉ khi Active Revision của
+monitor khớp Active Revision của Project. Loading/unavailable/empty tách riêng;
+`0`/`FALSE` hợp lệ vẫn hiện. `valid=false`, value không scalar, BAD, OFFLINE,
+UNKNOWN hoặc freshness UNAVAILABLE đều hiện `—`; stale được phép giữ last-known
+nhưng phải mang nhãn `STALE`, không được trang trí như live.
+
+**FBD dùng interface typed đã lưu trong Draft.** FE không parse source ST để tự
+dựng signature thứ hai. FUNCTION/FUNCTION_BLOCK hợp lệ xuất hiện trong nhóm POU
+Project/Library với pin và kiểu từ `objects[].interface`; POU đang mở bị loại để
+không chào direct recursion. Interface sai tên/kind/type/pin bị loại và báo rõ,
+không crash và không sinh pin đoán. Keyboard flow khoá `Insert`, chọn port bằng
+phím mũi tên, `Enter` nối, `Alt+↑/↓` đổi thứ tự, `Delete`, `Ctrl+Z/Y`; focus sau
+Insert quay về graph để lệnh kế tiếp không kích hoạt lại nút toolbar.
+
+**Bằng chứng task.** Unit/component tests phủ history/cursor, adapter
+Draft→overlay/POU, invalid/stale/valid-zero và keyboard/a11y FBD; browser editor
+spec giữ guard Console/Network. Các test này nằm trong FE **124 file / 1161
+test** và E2E mock **61/61** hiện hành; không dùng chúng để nâng CI/target/release.
+
+**Evidence level.** Host/local. Không phải runtime target, timing hay physical
+I/O evidence.
+
 #### Sửa kèm W5 — đường trace debug chưa nối tới người dùng
 
 Cổng W5 chạy lần đầu đã lộ thêm một thứ mà không cổng nào của W4 gọi tới: BE
@@ -1945,6 +2090,75 @@ Một điểm nữa cùng lớp: test chống hồi quy đầu tiên của đư�
 chờ `readCalls > 0` rồi đọc mẫu, trong khi lệnh đọc tới Core trước lúc mẫu được
 ghi vào phiên. Cổng `go` bắt được ở lần chạy thứ hai. Điều kiện chờ nay là **cả
 hai** (đã đọc ring **và** mẫu đã ghi); chạy lặp 5 lần đều xanh.
+
+#### Sửa kèm W5 — ST+ chưa tương thích payload Draft v2 strict
+
+Chrome trên stack real-backend phát hiện nút **ST+** nhận `400`: FE trải cả
+`executionOrder` và `functionalTags` vào operation `upsertProgram`, trong khi
+backend Draft v2 strict chỉ chấp nhận đúng năm field `programId`, `name`, `kind`,
+`language`, `document`. Tên mặc định có khoảng trắng (`New program`/bản dịch)
+cũng vi phạm grammar POU, nên bỏ hai field thừa vẫn chưa đủ làm luồng tạo Program
+chạy được.
+
+Transport nay dùng type hẹp đúng năm field; tên sinh là `NewProgram`,
+`NewFbdProgram` và hậu tố `_2`, đồng thời validation client dùng cùng grammar và
+bộ từ khóa reserved của backend. Metadata Program không tồn tại trong Draft v2
+được bỏ khỏi Inspector thay vì tiếp tục gửi một khả năng giả. E2E real-backend
+khóa request body exact, PATCH `200`, heading UI và GET Project read-back; Chrome
+DevTools xác nhận cùng đường trên desktop/mobile. Nhãn `Name`/`Kind` được nối
+`htmlFor`/`id`, nên kiểm form accessibility không còn field vô danh.
+
+**Evidence level.** Host/local. Đây là compatibility fix của contract đã khóa,
+không thêm field hay semantics mới vào Unified DDD.
+
+#### Đóng sổ W5 — hai finding chặn cổng, phát hiện khi chạy lại toàn bộ ma trận
+
+`T59-501..506` được tuyên bố DONE bằng số đo chạy **từng cổng rời** ở các phiên
+trước. Khi chạy lại **cả tám cổng W5 trong một lượt** trên đúng cây làm việc sắp
+commit (2026-08-23), bốn cổng đỏ. Hai trong số đó là lỗi thật của source, không
+phải nhiễu môi trường; chúng được sửa trong chính change-set đóng sổ này.
+
+**`F-W5-CLOSE-01` — `apps/core/application/st/st_scheduler.cpp` không biên dịch
+được.** `stage_activation` được tách thành hai overload (một nhận
+`const std::string& instance_id`, một nhận `StProgramInstance*`), nhưng thân hàm
+của overload con trỏ vẫn còn hai chỗ đọc `instance_id` — biến chỉ tồn tại ở
+overload kia. `g++` báo `error: 'instance_id' was not declared in this scope` tại
+dòng `292` và `328`. Hệ quả kéo theo hai cổng: `cpp` FAIL sau 6,1 s và `e2e-real`
+FAIL sau 3,1 s vì `webServer` của lane real-backend dựng
+`mkddc-programming-core-sim` từ đúng source đó. Sửa: dùng `p->instance_id` cho cả
+hai chỗ. Đây là bằng chứng trực tiếp rằng số đo `ctest 1211/1211` ghi ở `T59-504`
+đã **không** được đo lại sau lần sửa scheduler cuối cùng.
+
+**`F-W5-CLOSE-02` — cổng `e2e` đỏ vì helper đăng nhập coi sự kiện `load` là
+"ứng dụng đã mount".** Test `pa3-dashboard.spec.ts:238` timeout 30 s tại
+`locator.fill`. Trace của lần đỏ cho thấy sáu request module bị
+`net::ERR_NETWORK_CHANGED` trong 65 ms sau `page.goto('/login')`, React không bao
+giờ mount, `page.goto(waitUntil:'load')` vẫn trả về bình thường nên test đi tiếp
+rồi chờ một selector không bao giờ xuất hiện. Repro tất định: `route.abort` đúng
+một module ⇒ lỗi giống từng ký tự. Sửa trong `apps/web-ui/e2e/pa3-dashboard.spec.ts`:
+helper chờ đúng điều kiện "ứng dụng đã mount" thay vì sự kiện `load`, và **chỉ**
+điều hướng lại khi đã ghi nhận abort tầng mạng của tài nguyên tĩnh. Ba control
+chứng minh không nới acceptance: abort một lần → PASS 13,0 s; abort mọi lần →
+vẫn FAIL 21,0 s; app hỏng mà không có abort mạng → vẫn FAIL, nhanh hơn (10,3 s).
+Bảy spec anh em còn dùng nguyên helper cũ (`fe-pages-health`, `pa3-a11y`,
+`point-names`, `scheduler`, `st-editor-alignment`, `programming`, `trends`) nên
+mang cùng lỗ hổng; việc gom helper dùng chung thuộc `T59-604`.
+
+**Số đo cổng W5 sau khi sửa (HOST, một lượt, `scripts/verify-project.sh --wave W5`).**
+
+| Cổng | Mức | Kết quả | Thời gian |
+|---|---|---|---|
+| `layout` | HOST | PASS | 3,2 s |
+| `cpp` | HOST | PASS — `ctest` **1211/1211** | 17,0 s |
+| `go` | HOST | PASS | 37,7 s |
+| `frontend` | HOST | PASS | 54,4 s |
+| `e2e` | HOST | PASS — **61/61** trên 8 spec | 53,0 s |
+| `e2e-real` | HOST | PASS — **1/1** | 15,5 s |
+| `docs` | HOST | PASS | 0,1 s |
+| `candidate-pin` | HOST | PASS sau khi phát hành manifest 1.37 | 0,0 s |
+
+**Evidence level.** Toàn bộ HOST/LOCAL. Không phải GitHub CI, target, HIL hay
+release evidence; `RELEASE_READY` giữ `NO-GO`.
 
 ### W6 — Hardening, packaging và Release Candidate
 
@@ -1961,7 +2175,7 @@ hai** (đã đọc ring **và** mẫu đã ghi); chạy lặp 5 lần đều xan
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-701` | P0 | Khôi phục GitHub Actions account và chạy full RC workflow | RC T59-606 | EVIDENCE_QUEUE | 11 job khởi chạy thật; required checks PASS trên RC commit. |
+| `T59-701` | P0 | Khôi phục GitHub Actions account và chạy full RC workflow | RC T59-606 | EVIDENCE_QUEUE | **12 job** khởi chạy thật (gồm lane Programming real-backend); required checks PASS trên RC commit. Việc job tồn tại trong workflow không phải CI evidence. |
 | `T59-702` | P0 | Deploy target 10-Program fixture, timing/fault/Web-BE loss | T59-606 | EVIDENCE_QUEUE | 24 h; 3 period; no poll gap >=200 ms; fault isolation/signal freshness đúng. |
 | `T59-703` | P0 | Physical I/O HIL cho ST và FBD output | T59-606 | EVIDENCE_QUEUE | AO/DO đo bằng instrument; full candidate/safety path; Disable/rollback physical đúng. |
 | `T59-704` | P0 | RETAIN/power-cut/reboot/enable-intent/LKG matrix | T59-606 | EVIDENCE_QUEUE | >=10 power cuts; cold-init/recovery exact; no corrupt accepted/partial active. |
@@ -2034,3 +2248,5 @@ truy nguyên As-Built đến 2026-08-20.
 |---|---|---|
 | 1.0/1.1 | 2026-08-20 | Bản nháp 37 task chia Rev A/Rev B; superseded. |
 | 2.0 | 2026-08-20 | Owner chốt một Product; 51 task/8 Wave từ contract đến release, đủ POU/library/multi-Program/signal/enable/output/HIL; mọi implementation task READY/ORDERED, không còn decision blocker. |
+| 2.2 | 2026-08-23 | Đóng sổ W5 trên cây làm việc thật: chạy lại cả tám cổng trong một lượt lộ ra `F-W5-CLOSE-01` (overload `stage_activation` mới không biên dịch được — kéo đỏ cả `cpp` lẫn `e2e-real`) và `F-W5-CLOSE-02` (helper đăng nhập E2E coi sự kiện `load` là "đã mount"), cả hai được sửa trong cùng change-set; W5 đạt **8/8 PASS** mức HOST. Không đổi `RELEASE_READY=NO-GO`. |
+| 2.1 | 2026-08-21 | Cập nhật W5 theo source/evidence host: đóng T59-503/504/506; sau khi sửa vòng render Draft adapter, read-back PROJECT Library `PUBLISHED` và payload ST+ đúng Draft v2 strict, đóng T59-505 bằng `e2e-real` 1/1 PASS. Mở gate `e2e-real` riêng, ép C++ `cmake --fresh`, mở anti-mock guard cho mọi BrowserContext và cập nhật T59-701 thành 12 job; chưa claim GitHub CI/target/HIL/release và không đổi `RELEASE_READY=NO-GO`. |

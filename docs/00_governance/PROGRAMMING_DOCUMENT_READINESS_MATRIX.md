@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-DRM-001` |
-| Phiên bản | 2.0 |
+| Phiên bản | 2.1 |
 | Trạng thái | **Active — `PLAN_READY=PASS`, `IMPLEMENT_READY=PASS`** |
-| Ngày | 2026-08-20 |
+| Ngày | 2026-08-21 |
 | Chủ quản | System Engineering + Document Control |
 | Product authority | [`PROD-PROG-001` v3.0](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) |
 | Design authority | [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
@@ -39,7 +39,7 @@ cổng phát hành.
 | Verification | `VVP-PROG-001` v2.0 | 32 scenario migration + 12 scenario unified; target/HIL authority tách khỏi host | PASS cho implementation; release evidence chờ chạy |
 | Traceability | `TRACE-PROG-001` v4.0 | 22 target requirement nối Plan59 và `VS-PROG-U01..U12` | PASS |
 | Risk | `RSK-PROG-001` v3.0 | 22 risk, thêm multi-Program/POU/library/signal/output/power-loss | PASS |
-| Execution | `PLAN-PROG-059` v2.0 | 51 task, 8 Wave, một tracker duy nhất | PASS |
+| Execution | `PLAN-PROG-059` v2.1 | 51 task, 8 Wave, một tracker duy nhất; W5 đã có source/evidence HOST/LOCAL | PASS cho implementation; `RELEASE_READY` vẫn NO-GO |
 | Autonomous prompt | `PROMPT-PLAN59-AUTONOMOUS` v2.0 | Chọn task, thực thi, kiểm chứng, commit/PR và cập nhật tracker | READY |
 
 ## 2. Disposition tài liệu cũ
@@ -83,3 +83,4 @@ NO-GO, nhưng team vẫn tiếp tục mọi việc implement/test còn khả thi
 |---|---|---|
 | 1.0..1.2 | 2026-08-15 | Ma trận theo Plan 56, có ba hồ sơ thiếu và Product authority treo; superseded. |
 | 2.0 | 2026-08-20 | Hợp nhất một Product; đóng mọi decision/document blocker; chuyển authority thực thi sang Plan59 và tách evidence queue khỏi implementation readiness. |
+| 2.1 | 2026-08-21 | Đồng bộ Plan59 v2.1 và trạng thái W5 HOST/LOCAL; không đổi Product/SRS/DDD/VVP, không biến host test thành GitHub CI/target/HIL/Test Result và giữ `RELEASE_READY=NO-GO`. |

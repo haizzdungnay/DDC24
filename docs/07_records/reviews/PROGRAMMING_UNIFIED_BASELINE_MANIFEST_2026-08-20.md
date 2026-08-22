@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.36 |
+| Phiên bản | 1.37 |
 | Trạng thái | Active |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -27,21 +27,21 @@ target, HIL hoặc release.
 
 | # | Đường dẫn | SHA-256 nội dung | Source baseline |
 |---:|---|---|---|
-| 1 | `docs/00_governance/CONTROL.md` | `db0cdab58fad4f25e50878d18c85c67794ad14624b9c97bcac9098b8113fcfab` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
+| 1 | `docs/00_governance/CONTROL.md` | `56c7a6a8fb02597004622f061fe8d30963f535ebcd8f51a422869380b4151940` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 2 | `docs/00_governance/DECISIONS.md` | `bb172480bc7454e7e5f96a28da0c2889b43a28f3d889d1b9a8e3d968b24f8088` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `21c37d6cdf266d318f9fda969c208708354572fb98af657ed9a7990a3a78135a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 4 | `docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` | `1094b0e7ebea3d1b1f4599bd9257123588712102d76d13f92ad944b81167e71f` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
+| 4 | `docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` | `d985fdde0631847a97ff4feecc3248f0acd3ee04e7fcb15d3adea056cdc80652` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 5 | `docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md` | `14de631caed70f20d47a4d11825a5ec1f8bc9a25135f9020e13f2cb655355c3e` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 6 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `0389839909b497b5c180074c88405bcbbc154a678a3a2566d7aa98a8fa14240e` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
+| 6 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `65cc2876b45d67149366d6521e859991044e892a5dc009272cb3a1596df20f7e` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 7 | `docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md` | `ec57e4b0a9f855977ecd7743faea2152f518d1f7330a683fd1e8606a9eafd97a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 8 | `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | `08821231afc68cb1badc773b2d4ced17a9e5363562285f4d5f98cb90a7ebcb19` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 9 | `docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md` | `e24d6db84d8c0da982708c3ac94a5cda95e36d8ca66aee3ebba8a6c3d2a519dc` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
 | 10 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `d4992caf7d85275558de9c3e0553c31cbf686a28ddb61082a998edea666fec6d` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 11 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `716344cd9d21e3b32765cc1126418a0013518e86bdf3460f7ed8713d443d2a62` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `2d26255dda3f9431c79a2553e11f37de5641f04d377a8de0075af3a9cb672968` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `17e9d0ddd059ec0602a1b752303841e2c621b703b825b95498083e808ee12692` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `d3bb0bb7a8e9c5486896ae7f2616b5bbc3ce636f07462edfc0bc4342b6631ec9` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `eee43b3328eab4af963dc46838b81f3d54748e2d5104a693a9311811150ba43a` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `1cb6b00570036392c1536c20f7ca296b30fe229ba4f9d8db63f2b4739d49d78c` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `9706dd14d6d18e590946f18492a1946518ba40bf018b4dffe087c2a2300b5529` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `c67cc6aa64383bc0492fa2a32a9bdbf0f27826d06b1311827c358f53c50937b9` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `8dd7bd227861ded3a1da3478aec522826dc60716280bdd40b79fa23f7f1ef29a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
 
 ## 3. Disposition baseline cũ
@@ -104,6 +104,7 @@ evidence release.
 | 1.24 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-306` (**đóng Wave W3, 6/6 task**). **Đánh giá impact:** dòng 13 thêm §5.39 và lịch sử 4.3, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence PGM-02/03 vào `SWR-REQ-PROG-FE-116..118`; dòng 15 là status W3 + ghi chú §3.4. Unified DDD **không đổi** — §8 vốn đã khoá IA sáu trang, task chỉ đưa route đích về đúng chỗ. SRS và VVP không đổi. |
 | 1.32 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-408` — **đóng Wave W4 đủ 8/8 task**. **Đánh giá impact:** dòng 13 thêm §5.47 và lịch sử 4.11, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence trace giá trị vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status `T59-408` + ghi chú §3.5. Unified DDD **không đổi** — OD-PROG-011 vốn đã khoá 10.000 mẫu/10 phút. **Contract đổi cùng phiên:** IPC `protocolMinor` 1→2 với hai action mới `TRACE_STOP`/`TRACE_READ` và `TRACE_START` chuyển NOT_IMPLEMENTED→IMPLEMENTED (`schemaVersion` trên dây GIỮ NGUYÊN "1.0"), error catalog 122→124 detail. SRS và VVP không đổi. |
 | 1.31 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-407`. **Đánh giá impact:** dòng 13 thêm §5.46 và lịch sử 4.10, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence cô lập RETAIN vào `SWR-REQ-PROG-CORE-111..116`; dòng 15 là status `T59-407` + ghi chú §3.5. Unified DDD và `DDD-RETAIN-RESET-PROG-001` **không đổi** — bản vá làm cho hành vi khớp với thứ hai tài liệu đã quy định, không đổi quy định. Contract không đổi. |
+| 1.37 | 2026-08-23 | Re-pin dòng 1/4/6/13/14/15 khi **đóng sổ W5** — phát hành manifest cho đúng nội dung sắp commit. **Đánh giá impact trước khi re-pin:** dòng 15 (Plan59 2.1→2.2) thêm mục §3.6 "Đóng sổ W5" với hai finding `F-W5-CLOSE-01`/`F-W5-CLOSE-02` và bảng số đo tám cổng; dòng 1 (`CONTROL.md` 1.0→1.1) chỉ đồng bộ ngày/phiên bản Plan59 và thêm một dòng register cho prompt CTO W6+W7; dòng 4 (Readiness Matrix 2.0→2.1), dòng 6 (Design Index 4.0→4.1), dòng 13 (Risk 4.15→4.19, thêm §5.51..§5.54) và dòng 14 (Trace 6.3→6.4) là nội dung W5 do các phiên trước viết nhưng chưa từng được ghim — kiểm lại từng dòng: **không** đổi S×L/lifecycle, **22/22 risk giữ Open**, không thêm residual accepted, cột `D/I/T/P/R` của Trace giữ nguyên vì source W5 khi đó chưa merge. Product Spec, SRS, Unified DDD và VVP **không đổi**. `RELEASE_READY` giữ **NO-GO**. |
 | 1.36 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-502`. **Đánh giá impact:** dòng 13 thêm §5.50 và lịch sử 4.15, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence impact tám nhóm; dòng 15 là status `T59-502` + ghi chú §3.6. Unified DDD **không đổi** — §4.5/§10 vốn đã khoá Published Signal, bản vá làm chúng seal được vào Revision. **Contract đổi cùng phiên:** store v10→v11 (migration `0011`), OpenAPI 1.24.0→1.25.0 (4 khoá impact mới, `ProgrammingImpact` thêm 4 trường bắt buộc). SRS và VVP không đổi. |
 | 1.35 | 2026-08-21 | Re-pin dòng 13/14/15 sau khi nối đường đọc trace của `T59-408` (phát hiện ở cổng W5). **Đánh giá impact:** dòng 13 thêm §5.49 và lịch sử 4.14, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 ghi evidence đường đọc trace; dòng 15 bổ sung §3.5 (`T59-408`) và §3.6. Unified DDD **không đổi** — OD-PROG-011 vốn đã quy định historian giá trị; bản vá làm dữ liệu đó tới được người dùng. Contract không đổi. |
 | 1.34 | 2026-08-21 | Re-pin dòng 13/14/15 sau `T59-501` (**mở Wave W5**). **Đánh giá impact:** dòng 13 thêm §5.48 và lịch sử 4.13, không đổi S×L/lifecycle/residual (22/22 Open); dòng 14 nối evidence atomicity mức gói; dòng 15 là status `T59-501` + mục ghi chú mới §3.6. Unified DDD **không đổi** — §6 vốn đã quy định "Commission atomic ở cấp package, không active một phần"; bản vá làm hành vi khớp với quy định đó. Contract không đổi. |
