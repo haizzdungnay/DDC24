@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+### T59-607 — bật `SIGNATURE_REQUIRED` cho artifact Programming (2026-08-23)
+
+- **Changed — contract:** `product_profile_v2.json` **2.0→2.1**, `integrityMode`
+  `HASH_ONLY` → **`SIGNATURE_REQUIRED`**; schema đổi `const` thành enum hai giá
+  trị để đường lùi vẫn là một thay đổi contract có kiểm soát. Hằng C++/Go/TS
+  sinh lại từ cùng generator; G1 re-pin trong **cùng** change-set.
+- **Fixed — chính sách chưa từng nối tới hành vi.** `StLoaderOptions.integrity_mode`
+  viết cứng `HASH_ONLY`, nên đổi contract sẽ không đổi hành vi thiết bị. Nay mặc
+  định đọc `st_profile_integrity_mode()` từ profile sinh máy, không có nhánh
+  "cho qua" khi gặp giá trị lạ.
+- **Fixed — worker sandbox không ký được.** Ràng buộc `ST-CLI-SANDBOX` "sandbox
+  worker does not accept signing keys" có từ thời Rev A; với `ADR-052` (bo tự ký
+  artifact do bo biên dịch) nó khiến **không đường nào** sinh được artifact hợp
+  lệ. Bỏ ràng buộc, giữ nguyên thứ tự đọc khoá trước `apply_worker_sandbox()`.
+  Thiếu khoá nay báo `ST-CLI-KEY-REQUIRED` ở biên thay vì `IR-E-007` ở bước dựng
+  manifest.
+- **Fixed — `integrityMode` viết cứng ở ba nơi** (output CLI, manifest artifact,
+  kiểm envelope backend): manifest của artifact **đã ký** vẫn tự khai `HASH_ONLY`.
+  Cả ba nay lấy từ profile; manifest phản ánh đúng artifact cụ thể.
+- **Added — backend ký artifact.** `ProcessRunner.SigningKeyPath` +
+  `PROGRAMMING_SIGNING_KEY` (mặc định `/data/mkddc/keys/device.key`, đúng chỗ
+  `install.sh` provisioning). Fail-closed khi profile đòi ký mà worker không có
+  khoá; kiểm chữ ký **hai chiều**.
+- **Changed — validator G1 tách chính sách khỏi fixture.** Phép kiểm cũ buộc
+  `profile == golden_manifest == pin`; ba thứ này không cùng loại. Nay hai phép
+  kiểm riêng, cộng một bất biến mới: golden khai `HASH_ONLY` thì vùng chữ ký
+  phải còn nguyên zero (giữ fixture dual-reader của DDD §12).
+- **Fixed — `F-607-01`: trộn tên chính sách với tên trạng thái artifact.** Cột
+  `integrity_mode` của store có `CHECK constraint IN ('HASH_ONLY','SIGNED')` vì
+  nó mô tả **một artifact**; `SIGNATURE_REQUIRED` là tên **chính sách** ở
+  profile. Ghi tên chính sách vào manifest/output làm `INSERT` hỏng ở tầng DB và
+  Check kẹt `RUNNING` tới hết lease. Nay artifact khai `SIGNED`/`HASH_ONLY`,
+  backend suy giá trị mong đợi bằng `expectedArtifactIntegrityMode()`.
+- **Fixed — `F-607-02`: worker Check nuốt lỗi.** `CheckService.run` bỏ lỗi của
+  `ProcessNext` bằng `_`, nên một Check hỏng giữa chừng nằm im tới hết lease mà
+  không dòng log nào nói lý do — chẩn đoán phải dump goroutine. Nay có
+  `WARN programming_check_worker err=...`.
+- **Verification (HOST):** `ctest` **1227/1227**; `go vet` + `go test ./... -count=1`
+  PASS; `--component layout` PASS; `--component frontend` PASS;
+  `python3 -m unittest tests.integration.test_release_dryrun` **12/12 OK**
+  (thêm 2 ca: đường khoá nối liền provisioning→compiler→Core, và profile phát
+  hành đòi chữ ký).
+- **Migration:** artifact chưa ký **không nạp được nữa**, kể cả Active và LKG —
+  đường đi là **re-commission tường minh** (5 bước, bảng trong Plan 59 §3.7),
+  đường lùi là profile về `HASH_ONLY` + `rollback.sh`. Chưa chạy trên bo thật;
+  phần đó thuộc `T59-705`.
+
 ### Hợp nhất W5 + W6 và mở đường khoá phát hành thật (2026-08-23)
 
 - **Fixed — `F-W6-MERGE-01`: đường dựng bản RELEASE chưa bao giờ tồn tại.**

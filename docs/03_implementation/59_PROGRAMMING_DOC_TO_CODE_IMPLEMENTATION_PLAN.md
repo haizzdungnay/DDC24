@@ -2170,7 +2170,7 @@ release evidence; `RELEASE_READY` giữ `NO-GO`.
 | `T59-604` | P1 | E2E stability, remove stale quarantine, deterministic workers/retry policy | T59-505 | **DONE (HOST/LOCAL)** | **Chẩn đoán trước đó SAI, và cái sai đó giữ cổng đỏ thêm một vòng.** W6 kết luận flake là "đói CPU" và vá bằng chờ điều kiện 60 s. Hai chỗ hỏng: (1) phép chờ 60 s nằm trong test có ngân sách 30 s nên **không bao giờ chạy hết hạn của chính nó**; (2) helper đăng nhập được chép tay ở **bảy** spec, bản vá chỉ áp cho một — sáu bản còn lại giữ nguyên cuộc đua, và lần chạy kế đỏ ở `pa3-a11y.spec.ts`. **Nguyên nhân thật, có bằng chứng từ trace:** sau khi bấm "Tiếp tục chỉnh sửa", URL thật là `/programs`, còn spec chờ `/design` — mà `design` chính là **lối vào cũ được W5 đổi thành redirect sang `programs`**. Spec đang đua với redirect: máy chậm thì Playwright kịp thấy trạng thái trung gian và test xanh; máy nhanh thì redirect xong trước và test treo tới hết giờ. **Ba bản sửa:** một helper đăng nhập duy nhất (`e2e/helpers/session.ts`) + guard cổng chặn spec định nghĩa lại; e2e phục vụ **bản đã build** (`vite preview`) thay vì dev server, bỏ hẳn lớp biên dịch-theo-yêu-cầu; spec chờ đích cuối của redirect. `retries: 0` giữ nguyên. **Acceptance đạt: 5 lần chạy LIÊN TIẾP 79/79 PASS, exit 0, 28–29 s/lần** (trước: 64/79/79/78+1F/78+1F, 78–88 s). Chi tiết §3.7. |
 | `T59-605` | P0 | Release packaging: Programming default ON, artifact/compiler/library/systemd/env | T59-501/602 | **DONE (HOST/LOCAL + TARGET DEPLOY)** | **Lỗi thật, kiểm chứng trên chính board Foxlinx:** `/usr/sbin/mkddc-st-package` **không tồn tại** trên bo — binary được build, có test riêng, nhưng chưa bao giờ được cài, trong khi BE gọi đúng đường dẫn đó ở bước Commission (`ProgrammingPackagerPath`). Cài + đưa vào `checksums.sha256`/`runtime-checksums`. `PROGRAMMING_REV_A=1` nay do `install.sh` ghi, **cả nhánh nâng cấp** (bo cũ có file env sẵn nên khối khởi tạo lần đầu không chạy — thiếu nhánh này thì bo cũ mãi ở trạng thái FE-bật/BE-tắt). 6/6 guard đóng gói PASS. Deploy thật lên board: core/web/st-compile/st-package/dist mới, ba service `active`, `/api/v1/programming/projects` trả **401** (route có, cờ ON) thay vì 404. Chi tiết §3.7. |
 | `T59-606` | P0 | RC reproducible build/provenance/SBOM/backup/restore/upgrade dry-run | T59-601..605 | **DONE (HOST/LOCAL)** | Tái lập **7/7** artifact và SBOM 92 component đã xong ở vòng trước (chi tiết §3.7). Vòng này đóng nốt **dry-run cài mới/nâng cấp/rollback**: `install.sh` và `rollback.sh` nhận `MKDDC_INSTALL_ROOT` để ghi vào **cây giả** và bỏ thao tác cần quyền hệ thống, nhờ đó ba thao tác cuối cùng của một bản phát hành kiểm được BẰNG MÁY thay vì bằng cách đọc script rồi tin. **Lỗi thật tìm thấy ngay khi có phép kiểm:** `rollback.sh` **không khôi phục `mkddc-st-package`** — sau khi lùi, bo giữ writer artifact của bản MỚI trong khi compiler/loader/Core đã về bản cũ, và chỗ hỏng chỉ lộ ra ở lần Commission kế tiếp. Đúng lớp lỗi mà `T59-605` vừa vá cho `install.sh` (build nhưng không cài), lần này ở đường lùi. 6 test mới đi trọn ba kịch bản trên gói vừa dựng: cài mới đủ binary/metadata/cờ Programming và checksum khớp file thật; nâng cấp giữ nguyên `JWT_SECRET`, cấu hình đã sửa và artifact đã commission, đồng thời chụp snapshot đúng bản đang chạy; rollback khôi phục **đủ 7 binary** và không mất dữ liệu. **Test được kiểm chứng bằng cách gỡ bản vá:** đỏ đúng dòng `rollback KHÔNG khôi phục mkddc-st-package`. Nối vào cổng `release`. `python3 -m unittest test_release_dryrun` **6/6 OK**. |
-| `T59-607` | P0 | Bật `SIGNATURE_REQUIRED`: profile v2.1, re-pin G1/golden, migration artifact đang chạy | T59-602 | **READY — đường khoá phát hành đã thông (xem §3.7)** | `integrityMode` đổi trong profile contract, re-pin cùng PR sau review; artifact đang chạy (gồm LKG) được ký lại hoặc biên dịch lại trước khi bật; có đường lùi về `HASH_ONLY` chứng minh bằng diễn tập. |
+| `T59-607` | P0 | Bật `SIGNATURE_REQUIRED`: profile v2.1, re-pin G1/golden, migration artifact đang chạy | T59-602 | **DONE (HOST/LOCAL)** | Profile contract **2.0→2.1**, `integrityMode` `HASH_ONLY`→`SIGNATURE_REQUIRED`; hằng C++/Go/TS sinh lại từ cùng một chỗ. Mặc định `StLoaderOptions.integrity_mode` nay **đọc từ profile** thay vì viết cứng — chỗ nối này là thứ quyết định hồ sơ và thiết bị có nói cùng một chuyện hay không. Compiler CLI fail-closed `ST-CLI-KEY-REQUIRED` khi thiếu `--key`, worker sandbox **được** ký (ràng buộc cũ khiến không đường nào sinh nổi artifact hợp lệ), và `integrityMode` trong output/manifest lấy từ profile chứ không phải literal. BE truyền `PROGRAMMING_SIGNING_KEY` (mặc định `/data/mkddc/keys/device.key`, đúng chỗ `install.sh` provisioning) và kiểm chữ ký **hai chiều**. Validator G1 tách **chính sách** (profile) khỏi **thuộc tính fixture** (golden HASH_ONLY của đường dual-reader) và re-pin trong cùng change-set. `ctest` **1227/1227**; Go/layout/frontend/dry-run PASS. Chi tiết §3.7. | `integrityMode` đổi trong profile contract, re-pin cùng PR sau review; artifact đang chạy (gồm LKG) được ký lại hoặc biên dịch lại trước khi bật; có đường lùi về `HASH_ONLY` chứng minh bằng diễn tập. |
 
 ### 3.7 Ghi chú thực thi W6
 
@@ -2423,6 +2423,88 @@ tài nguyên tĩnh bị huỷ ở tầng mạng; không có abort thì ném nguy
 động và để cổng xanh trung thực, nhưng **không phải khoá hãng**: bản thương mại
 phải dùng khoá do hãng giữ trong HSM, và `provenance.json` ghi fingerprint nên
 không bản nào lẫn được hai thứ.
+
+#### `T59-607` — Bật `SIGNATURE_REQUIRED` và bốn chỗ chính sách chưa từng nối tới hành vi
+
+**Chỗ nối bị thiếu, không phải một cờ.** `T59-602` đã dựng đủ cơ chế: ký, tập
+khoá tin cậy có overlap, rotation, rollback, và gate chặn khoá test. Nhưng bốn
+chỗ dưới đây khiến chính sách vẫn chỉ nằm trên giấy:
+
+1. **`StLoaderOptions.integrity_mode` viết cứng `HASH_ONLY`.** Mọi chỗ tạo
+   options mà không truyền gì đều chạy chế độ cũ. Đổi contract sẽ **không** đổi
+   hành vi thiết bị — hồ sơ nói một đằng, bo làm một nẻo. Nay mặc định gọi
+   `st_profile_integrity_mode()`, dịch thẳng từ `st_profile_generated.hpp`, và
+   không có nhánh "cho qua" khi gặp giá trị lạ: đoán bừa `HASH_ONLY` chính là hạ
+   mức bảo vệ mà không ai thấy.
+2. **Compiler CLI cấm worker sandbox nhận khoá.** Ràng buộc `ST-CLI-SANDBOX`
+   sinh ra ở thời Rev A. Nhưng `ADR-052` nói artifact do **chính bo** biên dịch
+   phải ký bằng khoá thiết bị, mà đường biên dịch của bo chính là worker sandbox
+   do backend gọi — giữ ràng buộc cũ nghĩa là **không đường nào** sinh được
+   artifact hợp lệ. Khoá vẫn đọc trước `apply_worker_sandbox()` nên seccomp giữ
+   nguyên hiệu lực. Thiếu khoá nay báo `ST-CLI-KEY-REQUIRED` ngay ở biên, thay vì
+   lòi ra ở bước dựng manifest dưới dạng `IR-E-007: artifact is not signed` —
+   một câu đúng về hiện tượng nhưng chỉ sai chỗ.
+3. **`integrityMode` viết cứng ở ba nơi khác nhau** (output CLI, manifest
+   artifact, kiểm envelope của backend). Manifest của một artifact **đã ký** vẫn
+   tự khai `HASH_ONLY`: provenance nói sai về chính vật nó mô tả. Nay cả ba lấy
+   từ profile, và manifest phản ánh đúng artifact cụ thể.
+4. **Backend không có khoá.** `ProcessRunner` nay nhận `SigningKeyPath`
+   (`PROGRAMMING_SIGNING_KEY`, mặc định `/data/mkddc/keys/device.key` — đúng chỗ
+   `install.sh` provisioning) và **từ chối ngay** khi profile đòi chữ ký mà
+   worker không có khoá. Kiểm chữ ký nay hai chiều: profile đòi ký mà artifact
+   chưa ký thì hỏng, và profile `HASH_ONLY` mà artifact lại ký cũng hỏng.
+
+**Validator G1: tách chính sách khỏi fixture.** Phép kiểm cũ đòi
+`profile.integrityMode == golden_manifest.integrityMode == pin`. Ba thứ này
+không cùng loại: hai đầu là **chính sách hệ thống**, đầu giữa là **thuộc tính
+của đúng một file golden** dùng cho test byte-exact. Buộc chúng bằng nhau nghĩa
+là mỗi lần siết chính sách lại phải ký lại fixture — và mất luôn fixture
+"artifact chưa ký", thứ duy nhất còn chứng minh đường dual-reader của DDD §12
+đọc được gói cũ. Nay tách thành hai phép kiểm, kèm một bất biến mới cho fixture:
+golden khai `HASH_ONLY` thì vùng chữ ký phải còn nguyên zero. Re-pin G1 nằm
+trong **cùng** change-set với thay đổi validator.
+
+**Hai lỗi thật chỉ lộ ra khi lane real-backend chạy hết đường.** Cả hai đều
+không thể thấy bằng unit test, vì chúng nằm ở chỗ ba tầng gặp nhau.
+
+`F-607-01` — **trộn tên CHÍNH SÁCH với tên TRẠNG THÁI.** Sau khi bật, lane
+`e2e-real` đứng ở Check với state `RUNNING` cho tới hết lease. Nguyên nhân: cột
+`integrity_mode` của store có `CHECK constraint IN ('HASH_ONLY','SIGNED')` —
+đúng bộ tên của `artifact_v2.schema.json`, vì nó mô tả **một artifact**. Còn
+`SIGNATURE_REQUIRED` là tên của **chính sách** ở profile. Bản vá đầu ghi thẳng
+tên chính sách vào manifest và output compiler, nên `INSERT` hỏng tận tầng DB.
+Sửa: artifact khai `SIGNED`/`HASH_ONLY`; backend suy giá trị mong đợi từ chính
+sách bằng `expectedArtifactIntegrityMode()` thay vì so trực tiếp hai bộ tên.
+
+`F-607-02` — **worker Check nuốt lỗi.** `CheckService.run` gọi
+`processed, _ := s.ProcessNext(ctx)`. Khi worker đã claim một Check rồi hỏng ở
+giữa, Check nằm `RUNNING` tới hết lease rồi bị `FailExhaustedChecks` đóng bằng
+một mã chung, và **không một dòng log nào** nói vì sao. Chẩn đoán `F-607-01` vì
+thế phải dựng lại toàn bộ stack rồi `kill -QUIT` để dump goroutine. Nay lỗi được
+log `WARN programming_check_worker err=...`; chính dòng đó chỉ thẳng ra
+constraint hỏng trong lần chạy kế tiếp.
+
+**Migration và đường lùi.** Bật chính sách này làm artifact chưa ký **không nạp
+được nữa**, kể cả bản đang Active và LKG. Vì vậy đường migration là
+**re-commission tường minh**, đúng nguyên tắc DDD §12 "migration không tự đổi
+Active":
+
+| Bước | Lệnh/thao tác | Điều kiện đạt |
+|---|---|---|
+| 1 | Ghi lại Revision đang Active và bản LKG của từng Program | có ID để đối chiếu sau |
+| 2 | `sudo platform/packaging/install.sh` (bản mới) | `device.key` `0600` đã tồn tại; nâng cấp **không** sinh lại khoá |
+| 3 | Check lại Revision đang Active trên UI | artifact mới có `signaturePresent=true` |
+| 4 | Commission lại từng Program | read-back trả đúng Revision; Core log `st_trusted_key_count>=1` |
+| 5 | Xác nhận | không Program nào ở `REJECTED` vì `IR-E-007` |
+
+Đường lùi khi bước 3–4 hỏng: đặt `integrityMode` của profile về `HASH_ONLY`,
+dựng lại gói, `sudo platform/packaging/rollback.sh` — gói cũ khôi phục đủ **7**
+binary và giữ nguyên dữ liệu/audit (đã có test dry-run canh). Hai đường đều được
+diễn tập bằng máy trong `tests/integration/test_release_dryrun.py` **12/12 OK**.
+
+**Ranh giới trung thực.** Toàn bộ ở mức HOST. Việc migration này **chưa** chạy
+trên bo thật; nó thuộc `T59-705` phần "cài đè thật", và cửa sổ bảo trì là điều
+kiện bắt buộc vì bước 2 restart dịch vụ.
 
 ### W7 — Target/HIL/V&V và quyết định phát hành
 
