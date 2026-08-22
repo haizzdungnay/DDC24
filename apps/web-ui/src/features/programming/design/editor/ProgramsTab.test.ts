@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  collectStInterfaceVariables, collectStSymbols, formatStSource, isDuplicateProgramName,
+  collectStInterfaceVariables, collectStSymbols, formatStSource, isDuplicateProgramName, isValidPouName,
   mapOffsetAcrossReplaceAll, mapOffsetByNonWhitespaceCount, uniqueProgramName
 } from './ProgramsTab'
 import type { ProgrammingProgram } from '../../model/types'
@@ -9,7 +9,7 @@ import type { ProgrammingProgram } from '../../model/types'
 function program(overrides: Partial<ProgrammingProgram> = {}): ProgrammingProgram {
   return {
     programId: overrides.programId ?? 'p1',
-    name: overrides.name ?? 'New program',
+    name: overrides.name ?? 'NewProgram',
     kind: 'PROGRAM',
     language: 'ST',
     document: '',
@@ -211,27 +211,37 @@ END_PROGRAM`
 
 describe('isDuplicateProgramName / uniqueProgramName (BUG-006)', () => {
   it('phát hiện trùng tên không phân biệt hoa/thường và khoảng trắng', () => {
-    const programs = [program({ programId: 'a', name: 'New program' })]
-    expect(isDuplicateProgramName(programs, ' new program ')).toBe(true)
+    const programs = [program({ programId: 'a', name: 'NewProgram' })]
+    expect(isDuplicateProgramName(programs, ' newprogram ')).toBe(true)
     expect(isDuplicateProgramName(programs, 'Other')).toBe(false)
   })
 
   it('bỏ qua chính chương trình đang sửa khi excludeProgramId khớp', () => {
-    const programs = [program({ programId: 'a', name: 'New program' })]
-    expect(isDuplicateProgramName(programs, 'New program', 'a')).toBe(false)
+    const programs = [program({ programId: 'a', name: 'NewProgram' })]
+    expect(isDuplicateProgramName(programs, 'NewProgram', 'a')).toBe(false)
   })
 
   it('sinh tên tăng dần khi trùng, giữ nguyên nếu chưa dùng', () => {
-    const programs = [program({ programId: 'a', name: 'New program' })]
-    expect(uniqueProgramName(programs, 'New program')).toBe('New program 2')
-    expect(uniqueProgramName(programs, 'Free name')).toBe('Free name')
+    const programs = [program({ programId: 'a', name: 'NewProgram' })]
+    expect(uniqueProgramName(programs, 'NewProgram')).toBe('NewProgram_2')
+    expect(uniqueProgramName(programs, 'FreeName')).toBe('FreeName')
   })
 
   it('nhảy tiếp số khi hai chương trình đã tạo trước đó', () => {
     const programs = [
-      program({ programId: 'a', name: 'New program' }),
-      program({ programId: 'b', name: 'New program 2' })
+      program({ programId: 'a', name: 'NewProgram' }),
+      program({ programId: 'b', name: 'NewProgram_2' })
     ]
-    expect(uniqueProgramName(programs, 'New program')).toBe('New program 3')
+    expect(uniqueProgramName(programs, 'NewProgram')).toBe('NewProgram_3')
+  })
+})
+
+describe('isValidPouName — đồng bộ biên ghi Draft v2', () => {
+  it.each(['NewProgram', 'AHU_01', 'a', `A${'1'.repeat(63)}`])('chấp nhận tên POU hợp lệ %s', (name) => {
+    expect(isValidPouName(name)).toBe(true)
+  })
+
+  it.each(['', '1AHU', 'New program', 'Điều_khiển', 'PROGRAM', 'end_if', `A${'1'.repeat(64)}`])('chặn tên backend chắc chắn từ chối %s', (name) => {
+    expect(isValidPouName(name)).toBe(false)
   })
 })

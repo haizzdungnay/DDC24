@@ -48,6 +48,34 @@ export interface ProgrammingRuntime {
   task?: ProgrammingTaskMetrics | null
 }
 
+/**
+ * `GET /programming/projects/{projectId}/programs` — ý định bền vững và trạng
+ * thái Core là hai sự thật độc lập. Không được suy `RUNNING` từ
+ * `desiredEnabled=true`, nhất là khi Program đang STARTING/WAITING/FAULTED hoặc
+ * Core chưa đọc được trạng thái.
+ */
+export type ProgrammingProgramRuntimeState =
+  | 'DISABLED'
+  | 'STARTING'
+  | 'RUNNING'
+  | 'WAITING'
+  | 'STOPPING'
+  | 'FAULTED'
+  | 'UNKNOWN'
+
+export interface ProgrammingProgramIntent {
+  programId: string
+  desiredEnabled: boolean
+  generation: number
+  runtimeState: ProgrammingProgramRuntimeState
+  updatedBy: string
+  updatedAtUtcMs: number
+}
+
+export interface ProgrammingProgramIntentList {
+  items: ProgrammingProgramIntent[]
+}
+
 export interface ProgrammingTaskMetrics {
   taskId: string
   periodMs: number
@@ -86,6 +114,35 @@ export interface ProgrammingMonitorPage {
   safeState: boolean
   task: ProgrammingTaskMetrics | null
   items: ProgrammingMonitorSample[]
+}
+
+/** T59-504 — Published Signal runtime là snapshot riêng của `StSignalBus`,
+ * không được suy ra từ Binding/Point monitor. `valid=false` bắt buộc đi cùng
+ * `value=null`; UI vẫn fail-closed nếu payload ngoài contract vi phạm cặp này. */
+export interface ProgrammingRuntimeSignal {
+  signalId: string | null
+  name: string
+  producerProgramId: string
+  dataType: 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME'
+  unit: string | null
+  value: boolean | number | null
+  valid: boolean
+  quality: 'GOOD' | 'UNCERTAIN' | 'BAD'
+  freshness: 'FRESH' | 'STALE_HELD' | 'STALE_FALLBACK' | 'UNAVAILABLE' | 'NOT_DECLARED'
+  stalePolicy: 'WAIT' | 'HOLD_LAST' | 'USE_FALLBACK' | 'SAFE_STATE'
+  freshnessMs: number
+  /** uint64 truyền dưới dạng chuỗi thập phân để không mất bit trong JavaScript. */
+  publishedAtMonoNs: string
+  generation: string
+  definitionState: 'MATCHED' | 'MISMATCH' | 'CORE_ONLY' | 'REVISION_ONLY'
+}
+
+export interface ProgrammingRuntimeSignalPage {
+  schemaVersion: '1.0'
+  producerState: ProgrammingTargetState
+  activeRevisionId: string | null
+  observedAt: string
+  items: ProgrammingRuntimeSignal[]
 }
 
 export interface ProgrammingTraceRequest {
@@ -138,6 +195,52 @@ export interface ProgrammingProgram {
   document: unknown
   executionOrder?: number
   functionalTags?: string[]
+}
+
+/**
+ * Payload ghi cho operation tương thích `upsertProgram` của Draft v2.
+ *
+ * `ProgrammingProgram` ở trên là view model nên còn mang các field lịch sử
+ * như `executionOrder`/`functionalTags`. Decoder backend cố ý strict và Draft
+ * v2 không có hai field đó; dùng một type hẹp tại biên ghi để không thể vô tình
+ * serialize cả view model rồi nhận 400.
+ */
+export interface ProgrammingProgramDraftInput {
+  programId: string
+  name: string
+  kind: ProgrammingProgram['kind']
+  language: ProgrammingProgram['language']
+  document: unknown
+}
+
+/**
+ * Hình dạng hẹp của metadata interface nằm trong `objects[]` của Draft v2.
+ * Đây là authority để sinh pin POU ở FBD; source ST/FBD không được parse lại ở
+ * FE để đoán cùng một chữ ký lần thứ hai.
+ *
+ * `type` vẫn là chuỗi tại biên API. Adapter FBD phải đối chiếu nó với registry
+ * type sinh từ profile trước khi đổi thành `FbdDataType`.
+ */
+export interface ProgrammingPouInterfacePort {
+  name: string
+  type: string
+}
+
+export interface ProgrammingPouInterface {
+  inputs: ProgrammingPouInterfacePort[]
+  outputs?: ProgrammingPouInterfacePort[]
+  returnType?: string
+}
+
+export interface ProgrammingDraftObjectV2 {
+  objectId: string
+  kind: ProgrammingProgram['kind']
+  name: string
+  language: ProgrammingProgram['language']
+  source: unknown
+  interface?: ProgrammingPouInterface
+  locals?: unknown[]
+  dependencies?: string[]
 }
 
 /** Data Model §3.4. */
@@ -224,7 +327,7 @@ export interface ProgrammingProject {
 export type ProgrammingDraftOperation =
   | { op: 'setFunctionalTags'; tags: string[] }
   | { op: 'replaceProgramSource'; programId: string; language: 'ST' | 'FBD'; source: string }
-  | { op: 'upsertProgram'; program: ProgrammingProgram }
+  | { op: 'upsertProgram'; program: ProgrammingProgramDraftInput }
   | { op: 'removeProgram'; programId: string }
   | { op: 'upsertVariable'; variable: ProgrammingVariable }
   | { op: 'removeVariable'; variableId: string }
@@ -366,7 +469,7 @@ export interface ProgrammingAuditPage {
 /**
  * Mô hình state hợp nhất theo `DDD-FE-PROG-001` §3 — KHÔNG dùng một boolean
  * `isRunning`. Đây là phần "editing/check/commission/core/runtime" dùng
- * xuyên suốt bốn workspace; mỗi slice thêm field khi cần, không tạo state
+ * xuyên suốt sáu workspace; mỗi slice thêm field khi cần, không tạo state
  * machine song song.
  */
 export interface ProgrammingEditingState {
@@ -427,4 +530,3 @@ export interface ProgrammingLibraryPage {
   items: ProgrammingLibraryEntry[]
   nextCursor?: string | null
 }
-

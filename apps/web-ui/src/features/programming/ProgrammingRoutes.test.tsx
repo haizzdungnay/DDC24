@@ -2,11 +2,12 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { PROGRAMMING_WORKSPACE_PATHS } from './ProgrammingRoutes'
 import { LegacyDesignRedirect, LegacyTabRedirect } from './shared/LegacyTabRedirect'
 
 function LocationProbe() {
   const location = useLocation()
-  return <output data-testid="location">{location.pathname + location.search}</output>
+  return <output data-testid="location">{location.pathname + location.search + location.hash}</output>
 }
 
 function renderAt(path: string) {
@@ -27,7 +28,18 @@ afterEach(cleanup)
 
 const PROJECT = '11111111-1111-4111-8111-111111111111'
 
-describe('T59-306 — IA sáu trang: route đích và lối vào cũ', () => {
+describe('T59-503 — IA sáu workspace: route đích và lối vào cũ', () => {
+  it('khai báo đúng sáu route canonical PGM-01..06', () => {
+    expect(PROGRAMMING_WORKSPACE_PATHS).toEqual({
+      overview: '',
+      programs: 'projects/:projectId/programs',
+      mapping: 'projects/:projectId/mapping',
+      library: 'projects/:projectId/library',
+      commission: 'projects/:projectId/commission',
+      runtime: 'runtime'
+    })
+  })
+
   // `/design` không còn là route đích. Deep-link cũ phải mở ĐÚNG trang tương
   // ứng, nếu không mọi link trong tài liệu/báo lỗi cũ đều dẫn tới trang trống.
   it('lối vào cũ /design chuyển sang /programs theo mặc định', () => {
@@ -49,6 +61,11 @@ describe('T59-306 — IA sáu trang: route đích và lối vào cũ', () => {
     expect(location).toContain('program=p1')
     expect(location).toContain('line=12')
     expect(location).toContain('column=4')
+  })
+
+  it('giữ nguyên fragment khi chuyển route cũ sang workspace canonical', () => {
+    renderAt(`/eng/programming/projects/${PROJECT}/design?tab=mapping&signal=s1#binding-owner`)
+    expect(screen.getByTestId('location')).toHaveTextContent(`/mapping?signal=s1#binding-owner`)
   })
 
   // `execution` chưa có route đích riêng trong IA sáu trang, nên nó đi tiếp dưới

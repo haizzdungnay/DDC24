@@ -1,4 +1,4 @@
-import type { FbdDataType, FbdNodeKind, FbdPort } from './model'
+import { isFbdIdentifier, type FbdDataType, type FbdNodeKind, type FbdPort } from './model'
 import type { FbdPaletteEntry, FbdPalettePortTemplate } from './palette'
 
 /**
@@ -31,6 +31,9 @@ export const USER_POU_RETURN_PORT = 'OUT'
 export class UserPouInterfaceError extends Error {}
 
 function assertInterface(pou: UserPouInterface): void {
+  if (!isFbdIdentifier(pou.name)) {
+    throw new UserPouInterfaceError(`Tên POU '${pou.name}' không hợp lệ`)
+  }
   if (pou.kind === 'FUNCTION') {
     if (!pou.returnType) {
       throw new UserPouInterfaceError(`FUNCTION '${pou.name}' thiếu kiểu trả về`)
@@ -54,10 +57,14 @@ function assertInterface(pou: UserPouInterface): void {
   const seen = new Set<string>()
   const all = [...pou.inputs, ...(pou.outputs ?? [])]
   for (const port of all) {
-    if (seen.has(port.name)) {
+    if (!isFbdIdentifier(port.name)) {
+      throw new UserPouInterfaceError(`POU '${pou.name}' có tên cổng không hợp lệ '${port.name}'`)
+    }
+    const normalizedName = port.name.toLocaleUpperCase('en-US')
+    if (seen.has(normalizedName)) {
       throw new UserPouInterfaceError(`POU '${pou.name}' có cổng trùng tên '${port.name}'`)
     }
-    seen.add(port.name)
+    seen.add(normalizedName)
   }
   if (pou.kind === 'FUNCTION' && seen.has(USER_POU_RETURN_PORT)) {
     throw new UserPouInterfaceError(

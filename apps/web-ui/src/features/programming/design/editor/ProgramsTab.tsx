@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AlignLeft, Command, FilePlus, PlusSquare, Save, Search, Trash2, X } from 'lucide-react'
+import { AlignLeft, Command, FilePlus, PlusSquare, Redo2, Save, Search, Trash2, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { createUuid } from '../../../../shared/crypto'
 import { useAuth, roleAtLeast } from '../../../auth'
@@ -7,30 +7,43 @@ import { Button } from '../../../../shared/components/Button'
 import { Modal } from '../../../../shared/components/Modal'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import { canonicalFbdJson, FBD_PROFILE_ID, FBD_SCHEMA_VERSION, type FbdDocument } from '../../fbd/model'
+import type { UserPouInterface } from '../../fbd/userPou'
 import { useLazyProgrammingPointCatalog } from '../../api/queries'
-import type { ProgrammingDiagnostic, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
+import type {
+  ProgrammingDiagnostic,
+  ProgrammingDraftDocument,
+  ProgrammingDraftOperation,
+  ProgrammingPointCatalogEntry,
+  ProgrammingProgram,
+  ProgrammingProgramDraftInput,
+} from '../../model/types'
 import {
   buildStCompletions,
   computeAutoIndent,
+  createStEditorHistory,
   currentWordPrefix,
   findMatchingBracket,
   mergeDiagnosticRanges,
+  recordStEditorEdit,
+  redoStEditorEdit,
   tokenizeStSource,
+  undoStEditorEdit,
+  updateStEditorSelection,
   type StCompletionItem,
   type StDiagnosticRange,
 } from './stEditorSupport'
+import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeValueOverlay'
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { SelectionQuickActions } from './SelectionQuickActions'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
 
 /** F-PROG-ASBUILT-001/D-02: Program ST mới không được bắt đầu ở `document: ''`
- * — compiler luôn Check FAILED ngay khi tạo. Định danh `PROGRAM` cố định
- * (không lấy từ tên hiển thị, có thể có dấu/khoảng trắng không hợp lệ trong
- * ST) — `compilerInput()` (BE) định tuyến theo `programId` (UUID), không đọc
- * tên khai báo trong source, nên định danh này chỉ cần là ST hợp lệ. */
-function stProgramTemplate(): string {
-  return 'PROGRAM NewProgram\nEND_PROGRAM\n'
+ * — compiler luôn Check FAILED ngay khi tạo. Tên hiển thị nay cũng là định danh
+ * POU hợp lệ, nên template dùng cùng tên để Program thứ hai không lặp lại khai
+ * báo `NewProgram` của Program đầu. */
+function stProgramTemplate(name: string): string {
+  return `PROGRAM ${name}\nEND_PROGRAM\n`
 }
 
 /** Nguồn chân lý DUY NHẤT cho số đo ST editor — gutter số dòng, overlay tô
@@ -64,6 +77,12 @@ const EDITOR_PAD_TOP_PX = 12
 const EDITOR_PAD_X_PX = 12
 const EDITOR_GUTTER_PAD_X_PX = 8
 const EDITOR_TAB_SIZE = 2
+const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
+
+interface StFormatRequest {
+  programId: string
+  nonce: number
+}
 
 /** Áp cho CẢ BA lớp (gutter/overlay/textarea) — chỉ khác `paddingLeft`/
  *  `paddingRight` giữa gutter (căn phải, đệm hẹp hơn) và overlay/textarea. */
@@ -107,7 +126,9 @@ export function ProgramsTab({
   focusDiagnostic,
   onPendingOperationsChange,
   discardVersion,
-  onRunCheck
+  onRunCheck,
+  runtimeOverlayByProgramId,
+  userPouInterfaces = EMPTY_USER_POU_INTERFACES,
 }: {
   document: ProgrammingDraftDocument
   saving: boolean
@@ -123,6 +144,11 @@ export function ProgramsTab({
    *  "Kiểm tra" ở `DesignWorkspacePage`, nên nhận callback thay vì tự `useNavigate`
    *  (giữ `ProgramsTab` không phụ thuộc router, đúng ranh giới hiện có). */
   onRunCheck: () => void
+  /** T59-506: dữ liệu chỉ đọc do workspace map từ monitor authority. Không có
+   * prop nghĩa là lane monitor chưa được nối, editor không dựng giá trị giả. */
+  runtimeOverlayByProgramId?: Readonly<Record<string, StRuntimeOverlayState | undefined>>
+  /** Interface POU typed do Draft/API cung cấp; FBD không tự parse ST để đoán pin. */
+  userPouInterfaces?: readonly UserPouInterface[]
 }) {
   const { pick } = useI18n()
   const { session } = useAuth()
@@ -139,6 +165,7 @@ export function ProgramsTab({
    * `SourceEditor`) để cache còn nguyên khi đổi Program đang chọn. */
   const pointCatalog = useLazyProgrammingPointCatalog()
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [formatRequest, setFormatRequest] = useState<StFormatRequest | null>(null)
   /* Điều hướng chéo Program khi chọn một biến ở Bảng lệnh nhanh: đổi
    * `selectedProgramId` rồi TÁI DÙNG đúng cơ chế `focusDiagnostic` đã có
    * (D-01) — không viết thêm một prop/hiệu ứng thứ hai cho cùng việc "chọn
@@ -186,17 +213,19 @@ export function ProgramsTab({
     for (const program of document.programs) {
       const source = buffers[program.programId] ?? programSource(program)
       const metadata = metadataDrafts[program.programId] ?? metadataOf(program)
-      if (source !== programSource(program) || !sameMetadata(metadata, metadataOf(program))) {
+      const sourceChanged = source !== programSource(program)
+      const metadataChanged = !sameMetadata(metadata, metadataOf(program))
+      const nextName = metadata.name.trim()
+      if (metadataChanged && isValidPouName(nextName)) {
         operations.push({
           op: 'upsertProgram',
-          program: {
-            ...program,
-            name: metadata.name.trim() || program.name,
-            kind: metadata.kind,
-            functionalTags: parseTags(metadata.functionalTags),
-            document: source
-          }
+          program: programDraftInput(program, { name: nextName, kind: metadata.kind, document: source })
         })
+      } else if (sourceChanged) {
+        /* Metadata không hợp lệ không được lọt qua một nút Lưu khác. Phần mã
+         * nguồn vẫn có operation riêng, nên người dùng không mất edit hợp lệ
+         * chỉ vì ô tên đang mang một giá trị bị backend từ chối. */
+        operations.push({ op: 'replaceProgramSource', programId: program.programId, language: program.language, source })
       }
     }
     return operations
@@ -212,16 +241,16 @@ export function ProgramsTab({
 
   function addProgram(language: 'ST' | 'FBD') {
     const programId = createUuid()
-    const baseName = language === 'FBD' ? pick('FBD mới', 'New FBD') : pick('Chương trình mới', 'New program')
+    /* Tên POU là token hợp đồng, không phải copy được dịch. Tên có dấu/khoảng
+     * trắng từng làm ST+ luôn nhận 400 từ `validPouName` của backend. */
+    const baseName = language === 'FBD' ? 'NewFbdProgram' : 'NewProgram'
     const name = uniqueProgramName(document.programs, baseName)
-    const newProgram: ProgrammingProgram = {
+    const newProgram: ProgrammingProgramDraftInput = {
       programId,
       name,
       kind: 'PROGRAM',
       language,
-      document: language === 'FBD' ? canonicalFbdJson(emptyFbdDocument(name)) : stProgramTemplate(),
-      executionOrder: document.programs.length,
-      functionalTags: []
+      document: language === 'FBD' ? canonicalFbdJson(emptyFbdDocument(name)) : stProgramTemplate(name),
     }
     void onSave([
       { op: 'upsertProgram', program: newProgram },
@@ -273,7 +302,10 @@ export function ProgramsTab({
     }
     if (entry.commandId === 'format') {
       if (!selectedProgramId) return
-      setBuffers((current) => ({ ...current, [selectedProgramId]: formatStSource(current[selectedProgramId] ?? '') }))
+      /* Chuyển lệnh vào SourceEditor để đi qua cùng history/cursor pipeline
+       * với nút Định dạng; sửa buffer trực tiếp ở đây sẽ biến format từ
+       * Command Palette thành baseline mới và làm mất toàn bộ Undo trước đó. */
+      setFormatRequest((current) => ({ programId: selectedProgramId, nonce: (current?.nonce ?? 0) + 1 }))
       return
     }
     if (entry.commandId === 'save') {
@@ -415,6 +447,8 @@ export function ProgramsTab({
             pointCatalogItems={pointCatalog.data?.items ?? []}
             pointCatalogError={pointCatalog.error}
             onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
+            runtimeOverlay={runtimeOverlayByProgramId?.[selected.programId]}
+            formatRequest={formatRequest?.programId === selected.programId ? formatRequest : undefined}
           />
         ) : (
           <FbdEditorPane
@@ -424,6 +458,7 @@ export function ProgramsTab({
             saving={saving}
             onChange={(source) => setBuffers((current) => ({ ...current, [selected.programId]: source }))}
             onSave={onSave}
+            userPouInterfaces={userPouInterfaces}
           />
         )}
       </div>
@@ -463,7 +498,9 @@ export function SourceEditor({
   pointCatalogStatus,
   pointCatalogItems,
   pointCatalogError,
-  onEnsurePointCatalogLoaded
+  onEnsurePointCatalogLoaded,
+  runtimeOverlay,
+  formatRequest,
 }: {
   program: ProgrammingProgram
   source: string
@@ -480,6 +517,9 @@ export function SourceEditor({
   pointCatalogItems: readonly ProgrammingPointCatalogEntry[]
   pointCatalogError: string | null
   onEnsurePointCatalogLoaded: () => void
+  runtimeOverlay?: StRuntimeOverlayState
+  /** Lệnh Định dạng từ Command Palette cha; vẫn phải ghi history như nút local. */
+  formatRequest?: StFormatRequest
 }) {
   const { pick } = useI18n()
   const committed = typeof program.document === 'string' ? program.document : ''
@@ -510,6 +550,13 @@ export function SourceEditor({
    * hiện tại — `null` khi con trỏ chỉ là một điểm (không hiện thanh lệnh). */
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null)
   const [insertPanelOpen, setInsertPanelOpen] = useState(false)
+  /* T59-506: một lịch sử riêng cho MỖI POU đang mount. Ref cho phép mọi đường
+   * edit (gõ thường/autocomplete/Format/Replace/quick action) ghi snapshot trước
+   * khi callback cha echo lại prop `source`; state rỗng chỉ dùng để render lại
+   * trạng thái nút Undo/Redo. */
+  const historyProgramIdRef = useRef(program.programId)
+  const historyRef = useRef(createStEditorHistory(source))
+  const [, bumpHistoryVersion] = useState(0)
   const symbols = useMemo(() => collectStSymbols(source), [source])
   const matches = useMemo(() => findTextMatches(source, searchText), [searchText, source])
   const tokens = useMemo(() => tokenizeStSource(source), [source])
@@ -527,6 +574,33 @@ export function SourceEditor({
   const segments = useMemo(() => mergeDiagnosticRanges(tokens, diagnosticRanges), [tokens, diagnosticRanges])
   const bracketMatch = useMemo(() => findMatchingBracket(source, textareaRef.current?.selectionStart ?? -1), [source, cursor])
 
+  function replaceHistory(next: ReturnType<typeof createStEditorHistory>) {
+    historyRef.current = next
+    bumpHistoryVersion((version) => version + 1)
+  }
+
+  useEffect(() => {
+    if (historyProgramIdRef.current === program.programId) return
+    historyProgramIdRef.current = program.programId
+    replaceHistory(createStEditorHistory(source))
+    setCursor({ line: 1, column: 1 })
+    setSelectionRange(null)
+    closeCompletion()
+  }, [program.programId, source])
+
+  /* Thay đổi prop không đi qua editor (Discard, reload hoặc command ngoài
+   * editor) là một baseline mới. Echo của chính edit thì đã khớp `current` và
+   * không được xóa lịch sử vừa ghi. */
+  useEffect(() => {
+    if (historyRef.current.current.source === source) return
+    const textarea = textareaRef.current
+    replaceHistory(createStEditorHistory(
+      source,
+      textarea?.selectionStart ?? 0,
+      textarea?.selectionEnd ?? textarea?.selectionStart ?? 0,
+    ))
+  }, [source])
+
   function updateCursor() {
     const textarea = textareaRef.current
     const offset = textarea?.selectionStart ?? 0
@@ -534,6 +608,7 @@ export function SourceEditor({
     const start = textarea?.selectionStart ?? 0
     const end = textarea?.selectionEnd ?? 0
     setSelectionRange(start === end ? null : { start, end })
+    historyRef.current = updateStEditorSelection(historyRef.current, start, end)
   }
 
   function selectRange(offset: number, length: number) {
@@ -600,6 +675,7 @@ export function SourceEditor({
    *  dùng cho Enter/autocomplete/Find-Replace có sẵn) chỉ còn là trường hợp
    *  riêng của hàm này. */
   function applyEditRange(next: string, selectionStart: number, selectionEnd: number) {
+    replaceHistory(recordStEditorEdit(historyRef.current, { source: next, selectionStart, selectionEnd }))
     pendingCursorRef.current = { value: next, selectionStart, selectionEnd }
     onChange(next)
     setCursor(offsetToLineColumn(next, selectionEnd))
@@ -608,6 +684,29 @@ export function SourceEditor({
 
   function applyEdit(next: string, newCursor: number) {
     applyEditRange(next, newCursor, newCursor)
+  }
+
+  function applyHistorySnapshot(direction: 'undo' | 'redo') {
+    if (!canEdit) return
+    const current = historyRef.current
+    const next = direction === 'undo' ? undoStEditorEdit(current) : redoStEditorEdit(current)
+    if (next === current) return
+    historyRef.current = next
+    bumpHistoryVersion((version) => version + 1)
+    const snapshot = next.current
+    pendingCursorRef.current = {
+      value: snapshot.source,
+      selectionStart: snapshot.selectionStart,
+      selectionEnd: snapshot.selectionEnd,
+    }
+    onChange(snapshot.source)
+    setCursor(offsetToLineColumn(snapshot.source, snapshot.selectionEnd))
+    setSelectionRange(snapshot.selectionStart === snapshot.selectionEnd ? null : {
+      start: snapshot.selectionStart,
+      end: snapshot.selectionEnd,
+    })
+    closeCompletion()
+    textareaRef.current?.focus()
   }
 
   /** Định dạng lại (nút "Định dạng") và "Thay tất cả" (Find & Replace) từng
@@ -638,6 +737,15 @@ export function SourceEditor({
     applyEditRange(next, mapOffsetByNonWhitespaceCount(source, next, rawStart), mapOffsetByNonWhitespaceCount(source, next, rawEnd))
     textarea?.focus()
   }
+
+  const consumedFormatRequestRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!formatRequest || formatRequest.programId !== program.programId) return
+    const requestKey = `${formatRequest.programId}:${formatRequest.nonce}`
+    if (consumedFormatRequestRef.current === requestKey) return
+    consumedFormatRequestRef.current = requestKey
+    handleFormat()
+  }, [formatRequest, program.programId])
 
   /** FE-ST-008: một hàm lưu DUY NHẤT cho cả nút Lưu và `Ctrl+S` — ghi lại kết
    *  quả (`saved`/`failed`) neo vào đúng buffer vừa thử, để trạng thái hiển
@@ -768,6 +876,24 @@ export function SourceEditor({
           </Button>
           {canEdit && (
             <>
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Undo2 className="h-4 w-4" aria-hidden="true" />}
+                disabled={historyRef.current.past.length === 0}
+                aria-label={pick('Hoàn tác thay đổi ST', 'Undo ST edit')}
+                title={pick('Hoàn tác (Ctrl+Z)', 'Undo (Ctrl+Z)')}
+                onClick={() => applyHistorySnapshot('undo')}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Redo2 className="h-4 w-4" aria-hidden="true" />}
+                disabled={historyRef.current.future.length === 0}
+                aria-label={pick('Làm lại thay đổi ST', 'Redo ST edit')}
+                title={pick('Làm lại (Ctrl+Y)', 'Redo (Ctrl+Y)')}
+                onClick={() => applyHistorySnapshot('redo')}
+              />
               <Button
                 size="sm"
                 variant="ghost"
@@ -943,7 +1069,8 @@ export function SourceEditor({
             spellCheck={false}
             onChange={(event) => {
               const next = event.target.value
-              const offset = event.target.selectionStart
+              const selectionStart = event.target.selectionStart
+              const selectionEnd = event.target.selectionEnd
               /* Tính lại Dòng/cột ngay từ `next`/`offset` tươi của chính sự
                * kiện này — không dựa vào `onKeyUp`/`onSelect` đọc lại closure
                * `source` có thể còn là giá trị của lần render trước, đúng
@@ -963,10 +1090,12 @@ export function SourceEditor({
                * batch kịp nên hiếm khi lộ ra — nhưng không nên dựa vào đúng
                * thời điểm batch của React để đúng, `useLayoutEffect` đảm bảo
                * đúng bất kể cha cập nhật nhanh hay chậm. */
-              pendingCursorRef.current = { value: next, selectionStart: offset, selectionEnd: offset }
+              replaceHistory(recordStEditorEdit(historyRef.current, { source: next, selectionStart, selectionEnd }))
+              pendingCursorRef.current = { value: next, selectionStart, selectionEnd }
               onChange(next)
-              setCursor(offsetToLineColumn(next, offset))
-              refreshCompletion(next, offset)
+              setCursor(offsetToLineColumn(next, selectionEnd))
+              setSelectionRange(selectionStart === selectionEnd ? null : { start: selectionStart, end: selectionEnd })
+              refreshCompletion(next, selectionEnd)
             }}
             onClick={() => { updateCursor(); closeCompletion() }}
             onKeyUp={updateCursor}
@@ -987,6 +1116,14 @@ export function SourceEditor({
               }
               if (event.key === 'Escape' && searchOpen) {
                 event.preventDefault(); setSearchOpen(false); return
+              }
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && canEdit) {
+                event.preventDefault()
+                applyHistorySnapshot(event.shiftKey ? 'redo' : 'undo')
+                return
+              }
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && canEdit) {
+                event.preventDefault(); applyHistorySnapshot('redo'); return
               }
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
                 event.preventDefault(); setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0); return
@@ -1063,6 +1200,7 @@ export function SourceEditor({
         <span>{pick('Dòng', 'Line')} {cursor.line}, {pick('cột', 'column')} {cursor.column}</span>
         <span>{source.length} {pick('ký tự', 'characters')}</span>
       </div>
+      {runtimeOverlay && <StRuntimeValueOverlay state={runtimeOverlay} />}
       <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
         <h4 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Ký hiệu & kiểu', 'Symbols & types')}</h4>
         {symbols.length === 0 ? (
@@ -1125,7 +1263,8 @@ function FbdEditorPane({
   canEdit,
   saving,
   onChange,
-  onSave
+  onSave,
+  userPouInterfaces,
 }: {
   program: ProgrammingProgram
   source: string
@@ -1133,6 +1272,7 @@ function FbdEditorPane({
   saving: boolean
   onChange: (source: string) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
+  userPouInterfaces: readonly UserPouInterface[]
 }) {
   const { pick } = useI18n()
   const committedJson = useMemo(() => canonicalFbdJson(parseFbdDocument(program.document, program.name)), [program.document, program.name])
@@ -1156,7 +1296,12 @@ function FbdEditorPane({
           </Button>
         )}
       </div>
-      <StructuredFbdEditor document={local} canEdit={canEdit} onChange={(next) => onChange(canonicalFbdJson(next))} />
+      <StructuredFbdEditor
+        document={local}
+        canEdit={canEdit}
+        userPouInterfaces={userPouInterfaces}
+        onChange={(next) => onChange(canonicalFbdJson(next))}
+      />
       {dirty && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
     </div>
   )
@@ -1165,15 +1310,14 @@ function FbdEditorPane({
 interface ProgramMetadataDraft {
   name: string
   kind: ProgrammingProgram['kind']
-  functionalTags: string
 }
 
 function metadataOf(program: ProgrammingProgram): ProgramMetadataDraft {
-  return { name: program.name, kind: program.kind, functionalTags: (program.functionalTags ?? []).join(', ') }
+  return { name: program.name, kind: program.kind }
 }
 
 function sameMetadata(left: ProgramMetadataDraft, right: ProgramMetadataDraft): boolean {
-  return left.name === right.name && left.kind === right.kind && sameTags(parseTags(left.functionalTags), parseTags(right.functionalTags))
+  return left.name === right.name && left.kind === right.kind
 }
 
 function parseTags(value: string): string[] {
@@ -1184,21 +1328,47 @@ function sameTags(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((item, index) => item === right[index])
 }
 
-/** So khớp tên không phân biệt hoa/thường và khoảng trắng đầu/cuối — hai
- *  Program tên "New program" và " new program " coi là trùng. */
+const POU_RESERVED_NAMES = new Set([
+  'PROGRAM', 'FUNCTION', 'FUNCTION_BLOCK', 'VAR', 'END_VAR', 'IF', 'THEN',
+  'ELSE', 'END_IF', 'TRUE', 'FALSE', 'AND', 'OR', 'XOR', 'NOT', 'MOD',
+])
+
+/** Đồng bộ `validPouName` ở backend: ASCII identifier tối đa 64 ký tự và
+ * không trùng từ khoá IEC/ST bị giữ chỗ. Validation phía client chỉ giúp chặn
+ * request chắc chắn 400; backend vẫn là authority cuối cùng. */
+export function isValidPouName(name: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name) && !POU_RESERVED_NAMES.has(name.toUpperCase())
+}
+
+/** So khớp tên không phân biệt hoa/thường và khoảng trắng đầu/cuối. */
 export function isDuplicateProgramName(programs: ProgrammingProgram[], name: string, excludeProgramId?: string): boolean {
   const normalized = name.trim().toLocaleLowerCase()
   if (!normalized) return false
   return programs.some((program) => program.programId !== excludeProgramId && program.name.trim().toLocaleLowerCase() === normalized)
 }
 
-/** Sinh tên duy nhất kiểu "New program 2", "New program 3" — tránh im lặng
- *  tạo hai Program cùng tên khi bấm ST+/FBD nhiều lần (BUG-006). */
+/** Sinh tên duy nhất kiểu `NewProgram_2`, `NewProgram_3`; hậu tố luôn giữ tên
+ * trong grammar POU thay vì tái đưa khoảng trắng vào token (BUG-006). */
 export function uniqueProgramName(programs: ProgrammingProgram[], baseName: string): string {
   if (!isDuplicateProgramName(programs, baseName)) return baseName
   let suffix = 2
-  while (isDuplicateProgramName(programs, `${baseName} ${suffix}`)) suffix += 1
-  return `${baseName} ${suffix}`
+  while (isDuplicateProgramName(programs, `${baseName}_${suffix}`)) suffix += 1
+  return `${baseName}_${suffix}`
+}
+
+/** Chuyển view model sang đúng năm field decoder `upsertProgramCompat` nhận.
+ * Không dùng spread ở biên transport: view còn giữ field legacy phục vụ đọc. */
+function programDraftInput(
+  program: ProgrammingProgram,
+  changes: Partial<Omit<ProgrammingProgramDraftInput, 'programId'>> = {},
+): ProgrammingProgramDraftInput {
+  return {
+    programId: program.programId,
+    name: changes.name ?? program.name,
+    kind: changes.kind ?? program.kind,
+    language: changes.language ?? program.language,
+    document: changes.document ?? program.document,
+  }
 }
 
 function programSource(program: ProgrammingProgram): string {
@@ -1220,16 +1390,34 @@ function ProjectTagsEditor({ canEdit, value, saving, onChange, onSave }: { canEd
 function ProgramInspector({ program, programs, draft, canEdit, saving, onChange, onSave }: { program: ProgrammingProgram; programs: ProgrammingProgram[]; draft: ProgramMetadataDraft; canEdit: boolean; saving: boolean; onChange: (draft: ProgramMetadataDraft) => void; onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean> }) {
   const { pick } = useI18n()
   const dirty = !sameMetadata(draft, metadataOf(program))
-  const duplicateName = isDuplicateProgramName(programs, draft.name, program.programId)
+  const normalizedName = draft.name.trim()
+  const invalidName = !isValidPouName(normalizedName)
+  const duplicateName = isDuplicateProgramName(programs, normalizedName, program.programId)
+  const nameHelpId = `program-name-help-${program.programId}`
+  const nameInputId = `program-name-${program.programId}`
+  const kindInputId = `program-kind-${program.programId}`
   return (
     <section className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
       <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Thuộc tính', 'Inspector')}</h3>
-      <div className="mt-2 grid gap-2 sm:grid-cols-3">
-        <label className="text-xs text-[var(--c-text-dim)]">
-          {pick('Tên', 'Name')}
-          <input className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.name} readOnly={!canEdit} onChange={(event) => onChange({ ...draft, name: event.target.value })} />
-          {duplicateName && <span className="mt-1 block text-xs font-normal normal-case text-[var(--c-fault-fg)]">{pick('Tên đã được dùng bởi chương trình khác.', 'This name is already used by another program.')}</span>}
-        </label>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div className="text-xs text-[var(--c-text-dim)]">
+          <label htmlFor={nameInputId}>{pick('Tên', 'Name')}</label>
+          <input
+            id={nameInputId}
+            className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]"
+            value={draft.name}
+            readOnly={!canEdit}
+            aria-invalid={invalidName || duplicateName || undefined}
+            aria-describedby={(invalidName || duplicateName) ? nameHelpId : undefined}
+            onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          />
+          {invalidName && (
+            <span id={nameHelpId} className="mt-1 block text-xs font-normal normal-case text-[var(--c-fault-fg)]">
+              {pick('Tên phải bắt đầu bằng chữ, chỉ gồm chữ, số hoặc dấu gạch dưới, dài tối đa 64 ký tự và không là từ khóa ST.', 'Name must start with a letter, contain only letters, digits or underscores, be at most 64 characters, and not be an ST keyword.')}
+            </span>
+          )}
+          {!invalidName && duplicateName && <span id={nameHelpId} className="mt-1 block text-xs font-normal normal-case text-[var(--c-fault-fg)]">{pick('Tên đã được dùng bởi chương trình khác.', 'This name is already used by another program.')}</span>}
+        </div>
         <label className="text-xs text-[var(--c-text-dim)]">
           {pick('Loại', 'Kind')}
           {/* WP-02 (D-03, REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15 §7.4): Check
@@ -1241,7 +1429,7 @@ function ProgramInspector({ program, programs, draft, canEdit, saving, onChange,
            * Check thất bại khó hiểu. Program hiện có (nếu có, từ import bundle)
            * mang sẵn kind khác PROGRAM vẫn hiển thị đúng giá trị thật kèm cảnh
            * báo, không bị ẩn/mất dữ liệu. */}
-          <select className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.kind} disabled={!canEdit} onChange={(event) => onChange({ ...draft, kind: event.target.value as ProgrammingProgram['kind'] })}>
+          <select id={kindInputId} className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.kind} disabled={!canEdit} onChange={(event) => onChange({ ...draft, kind: event.target.value as ProgrammingProgram['kind'] })}>
             <option value="PROGRAM">PROGRAM</option>
             {draft.kind !== 'PROGRAM' && <option value={draft.kind}>{draft.kind}</option>}
           </select>
@@ -1251,9 +1439,8 @@ function ProgramInspector({ program, programs, draft, canEdit, saving, onChange,
             </span>
           )}
         </label>
-        <label className="text-xs text-[var(--c-text-dim)]">{pick('Tag chức năng', 'Functional tags')}<input className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.functionalTags} readOnly={!canEdit} onChange={(event) => onChange({ ...draft, functionalTags: event.target.value })} /></label>
       </div>
-      {canEdit && <Button className="mt-2" size="sm" loading={saving} disabled={!dirty || draft.name.trim().length === 0 || duplicateName} onClick={() => void onSave([{ op: 'upsertProgram', program: { ...program, name: draft.name.trim(), kind: draft.kind, functionalTags: parseTags(draft.functionalTags) } }])}>{pick('Lưu thuộc tính', 'Save properties')}</Button>}
+      {canEdit && <Button className="mt-2" size="sm" loading={saving} disabled={!dirty || invalidName || duplicateName} onClick={() => void onSave([{ op: 'upsertProgram', program: programDraftInput(program, { name: normalizedName, kind: draft.kind }) }])}>{pick('Lưu thuộc tính', 'Save properties')}</Button>}
     </section>
   )
 }

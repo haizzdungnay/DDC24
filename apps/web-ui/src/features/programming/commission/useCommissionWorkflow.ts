@@ -11,7 +11,7 @@ import type { ProgrammingOperationView } from '../model/types'
 export type CommissionWorkflowState =
   | { phase: 'idle' }
   | { phase: 'submitting' }
-  | { phase: 'polling'; operationId: string }
+  | { phase: 'polling'; operationId: string; operation?: ProgrammingOperationView }
   | { phase: 'unknown'; operationId: string }
   | { phase: 'terminal'; operation: ProgrammingOperationView }
   | { phase: 'error'; message: string }
@@ -59,6 +59,9 @@ export function useCommissionWorkflow() {
               setState({ phase: 'unknown', operationId })
               return
             }
+            // Giữ read-back trung gian để PGM-05 hiện đúng STAGING /
+            // ACTIVATING / VERIFYING, không suy một spinner chung thành success.
+            setState({ phase: 'polling', operationId, operation })
             pollTimer.current = window.setTimeout(poll, 1500)
           },
           () => setState({ phase: 'unknown', operationId })

@@ -14,6 +14,8 @@ import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
 import { toWorkspaceDocument } from '../model/draftV2'
 import { PouTree } from './PouTree'
+import { useProgrammingRuntimeMonitor } from '../api/queries'
+import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
@@ -120,6 +122,17 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
   }, [requested, route, tab, setSearchParams])
 
   const workspace = useDraftWorkspace(projectId)
+  const monitor = useProgrammingRuntimeMonitor()
+  /* `toWorkspaceDocument` cấp object/array mới. Nếu gọi trực tiếp dưới render,
+   * mỗi lần monitor poll sẽ làm ProgramsTab tưởng Draft đổi, phát lại
+   * `onPendingOperationsChange([])` rồi cha set state bằng một mảng mới: vòng
+   * render vô hạn (`Maximum update depth exceeded`) chỉ lộ trên browser thật.
+   * Neo adapter theo đúng payload Draft authority; monitor thay đổi không được
+   * làm identity của tài liệu chỉnh sửa thay đổi theo. */
+  const workspaceDocument = useMemo(
+    () => workspace.project?.draft ? toWorkspaceDocument(workspace.project.draft) : null,
+    [workspace.project?.draft]
+  )
   const pendingOperations = useMemo(() => [...programOperations, ...executionOperations], [executionOperations, programOperations])
   const draftDirty = pendingOperations.length > 0
 
@@ -178,7 +191,9 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
     return <StateBlock state="error" title={pick('Không tải được Project.', 'Could not load the project.')} detail={workspace.error ?? undefined} onRetry={workspace.reload} />
   }
   // T59-301: BE trả document v2; adapter chiếu về view model của bốn tab.
-  const document = toWorkspaceDocument(workspace.project.draft)
+  const document = workspaceDocument as NonNullable<typeof workspaceDocument>
+  const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
+  const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
 
   return (
     <div className="space-y-3">
@@ -285,6 +300,8 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
           onPendingOperationsChange={updateProgramOperations}
           discardVersion={discardVersion}
           onRunCheck={goToCommission}
+          runtimeOverlayByProgramId={runtimeOverlays}
+          userPouInterfaces={userPouInterfaces}
         />
       </div>
       <div hidden={tab !== 'mapping'}>

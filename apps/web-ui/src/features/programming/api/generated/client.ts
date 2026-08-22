@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.25.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.26.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -133,6 +133,7 @@ export const PROGRAMMING_ENDPOINTS = {
   "getProgrammingRevision": { method: "GET", path: "/api/v1/programming/revisions/{revisionId}", roles: ["viewer","operator","admin"] },
   "getProgrammingRuntime": { method: "GET", path: "/api/v1/programming/runtime", roles: ["viewer","operator","admin"] },
   "getProgrammingRuntimeMonitor": { method: "GET", path: "/api/v1/programming/runtime/monitor", roles: ["viewer","operator","admin"] },
+  "getProgrammingRuntimeSignals": { method: "GET", path: "/api/v1/programming/runtime/signals", roles: ["viewer","operator","admin"] },
   "getProgrammingTrace": { method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["viewer","operator","admin"] },
   "importProgrammingBundle": { method: "POST", path: "/api/v1/programming/bundles/import", roles: ["admin"] },
   "listProgrammingAudit": { method: "GET", path: "/api/v1/programming/audit", roles: ["viewer","operator","admin"] },

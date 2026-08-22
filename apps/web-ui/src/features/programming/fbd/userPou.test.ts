@@ -73,8 +73,14 @@ describe('sinh pin cho POU người dùng (T59-105)', () => {
     expect(() => userPouPorts({ ...blend, inputs: [
       { name: 'A', dataType: 'REAL' }, { name: 'A', dataType: 'REAL' },
     ] })).toThrow(UserPouInterfaceError)
+    expect(() => userPouPorts({ ...blend, inputs: [
+      { name: 'A', dataType: 'REAL' }, { name: 'a', dataType: 'REAL' },
+    ] })).toThrow(UserPouInterfaceError)
     // `OUT` là tên dành riêng cho giá trị trả về của FUNCTION.
     expect(() => userPouPorts({ ...blend, inputs: [{ name: 'OUT', dataType: 'REAL' }] }))
+      .toThrow(UserPouInterfaceError)
+    expect(() => userPouPorts({ ...blend, name: '1 bad POU' })).toThrow(UserPouInterfaceError)
+    expect(() => userPouPorts({ ...blend, inputs: [{ name: 'bad-port', dataType: 'REAL' }] }))
       .toThrow(UserPouInterfaceError)
   })
 

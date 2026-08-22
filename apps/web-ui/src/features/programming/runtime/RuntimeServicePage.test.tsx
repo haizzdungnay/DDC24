@@ -263,14 +263,13 @@ describe('RuntimeServicePage — S5-D (TASK-PROG-505)', () => {
     expect(screen.queryByText(/giữ Commission\/Restore bị khóa/)).not.toBeInTheDocument()
   })
 
-  it('có bottom navigation bốn workspace trên shell Programming', async () => {
+  it('có bottom navigation đủ sáu workspace trên shell Programming', async () => {
     stubDefaultEndpoints()
     renderPage()
-    const nav = await screen.findByRole('navigation', { name: 'Điều hướng workspace Lập trình' })
-    expect(nav).toHaveTextContent('Tổng quan')
-    expect(nav).toHaveTextContent('Thiết kế')
-    expect(nav).toHaveTextContent('Kiểm tra')
-    expect(nav).toHaveTextContent('Runtime')
+    const nav = await screen.findByRole('navigation', { name: 'Điều hướng sáu workspace Lập trình' })
+    for (const name of ['Tổng quan', 'Chương trình', 'Điểm & Ánh xạ', 'Thư viện điều khiển', 'Kiểm tra & Vận hành', 'Runtime & Bảo trì']) {
+      expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
+    }
   })
 
   it('tab Theo dõi gọi GET /runtime/monitor thật và hiện đúng trạng thái chưa sẵn sàng khi 503', async () => {

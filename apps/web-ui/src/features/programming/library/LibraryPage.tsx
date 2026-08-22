@@ -119,7 +119,7 @@ export function LibraryPage() {
               </p>
             )}
             {error && (
-              <p role="alert" className="mt-2 text-sm text-[var(--c-danger)]">
+              <p role="alert" className="mt-2 text-sm text-[var(--c-fault-fg)]">
                 {error}
               </p>
             )}

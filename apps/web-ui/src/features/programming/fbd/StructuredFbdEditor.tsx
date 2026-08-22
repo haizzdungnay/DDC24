@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Plus, Redo2, RotateCcw, Trash2, Undo2 } from 'lucide-react'
-import { useEffect, useId, useReducer, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useReducer, useRef, useState } from 'react'
 
 import { Button } from '../../../shared/components/Button'
 import { useI18n } from '../../../shared/i18n'
@@ -31,13 +31,19 @@ import {
   defaultConstantLiteral,
   fbdPaletteEntry,
   isValidConstantLiteral,
+  type FbdPaletteEntry,
 } from './palette'
+import { userPouPaletteEntry, type UserPouInterface } from './userPou'
 
 export interface StructuredFbdEditorProps {
   document: FbdDocument
   canEdit: boolean
   onChange: (document: FbdDocument) => void
+  /** Interface typed đến từ Draft/API. Editor không parse source ST để đoán pin. */
+  userPouInterfaces?: readonly UserPouInterface[]
 }
+
+const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
 
 function newUuid(): string {
   return createUuid()
@@ -47,25 +53,10 @@ function newNetwork(index: number): FbdNetwork {
   return { id: newUuid(), name: `NETWORK_${index + 1}`, order: index, nodes: [], wires: [] }
 }
 
-function newAndNode(executionOrder: number): FbdNode {
-  return {
-    id: newUuid(),
-    kind: 'FUNCTION',
-    typeRef: 'AND',
-    executionOrder,
-    parameters: {},
-    ports: [
-      { id: newUuid(), name: 'IN1', direction: 'INPUT', dataType: 'BOOL', unit: null, order: 0 },
-      { id: newUuid(), name: 'IN2', direction: 'INPUT', dataType: 'BOOL', unit: null, order: 1 },
-      { id: newUuid(), name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL', unit: null, order: 2 },
-    ],
-  }
-}
-
 /* WP-05 (FBD_EDITOR_DESIGN.md §1) — mọi block Logic/Compare/Math/Conversion/
  * Timer/Trigger/Control tạo qua đúng 1 factory chung, executionOrder do
  * reducer `ADD_NODE` gán lại (luôn nối cuối network) nên không cần tính ở đây. */
-function buildPaletteNode(entry: (typeof FBD_PALETTE)[number]): FbdNode {
+function buildPaletteNode(entry: FbdPaletteEntry): FbdNode {
   const ports = entry.buildPorts(entry.defaultType)
   return {
     id: newUuid(),
@@ -113,16 +104,36 @@ function buildConstantNode(dataType: FbdDataType, value: FbdParameterValue): Fbd
 
 const inputClass = 'rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-xs'
 
+/**
+ * Shortcut graph không được nuốt Arrow/Delete/Ctrl+Z của ô nhập liệu. Với
+ * button toolbar/palette, Enter/Arrow phải giữ hành vi native. `Insert` không
+ * có hành vi native trên button và là shortcut toàn editor, nên vẫn phải thêm
+ * block khi người dùng vừa Tab tới toolbar (đường E2E bàn phím chuẩn).
+ */
+function ignoresGraphCommand(target: EventTarget | null, command: FbdKeyboardCommand): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable || target.closest('input, select, textarea')) return true
+  const button = target.closest('button')
+  return Boolean(
+    button &&
+    !button.dataset.fbdCanvasControl &&
+    command !== 'ADD_BLOCK' &&
+    command !== 'UNDO' &&
+    command !== 'REDO'
+  )
+}
+
 function NodeInspector({
-  node, networkId, canEdit, dispatch, pick,
+  node, networkId, canEdit, dispatch, pick, paletteEntry,
 }: {
   node: FbdNode
   networkId: string
   canEdit: boolean
   dispatch: (action: FbdEditorAction) => void
   pick: (vi: string, en: string) => string
+  paletteEntry?: FbdPaletteEntry
 }) {
-  const entry = fbdPaletteEntry(node.typeRef)
+  const entry = paletteEntry ?? fbdPaletteEntry(node.typeRef)
   const [variableDraft, setVariableDraft] = useState('')
   const [unitDraft, setUnitDraft] = useState('')
   const [typeDraft, setTypeDraft] = useState<FbdDataType>('BOOL')
@@ -296,7 +307,7 @@ function NodeInspector({
   )
 }
 
-export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredFbdEditorProps) {
+export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterfaces = EMPTY_USER_POU_INTERFACES }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
   const publishedDocument = useRef(canonicalFbdJson(state.document))
@@ -311,6 +322,27 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
   const [constantType, setConstantType] = useState<FbdDataType>('BOOL')
   const [constantValue, setConstantValue] = useState('false')
   const [createError, setCreateError] = useState<string | null>(null)
+  const userPouPalette = useMemo(() => {
+    const entries: FbdPaletteEntry[] = []
+    const issues: string[] = []
+    const seen = new Set(FBD_PALETTE.map((entry) => entry.typeRef.toLocaleUpperCase('en-US')))
+    for (const pou of userPouInterfaces) {
+      try {
+        const entry = userPouPaletteEntry(pou)
+        const key = entry.typeRef.toLocaleUpperCase('en-US')
+        if (seen.has(key)) throw new Error('duplicate-pou-name')
+        seen.add(key)
+        entries.push(entry)
+      } catch {
+        issues.push(pou.name || '?')
+      }
+    }
+    return { entries, issues }
+  }, [userPouInterfaces])
+  const paletteEntries = useMemo(
+    () => [...FBD_PALETTE, ...userPouPalette.entries],
+    [userPouPalette.entries],
+  )
 
   useEffect(() => {
     dispatch({ type: 'SET_CAN_EDIT', canEdit })
@@ -344,7 +376,16 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
     if (sectionRef.current && (!active || active === window.document.body)) sectionRef.current.focus()
   }, [state.selection])
 
+  /* Draft/library refresh có thể gỡ POU đang chọn khỏi palette. Không được
+   * âm thầm dùng một block khác cho lệnh Insert trong render chuyển tiếp; trả
+   * lựa chọn về entry chuẩn đầu tiên rồi mới cho phép thêm node. */
+  useEffect(() => {
+    if (paletteEntries.some((entry) => entry.id === paletteTypeRef)) return
+    setPaletteTypeRef(FBD_PALETTE[0]?.id ?? '')
+  }, [paletteEntries, paletteTypeRef])
+
   const selectedNetworkId = state.selection?.networkId ?? state.document.networks[0]?.id
+  const selectedPaletteEntry = paletteEntries.find((entry) => entry.id === paletteTypeRef)
 
   function dispatchCommand(command: FbdKeyboardCommand) {
     let action: FbdEditorAction | null = null
@@ -352,7 +393,9 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
       action = { type: 'ADD_NETWORK', network: newNetwork(state.document.networks.length) }
     } else if (command === 'ADD_BLOCK') {
       const network = state.document.networks.find((item) => item.id === selectedNetworkId)
-      if (network) action = { type: 'ADD_NODE', networkId: network.id, node: newAndNode(network.nodes.length) }
+      if (network && selectedPaletteEntry) {
+        action = { type: 'ADD_NODE', networkId: network.id, node: buildPaletteNode(selectedPaletteEntry) }
+      }
     } else if (command === 'SELECT_NEXT_PORT') {
       action = { type: 'SELECT_PORT_OFFSET', offset: 1 }
     } else if (command === 'SELECT_PREVIOUS_PORT') {
@@ -385,10 +428,9 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
   }
 
   function addPaletteNode() {
-    const entry = fbdPaletteEntry(paletteTypeRef)
     const network = state.document.networks.find((item) => item.id === selectedNetworkId)
-    if (!entry || !network) return
-    dispatch({ type: 'ADD_NODE', networkId: network.id, node: buildPaletteNode(entry) })
+    if (!selectedPaletteEntry || !network) return
+    dispatch({ type: 'ADD_NODE', networkId: network.id, node: buildPaletteNode(selectedPaletteEntry) })
   }
 
   function submitInterfaceNode(kind: 'INPUT' | 'OUTPUT') {
@@ -415,8 +457,6 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
     setCreatingKind(null)
   }
 
-  const selectedPaletteEntry = fbdPaletteEntry(paletteTypeRef)
-
   const issues = validateFbdDocument(state.document)
   return (
     <section
@@ -427,9 +467,18 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
       className="space-y-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4"
       onKeyDown={(event) => {
         const command = resolveFbdKeyboardCommand(event)
-        if (!command) return
+        if (!command || ignoresGraphCommand(event.target, command)) return
+        const insertStartedFromToolbar =
+          command === 'ADD_BLOCK' &&
+          event.target instanceof HTMLElement &&
+          Boolean(event.target.closest('button'))
         event.preventDefault()
         dispatchCommand(command)
+        // Sau `Insert` từ một nút toolbar, chuyển focus về vùng editor để
+        // Arrow/Enter kế tiếp thuộc keyboard contract của graph. Giữ focus ở
+        // nút sẽ buộc Enter kích hoạt chính nút đó (thêm Network) thay vì nối
+        // port, dù block vừa được thêm thành công.
+        if (insertStartedFromToolbar) sectionRef.current?.focus()
       }}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -437,8 +486,8 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
           <h2 className="text-lg font-semibold">FBD · {state.document.name}</h2>
           <p id={keyboardHelpId} className="text-xs text-[var(--c-text-dim)]">
             {pick(
-              'Insert thêm block AND · ↑/↓ chọn port · Enter nối · Alt+↑/↓ đổi thứ tự · Delete xóa · Ctrl+Z/Y hoàn tác/làm lại.',
-              'Insert adds an AND block · arrows select port · Enter connects · Alt+arrows reorder · Delete removes · Ctrl+Z/Y undo/redo.',
+              'Chọn block/POU trong palette; Insert thêm lựa chọn đó · ↑/↓ chọn port · Enter nối · Alt+↑/↓ đổi thứ tự · Delete xóa · Ctrl+Z/Y hoàn tác/làm lại.',
+              'Choose a block/POU in the palette; Insert adds the selected block/POU · arrows select port · Enter connects · Alt+arrows reorder · Delete removes · Ctrl+Z/Y undo/redo.',
             )}
           </p>
         </div>
@@ -458,7 +507,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
       </div>
 
       {/* WP-05/06 (FBD_EDITOR_DESIGN.md §1/§2) — palette 9 nhóm + tạo node giao diện */}
-      <div className="flex flex-wrap items-end gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3" aria-label={pick('Palette FBD', 'FBD palette')}>
+      <div className="flex flex-wrap items-end gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3" role="group" aria-label={pick('Palette FBD', 'FBD palette')}>
         <label className="flex flex-col gap-1 text-xs">
           {pick('Khối', 'Block')}
           <select
@@ -474,9 +523,18 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
                 ))}
               </optgroup>
             ))}
+            {userPouPalette.entries.length > 0 && (
+              <optgroup label={pick('POU dự án / thư viện', 'Project / library POUs')}>
+                {userPouPalette.entries.map((entry) => (
+                  <option key={`pou-${entry.id}`} value={entry.id}>
+                    {pick(entry.labelVi, entry.labelEn)} · {entry.kind}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </label>
-        <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit || !selectedNetworkId} onClick={addPaletteNode}>
+        <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit || !selectedNetworkId || !selectedPaletteEntry} onClick={addPaletteNode}>
           {pick('Thêm khối', 'Add block')}
         </Button>
         <Button size="sm" variant={creatingKind === 'INPUT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
@@ -499,6 +557,18 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
           <p className="basis-full rounded bg-[var(--c-warn-bg)] px-2 py-1 text-xs text-[var(--c-warn-fg)]">
             {pick(selectedPaletteEntry.warning.vi, selectedPaletteEntry.warning.en)}
           </p>
+        )}
+        {userPouPalette.issues.length > 0 && (
+          <div className="basis-full rounded bg-[var(--c-warn-bg)] px-2 py-1 text-xs text-[var(--c-warn-fg)]" role="status">
+            <p className="font-semibold">{pick('Một số POU không thể đưa vào palette vì interface không hợp lệ:', 'Some POUs are unavailable because their interfaces are invalid:')}</p>
+            <ul className="list-disc pl-4">
+              {userPouPalette.issues.map((name, index) => (
+                <li key={`${name}-${index}`}>
+                  {name}: {pick('tên/signature/pin trùng hoặc không hợp lệ', 'duplicate or invalid name/signature/pins')}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 
@@ -578,7 +648,8 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
           <article key={network.id} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
             <button
               type="button"
-              className="mb-3 text-left text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+              data-fbd-canvas-control="true"
+              className="mb-3 min-h-11 text-left text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
               aria-pressed={state.selection?.kind === 'network' && state.selection.networkId === network.id}
               onClick={() => dispatch({ type: 'SELECT', selection: { kind: 'network', networkId: network.id } })}
             >
@@ -589,7 +660,8 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
                 <li key={node.id} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3">
                   <button
                     type="button"
-                    className="w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                    data-fbd-canvas-control="true"
+                    className="min-h-11 w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
                     aria-pressed={state.selection?.kind === 'node' && state.selection.nodeId === node.id}
                     onClick={() => dispatch({ type: 'SELECT', selection: { kind: 'node', networkId: network.id, nodeId: node.id } })}
                   >
@@ -608,7 +680,8 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
                             else portButtons.current.delete(port.id)
                           }}
                           type="button"
-                          className={`rounded border px-2 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${selected || isSource ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)]' : 'border-[var(--c-border)]'}`}
+                          data-fbd-canvas-control="true"
+                          className={`min-h-11 rounded border px-2 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${selected || isSource ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)]' : 'border-[var(--c-border)]'}`}
                           aria-pressed={selected}
                           aria-label={`${node.typeRef} ${port.direction} ${port.name} ${port.dataType}${port.unit ? ` ${port.unit}` : ''}`}
                           onClick={() => dispatch({ type: 'SELECT', selection: { kind: 'port', networkId: network.id, nodeId: node.id, portId: port.id } })}
@@ -619,8 +692,15 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
                     })}
                   </div>
                   {state.selection?.kind === 'node' && state.selection.nodeId === node.id && (
-                    <div className="mt-3 border-t border-[var(--c-border)] pt-3" aria-label={pick('Inspector node', 'Node inspector')}>
-                      <NodeInspector node={node} networkId={network.id} canEdit={canEdit} dispatch={dispatch} pick={pick} />
+                    <div className="mt-3 border-t border-[var(--c-border)] pt-3" role="group" aria-label={pick('Inspector node', 'Node inspector')}>
+                      <NodeInspector
+                        node={node}
+                        networkId={network.id}
+                        canEdit={canEdit}
+                        dispatch={dispatch}
+                        pick={pick}
+                        paletteEntry={paletteEntries.find((entry) => entry.typeRef === node.typeRef)}
+                      />
                     </div>
                   )}
                 </li>
@@ -633,7 +713,8 @@ export function StructuredFbdEditor({ document, canEdit, onChange }: StructuredF
                   <button
                     key={wire.id}
                     type="button"
-                    className="rounded border border-[var(--c-border)] px-2 py-1 font-mono text-[11px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                    data-fbd-canvas-control="true"
+                    className="min-h-11 rounded border border-[var(--c-border)] px-2 py-1 font-mono text-[11px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
                     aria-pressed={state.selection?.kind === 'wire' && state.selection.wireId === wire.id}
                     onClick={() => dispatch({ type: 'SELECT', selection: { kind: 'wire', networkId: network.id, wireId: wire.id } })}
                   >

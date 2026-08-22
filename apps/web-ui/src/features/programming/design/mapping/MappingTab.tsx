@@ -43,13 +43,26 @@ function isCompatiblePoint(variable: MappableVariable, entry: ProgrammingPointCa
   return directionOk && entry.dataType === variable.type
 }
 
-const QUALITY_BADGE: Record<string, string> = {
-  GOOD: 'online',
-  UNCERTAIN: 'warning',
-  BAD: 'fault',
-  STALE: 'stale',
-  OFFLINE: 'offline',
-  UNKNOWN: 'unknown'
+/**
+ * Lớp màu của cột Chất lượng.
+ *
+ * Bản trước ghép tên class bằng nội suy chuỗi
+ * (`text-[var(--c-${QUALITY_BADGE[...]}-fg,...)]`). Hai lỗi chồng nhau nên
+ * cột này CHƯA BAO GIỜ đổi màu: (1) Tailwind quét class theo VĂN BẢN NGUỒN,
+ * chuỗi nội suy không bao giờ xuất hiện nguyên dạng nên không utility nào
+ * được sinh — kiểm chứng trên chính CSS đang chạy ở board: `--c-online-fg`
+ * xuất hiện 0 lần; (2) `--c-online-fg`/`--c-stale-fg`/`--c-unknown-fg` cũng
+ * không có trong `TOKEN_NAMES`, nên kể cả có class thì biến vẫn rơi về
+ * fallback. Nay là bảng tra TĨNH, viết đủ tên class và chỉ dùng token có
+ * thật (`theme/tokens.ts`).
+ */
+const QUALITY_CLASS: Record<string, string> = {
+  GOOD: 'text-[var(--c-good-fg)]',
+  UNCERTAIN: 'text-[var(--c-warn-fg)]',
+  BAD: 'text-[var(--c-fault-fg)]',
+  STALE: 'text-[var(--c-warn-fg)]',
+  OFFLINE: 'text-[var(--c-fault-fg)]',
+  UNKNOWN: 'text-[var(--c-text-dim)]'
 }
 
 /**
@@ -128,7 +141,7 @@ export function MappingTab({
                       {binding.unit ? ` / ${binding.unit}` : ''}
                     </td>
                     <td className="py-1.5 pr-3">
-                      <span className={`text-xs font-semibold text-[var(--c-${QUALITY_BADGE[quality ?? 'UNKNOWN']}-fg,var(--c-text-dim))]`}>{quality ?? pick('Không rõ', 'Unknown')}</span>
+                      <span className={`text-xs font-semibold ${QUALITY_CLASS[quality ?? 'UNKNOWN'] ?? QUALITY_CLASS.UNKNOWN}`}>{quality ?? pick('Không rõ', 'Unknown')}</span>
                     </td>
                     {canEdit && (
                       <td className="py-1.5 text-right">
