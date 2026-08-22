@@ -252,7 +252,7 @@ func packageSignals(objects []revisionObjectView) []programmingcompiler.PackageS
 			policy = 2
 		}
 		item := programmingcompiler.PackageSignal{
-			Name: signal.name, Publisher: signal.publisherID, Type: signalTypeCode(signal.dataType),
+			Name: signal.name, Publisher: programPackageName(signal.publisherID), Type: signalTypeCode(signal.dataType),
 			FreshnessMs: int(signal.freshnessMs), StalePolicy: policy,
 		}
 		if signal.fallbackValue != nil {

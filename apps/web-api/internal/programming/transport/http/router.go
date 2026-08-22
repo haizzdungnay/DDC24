@@ -45,6 +45,7 @@ var routeDefinitions = []routeDefinition{
 	{method: "GET", path: "/api/v1/programming/point-catalog", role: auth.RoleViewer},
 	{method: "GET", path: "/api/v1/programming/runtime", role: auth.RoleViewer},
 	{method: "GET", path: "/api/v1/programming/runtime/monitor", role: auth.RoleViewer},
+	{method: "GET", path: "/api/v1/programming/runtime/signals", role: auth.RoleViewer},
 	{method: "POST", path: "/api/v1/programming/runtime/traces", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", role: auth.RoleViewer},
 	{method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", role: auth.RoleAdmin},

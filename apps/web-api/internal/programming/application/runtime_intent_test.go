@@ -89,8 +89,8 @@ func intentCommand(programID string, enabled bool, key string) SetProgramIntentC
 		CorrelationID: testCorrelationID}
 }
 
-// Đường đầy đủ: store ghi intent, lệnh đi xuống Core, read-back ghi lại trạng
-// thái CHUYỂN TIẾP chứ không ghi thẳng trạng thái đích.
+// Đường đầy đủ: Core chỉ trả OK sau khi lệnh đồng bộ đã đạt
+// trạng thái đích, nên read-back phải phản ánh RUNNING/DISABLED.
 func TestSetProgramEnabledWritesIntentAndPushesToCore(t *testing.T) {
 	service, runtime, projectID := openIntentService(t)
 	result, err := service.SetProgramEnabled(context.Background(), Actor{ID: testActorID, Role: "admin"},
@@ -104,6 +104,12 @@ func TestSetProgramEnabledWritesIntentAndPushesToCore(t *testing.T) {
 	if len(runtime.calls) != 1 || runtime.calls[0].Action != coreipc.ActionSetProgramEnabled {
 		t.Fatalf("lệnh xuống Core sai: %+v", runtime.calls)
 	}
+	if runtime.calls[0].ActorID != testActorID {
+		t.Fatalf("actorId IPC=%q, phải giữ actor đã ghi intent %q", runtime.calls[0].ActorID, testActorID)
+	}
+	if err := coreipc.ValidateRequest(runtime.calls[0]); err != nil {
+		t.Fatalf("lệnh SET_PROGRAM_ENABLED không qua được validator IPC thật: %v", err)
+	}
 	intents, err := service.ListProgramIntents(context.Background(), projectID)
 	if err != nil {
 		t.Fatal(err)
@@ -111,10 +117,8 @@ func TestSetProgramEnabledWritesIntentAndPushesToCore(t *testing.T) {
 	if len(intents) != 1 || !intents[0].DesiredEnabled || intents[0].Generation != 1 {
 		t.Fatalf("intent=%+v", intents)
 	}
-	// STARTING, không phải RUNNING: nói nó đã tới đích khi nó mới lên đường là
-	// nói dối người vận hành.
-	if intents[0].RuntimeState != "STARTING" {
-		t.Fatalf("runtimeState=%q, phải là STARTING", intents[0].RuntimeState)
+	if intents[0].RuntimeState != "RUNNING" {
+		t.Fatalf("runtimeState=%q, phải là RUNNING", intents[0].RuntimeState)
 	}
 	if intents[0].UpdatedBy != testActorID {
 		t.Fatalf("updatedBy=%q", intents[0].UpdatedBy)
@@ -164,6 +168,9 @@ func TestEnableAndDisableAreDistinctIdempotencyActions(t *testing.T) {
 	}
 	if intents[0].DesiredEnabled {
 		t.Fatal("intent vẫn là Enabled sau khi tắt")
+	}
+	if intents[0].RuntimeState != "DISABLED" {
+		t.Fatalf("runtimeState=%q, phải là DISABLED", intents[0].RuntimeState)
 	}
 	// Generation chỉ tăng: intent cũ tới muộn không được ghi đè intent mới.
 	if intents[0].Generation != 2 {

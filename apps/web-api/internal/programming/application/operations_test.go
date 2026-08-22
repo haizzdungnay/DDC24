@@ -134,6 +134,18 @@ func newOperationFixture(t *testing.T) operationFixture {
 		revision: revision, checkID: accepted.CheckID, staging: filepath.Join(root, "staging"), now: now}
 }
 
+func TestOperationStagesSingleProgramUnderSealedProgramID(t *testing.T) {
+	fixture := newOperationFixture(t)
+	service := fixture.service(t, &fakeOperationRuntime{})
+	instanceID, err := service.runtimeInstanceIDForRevision(context.Background(), fixture.revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if instanceID != "55555555-5555-4555-8555-555555555555" {
+		t.Fatalf("instanceID=%q; hard-code program-main sẽ làm intent không chạm Core", instanceID)
+	}
+}
+
 func (f operationFixture) service(t *testing.T, runtime *fakeOperationRuntime) *OperationService {
 	t.Helper()
 	runtime.desiredRevision = f.revision

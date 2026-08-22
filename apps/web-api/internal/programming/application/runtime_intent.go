@@ -186,7 +186,7 @@ func (s *RuntimeIntentService) pushToCore(ctx context.Context, command SetProgra
 		return
 	}
 	request := coreipc.NewRequest(coreipc.ActionSetProgramEnabled, uuidBytes(s.newID()),
-		uuidBytes(s.newID()), s.controllerID, "", command.CorrelationID,
+		uuidBytes(s.newID()), s.controllerID, intent.UpdatedBy, command.CorrelationID,
 		coreipc.FutureDeadline(intentCallTimeout), payload)
 	callCtx, cancel := context.WithTimeout(ctx, intentCallTimeout)
 	defer cancel()
@@ -196,14 +196,13 @@ func (s *RuntimeIntentService) pushToCore(ctx context.Context, command SetProgra
 	}
 	switch response.Result {
 	case coreipc.ResultOK:
-		// Core nhận lệnh nhưng Program chưa chắc đã ở trạng thái cuối: bật một
-		// Program đi qua STARTING, tắt đi qua STOPPING. Ghi trạng thái CHUYỂN
-		// TIẾP chứ không ghi thẳng RUNNING/DISABLED — nói nó đã tới đích khi nó
-		// mới lên đường là nói dối người vận hành.
+		// SET_PROGRAM_ENABLED là lệnh đồng bộ: Core chỉ trả OK sau khi
+		// scheduler đã đạt trạng thái đích. Giữ STARTING/STOPPING sau OK
+		// sẽ làm UI kẹt vĩnh viễn ở một chuyển tiếp không hề tồn tại.
 		if command.DesiredEnabled {
-			state = "STARTING"
+			state = "RUNNING"
 		} else {
-			state = "STOPPING"
+			state = "DISABLED"
 		}
 	case coreipc.ResultRejected:
 		state = "FAULTED"

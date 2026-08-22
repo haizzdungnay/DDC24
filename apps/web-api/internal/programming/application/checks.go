@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -650,14 +649,16 @@ type packageProgramArtifact struct {
 	IntegrityMode   string `json:"integrityMode"`
 }
 
-// packageArtifact quyết định thứ Commission sẽ stage. Một Program: artifact v1
-// nguyên trạng. Nhiều Program: gọi packager để bọc thành container v2, rồi lưu
-// container đó content-addressed như mọi artifact khác.
+// packageArtifact quyết định thứ Commission sẽ stage. Một Program
+// không Published Signal có thể giữ artifact v1. Chỉ cần có signal thì
+// BẮT BUỘC bọc v2, kể cả khi chỉ có một Program: artifact v1 không
+// có section SIGNAL, nên trả v1 ở đây sẽ làm Check PASSED nhưng Core
+// không bao giờ nhận được hợp đồng signal đã seal.
 func (s *CheckService) packageArtifact(ctx context.Context, check programmingstore.Check,
 	inputs []programmingcompiler.Input, results []programmingcompiler.Result,
 	artifacts []packageProgramArtifact, topology []packageProgramTopology,
 	signals []programmingcompiler.PackageSignal) (*programmingstore.Artifact, *programmingcompiler.PackageResult, error) {
-	if len(results) == 1 {
+	if len(results) == 1 && len(signals) == 0 {
 		result := results[0]
 		return &programmingstore.Artifact{ArtifactID: s.newID(), RevisionID: check.RevisionID, CheckID: check.CheckID,
 			SchemaVersion: result.ArtifactSchemaVersion, Profile: checkStoreProfile, TargetABI: result.TargetABI,
@@ -702,17 +703,12 @@ func (s *CheckService) packageArtifact(ctx context.Context, check programmingsto
 		IntegrityMode: results[0].IntegrityMode}, &packaged, nil
 }
 
-// programPackageName biến UUID thành tên Program hợp lệ trong container. Tên là
-// identity trong package v2 và không được chứa `=` hay dấu phân cách đường dẫn.
+// programPackageName giữ NGUYÊN Program ID. Tên trong PROGRAM_TABLE là
+// runtime instance identity, không phải tên POU trong mã ST. Đổi UUID thành
+// `P_...` làm API intent gửi ID đã seal nhưng Core chỉ biết một ID
+// khác, nên Enable/Disable bị từ chối cho mọi package v2.
 func programPackageName(sourceID string) string {
-	name := strings.NewReplacer("-", "_", "=", "_", "/", "_", "\\", "_").Replace(sourceID)
-	if len(name) > 64 {
-		name = name[:64]
-	}
-	if name == "" {
-		name = "PROGRAM"
-	}
-	return "P_" + name[:min(len(name), 62)]
+	return sourceID
 }
 
 // packageCheckManifest tất định: `artifacts` đã sắp theo `programId` từ

@@ -13,10 +13,9 @@ import (
 
 const (
 	ProtocolMajor uint16 = 1
-	// T59-405 nâng minor 0 -> 1: thêm action `SET_PROGRAM_ENABLED` là thay đổi
-	// TƯƠNG THÍCH NGƯỢC. Giữ nguyên minor sẽ làm hai bên không có cách nào
-	// biết đối phương có hiểu action mới hay không.
-	ProtocolMinor    uint16 = 2
+	// T59-504 nâng minor 2 -> 3: STATUS thêm snapshot Published Signal ở phần
+	// tử thứ năm. Client cũ giải mã array cố định nên cần nhận biết phiên bản.
+	ProtocolMinor    uint16 = 3
 	SchemaVersion           = "1.0"
 	MaxFramePayload         = 64 * 1024
 	MaxQueueDepth           = 32

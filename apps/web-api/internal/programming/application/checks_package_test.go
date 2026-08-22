@@ -96,6 +96,38 @@ func newCheckServiceForPackage(t *testing.T, store *programmingstore.Store, runn
 	return service
 }
 
+func TestSingleProgramPublishedSignalForcesV2AndKeepsProgramIdentity(t *testing.T) {
+	artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	packager := &fakePackager{}
+	service := &CheckService{packager: packager, artifacts: artifacts,
+		newID: func() string { return "89999999-9999-4999-8999-999999999999" }}
+	programID := "81111111-1111-4111-8111-111111111111"
+	artifactBytes := []byte("artifact-single-with-signal")
+	digest := sha256.Sum256(artifactBytes)
+	stored, packaged, err := service.packageArtifact(context.Background(), programmingstore.Check{},
+		[]programmingcompiler.Input{{SourceID: programID}},
+		[]programmingcompiler.Result{{Artifact: artifactBytes, ArtifactSHA256: digest}},
+		[]packageProgramArtifact{{ProgramID: programID}},
+		[]packageProgramTopology{{ProgramID: programID, PeriodMs: 1000}},
+		[]programmingcompiler.PackageSignal{{Name: "SUPPLY_TEMP", Publisher: programID,
+			Type: 3, FreshnessMs: 5000, StalePolicy: 0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if packaged == nil || stored.SchemaVersion != 2 || packager.calls != 1 {
+		t.Fatalf("signal một Program không được đóng gói v2: stored=%+v packaged=%+v", stored, packaged)
+	}
+	if got := programPackageName(programID); got != programID {
+		t.Fatalf("runtime identity=%q, muốn Program ID nguyên gốc %q", got, programID)
+	}
+	if len(packager.signals) != 1 || packager.signals[0].Publisher != programID {
+		t.Fatalf("publisher bị đổi identity: %+v", packager.signals)
+	}
+}
+
 // packageRevisionFixture seal một Revision có `count` Program, đi qua đúng đường
 // sản phẩm (SaveDraft + SealRevision) chứ không dựng object bằng tay.
 func packageRevisionFixture(t *testing.T, projects *ProjectService, count int, brokenIndexes ...int) (string, []string) {
