@@ -54,7 +54,7 @@
   Gói dựng bằng `verify-project.sh --component release` (exit 0, cần
   `MKDDC_ALLOW_TEST_KEY=1` cho bản lab — cổng khoá TEST của `T59-602` chặn đúng).
 
-### T59-602 — Chốt mô hình ký artifact: khoá của chính bo (2026-08-22)
+### T59-602 — Ký artifact bằng khoá của chính bo: quyết định + hiện thực (2026-08-22)
 
 - **Added — `docs/adr/ADR-052-programming-ky-artifact-bang-khoa-thiet-bi.md`**
   (Accepted). Đóng câu hỏi mở §2/§3 của `DDD-ARTIFACT-TRUST-PROG-001`: artifact do
@@ -69,6 +69,30 @@
 - **Ranh giới ghi thẳng trong ADR:** khoá riêng thiết bị bảo vệ bằng quyền file
   `0600` vì bo chưa có secure element — nâng chi phí tấn công từ "ghi được một
   file" lên "chiếm được quyền service", **không** chống được kẻ đã có root.
+- **Added — provisioning khoá thiết bị.** `mkddc-st-compile --gen-device-key <dir>`
+  sinh cặp Ed25519, ghi `device.key` bằng `O_EXCL` + mode `0600` ngay từ lúc tạo
+  (ghi rồi `chmod` sau để lại một khe thời gian khoá đọc được bởi mọi tiến trình),
+  và **từ chối ghi đè** khi đã có khoá — sinh lại làm mọi artifact đang chạy mất
+  hiệu lực cùng lúc, gồm cả LKG. `install.sh` provisioning một lần, nhánh nâng cấp
+  giữ nguyên khoá cũ.
+- **Added — Core tin khoá của chính bo.** `mkddc-core --st-trusted-key FILE` (tối
+  đa 4) nạp khoá vào tập tin cậy bên cạnh khoá hãng nhúng trong build; khoá
+  thiếu/sai định dạng là **lỗi cấu hình dừng hẳn**, không lặng lẽ chạy với ít khoá
+  hơn — đó là cách một bo tự hạ mức bảo vệ mà không ai biết. Unit
+  `mkddc-core.service` nạp sẵn `/data/mkddc/keys/device.pub`.
+- **Added — 3 test** khoá hai bất biến của mô hình: artifact ký bằng khoá **bo
+  khác** KHÔNG được nạp (nếu không, "khoá thiết bị" chỉ là khoá dùng chung đổi
+  tên), và khoá hãng + khoá thiết bị **cùng sống trong một tập tin cậy** (nếu
+  không, bật SIGNED sẽ chặn đúng một trong hai nguồn artifact hợp lệ).
+- **Added — mã lỗi `ST-CLI-KEY-EXISTS`** → `PRG-ERR-CONFLICT-001` (đã tồn tại, không
+  phải hạ tầng hỏng); catalog 125 detail code.
+- **Verification:** `core_tests --gtest_filter=StArtifactTrust.*` → **10/10 PASS**;
+  `--gen-device-key` chạy thật: `device.key` mode `0600`, lần chạy thứ hai thoát `2`
+  với `ST-CLI-KEY-EXISTS`.
+- **Còn lại, có tên và có chủ (`T59-607`):** bật `SIGNATURE_REQUIRED` mặc định đổi
+  `integrityMode` trong **profile contract** (v2.0→v2.1), kéo theo re-pin G1 +
+  golden manifest và migration cho artifact đang chạy. Đó là một task riêng có kế
+  hoạch lùi, không phải một dòng sửa cuối phiên.
 
 ### T59-604 — Flake e2e không phải lỗi spec, là đói CPU (2026-08-21)
 
