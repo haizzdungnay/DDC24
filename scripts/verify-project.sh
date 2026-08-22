@@ -137,6 +137,18 @@ run_e2e() {
     printf 'LỖI: không tìm thấy spec e2e nào — kiểm tra lại đường dẫn\n' >&2
     exit 2
   fi
+  # T59-604 — CHỈ MỘT helper đăng nhập. Trước đây helper này được chép tay ở
+  # bảy spec; bản vá "chờ điều kiện thay vì đua với dev server" chỉ áp được cho
+  # một bản, nên sáu bản còn lại giữ nguyên cuộc đua và cổng vẫn đỏ ngắt quãng ở
+  # chỗ khác. Một bản vá nằm ở một trong bảy bản sao không phải bản vá.
+  local dup
+  dup="$(cd "$repo_root/$frontend_dir" && grep -rln 'async function login' e2e --include='*.spec.ts' || true)"
+  if [ -n "$dup" ]; then
+    printf 'LỖI: spec định nghĩa lại helper đăng nhập thay vì dùng e2e/helpers/session.ts:\n%s\n' \
+      "$dup" >&2
+    exit 1
+  fi
+
   printf 'e2e: chạy %d spec (cách ly: %s)\n' "${#specs[@]}" "${MKDDC_E2E_QUARANTINE:-<rỗng>}"
   (cd "$repo_root/$frontend_dir" && npx playwright test "${specs[@]}")
   # Cách ly phải TỰ HẾT HẠN: spec đang bị cách ly mà chạy PASS nghĩa là lý do

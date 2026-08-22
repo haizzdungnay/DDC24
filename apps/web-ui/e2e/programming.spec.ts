@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { login } from './helpers/session'
 
 /**
  * TASK-PROG-506 — nghiệm thu trình duyệt thật cho bốn workspace Programming
@@ -274,14 +275,6 @@ async function installProgrammingMocks(page: Page, state: MockState) {
   })
 }
 
-async function login(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
-  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin')
-  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 })
-}
-
 /**
  * `VITE_AUTH_MODE=mock` giữ phiên trong React state, không cookie/localStorage
  * (xem `AuthProvider.tsx`) — `page.goto()` sau khi đăng nhập làm tải lại toàn
@@ -368,8 +361,15 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await page.screenshot({ path: testInfo.outputPath('01-overview.png'), fullPage: true })
 
     // UJ-PROG-02 — mở workspace Thiết kế qua Project trong Draft panel
+    //
+    // Chờ ĐÍCH CUỐI (`programs`), không chờ lối vào cũ `design`. IA của W5 đổi
+    // `design` thành redirect sang `programs` (xem bảng redirect ở test phía
+    // trên), nên chờ `design` là chờ một trạng thái TRUNG GIAN của redirect:
+    // máy chậm thì Playwright kịp nhìn thấy và test xanh, máy nhanh thì redirect
+    // xong trước và test treo tới hết giờ. Đó chính là nguồn "flake" của cổng
+    // e2e — không phải hạ tầng, mà là một assertion đua với redirect.
     await page.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }).click()
-    await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/design`)
+    await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/programs`)
     await expect(page.getByText('Chưa có chương trình. Bấm + để tạo.')).toBeVisible()
 
     // Thêm chương trình ST bằng bàn phím hoàn toàn (Tab tới nút, Enter kích hoạt)
@@ -530,7 +530,7 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
 
     const screens = [
       { path: '/eng/programming', ready: page.getByRole('heading', { name: 'Lập trình điều khiển' }) },
-      { path: `/eng/programming/projects/${PROJECT_ID}/design`, ready: page.getByRole('button', { name: /Điều khiển AHU/ }) },
+      { path: `/eng/programming/projects/${PROJECT_ID}/programs`, ready: page.getByRole('button', { name: /Điều khiển AHU/ }) },
       {
         path: `/eng/programming/projects/${PROJECT_ID}/commission?revisionId=revision-mock-0001&checkId=check-mock-0001`,
         ready: page.getByText('PASSED')

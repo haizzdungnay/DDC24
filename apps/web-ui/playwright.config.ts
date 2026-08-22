@@ -5,6 +5,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,
+  timeout: 60_000,
   reporter: 'list',
   outputDir: './node_modules/.cache/playwright-results',
   use: {
@@ -35,21 +36,21 @@ export default defineConfig({
       use: { ...devices['Pixel 7'], channel: 'chrome' }
     }
   ],
+  // T59-604 — PHỤC VỤ BẢN ĐÃ BUILD, KHÔNG PHẢI DEV SERVER.
+  //
+  // Chuỗi đỏ ngắt quãng (64/79/79/78+1F/78+1F, rồi 79/78+1F sau lần vá đầu) đều
+  // chết ở cùng một chỗ: thao tác đầu tiên chạm một route chưa được biên dịch.
+  // Vite dev biên dịch theo yêu cầu, nên lần chạm đầu của MỖI route trả tiền
+  // biên dịch bằng ngân sách thời gian của chính test đó — và khi mười worker
+  // cùng khởi động thì khoản ấy vượt hạn. Nới timeout chỉ dời ngưỡng vỡ; bỏ hẳn
+  // biên dịch-theo-yêu-cầu mới là bỏ nguyên nhân.
+  //
+  // Cờ `VITE_*` phải nằm ở lệnh BUILD (`build:e2e`), không phải ở env của
+  // webServer: `vite preview` chỉ phục vụ tĩnh, không đọc lại biến môi trường.
   webServer: {
-    command: 'npm run dev -- --port 4174 --strictPort',
+    command: 'npm run build:e2e && npx vite preview --port 4174 --strictPort',
     url: 'http://127.0.0.1:4174/login',
     reuseExistingServer: false,
-    timeout: 120_000,
-    env: {
-      VITE_DDC_MODE: 'live',
-      VITE_AUTH_MODE: 'mock',
-      VITE_HISTORIAN_V2_TRENDS: '1',
-      // TASK-PROG-500: bốn workspace Programming chỉ hiện sau cờ này; mặc
-      // định TẮT ở production, bật riêng cho dev server e2e để có bằng
-      // chứng trình duyệt thật (không phải mock) cho toàn bộ P5.
-      VITE_PROGRAMMING_REV_A: '1',
-      // Tắt file watcher của Vite: xem ghi chú ở `vite.config.ts`.
-      VITE_E2E_NO_WATCH: '1'
-    }
+    timeout: 300_000
   }
 })

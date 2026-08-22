@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { login } from './helpers/session'
 
 /**
  * Nghiệm thu PA3 trên trình duyệt thật — PA3-602.
@@ -11,14 +12,6 @@ import { expect, test, type Page } from '@playwright/test'
  * Các đường có dữ liệu thật được phủ bằng `page.route()` để nạp một snapshot
  * `/overview` cố định, nên khẳng định về bố cục không phụ thuộc vào bo.
  */
-
-async function login(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
-  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin')
-  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 })
-}
 
 async function navigate(page: Page, path: string) {
   await page.evaluate((target) => {
