@@ -106,6 +106,34 @@ export function ProgrammingLayout() {
             intentError={programIntents.error}
             editing={visibleEditingContext}
             canMutate={roleAtLeast(session?.role, 'admin')}
+            details={{
+              draftRevisionId: visibleEditingContext?.draftRevisionId ?? null,
+              activeRevisionId: runtime.data?.activeRevisionId ?? null,
+              lkgRevisionId: runtime.data?.lkgRevisionId ?? null,
+              controllerId: runtime.data?.controllerId ?? null,
+              observedAt: runtime.data?.observedAt ?? null,
+              /* `contentHash` nằm trong thân Revision (`GET /revisions/{id}`),
+                 mà shell KHÔNG tải — và không được tự gọi HTTP ở đây (README
+                 §5.1/§5.2: chỉ `api/queries.ts` biết về mạng). Truyền `null`
+                 để popover nói thẳng "chưa đọc được ở màn này" thay vì bịa
+                 một chuỗi hash. Khi `T60-203` mở đường đọc Revision, nối vào
+                 đúng hai dòng này là xong. */
+              draftContentHash: null,
+              activeContentHash: null,
+              /* Ba tình trạng, KHÔNG phải một cờ nhị phân. `loading` phải
+                 tách riêng: `useProgrammingResource` chỉ để `status =
+                 'loading'` ở lần đọc đầu (refresh giữ nguyên `ready`), nên gộp
+                 nó vào "không đọc được" sẽ dán một cảnh báo mất kết nối giả
+                 lên mỗi lần vào trang. Ba nguồn "Core im" thì phải gộp: HTTP
+                 lỗi, chưa có thân phản hồi, và `producerState = UNAVAILABLE` —
+                 thiếu nhánh nào thì popover nói "chưa Commission" trong khi sự
+                 thật là không ai biết, đúng kiểu suy diễn README §5.4 cấm. */
+              coreStatus: runtime.status === 'loading'
+                ? 'loading'
+                : runtime.status === 'error' || !runtime.data || runtime.data.producerState === 'UNAVAILABLE'
+                  ? 'unreadable'
+                  : 'readable'
+            }}
           />
           <ProgrammingHeader
             refreshing={refreshing}

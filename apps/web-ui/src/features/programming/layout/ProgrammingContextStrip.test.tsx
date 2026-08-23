@@ -9,6 +9,7 @@ import {
   PROGRAMMING_CONTEXT_STRIP_HEIGHT_PX,
   ProgrammingContextStrip
 } from './ProgrammingContextStrip'
+import type { ContextDetailsData } from './contextDetails'
 
 /**
  * Bộ test của `ProgrammingContextStrip` — `T60-102`.
@@ -51,6 +52,20 @@ const runtime: ProgrammingRuntime = {
   safeState: false,
   safeStateNoControllerOnly: false,
   observedAt: '2026-08-21T10:00:00Z'
+}
+
+/** Dữ kiện kỹ thuật của popover `Chi tiết` (`T60-103`) — chỉ truyền ở những
+ *  case cần chứng minh nửa sau của `AC-PGM01-01`; các case còn lại vẫn render
+ *  strip KHÔNG có popover, đúng như bản `T60-102`. */
+const details: ContextDetailsData = {
+  draftRevisionId: DRAFT_REVISION_ID,
+  draftContentHash: 'a'.repeat(64),
+  activeRevisionId: ACTIVE_REVISION_ID,
+  activeContentHash: 'b'.repeat(64),
+  lkgRevisionId: LKG_REVISION_ID,
+  controllerId: 'controller-local',
+  observedAt: '2026-08-21T10:00:00Z',
+  coreStatus: 'readable'
 }
 
 const intents: ProgrammingProgramIntentList = {
@@ -239,6 +254,36 @@ describe('AC-PGM01-01 — không lộ UUID ở mặt trước', () => {
     renderStrip({ onOpenDetails })
     fireEvent.click(screen.getByRole('button', { name: 'Chi tiết' }))
     expect(onOpenDetails).toHaveBeenCalledTimes(1)
+  })
+
+  /* `T60-103` đóng nốt NỬA SAU của `AC-PGM01-01`. Case seam ở trên chỉ chứng
+   * minh strip mở ra một chỗ nối; hai case dưới đây đi qua popover THẬT, tức là
+   * đúng đường mà người dùng đi. Bộ đầy đủ (bàn phím, trả tiêu điểm, Copy,
+   * clipboard vắng mặt) nằm ở `ContextDetailsPopover.test.tsx`. */
+  it('có details thật: mặt trước sạch UUID, mở Chi tiết mới lộ định danh thô', () => {
+    renderStrip({ details })
+    expect(strip().textContent ?? '').not.toMatch(UUID_PATTERN)
+    expect(strip().textContent ?? '').not.toContain(runtime.controllerId)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chi tiết' }))
+
+    const panel = screen.getByRole('dialog', { name: 'Chi tiết kỹ thuật' })
+    expect(panel.textContent ?? '').toMatch(UUID_PATTERN)
+    expect(panel.textContent).toContain(DRAFT_REVISION_ID)
+    expect(panel.textContent).toContain(ACTIVE_REVISION_ID)
+    expect(panel.textContent).toContain(runtime.controllerId)
+  })
+
+  it('đóng popover bằng Esc thì mặt trước sạch UUID trở lại và tiêu điểm về nút Chi tiết', () => {
+    renderStrip({ details })
+    const button = screen.getByRole('button', { name: 'Chi tiết' })
+    fireEvent.click(button)
+    expect(document.body.textContent ?? '').toMatch(UUID_PATTERN)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(document.body.textContent ?? '').not.toMatch(UUID_PATTERN)
+    expect(document.activeElement).toBe(button)
   })
 })
 

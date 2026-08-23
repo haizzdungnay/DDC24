@@ -1,8 +1,10 @@
-import type { ReactNode } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, Info, Loader2, ShieldAlert, WifiOff } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { semanticBadgeProps, type SemanticState } from '../shared/semanticState'
+import { ContextDetailsPopover, type ContextDetailsCloseOptions } from './ContextDetailsPopover'
+import { formatObservedAt, type ContextDetailsData } from './contextDetails'
 import type {
   ProgrammingProgramIntentList,
   ProgrammingProgramRuntimeState,
@@ -85,6 +87,7 @@ export function ProgrammingContextStrip({
   intentError,
   editing,
   canMutate,
+  details,
   onOpenDetails
 }: {
   projectStatus: ResourceStatus
@@ -95,14 +98,31 @@ export function ProgrammingContextStrip({
   intentError: string | null
   editing: ProgrammingEditingContext | null
   canMutate: boolean
-  /** `T60-103` cắm popover chi tiết kỹ thuật vào đây. Chưa có handler ⇒ nút
-   *  hiện nhưng vô hiệu hoá kèm lý do, thay vì biến mất không dấu vết. */
+  /**
+   * `T60-103` — dữ kiện kỹ thuật thô của popover `Chi tiết`. Có `details` thì
+   * strip tự quản trạng thái mở/đóng và tự trả tiêu điểm; đây là **lối duy
+   * nhất** tới UUID sau khi `AC-PGM01-01` gỡ chúng khỏi mặt trước.
+   */
+  details?: ContextDetailsData
+  /** Seam của `T60-102`: tầng gọi muốn biết người dùng đã mở `Chi tiết`
+   *  (đo lường, mở panel riêng…). Không có `details` lẫn handler ⇒ nút hiện
+   *  nhưng vô hiệu hoá kèm lý do, thay vì biến mất không dấu vết. */
   onOpenDetails?: () => void
 }) {
   const { pick } = useI18n()
   const notice = contextNotice({
     pick, projectStatus, runtimeStatus, runtime, intentStatus, intents, intentError, editing, canMutate
   })
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const detailsButtonRef = useRef<HTMLButtonElement>(null)
+  // `useCallback`: `ContextDetailsPopover` đăng ký listener `keydown`/
+  // `pointerdown` phụ thuộc hàm này. Một hàm mới mỗi lần render sẽ gỡ và gắn
+  // lại listener ở MỌI lần render của strip — và strip render lại theo nhịp
+  // poll của read-model runtime.
+  const closeDetails = useCallback(({ returnFocus }: ContextDetailsCloseOptions) => {
+    setDetailsOpen(false)
+    if (returnFocus) detailsButtonRef.current?.focus()
+  }, [])
 
   return (
     <section
@@ -112,7 +132,9 @@ export function ProgrammingContextStrip({
        * người dùng cuộn — tức là mất luôn thứ mà "sticky" sinh ra để giữ.
        * `z-20` nằm dưới banner mất kết nối (`z-30`) và dưới `TopBar` (`z-40`),
        * đúng thứ tự ưu tiên: cảnh báo hạ tầng luôn thắng ngữ cảnh workspace. */
-      className="sticky top-16 z-20 border-b border-[var(--c-border)] bg-[var(--c-surface-2)] px-3"
+      /* `relative` là mỏ neo của popover `Chi tiết` (`T60-103`): panel đó phải
+       * nằm NGOÀI hàng 38 px vì hàng đó `overflow-hidden`. */
+      className="relative sticky top-16 z-20 border-b border-[var(--c-border)] bg-[var(--c-surface-2)] px-3"
     >
       <h2 id="programming-context-title" className="sr-only">
         {pick('Ngữ cảnh Lập trình hiện tại', 'Current Programming context')}
@@ -152,19 +174,31 @@ export function ProgrammingContextStrip({
         </ContextField>
 
         <button
+          ref={detailsButtonRef}
           type="button"
           className="ml-auto shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-[11px] font-semibold text-[var(--c-text-dim)] transition hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] disabled:opacity-50"
           aria-haspopup="dialog"
-          aria-expanded={false}
-          disabled={!onOpenDetails}
-          title={onOpenDetails
+          aria-expanded={detailsOpen}
+          aria-controls={detailsOpen ? 'programming-context-details' : undefined}
+          disabled={!details && !onOpenDetails}
+          title={details || onOpenDetails
             ? pick('Định danh thô, contentHash và mốc đọc gần nhất', 'Raw identifiers, contentHash, and the last observed time')
             : pick('Chi tiết kỹ thuật chưa khả dụng ở bản dựng này', 'Technical details are not available in this build')}
-          onClick={onOpenDetails}
+          /* Nút thật `<button>`: `Enter`/`Space` đã sinh ra `click` sẵn, nên
+           * "mở được bằng bàn phím" không cần thêm handler `keydown` nào — và
+           * thêm vào thì phím `Space` sẽ mở rồi đóng ngay trong cùng một lần
+           * nhấn. */
+          onClick={() => {
+            if (details) setDetailsOpen((open) => !open)
+            onOpenDetails?.()
+          }}
         >
           {pick('Chi tiết', 'Details')}
         </button>
       </div>
+      {details && detailsOpen
+        ? <ContextDetailsPopover data={details} anchorRef={detailsButtonRef} onClose={closeDetails} />
+        : null}
       {notice ? <ContextStateNotice notice={notice} /> : null}
     </section>
   )
@@ -444,11 +478,6 @@ function projectValue(pick: Pick, status: ResourceStatus, value: string | undefi
   if (status === 'loading') return pick('Đang tải…', 'Loading…')
   if (status === 'error') return pick('— không đọc được', '— unavailable')
   return value || pick('— chưa có', '— none')
-}
-
-function formatObservedAt(value: string): string {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.valueOf()) ? value : parsed.toLocaleString()
 }
 
 function checkStateLabel(pick: Pick, state: ProgrammingEditingContext['checkState']): string {
