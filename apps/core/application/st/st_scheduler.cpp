@@ -97,6 +97,7 @@ void st_program_mark_released(StProgramInstance* program, uint64_t now_ns)
     if (!program->release_started) {
         program->release_started = true;
         program->next_release_ns = now_ns + period_ns;
+        program->consecutive_missed_release = 0;
         return;
     }
     /* Bù trôi theo mốc LÝ THUYẾT. Bám thời điểm chạy thật sẽ làm một tick trễ
@@ -109,11 +110,28 @@ void st_program_mark_released(StProgramInstance* program, uint64_t now_ns)
             const uint64_t room = UINT32_MAX - program->missed_release_count;
             program->missed_release_count +=
                 static_cast<uint32_t>(std::min(missed, room));
+            /* T60-002 — cùng sự kiện, hai bộ đếm khác họ: `missed_release_count`
+             * trả lời "từ đầu tới giờ lỡ bao nhiêu", còn bộ đếm liên tiếp trả
+             * lời "ngay lúc này có đang lỡ nhịp không". Công thức `health` của
+             * Plan 60 §4.2 chỉ được đọc cái thứ hai. */
+            const uint64_t consecutive_room =
+                UINT32_MAX - program->consecutive_missed_release;
+            program->consecutive_missed_release +=
+                static_cast<uint32_t>(std::min(missed, consecutive_room));
+        } else {
+            /* Release đúng hạn (trễ chưa tới trọn một chu kỳ = jitter, đúng
+             * cùng ngưỡng mà `missed_release_count` đang dùng) ⇒ chuỗi lỡ nhịp
+             * kết thúc tại đây. */
+            program->consecutive_missed_release = 0;
         }
         program->next_release_ns += period_ns * (missed + 1);
         /* Lỡ quá nhiều thì BỎ, không chạy bù: chạy bù làm timer nhảy và làm
          * tình trạng quá tải nặng thêm (SPEC §4). */
         if (program->next_release_ns <= now_ns) program->next_release_ns = now_ns + period_ns;
+    } else {
+        /* Gọi trước hạn (không xảy ra qua `st_program_due`, nhưng hàm này là
+         * API công khai): sớm hơn hạn thì chắc chắn không lỡ nhịp. */
+        program->consecutive_missed_release = 0;
     }
 }
 
@@ -485,6 +503,10 @@ bool StScheduler::swap_prepared_program_set_at_boundary(
         program->retain_reject_code = program->pending_retain_reject_code;
         program->retain_generation = program->pending_retain_generation;
         program->last_successful_now_ns = 0;
+        /* T60-002: gói mới chưa chạy lần nào, nên không được thừa kế mốc chạy
+         * lẫn chuỗi lỡ nhịp của gói cũ — cả hai đều mô tả một artifact khác. */
+        program->last_run_mono_ns = 0;
+        program->consecutive_missed_release = 0;
         program->activated_artifact.swap(program->pending_artifact);
         program->state = program->enabled ? StProgramState::RUNNING
                                           : StProgramState::DISABLED;
@@ -693,6 +715,9 @@ void StScheduler::apply_pending_activations(StTask& task)
             p->retain_reject_code = p->pending_retain_reject_code;
             p->retain_generation = p->pending_retain_generation;
             p->last_successful_now_ns = 0;
+            /* T60-002: mốc chạy và chuỗi lỡ nhịp thuộc về artifact CŨ. */
+            p->last_run_mono_ns = 0;
+            p->consecutive_missed_release = 0;
             /* Giữ lại bytes để promote thành last-known-good SAU KHI chạy được
              * >= 1 tick không fault — package chưa chạy lần nào không đủ tư
              * cách làm mốc rollback. */
@@ -818,6 +843,15 @@ bool StScheduler::run_program(StTask& task, StProgramInstance& program, uint64_t
 
     const StExecResult result = program.runtime.execute(static_cast<int64_t>(now_ns));
     program.run_count++;
+    /* T60-002 — MỐC THỜI GIAN của lần chạy, ghi ngay sau khi thân chương trình
+     * đã thực thi và TRƯỚC nhánh fault: một Program chết lúc 10:03 phải báo
+     * 10:03, không phải mốc của lần chạy tốt cuối cùng trước đó. Chỉ RUNNING
+     * mới được dispatch, nên sau khi fault chuyển sang FAULTED thì mốc này đứng
+     * yên đúng tại thời điểm chết. Dùng `now_ns` (đồng hồ chụp một lần cho cả
+     * tick) chứ không gọi `wall_clock_()`: cột này được so với
+     * `captured_monotonic_ns` của cùng snapshot, hai đồng hồ khác nhau thì phép
+     * trừ đó vô nghĩa. */
+    program.last_run_mono_ns = now_ns;
     if (!result.ok) {
         record_fault(result.fault_code, result.fault_pc, result.fault_line);
         return false;
