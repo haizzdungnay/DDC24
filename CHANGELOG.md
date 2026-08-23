@@ -137,8 +137,46 @@
   chạy trong Core mà Project chưa từng ghi intent ra `null` thay vì `false` —
   điền `false` sẽ đọc thành "có người đã tắt nó". Type FE cần `| null` khi làm
   `T60-016`.
-- **Changed — Plan 60 §6**: `T60-001..004`, `T60-011..015`, `T60-017`,
-  `T60-101/102/104` chuyển `DONE` (**13/27**). Plan lên `v1.3`.
+- **Added — `apps/web-ui` `T60-103`** (`c9539ef`). *Triệu chứng:* sau `T60-102`,
+  nút `Chi tiết` chỉ là một seam — mọi UUID đã bị gỡ khỏi mặt trước theo
+  `AC-PGM01-01` nhưng chưa có bề mặt nào đọc lại `revisionId`/`controllerId`,
+  nên gỡ đi mà không dựng lối đọc thay thế là **xoá dữ liệu** chứ không phải làm
+  gọn. *Cách sửa:* `ContextDetailsPopover` — dialog **không modal** neo dưới nút
+  (lớp phủ toàn màn hình sẽ che chính cái strip mà nó đang giải thích), bảy dòng
+  dữ kiện, mỗi dòng một nút `Copy` có `aria-label` riêng; `Esc` đóng và **trả
+  tiêu điểm về đúng nút đã mở**; bấm ra ngoài đóng nhưng không giật tiêu điểm.
+  Luật ô trống tách sang hàm thuần `contextDetails.ts`: `value` rỗng ⇔ bắt buộc
+  có `missingReason`, chuỗi rỗng/khoảng trắng bị coi là thiếu (nếu không, `Copy`
+  đặt chuỗi rỗng vào clipboard người dùng). `copyToClipboard` nuốt gọn cả hai
+  nhánh hỏng của `navigator.clipboard` nên không promise reject nào làm hỏng
+  strip. *Verification (HOST):* vitest **128 file / 1262 test, 1261 pass**;
+  lint/build exit `0`. 34 test mới; `ProgrammingContextStrip.test.tsx` +45/−0.
+- **Fixed — cảnh báo mất kết nối giả trong popover** (`c9539ef`). Bản đầu dùng
+  cờ nhị phân `coreReadable`, nên trong lần đọc đầu (`status === 'loading'`,
+  `data` còn `null`) popover nói **"Không đọc được từ Core"** — dán một cảnh báo
+  sai lên mỗi lần vào trang. Đổi thành `coreStatus` ba giá trị
+  (`loading`/`readable`/`unreadable`) với thứ tự thắng *đang đọc → Core im → lý
+  do nghiệp vụ*, để "đang đọc lần đầu" không bị nói thành "không đọc được" và
+  "Core im" không bị nói thành "chưa Commission" (README §5.4).
+- **Added — `T59-702` đóng gói hộ, KHÔNG thuộc Plan 60** (`261557c`). Toàn bộ
+  công việc của luồng T59-702 nằm chưa commit trong cây từ 2026-08-23 11:00–11:37
+  (`POST /runtime/recovery-reset` admin-only, Core `program_ipc_server` +
+  `programming_runtime_coordinator` + `st_journal`, schema/golden IPC,
+  `draft_v2.programOrder`, client sinh lại 31 → 32 operation,
+  `scripts/target_soak_10program.py`). Tách thành **commit riêng** để lịch sử
+  không trộn hai luồng. Lý do đóng gói lúc này: `client.ts` được **sinh tự động**
+  từ `openapi.yaml`, mà file đó đã mang endpoint của luồng này, nên `T60-016`
+  không thể chạm tới OpenAPI mà không kéo theo — không tách được bằng thủ thuật
+  hunk vì bản sinh phải khớp bản OpenAPI đã commit thì `check:programming-api`
+  mới xanh. Phần duy nhất do Plan 60 viết trong commit đó là cập nhật
+  `client.test.ts` 31 → 32 kèm khẳng định RBAC admin-only — hoàn tất nốt việc
+  đang dở khiến **gate FE đỏ suốt từ 11:37 hôm trước**.
+- **Changed — Plan 60 §6**: thêm `T60-103` chuyển `DONE` (**14/27**). §8:
+  `AC-PGM01-01` nay đóng **cả hai chiều** — mặt trước sạch UUID, mở `Details`
+  lộ đủ, `Esc` thì UUID biến mất khỏi DOM chứ không nằm ẩn.
+- **Changed — gate FE xanh hoàn toàn lần đầu**: `npx vitest --run --environment
+  jsdom src` → **128 file / 1262 test, TẤT CẢ PASS, exit `0`**.
+
 
 
 

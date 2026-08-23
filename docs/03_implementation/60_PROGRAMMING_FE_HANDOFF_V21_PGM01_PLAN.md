@@ -313,7 +313,7 @@ JSON có tên trường nên thêm trường là **tương thích ngược**, kh
 |---|---|---|---|---|---|
 | `T60-101` | P0 | `ProgrammingFeatureRail` 220 px dọc theo **focus mode** (D-01): trong `/eng/programming` rail này **thay** `NavRail` toàn cục. Bắt buộc mục `← Thoát Lập trình` ở đầu rail — không được để người dùng mắc kẹt trong workspace. 6 đích + `Project Settings`; tablet thu icon-only; `<768 px` ẩn hoàn toàn (nhường bottom nav). `NAV_GROUPS` **không đổi** nên hợp đồng route↔menu (`ADR-032`) không bị động tới — đây là chặn *render*, không phải xoá mục. Đích phụ thuộc Project vẫn vô hiệu hoá khi chưa có `projectId` (giữ hành vi `T59-503`). | — | `DONE` | 2 nd |
 | `T60-102` | P0 | `ProgrammingContextStrip`: một hàng, cao 36–40 px, `position: sticky`, 5 dữ kiện bắt buộc + nút `Details`. **Bỏ mọi UUID khỏi mặt trước.** Giữ nguyên toàn bộ luật fail-closed đã có ở `ProgrammingContextBar` (không suy intent thành `RUNNING`; `UNKNOWN`/`stale`/`offline` tường minh) — đây là **đổi bố cục, không đổi ngữ nghĩa**. | — | `DONE` | 2 nd |
-| `T60-103` | P1 | `ContextDetailsPopover`: revision ID thô, `contentHash`, `observedAt`, `controllerId`, mỗi dòng có nút `Copy`; mở/đóng bằng bàn phím, `Esc` đóng, trả focus. | `T60-102` | `ORDERED` | 1 nd |
+| `T60-103` | P1 | `ContextDetailsPopover`: revision ID thô, `contentHash`, `observedAt`, `controllerId`, mỗi dòng có nút `Copy`; mở/đóng bằng bàn phím, `Esc` đóng, trả focus. | `T60-102` | `DONE` | 1 nd |
 | `T60-104` | P1 | `shared/semanticState.ts`: 7 trạng thái ngữ nghĩa của README §3, ánh xạ sang `StatusBadge` hiện hữu, bổ sung `reconciling`/`disabled`; mỗi trạng thái **bắt buộc có icon + chữ**, không chỉ màu. | — | `DONE` | 1 nd |
 
 ### P2 — PGM-01 Overview
@@ -373,7 +373,7 @@ Ba mốc bàn giao giữa hai lane: `T60-003` (JSON `programs[]` có thật) m�
 
 | AC | Nội dung | Task chủ quản | Bằng chứng |
 |---|---|---|---|
-| `AC-PGM01-01` | Không lộ UUID ở mặt trước | `T60-102`, `T60-103`, `T60-205` | Test khẳng định **không** khớp regex UUID trong DOM mặc định; có nội dung sau khi mở `Details` |
+| `AC-PGM01-01` | Không lộ UUID ở mặt trước | `T60-102`, `T60-103`, `T60-205` | **ĐÓNG CẢ HAI CHIỀU (2026-08-24, `c9539ef`):** `ProgrammingContextStrip.test.tsx` khẳng định DOM mặc định **không** khớp regex UUID ở bốn nhánh trạng thái → mở `Details` → panel chứa đủ ba UUID + `controllerId` → `Esc` → UUID **biến mất khỏi DOM** (không nằm ẩn). Kèm `ContextDetailsPopover.test.tsx`. Còn chờ `T60-205` cho bảng Programs |
 | `AC-PGM01-02` | Draft và Active cùng hiện khi khác nhau | `T60-203` | Component test 2 nhánh (khác / bằng nhau) |
 | `AC-PGM01-03` | Mục cần chú ý deep-link tới đúng trang chủ quản | `T60-204` | Test điều hướng theo từng mã (không dùng đích cứng) + E2E |
 | `AC-PGM01-04` | Không render thiếu-dữ-liệu thành số `0` | `T60-205`, `T60-207` | Test bảng với `undefined`/`UNAVAILABLE` ⇒ `—` |
