@@ -9,8 +9,9 @@
 | Chủ quản | Dev Lead (FE) + System Architect + Product Owner |
 | Authority đầu vào | `docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/README_FE_HANDOFF.md`, `PGM-01_OVERVIEW_FE_HANDOFF.md`, `assets/PGM-01_overview.png` |
 | Quan hệ với Plan 59 | **Bổ sung, không thay thế.** Plan 59 sở hữu contract/runtime/lifecycle; Plan này sở hữu delta UI của handoff v2.1 |
-| Baseline source | `a35f578` (nhánh `feat/t59-201-control-library-domain`) |
+| Baseline source | `aa08ac5` (= `main`, đo lại 2026-08-23 tại Batch 0). Baseline cũ `a35f578` (nhánh `feat/t59-201-control-library-domain`) **đã lạc hậu**; nhánh thi hành Plan 60 là `feat/plan60-pgm01` tách từ `main` |
 | Phạm vi | Shell dùng chung (README §3) + **PGM-01 Overview trọn vẹn**. PGM-02..06 **ngoài phạm vi** (chỉ thừa hưởng shell) |
+| Prompt thi hành | [`PROMPT-PLAN60-CTIO-MULTIAGENT`](PROMPT_PLAN60_CTIO_MULTIAGENT_EXECUTION.md) v1.0 — đội 5 lane, ma trận sở hữu file, lịch 5 batch |
 
 ---
 
@@ -60,8 +61,25 @@ truy nguyên `AC-PGM01-01..06`.
 | Bảng dùng chung | `shared/components/DataTable.tsx` | Có sẵn, hỗ trợ loading/error/empty |
 | Rail toàn cục | `shared/components/NavRail.tsx` | Rail 4 nhóm của toàn app (`ADR-032`), có hợp đồng test route↔menu |
 
-Số đo FE gần nhất được ghi nhận (Plan 59 §3.6, `T59-503`): **124 file / 1161 test**,
-E2E mock **61/61**. Plan này **không dẫn lại số đó làm bằng chứng**; mọi task phải đo lại.
+**Baseline đo lại tại `aa08ac5` (Batch 0, 2026-08-23, mức HOST)** — đo trên bản
+xuất sạch của `aa08ac5`, không lẫn thay đổi chưa commit của phiên khác:
+
+| Cổng | Lệnh | Số đo | Exit |
+|---|---|---|---|
+| C++ | `cmake --fresh` → `cmake --build` → `ctest` | **1227/1227 pass** | configure `0` / build `0` / ctest `0` |
+| Go | `go vet ./...` + `go test ./... -count=1` | 19 package `ok`, 0 fail | `0` / `0` |
+| FE unit | `npx vitest --run --environment jsdom src` | **124 file / 1161 test pass** | `0` |
+| FE lint | `npm run lint` | pass (kèm `check_ui_strings.py`) | `0` |
+| FE build | `npm run build` | pass, 995 ms | `0` |
+| E2E mock | `npx playwright test e2e/programming.spec.ts` | **10/10 pass** | `0` |
+| Contract | `npm run check:programming-api` | 31 operation đồng bộ | `0` |
+| Cổng dự án | `scripts/verify-project.sh --component layout` | PASS toàn bộ | `0` |
+| Tài liệu | `python3 scripts/docs_iso_harness.py --expect` | PASS, khớp ngưỡng | `0` |
+
+Số cũ của Plan 59 §3.6 (`124 file / 1161 test`, E2E mock `61/61`) **không được dẫn
+lại làm bằng chứng**; bảng trên là số đo của chính Plan 60. Con số E2E `61/61` là
+của **toàn bộ** thư mục `e2e/`; cổng mà Plan 60 dùng (`e2e/programming.spec.ts`)
+là **10** case.
 
 ---
 
@@ -226,6 +244,18 @@ features/programming/
 
 ## 6. Bảng nhiệm vụ
 
+### 6.1 File dùng chung — chỉ CTIO sửa
+
+`CHANGELOG.md`, Plan 60 (file này), `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md`
+và **`contracts/programming/g1_contract_join_v1.json`**. Lane trả về khối văn bản
+đề xuất; CTIO dán vào và commit.
+
+File thứ tư được thêm ở Batch 0 vì nó là **điểm va chạm đã biết**: pin `openapi`
+(do `T60-016` bump `1.26.0 → 1.27.0`) và pin `ipc` nằm **cùng một file**, và pin
+`ipc` đang được một phiên khác sửa song song. Re-pin phải đi cùng PR với thay đổi
+contract sinh ra nó (bài học `TASK-PROG-G1-CONTRACT-REPIN-001`), nên việc này bị
+tập trung về CTIO thay vì để hai bên cùng ghi.
+
 ### P0-A — FW SOM (Core C++): mở đường xuất trạng thái theo Program
 
 Toàn bộ phép đo **đã có sẵn và đã chạy** trong scheduler. Bốn task dưới đây chỉ
@@ -239,10 +269,10 @@ JSON có tên trường nên thêm trường là **tương thích ngược**, kh
 
 | Mã | Ưu tiên | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---|
-| `T60-001` | P0 | Thêm `RuntimeProgramSnapshot` vào `apps/core/domain/graph/runtime_point_snapshot.hpp` và mảng **kích thước cố định** `std::array<RuntimeProgramSnapshot, st_sched_limits::kMaxProgramsPerTask>` (=16) + `program_count` vào `RuntimePointSnapshot`. Trường: `instance_id[65]`, `state[12]`, `enabled`, `period_ms`, `last_exec_ns`, `max_exec_ns`, `missed_release_count`, **`consecutive_missed_release`** (mới, cho D-04 §4.2), **`last_run_mono_ns`** (mới), `lane`. **Lưu ý đọc nhầm rất dễ xảy ra:** `last_exec_ns` của Core là **THỜI LƯỢNG** một lần chạy (`wall_clock_() - program_start`, `st_scheduler.cpp:829`), **không phải mốc thời gian**. Cột `Last Exec` của thiết kế là mốc thời gian ⇒ bắt buộc có `last_run_mono_ns` riêng. **Không dùng heap** — struct này nằm trên đường realtime, giữ đúng khuôn `std::array` như `rows`/`task` hiện có. | — | `READY` | 0,5 nd |
-| `T60-002` | P0 | Điền mảng ở `apps/core/application/runtime/scan_loop.cpp` (~dòng 262). **Sửa luôn khuyết tật đang có:** khối hiện tại lấy `d_.st_sched->tasks().front()` và báo cáo nó như thể là *Task duy nhất* — sai từ khi `T59-402/403` cho Program chu kỳ riêng và lane riêng. Duyệt đủ Program của mọi Task; `program_count` cắt ở 16 và **đánh dấu bị cắt**, không im lặng bỏ bớt. Đặt `last_run_mono_ns` tại đúng chỗ đang tính `last_exec_ns` (`st_scheduler.cpp:829`) và `consecutive_missed_release` tại chỗ đang cộng `missed_release_count` (`st_scheduler.cpp:105-118`), reset về 0 khi release đúng hạn. | `T60-001` | `READY` | 1,5 nd |
-| `T60-003` | P0 | Serialize `"programs":[…]` trong `runtime_point_snapshot.cpp` (cạnh khối `"task"`, ~dòng 213-230), giữ `noexcept` + bounded. Ngân sách: payload hiện ~5 KiB (24 row + task) trên trần `KX_POINT_SNAPSHOT_MAX_PAYLOAD` = **64 KiB**; 16 Program thêm ~3 KiB ⇒ ~8 KiB, còn xa trần. Tràn vẫn đi đúng nhánh fail-closed sẵn có (`serialize` trả `false` ⇒ `snapshot_ = {}`), **không cắt cụt JSON**. | `T60-001` | `READY` | 0,5 nd |
-| `T60-004` | P0 | Test Core: đủ 16 Program; nhiều Task nhiều chu kỳ; Program `DISABLED`; scheduler rỗng ⇒ `programs: []` (không phải thiếu khoá); ép `set_snapshot_payload_limit_for_test` để chứng minh nhánh tràn fail-closed; round-trip serialize→parse; `consecutive_missed_release` **reset về 0** sau một chu kỳ đúng hạn (chống hồi quy công thức §4.2 điều 4). | `T60-002`, `T60-003` | `READY` | 1 nd |
+| `T60-001` | P0 | Thêm `RuntimeProgramSnapshot` vào `apps/core/domain/graph/runtime_point_snapshot.hpp` và mảng **kích thước cố định** `std::array<RuntimeProgramSnapshot, st_sched_limits::kMaxProgramsTotal>` (**=32**) — **đính chính Batch 0:** bản 1.1 ghi `kMaxProgramsPerTask` (=16), nhưng `programs[]` là danh sách **toàn hệ thống** (mọi Task), nên trần đúng là `kMaxProgramsTotal`; Rev A cũng cho `kMaxProgramsTotal = 32` (`st_profile_generated.hpp:34`). Dùng trần per-task 16 sẽ **cắt mất một nửa** cấu hình 32 Program hợp lệ — đúng thứ task này cấm + `program_count` vào `RuntimePointSnapshot`. Trường: `instance_id[65]`, `state[12]`, `enabled`, `period_ms`, `last_exec_ns`, `max_exec_ns`, `missed_release_count`, **`consecutive_missed_release`** (mới, cho D-04 §4.2), **`last_run_mono_ns`** (mới), `lane`. **Lưu ý đọc nhầm rất dễ xảy ra:** `last_exec_ns` của Core là **THỜI LƯỢNG** một lần chạy (`wall_clock_() - program_start`, `st_scheduler.cpp:829`), **không phải mốc thời gian**. Cột `Last Exec` của thiết kế là mốc thời gian ⇒ bắt buộc có `last_run_mono_ns` riêng. **Không dùng heap** — struct này nằm trên đường realtime, giữ đúng khuôn `std::array` như `rows`/`task` hiện có. | — | `READY` | 0,5 nd |
+| `T60-002` | P0 | Điền mảng ở `apps/core/application/runtime/scan_loop.cpp` (~dòng 262). **Sửa luôn khuyết tật đang có:** khối hiện tại lấy `d_.st_sched->tasks().front()` và báo cáo nó như thể là *Task duy nhất* — sai từ khi `T59-402/403` cho Program chu kỳ riêng và lane riêng. Duyệt đủ Program của mọi Task; `program_count` cắt ở **32** (`kMaxProgramsTotal`, xem đính chính ở `T60-001`) và **đánh dấu bị cắt**, không im lặng bỏ bớt. Đặt `last_run_mono_ns` tại đúng chỗ đang tính `last_exec_ns` (`st_scheduler.cpp:829`) và `consecutive_missed_release` tại chỗ đang cộng `missed_release_count` (`st_scheduler.cpp:105-118`), reset về 0 khi release đúng hạn. | `T60-001` | `READY` | 1,5 nd |
+| `T60-003` | P0 | Serialize `"programs":[…]` trong `runtime_point_snapshot.cpp` (cạnh khối `"task"`, ~dòng 213-230), giữ `noexcept` + bounded. Ngân sách: payload hiện ~5 KiB (24 row + task) trên trần `KX_POINT_SNAPSHOT_MAX_PAYLOAD` = **64 KiB**; **32** Program thêm ~8 KiB (≈250 B/Program ở trường hợp xấu nhất: `instanceId` 64 ký tự + 6 số) ⇒ ~13 KiB, còn xa trần. Tràn vẫn đi đúng nhánh fail-closed sẵn có (`serialize` trả `false` ⇒ `snapshot_ = {}`), **không cắt cụt JSON**. | `T60-001` | `READY` | 0,5 nd |
+| `T60-004` | P0 | Test Core: đủ **32** Program (chạm trần `kMaxProgramsTotal`); nhiều Task nhiều chu kỳ; Program `DISABLED`; scheduler rỗng ⇒ `programs: []` (không phải thiếu khoá); ép `set_snapshot_payload_limit_for_test` để chứng minh nhánh tràn fail-closed; round-trip serialize→parse; `consecutive_missed_release` **reset về 0** sau một chu kỳ đúng hạn (chống hồi quy công thức §4.2 điều 4). | `T60-002`, `T60-003` | `READY` | 1 nd |
 
 ### P0-B — BE (Go web-api): nối read-back sống và tính `health`
 
@@ -404,5 +434,6 @@ Plan 59 W6/W7.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.2 | 2026-08-23 | **Batch 0 (CTIO)** — dựng nhánh `feat/plan60-pgm01` từ `main` và **đo lại baseline thật** tại `aa08ac5` (§1): 1227/1227 ctest, 124 file/1161 test FE, 10/10 E2E mock, cổng layout + docs PASS. Re-pin `Baseline source` `a35f578` → `aa08ac5`. **Một đính chính kỹ thuật trong bảng §6:** `T60-001..004` ghi trần mảng `programs[]` là `st_sched_limits::kMaxProgramsPerTask` (=16) — sai, vì `programs[]` là danh sách **toàn hệ thống** chứ không phải một Task; trần đúng là `kMaxProgramsTotal` (**=32**, và Rev A cũng 32). Giữ nguyên 16 sẽ cắt mất một nửa cấu hình 32 Program hợp lệ, đúng thứ `T60-002` cấm. Ngân sách payload cập nhật theo: ~13 KiB / trần 64 KiB. Xác nhận mọi số dòng §1/§2/§3 trích dẫn còn đúng tại `aa08ac5`. Bổ sung `contracts/programming/g1_contract_join_v1.json` vào nhóm file **chỉ CTIO sửa** (§6.1). |
 | 1.1 | 2026-08-23 | **Chốt 7/7 quyết định** sau khi đọc lại Core/BE. Hai phát hiện làm đổi quyết định so với bản nháp: (1) `start()`/`stop()`/`disable()` của Core là **đồng bộ tức thì** và BE đã ghi rõ `STARTING`/`STOPPING` là chuyển tiếp không tồn tại (`runtime_intent.go:199-201`) ⇒ loại ánh xạ `ACTIVE → STARTING` của bản nháp; (2) `last_exec_ns` là **thời lượng**, không phải mốc thời gian ⇒ cột `Last Exec` cần thêm `last_run_mono_ns`. D-01 chốt **focus mode** vì ngân sách ngang: hai rail chỉ còn 828 px ở 1280 px, không đủ cho PGM-02. Thêm `consecutive_missed_release` (phép đo mới duy nhất) cho công thức `health` §4.2. Trạng thái plan: PLAN_READY; 27 task ≈ 34,5 người-ngày. |
 | 1.0 | 2026-08-23 | Lập plan từ gói FE Handoff v2.1 (README + PGM-01 + mockup `PGM-01_overview.png`), đối chiếu As-Built tại `a35f578`; ghi nhận 6 lỗ hổng dữ liệu backend chặn bảng Programs; 22 task / 3 pha / ~31 người-ngày; 6 quyết định chờ chốt. |

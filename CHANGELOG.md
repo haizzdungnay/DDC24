@@ -8,6 +8,56 @@
 
 ## [Unreleased]
 
+### Plan 60 Batch 0 — dựng baseline thi hành (2026-08-23)
+
+- **Changed — `docs/03_implementation/60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md`**
+  (Plan 60 v1.1 → **v1.2**). Nhánh thi hành `feat/plan60-pgm01` tách từ `main`;
+  re-pin `Baseline source` `a35f578` → **`aa08ac5`** và ghi **bảng baseline đo
+  thật** vào §1 (mức HOST): ctest **1227/1227**, Go 19 package `ok`, FE unit
+  **124 file / 1161 test**, E2E mock **10/10**, contract 31 operation, cổng
+  `verify-project.sh --component layout` và `docs_iso_harness.py --expect` đều
+  PASS — exit code đọc rời cho **cả** configure lẫn build.
+- **Fixed — đính chính trần mảng `programs[]` trong bảng §6** (`T60-001..004`).
+  *Triệu chứng:* plan chỉ định `std::array<RuntimeProgramSnapshot,
+  st_sched_limits::kMaxProgramsPerTask>` (=16). *Nguyên nhân gốc:* `programs[]`
+  là danh sách **toàn hệ thống** (duyệt mọi Task theo `T60-002`), nhưng plan lại
+  lấy trần **per-task**. *Cách sửa:* đổi sang `kMaxProgramsTotal` (**=32**;
+  `st_scheduler.hpp:68`), khớp cả Rev A (`st_profile_generated.hpp:34` = 32).
+  Giữ 16 sẽ cắt im lặng một nửa cấu hình 32 Program hợp lệ — đúng điều `T60-002`
+  cấm. Ngân sách payload cập nhật ~13 KiB trên trần 64 KiB.
+- **Added — Plan 60 §6.1**: `contracts/programming/g1_contract_join_v1.json` vào
+  nhóm file **chỉ CTIO sửa**, vì pin `openapi` (`T60-016` bump `1.26.0 → 1.27.0`)
+  và pin `ipc` nằm cùng file.
+- **Verification:** mọi số dòng §1/§2/§3 mà plan trích dẫn đã đối chiếu lại tại
+  `aa08ac5` và còn đúng (`st_scheduler.cpp:829` `last_exec_ns` là **thời lượng**;
+  `scan_loop.cpp:264` còn khuyết tật `tasks().front()`; `runtime_intent.go:199`;
+  `runtime.go:136` `taskPeriodsMs`; `NavRail.tsx:210` `w-[232px]`; OpenAPI
+  `1.26.0`). Baseline được đo trên **bản xuất sạch của `aa08ac5`** để không lẫn
+  thay đổi chưa commit của phiên khác đang sửa `apps/core/**`.
+- **Housekeeping:** thu hồi ~5 GB đĩa bằng cách xoá 12 thư mục build tái tạo
+  được, không được tham chiếu ở `scripts/`/CI — trong đó 6 thư mục có
+  `CMAKE_HOME_DIRECTORY` trỏ `services/` đã xoá (`PLAN-ARCH-RESTRUCT-002`), tức
+  nguồn của bẫy "configure hỏng nhưng ctest vẫn báo pass". `build/fw` giữ nguyên.
+
+### Prompt thi hành Plan 60 bằng đội multi-agent (2026-08-23)
+
+- **Added — `docs/03_implementation/PROMPT_PLAN60_CTIO_MULTIAGENT_EXECUTION.md`**
+  (`PROMPT-PLAN60-CTIO-MULTIAGENT` v1.0). Prompt cấp quyền CTIO điều phối đội
+  multi-agent thi hành trọn 27 task của `PLAN-FE-PGM-060`: chia **5 lane**
+  (Core C++ / BE Go / FE shell / FE overview / kiểm chứng) kèm **ma trận sở hữu
+  file** một-chủ-một-file, **giao thức git một-người-commit** (chỉ CTIO chạy
+  `git add`/`commit`, cấm `git add -A` và `reset --hard`) để chặn lại đúng lỗi
+  các phiên song song cuốn commit của nhau, lịch **5 batch** suy từ đồ thị phụ
+  thuộc Plan 60 §7, **3 mốc bàn giao** (`T60-003`/`T60-013`/`T60-016`) có tiêu
+  chí chứng cứ thay vì lời khai, 7 bẫy đã dính trước đây, ma trận gate theo
+  lane và mẫu prompt con để spawn lane agent.
+  Ràng buộc tài nguyên đo thật tại `aa08ac5`: đĩa còn ~14 GB (95% đầy) và
+  `build/` đã 18 GB ⇒ **không** dùng worktree-per-lane, cách ly bằng ma trận sở
+  hữu file; `build/fw` độc quyền Lane A; Playwright chỉ một tiến trình; trần
+  **ba** lane chạy song song. Prompt cũng ghim baseline Plan 60 (`a35f578`) đã
+  cũ so với `main` hiện tại nên Batch 0 phải dựng lại baseline và đo lại số
+  trước khi giao việc.
+
 ### Dọn tracker cuối Plan 59 (2026-08-23)
 
 - **Changed:** `T59-602` chuyển **PARTIAL → DONE** — phần còn lại của nó (bật
