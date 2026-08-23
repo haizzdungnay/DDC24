@@ -100,8 +100,46 @@
   luôn kèm lý do. *Verification (HOST):* vitest **126 file / 1228 test, 1227
   pass**, CTIO chạy lại độc lập cùng con số; `npm run lint` exit `0`;
   `npm run build` exit `0`; `verify-project.sh --component layout` exit `0`.
-- **Changed — Plan 60 §6**: `T60-001/002/003/004/015/017/101/102/104` chuyển
-  `DONE` (9/27).
+- **Added — `apps/web-api` `T60-011`/`T60-012`** (`0c953e1`). Core đã phát
+  `programs[]` từ `ad28a51` nhưng web-api chưa khai field nên `encoding/json` bỏ
+  qua toàn bộ khoá — mọi Program vô hình với BE. Giữ `[]T` để `nil` (Core đời cũ
+  ⇒ `UNAVAILABLE`) khác `[]` (Core sống, hệ không có Program nào) đi suốt ba
+  lớp; khai `omitempty` hay chuẩn hoá nil thành `[]` sẽ trộn hai tình huống đó
+  làm một và báo một bo không đọc được là "không có Program nào". Ánh xạ đặt
+  đúng chỗ đang dựng `Task` nên vẫn dùng chung **một** `point_snapshot` đã
+  coalesce — thêm round-trip riêng sẽ dựng lại đúng cuộc đụng độ đã sinh 503
+  ngắt quãng hồi 2026-08-14.
+- **Added — `apps/web-api` `T60-013`/`T60-014`** (`415dd45`).
+  `GET /projects/{id}/programs` ghép ý định bền vững với read-back sống, thêm
+  `runtimeStateSource ∈ {CORE_LIVE, LAST_KNOWN, UNAVAILABLE}`, `observedAt`,
+  `coreState`, `periodMs`, `lastExecNs`, `maxExecNs`, `missedReleaseCount`,
+  `consecutiveMissedRelease`, `lastRunAtUtc`, `lastRunAgeMs`, `lane`. Đường đọc
+  **không ghi** bảng intent — một read-back không phải một ý định, để nó ghi đè
+  sẽ biến Program đang `FAULTED` thành "người vận hành đã tắt". Core im ⇒
+  `UNKNOWN` + `UNAVAILABLE` với **mọi** số đo `null`, kể cả khi store còn nhớ
+  trạng thái cũ. Cột `Last Exec` lấy **mốc** từ `lastRunMonoNs`, không lấy
+  `lastExecNs` (thời lượng). `health` do server tính (D-04), nullable, dùng
+  `consecutiveMissedRelease` chứ không dùng bộ đếm tích luỹ.
+- **Fixed — `STARTING`/`STOPPING` rò ra hợp đồng qua đường `LAST_KNOWN`**
+  (`415dd45`). CHECK constraint của
+  `program_runtime_intents.last_known_runtime_state` vẫn cho phép hai giá trị
+  đó, nên một dòng DB cũ sẽ đẩy UI kẹt vĩnh viễn ở một chuyển tiếp **không tồn
+  tại** — `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức
+  thì (D-07 cấm hai giá trị này). Nay lọc về `UNKNOWN`/`UNAVAILABLE`.
+- **Fixed — đính chính thứ tự công thức `health` (Plan 60 §4.2)** (`415dd45`).
+  Điều 6 (`ROLLED_BACK ⇒ DEGRADED`) xếp **sau** điều 3 (`WAITING ⇒ null`) trong
+  khi §4.1 ánh xạ `ROLLED_BACK → WAITING`, nên điều 6 là **chữ chết** — mâu
+  thuẫn với chính §4.1 và phần lời D-07. Thứ tự đúng: 1 → 2 → 6 → 3 → 4 → 5 → 7.
+  Bổ sung điều kiện tiên quyết chưa ghi cho điều 5: bỏ qua khi `periodMs = 0`,
+  vì so với ngưỡng `0,8 × 0` sẽ dán `DEGRADED` cho mọi Program từng chạy dù chỉ
+  một nano-giây.
+- **Changed — `desiredEnabled` trở thành nullable** (`415dd45`). Program đang
+  chạy trong Core mà Project chưa từng ghi intent ra `null` thay vì `false` —
+  điền `false` sẽ đọc thành "có người đã tắt nó". Type FE cần `| null` khi làm
+  `T60-016`.
+- **Changed — Plan 60 §6**: `T60-001..004`, `T60-011..015`, `T60-017`,
+  `T60-101/102/104` chuyển `DONE` (**13/27**). Plan lên `v1.3`.
+
 
 
 ### Plan 60 Batch 0 — dựng baseline thi hành (2026-08-23)

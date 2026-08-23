@@ -195,6 +195,22 @@ Xét theo thứ tự, dừng ở điều kiện khớp đầu tiên:
 | 6 | Core state là `ROLLED_BACK` | `DEGRADED` |
 | 7 | còn lại (`RUNNING`, không dấu hiệu nào) | `HEALTHY` |
 
+**ĐÍNH CHÍNH THỨ TỰ (2026-08-23, khi thi hành `T60-014`).** Điều 6
+(`ROLLED_BACK ⇒ DEGRADED`) phải được xét **NGAY TRƯỚC** điều 3, không phải sau.
+`ROLLED_BACK` ánh xạ thành `WAITING` theo §4.1, nên với thứ tự viết ban đầu điều
+3 (`WAITING ⇒ null`) luôn khớp trước và **điều 6 không bao giờ chạy tới được** —
+trái với chính bảng §4.1 và phần lời D-07 (*"việc đã có rollback được nói bằng
+`health = DEGRADED`, đúng chỗ của nó"*). Thứ tự đúng: **1 → 2 → 6 → 3 → 4 → 5 →
+7**. Không điều nào khác đổi vị trí. Đây là sửa lỗi soạn thảo để D-04 **thi hành
+được**, không phải đảo quyết định: cả hai chỗ khác của cùng quyết định đều đòi
+`DEGRADED`, chỉ riêng bảng §4.2 xếp sai chỗ làm điều khoản đó thành chữ chết.
+
+**Điều 5 có một điều kiện tiên quyết chưa ghi:** bỏ qua khi `periodMs = 0`. Core
+phát `period_ms = 0` khi không phân giải được chu kỳ hiệu lực; so với ngưỡng
+`0,8 × 0` sẽ dán `DEGRADED` cho mọi Program từng chạy dù chỉ một nano-giây. Cài
+đặt so bằng số nguyên (`periodMs × 800_000` ns) để không phụ thuộc làm tròn dấu
+phẩy động ở đúng cạnh ngưỡng.
+
 **Không dùng `missedReleaseCount` tuyệt đối** cho điều kiện 4: nó là bộ đếm tích luỹ
 từ lúc start, nên một lần lỡ nhịp cách đây một giờ sẽ ghim Program ở `DEGRADED` vĩnh
 viễn. Vì vậy `T60-001/002` thêm `consecutive_missed_release` — đặt cùng chỗ đang cộng
@@ -278,10 +294,10 @@ JSON có tên trường nên thêm trường là **tương thích ngược**, kh
 
 | Mã | Ưu tiên | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---|
-| `T60-011` | P0 | Decode `programs[]`: thêm field vào `webIPCResponse` (`internal/app/core_client.go:108-131`) và `RuntimePointSnapshot` (`internal/app/dto.go:272-283`). Vắng khoá ⇒ `nil`, **khác** mảng rỗng: Core cũ chưa có trường này phải ra `UNAVAILABLE`, không phải "không có Program nào". | `T60-003` | `ORDERED` | 0,5 nd |
-| `T60-012` | P0 | `MonitorTruthSnapshot.Programs` + ánh xạ ở `internal/app/programming_pointcatalog.go:45-80` (cùng chỗ đang dựng `Task`). Giữ nguyên đường coalescing `point_snapshot` hiện có — Core chỉ phát **một** snapshot mỗi scan cycle. | `T60-011` | `ORDERED` | 0,5 nd |
-| `T60-013` | P0 | `GET /projects/{id}/programs` ghép **intent bền vững** (store) + **read-back sống** (snapshot). Thêm `runtimeStateSource ∈ {CORE_LIVE, LAST_KNOWN, UNAVAILABLE}`, `observedAt`, `lastExecNs`, `maxExecNs`, `missedReleaseCount`, `periodMs`. **Không ghi đè bảng intent**; Core im ⇒ `UNKNOWN` + `UNAVAILABLE`, tuyệt đối không trả giá trị cũ như thể đang sống. Ánh xạ trạng thái theo D-07. | `T60-012` | `ORDERED` | 1,5 nd |
-| `T60-014` | P0 | `health` do server tính theo D-04, kèm test biên: 0 lỡ nhịp; có lỡ nhịp; overrun liên tiếp; Core im; Program `DISABLED` (không phải `FAULT`). | `T60-013` | `ORDERED` | 1 nd |
+| `T60-011` | P0 | Decode `programs[]`: thêm field vào `webIPCResponse` (`internal/app/core_client.go:108-131`) và `RuntimePointSnapshot` (`internal/app/dto.go:272-283`). Vắng khoá ⇒ `nil`, **khác** mảng rỗng: Core cũ chưa có trường này phải ra `UNAVAILABLE`, không phải "không có Program nào". | `T60-003` | `DONE` | 0,5 nd |
+| `T60-012` | P0 | `MonitorTruthSnapshot.Programs` + ánh xạ ở `internal/app/programming_pointcatalog.go:45-80` (cùng chỗ đang dựng `Task`). Giữ nguyên đường coalescing `point_snapshot` hiện có — Core chỉ phát **một** snapshot mỗi scan cycle. | `T60-011` | `DONE` | 0,5 nd |
+| `T60-013` | P0 | `GET /projects/{id}/programs` ghép **intent bền vững** (store) + **read-back sống** (snapshot). Thêm `runtimeStateSource ∈ {CORE_LIVE, LAST_KNOWN, UNAVAILABLE}`, `observedAt`, `lastExecNs`, `maxExecNs`, `missedReleaseCount`, `periodMs`. **Không ghi đè bảng intent**; Core im ⇒ `UNKNOWN` + `UNAVAILABLE`, tuyệt đối không trả giá trị cũ như thể đang sống. Ánh xạ trạng thái theo D-07. | `T60-012` | `DONE` | 1,5 nd |
+| `T60-014` | P0 | `health` do server tính theo D-04, kèm test biên: 0 lỡ nhịp; có lỡ nhịp; overrun liên tiếp; Core im; Program `DISABLED` (không phải `FAULT`). | `T60-013` | `DONE` | 1 nd |
 | `T60-015` | P1 | Hai giá trị dẫn xuất đã có dữ liệu trong DB (nhóm B §3.1): cờ `dirty` = `drafts.content_sha256` ≠ `content_hash` của base revision; và `revisions.sequence` lộ ra `GET /revisions/{id}` + `draftSequence`/`activeSequence` ở item `GET /projects`. **Không cần migration** — cả hai cột đã tồn tại từ `0001_programming_v1.sql`. | — | `DONE` | 0,5 nd |
 | `T60-016` | P0 | OpenAPI `1.26.0 → 1.27.0` + `scripts/generate-programming-client.mjs` + type FE + `contract_sync_test.go`. Không viết tay type đã sinh được. | `T60-013..015` | `ORDERED` | 1 nd |
 
@@ -434,6 +450,7 @@ Plan 59 W6/W7.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.3 | 2026-08-23 | **Batch 1 (CTIO + 3 lane)** — 13/27 task `DONE`: `T60-001..004` (Core), `T60-011..015` (BE Go), `T60-017`, `T60-101/102/104` (FE shell). **Mốc M1 và M2 đều ĐẠT** bằng chứng cứ: dump `point_snapshot` thật 2 Program khác chu kỳ; hai response thật của `GET .../programs` ở `CORE_LIVE` và `UNAVAILABLE`. **Một đính chính quy phạm ở §4.2** (xem ngay dưới bảng công thức): điều 6 `ROLLED_BACK ⇒ DEGRADED` phải xét **trước** điều 3, vì `ROLLED_BACK` ánh xạ thành `WAITING` (§4.1) nên với thứ tự cũ điều 6 là **chữ chết** — mâu thuẫn với chính §4.1 và phần lời D-07. Thứ tự đúng: 1 → 2 → 6 → 3 → 4 → 5 → 7. Bổ sung điều kiện tiên quyết chưa ghi cho điều 5: bỏ qua khi `periodMs = 0`. **Hai lỗi ngoài dự kiến đã sửa cùng phiên:** `STARTING`/`STOPPING` rò ra hợp đồng qua đường `LAST_KNOWN` (CHECK constraint của store vẫn cho phép, một dòng DB cũ làm UI kẹt vĩnh viễn ở chuyển tiếp không tồn tại); và Context Strip đặt `sticky top-0` trùng tầng TopBar nên trượt xuống dưới và mất tác dụng khi cuộn. **Đổi hợp đồng:** `desiredEnabled` thành nullable — Program chạy trong Core mà Project chưa từng ghi intent ra `null`, không phải `false`. Số đo hợp nhất (HOST, CTIO tự chạy lại): ctest **1243/1243**; go vet/test exit 0, 18 package `ok`; vitest **126 file / 1228 test**, 1227 pass; lint/build/`verify-project.sh --component layout` exit 0. |
 | 1.2 | 2026-08-23 | **Batch 0 (CTIO)** — dựng nhánh `feat/plan60-pgm01` từ `main` và **đo lại baseline thật** tại `aa08ac5` (§1): 1227/1227 ctest, 124 file/1161 test FE, 10/10 E2E mock, cổng layout + docs PASS. Re-pin `Baseline source` `a35f578` → `aa08ac5`. **Một đính chính kỹ thuật trong bảng §6:** `T60-001..004` ghi trần mảng `programs[]` là `st_sched_limits::kMaxProgramsPerTask` (=16) — sai, vì `programs[]` là danh sách **toàn hệ thống** chứ không phải một Task; trần đúng là `kMaxProgramsTotal` (**=32**, và Rev A cũng 32). Giữ nguyên 16 sẽ cắt mất một nửa cấu hình 32 Program hợp lệ, đúng thứ `T60-002` cấm. Ngân sách payload cập nhật theo: ~13 KiB / trần 64 KiB. Xác nhận mọi số dòng §1/§2/§3 trích dẫn còn đúng tại `aa08ac5`. Bổ sung `contracts/programming/g1_contract_join_v1.json` vào nhóm file **chỉ CTIO sửa** (§6.1). |
 | 1.1 | 2026-08-23 | **Chốt 7/7 quyết định** sau khi đọc lại Core/BE. Hai phát hiện làm đổi quyết định so với bản nháp: (1) `start()`/`stop()`/`disable()` của Core là **đồng bộ tức thì** và BE đã ghi rõ `STARTING`/`STOPPING` là chuyển tiếp không tồn tại (`runtime_intent.go:199-201`) ⇒ loại ánh xạ `ACTIVE → STARTING` của bản nháp; (2) `last_exec_ns` là **thời lượng**, không phải mốc thời gian ⇒ cột `Last Exec` cần thêm `last_run_mono_ns`. D-01 chốt **focus mode** vì ngân sách ngang: hai rail chỉ còn 828 px ở 1280 px, không đủ cho PGM-02. Thêm `consecutive_missed_release` (phép đo mới duy nhất) cho công thức `health` §4.2. Trạng thái plan: PLAN_READY; 27 task ≈ 34,5 người-ngày. |
 | 1.0 | 2026-08-23 | Lập plan từ gói FE Handoff v2.1 (README + PGM-01 + mockup `PGM-01_overview.png`), đối chiếu As-Built tại `a35f578`; ghi nhận 6 lỗ hổng dữ liệu backend chặn bảng Programs; 22 task / 3 pha / ~31 người-ngày; 6 quyết định chờ chốt. |
