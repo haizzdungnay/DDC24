@@ -1,15 +1,20 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <limits>
 #include <new>
+#include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -597,4 +602,241 @@ TEST(RuntimePointSnapshot, IobusReaderCopiesUiUnit)
     IoSnapshot io;
     ASSERT_TRUE(IobusReader::read_from(&shm, &io));
     EXPECT_EQ(std::string_view(io.ui_unit[0], 8), "12345678");
+}
+
+/* ===================================================================
+ * T60-004 — bảng `programs[]` trong point_snapshot (Plan 60 §6 P0-A).
+ *
+ * Bộ test dưới đây khoá phần SERIALIZE ở lớp domain: khoá `programs` luôn có
+ * mặt, giá trị đi/về không đổi qua JSON, và tràn buffer đi đúng nhánh
+ * fail-closed thay vì phát ra một chuỗi JSON cụt.
+ * =================================================================== */
+
+namespace {
+
+/* Dựng một dòng `programs[]` đủ trường. Giữ đúng khuôn bounded của struct
+ * thật (không chuỗi động) vì đây là bản sao của thứ nằm trên đường realtime. */
+RuntimeProgramSnapshot make_program_row(const char* instance_id, const char* state,
+                                        bool enabled, uint32_t period_ms,
+                                        uint64_t last_exec_ns, uint64_t max_exec_ns,
+                                        uint32_t missed_release_count,
+                                        uint32_t consecutive_missed_release,
+                                        uint64_t last_run_mono_ns, uint8_t lane)
+{
+    RuntimeProgramSnapshot row;
+    std::memcpy(row.instance_id.data(), instance_id,
+                std::min(std::strlen(instance_id), row.instance_id.size() - 1));
+    std::memcpy(row.state.data(), state,
+                std::min(std::strlen(state), row.state.size() - 1));
+    row.enabled = enabled;
+    row.period_ms = period_ms;
+    row.last_exec_ns = last_exec_ns;
+    row.max_exec_ns = max_exec_ns;
+    row.missed_release_count = missed_release_count;
+    row.consecutive_missed_release = consecutive_missed_release;
+    row.last_run_mono_ns = last_run_mono_ns;
+    row.lane = lane;
+    return row;
+}
+
+RuntimePointSnapshot make_base_snapshot(uint64_t snapshot_id)
+{
+    IoSnapshot io = make_io();
+    PointTable table;
+    table.update_inputs(io);
+    PriorityResolver resolver;
+    RuntimePointSnapshotPublisher publisher;
+    return publisher.build(snapshot_id, 0, 100, table, io, resolver.resolve(), resolver,
+                           false);
+}
+
+/* Trường hợp XẤU NHẤT của một dòng: instance_id chạm trần 64 ký tự, tên trạng
+ * thái dài nhất, mọi số chạm trần kiểu. Ngân sách payload phải đứng vững ở đây
+ * chứ không ở cấu hình phòng lab. */
+RuntimeProgramSnapshot make_worst_case_row(std::size_t index)
+{
+    std::string id(64, 'P');
+    const std::string suffix = std::to_string(index);
+    id.replace(id.size() - suffix.size(), suffix.size(), suffix);
+    return make_program_row(id.c_str(), "ROLLED_BACK", true, 4294967295u,
+                            std::numeric_limits<uint64_t>::max(),
+                            std::numeric_limits<uint64_t>::max(), 4294967295u,
+                            4294967295u, std::numeric_limits<uint64_t>::max(), 255u);
+}
+
+} // namespace
+
+/* Rỗng và THIẾU KHOÁ là hai câu trả lời khác nhau: rỗng = "Core sống, hệ không
+ * có Program nào"; thiếu khoá = "Core đời cũ chưa biết trường này" ⇒ phía đọc
+ * phải ra UNAVAILABLE (Plan 60 §4.2 điều 1, `T60-011`). Test khẳng định KHOÁ CÓ
+ * MẶT, không phải khẳng định "đọc ra rỗng" — hai điều đó `.value()` của một
+ * parser JSON không phân biệt được. */
+TEST(RuntimePointSnapshot, EmptyProgramTableStillEmitsTheProgramsKey)
+{
+    const RuntimePointSnapshot snapshot = make_base_snapshot(3);
+    ASSERT_EQ(snapshot.program_count, 0u);
+
+    const std::string wire = serialize_runtime_point_snapshot(snapshot);
+    ASSERT_FALSE(wire.empty());
+    EXPECT_NE(wire.find("\"programs\":[]"), std::string::npos)
+        << "khoá phải nằm trong chuỗi thô, không phải chỉ 'parse ra rỗng'";
+
+    const auto json = nlohmann::json::parse(wire);
+    ASSERT_TRUE(json.contains("programs"))
+        << "vắng khoá = Core đời cũ; mảng rỗng = Core sống không có Program";
+    EXPECT_TRUE(json.at("programs").is_array());
+    EXPECT_TRUE(json.at("programs").empty());
+    ASSERT_TRUE(json.contains("programsTruncated"));
+    EXPECT_FALSE(json.at("programsTruncated").get<bool>());
+}
+
+/* Round-trip: serialize → parse → dựng lại struct → serialize lại phải cho ĐÚNG
+ * cùng một chuỗi. Chỉ so từng trường thì một lỗi thứ tự khoá hoặc một trường bị
+ * bỏ quên vẫn lọt. */
+TEST(RuntimePointSnapshot, SerializesProgramRowsAndSurvivesJsonRoundTrip)
+{
+    RuntimePointSnapshot snapshot = make_base_snapshot(11);
+    snapshot.programs[0] = make_program_row("P_ahu_supply_fan", "RUNNING", true, 1000,
+                                            5600000u, 9100000u, 3u, 0u,
+                                            123456789012345678ull, 0u);
+    snapshot.programs[1] = make_program_row("P_boiler_stage", "FAULTED", false, 30000,
+                                            0u, 42u, 4294967295u, 7u,
+                                            std::numeric_limits<uint64_t>::max(), 3u);
+    snapshot.program_count = 2;
+
+    const std::string wire = serialize_runtime_point_snapshot(snapshot);
+    ASSERT_FALSE(wire.empty());
+    const auto json = nlohmann::json::parse(wire);
+    ASSERT_EQ(json.at("programs").size(), 2u);
+    EXPECT_FALSE(json.at("programsTruncated").get<bool>());
+
+    const auto& first = json.at("programs").at(0);
+    EXPECT_EQ(first.at("instanceId"), "P_ahu_supply_fan");
+    EXPECT_EQ(first.at("state"), "RUNNING");
+    EXPECT_TRUE(first.at("enabled").get<bool>());
+    EXPECT_EQ(first.at("periodMs").get<uint32_t>(), 1000u);
+    EXPECT_EQ(first.at("lastExecNs").get<uint64_t>(), 5600000u);
+    EXPECT_EQ(first.at("maxExecNs").get<uint64_t>(), 9100000u);
+    EXPECT_EQ(first.at("missedReleaseCount").get<uint32_t>(), 3u);
+    EXPECT_EQ(first.at("consecutiveMissedRelease").get<uint32_t>(), 0u);
+    EXPECT_EQ(first.at("lastRunMonoNs").get<uint64_t>(), 123456789012345678ull);
+    EXPECT_EQ(first.at("lane").get<uint32_t>(), 0u);
+
+    const auto& second = json.at("programs").at(1);
+    EXPECT_EQ(second.at("instanceId"), "P_boiler_stage");
+    EXPECT_EQ(second.at("state"), "FAULTED");
+    EXPECT_FALSE(second.at("enabled").get<bool>());
+    EXPECT_EQ(second.at("periodMs").get<uint32_t>(), 30000u);
+    EXPECT_EQ(second.at("missedReleaseCount").get<uint32_t>(), 4294967295u);
+    EXPECT_EQ(second.at("consecutiveMissedRelease").get<uint32_t>(), 7u);
+    EXPECT_EQ(second.at("lastRunMonoNs").get<uint64_t>(),
+              std::numeric_limits<uint64_t>::max())
+        << "uint64 lớn không được mất chính xác khi qua JSON";
+    EXPECT_EQ(second.at("lane").get<uint32_t>(), 3u);
+
+    /* Dựng lại từ JSON rồi serialize lần hai — chuỗi phải trùng khít. */
+    RuntimePointSnapshot rebuilt = make_base_snapshot(11);
+    for (std::size_t index = 0; index < json.at("programs").size(); ++index) {
+        const auto& row = json.at("programs").at(index);
+        rebuilt.programs[index] = make_program_row(
+            row.at("instanceId").get<std::string>().c_str(),
+            row.at("state").get<std::string>().c_str(), row.at("enabled").get<bool>(),
+            row.at("periodMs").get<uint32_t>(), row.at("lastExecNs").get<uint64_t>(),
+            row.at("maxExecNs").get<uint64_t>(),
+            row.at("missedReleaseCount").get<uint32_t>(),
+            row.at("consecutiveMissedRelease").get<uint32_t>(),
+            row.at("lastRunMonoNs").get<uint64_t>(),
+            static_cast<uint8_t>(row.at("lane").get<uint32_t>()));
+    }
+    rebuilt.program_count = json.at("programs").size();
+    rebuilt.programs_truncated = json.at("programsTruncated").get<bool>();
+    EXPECT_EQ(serialize_runtime_point_snapshot(rebuilt), wire);
+}
+
+/* `program_count` sai không được đọc ra ngoài biên mảng, và việc bị cắt phải
+ * NÓI RA. Bỏ bớt trong im lặng làm người vận hành đọc một danh sách thiếu mà
+ * tin là đủ. */
+TEST(RuntimePointSnapshot, ClampsProgramCountToArrayBoundAndReportsTruncation)
+{
+    RuntimePointSnapshot snapshot = make_base_snapshot(13);
+    for (std::size_t index = 0; index < snapshot.programs.size(); ++index)
+        snapshot.programs[index] = make_program_row(
+            ("P_" + std::to_string(index)).c_str(), "RUNNING", true, 1000, 10, 20, 0, 0,
+            1000 + index, 0);
+    snapshot.program_count = snapshot.programs.size() + 7; /* con số hỏng */
+    snapshot.programs_truncated = true;
+
+    const auto json = nlohmann::json::parse(serialize_runtime_point_snapshot(snapshot));
+    EXPECT_EQ(json.at("programs").size(), KX_POINT_SNAPSHOT_MAX_PROGRAMS)
+        << "phải kẹp theo kích thước mảng, không tin `program_count`";
+    EXPECT_TRUE(json.at("programsTruncated").get<bool>());
+}
+
+/* Ngân sách payload của Plan 60 §6 `T60-003`: 32 Program TRƯỜNG HỢP XẤU NHẤT
+ * vẫn phải nằm trong trần 64 KiB, còn dư chỗ. Đây là con số bảo vệ quyết định
+ * "dùng point_snapshot làm kênh xuất" — hết ngân sách thì quyết định đó sai. */
+TEST(RuntimePointSnapshot, WorstCaseThirtyTwoProgramPayloadFitsTheSnapshotBudget)
+{
+    RuntimePointSnapshot snapshot = make_base_snapshot(17);
+    for (std::size_t index = 0; index < snapshot.programs.size(); ++index)
+        snapshot.programs[index] = make_worst_case_row(index);
+    snapshot.program_count = snapshot.programs.size();
+
+    const std::string wire = serialize_runtime_point_snapshot(snapshot);
+    ASSERT_FALSE(wire.empty());
+    EXPECT_LT(wire.size(), KX_POINT_SNAPSHOT_MAX_PAYLOAD)
+        << "payload 32 Program xấu nhất = " << wire.size() << " B";
+    const auto json = nlohmann::json::parse(wire);
+    EXPECT_EQ(json.at("programs").size(), 32u);
+    EXPECT_EQ(json.at("programs").at(0).at("instanceId").get<std::string>().size(), 64u);
+    /* In ra số đo thật: ngân sách ở §6 là một con số phải KIỂM ĐƯỢC, không phải
+     * một ước lượng chép lại trong tài liệu. */
+    std::printf("T60-004 worst-case payload: 32 program = %zu B / tran %zu B\n",
+                wire.size(), static_cast<std::size_t>(KX_POINT_SNAPSHOT_MAX_PAYLOAD));
+    std::fflush(stdout);
+}
+
+/* Nhánh tràn phải FAIL-CLOSED: `serialize` trả false, `*length` = 0 (KHÔNG phát
+ * ra chuỗi cụt), và cache của WebIpc bị XOÁ chứ không giữ lại snapshot cũ như
+ * thể nó còn đúng. */
+TEST(RuntimePointSnapshot, OversizedProgramTableFailsClosedWithoutTruncatedJson)
+{
+    RuntimePointSnapshot snapshot = make_base_snapshot(19);
+    for (std::size_t index = 0; index < snapshot.programs.size(); ++index)
+        snapshot.programs[index] = make_worst_case_row(index);
+    snapshot.program_count = snapshot.programs.size();
+
+    std::array<char, KX_POINT_SNAPSHOT_MAX_PAYLOAD> buffer{};
+    std::size_t full_length = 0;
+    ASSERT_TRUE(serialize_runtime_point_snapshot(snapshot, buffer.data(), buffer.size(),
+                                                 &full_length));
+    ASSERT_GT(full_length, 0u);
+
+    /* Với MỌI sức chứa thiếu, kết quả phải là "không có gì", không phải "một
+     * phần". Một chuỗi cụt vẫn có thể parse được ở phía đọc nếu nó vô tình đứt
+     * ở chỗ hợp lệ — đó mới là thứ nguy hiểm. */
+    for (const std::size_t capacity : {std::size_t{1}, std::size_t{64},
+                                       full_length / 2, full_length - 1}) {
+        std::vector<char> tight(capacity, '\xff');
+        std::size_t length = 12345;
+        EXPECT_FALSE(serialize_runtime_point_snapshot(snapshot, tight.data(), capacity,
+                                                      &length))
+            << "capacity=" << capacity;
+        EXPECT_EQ(length, 0u) << "capacity=" << capacity << " — không được phát chuỗi cụt";
+    }
+
+    WebIpc web;
+    web.publish_point_snapshot(snapshot);
+    ASSERT_EQ(web.snapshot_cache_state_for_test(), SnapshotCacheState::READY);
+    ASSERT_EQ(web.snapshot_for_test().snapshot_id, 19u);
+    ASSERT_EQ(web.snapshot_for_test().program_count, 32u);
+
+    web.set_snapshot_payload_limit_for_test(full_length - 1);
+    web.publish_point_snapshot(snapshot);
+
+    EXPECT_EQ(web.snapshot_cache_state_for_test(), SnapshotCacheState::TOO_LARGE);
+    EXPECT_TRUE(web.snapshot_payload_for_test().empty())
+        << "tràn phải xoá cache, không phục vụ JSON cụt";
+    EXPECT_EQ(web.snapshot_for_test().snapshot_id, 0u);
+    EXPECT_EQ(web.snapshot_for_test().program_count, 0u);
 }

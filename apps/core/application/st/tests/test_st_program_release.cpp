@@ -190,3 +190,81 @@ TEST(StProgramRelease, TenProgramThreePeriodFixtureIsDeterministic)
     const std::vector<uint32_t> expected = {31, 31, 31, 31, 7, 7, 7, 7, 2, 2};
     EXPECT_EQ(first, expected);
 }
+
+/* ===================================================================
+ * T60-004 — `consecutive_missed_release` (T60-002, Plan 60 §4.2 điều 4).
+ *
+ * Công thức `health` chỉ được đọc bộ đếm LIÊN TIẾP, không đọc bộ đếm tích luỹ:
+ * `missed_release_count` không bao giờ giảm, nên dùng nó để kết luận "sức khoẻ
+ * HIỆN TẠI" sẽ ghim Program ở DEGRADED vĩnh viễn chỉ vì một lần lỡ nhịp cách
+ * đây một giờ. Vì vậy phần phải khoá là chiều RESET, không phải chiều tăng.
+ * =================================================================== */
+TEST(StProgramRelease, ConsecutiveMissedReleaseResetsAfterAnOnTimeCycle)
+{
+    auto program = make_program("fast", 1000, 0);
+
+    /* Chu kỳ đầu tiên: chưa có gì để lỡ. */
+    ASSERT_TRUE(st_program_due(*program, 1000, 0));
+    st_program_mark_released(program.get(), 0);
+    EXPECT_EQ(program->missed_release_count, 0u);
+    EXPECT_EQ(program->consecutive_missed_release, 0u);
+
+    /* Nhảy thẳng tới 5,4 s: lỡ các mốc 1..4 s. */
+    ASSERT_TRUE(st_program_due(*program, 1000, 5400 * kMs));
+    st_program_mark_released(program.get(), 5400 * kMs);
+    EXPECT_EQ(program->missed_release_count, 4u);
+    EXPECT_EQ(program->consecutive_missed_release, 4u);
+
+    /* Vẫn đang lỡ nhịp ⇒ chuỗi CỘNG DỒN, không reset giữa chừng. */
+    ASSERT_TRUE(st_program_due(*program, 1000, 8100 * kMs));
+    st_program_mark_released(program.get(), 8100 * kMs);
+    EXPECT_EQ(program->missed_release_count, 6u);
+    EXPECT_EQ(program->consecutive_missed_release, 6u);
+
+    /* MỘT chu kỳ đúng hạn (trễ 700 ms = jitter, chưa trọn một chu kỳ) phải kết
+     * thúc chuỗi NGAY, trong khi bộ đếm tích luỹ giữ nguyên con số lịch sử. */
+    ASSERT_TRUE(st_program_due(*program, 1000, 9700 * kMs));
+    st_program_mark_released(program.get(), 9700 * kMs);
+    EXPECT_EQ(program->consecutive_missed_release, 0u)
+        << "một chu kỳ đúng hạn phải đưa chuỗi lỡ nhịp về 0";
+    EXPECT_EQ(program->missed_release_count, 6u)
+        << "bộ đếm tích luỹ là lịch sử, không được reset theo";
+
+    /* Và ở lại 0 qua nhiều chu kỳ đúng hạn liên tiếp. */
+    for (uint64_t now = 10000; now <= 15000; now += 1000) {
+        ASSERT_TRUE(st_program_due(*program, 1000, now * kMs));
+        st_program_mark_released(program.get(), now * kMs);
+        EXPECT_EQ(program->consecutive_missed_release, 0u) << "now=" << now;
+    }
+    EXPECT_EQ(program->missed_release_count, 6u);
+}
+
+/* `st_program_mark_released` là API công khai nên có thể bị gọi TRƯỚC hạn.
+ * Sớm hơn hạn thì chắc chắn không lỡ nhịp — chuỗi phải về 0, không được giữ lại
+ * con số cũ và báo DEGRADED cho một Program đang chạy sớm. */
+TEST(StProgramRelease, EarlyMarkClearsTheMissedChain)
+{
+    auto program = make_program("fast", 1000, 0);
+    st_program_mark_released(program.get(), 0);
+    st_program_mark_released(program.get(), 5400 * kMs);
+    ASSERT_EQ(program->consecutive_missed_release, 4u);
+
+    /* Deadline kế tiếp là 6000 ms; gọi ở 5500 ms là gọi trước hạn. */
+    st_program_mark_released(program.get(), 5500 * kMs);
+    EXPECT_EQ(program->consecutive_missed_release, 0u);
+    EXPECT_EQ(program->missed_release_count, 4u);
+}
+
+/* `period_ms == 0` = "theo chu kỳ Task": Task đã quyết định thời điểm, nên
+ * Program không tự đếm lỡ nhịp và chuỗi phải đứng yên ở 0. Nếu không, mọi cấu
+ * hình chưa khai chu kỳ riêng sẽ bị `health` chấm DEGRADED oan. */
+TEST(StProgramRelease, TaskInheritedPeriodNeverAccumulatesAMissedChain)
+{
+    auto program = make_program("legacy", 0, 0);
+    for (uint64_t now = 0; now < 10; ++now) {
+        ASSERT_TRUE(st_program_due(*program, 1000, now * 5000 * kMs));
+        st_program_mark_released(program.get(), now * 5000 * kMs);
+    }
+    EXPECT_EQ(program->consecutive_missed_release, 0u);
+    EXPECT_EQ(program->missed_release_count, 0u);
+}
