@@ -299,7 +299,7 @@ JSON có tên trường nên thêm trường là **tương thích ngược**, kh
 | `T60-013` | P0 | `GET /projects/{id}/programs` ghép **intent bền vững** (store) + **read-back sống** (snapshot). Thêm `runtimeStateSource ∈ {CORE_LIVE, LAST_KNOWN, UNAVAILABLE}`, `observedAt`, `lastExecNs`, `maxExecNs`, `missedReleaseCount`, `periodMs`. **Không ghi đè bảng intent**; Core im ⇒ `UNKNOWN` + `UNAVAILABLE`, tuyệt đối không trả giá trị cũ như thể đang sống. Ánh xạ trạng thái theo D-07. | `T60-012` | `DONE` | 1,5 nd |
 | `T60-014` | P0 | `health` do server tính theo D-04, kèm test biên: 0 lỡ nhịp; có lỡ nhịp; overrun liên tiếp; Core im; Program `DISABLED` (không phải `FAULT`). | `T60-013` | `DONE` | 1 nd |
 | `T60-015` | P1 | Hai giá trị dẫn xuất đã có dữ liệu trong DB (nhóm B §3.1): cờ `dirty` = `drafts.content_sha256` ≠ `content_hash` của base revision; và `revisions.sequence` lộ ra `GET /revisions/{id}` + `draftSequence`/`activeSequence` ở item `GET /projects`. **Không cần migration** — cả hai cột đã tồn tại từ `0001_programming_v1.sql`. | — | `DONE` | 0,5 nd |
-| `T60-016` | P0 | OpenAPI `1.26.0 → 1.27.0` + `scripts/generate-programming-client.mjs` + type FE + `contract_sync_test.go`. Không viết tay type đã sinh được. | `T60-013..015` | `ORDERED` | 1 nd |
+| `T60-016` | P0 | OpenAPI `1.26.0 → 1.27.0` + `scripts/generate-programming-client.mjs` + type FE + `contract_sync_test.go`. Không viết tay type đã sinh được. | `T60-013..015` | `DONE` | 1 nd |
 
 ### P0-C — Nối FE tới dữ liệu đã có sẵn
 

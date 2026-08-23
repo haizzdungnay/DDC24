@@ -174,6 +174,41 @@
 - **Changed — Plan 60 §6**: thêm `T60-103` chuyển `DONE` (**14/27**). §8:
   `AC-PGM01-01` nay đóng **cả hai chiều** — mặt trước sạch UUID, mở `Details`
   lộ đủ, `Esc` thì UUID biến mất khỏi DOM chứ không nằm ẩn.
+- **Added — `T60-016`: OpenAPI `1.26.0` → `1.27.0`, sinh type FE từ contract**
+  (`b981e54`). *Triệu chứng:* `T60-013/014/015` đã đổi hình dạng phản hồi thật
+  nhưng contract vẫn khai `ProgrammingProgramIntentList` với đúng hai trường —
+  FE muốn dựng bảng Programs thì phải viết tay type theo trí nhớ hoặc đi đọc code
+  Go. *Nguyên nhân gốc:* script sinh client chỉ sinh **bảng endpoint**, không
+  sinh type từ schema, nên mọi schema đọc buộc phải khai tay và không cổng nào
+  bắt chúng khớp OpenAPI. Type khai tay không lệch ồn ào — nó lệch **im lặng**;
+  bằng chứng còn trong repo: enum `runtimeState` khai tay vẫn mang
+  `STARTING`/`STOPPING`, hai giá trị D-07 đã loại. *Cách sửa:*
+  `ProgrammingProgramsPage` + `ProgrammingProgramListItem` (6 + 19 trường), mọi
+  trường `required` kể cả khi nullable; ba enum tách riêng với
+  `ProgrammingProgramRuntimeState` **đúng năm giá trị**; `health` nullable ở
+  **chỗ dùng** chứ không nhét `null` vào enum. Hai schema intent cũ **xoá hẳn** —
+  giữ lại nghĩa là contract đồng thời khẳng định `desiredEnabled` bắt buộc
+  `boolean` và `runtimeState` có thể `STARTING`, nằm ngay cạnh schema nói ngược
+  lại. Generator nay sinh type thẳng từ schema và **ném lỗi** ở mọi nhánh không
+  hiểu thay vì trả `unknown` (một `unknown` lặng lẽ sẽ tắt đúng phần kiểm kiểu
+  mà tệp sinh sinh ra để có). Số operation giữ **32** — đổi hình dạng phản hồi,
+  không thêm route.
+- **Fixed — `ProgrammingRevision.snapshot` khai optional trong khi server luôn
+  gửi** (`b981e54`). Do chính test mới của `contract_sync_test.go` tìm ra.
+  Contract lỏng hơn thứ server bảo đảm sẽ buộc client viết một nhánh "thiếu
+  snapshot" không bao giờ chạy tới. Test mới đọc trường JSON thật bằng `reflect`
+  trên struct handler serialize và khoá bất biến `omitempty` ⇔ `required`; đã ép
+  đỏ bằng đột biến (`lane` → `laneX`) để chứng minh không phải cổng giả.
+- **Changed — re-pin G1 `openapi` theo `1.27.0`** (`dfc8e48`). Hash CTIO tự tính
+  lại bằng `sha256sum` trên chính file đã commit, không lấy theo lời khai của
+  lane. `operationCount` giữ 32. Tách commit riêng nhưng **đi cùng PR** với thay
+  đổi contract sinh ra nó (bài học `TASK-PROG-G1-CONTRACT-REPIN-001`).
+- **Changed — `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` lên `v4.2`**: đồng bộ
+  `OpenAPI v1.26.0` → `v1.27.0` ở hai dòng trạng thái hiện hành. Dòng revision
+  history giữ nguyên `1.26.0` vì đó là lịch sử, không phải trạng thái.
+- **Changed — Plan 60 §6**: `T60-016` chuyển `DONE` (**15/27**). **Mốc M3 ĐẠT** —
+  type đã sinh (không dòng nào viết tay), `contract_sync_test.go` xanh,
+  `check:programming-api` xanh (32 operation đồng bộ).
 - **Changed — gate FE xanh hoàn toàn lần đầu**: `npx vitest --run --environment
   jsdom src` → **128 file / 1262 test, TẤT CẢ PASS, exit `0`**.
 

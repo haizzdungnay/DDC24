@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `PROG-DOCSET-001` |
-| Phiên bản | 4.1 |
+| Phiên bản | 4.2 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION — unified Product baseline** |
-| Ngày | 2026-08-21 |
+| Ngày | 2026-08-24 |
 | Chủ quản | System Engineering |
 | Phạm vi | Một Product Programming — Product/SRS/Architecture/DDD/FE/BE/Core/HW/FW/V&V/Ops |
 
@@ -74,7 +74,7 @@ Product/ADR Active
 | `ARCH-PROG-001` | [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | context, ownership, package/POU/scheduler/signal/output/failure/migration boundary | `Active` v1.0 — unified Product architecture; **APPROVED FOR IMPLEMENTATION** |
 | `DDD-SW-PROG-UNIFIED-001` | [Unified Product Detailed Design](software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | multi-Program, POU, library, signal, enable, scheduler, output, migration, test | `Active` v1.1 — **IMPLEMENT_READY; DD-01..13 PASS** |
 | `DM-PROG-001` | [Programming Data Model](software/PROGRAMMING_DATA_MODEL.md) | Project/Draft/Revision/Artifact/Runtime/Audit | `M3` v1.0 — SQLite v5 operation/Commission projection As-Built; target migration còn mở |
-| `IFSPEC-PROG-001` | [Programming Interface Specification](interfaces/PROGRAMMING_INTERFACE_SPEC.md) | REST/WS/internal control/error/idempotency contracts | `M3` v1.9 — Monitor/Trace concrete; machine-readable OpenAPI hiện hành v1.26.0 và target corrective còn mở |
+| `IFSPEC-PROG-001` | [Programming Interface Specification](interfaces/PROGRAMMING_INTERFACE_SPEC.md) | REST/WS/internal control/error/idempotency contracts | `M3` v1.9 — Monitor/Trace concrete; machine-readable OpenAPI hiện hành v1.27.0 và target corrective còn mở |
 | `DDD-LANG-PROG-001` | [Language/Compiler Design](software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md) | ST/FBD, user POU, purity/state/call graph, typed IR và compiler | `Active` v1.0 — implementation-ready; source migration theo Plan59 W1 |
 | `IFSPEC-ART-PROG-001` | [Artifact/Loader Spec](interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md) | artifact layout, bounded loader, stage/load/swap/reject | `M3` v0.9 — verified file staging, O(1) swap/LKG và checkpoint recovery có source; target còn mở |
 | `DDD-CTRL-PROG-001` | [Control Semantics](software/PROGRAMMING_CONTROL_SEMANTICS.md) | scan order, priority, PID, hold-last, overrun, transition | `M3` v1.1 — exclusive owner, TTL hold-last 60 s và first-output cutover/rollback As-Built; target/HIL còn mở |
@@ -119,7 +119,7 @@ cập nhật trong Plan 59 để không tạo hai authority.
 | Graph production path | Có, bootstrap nạp `graph.json` | Legacy; cần cutover contract |
 | ST parser/semantic/IR/artifact/scheduler/RETAIN/trace component | Compiler/runtime, ST history/overlay và đường `TRACE_READ` có source/test host; invalid không thành zero | Supporting HOST/LOCAL; target timing/soak và Test Result còn mở |
 | FBD | Compiler/editor có POU typed interface, keyboard flow và source/host evidence | User POU/library/multi-Program HOST/LOCAL; target Commission/HIL còn thiếu |
-| Programming REST/WS + persistence | Store v11, OpenAPI v1.26.0; Project/Draft/Revision/Check/Commission/Restore/Enable/Disable/Runtime/Signal dùng service thật; lane E2E real-backend 1/1 PASS trên host | Source W0..W5 trên nhánh; GitHub CI/target/HIL/Test Result/release còn mở |
+| Programming REST/WS + persistence | Store v11, OpenAPI v1.27.0; Project/Draft/Revision/Check/Commission/Restore/Enable/Disable/Runtime/Signal dùng service thật; lane E2E real-backend 1/1 PASS trên host | Source W0..W5 trên nhánh; GitHub CI/target/HIL/Test Result/release còn mở |
 | MCU IOP safe timeout | Có code thuần `200 ms` | BSP/HIL vật lý còn RED |
 | FE Programming | Sáu workspace, lifecycle, Monitor và ST/FBD editor PASS source/component/browser ở mức HOST/LOCAL | Source nhánh chưa merge; usability độc lập, GitHub CI, target/HIL và release còn mở |
 
@@ -230,6 +230,7 @@ code; review/evidence thực được bổ sung trong task và trước release.
 | 3.6 | 2026-08-13 | Đồng bộ `EV-PROG-P5-510`: Interface v1.9, UX v1.0, FE v1.3, BE v1.6, FW-SOM v1.0, VVP v1.8, Trace v3.20 và Plan v0.54. Full host gate và Foxlinx deploy/read-back/rollback/Chrome/axe PASS; source chưa merge, positive binding target và release assurance còn mở. P5 giữ 8/11, tổng 43/53, 0/32 PASS. |
 | 3.7 | 2026-08-13 | Đồng bộ vòng đóng audit live HTTP: UX v1.1, FE v1.4, VVP v1.9, Trace v3.21 và Plan v0.55. Loại bỏ phụ thuộc Web Crypto ở HTTP, giữ deep-link qua đăng nhập, khóa Restore/RETAIN fail-closed, thêm export/import và điều hướng mobile; redeploy Foxlinx, kiểm live ST save/restore, export, import lỗi `422`, desktop/mobile và axe 6/6 scan sạch. Source chưa merge, positive binding target và release assurance còn mở; P5 giữ 8/11, 0/32 PASS. |
 | 4.0 | 2026-08-20 | Hợp nhất Product v3.0 theo ADR-050; thêm Unified DDD, 82 requirement, sáu workspace, 12 scenario unified và Plan59; Plan53/54/56/tracker thành Superseded, không còn decision/document blocker implementation. |
+| 4.2 | 2026-08-24 | Đồng bộ theo `T60-016` (Plan 60): **OpenAPI `1.26.0` → `1.27.0`**. `GET /projects/{projectId}/programs` chuyển từ `ProgrammingProgramIntentList` (2 trường) sang `ProgrammingProgramsPage` — 6 trường mức trang + 19 trường mức item, mọi trường `required` kể cả khi nullable (server cố ý không dùng `omitempty`: `null` tường minh khác hẳn trường vắng mặt). Ba enum mới; `ProgrammingProgramRuntimeState` đúng **năm** giá trị — `STARTING`/`STOPPING` bị loại theo `ADR`/D-07 vì `start()`/`stop()`/`disable()` của scheduler đổi trạng thái đồng bộ tức thì. Generator nay **sinh type từ schema** thay vì chỉ sinh bảng endpoint, nên type FE không còn khai tay. Số operation giữ **32** (đổi hình dạng phản hồi, không thêm route). Pin G1 re-pin cùng PR. |
 | 4.1 | 2026-08-21 | Đồng bộ revision authority sau W5: Unified DDD v1.1, Interface v1.9/OpenAPI v1.26.0, Control Semantics v1.1, Risk v4.19, Trace v6.4 và Plan59 v2.1. Ghi đúng W5 đã PASS ở mức HOST/LOCAL nhưng source chưa merge; `RELEASE_READY` giữ NO-GO vì chưa có GitHub CI, target/HIL, Test Result và residual risk được chấp nhận. |
 
 ## 11. Phụ lục — Tự kiểm cổng M3 (loại: Kiểm soát tài liệu)
