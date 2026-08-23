@@ -54,6 +54,14 @@ type projectResponse struct {
 	// LatestCheck — WP-01 (Overview state model). `nil` khi Draft chưa từng
 	// niêm phong hoặc chưa từng Check.
 	LatestCheck *projectLatestCheckResponse `json:"latestCheck,omitempty"`
+	// Dirty/DraftSequence/ActiveSequence — T60-015 (Plan 60 §3.1 nhóm B, D-05).
+	// CỐ Ý không dùng `omitempty`: `null` tường minh nói "server đã xét và
+	// chưa biết", còn trường vắng mặt thì lẫn với "server đời cũ chưa có
+	// trường này". FE phải render `null` thành `—`, tuyệt đối không thành `0`
+	// hay "sạch".
+	Dirty          *bool  `json:"dirty"`
+	DraftSequence  *int64 `json:"draftSequence"`
+	ActiveSequence *int64 `json:"activeSequence"`
 }
 
 type projectLatestCheckResponse struct {
@@ -198,8 +206,16 @@ func handleGetRevision(w http.ResponseWriter, r *http.Request, correlationID str
 		writeMappedError(w, err, correlationID)
 		return
 	}
-	writeJSON(w, http.StatusOK, correlationID, map[string]any{"revisionId": revision.RevisionID, "projectId": revision.ProjectID,
-		"state": revision.State, "contentHash": revision.ContentHash, "createdAt": revision.CreatedAt, "snapshot": revision.Snapshot})
+	writeJSON(w, http.StatusOK, correlationID, toRevisionResponse(revision))
+}
+
+// toRevisionResponse — `sequence` là số thứ tự Revision trong Project
+// (T60-015 + D-05), luôn >= 1 nên không cần nullable: hàng `revisions` không
+// tồn tại thì request đã trả 404 từ trước đó.
+func toRevisionResponse(revision programmingapplication.RevisionView) map[string]any {
+	return map[string]any{"revisionId": revision.RevisionID, "projectId": revision.ProjectID,
+		"state": revision.State, "sequence": revision.Sequence, "contentHash": revision.ContentHash,
+		"createdAt": revision.CreatedAt, "snapshot": revision.Snapshot}
 }
 
 func requestActor(r *http.Request) programmingapplication.Actor {
@@ -285,7 +301,8 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 func toProjectResponse(project programmingapplication.ProjectView) projectResponse {
 	response := projectResponse{ProjectID: project.ProjectID, Name: project.Name, ETag: project.ETag,
 		ActiveRevisionID: project.ActiveRevisionID, DraftRevisionID: project.DraftRevisionID,
-		BaseRevisionID: project.BaseRevisionID, UpdatedAt: project.UpdatedAt}
+		BaseRevisionID: project.BaseRevisionID, UpdatedAt: project.UpdatedAt,
+		Dirty: project.Dirty, DraftSequence: project.DraftSequence, ActiveSequence: project.ActiveSequence}
 	if len(project.DraftContentJSON) > 0 {
 		response.Draft = json.RawMessage(project.DraftContentJSON)
 	}
