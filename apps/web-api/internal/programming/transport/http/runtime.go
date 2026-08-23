@@ -156,6 +156,21 @@ func handleRuntimeRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		writeRuntimeJSON(w, http.StatusOK, correlationID, page)
 		return true
 	}
+	// T60-013 — GET /projects/{projectId}/programs.
+	//
+	// Nối ở ĐÂY chứ không ở `router.go` là có chủ đích. `handleProgrammingRequest`
+	// gọi `handleRuntimeRequest` TRƯỚC `handleProgramIntentRequest`, nên bắt
+	// request tại cuối hàm này cho đúng thứ tự cần thiết: nhánh `GET .../programs`
+	// cũ trong `runtime_intent.go` (chỉ trả ý định lưu trong DB, không có
+	// read-back sống) không bao giờ còn chạy tới. Đặt vào `router.go` sẽ cho cùng
+	// kết quả nhưng phải sửa một file đang mang thay đổi chưa commit của luồng
+	// khác — xem ghi chú Plan 60 §6 P0-B.
+	//
+	// Handler tự khớp đường dẫn tường minh dựng từ `projectId` và trả `false` khi
+	// không phải route của nó, nên nó không nuốt request của module khác.
+	if handleProgramsRequest(w, r, correlationID, service) {
+		return true
+	}
 	return false
 }
 
