@@ -8,6 +8,56 @@
 
 ## [Unreleased]
 
+### Plan 60 Batch 1 — mở đường dữ liệu Program và nền FE (2026-08-23)
+
+- **Added — Core C++ `T60-001..003`** (`ad28a51`). *Triệu chứng:* PGM-01 cần
+  bảng Programs sáu cột nhưng Core không phát trạng thái theo từng Program;
+  khối `task` chỉ mô tả `tasks().front()` và báo cáo nó như thể là Task duy
+  nhất. *Nguyên nhân gốc:* từ `T59-402/403` mỗi Program tự release theo chu kỳ
+  riêng nên Task không còn đại diện cho hệ — Program của Task thứ hai trở đi
+  biến mất khỏi snapshot; đồng thời `last_exec_ns` là THỜI LƯỢNG chứ không phải
+  mốc thời gian, và `missed_release_count` tích luỹ nên dùng cho `health` sẽ
+  ghim Program ở DEGRADED vĩnh viễn. *Cách sửa:* `RuntimeProgramSnapshot` +
+  `std::array<…, 32>` bounded (trần `kMaxProgramsTotal`, **không** phải
+  `kMaxProgramsPerTask`=16); duyệt đủ Program của mọi Task với `static_assert`
+  nối hai trần; phân giải `period_ms == 0` về chu kỳ Task thay vì phát `0`;
+  thêm `last_run_mono_ns` (ghi ở mọi lần chạy, kể cả lần kết thúc bằng fault)
+  và `consecutive_missed_release` (reset về 0 khi release đúng hạn); serialize
+  `"programs":[…]` với khoá LUÔN có mặt kể cả khi rỗng — mảng rỗng và thiếu
+  khoá là hai câu trả lời khác nhau. *Verification (HOST):* configure exit `0`,
+  build exit `0`, **ctest 1230/1230 pass** exit `0`.
+- **Added — `apps/web-api` `T60-015`** (`550449f`). *Triệu chứng:* Overview cần
+  nhãn `Draft #14`/`Active #12` và cờ Draft-có-việc-chưa-phát-hành, nhưng
+  `GET /projects` không trả cả hai. *Nguyên nhân gốc:* hai cột đã tồn tại từ
+  `0001_programming_v1.sql` mà chưa được đưa lên tầng application/transport —
+  lỗ hổng **lộ** dữ liệu, không phải thiếu dữ liệu, nên không cần migration.
+  *Cách sửa:* `dirty` so thật `drafts.content_sha256` với
+  `manifest.draftContentSha256` của base Revision, trả `nil` khi không so được
+  chứ tuyệt đối không `false`; `draftSequence`/`activeSequence` trả `nil` khi
+  Core im hoặc Revision không thuộc Project, không lấy bản Commission gần nhất
+  thế chỗ; JSON cố ý bỏ `omitempty` để `null` phân biệt được với trường vắng;
+  tách `GetRevisionHeader` khỏi `GetRevision` vì đường Overview không cần kéo
+  toàn bộ `revision_objects` (mỗi object tới 256 KiB) cho mỗi item.
+  *Verification (HOST):* `go vet ./...` exit `0`; `go test ./... -count=1`
+  exit `0`, 18 package `ok`.
+- **Added — `apps/web-ui` `T60-104`** (`984ebdd`). *Triệu chứng:* Handoff v2.1
+  §3 quy định bảy trạng thái ngữ nghĩa dùng chung, nhưng `StatusBadge` mang một
+  tập khác sinh ra từ nhu cầu trang Point/Alarm. *Nguyên nhân gốc:* tập đó
+  thiếu `reconciling` (không có nó thì mutation hết giờ chỉ còn rơi vào "lỗi"
+  hoặc "xong" — cả hai đều sai, và README §5.5 cấm suy timeout thành thành
+  công) và `disabled` (tắt có chủ đích không phải lỗi, gộp vào `unknown`/
+  `fault` là dạy người vận hành thông tin sai). *Cách sửa:* module
+  `shared/semanticState.ts` ánh xạ bảy trạng thái lên tập badge sẵn có thay vì
+  mở rộng `StatusBadge`, giữ bảng màu là một nguồn duy nhất; mỗi trạng thái bắt
+  buộc có **icon + chữ** và test ép điều đó. *Verification (HOST):*
+  `npx vitest --run --environment jsdom src` — 125 file / 1180 test, 1179 pass.
+  Một fail **ngoài phạm vi Plan 60**: `api/generated/client.test.ts` chờ 31
+  operation trong khi `client.ts` đã lên 32 do `resetProgrammingRecovery`
+  (`T59-702`) đang nằm chưa commit trong cây làm việc — không sửa vì thuộc
+  luồng khác.
+- **Changed — Plan 60 §6**: `T60-001/002/003/015/104` chuyển `DONE`.
+
+
 ### Plan 60 Batch 0 — dựng baseline thi hành (2026-08-23)
 
 - **Changed — `docs/03_implementation/60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md`**
