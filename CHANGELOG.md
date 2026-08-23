@@ -55,7 +55,53 @@
   operation trong khi `client.ts` đã lên 32 do `resetProgrammingRecovery`
   (`T59-702`) đang nằm chưa commit trong cây làm việc — không sửa vì thuộc
   luồng khác.
-- **Changed — Plan 60 §6**: `T60-001/002/003/015/104` chuyển `DONE`.
+- **Added — Core C++ test `T60-004`** (`ea18a38`). 13 test mới phủ bảy nhóm case
+  của §6 P0-A. Hai chỗ được chứng minh chứ không chỉ được khẳng định:
+  `"programs":[]` kiểm trên **chuỗi thô trước khi parse** — chỉ hỏi parser thì
+  "khoá vắng" và "mảng rỗng" cho cùng một câu trả lời, mà đó đúng là ranh giới
+  `CORE_LIVE` ↔ `UNAVAILABLE`; nhánh tràn đòi `*length == 0` ở bốn sức chứa
+  thiếu khác nhau, vì nguy hiểm thật không phải tràn mà là chuỗi cụt đứt đúng
+  chỗ hợp lệ rồi vẫn parse được ở đầu kia. Trần 32 để **chính scheduler** từ
+  chối Program thứ 33 thay vì test tự đặt con số. *Verification (HOST):*
+  configure/build exit `0`; **ctest 1243/1243 pass** exit `0` (nền 1230), CTIO
+  chạy lại độc lập cùng con số. Hai số đo mới thay ước lượng: payload 32 Program
+  xấu nhất **15 339 B / trần 65 536 B**; nhánh `programs_truncated=true` **không
+  tới được qua scheduler** (`add_program` chặn ở đúng 32) nên chỉ là phòng vệ
+  của lớp serialize. **Mốc M1 ĐẠT** — dump `point_snapshot` thật, 2 Program chu
+  kỳ 50 ms / 200 ms, sinh từ `ScanLoop` + artifact ST đã ký.
+- **Added — `apps/web-ui` `T60-101` + `T60-102`** (`c849510`). *Triệu chứng:*
+  workspace mang hai lớp điều hướng (rail toàn cục 232 px + tab ngang), và ngữ
+  cảnh là panel `<dl>` ~76 px cuộn mất, in thẳng UUID 36 ký tự. *Nguyên nhân
+  gốc:* ngân sách ngang — giữ cả hai lớp thì ở 1280 px workspace còn 828 px và
+  PGM-02 chỉ còn ~328 px cho editor; còn ngữ cảnh thì bị đặt làm khối **nội
+  dung** thay vì thanh trạng thái, lấy định danh kỹ thuật trả lời một câu hỏi
+  nhị phân. *Cách sửa:* `ProgrammingFeatureRail` 220 px theo focus mode `D-01`
+  với mục `← Thoát Lập trình` bắt buộc ở đầu (ở ≥1024 px nút ngăn kéo TopBar là
+  `lg:hidden` nên đây là đường duy nhất rời workspace bằng chuột); chặn render
+  đặt ở `NavRail.isProgrammingFocusRoute` — **chặn render, không xoá mục**,
+  `NAV_GROUPS` nguyên vẹn nên `ADR-032` không bị động tới.
+  `ProgrammingContextStrip` một hàng 38 px `sticky top-16`, bỏ mọi UUID khỏi
+  mặt trước, giữ nguyên từng dòng luật fail-closed. **Không case test nào bị
+  xoá**: 8 case ContextBar + 3 case DesktopNav chuyển sang test mới, hai case cũ
+  khẳng định UUID *hiện* ở mặt trước bị đảo chiều theo `AC-PGM01-01` và nay
+  kiểm chặt hơn bằng regex UUID trên toàn DOM.
+- **Fixed — hai lỗi phát hiện trong cùng phiên** (`c849510`). Strip đặt
+  `sticky top-0` trong khi TopBar là `sticky top-0 z-40 h-16` ⇒ strip trượt
+  xuống dưới TopBar và biến mất đúng lúc cuộn; sửa thành `top-16 z-20`. Chặn
+  render `NavRail` phải phụ thuộc **cả** cờ `PROGRAMMING_REV_A_ENABLED`: cờ tắt
+  thì `/eng/programming` render `UnavailableFeaturePage` nên không có rail thay
+  thế — ẩn rail toàn cục lúc đó để người dùng ≥1024 px mất sạch điều hướng.
+- **Added — `apps/web-ui` `T60-017`** (`c718d65`). Hàm thuần `activeProgramSet()`
+  đọc `snapshot.objects[kind='PROGRAM']` của Active Revision; không tự gọi API
+  (tầng `api/queries` là đường HTTP duy nhất, trộn fetch vào đây sẽ tạo đường
+  đọc thứ hai không đi qua client sinh từ contract). Ba luật fail-closed: không
+  mượn Draft (`NO_ACTIVE_REVISION`, và `REVISION_MISMATCH` khi thân phản hồi
+  thuộc Revision khác); không chế số (`null` ⇒ `—`, không bao giờ `0`); rỗng
+  luôn kèm lý do. *Verification (HOST):* vitest **126 file / 1228 test, 1227
+  pass**, CTIO chạy lại độc lập cùng con số; `npm run lint` exit `0`;
+  `npm run build` exit `0`; `verify-project.sh --component layout` exit `0`.
+- **Changed — Plan 60 §6**: `T60-001/002/003/004/015/017/101/102/104` chuyển
+  `DONE` (9/27).
 
 
 ### Plan 60 Batch 0 — dựng baseline thi hành (2026-08-23)
