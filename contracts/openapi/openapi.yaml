@@ -2529,6 +2529,40 @@ paths:
         "413": { $ref: "#/components/responses/ProgrammingError" }
         "422": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/runtime/recovery-reset:
+    post:
+      operationId: resetProgrammingRecovery
+      summary: Gỡ khoá Core khỏi RECOVERY_REQUIRED (T59-702)
+      description: >-
+        `RECOVERY_REQUIRED` là ngõ cụt có chủ ý — Core không đoán gói nào còn
+        dùng được. Endpoint này là LỐI RA tường minh duy nhất: nó ghi thêm một
+        bản ghi journal (không xoá gì), đưa Core về `IDLE` KHÔNG có Active và
+        giữ safe-state. Phải Commission lại sau đó; không gói nào tự sống lại.
+        Gọi khi Core không ở `RECOVERY_REQUIRED` trả `409`.
+      x-rbac: [admin]
+      x-implementation-status: implemented
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingRecoveryResetRequest" }
+      responses:
+        "200":
+          description: Core đã rời RECOVERY_REQUIRED
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRecoveryResetResult" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409":
+          description: Core không ở RECOVERY_REQUIRED — không có gì để gỡ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRecoveryResetResult" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/audit:
     get:
       operationId: listProgrammingAudit
@@ -3217,6 +3251,25 @@ components:
           contentEncoding: base64
         auditId: { type: string, format: uuid }
         correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+    ProgrammingRecoveryResetRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, reason]
+      properties:
+        schemaVersion: { type: string, enum: ["1.0"] }
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Lý do gỡ khoá — đi thẳng vào audit, kể cả khi Core từ chối.
+    ProgrammingRecoveryResetResult:
+      type: object
+      additionalProperties: false
+      required: [applied, auditId]
+      properties:
+        applied: { type: boolean }
+        detailCode: { type: string, maxLength: 64 }
+        auditId: { type: string, format: uuid }
     ProgrammingRetainResetRequest:
       type: object
       additionalProperties: false

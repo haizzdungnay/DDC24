@@ -10,11 +10,19 @@ import {
 import impactGolden from "../../../../../../../contracts/openapi/testdata/programming-impact.json";
 
 describe("Programming API client sinh từ OpenAPI", () => {
-  it("khóa đủ 31 operation và contract Commission/Runtime Signal", () => {
+  it("khóa đủ 32 operation và contract Commission/Runtime Signal", () => {
     // 25 operation Rev A + 3 operation Control Library (T59-202)
     // + 2 operation intent Enable/Disable (T59-405) + 1 Published Signal
-    // runtime read-only (T59-504).
-    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(31);
+    // runtime read-only (T59-504) + 1 recovery-reset (T59-702).
+    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(32);
+    // T59-702 — lối ra tường minh khỏi RECOVERY_REQUIRED. Admin-only: đây là
+    // lệnh gỡ khoá vận hành, đưa Core về IDLE KHÔNG có Active và bắt buộc
+    // Commission lại; không gói nào tự sống lại.
+    expect(PROGRAMMING_ENDPOINTS.resetProgrammingRecovery).toEqual({
+      method: "POST",
+      path: "/api/v1/programming/runtime/recovery-reset",
+      roles: ["admin"],
+    });
     expect(PROGRAMMING_ENDPOINTS.getProgrammingRuntimeSignals).toEqual({
       method: "GET",
       path: "/api/v1/programming/runtime/signals",

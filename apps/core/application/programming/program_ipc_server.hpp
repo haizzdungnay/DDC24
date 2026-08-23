@@ -18,7 +18,9 @@ constexpr uint16_t PROGRAM_IPC_PROTOCOL_MAJOR = 1;
 /* T59-504 nâng minor 2 -> 3: STATUS thêm snapshot Published Signal ở phần tử
  * thứ năm. Client minor cũ không giải mã array dài hơn, nên phải nhận biết
  * phiên bản thay vì âm thầm coi payload hỏng. */
-constexpr uint16_t PROGRAM_IPC_PROTOCOL_MINOR = 3;
+/* T59-702 nâng 3 -> 4: thêm action `RECOVERY_RESET`. Core minor 3 gặp action
+ * này trả lỗi action không hợp lệ — đúng fail-closed. */
+constexpr uint16_t PROGRAM_IPC_PROTOCOL_MINOR = 4;
 constexpr std::size_t PROGRAM_IPC_MAX_FRAME = 64U * 1024U;
 constexpr std::size_t PROGRAM_IPC_MAX_PAYLOAD = 32U * 1024U;
 constexpr std::size_t PROGRAM_IPC_MAX_QUEUE = 32;
@@ -38,6 +40,10 @@ enum class ProgramAction {
      * hoạt động" là hai quyết định khác nhau, và gộp chúng sẽ buộc mọi lần bật
      * một Program phải đi qua đường Commission. */
     SetProgramEnabled,
+    /* T59-702 — lối ra tường minh khỏi `RECOVERY_REQUIRED`. Là action riêng vì
+     * nó KHÔNG nạp gói nào: gộp vào `STAGE`/`RESTORE` sẽ biến một quyết định
+     * "bỏ giao dịch cũ" thành một tác dụng phụ của lệnh khác. */
+    RecoveryReset,
     /* T59-408 — trace giá trị. `TRACE_START`/`TRACE_STOP` là mutation (đổi trạng
      * thái lấy mẫu của Core); `TRACE_READ` chỉ đọc. Tách `TRACE_READ` ra khỏi
      * hai cái kia vì trộn một lệnh đọc vào nhóm mutation sẽ buộc nó phải mang

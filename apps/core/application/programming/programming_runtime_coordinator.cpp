@@ -316,6 +316,14 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
             return false;
         }
         return true;
+    case StJournalBootAction::COLD_START_AFTER_RECOVERY_RESET:
+        /* Operator đã bỏ giao dịch cũ. Boot sạch: không Active, không candidate,
+         * graph giữ quyền output cho tới khi có Commission mới. */
+        detail_code_ = "JOURNAL_RECOVERY_RESET";
+        state_.store(LifecycleState::IDLE, std::memory_order_release);
+        cutover_->request(CutoverMode::GRAPH_ONLY);
+        (void)cutover_->apply_pending_at_boundary();
+        return true;
     case StJournalBootAction::NO_VALID_RECORD_RAISE_INCIDENT:
         detail_code_ = "JOURNAL_CORRUPT";
         state_.store(LifecycleState::RECOVERY_REQUIRED, std::memory_order_release);
@@ -1092,6 +1100,53 @@ void ProgrammingRuntimeCoordinator::on_output_commit(bool committed) noexcept
     }
     first_output_committed_.store(true, std::memory_order_release);
     state_.store(LifecycleState::FIRST_CYCLE_OK, std::memory_order_release);
+}
+
+RecoveryResetOutcome ProgrammingRuntimeCoordinator::recovery_reset(
+    const RecoveryResetCommand& command, std::string* detail_code, std::string* error)
+{
+    if (command.actor_id.empty() || command.actor_id.size() > kStJournalFieldMax) {
+        if (detail_code) *detail_code = "RECOVERY_RESET_ACTOR_REQUIRED";
+        if (error) *error = "recovery reset cần actorId";
+        return RecoveryResetOutcome::REJECTED;
+    }
+    if (state_.load(std::memory_order_acquire) != LifecycleState::RECOVERY_REQUIRED) {
+        if (detail_code) *detail_code = "RECOVERY_RESET_NOT_IN_RECOVERY";
+        if (error) *error = "chỉ reset được khi đang RECOVERY_REQUIRED";
+        return RecoveryResetOutcome::NOT_IN_RECOVERY;
+    }
+
+    /* Ghi TRƯỚC khi đổi state: nếu mất điện giữa chừng thì lần boot sau đọc được
+     * quyết định đã ghi, chứ không thấy một Core "đã IDLE" mà journal vẫn nói
+     * đang dở giao dịch. */
+    StJournalRecord record;
+    record.phase = StJournalPhase::RECOVERY_RESET;
+    record.timestamp_ns = default_monotonic_wall_clock_ns();
+    record.operation_id = command.operation_id;
+    record.old_active_hash = command.actor_id;
+    record.candidate_hash.clear();
+    record.plan_hash.clear();
+    if (!journal_.append(record)) {
+        if (detail_code) *detail_code = "RECOVERY_RESET_JOURNAL_WRITE_FAILED";
+        if (error) *error = "cannot append/fsync Programming journal";
+        return RecoveryResetOutcome::REJECTED;
+    }
+
+    /* Không nạp gói nào, không đụng LKG, không đụng RETAIN. Chỉ mở khoá cho một
+     * Commission tường minh sau đó. */
+    operation_id_.clear();
+    artifact_hash_.clear();
+    plan_hash_.clear();
+    previous_artifact_hash_.clear();
+    previous_revision_id_.clear();
+    boundary_applied_.store(false, std::memory_order_release);
+    boundary_journaled_.store(false, std::memory_order_release);
+    detail_code_ = "JOURNAL_RECOVERY_RESET";
+    state_.store(LifecycleState::IDLE, std::memory_order_release);
+    cutover_->request(CutoverMode::GRAPH_ONLY);
+    (void)cutover_->apply_pending_at_boundary();
+    if (detail_code) *detail_code = "RECOVERY_RESET_APPLIED";
+    return RecoveryResetOutcome::APPLIED;
 }
 
 bool ProgrammingRuntimeCoordinator::append_phase(StJournalPhase phase, std::string* error)

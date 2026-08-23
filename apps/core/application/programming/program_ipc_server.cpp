@@ -32,6 +32,7 @@ std::string action_name(ProgramAction action)
     case ProgramAction::Restore: return "RESTORE";
     case ProgramAction::TraceStart: return "TRACE_START";
     case ProgramAction::RetainReset: return "RETAIN_RESET";
+    case ProgramAction::RecoveryReset: return "RECOVERY_RESET";
     case ProgramAction::SetProgramEnabled: return "SET_PROGRAM_ENABLED";
     case ProgramAction::TraceStop: return "TRACE_STOP";
     case ProgramAction::TraceRead: return "TRACE_READ";
@@ -49,6 +50,7 @@ bool parse_action(const std::string& value, ProgramAction* action)
     else if (value == "RESTORE") *action = ProgramAction::Restore;
     else if (value == "TRACE_START") *action = ProgramAction::TraceStart;
     else if (value == "RETAIN_RESET") *action = ProgramAction::RetainReset;
+    else if (value == "RECOVERY_RESET") *action = ProgramAction::RecoveryReset;
     else if (value == "SET_PROGRAM_ENABLED") *action = ProgramAction::SetProgramEnabled;
     else if (value == "TRACE_STOP") *action = ProgramAction::TraceStop;
     else if (value == "TRACE_READ") *action = ProgramAction::TraceRead;
@@ -126,6 +128,7 @@ bool mutation_action(ProgramAction action)
     return action == ProgramAction::Stage || action == ProgramAction::Activate ||
            action == ProgramAction::Restore || action == ProgramAction::TraceStart ||
            action == ProgramAction::RetainReset ||
+           action == ProgramAction::RecoveryReset ||
            action == ProgramAction::SetProgramEnabled ||
            action == ProgramAction::TraceStop;
 }
@@ -296,6 +299,22 @@ bool parse_retain_reset_payload(const ProgramRequest& request, RetainResetComman
             ? std::string() : value[0].get<std::string>();
         output->instance_id = value[1].get<std::string>();
         return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+/* T59-702. Payload 1 phần tử: `[actor_id (string)]`. `operation_id` lấy từ
+ * envelope chung. Actor bắt buộc — một quyết định bỏ giao dịch mà không có chủ
+ * thì không truy được về sau. */
+bool parse_recovery_reset_payload(const ProgramRequest& request, RecoveryResetCommand* output)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 1 || !value[0].is_string()) return false;
+        output->operation_id = uuid_text(request.operation_id);
+        output->actor_id = value[0].get<std::string>();
+        return !output->actor_id.empty();
     } catch (const json::exception&) {
         return false;
     }
@@ -889,6 +908,23 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
                     case RetainResetOutcome::APPLIED: result = ProgramResult::Ok; break;
                     case RetainResetOutcome::REJECTED: result = ProgramResult::Rejected; break;
                     case RetainResetOutcome::TIMED_OUT: result = ProgramResult::Busy; break;
+                    }
+                } else {
+                    detail = "IPC-PAYLOAD";
+                }
+                response = make_response(request, result,
+                                         result == ProgramResult::Ok ? nullptr
+                                             : (detail.empty() ? "IPC-PAYLOAD" : detail.c_str()));
+            } else if (request.action == ProgramAction::RecoveryReset) {
+                RecoveryResetCommand command;
+                std::string detail;
+                std::string error;
+                ProgramResult result = ProgramResult::Rejected;
+                if (parse_recovery_reset_payload(request, &command)) {
+                    switch (coordinator_->recovery_reset(command, &detail, &error)) {
+                    case RecoveryResetOutcome::APPLIED: result = ProgramResult::Ok; break;
+                    case RecoveryResetOutcome::NOT_IN_RECOVERY:
+                    case RecoveryResetOutcome::REJECTED: result = ProgramResult::Rejected; break;
                     }
                 } else {
                     detail = "IPC-PAYLOAD";

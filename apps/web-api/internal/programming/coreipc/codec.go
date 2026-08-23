@@ -15,7 +15,7 @@ const (
 	ProtocolMajor uint16 = 1
 	// T59-504 nâng minor 2 -> 3: STATUS thêm snapshot Published Signal ở phần
 	// tử thứ năm. Client cũ giải mã array cố định nên cần nhận biết phiên bản.
-	ProtocolMinor    uint16 = 3
+	ProtocolMinor    uint16 = 4
 	SchemaVersion           = "1.0"
 	MaxFramePayload         = 64 * 1024
 	MaxQueueDepth           = 32
@@ -35,6 +35,10 @@ const (
 	ActionRestore         Action = "RESTORE"
 	ActionTraceStart      Action = "TRACE_START"
 	ActionRetainReset     Action = "RETAIN_RESET"
+	// T59-702 — lối ra tường minh khỏi `RECOVERY_REQUIRED`. Không nạp gói nào;
+	// gộp vào STAGE/RESTORE sẽ biến "bỏ giao dịch cũ" thành tác dụng phụ của
+	// một lệnh khác.
+	ActionRecoveryReset Action = "RECOVERY_RESET"
 	// T59-405 — intent Enable/Disable cho MỘT Program. Action riêng chứ không
 	// phải tham số của ACTIVATE: "chương trình nào đang chạy" và "gói nào đang
 	// hoạt động" là hai quyết định khác nhau, và gộp chúng sẽ buộc mọi lần bật
@@ -381,6 +385,7 @@ func knownAction(action Action) bool {
 	switch action {
 	case ActionCapabilities, ActionStatus, ActionStage, ActionActivate,
 		ActionOperationStatus, ActionRestore, ActionTraceStart, ActionRetainReset,
+		ActionRecoveryReset,
 		ActionSetProgramEnabled, ActionTraceStop, ActionTraceRead:
 		return true
 	}
@@ -398,6 +403,7 @@ func knownResult(result Result) bool {
 func isMutation(action Action) bool {
 	switch action {
 	case ActionStage, ActionActivate, ActionRestore, ActionTraceStart, ActionRetainReset,
+		ActionRecoveryReset,
 		ActionSetProgramEnabled, ActionTraceStop:
 		// `TRACE_READ` KHÔNG nằm ở đây: nó chỉ đọc. Xếp một lệnh đọc vào nhóm
 		// mutation sẽ buộc nó mang `operationId` và đi qua kiểm idempotency mà

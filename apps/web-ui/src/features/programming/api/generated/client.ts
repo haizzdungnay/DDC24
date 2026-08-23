@@ -141,6 +141,7 @@ export const PROGRAMMING_ENDPOINTS = {
   "listProgrammingOverrides": { method: "GET", path: "/api/v1/programming/overrides", roles: ["viewer","operator","admin"] },
   "listProgrammingProgramIntents": { method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", roles: ["viewer","operator","admin"] },
   "listProgrammingProjects": { method: "GET", path: "/api/v1/programming/projects", roles: ["viewer","operator","admin"] },
+  "resetProgrammingRecovery": { method: "POST", path: "/api/v1/programming/runtime/recovery-reset", roles: ["admin"] },
   "resetProgrammingRetain": { method: "POST", path: "/api/v1/programming/retain/reset", roles: ["admin"] },
   "restoreProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/restore", roles: ["admin"] },
   "searchProgrammingLibraries": { method: "GET", path: "/api/v1/programming/libraries", roles: ["viewer","operator","admin"] },

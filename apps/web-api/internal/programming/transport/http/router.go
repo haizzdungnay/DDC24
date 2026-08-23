@@ -65,6 +65,10 @@ var routeDefinitions = []routeDefinition{
 	{method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent",
 		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/audit", role: auth.RoleViewer},
+	// T59-702 — lối ra tường minh khỏi `RECOVERY_REQUIRED`. Admin, có
+	// idempotency key và body bắt buộc: một lệnh gỡ khoá vận hành phải nêu lý do.
+	{method: "POST", path: "/api/v1/programming/runtime/recovery-reset",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 }
 
 // RegisterProgrammingRoutes chỉ mount contract khi flag bật. Khi flag tắt,
@@ -111,6 +115,9 @@ func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition
 		return
 	}
 	if services.Runtime != nil && handleRuntimeRequest(w, r, correlationID, services.Runtime) {
+		return
+	}
+	if services.Intents != nil && handleRecoveryResetRequest(w, r, correlationID, services.Intents) {
 		return
 	}
 	if services.Intents != nil && handleProgramIntentRequest(w, r, correlationID, services.Intents) {
