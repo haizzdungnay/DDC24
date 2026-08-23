@@ -24,8 +24,42 @@ type MonitorTruthSnapshot struct {
 	// I/O/stale/overrun thật đi kèm. Dùng để RuntimeService không chặn
 	// Commission trong đúng trường hợp mà Commission sẽ tự giải quyết.
 	SafeStateNoControllerOnly bool
-	Task                      *TaskMetricsView
-	Points                    []MonitorPointTruth
+	// CapturedMonotonicNs là mốc đồng hồ monotonic lúc Core chụp snapshot. Nó
+	// CÙNG HỌ đồng hồ với `ProgramMetricsView.LastRunMonoNS`, nên tuổi của một
+	// lần chạy tính được bằng đúng một phép trừ TRONG CÙNG snapshot — không
+	// phải so đồng hồ tường của hai máy khác nhau.
+	CapturedMonotonicNs uint64
+	Task                *TaskMetricsView
+	// Programs: nil KHÁC HẲN slice rỗng, và sự phân biệt đó đi suốt từ JSON của
+	// Core tới đây.
+	//
+	//   nil  ⇒ Core không nói gì về Program (khoá `programs` vắng — Core đời cũ)
+	//          ⇒ người đọc phải ra `UNAVAILABLE`.
+	//   []   ⇒ Core sống và nói rõ "hệ không có Program nào".
+	Programs []ProgramMetricsView
+	// ProgramsTruncated: Core đã cắt ở trần `kMaxProgramsTotal` (32) ⇒ danh
+	// sách KHÔNG đầy đủ.
+	ProgramsTruncated bool
+	Points            []MonitorPointTruth
+}
+
+// ProgramMetricsView là read-back sống của MỘT Program, giữ nguyên đơn vị và
+// nguyên văn trạng thái của Core. Lớp này KHÔNG dịch trạng thái và KHÔNG tính
+// `health` — hai việc đó thuộc `ListPrograms` (D-07/D-04) và cần bản nguyên văn
+// (`ROLLED_BACK`) mới làm đúng được.
+type ProgramMetricsView struct {
+	InstanceID string
+	// State: nguyên văn `StProgramState`.
+	State                    string
+	Enabled                  bool
+	PeriodMS                 int
+	LastExecNS               uint64
+	MaxExecNS                uint64
+	MissedReleaseCount       uint32
+	ConsecutiveMissedRelease uint32
+	// LastRunMonoNS: 0 = chưa chạy lần nào kể từ lần activate gần nhất.
+	LastRunMonoNS uint64
+	Lane          int
 }
 
 type MonitorPointTruth struct {

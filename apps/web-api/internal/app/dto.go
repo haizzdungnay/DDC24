@@ -116,7 +116,7 @@ type VirtualPoint struct {
 	// category VP hướng READ (resolve_io_bindings chấp nhận từ 2026-08-17).
 	BoundPointID string `json:"boundPointId,omitempty"`
 	// Equipment — `T57-3.1` (`ADR-042`). Rỗng = chưa gán, KHÔNG đoán theo tên.
-	Equipment       string  `json:"equipment,omitempty"`
+	Equipment string `json:"equipment,omitempty"`
 }
 
 type SystemConfig struct {
@@ -269,6 +269,38 @@ type RuntimeTaskSnapshot struct {
 	ConsecutiveOverruns uint32 `json:"consecutiveOverruns"`
 }
 
+// RuntimeProgramSnapshot là một dòng của mảng `programs[]` mà Core serialize
+// trong `point_snapshot` (T60-001..003, apps/core/domain/graph/
+// runtime_point_snapshot.cpp). Tên field khớp NGUYÊN VĂN JSON của Core.
+//
+// Hai chỗ cực dễ đọc nhầm, đã ghi lại ngay đây để không phải tra ngược:
+//
+//   - `LastExecNS` là THỜI LƯỢNG một lần chạy (`wall_clock_() - program_start`),
+//     KHÔNG phải mốc thời gian. Mốc nằm ở `LastRunMonoNS`, cùng họ đồng hồ với
+//     `RuntimePointSnapshot.CapturedMonotonicNs` nên "tuổi" của số đo tính được
+//     bằng đúng một phép trừ trong cùng một snapshot.
+//   - `MissedReleaseCount` là bộ đếm TÍCH LUỸ; công thức `health` (Plan 60 §4.2
+//     điều 4) phải dùng `ConsecutiveMissedRelease` — bộ đếm reset về 0 mỗi lần
+//     release đúng hạn. Dùng bộ tích luỹ sẽ ghim Program ở DEGRADED vĩnh viễn.
+type RuntimeProgramSnapshot struct {
+	InstanceID string `json:"instanceId"`
+	// State giữ NGUYÊN VĂN `StProgramState` của Core (RUNNING/STOPPED/ACTIVE/
+	// ROLLED_BACK/DISABLED/FAULTED/REJECTED/EMPTY/STAGED/VALIDATED/READY).
+	// Ánh xạ sang hợp đồng FE làm ở lớp application (D-07) — dịch sớm ở đây sẽ
+	// mất thông tin mà công thức `health` còn cần (ROLLED_BACK).
+	State                    string `json:"state"`
+	Enabled                  bool   `json:"enabled"`
+	PeriodMS                 int    `json:"periodMs"`
+	LastExecNS               uint64 `json:"lastExecNs"`
+	MaxExecNS                uint64 `json:"maxExecNs"`
+	MissedReleaseCount       uint32 `json:"missedReleaseCount"`
+	ConsecutiveMissedRelease uint32 `json:"consecutiveMissedRelease"`
+	// LastRunMonoNS: 0 = chưa chạy lần nào kể từ lần activate gần nhất. KHÔNG
+	// được hiểu 0 là "chạy lúc mốc 0" — đó là dữ liệu bịa.
+	LastRunMonoNS uint64 `json:"lastRunMonoNs"`
+	Lane          int    `json:"lane"`
+}
+
 type RuntimePointSnapshot struct {
 	SnapshotID            uint64 `json:"snapshotId"`
 	SnapshotObservedAtUTC string `json:"snapshotObservedAtUtc"`
@@ -279,7 +311,19 @@ type RuntimePointSnapshot struct {
 	// không có lỗi thật đi kèm.
 	SafeStateNoControllerOnly bool                 `json:"safeStateNoControllerOnly"`
 	Task                      *RuntimeTaskSnapshot `json:"task"`
-	Points                    []RuntimePoint       `json:"points"`
+	// Programs: nil KHÁC HẲN slice rỗng và sự khác biệt đó là hợp đồng.
+	//
+	//   nil  ⇒ khoá `programs` VẮNG trong JSON của Core ⇒ Core đời cũ chưa biết
+	//          trường này ⇒ phía đọc phải ra `UNAVAILABLE`.
+	//   []   ⇒ Core sống và nói rõ "hệ không có Program nào".
+	//
+	// Gộp hai tình huống đó lại sẽ báo "không có Program nào" cho một bo mà ta
+	// thật ra không đọc được gì (Plan 60 §4.2 điều 1).
+	Programs []RuntimeProgramSnapshot `json:"programs"`
+	// ProgramsTruncated: Core đã cắt danh sách ở trần `kMaxProgramsTotal` (32).
+	// Danh sách khi đó KHÔNG đầy đủ và phải nói ra, không im lặng bỏ bớt.
+	ProgramsTruncated bool           `json:"programsTruncated"`
+	Points            []RuntimePoint `json:"points"`
 }
 
 type HistorianPolicyPatch struct {
@@ -371,18 +415,18 @@ type PointDTO struct {
 	// BoundPointID — chỉ đặt cho Kind=="virtual" khi VP đã bind vào slot Core
 	// AV/BV thật (F-PROG-ASBUILT-014); Programming Point Catalog dùng field
 	// này thay cho ID thân thiện ("VP1") khi build binding cho ST Program.
-	BoundPointID       string   `json:"boundPointId,omitempty"`
+	BoundPointID string `json:"boundPointId,omitempty"`
 	// Equipment — `T57-3.1` (`ADR-042`): thiết bị công nghệ mà điểm thuộc về.
 	// Rỗng ⇒ giao diện xếp vào nhóm "Chưa gán"; CẤM đoán từ tên điểm.
-	Equipment          string   `json:"equipment,omitempty"`
-	PointID            string   `json:"point_id"`
-	TagName            string   `json:"tag_name"`
-	DisplayName        string   `json:"display_name"`
-	DataType           string   `json:"data_type"`
-	Timestamp          string   `json:"timestamp"`
-	ReadWrite          string   `json:"read_write"`
-	DefaultValue       any      `json:"default_value"`
-	SafeValue          any      `json:"safe_value"`
+	Equipment    string `json:"equipment,omitempty"`
+	PointID      string `json:"point_id"`
+	TagName      string `json:"tag_name"`
+	DisplayName  string `json:"display_name"`
+	DataType     string `json:"data_type"`
+	Timestamp    string `json:"timestamp"`
+	ReadWrite    string `json:"read_write"`
+	DefaultValue any    `json:"default_value"`
+	SafeValue    any    `json:"safe_value"`
 
 	// MBR-B103/B309: chi tiết chẩn đoán của Point Modbus RTU. Tất cả đến TỪ
 	// producer; FE hiển thị nguyên văn và hiện `unknown` khi thiếu, tuyệt đối
