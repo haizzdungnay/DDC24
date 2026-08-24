@@ -8,6 +8,94 @@
 
 ## [Unreleased]
 
+### Plan 59 corrective — Enable/Disable qua safe boundary và read-back signal (2026-08-24)
+
+- **Fixed — Core C++ `F-P59-ENABLE-BOUNDARY-001`** (`T59-402/405/406`).
+  *Triệu chứng:* không có triệu chứng nhìn thấy trên host — mọi test của W4 chạy
+  đơn luồng nên đường này luôn xanh; lỗi chỉ lộ ra khi dựng lại đúng mô hình
+  luồng của bo (scan `SCHED_FIFO 80` + IPC worker thread) và chạy dưới
+  `-fsanitize=thread`. *Nguyên nhân gốc:*
+  `ProgrammingRuntimeCoordinator::set_program_enabled()` gọi thẳng
+  `StScheduler::start/stop/enable/disable` từ luồng non-RT, tức ghi
+  `StProgramInstance::state`/`enabled` ngay khi RT đang đọc để quyết định
+  dispatch và đang ghi khi Program fault — TSan đo ra **3 data race**
+  (`stop`↔`run_task`, `disable`↔`run_task`, vòng đếm trần 16 của `start`↔
+  `run_program`). Hệ quả thật: một lệnh Disable rơi đúng giữa tick có thể bị RT
+  ghi đè trạng thái ngay sau đó, và Program người vận hành vừa tắt còn chạy thêm
+  một chu kỳ **với quyền ghi đầu ra**. *Cách sửa:* Enable/Disable đi đúng con
+  đường đã dùng cho RETAIN reset — non-RT chỉ ARM
+  (`StScheduler::request_program_enabled`), RT áp dụng tại safe boundary
+  (`apply_pending_enable_requests_at_boundary`, gọi trong `on_safe_boundary()`)
+  rồi ack qua `enable_ack_generation`/`enable_ack_result`/`enable_ack_state`;
+  coordinator chờ có giới hạn 1500 ms và trả `APPLIED`/`REJECTED`/`TIMED_OUT`,
+  với `TIMED_OUT` map sang `Busy` chứ không phải `Rejected` (lệnh vẫn có thể áp
+  dụng ở boundary kế; báo "đã từ chối" là nói sai với người vận hành). Sửa kèm:
+  **trần 16 Program kiểm TRƯỚC khi chạm bất kỳ trường nào** — đường cũ enable
+  xong mới phát hiện vượt trần, để lại Program ở `STOPPED`/`enabled=true`.
+  *Kiểm chứng:* `ProgrammingStageAtomicity.EnableIntentAppliesAtSafeBoundaryWhileScanRuns`
+  (3 race trước khi sửa → 0 sau khi sửa); `ctest` **1293/1293**.
+  Refs: `docs/07_records/test-evidence/programming/2026-08-24-tsan-enable-boundary.md`.
+
+- **Fixed — Core C++ `F-P59-SIGNAL-READBACK-001`** (`T59-404/504`).
+  *Triệu chứng:* Runtime Monitor có thể trả `value` của chu kỳ N ghép với
+  `published_at_ns` của chu kỳ N+1 — một số đo "tươi" theo mốc thời gian không
+  thuộc về nó. *Nguyên nhân gốc:* double-buffer chỉ bảo đảm "trọn bản cũ hoặc
+  trọn bản mới" cho reader chạy TRONG cùng chu kỳ với publisher, nhưng
+  `program_ipc_server.cpp` gọi `signal_bus()->inspect_all()` trên IPC worker
+  thread: reader non-RT có thể còn đang chép bản `live` khi scan commit — bản đó
+  thành nháp và `publish()` chu kỳ kế ghi đè lên chính nó. *Cách sửa:*
+  `StSignalBus::snapshot_slot()` kiểm `generation` trước/sau khi chép, chép lại
+  khi khác (trần 5 lần thử) — đúng khuôn seqlock đã dùng cho SHM
+  `IobusReader::read_from`, không phát minh biến thể thứ hai; RT trả thêm đúng
+  một atomic load và không bao giờ retry vì scan là bên duy nhất commit.
+  *Kiểm chứng:* test mới
+  `StSignalBus.ConcurrentInspectNeverPairsValueWithForeignTimestamp` (đỏ 1/3 lần
+  chạy trên bản chưa sửa, xanh sau khi sửa; bộ bắt lỗi tất định là TSan).
+
+- **Added — hạ tầng TSan** (`platform/tsan/suppressions.txt`). Chỉ hai mẫu
+  seqlock CỐ Ý (`IobusReader::read_from`, `StSignalBus::publish`), mỗi mẫu có
+  test hành vi riêng; mọi cảnh báo ngoài danh sách phải coi là lỗi thật. Kèm
+  cách chạy: cần `setarch -R` vì kernel máy dev cấp entropy `mmap` lớn hơn vùng
+  shadow TSan chịu được. *Số đo:* TSan toàn core **0 cảnh báo / 897 pass**; hai
+  test `StCompileCli` không chạy được dưới TSan vì `RLIMIT_AS 256 MB` của sandbox
+  compiler — **không** hạ trần sandbox để làm xanh sanitizer.
+
+- **Fixed — gate Go/layout lạc hậu.** `startTestHMIBroker` chờ socket 2 s: đủ khi
+  chạy riêng gói, không đủ khi `go test ./...` chạy 17 gói trên máy đang build
+  thứ khác (đo thật 2026-08-24: đỏ trong lần chạy đầy đủ, xanh khi chạy một
+  mình) → nâng lên 20 s và báo đúng lỗi khi `Serve()` thoát sớm thay vì đợi hết
+  hạn. `test_programming_error_catalog` còn ghim `126` detail trong khi catalog
+  đã là `134` → cập nhật cùng change-set kèm lý do từng mã mới.
+
+- **Fixed — BE Go `F-P59-MONITOR-VARS-001`.** *Triệu chứng:* màn "Theo dõi" của
+  Runtime & Bảo trì luôn hiện "Revision đang chạy chưa có biến ánh xạ" dù Program
+  đang chạy với Binding hợp lệ; lane E2E thật che lỗi này bằng một kỳ vọng
+  "Monitor đang ngoại tuyến" và một ngoại lệ `503` được coi là hợp lệ.
+  *Nguyên nhân gốc:* hai lỗi chồng nhau. (1) `ReadProgrammingMonitorSnapshot`
+  để lỗi đọc PLC SHM nuốt luôn `snapshot.Points` mà Core phát qua Web IPC, nên
+  Core báo `UI-01=21.5` còn Monitor trả mảng rỗng; (2) `GetMonitor` chỉ tra biến
+  ở Revision object `VARIABLE` (hình dạng v1), trong khi `SealRevision` của Draft
+  v2 seal biến vào `locals` của POU — bảng `variables` luôn rỗng nên **mọi**
+  Binding bị `continue` bỏ qua với **mọi** Revision. Không test nào bắt được vì
+  fixture monitor duy nhất dựng Revision kiểu v1. *Cách sửa:* Monitor đọc cả hai
+  nguồn như `checks_invariants.go` (locals v2 + object `VARIABLE` v1) và chuẩn
+  hoá `objectId`→`programId` runtime; giữ nguyên đường Point Catalog/SHM cho CRUD.
+  *Kiểm chứng:* test mới `TestGetMonitorResolvesVariablesFromDraftV2Locals` (đỏ
+  đúng dòng khi gỡ bản vá); lane E2E thật nay **1 passed** với `HTTP>=500=0`,
+  `requestfailed=0`, `console.error=0` — thay cho ngoại lệ 503 trước đây.
+
+- **Fixed — E2E `programming-real` hai khẳng định không kiểm gì.** Khẳng định
+  `getByText(/· PUBLISHED$/)` toàn trang khớp 42 phần tử (41 khối SYSTEM trong
+  danh sách + entry PROJECT) nên vừa fail strict mode vừa sẽ xanh kể cả khi entry
+  PROJECT không được chọn → soi trong đúng panel "Chi tiết". Hai khẳng định
+  "Monitor đang ngoại tuyến" được thay bằng đọc thật hàng `SupplyTemp` → `UI-01`
+  → `21.5` → `GOOD`, và ngân sách 5xx/console hạ về **0**.
+
+- **Changed — hồ sơ authority.** Risk Register 4.20 (§5.55), Traceability 6.6,
+  Plan 59 §3.5 "Sửa kèm W4" + hai hàng finding ở bảng corrective closure,
+  manifest baseline **1.42** re-pin dòng 1/4/6/10/13/14/15 kèm đánh giá impact.
+  `RELEASE_READY` giữ **NO-GO**; 22/22 risk giữ Open.
+
 ### Plan 60 Batch 1 — mở đường dữ liệu Program và nền FE (2026-08-23)
 
 - **Added — Core C++ `T60-001..003`** (`ad28a51`). *Triệu chứng:* PGM-01 cần

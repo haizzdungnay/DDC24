@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 6.4 |
-| Trạng thái | **Active — 60 requirement legacy + 22 unified requirement; 0 Open Decision; release evidence chưa đủ** |
-| Cập nhật | 2026-08-21 |
+| Phiên bản | 6.6 |
+| Trạng thái | **Active — 82/82 requirement có dòng máy đọc được; 44/44 scenario được nối; release evidence chưa đủ** |
+| Cập nhật | 2026-08-24 |
 | Chủ quản | Verification Lead |
 | Người review | Document Control, Product, Architect và tất cả discipline lead |
 | Người phê duyệt | Verification Lead + Document Control |
@@ -16,11 +16,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối Product v3.0 → 82 requirement → Unified DDD → Plan 59 task → scenario/evidence/release. Legacy matrix phía dưới giữ history. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement legacy có design/source target/scenario; baseline merged giữ 22/60 `I=Y`. Trên nhánh Plan59 hiện có source W5 cho sáu workspace, Monitor Point + Published Signal fail-closed, ST/FBD editor và lane E2E dùng backend/compiler/Core simulator thật trên **HOST/LOCAL**. Các cổng HOST thành phần hiện hành đã PASS nhưng chưa có GitHub CI verdict, Test Result được review và source chưa merge, nên không đổi `I/T/P/R`. Hai record legacy `BLOCKED`, 30 scenario `NOT_RUN`, 0/32 PASS; release vẫn `RED / NO-GO`. |
+| 3. Hệ thống hiện tại đang có gì? | 82/82 requirement có dòng §6; baseline merged giữ 22/82 `I=Y`. Corrective source Plan59 cho user POU, Published Signal và atomic staging đang ở current worktree, chưa merge nên 22 dòng unified mới vẫn giữ `I=N`. Hai record legacy `BLOCKED`, 42 scenario `NOT_RUN`, 0/44 PASS; CI được owner cho phép `WAIVED/DEFERRED` trong phạm vi đóng implementation, MCU vật lý/HIL được defer vì lab dùng MCU FAKE; release vẫn `RED / NO-GO`. |
 | 4. Thiết kế mới thay đổi điều gì? | ADR-050 thêm 22 requirement và 12 scenario unified; Plan 59 thay Plan 53/56. Evidence legacy không tự kế thừa sang contract v2. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
 | 6. Điều gì còn bị chặn? | Không còn decision/document blocker cho implementation. Target/HIL/physical I/O/soak/CI/provenance còn thiếu chỉ chặn Release. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Harness tài liệu hiện PASS: 82 requirement canonical, 60 dòng D/I/T/P/R legacy, 0 link/ID/invariant lỗi. Riêng `trace_bidirectional_check.py` còn chỉ hiểu 60 requirement + 32 scenario legacy nên trả FAIL vì chưa nhập 22 requirement unified ở §0; không được dùng lệnh đó làm bằng chứng current-pass cho toàn bộ 82 requirement cho tới khi drift ở §8.1 được sửa. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `docs_iso_harness.py --expect` phải xác nhận 82 dòng D/I/T/P/R, 0 link/ID/invariant lỗi; `trace_bidirectional_check.py` phải xác nhận 82/82 requirement và 44/44 scenario. Đây chỉ là bằng chứng tính nhất quán tài liệu, không thay Test Result, target/HIL hay release approval. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
 nghĩa code tồn tại, cũng không nghĩa test đã PASS.
@@ -39,7 +39,7 @@ nghĩa code tồn tại, cũng không nghĩa test đã PASS.
 | `SWR-REQ-PROG-FE-116..118` | Unified DDD §8; UX unified section | T59-203/503/504/506 | U03/U06/U07/U10 | `T59-203`: Control Library search/filter/detail/create/delete và review-gate chỉ hiển thị. `T59-503`: đúng sáu route/nav desktop-mobile, context Draft/Active/intent/runtime không trộn và PGM-05 lifecycle fail-closed. `T59-504`: Watch phủ LOCAL/VP/MB_RTU, Point candidate/actual/source/priority/quality/freshness và Published Signal ở snapshot riêng. `T59-506`: lịch sử ST 50 snapshot, kiểm 20 undo/redo + cursor, runtime overlay giữ null/invalid; FBD lấy interface POU typed từ Draft v2 và không đoán pin. Source/component test ở host/local; E2E thật thuộc `T59-505` đang được gate; U03/U06/U07/U10 NOT_RUN |
 | `SWR-REQ-PROG-BE-111` | Unified DDD §4–§6 | T59-005/201/202 | U03 | `T59-201`: domain/store + schema v7 có immutable/version/reference guard. `T59-202`: 3 route DDD §5.1, OpenAPI 1.23.0 28 operation ↔ route Go ↔ client TS exact, RBAC admin-only cho mutation, `If-Match`+idempotency+audit cùng transaction. FE/import/target còn thiếu; U03 NOT_RUN |
 | `SWR-REQ-PROG-BE-112..115` | Unified DDD §4–§6 | T59-006/302/405/408/504/505 | U04/U07/U10 | `BE-112/115`: Check/package v2 đã có source host/local từ W3/W4. `BE-113`: Enable/Disable đã có RBAC/idempotency/audit/reconcile/read-back source. `BE-114`: `TRACE_READ` là nguồn mẫu chính; Monitor Point và `GET /runtime/signals` giữ unavailable explicit, không trộn hai nguồn trong một dãy. `T59-505` gọi đúng HTTP/worker/compiler/packager/IPC trong lane HOST/LOCAL đang được gate; chưa có Test Result/target. U04/U07/U10 NOT_RUN |
-| `SWR-REQ-PROG-CORE-111..116` | Unified DDD §5.3/§7 | T59-401..408/501/504/505 | U02/U05..U09/U11 | `T59-401..408`: package v2/dual-reader, per-Program scheduler/lane, signal double-buffer, Enable/Disable safe-boundary, candidate withdrawal, RETAIN cô lập và trace bounded đã có source host/local. `T59-501`: barrier first-cycle/LKG/rollback ở mức gói và restart bốn pha. `T59-502`: sửa `SIGNAL` không seal được. `T59-504`: `STATUS` minor 3 công bố snapshot Published Signal typed; API đọc trạng thái Program và `TRACE_READ` đã nối tới consumer, unavailable/null giữ fail-closed. `T59-505`: Core simulator chỉ dùng scheduler/coordinator/cutover/process-image/IPC production để gate tích hợp HOST/LOCAL, không giả I/O vật lý. Opcode signal trong thân Program, target timing/soak/power/HIL vẫn thiếu; U02/U05..U09/U11 NOT_RUN |
+| `SWR-REQ-PROG-CORE-111..116` | Unified DDD §5.3/§7 | T59-401..408/501/504/505 | U02/U05..U09/U11 | Baseline merged có package v2/dual-reader, per-Program scheduler, signal double-buffer, Enable/Disable safe-boundary, RETAIN cô lập và trace bounded. Corrective source current-worktree bổ sung `SIGNAL_READ=0x71`, `SIGNAL_PUBLISH=0x72`, section signal-ref `0x0009`, prepared whole-program-set và handoff sau `PREPARED` fsync; thêm `F-P59-MONITOR-VARS-001` (Monitor tra biến theo `locals` Draft v2 và giữ point Core khi SHM chưa attach), thêm `F-P59-ENABLE-BOUNDARY-001` (Enable/Disable ARM ở non-RT, áp dụng tại safe boundary, ack theo generation; trần 16 kiểm trước khi chạm trường) và `F-P59-SIGNAL-READBACK-001` (read-back signal cho reader non-RT kiểm generation trước/sau khi chép) — bằng chứng TSan `docs/07_records/test-evidence/programming/2026-08-24-tsan-enable-boundary.md`; chưa merge nên chưa nâng `I`. Target timing/soak/power/HIL vẫn thiếu; U02/U05..U09/U11 NOT_RUN |
 | `NFR-REQ-PROG-111` | Unified DDD §11–§12 | T59-606/702/707 | U05/U11 | NOT_RUN |
 
 ### Evidence source W5 `T59-503..506` — chưa phải Test Result
@@ -104,6 +104,11 @@ PASS. Không có Test Result mới cho suite v0.1, vì vậy evidence production
 | `NFR-REQ-PROG-105..106` | ARCH §8/9; BE §4/7 | IFSPEC §1/6 | BE/Core/Security | VS-022/024/030 | MISSING |
 | `NFR-REQ-PROG-107` | FE §8/10 | UX §8–10 | FE/QA | VS-025/028 | MISSING |
 | `NFR-REQ-PROG-108` | ARCH §5/7; FWSOM §7 | FWMCU §4; HW §4–5 | Core/FW/HW/QA | VS-014/030 | MISSING |
+| `SYS-REQ-PROG-109..115` | Unified DDD §4–§7; LANG/CTRL/LIFE | ART/IFSPEC/DM/UX | Compiler/BE/Core/FE | VS-U01..U11 | Current worktree; chưa merge; unified Test Result `NOT_RUN` |
+| `SWR-REQ-PROG-FE-116..118` | Unified DDD §8; FE/UX | OpenAPI + runtime read model | FE/BE/Core | VS-U03/U06/U07/U10 | Current worktree; chưa merge; unified Test Result `NOT_RUN` |
+| `SWR-REQ-PROG-BE-111..115` | Unified DDD §4–§6; BE/DM | OpenAPI/store/package/IPC | BE/compiler/Core | VS-U01/U03/U04/U06/U07/U10/U11 | Current worktree; chưa merge; unified Test Result `NOT_RUN` |
+| `SWR-REQ-PROG-CORE-111..116` | Unified DDD §5.3/§7; FWSOM/ART | package v2/IPC/signal bus | Core/compiler | VS-U01/U02/U04..U11 | Current worktree; chưa merge; unified Test Result `NOT_RUN` |
+| `NFR-REQ-PROG-111` | Unified DDD §11–§12; OPS | target soak fixture | Core/iobus/QA | VS-U05/U11 | `NOT_RUN`; cần đủ 24 h trên target MCU FAKE và raw evidence |
 
 ## 3. Product/UX proposal crosswalk
 
@@ -128,23 +133,23 @@ scenario tương ứng có Test Result được review.
 
 ## 5. Coverage và gate
 
-- SRS v0.5: 8 system + 15 FE + 10 BE + 10 Core + 4 MCU + 3 HW + 10 NFR = 60,
-  tất cả có design owner và scenario group.
+- SRS v0.5 + unified: 15 system + 18 FE + 15 BE + 16 Core + 4 MCU + 3 HW +
+  11 NFR = 82, tất cả có design owner, source target và scenario.
 - Proposal: 7 nhóm `PRG-*`, 24 `UX-REQ-*`, 10 NFR proposal có crosswalk.
-- Scenario: `VS-PROG-001..032`, không có ID trùng requirement/error.
-- Truy vết **hai chiều legacy**: `32/32` kịch bản đều xuất hiện ở cột “Scenario”
-  của ít nhất một dòng §6, và mọi kịch bản dẫn ở §6 đều tồn tại trong
-  `VVP-PROG-001`. Lệnh §8.1 xác nhận phần legacy này nhưng vẫn trả FAIL cho toàn
-  bộ corpus vì chưa nhập 22 requirement + 12 scenario unified.
-- Test Result: `2/32` record (`VS-001/019` đều `BLOCKED`), `0/32 PASS`.
+- Scenario: `VS-PROG-001..032` + `VS-PROG-U01..U12`, không trùng ID.
+- Truy vết hai chiều: `44/44` kịch bản xuất hiện trong ít nhất một dòng §6 và
+  mọi kịch bản dẫn ở §6 tồn tại trong `VVP-PROG-001`; lệnh §8.1 là gate máy.
+- Test Result: `2/44` record (`VS-001/019` đều `BLOCKED`), `0/44 PASS`; 42
+  scenario còn lại `NOT_RUN`.
 - Release gate: **RED / NO-GO**.
 
 ## 6. Trace chi tiết từng requirement
 
 Status dùng năm trục: `D` documented, `I` implemented, `T` tested, `P` passed,
-`R` released. Hiện mọi dòng `D=YES`; 22 dòng có `I=YES` (7 dòng BE/Core ghi ở
-§0 + `FE-101..115` sau `TASK-PROG-500..506`), 38 dòng còn lại `I=NO`; toàn bộ
-`T/P/R=NO` cho tới khi có Test Result/release hợp lệ.
+`R` released. Hiện mọi dòng `D=YES`; 22 dòng baseline merged có `I=YES` (7 dòng
+BE/Core + `FE-101..115`), 60 dòng còn lại `I=NO`; toàn bộ `T/P/R=NO` cho tới
+khi có Test Result/release hợp lệ. Corrective source current-worktree không được
+nâng `I` trước commit merge có file/symbol/build hash.
 Source target là vị trí phải tạo/sửa, không phải claim code đã có.
 
 Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
@@ -214,6 +219,28 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `NFR-108` | CTRL; FWSOM; MCU; HW; RSK-003 | `4f7e0ac`: O(1) handle/LKG swap host; IOP gap, MCU timeout, physical output và HIL còn thiếu | 014/030 | Y/N/N/N/N |
 | `NFR-109` | UX §14.1; FE; Product Spec §8.1 | tám journey FE end-to-end | 031 | Y/N/N/N/N |
 | `NFR-110` | Product Spec §8.3; UX; VVP | bảng điểm heuristic (kiểm tra thiết kế) | 025/031 | Y/N/N/N/N |
+| `SYS-109` | Unified DDD §4–§6; LANG; ART; RSK-006/019 | Current worktree: parser/registry/lowering/package/runtime user POU; chờ commit merge + gate đầy đủ | U01/U02 | Y/N/N/N/N |
+| `SYS-110` | Unified DDD §4–§6; BE; RSK-006/019/020 | Baseline W2 + current worktree: SYSTEM/PROJECT library, lock DAG và provenance; chờ corrective merge | U03/U12 | Y/N/N/N/N |
+| `SYS-111` | Unified DDD §4.1/§7; FWSOM; RSK-002/017 | Baseline W3/W4: 32 Program/16 Enabled; target boundary và Test Result chưa chạy | U04/U05 | Y/N/N/N/N |
+| `SYS-112` | Unified DDD §4.5/§7.3; CTRL; RSK-010/017/020 | Current worktree: signal source→IR `0x71/0x72`→section `0x0009`→bus; chưa merge | U05/U06/U10 | Y/N/N/N/N |
+| `SYS-113` | Unified DDD §4.3/§5.1–§5.2/§7.2; LIFE; RSK-003/007 | Baseline lifecycle + current atomic whole-set corrective source; chưa có target evidence mới | U07/U08/U10 | Y/N/N/N/N |
+| `SYS-114` | Unified DDD §4.6/§7/§9; CTRL; RSK-001/004 | Output ownership/candidate withdrawal source; physical AO/DO HIL deferred do MCU FAKE | U07/U09 | Y/N/N/N/N |
+| `SYS-115` | Unified DDD §7/§11; FWSOM; RSK-002/017/018 | Target 10-Program/24 h soak chưa chạy đủ | U05/U11 | Y/N/N/N/N |
+| `FE-116` | Unified DDD §8; FE/UX; RSK-016/020 | Current worktree: Library/POU/Published Signal authoring và read-back; chưa merge/browser gate | U03/U06/U10 | Y/N/N/N/N |
+| `FE-117` | Unified DDD §8; FE/LIFE; RSK-003/016 | Baseline Enable/Disable UI + read-back; corrective source chưa merge | U07/U10 | Y/N/N/N/N |
+| `FE-118` | Unified DDD §8; FE/IFSPEC; RSK-010/016 | Current worktree: Published Signal value/type/unit/quality/freshness/policy fail-closed; chưa merge | U06/U10 | Y/N/N/N/N |
+| `BE-111` | Unified DDD §4–§6; BE/DM; RSK-006/019 | Baseline store v6+ có POU/library/signal/intent; current migration/library receipt chưa merge | U03 | Y/N/N/N/N |
+| `BE-112` | Unified DDD §4–§6; BE/ART; RSK-006/010/020 | Current worktree: Check manifest khóa POU/library/signal/output/profile; chưa merge | U01/U02/U04/U06/U08/U09/U12 | Y/N/N/N/N |
+| `BE-113` | Unified DDD §5.1–§5.2; BE/LIFE; RSK-007/008 | Library và Enable/Disable route có RBAC/idempotency/audit; chờ cohesive merge/read-back gate | U03/U07/U10 | Y/N/N/N/N |
+| `BE-114` | Unified DDD §5.2/§7; BE/FWSOM; RSK-010/014 | Core `TRACE_READ`/signal snapshot là authority; current producer-consumer integration chưa merge | U06/U10/U11 | Y/N/N/N/N |
+| `BE-115` | Unified DDD §4–§6; LANG/ART; RSK-006/014/019 | Current compiler/package CLI nhận POU/library/signal manifest và tạo package deterministic; chưa merge | U01/U04/U10 | Y/N/N/N/N |
+| `CORE-111` | Unified DDD §5.3/§7; ART/FWSOM; RSK-003/006 | Current worktree: package v2 topology/POU/library/signal và dual-reader; chưa merge | U01/U02/U04/U08 | Y/N/N/N/N |
+| `CORE-112` | Unified DDD §7; FWSOM; RSK-002/017 | Baseline per-Program scheduler/cap 16; target timing/soak chưa có | U04/U05/U11 | Y/N/N/N/N |
+| `CORE-113` | Unified DDD §7.3; CTRL/FWSOM; RSK-010/017 | Current worktree: private FB state + signal double-buffer source execution; chưa merge | U02/U05/U06 | Y/N/N/N/N |
+| `CORE-114` | Unified DDD §7.2; LIFE/FWSOM; RSK-001/004 | Baseline safe-boundary Enable/Disable/candidate withdrawal; physical output HIL deferred | U07/U09 | Y/N/N/N/N |
+| `CORE-115` | Unified DDD §7.2/§12; LIFE/ART; RSK-003/022 | Current worktree: `StPreparedProgramSet`, `PREPARED` fsync rồi một handoff whole-set; chưa merge | U08 | Y/N/N/N/N |
+| `CORE-116` | Unified DDD §5.3/§7; FWSOM/IFSPEC; RSK-014/017 | Core bounded trace ring/read path có source; target load/soak chưa có | U11 | Y/N/N/N/N |
+| `NFR-111` | Unified DDD §11–§12; OPS; RSK-002/017/018 | `target_soak_10program.py` là fixture; 24 h MCU FAKE target + raw hash/reviewer chưa chạy | U05/U11 | Y/N/N/N/N |
 
 Tên rút gọn map: `LANG=DDD-LANG-PROG-001`, `ART=IFSPEC-ART-PROG-001`,
 `CTRL=DDD-CTRL-PROG-001`, `LIFE=DDD-LIFE-PROG-001`, `SEC=DDD-SEC-PROG-001`,
@@ -224,12 +251,12 @@ Tên rút gọn map: `LANG=DDD-LANG-PROG-001`, `ART=IFSPEC-ART-PROG-001`,
 
 | Coverage | Current |
 |---|---:|
-| Requirement có design/control | 60/60 = 100% documented |
-| Requirement có source target | 60/60 = 100% planned |
-| Requirement có scenario | 60/60 = 100% specified |
-| Requirement implemented end-to-end | 22/60 confirmed (`SYS-103`, `SYS-105`, `BE-106`, `BE-110`, `CORE-101`, `CORE-106`, `CORE-109`, `FE-101..115`) |
-| Scenario có Test Result record | 2/32 (`BLOCKED`); PASS 0/32 |
-| Requirement passed/released | 0/60 |
+| Requirement có design/control | 82/82 = 100% documented |
+| Requirement có source target | 82/82 = 100% planned |
+| Requirement có scenario | 82/82 = 100% specified |
+| Requirement implemented end-to-end | 22/82 confirmed (`SYS-103`, `SYS-105`, `BE-106`, `BE-110`, `CORE-101`, `CORE-106`, `CORE-109`, `FE-101..115`); corrective worktree chưa nâng `I` |
+| Scenario có Test Result record | 2/44 (`BLOCKED`); PASS 0/44 |
+| Requirement passed/released | 0/82 |
 
 Khi code merge, chỉ cột `I` được đổi và phải có commit/file/class/function. Khi
 test chạy, thêm Test Result ID/hash rồi đổi `T`; chỉ reviewer ký PASS mới đổi `P`.
@@ -250,30 +277,23 @@ là finding P1. Bảng nhóm §2 vẫn dùng để đọc nhanh, bảng §6 là 
 | R | release manifest, rollout scope, GO authority | Release + Product + QA | rollback/withdraw/release revoked |
 
 Update phải trong cùng change set với SRS/design/risk/VVP liên quan. Script/check
-phải phát hiện canonical ID thiếu/trùng, scenario ngoài `001..032`, `P=Y` khi
+phải phát hiện canonical ID thiếu/trùng, scenario ngoài `001..032/U01..U12`, `P=Y` khi
 `T=N`, `R=Y` khi `P=N`, evidence path thiếu và alias không giải được. Không sửa
-chỉ số tổng bằng tay trước khi **cả 60 dòng** ở §6 được kiểm lại.
+chỉ số tổng bằng tay trước khi **cả 82 dòng** ở §6 được kiểm lại.
 
-### 8.1 Lệnh kiểm truy vết hai chiều — drift unified đang mở
+### 8.1 Lệnh kiểm truy vết hai chiều
 
-Lệnh dưới đây giải alias của §6 về ID canonical trong SRS và đối chiếu tập kịch
-bản legacy của §6 với `VVP-PROG-001`:
+Lệnh dưới đây giải alias của §6 về ID canonical trong SRS và đối chiếu toàn bộ
+32 scenario legacy + 12 scenario unified với `VVP-PROG-001`:
 
 ```bash
 python3 scripts/trace_bidirectional_check.py
 ```
 
-Kết quả current-worktree ngày 2026-08-21: `60/60` alias legacy giải được và
-`32/32` scenario legacy được phủ, nhưng lệnh trả **FAIL** vì SRS đã có 82
-requirement còn §6/parser chỉ có 60; danh sách thiếu chính là 22 ID unified ở
-§0 (`SYS-109..115`, `FE-116..118`, `BE-111..115`, `CORE-111..116`, `NFR-111`).
-
-Owner: Verification tooling + Document Control. Ảnh hưởng: không được trích lệnh
-này như bằng chứng hai chiều current-pass cho Product v3.0. Gate: `T59-707` và
-`RELEASE_READY`. Điều kiện mở: mở rộng bảng máy đọc được/parser cho đủ 82
-requirement và 44 scenario (32 legacy + 12 unified), chạy lại exit `0`, rồi cập
-nhật số đếm trong §5/§7/§11. `docs_iso_harness.py --expect` vẫn PASS vì nó kiểm
-ID/link/invariant D/I/T/P/R, không thay thế phép join hai chiều này.
+Acceptance: `dòng §6=82`, `requirement SRS=82`, `alias giải được=82`, `kịch bản
+VVP=44`, `kịch bản được §6 phủ=44`, exit `0`. `docs_iso_harness.py --expect`
+phải đồng thời báo `trace_rows=82`, `trace_violations=0`. Hai lệnh chỉ chứng minh
+tính nhất quán hồ sơ, không đổi trạng thái formal `T/P/R`.
 
 ## 9. Blocker, revision và phê duyệt
 
@@ -281,14 +301,17 @@ ID/link/invariant D/I/T/P/R, không thay thế phép join hai chiều này.
 |---|---|---|
 | 17 decision `DECIDED`; baseline approved | Product + discipline authority + Document Control | **Không còn blocker implementation** theo `AUTH-PROG-2026-08-11-03` |
 | Source Target chưa implement end-to-end | Dev Leads | commit/build mapping per requirement |
-| Test Result PASS 0/32; 2 record `BLOCKED` | QA + discipline leads | hoàn tất workflow E2E, rerun và independent review theo VVP |
+| Test Result PASS 0/44; 2 record `BLOCKED`, 42 `NOT_RUN` | QA + discipline leads | hoàn tất workflow E2E, rerun và independent review theo VVP |
 | Corrective source 508/509 chưa merge | Dev Leads | commit/PR/merge thật để nâng `I`; target supporting evidence đã có nhưng không nâng `T/P/R` |
 | W5 `T59-503..506` đang ở cây làm việc, chưa merge | FE/BE/Core Dev Leads + QA | các cổng HOST thành phần current-worktree đã PASS; cần commit/push/CI rồi mới review Test Result `VS-PROG-U06/U07/U08/U10/U11`. Job CI mới khai báo không được dùng như kết quả CI |
-| Join hai chiều chưa hiểu 22 requirement/12 scenario unified | Verification tooling + Document Control | mở rộng §6/parser cho 82 requirement + 44 scenario và chạy `trace_bidirectional_check.py` exit `0`; thuộc `T59-707`, không chặn implementation W5 nhưng chặn dùng join làm release evidence |
+| CI không có ngân sách | Product Owner | `WAIVED/DEFERRED BY OWNER` cho đóng implementation; không phải CI PASS và không mở `RELEASE_READY` |
+| MCU/FW/HIL vật lý chưa có; lab dùng MCU FAKE | Product Owner + HW/FW + QA | defer physical I/O/power HIL; không đổi scenario U09/U12 sang PASS |
+| Soak 24 h MCU FAKE chưa PASS | QA + Core/iobus | chạy đủ 24 h, giữ raw JSONL/hash/commit/config và reviewer; thuộc U05/U11 |
 | Positive Monitor/Trace target có binding và review độc lập | QA + FE/BE/Core + Accessibility Reviewer | fixture read-only an toàn, raw output start/get/stop + row truth; review axe/bundle và ký Test Result theo VVP |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 6.5 | 2026-08-24 | Thêm 22 dòng unified vào §6 để đủ 82/82 requirement; mở checker cho `VS-PROG-U01..U12`; cập nhật coverage 44/44 scenario. Giữ corrective source current-worktree ở `I=N`, formal `T/P/R=N`, 0/44 PASS; ghi CI `WAIVED/DEFERRED BY OWNER`, MCU vật lý/HIL deferred và soak MCU FAKE 24 h chưa PASS |
 | 6.4 | 2026-08-21 | Ghi evidence source W5 `T59-503..506`: sáu workspace/lifecycle; Monitor Point + Published Signal fail-closed; ST history/runtime overlay và FBD POU typed; lane real-backend Project→Restore không dùng Programming mock; ST+ gửi đúng payload Draft v2 strict và có API read-back. Ghi số đo HOST/LOCAL current-worktree đã PASS nhưng giữ nguyên 22/60 `I=Y`, 0/32 PASS và mọi `T/P/R`; không claim GitHub CI/target/HIL/release. Ghi đúng finding join hai chiều: script hiện chỉ hiểu 60/32 legacy và FAIL trước 22/12 unified; owner/gate/điều kiện mở ở §8.1 |
 | 2.0 | 2026-08-09 | Trace nhóm SRS/proposal tới 30 scenario, evidence RED |
 | 2.1 | 2026-08-09 | Thêm 55 dòng requirement-level, 5 design lõi, source target, D/I/T/P/R và evidence rule M3 |
@@ -389,13 +412,13 @@ qua journey hoặc qua kịch bản xuyên suốt tương ứng.
 | Cổng | Kết quả | Bằng chứng trong file / lý do |
 |---|---|---|
 | Mọi link trỏ tới ID hoặc mục có thật | PASS | harness: local link missing `0`, anchor missing `0`; §6 alias giải được về ID canonical trong SRS |
-| Không trùng ID | PASS | 60 dòng requirement duy nhất; 8 `UJ-PROG-*`; 17 `UC-PROG-*`; harness `duplicate doc ID = 0` |
+| Không trùng ID | PASS | 82 dòng requirement duy nhất; 8 `UJ-PROG-*`; 17 `UC-PROG-*`; harness `duplicate doc ID = 0` |
 | Phân biệt planned/documented/implemented/tested/passed/released | PASS | §6 năm trục `D/I/T/P/R`; §1 nêu rõ `DOCUMENTED` **không** nghĩa code tồn tại |
-| Coverage requirement | PASS có giới hạn | §7: 60/60 legacy có thiết kế/source target/kịch bản; §0 phủ 22 unified bằng crosswalk; §10 phủ 8 journey và 17 UC. Join máy cho toàn bộ 82/44 còn BLOCKED ở §8.1 |
+| Coverage requirement | PASS | §6/§7 có 82/82 requirement và 44/44 scenario; §10 phủ 8 journey và 17 UC |
 | Bằng chứng cho phép đổi trạng thái | PASS | §8 quy định cho từng trục: ai xác nhận và điều kiện hạ ngược `Y→N` |
 | Quy tắc vô hiệu hóa | PASS | §7 và §8: đổi requirement/design/contract/source/board làm mất hiệu lực Test Result phía dưới; không giữ `P` cũ |
-| Kiểm tính nhất quán tự động | **BLOCKED FOR RELEASE** | `docs_iso_harness.py --expect` PASS (82 ID canonical, link/duplicate/invariant sạch), nhưng `trace_bidirectional_check.py` FAIL vì chưa hiểu 22 requirement/12 scenario unified. Owner/gate/điều kiện mở đầy đủ tại §8.1; không chặn implementation W5 |
-| Trạng thái bằng chứng trung thực | PASS | §5 và §7: 2/32 record `BLOCKED`, 0/32 PASS, 0/60 passed, release gate `RED / NO-GO` |
+| Kiểm tính nhất quán tự động | PASS khi rerun cùng change set | §8.1 khóa acceptance 82/82 requirement, 44/44 scenario và harness 82 trace rows; không thay Test Result |
+| Trạng thái bằng chứng trung thực | PASS | §5 và §7: 2/44 record `BLOCKED`, 42 `NOT_RUN`, 0/44 PASS, 0/82 released; release gate `RED / NO-GO` |
 | Quyền implementation | **PASS** | §9: baseline approved, 17/17 decision `DECIDED`, chữ ký còn thiếu được miễn cho implementation. Source/Test Result chưa có là công việc cần thực hiện, không phải blocker quyền viết code |
 
 Ma trận này theo dõi trạng thái; nó **không** tạo ra bằng chứng.

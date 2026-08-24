@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-20 (Programming Product v3.0 thống nhất, Unified DDD và Plan59 Active; plan/tracker cũ Superseded; `RELEASE_READY` vẫn NO-GO chờ evidence)
+**Cập nhật:** 2026-08-24 (Plan59 v2.4 có 52 task; corrective implementation và deploy/soak MCU FAKE đang chờ evidence; `RELEASE_READY=NO-GO`)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -26,7 +26,7 @@
 | [Programming Decision Register](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 12 quyết định đã khóa, 0 Open Decision; không còn decision blocker implementation |
 | [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào Product/SRS/Unified DDD/UX/VVP/Trace/Risk/Plan authority |
 | [Programming Unified Detailed Design](02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | data/contract/state/algorithm/error/source/test/deploy/rollback đủ DD-01..DD-13 |
-| [Programming Plan 59](03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | execution/tracker authority: 51 task, 8 Wave từ contract đến release; PLAN/IMPLEMENT READY |
+| [Programming Plan 59](03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | execution/tracker authority: 52 task, 8 Wave; tách implementation close, target MCU FAKE và release NO-GO |
 | [Prompt tự động Plan59](03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | hướng dẫn agent chọn task, implement, test, cập nhật tracker và commit/PR sạch |
 | [Programming Risk Register](07_records/PROGRAMMING_RISK_REGISTER.md) | 22 rủi ro, design control, owner, evidence gate và residual |
 | [Programming Docs Sync Report](07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record đồng bộ docs theo ADR-023 ngày 2026-08-03 |

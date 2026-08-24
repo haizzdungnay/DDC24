@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-DRM-001` |
-| Phiên bản | 2.1 |
-| Trạng thái | **Active — `PLAN_READY=PASS`, `IMPLEMENT_READY=PASS`** |
-| Ngày | 2026-08-21 |
+| Phiên bản | 2.2 |
+| Trạng thái | **Active — `PLAN_READY=PASS`, `IMPLEMENT_READY=PASS`, `IMPLEMENTATION_CLOSE=PENDING`, `RELEASE_READY=NO-GO`** |
+| Ngày | 2026-08-24 |
 | Chủ quản | System Engineering + Document Control |
 | Product authority | [`PROD-PROG-001` v3.0](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) |
 | Design authority | [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
@@ -21,8 +21,12 @@ cổng phát hành.
 
 - Không còn Open Decision hoặc `TBD` chặn implementation.
 - Task phụ thuộc code dùng `ORDERED`, tự chuyển `READY` khi dependency hoàn tất.
-- CI account, board, credential, HIL và người ký là `EVIDENCE_QUEUE`; không dừng
-  các task code khác, nhưng vẫn giữ `RELEASE_READY=NO-GO` đến khi có bằng chứng.
+- CI được Product Owner cho phép `WAIVED/DEFERRED BY OWNER` trong phạm vi đóng
+  implementation; đây không phải CI PASS và không mở release.
+- Lab Forlinx hiện dùng MCU FAKE vì chưa có MCU/FW/phần cứng; physical MCU/HIL
+  được defer, không đổi scenario target/HIL thành PASS.
+- Corrective source POU/Signal/atomic/Web IPC/library đang ở current worktree;
+  phải merge và chạy gate hiện hành trước `IMPLEMENTATION_CLOSE=PASS`.
 - As-Built một Program/bốn workspace được giữ làm migration fact, không phải
   Product Target.
 
@@ -37,9 +41,9 @@ cổng phát hành.
 | UX | `UX-WEB-PROG-001` v2.0 + asset PGM-02/PGM-04 desktop/mobile | Sáu workspace, POU tree, Control Library, lifecycle states và safe actions | PASS |
 | Compiler | `DDD-LANG-PROG-001` v1.0 | User Function/FB, purity, instance state, call graph và artifact v2 | PASS |
 | Verification | `VVP-PROG-001` v2.0 | 32 scenario migration + 12 scenario unified; target/HIL authority tách khỏi host | PASS cho implementation; release evidence chờ chạy |
-| Traceability | `TRACE-PROG-001` v4.0 | 22 target requirement nối Plan59 và `VS-PROG-U01..U12` | PASS |
-| Risk | `RSK-PROG-001` v3.0 | 22 risk, thêm multi-Program/POU/library/signal/output/power-loss | PASS |
-| Execution | `PLAN-PROG-059` v2.1 | 51 task, 8 Wave, một tracker duy nhất; W5 đã có source/evidence HOST/LOCAL | PASS cho implementation; `RELEASE_READY` vẫn NO-GO |
+| Traceability | `TRACE-PROG-001` v6.5 | 82/82 requirement và 44/44 scenario có join máy; formal T/P/R chưa nâng | PASS về tài liệu |
+| Risk | `RSK-PROG-001` v4.20 | 22/22 risk Open; treatment corrective chưa hạ residual | PASS cho implementation; release NO-GO |
+| Execution | `PLAN-PROG-059` v2.4 | 52 task, 8 Wave, một tracker duy nhất; corrective close và target MCU FAKE tách evidence | PASS cho implementation; close pending |
 | Autonomous prompt | `PROMPT-PLAN59-AUTONOMOUS` v2.0 | Chọn task, thực thi, kiểm chứng, commit/PR và cập nhật tracker | READY |
 
 ## 2. Disposition tài liệu cũ
@@ -69,18 +73,24 @@ Product semantics:
 Nếu implementation làm lộ constraint mới, team cập nhật cùng Product/SRS/DDD/
 Plan59 trong change-set đó; không tạo Open Decision mới chỉ để trì hoãn sửa lỗi.
 
-## 4. Cổng phát hành
+## 4. Phân lớp đóng implementation, target và phát hành
 
-`PLAN_READY` và `IMPLEMENT_READY` đã PASS **không đồng nghĩa** ứng dụng đã release.
-`RELEASE_READY` chỉ GO khi W0..W6 hoàn tất trên cùng RC và W7 có CI, target/HIL,
-AO/DO vật lý ST+FBD, power-cut/RETAIN/LKG, fresh install/upgrade/rollback, soak,
-provenance, security và Test Result có thẩm quyền. Thiếu một evidence Must thì
-NO-GO, nhưng team vẫn tiếp tục mọi việc implement/test còn khả thi.
+| Cổng | Trạng thái 2026-08-24 | Điều kiện đổi trạng thái |
+|---|---|---|
+| `IMPLEMENTATION_CLOSE` | **PENDING** | corrective source POU/Signal/atomic/Web IPC/library merge sạch; affected/full host gate, trace 82/82 và pin PASS |
+| `TARGET_FAKE_MCU_DEPLOY` | **PENDING** | build đúng commit, backup/install/service/API/UI/read-back/rollback trên Forlinx; hồ sơ ghi rõ `MCU_MODE=FAKE` |
+| `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** | chạy đủ 24 h, raw JSONL/hash/provenance, fault/signal/restart và `max_iop_poll_gap <200 ms` |
+| `RELEASE_READY` | **NO-GO** | CI, formal Test Result, residual acceptance và mọi Must target/HIL/physical theo VVP; waiver đóng implementation không thay điều kiện release |
+
+`PLAN_READY` và `IMPLEMENT_READY` chỉ trao quyền làm việc. `TARGET_FAKE_MCU_DEPLOY`
+và soak chứng minh profile lab, không phải MCU vật lý/HIL. Formal VVP giữ 12
+scenario unified `NOT_RUN` cho tới khi có Test Result đúng thẩm quyền.
 
 ## 5. Lịch sử
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.2 | 2026-08-24 | Đồng bộ Plan59 52 task; thêm bốn lớp trạng thái implementation close/deploy MCU FAKE/soak/release; ghi CI owner-deferred, physical MCU/HIL deferred và soak 24 h chưa PASS. |
 | 1.0..1.2 | 2026-08-15 | Ma trận theo Plan 56, có ba hồ sơ thiếu và Product authority treo; superseded. |
 | 2.0 | 2026-08-20 | Hợp nhất một Product; đóng mọi decision/document blocker; chuyển authority thực thi sang Plan59 và tách evidence queue khỏi implementation readiness. |
 | 2.1 | 2026-08-21 | Đồng bộ Plan59 v2.1 và trạng thái W5 HOST/LOCAL; không đổi Product/SRS/DDD/VVP, không biến host test thành GitHub CI/target/HIL/Test Result và giữ `RELEASE_READY=NO-GO`. |
