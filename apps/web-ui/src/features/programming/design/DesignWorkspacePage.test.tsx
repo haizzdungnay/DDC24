@@ -522,6 +522,42 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
     expect(options.body.operations).toEqual([{ op: 'removeObject', objectId: 'fn-1' }])
   })
+
+  /** Chương trình "ma": POU kind PROGRAM còn trong `objects[]` nhưng đã mất mục
+   *  trong `programs[]` — di chứng của lỗi xoá cũ, đo thật trên bo Foxlinx
+   *  2026-08-24. Gửi `removeProgram` cho nó trả `operations[0].removeProgram`,
+   *  nghĩa là người dùng KHÔNG bao giờ xoá được nó: vòng lặp chết. */
+  it('xóa PROGRAM không có cấu hình chạy chỉ gửi removeObject', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'ghost-1', objectId: 'ghost-1', hasRuntimeConfig: false,
+      name: 'AHU_MasterSequence', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM P\nEND_PROGRAM\n'
+    })
+    project.draft!.task.programOrder = []
+
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: baseDocument() },
+          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('AHU_MasterSequence')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle('Xóa chương trình'))
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Xóa chương trình?' })).getByRole('button', { name: 'Xóa' }))
+
+    await waitFor(() => {
+      expect(client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')).toBeTruthy()
+    })
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
+    expect(options.body.operations).toEqual([{ op: 'removeObject', objectId: 'ghost-1' }])
+  })
 })
 
 describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisions #01-04)', () => {

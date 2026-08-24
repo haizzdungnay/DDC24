@@ -10,6 +10,20 @@
 
 ### Sửa lỗi xóa Program/POU trả `PRG-ERR-REQ-001` (2026-08-24)
 
+- **Fixed — FE: không xóa được "chương trình ma".** *Triệu chứng:* sau vòng sửa
+  đầu, một số Program vẫn trả `400` với `field: "operations[0].removeProgram"`.
+  *Nguyên nhân gốc:* quyết định gửi `removeProgram` dựa trên **kind**, trong khi
+  một POU kind `PROGRAM` hoàn toàn có thể KHÔNG có mục trong `programs[]` — hoặc
+  vì mới tạo bằng `upsertObject` mà chưa xếp lịch, hoặc vì là **di chứng của
+  chính lỗi xóa cũ** (gỡ cấu hình chạy nhưng để lại POU). Với những POU đó,
+  `removeProgram` không tìm thấy id và cả batch bị từ chối — người dùng không bao
+  giờ xóa được đúng cái POU cần xóa. *Đo thật trên bo Foxlinx 2026-08-24:* ba
+  Project đang mang POU kiểu này (`SOAK_04`, `SOAK_00`, `AHU_MasterSequence`).
+  *Cách sửa:* adapter công bố `hasRuntimeConfig` (POU có mục trong `programs[]`
+  hay không) và batch xóa chỉ gửi `removeProgram` khi cờ đó bật; POU không có
+  cấu hình chạy chỉ cần `removeObject`. 3 test mới, đã kiểm chứng bằng cách gỡ
+  bản vá.
+
 - **Fixed — FE `F-P59-DELETE-PROGRAM-001`.** *Triệu chứng:* bấm "Xóa" một
   Program (hoặc một user FUNCTION/FUNCTION_BLOCK) trả `400 PRG-ERR-REQ-001`
   không kèm lý do; giao diện không xóa được gì. *Nguyên nhân gốc:* ba lỗi chồng

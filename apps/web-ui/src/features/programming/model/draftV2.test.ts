@@ -57,6 +57,25 @@ describe('adapter document v2 -> view model Design', () => {
     expect(view.programs.map((program) => program.kind)).toEqual(['PROGRAM', 'FUNCTION'])
     // `objectId` phải đi kèm: xoá một POU nhắm theo `objectId`, không phải `programId`.
     expect(view.programs[1].objectId).toBe('44444444-4444-4444-8444-444444444444')
+    // `hasRuntimeConfig` nói POU có mục trong `programs[]` hay không — kind
+    // không trả lời được câu đó.
+    expect(view.programs.map((program) => program.hasRuntimeConfig)).toEqual([true, false])
+  })
+
+  /** POU kind PROGRAM nhưng KHÔNG có cấu hình chạy — di chứng của lỗi xoá cũ
+   *  (gỡ `programs[]` nhưng để lại POU trong `objects[]`). Đây là hình dạng làm
+   *  `removeProgram` trả `operations[0].removeProgram`, tức người dùng không xoá
+   *  nổi đúng cái chương trình ma đó. Đã đo thật trên bo Foxlinx 2026-08-24: ba
+   *  Project mang POU kiểu này. */
+  it('PROGRAM không có cấu hình chạy phải lộ ra qua hasRuntimeConfig=false', () => {
+    const ghost = {
+      ...(V2 as unknown as Record<string, unknown>),
+      programs: []
+    } as unknown as ProgrammingDraftDocument
+    const view = toWorkspaceDocument(ghost)
+    expect(view.programs[0].kind).toBe('PROGRAM')
+    expect(view.programs[0].hasRuntimeConfig).toBe(false)
+    expect(view.task.programOrder).toEqual([])
   })
 
   it('chu kỳ lạ rơi về 1000 thay vì hiển thị giá trị profile không cho phép', () => {
