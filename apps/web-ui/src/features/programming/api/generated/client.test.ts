@@ -16,11 +16,11 @@ import {
 import impactGolden from "../../../../../../../contracts/openapi/testdata/programming-impact.json";
 
 describe("Programming API client sinh từ OpenAPI", () => {
-  it("khóa đủ 32 operation và contract Commission/Runtime Signal", () => {
-    // 25 operation Rev A + 3 operation Control Library (T59-202)
+  it("khóa đủ 33 operation và contract Commission/Runtime Signal", () => {
+    // 25 operation Rev A + 4 operation Control Library (T59-202/T59-203)
     // + 2 operation intent Enable/Disable (T59-405) + 1 Published Signal
     // runtime read-only (T59-504) + 1 recovery-reset (T59-702).
-    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(32);
+    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(33);
     // T59-702 — lối ra tường minh khỏi RECOVERY_REQUIRED. Admin-only: đây là
     // lệnh gỡ khoá vận hành, đưa Core về IDLE KHÔNG có Active và bắt buộc
     // Commission lại; không gói nào tự sống lại.
@@ -58,6 +58,11 @@ describe("Programming API client sinh từ OpenAPI", () => {
       path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}",
       roles: ["admin"],
     });
+    expect(PROGRAMMING_ENDPOINTS.deprecateProgrammingLibraryRevision).toEqual({
+      method: "POST",
+      path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate",
+      roles: ["admin"],
+    });
     expect(PROGRAMMING_ENDPOINTS.commissionProgrammingRevision).toEqual({
       method: "POST",
       path: "/api/v1/programming/operations/commission",
@@ -78,7 +83,7 @@ describe("Programming API client sinh từ OpenAPI", () => {
   it("khoá hợp đồng bảng Programs sinh từ OpenAPI (T60-013/T60-014)", () => {
     // Bump contract đi kèm thay đổi hình dạng phản hồi; khoá số ở đây để một
     // lần sinh lại quên chạy không lặng lẽ giữ type cũ.
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.27.0");
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.28.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,

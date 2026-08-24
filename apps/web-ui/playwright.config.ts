@@ -2,6 +2,13 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
+  // T59-505/604 — lane real-backend có stack riêng (`playwright.programming-real.config.ts`
+  // dựng backend Go + Core simulator thật). Hồ sơ vẫn ghi nó "bị loại khỏi suite
+  // mock mặc định", nhưng config này CHƯA hề loại: `npx playwright test` kéo
+  // luôn spec đó vào cả hai project và nó đỏ với `ECONNREFUSED 127.0.0.1:8081`
+  // — hai test đỏ không liên quan gì tới thay đổi của người đang chạy cổng, và
+  // đó là cách nhanh nhất để một cổng bị bỏ qua vì "vốn dĩ nó đỏ sẵn".
+  testIgnore: /programming-real\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,

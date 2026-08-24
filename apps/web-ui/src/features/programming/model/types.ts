@@ -357,6 +357,8 @@ export type ProgrammingDraftOperation =
   | { op: 'upsertBinding'; binding: ProgrammingBinding }
   | { op: 'removeBinding'; bindingId: string }
   | { op: 'setTask'; task: ProgrammingTaskConfig }
+  | { op: 'upsertSignal'; signal: ProgrammingSignalDraftInput }
+  | { op: 'removeSignal'; signalId: string }
 
 export interface ProgrammingDiagnostic {
   code: string
@@ -552,4 +554,70 @@ export interface ProgrammingLibraryEntry {
 export interface ProgrammingLibraryPage {
   items: ProgrammingLibraryEntry[]
   nextCursor?: string | null
+}
+
+/**
+ * T59-203 — Published Signal của tài liệu Draft v2 (`signals[]`).
+ *
+ * Đây là hình dạng ĐÚNG NHƯ backend lưu và trả lại
+ * (`application/draft_v2.go: upsertSignalDefinition`), không phải một view model
+ * làm đẹp. Ba điểm dễ sai nếu khai lại theo trí nhớ:
+ *
+ * 1. `stalePolicy` đi trên dây bằng **tên runtime** (`HOLD_LAST`/`WAIT`), còn
+ *    DDD §7.3 gọi chúng là `HOLD_PRIVATE`/`BLOCK_PROGRAM`. Hai bảng tên tồn tại
+ *    song song và bản đồ 1-1 nằm ở `PLAN59-CONTRACT-LOCK-2026-08-24` §2.3 —
+ *    giao diện hiển thị tên DDD, đường ghi gửi tên runtime.
+ * 2. `fallbackValue` là **số**, kể cả cho `BOOL` (0/1) và `TIME` (mili giây):
+ *    backend khai `*float64`. Gửi `true` hay `"5s"` là 400.
+ * 3. `fallbackValue` bắt buộc CÓ khi `stalePolicy==='USE_FALLBACK'` và bắt buộc
+ *    VẮNG với ba chính sách còn lại — backend từ chối cả hai chiều lệch.
+ */
+export type ProgrammingSignalType = 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME'
+
+/** Giá trị `stalePolicy` đi trên dây. `FAIL_CLOSED` backend còn nhận nhưng DDD
+ *  §7.3 không đặt tên cho nó, nên giao diện chỉ ĐỌC được, không tạo mới. */
+export type ProgrammingSignalStalePolicyWire = 'USE_FALLBACK' | 'HOLD_LAST' | 'WAIT' | 'FAIL_CLOSED'
+
+/** Tên chính sách theo DDD §7.3 — thứ người dùng nhìn thấy. */
+export type ProgrammingSignalStalePolicy = 'USE_FALLBACK' | 'HOLD_PRIVATE' | 'BLOCK_PROGRAM'
+
+export interface ProgrammingPublishedSignal {
+  signalId: string
+  name: string
+  type: ProgrammingSignalType
+  unit?: string
+  publisherProgramId: string
+  freshnessMs: number
+  stalePolicy: ProgrammingSignalStalePolicyWire
+  fallbackValue?: number
+}
+
+/** Payload ghi của op `upsertSignal`. Hẹp hơn view model: decoder backend là
+ *  strict nên một field thừa làm cả batch hỏng. */
+export interface ProgrammingSignalDraftInput {
+  signalId: string
+  name: string
+  type: ProgrammingSignalType
+  unit?: string
+  publisherProgramId: string
+  freshnessMs: number
+  stalePolicy: ProgrammingSignalStalePolicyWire
+  fallbackValue?: number
+}
+
+/** Cấu hình chạy của một Program trong Draft v2 (`programs[]`). Tách khỏi POU
+ *  (`objects[]`): đổi chu kỳ và sửa mã là hai việc khác nhau. */
+export interface ProgrammingDraftProgramConfigV2 {
+  programId: string
+  objectId: string
+  periodMs: number
+  taskId?: string
+}
+
+/** Khoá version thư viện của Draft v2 (`library`). `projectLibraryRevisionId`
+ *  `null` nghĩa là Project chưa từng có PROJECT library — KHÁC "chưa đọc được". */
+export interface ProgrammingDraftLibraryLock {
+  systemProfile: string
+  systemVersion: string
+  projectLibraryRevisionId: string | null
 }

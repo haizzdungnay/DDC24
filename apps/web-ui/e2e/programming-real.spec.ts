@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext, type APIResponse } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
+import { expect, test, type APIRequestContext, type APIResponse, type Page } from '@playwright/test'
 
 /**
  * T59-505 — nghiệm thu host/LOCAL qua đúng HTTP, compiler/packager và
@@ -13,6 +14,7 @@ const SIGNAL_ID = '82222222-2222-4222-8222-222222222222'
 const VARIABLE_ID = '83333333-3333-4333-8333-333333333333'
 const BINDING_ID = '84444444-4444-4444-8444-444444444444'
 const LIBRARY_ENTRY_ID = '85555555-5555-4555-8555-555555555555'
+const LIBRARY_INTERFACE = { inputs: [{ name: 'X', type: 'REAL' }], returnType: 'REAL' }
 const SOURCE_R1 = `PROGRAM AHU_MAIN
 VAR_INPUT
   SupplyTemp : REAL;
@@ -20,6 +22,7 @@ END_VAR
 VAR_OUTPUT
   Fan : BOOL;
 END_VAR
+SIGNAL_PUBLISH(SUPPLY_TEMP, SupplyTemp);
 Fan := TRUE;
 END_PROGRAM
 `
@@ -82,16 +85,20 @@ async function waitForCheck(request: APIRequestContext, token: string, checkID: 
 }
 
 async function waitForOperation(request: APIRequestContext, token: string, operationID: string): Promise<JsonObject> {
+  let observed: JsonObject | undefined
   for (let attempt = 0; attempt < 200; attempt += 1) {
     const response = await request.get(`/api/v1/programming/operations/${operationID}`, { headers: readHeaders(token) })
     const operation = await responseJSON(response, 200)
+    observed = operation
     if (operation.state === 'SUCCEEDED') return operation
     if (['FAILED', 'ROLLED_BACK'].includes(String(operation.state))) {
       throw new Error(`Operation ${operationID} kết thúc ${String(operation.state)}: ${JSON.stringify(operation)}`)
     }
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
-  throw new Error(`Operation ${operationID} không kết thúc trong 10 giây`)
+  const runtimeResponse = await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) })
+  throw new Error(`Operation ${operationID} không kết thúc trong 10 giây; ` +
+    `operation=${JSON.stringify(observed)}; runtime[${runtimeResponse.status()}]=${await runtimeResponse.text()}`)
 }
 
 async function waitForProgramState(
@@ -101,14 +108,59 @@ async function waitForProgramState(
   desiredEnabled: boolean,
   runtimeState: 'RUNNING' | 'DISABLED'
 ): Promise<JsonObject> {
+  let observed: JsonObject | undefined
+  let observedPage: JsonObject | undefined
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const response = await request.get(`/api/v1/programming/projects/${projectID}/programs`, { headers: readHeaders(token) })
     const page = await responseJSON(response, 200)
+    observedPage = page
     const item = (page.items as JsonObject[]).find((candidate) => candidate.programId === PROGRAM_ID)
+    observed = item
     if (item?.desiredEnabled === desiredEnabled && item.runtimeState === runtimeState) return item
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
-  throw new Error(`Program không đạt desired=${desiredEnabled}, runtime=${runtimeState}`)
+  const runtimeResponse = await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) })
+  const signalResponse = await request.get('/api/v1/programming/runtime/signals', { headers: readHeaders(token) })
+  const monitorResponse = await request.get('/api/v1/programming/runtime/monitor', { headers: readHeaders(token) })
+  throw new Error(`Program không đạt desired=${desiredEnabled}, runtime=${runtimeState}; ` +
+    `programs=${JSON.stringify(observedPage)}; item=${JSON.stringify(observed)}; ` +
+    `runtime[${runtimeResponse.status()}]=${await runtimeResponse.text()}; ` +
+    `signals[${signalResponse.status()}]=${await signalResponse.text()}; ` +
+    `monitor[${monitorResponse.status()}]=${await monitorResponse.text()}`)
+}
+
+async function waitForRuntimeSignal(
+  request: APIRequestContext,
+  token: string,
+  predicate: (signal: JsonObject) => boolean
+): Promise<{ page: JsonObject; signal: JsonObject }> {
+  let observedPage: JsonObject | undefined
+  let observedSignal: JsonObject | undefined
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const response = await request.get('/api/v1/programming/runtime/signals', { headers: readHeaders(token) })
+    const page = await responseJSON(response, 200)
+    const signal = (page.items as JsonObject[]).find((candidate) => candidate.signalId === SIGNAL_ID)
+    observedPage = page
+    observedSignal = signal
+    if (signal && predicate(signal)) return { page, signal }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error(`Published Signal không đạt trạng thái chờ đợi; page=${JSON.stringify(observedPage)}; signal=${JSON.stringify(observedSignal)}`)
+}
+
+async function assertMobileSurface(page: Page, label: string): Promise<void> {
+  const width = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    document: document.documentElement.scrollWidth,
+    body: document.body.scrollWidth
+  }))
+  expect(width.document, `${label}: document tràn ngang`).toBeLessThanOrEqual(width.viewport + 1)
+  expect(width.body, `${label}: body tràn ngang`).toBeLessThanOrEqual(width.viewport + 1)
+
+  const axe = await new AxeBuilder({ page }).analyze()
+  const severe = axe.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))
+  expect(severe, `${label}: axe serious/critical`).toEqual([])
+  console.info(`[T59-505] mobile ${label}: viewport=${width.viewport}, document=${width.document}, body=${width.body}, axe severe=0`)
 }
 
 async function sealAndCheck(
@@ -218,7 +270,7 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
         name: 'SCALE_LIN',
         language: 'ST',
         source: 'FUNCTION SCALE_LIN : REAL\nVAR_INPUT X : REAL; END_VAR\nSCALE_LIN := X;\nEND_FUNCTION\n',
-        interface: { inputs: [{ name: 'X', type: 'REAL' }], returnType: 'REAL' },
+        interface: LIBRARY_INTERFACE,
         dependencies: []
       }
     }
@@ -327,6 +379,8 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
       libraryState: 'PUBLISHED'
     })
   ])
+  const publishedLibraryRevisionId = (publishedLibrary.items as JsonObject[])[0].libraryRevisionId as string
+  expect(publishedLibraryRevisionId).toMatch(/^[0-9a-f-]{36}$/)
   await commission(request, token, 'none', r1.revisionID, r1.checkID, ['publishedSignals', 'programSet', 'controlLibrary'])
 
   const enableResponse = await request.put(
@@ -340,18 +394,20 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   expect((enabled.resource as JsonObject).desiredEnabled).toBe(true)
   await waitForProgramState(request, token, projectID, true, 'RUNNING')
 
-  const signalsResponse = await request.get('/api/v1/programming/runtime/signals', { headers: readHeaders(token) })
-  const signals = await responseJSON(signalsResponse, 200)
+  const { page: signals, signal } = await waitForRuntimeSignal(
+    request,
+    token,
+    (candidate) => candidate.valid === true && candidate.value === 21.5 && candidate.freshness === 'FRESH'
+  )
   expect(signals.producerState).toBe('READY')
   expect(signals.activeRevisionId).toBe(r1.revisionID)
-  const signal = (signals.items as JsonObject[]).find((candidate) => candidate.signalId === SIGNAL_ID)
   expect(signal).toMatchObject({
     name: 'SUPPLY_TEMP',
     producerProgramId: PROGRAM_ID,
-    valid: false,
-    value: null,
-    quality: 'BAD',
-    freshness: 'UNAVAILABLE',
+    valid: true,
+    value: 21.5,
+    quality: 'GOOD',
+    freshness: 'FRESH',
     definitionState: 'MATCHED'
   })
 
@@ -441,10 +497,20 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   await expect(signalRow.getByText('MATCHED', { exact: true })).toBeVisible()
   await expect(signalValueCell).not.toContainText('0')
 
-  // Core simulator cố ý không dựng regular process-I/O socket; màn Watch phải
-  // hiện offline thay vì bịa Point value. Đây là 503 Programming duy nhất được
-  // phép ở lane host này.
-  await expect(page.getByText('Monitor đang ngoại tuyến.')).toBeVisible()
+  // Trước 2026-08-24 chỗ này chờ "Monitor đang ngoại tuyến." vì lỗi đọc SHM vật
+  // lý nuốt luôn snapshot Core. Hai lỗi thật nấp sau kỳ vọng đó: (1) BE vứt
+  // `snapshot.Points` do Core phát khi PLC SHM chưa attach, (2) Monitor chỉ tra
+  // biến ở Revision object `VARIABLE` kiểu v1, trong khi Draft v2 seal biến vào
+  // `locals` của POU — nên `items` rỗng với MỌI Revision thật. Màn Theo dõi
+  // phải hiện đúng biến đã ánh xạ kèm giá trị Core đang phát; hạ kỳ vọng xuống
+  // "offline" hay "chưa có biến ánh xạ" chính là giấu cả hai lỗi đó.
+  const watchRow = page.getByRole('row', { name: /SupplyTemp/ })
+  await expect(watchRow).toBeVisible()
+  await expect(watchRow).toContainText('UI-01')
+  await expect(watchRow).toContainText('21.5')
+  await expect(watchRow).toContainText('GOOD')
+  // Binding là READ: cột đề xuất đầu ra mức 5 KHÔNG được bịa ra một số.
+  await expect(watchRow).toContainText('Không áp dụng')
 
   // VS-PROG-U10: API setup ở trên chưa đủ. Ba workspace chỉnh sửa phải tự đọc
   // lại đúng dữ liệu từ backend thật sau điều hướng client-side (giữ JWT thật),
@@ -502,7 +568,99 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
     .getByRole('button', { name: /SCALE_LIN\s+PROJECT\s+FUNCTION/ })
   await expect(projectLibraryEntry).toBeVisible()
   await projectLibraryEntry.click()
-  await expect(page.getByText(/· PUBLISHED$/)).toBeVisible()
+  // Phải soi trong đúng panel "Chi tiết": danh sách bên trái hiện
+  // "rev-a.1 · PUBLISHED" cho cả 41 khối SYSTEM, nên một locator toàn trang
+  // khớp 42 phần tử và fail ở strict mode — nó cũng sẽ xanh ngay cả khi entry
+  // PROJECT không hề được chọn, tức là một khẳng định không kiểm gì cả.
+  const libraryDetail = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'Chi tiết', level: 2 }) })
+  await expect(libraryDetail.getByText(/· PUBLISHED$/)).toBeVisible()
+
+  // F-P59-UI-001: authoring Library phải đi qua mutation + read-back thật.
+  // Entry đã publish mở Draft version mới; payload edit phải GIỮ interface
+  // canonical mà GET /libraries trả về — thay nó bằng `{inputs:[]}` làm mất
+  // contract POU khỏi content hash dù người dùng chỉ sửa source.
+  await page.getByRole('button', { name: 'Sửa — tạo phiên bản mới' }).click()
+  const editedLibrarySource =
+    'FUNCTION SCALE_LIN : REAL\nVAR_INPUT X : REAL; END_VAR\nSCALE_LIN := X + 1.0;\nEND_FUNCTION\n'
+  await page.getByLabel('Mã nguồn ST').fill(editedLibrarySource)
+  const uiLibraryMutationResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST' &&
+      url.pathname === `/api/v1/programming/projects/${projectID}/library/entries`
+  })
+  await page.getByRole('button', { name: 'Lưu vào bản nháp thư viện' }).click()
+  const uiLibraryMutation = await uiLibraryMutationResponse
+  expect(uiLibraryMutation.status(), await uiLibraryMutation.text()).toBe(200)
+  const uiLibraryMutationResult = await uiLibraryMutation.json() as JsonObject
+  const uiLibraryBody = uiLibraryMutation.request().postDataJSON() as JsonObject
+  expect(uiLibraryBody).toMatchObject({
+    entryId: LIBRARY_ENTRY_ID,
+    name: 'SCALE_LIN',
+    source: editedLibrarySource,
+    interface: LIBRARY_INTERFACE
+  })
+  await expect(page.getByText(/Máy chủ đã trả lại khối/)).toContainText('SCALE_LIN · 1.1.0 · DRAFT')
+
+  const uiLibraryReadbackResponse = await request.get(
+    `/api/v1/programming/libraries?projectId=${projectID}&scope=PROJECT&q=SCALE_LIN&limit=100`,
+    { headers: readHeaders(token) }
+  )
+  const uiLibraryReadback = await responseJSON(uiLibraryReadbackResponse, 200)
+  expect(uiLibraryReadback.items).toContainEqual(expect.objectContaining({
+    entryId: LIBRARY_ENTRY_ID,
+    libraryState: 'DRAFT',
+    interface: LIBRARY_INTERFACE
+  }))
+
+  // Vòng đời Library: Publish vẫn chỉ đi cùng Seal Revision. UI chỉ mở đúng
+  // chuyển tiếp một chiều PUBLISHED -> DEPRECATED, cảnh báo phạm vi toàn
+  // revision, gửi concurrency headers và chỉ xác nhận sau GET read-back.
+  const deprecateAction = page.getByRole('button', { name: 'Ngừng sử dụng phiên bản 1.0.0' })
+  await expect(deprecateAction).toBeVisible()
+  await deprecateAction.click()
+  const deprecateDialog = page.getByRole('dialog', { name: 'Ngừng sử dụng phiên bản thư viện?' })
+  await expect(deprecateDialog).toContainText('Toàn bộ phiên bản PROJECT Library này sẽ chuyển sang DEPRECATED')
+  await expect(deprecateDialog).toContainText(publishedLibraryRevisionId)
+  const uiDeprecateResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST' &&
+      url.pathname === `/api/v1/programming/projects/${projectID}/library/revisions/${publishedLibraryRevisionId}/deprecate`
+  })
+  await deprecateDialog.getByRole('button', { name: 'Ngừng sử dụng', exact: true }).click()
+  const uiDeprecate = await uiDeprecateResponse
+  expect(uiDeprecate.status(), await uiDeprecate.text()).toBe(200)
+  expect(uiDeprecate.request().postDataJSON()).toEqual({ schemaVersion: '1.0' })
+  expect(uiDeprecate.request().headers()['if-match']).toBe(uiLibraryMutationResult.etag)
+  expect(uiDeprecate.request().headers()['x-idempotency-key']).toMatch(/^[0-9a-f-]{36}$/)
+  const uiDeprecateResult = await uiDeprecate.json() as JsonObject
+  expect(uiDeprecateResult.resource).toMatchObject({
+    projectId: projectID,
+    libraryRevisionId: publishedLibraryRevisionId,
+    libraryVersion: '1.0.0',
+    libraryState: 'DEPRECATED'
+  })
+  await expect(page.getByRole('status').filter({ hasText: 'Máy chủ xác nhận phiên bản thư viện' }))
+    .toContainText('1.0.0 · DEPRECATED')
+
+  const uiDeprecateReadbackResponse = await request.get(
+    `/api/v1/programming/libraries?projectId=${projectID}&scope=PROJECT&q=SCALE_LIN&limit=100`,
+    { headers: readHeaders(token) }
+  )
+  const uiDeprecateReadback = await responseJSON(uiDeprecateReadbackResponse, 200)
+  expect(uiDeprecateReadback.items).toContainEqual(expect.objectContaining({
+    entryId: LIBRARY_ENTRY_ID,
+    libraryRevisionId: publishedLibraryRevisionId,
+    libraryVersion: '1.0.0',
+    libraryState: 'DEPRECATED'
+  }))
+  expect(uiDeprecateReadback.items).toContainEqual(expect.objectContaining({
+    entryId: LIBRARY_ENTRY_ID,
+    libraryVersion: '1.1.0',
+    libraryState: 'DRAFT'
+  }))
+  await expect(page.getByRole('button', { name: /Ngừng sử dụng phiên bản/ })).toHaveCount(0)
 
   await page.getByRole('navigation', { name: 'Điều hướng sáu workspace Lập trình trên desktop' })
     .getByRole('link', { name: 'Điểm & Ánh xạ' })
@@ -511,24 +669,93 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   const mappingRow = page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+READ\s+REAL/ })
   await expect(mappingRow).toBeVisible()
 
+  // F-P59-UI-001: Published Signal được tạo bằng UI, không phải chỉ seed API.
+  // Assert cả payload trên dây và Draft server trả lại để khoá mapping tên
+  // policy UI (`USE_FALLBACK`) cùng fallback số, không chấp nhận optimistic UI.
+  await page.getByRole('button', { name: 'Khai Published Signal' }).click()
+  const uiSignalForm = page.getByRole('form', { name: 'Biểu mẫu Published Signal' })
+  await uiSignalForm.getByLabel('Tên signal').fill('RETURN_AIR_TEMP')
+  await uiSignalForm.getByLabel('Đơn vị').fill('degC')
+  await uiSignalForm.getByLabel('Program publish (duy nhất)').selectOption((uiUpsert.program as JsonObject).programId as string)
+  await uiSignalForm.getByLabel('Hạn tươi (ms)').fill('5000')
+  await uiSignalForm.getByLabel('Chính sách khi quá hạn').selectOption('USE_FALLBACK')
+  await uiSignalForm.getByLabel('Giá trị dự phòng').fill('21.5')
+  const uiSignalMutationResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'PATCH' &&
+      url.pathname === `/api/v1/programming/projects/${projectID}/draft`
+  })
+  await uiSignalForm.getByRole('button', { name: 'Lưu Published Signal' }).click()
+  const uiSignalMutation = await uiSignalMutationResponse
+  expect(uiSignalMutation.status(), await uiSignalMutation.text()).toBe(200)
+  const uiSignalBody = uiSignalMutation.request().postDataJSON() as JsonObject
+  const uiSignalOperation = (uiSignalBody.operations as JsonObject[])
+    .find((operation) => operation.op === 'upsertSignal') as JsonObject
+  expect(uiSignalOperation.signal).toMatchObject({
+    name: 'RETURN_AIR_TEMP',
+    type: 'REAL',
+    publisherProgramId: (uiUpsert.program as JsonObject).programId,
+    freshnessMs: 5000,
+    stalePolicy: 'USE_FALLBACK',
+    fallbackValue: 21.5
+  })
+  await expect(page.getByText(/Máy chủ đã trả lại signal/)).toContainText(
+    'RETURN_AIR_TEMP · REAL · 5000 ms · USE_FALLBACK'
+  )
+  await expect(page.getByRole('row', { name: /RETURN_AIR_TEMP/ })).toBeVisible()
+
+  const uiSignalReadbackResponse = await request.get(`/api/v1/programming/projects/${projectID}`, {
+    headers: readHeaders(token)
+  })
+  const uiSignalReadback = await responseJSON(uiSignalReadbackResponse, 200)
+  expect((uiSignalReadback.draft as JsonObject).signals).toContainEqual(expect.objectContaining({
+    signalId: (uiSignalOperation.signal as JsonObject).signalId,
+    name: 'RETURN_AIR_TEMP',
+    publisherProgramId: (uiUpsert.program as JsonObject).programId,
+    stalePolicy: 'USE_FALLBACK',
+    fallbackValue: 21.5
+  }))
+
   await page.getByRole('navigation', { name: 'Điều hướng sáu workspace Lập trình trên desktop' })
     .getByRole('link', { name: 'Runtime & Bảo trì' })
     .click()
   await page.getByRole('tab', { name: 'Theo dõi' }).click()
   await expect(page.getByRole('row', { name: /SUPPLY_TEMP/ })).toBeVisible()
-  await expect(page.getByText('Monitor đang ngoại tuyến.')).toBeVisible()
+  await expect(page.getByRole('row', { name: /SupplyTemp/ })).toContainText('UI-01')
 
-  await expect.poll(() => [...new Set(serverFailures)].sort()).toEqual([
-    '503 /api/v1/programming/runtime/monitor'
-  ])
+  // Trước 2026-08-24 lane này CHẤP NHẬN đúng một `503 /runtime/monitor` và đúng
+  // một console error, vì BE để lỗi đọc PLC SHM nuốt cả snapshot Core. Sau khi
+  // Monitor đọc snapshot Core (và tra biến theo `locals` của Draft v2), không
+  // còn 5xx nào hợp lệ ở lane host: giữ lại ngoại lệ cũ nghĩa là để một lỗi
+  // server thật đi qua cổng mà không ai nhận ra.
+  await expect.poll(() => [...new Set(serverFailures)].sort()).toEqual([])
   expect(failedRequests).toEqual([])
-  expect(consoleErrors.length).toBeGreaterThan(0)
-  expect([...new Set(consoleErrors)]).toEqual([
-    'Failed to load resource: the server responded with a status of 503 (Service Unavailable)'
-  ])
+  expect([...new Set(consoleErrors)]).toEqual([])
+
+  // Cùng phiên Chrome thật chuyển về viewport mobile để khoá responsive của
+  // hai bề mặt authoring vừa mutation. Kiểm cả điều hướng More, tràn ngang và
+  // lỗi a11y nghiêm trọng; đây không phải một phép đo bằng jsdom.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(navigation).toBeHidden()
+  const mobileNavigation = page.getByRole('navigation', { name: 'Điều hướng sáu workspace Lập trình' })
+  await expect(mobileNavigation).toBeVisible()
+
+  await mobileNavigation.getByRole('button', { name: 'Thêm đích Lập trình' }).click()
+  await page.getByTestId('programming-mobile-more').getByRole('link', { name: 'Thư viện điều khiển' }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/library$`))
+  await expect(page.getByRole('list', { name: 'Danh sách khối Thư viện điều khiển' })
+    .getByRole('button', { name: /SCALE_LIN\s+PROJECT\s+FUNCTION/ })).toBeVisible()
+  await assertMobileSurface(page, 'Library')
+
+  await mobileNavigation.getByRole('button', { name: 'Thêm đích Lập trình' }).click()
+  await page.getByTestId('programming-mobile-more').getByRole('link', { name: 'Điểm & Ánh xạ' }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  await expect(page.getByRole('row', { name: /RETURN_AIR_TEMP/ })).toBeVisible()
+  await assertMobileSurface(page, 'Mapping + Published Signal')
+
   console.info(
     `[T59-505] browser evidence: HTTP>=500=${serverFailures.length} ` +
     `(${[...new Set(serverFailures)].join(', ')}); requestfailed=${failedRequests.length}; ` +
-    `console.error=${consoleErrors.length} (expected offline monitor only)`
+    `console.error=${consoleErrors.length} (expected 0)`
   )
 })

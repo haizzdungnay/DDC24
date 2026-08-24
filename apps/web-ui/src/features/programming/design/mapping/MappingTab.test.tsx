@@ -63,7 +63,7 @@ describe('MappingTab — chọn biến từ VAR_INPUT/VAR_OUTPUT, không gõ tay
     })
     const onSave = vi.fn().mockResolvedValue(true)
 
-    render(<I18nProvider><MappingTab document={document} saving={false} onSave={onSave} /></I18nProvider>)
+    render(<I18nProvider><MappingTab draft={document} document={document} saving={false} onSave={onSave} /></I18nProvider>)
 
     fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
     const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
@@ -95,7 +95,7 @@ describe('MappingTab — chọn biến từ VAR_INPUT/VAR_OUTPUT, không gõ tay
     })
     const onSave = vi.fn().mockResolvedValue(true)
 
-    render(<I18nProvider><MappingTab document={document} saving={false} onSave={onSave} /></I18nProvider>)
+    render(<I18nProvider><MappingTab draft={document} document={document} saving={false} onSave={onSave} /></I18nProvider>)
     fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
     const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
 
@@ -120,7 +120,7 @@ describe('MappingTab — chọn biến từ VAR_INPUT/VAR_OUTPUT, không gõ tay
       document: 'PROGRAM AHU_FanControl\nVAR_OUTPUT\n  AlarmHigh : BOOL;\nEND_VAR\nEND_PROGRAM'
     })
 
-    render(<I18nProvider><MappingTab document={document} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    render(<I18nProvider><MappingTab draft={document} document={document} saving={false} onSave={vi.fn()} /></I18nProvider>)
     fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
     const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
 
@@ -161,7 +161,7 @@ describe('MappingTab — chọn biến từ VAR_INPUT/VAR_OUTPUT, không gõ tay
     document.programs.push({ programId: 'program-fbd-1', name: 'AHU_FBD', kind: 'PROGRAM', language: 'FBD', document: JSON.stringify(fbdDocument) })
     const onSave = vi.fn().mockResolvedValue(true)
 
-    render(<I18nProvider><MappingTab document={document} saving={false} onSave={onSave} /></I18nProvider>)
+    render(<I18nProvider><MappingTab draft={document} document={document} saving={false} onSave={onSave} /></I18nProvider>)
     fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
     const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
 
@@ -186,7 +186,7 @@ describe('MappingTab — chọn biến từ VAR_INPUT/VAR_OUTPUT, không gõ tay
     })
     document.variables.push({ variableId: 'v1', programId: 'program-1', name: 'FanEnable', type: 'BOOL', class: 'OUTPUT', initialValue: null, retain: false })
 
-    render(<I18nProvider><MappingTab document={document} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    render(<I18nProvider><MappingTab draft={document} document={document} saving={false} onSave={vi.fn()} /></I18nProvider>)
     fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
     const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
 

@@ -9,6 +9,7 @@ import { useProgrammingPointCatalog } from '../../api/queries'
 import { collectStInterfaceVariables } from '../editor/ProgramsTab'
 import { collectFbdInterfaceVariables, type FbdDocument } from '../../fbd/model'
 import type { ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
+import { PublishedSignalsPanel } from './PublishedSignalsPanel'
 
 interface MappableVariable { name: string; type: string; direction: 'INPUT' | 'OUTPUT' }
 
@@ -72,10 +73,17 @@ const QUALITY_CLASS: Record<string, string> = {
  * nhãn — không bao giờ hiện `0` thay cho giá trị thiếu (UX-REQ-013).
  */
 export function MappingTab({
+  draft,
   document,
   saving,
   onSave
 }: {
+  /**
+   * Draft nguyên bản do server trả về. Published Signal là collection v2 và
+   * không được đọc từ `document`, vì `toWorkspaceDocument()` cố ý chiếu v2 về
+   * view model cũ và không mang theo `signals[]`.
+   */
+  draft: ProgrammingDraftDocument
   document: ProgrammingDraftDocument
   saving: boolean
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
@@ -99,6 +107,13 @@ export function MappingTab({
           thuộc layout của feature, `<h2>` thuộc màn hình cha, nên tab là
           `<h3>`. Ẩn thị giác vì thanh tab đã hiện tên. */}
       <h3 className="sr-only">{pick('Ánh xạ Biến ↔ Điểm', 'Variable ↔ point mapping')}</h3>
+      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
+        <PublishedSignalsPanel draft={draft} saving={saving} onSave={onSave} />
+      </div>
+
+      <div className="border-t border-[var(--c-border)] pt-3">
+        <h3 className="mb-2 text-sm font-semibold">{pick('Ánh xạ Biến ↔ Điểm', 'Variable ↔ point mapping')}</h3>
+      </div>
       {canEdit && (
         <Button size="sm" icon={<Plus className="h-4 w-4" aria-hidden="true" />} onClick={() => setShowPicker(true)} disabled={document.programs.length === 0}>
           {pick('Thêm ánh xạ', 'Add mapping')}
