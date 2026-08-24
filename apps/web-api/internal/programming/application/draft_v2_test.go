@@ -410,3 +410,78 @@ func TestSetTaskTuChoiProgramKhongTonTai(t *testing.T) {
 		t.Fatal("phải từ chối programOrder có Program không tồn tại")
 	}
 }
+
+// F-P59-DELETE-PROGRAM-001 — xoá Program trong Project CÓ user POU.
+//
+// Batch mà FE gửi khi xoá một Program là: removeBinding* -> removeVariable* ->
+// removeProgram -> setTask(programOrder = phần còn lại). Adapter FE dựng
+// `programOrder` từ TOÀN BỘ `objects` (gồm cả FUNCTION/FUNCTION_BLOCK), trong
+// khi `programs` của document chỉ chứa cấu hình chạy của POU kind PROGRAM. Hệ
+// quả: `setTaskCompat` thấy một id không có trong `programs` và từ chối CẢ
+// batch với `PRG-ERR-REQ-001` — người dùng bấm Xoá và không có gì xảy ra, cũng
+// không có lý do nào đọc được.
+//
+// Test này đi qua đúng `SaveDraft` production, không gọi thẳng hàm nội bộ.
+func TestXoaProgramTrongProjectCoUserPouKhongDuocTuChoiCaBatch(t *testing.T) {
+	service, projectID, draftID, etag := newV2Project(t)
+	programObject, functionObject := objectUUID(1), objectUUID(2)
+	programID := objectUUID(3)
+
+	saved, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-000000000101",
+		pouOp(programObject, "AHU_MAIN", "PROGRAM"),
+		programOp(programID, programObject, 1000),
+		pouOp(functionObject, "SCALE_LIN", "FUNCTION"))
+	if err != nil {
+		t.Fatalf("dựng fixture: %v", err)
+	}
+
+	// Chỉ Program mới nằm trong `programs`; FUNCTION thì không. Đây là bất biến
+	// mà `programOrder` phải tôn trọng.
+	document := draftDocument(t, service, projectID)
+	if got := len(collectionOf(document, "programs")); got != 1 {
+		t.Fatalf("fixture sai: có %d cấu hình Program, mong đợi 1", got)
+	}
+	if got := len(collectionOf(document, "objects")); got != 2 {
+		t.Fatalf("fixture sai: có %d POU object, mong đợi 2", got)
+	}
+
+	// Xoá Program duy nhất: sau khi bỏ nó, `programOrder` còn lại KHÔNG được
+	// mang theo id của FUNCTION.
+	if _, err := saveOps(t, service, projectID, draftID, saved.ETag,
+		"70000000-0000-4000-8000-000000000102",
+		op(map[string]any{"op": "removeProgram", "programId": programID}),
+		op(map[string]any{"op": "removeObject", "objectId": programObject}),
+		op(map[string]any{"op": "setTask", "task": map[string]any{
+			"taskId": projectID, "periodMs": 1000, "programOrder": []string{}}})); err != nil {
+		t.Fatalf("xoá Program bị từ chối: %v", err)
+	}
+
+	after := draftDocument(t, service, projectID)
+	if got := len(collectionOf(after, "programs")); got != 0 {
+		t.Fatalf("còn %d cấu hình Program sau khi xoá", got)
+	}
+	// POU của Program phải biến mất cùng cấu hình chạy. Giữ lại nó nghĩa là
+	// Program vẫn hiện trên giao diện (danh sách dựng từ `objects`) và vẫn có
+	// thể đi vào package ở lần Commission sau.
+	objects := collectionOf(after, "objects")
+	if len(objects) != 1 || objects[0]["objectId"] != functionObject {
+		t.Fatalf("objects sau khi xoá = %v, mong đợi chỉ còn FUNCTION", objects)
+	}
+}
+
+// Chốt chính cái ràng buộc mà FE vi phạm: `programOrder` mang id của một POU
+// KHÔNG phải Program thì cả batch bị từ chối. Giữ hành vi fail-closed này của
+// backend, và sửa ở phía dựng `programOrder`.
+func TestSetTaskTuChoiProgramOrderChuaIdCuaUserPou(t *testing.T) {
+	document := map[string]any{
+		"objects": []any{
+			map[string]any{"objectId": "p1", "kind": "PROGRAM", "name": "AHU"},
+			map[string]any{"objectId": "f1", "kind": "FUNCTION", "name": "SCALE"},
+		},
+		"programs": []any{map[string]any{"programId": "p1", "objectId": "p1", "periodMs": float64(1000)}},
+	}
+	raw := []byte(`{"op":"setTask","task":{"taskId":"main","periodMs":1000,"programOrder":["p1","f1"]}}`)
+	if err := setTaskCompat(document, raw); err == nil {
+		t.Fatal("programOrder chứa id của FUNCTION phải bị từ chối, không được im lặng bỏ qua")
+	}
+}

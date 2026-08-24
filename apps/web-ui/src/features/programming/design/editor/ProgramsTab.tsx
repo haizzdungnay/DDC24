@@ -260,18 +260,36 @@ export function ProgramsTab({
     })
   }
 
-  /** Xóa Program kéo theo Variable/Binding của nó — backend fail-closed nếu
-   *  Variable còn `programId` trỏ tới Program không tồn tại, và
-   *  `task.programOrder` phải khớp chính xác tập Program còn lại (draft.go
-   *  `validateDraftDocument`), nên phải gửi cả bốn thao tác trong một batch. */
+  /** Xóa một POU kéo theo Variable/Binding của nó. Backend fail-closed nếu
+   *  Variable còn `programId` trỏ tới Program không tồn tại, nên thứ tự trong
+   *  batch là bắt buộc: binding → biến → cấu hình chạy → chính POU.
+   *
+   *  Hai điều đã sai ở bản trước và cùng trả `PRG-ERR-REQ-001` không kèm lý do:
+   *
+   *  1. Batch gửi `setTask` với `programOrder`. Trong Draft v2 KHÔNG còn object
+   *     `task`: chu kỳ nằm theo từng Program trong `programs[]` và
+   *     `upsertProgram` đã tự gán. Gửi `setTask` ở đây vừa thừa vừa có hại —
+   *     `setTaskCompat` ghi đè chu kỳ của MỌI Program trong danh sách, nên xoá
+   *     Program A trong Project nhiều chu kỳ sẽ âm thầm đổi chu kỳ của B.
+   *  2. Batch luôn gửi `removeProgram`, kể cả khi POU là FUNCTION/FUNCTION_BLOCK
+   *     — những POU không hề có cấu hình chạy — và backend trả lỗi vì không tìm
+   *     thấy id trong `programs[]`. Nói cách khác: xoá một user FUNCTION KHÔNG
+   *     BAO GIỜ thành công.
+   *
+   *  Và thiếu `removeObject` thì mã nguồn POU vẫn ở lại Draft: người dùng bấm
+   *  Xoá, nhận 200, mà POU vẫn hiện nguyên trên danh sách. */
   function removeProgram(programId: string) {
+    const target = document.programs.find((program) => program.programId === programId)
     const variableIds = document.variables.filter((variable) => variable.programId === programId).map((variable) => variable.variableId)
     const bindingIds = document.bindings.filter((binding) => variableIds.includes(binding.variableId)).map((binding) => binding.bindingId)
     const operations: ProgrammingDraftOperation[] = [
       ...bindingIds.map((bindingId): ProgrammingDraftOperation => ({ op: 'removeBinding', bindingId })),
       ...variableIds.map((variableId): ProgrammingDraftOperation => ({ op: 'removeVariable', variableId })),
-      { op: 'removeProgram', programId },
-      { op: 'setTask', task: { ...document.task, programOrder: document.task.programOrder.filter((id) => id !== programId) } }
+      // Chỉ POU kind PROGRAM mới có cấu hình chạy để gỡ.
+      ...(target?.kind === 'PROGRAM' || target === undefined
+        ? [{ op: 'removeProgram', programId } as ProgrammingDraftOperation]
+        : []),
+      { op: 'removeObject', objectId: target?.objectId ?? programId }
     ]
     void onSave(operations).then((ok) => {
       setPendingDeleteId(null)

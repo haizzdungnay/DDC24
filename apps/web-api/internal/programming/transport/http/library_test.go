@@ -389,3 +389,53 @@ func TestLibraryHandlerDoesNotStealOtherProjectRoutes(t *testing.T) {
 		t.Fatalf("seal đi nhầm handler: status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+// F-P59-DELETE-PROGRAM-001 — batch `PATCH .../draft` phải nói RÕ thao tác nào bị
+// từ chối.
+//
+// Một lần bấm "Xóa Program" trên FE gửi 4–5 operation trong MỘT batch, còn API
+// trả đúng một mã `PRG-ERR-REQ-001` cho cả mảng. Không có `field`, người vận
+// hành (và người debug) không có gì để lần: đúng tình huống đã xảy ra khi
+// `setTask.programOrder` mang id của một user FUNCTION và làm hỏng cả lệnh xóa.
+func TestSaveDraftBaoDungThaoTacBiTuChoiTrongBatch(t *testing.T) {
+	mux, projectID, etag := newLibraryTestMux(t, auth.RoleAdmin)
+
+	// `baseRevisionId` phải đúng bản nền của Draft, nếu không request chết ở
+	// lớp validate trước khi chạm tới batch — và test sẽ đo nhầm chỗ.
+	readRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(readRecorder, libraryRequest(t, http.MethodGet,
+		"/api/v1/programming/projects/"+projectID, "", "", ""))
+	var project struct {
+		DraftRevisionID string `json:"draftRevisionId"`
+	}
+	if err := json.Unmarshal(readRecorder.Body.Bytes(), &project); err != nil {
+		t.Fatalf("đọc project: %v", err)
+	}
+
+	body := `{"schemaVersion":"1.0","baseRevisionId":"` + project.DraftRevisionID + `","operations":[` +
+		`{"op":"setFunctionalTags","tags":["ahu"]},` +
+		`{"op":"removeProgram","programId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"}]}`
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, libraryRequest(t, http.MethodPatch,
+		"/api/v1/programming/projects/"+projectID+"/draft", body, etag,
+		"10000000-0000-4000-8000-0000000000f1"))
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, mong đợi 400; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Error struct {
+			Code  string `json:"code"`
+			Field string `json:"field"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if response.Error.Code != "PRG-ERR-REQ-001" {
+		t.Fatalf("code = %q", response.Error.Code)
+	}
+	if response.Error.Field != "operations[1].removeProgram" {
+		t.Fatalf("field = %q, mong đợi trỏ đúng thao tác thứ hai trong batch", response.Error.Field)
+	}
+}

@@ -295,6 +295,14 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 	if operationError == nil {
 		public.KeepsRunningRevision = true
 	}
+	// Batch `PATCH .../draft` trả đúng một mã cho cả mảng operation. Không nói
+	// thao tác nào hỏng thì người vận hành chỉ thấy "request sai" cho một lần
+	// bấm Xoá gồm 4–5 thao tác (`F-P59-DELETE-PROGRAM-001`). `field` là chỗ hợp
+	// đồng đã dành sẵn cho đúng việc này.
+	var draftOperation *programmingapplication.DraftOperationError
+	if errors.As(err, &draftOperation) && public.Field == "" {
+		public.Field = draftOperation.Field()
+	}
 	WriteProgrammingError(w, status, public, correlationID)
 }
 

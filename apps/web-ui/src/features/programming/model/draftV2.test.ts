@@ -45,6 +45,20 @@ describe('adapter document v2 -> view model Design', () => {
     expect(view.task.periodMs).toBe(5000)
   })
 
+  /** Hồi quy `F-P59-DELETE-PROGRAM-001`: `programOrder` chỉ được chứa POU CÓ cấu
+   *  hình chạy. Bản trước lấy toàn bộ `objects`, nên Project có user FUNCTION
+   *  gửi lên một id không nằm trong `programs[]` và backend từ chối cả batch với
+   *  `PRG-ERR-REQ-001` — triệu chứng người dùng thấy là "bấm Xoá Program không
+   *  có gì xảy ra". */
+  it('programOrder loại POU không có cấu hình chạy (FUNCTION/FUNCTION_BLOCK)', () => {
+    const view = toWorkspaceDocument(V2)
+    expect(view.task.programOrder).toEqual(['22222222-2222-4222-8222-222222222222'])
+    // Vẫn giữ FUNCTION trong danh sách POU để tab Chương trình hiển thị nó.
+    expect(view.programs.map((program) => program.kind)).toEqual(['PROGRAM', 'FUNCTION'])
+    // `objectId` phải đi kèm: xoá một POU nhắm theo `objectId`, không phải `programId`.
+    expect(view.programs[1].objectId).toBe('44444444-4444-4444-8444-444444444444')
+  })
+
   it('chu kỳ lạ rơi về 1000 thay vì hiển thị giá trị profile không cho phép', () => {
     const odd = { ...(V2 as unknown as Record<string, unknown>), programs: [{ programId: 'x', objectId: 'y', periodMs: 777 }] }
     expect(toWorkspaceDocument(odd as unknown as ProgrammingDraftDocument).task.periodMs).toBe(1000)
