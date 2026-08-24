@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
-import type { ProgrammingProgramIntentList, ProgrammingRuntime } from '../model/types'
+import type { ProgrammingProgramListItem, ProgrammingProgramsPage, ProgrammingRuntime } from '../model/types'
 import { ProgrammingContextStrip } from './ProgrammingContextStrip'
 import type { ContextDetailsData } from './contextDetails'
 
@@ -51,9 +51,50 @@ const runtime: ProgrammingRuntime = {
   observedAt: '2026-08-21T10:00:00Z'
 }
 
-const intents: ProgrammingProgramIntentList = {
-  items: [{ programId: 'ahu-1', desiredEnabled: true, generation: 3, runtimeState: 'RUNNING', updatedBy: 'admin', updatedAtUtcMs: 1 }]
+/**
+ * Một dòng của `GET /projects/{projectId}/programs` sau `T60-013`/`T60-014`.
+ * Mặc định là "Core im": mọi trường read-back `null`, đúng thứ server trả khi
+ * chưa đọc được bảng Program — fixture không được đẹp hơn sự thật.
+ */
+function programItem(overrides: Partial<ProgrammingProgramListItem> = {}): ProgrammingProgramListItem {
+  return {
+    programId: 'ahu-1',
+    desiredEnabled: true,
+    generation: 3,
+    updatedBy: 'admin',
+    updatedAtUtcMs: 1,
+    runtimeState: 'UNKNOWN',
+    runtimeStateSource: 'UNAVAILABLE',
+    coreState: null,
+    enabled: null,
+    observedAt: null,
+    periodMs: null,
+    lastExecNs: null,
+    maxExecNs: null,
+    missedReleaseCount: null,
+    consecutiveMissedRelease: null,
+    lastRunAtUtc: null,
+    lastRunAgeMs: null,
+    lane: null,
+    health: null,
+    ...overrides
+  }
 }
+
+function programsPage(items: ProgrammingProgramListItem[]): ProgrammingProgramsPage {
+  return {
+    schemaVersion: '1.0',
+    projectId: '11111111-1111-4111-8111-111111111111',
+    runtimeStateSource: 'CORE_LIVE',
+    observedAt: '2026-08-21T10:00:00Z',
+    programsTruncated: false,
+    items
+  }
+}
+
+const intents: ProgrammingProgramsPage = programsPage([
+  programItem({ programId: 'ahu-1', runtimeState: 'RUNNING', runtimeStateSource: 'CORE_LIVE' })
+])
 
 const details: ContextDetailsData = {
   draftRevisionId: DRAFT_REVISION_ID,

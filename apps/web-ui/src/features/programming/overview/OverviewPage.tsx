@@ -10,7 +10,7 @@ import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import { useProgrammingRecentAudit } from '../api/queries'
 import { useCreateProgrammingProject } from '../api/mutations'
-import type { ProgrammingProgramIntentList, ProgrammingProject, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
+import type { ProgrammingProgramsPage, ProgrammingProject, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
 
 /**
  * `OverviewPage` (PGM-01) — `UJ-PROG-01`. Trong `≤5 giây` phải thấy: Core,
@@ -48,7 +48,7 @@ function RunningApplicationPanel({
 }: {
   runtime: ProgrammingRuntime | null
   status: 'loading' | 'ready' | 'error'
-  programIntents: RemoteState<ProgrammingProgramIntentList>
+  programIntents: RemoteState<ProgrammingProgramsPage>
 }) {
   const { pick } = useI18n()
   const navigate = useNavigate()
@@ -89,7 +89,7 @@ function RunningApplicationPanel({
   )
 }
 
-function ProgramIntentRuntimeSummary({ state }: { state: RemoteState<ProgrammingProgramIntentList> }) {
+function ProgramIntentRuntimeSummary({ state }: { state: RemoteState<ProgrammingProgramsPage> }) {
   const { pick } = useI18n()
   if (state.status === 'loading') {
     return <p role="status" className="text-xs text-[var(--c-text-dim)]">{pick('Đang tải ý định và trạng thái Program…', 'Loading Program intent and runtime state…')}</p>
@@ -103,7 +103,10 @@ function ProgramIntentRuntimeSummary({ state }: { state: RemoteState<Programming
   const desired = state.data.items.filter((item) => item.desiredEnabled).length
   const runtimeCounts = new Map<string, number>()
   for (const item of state.data.items) runtimeCounts.set(item.runtimeState, (runtimeCounts.get(item.runtimeState) ?? 0) + 1)
-  const runtime = ['FAULTED', 'UNKNOWN', 'STARTING', 'STOPPING', 'WAITING', 'RUNNING', 'DISABLED']
+  // ĐÚNG năm trạng thái của D-07 — hai giá trị chuyển tiếp đã bị gỡ khỏi hợp
+  // đồng ở `T60-016` vì Core đổi trạng thái đồng bộ tức thì, không có pha
+  // trung gian nào để hiển thị.
+  const runtime = ['FAULTED', 'UNKNOWN', 'WAITING', 'RUNNING', 'DISABLED']
     .filter((runtimeState) => runtimeCounts.has(runtimeState))
     .map((runtimeState) => `${runtimeState} ${runtimeCounts.get(runtimeState)}`)
     .join(' · ')

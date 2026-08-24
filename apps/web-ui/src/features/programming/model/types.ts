@@ -1,12 +1,53 @@
 /**
  * DTO chiếu 1-1 theo `contracts/openapi/openapi.yaml` nhóm `/programming/*`
  * (schema `ProgrammingCapabilities`, `ProgrammingRuntime`, `ProgrammingProject`
- * …). Generator `scripts/generate-programming-client.mjs` chỉ sinh type cho
- * nhóm Commission (`api/generated/client.ts`); các schema đọc còn lại được
- * khai tay ở đây và PHẢI khớp field/kiểu với OpenAPI — không tự thêm field.
+ * …). Generator `scripts/generate-programming-client.mjs` sinh type cho nhóm
+ * Commission **và** cho bảng Programs của PGM-01 (`api/generated/client.ts`);
+ * các schema đọc còn lại được khai tay ở đây và PHẢI khớp field/kiểu với
+ * OpenAPI — không tự thêm field.
+ *
+ * LUẬT BẤT DI BẤT DỊCH: type nào generator đã sinh thì KHÔNG khai tay lại ở
+ * file này. Hai bản khai cùng tên sẽ trôi xa nhau trong im lặng — đúng thứ đã
+ * xảy ra với `ProgrammingProgramIntent`/`ProgrammingProgramIntentList`/
+ * `ProgrammingProgramRuntimeState` (xem khối re-export ngay dưới).
  */
 
 import type { ProgrammingImpact } from '../api/generated/client'
+
+/**
+ * `GET /projects/{projectId}/programs` — re-export NGUYÊN VẸN từ client sinh
+ * tự động, không có bản khai tay song song.
+ *
+ * TRIỆU CHỨNG (phát hiện khi thi hành `T60-016`)
+ * ----------------------------------------------
+ * File này từng khai tay ba type `ProgrammingProgramIntent`,
+ * `ProgrammingProgramIntentList` và `ProgrammingProgramRuntimeState` theo hợp
+ * đồng TRƯỚC `T60-013`. Sau `T60-013`/`T60-014` chúng nói dối ba chỗ:
+ *
+ * 1. Thiếu 13 trường read-back sống (`runtimeStateSource`, `coreState`,
+ *    `enabled`, `observedAt`, `periodMs`, `lastExecNs`, `maxExecNs`,
+ *    `missedReleaseCount`, `consecutiveMissedRelease`, `lastRunAtUtc`,
+ *    `lastRunAgeMs`, `lane`, `health`) và toàn bộ phần bao trang
+ *    (`schemaVersion`, `projectId`, `runtimeStateSource`, `observedAt`,
+ *    `programsTruncated`).
+ * 2. Khai `desiredEnabled: boolean` trong khi server nay gửi được `null`
+ *    (nghĩa là "Project chưa từng ghi intent cho Program này" — KHÁC HẲN
+ *    `false`, vốn nghĩa là đã có người tắt nó).
+ * 3. Còn giữ `STARTING`/`STOPPING`, hai giá trị mà D-07 đã loại và server
+ *    không bao giờ gửi.
+ *
+ * Ba type đó lại TRÙNG TÊN với type sinh ra ở `api/generated/client.ts`, nên
+ * chỗ nào import nhầm nguồn thì trình biên dịch vẫn xanh trong khi kiểu đang
+ * mô tả một hợp đồng không còn tồn tại. Cách chữa duy nhất đúng là xoá bản
+ * khai tay và trỏ về đúng một nguồn.
+ */
+export type {
+  ProgrammingProgramHealth,
+  ProgrammingProgramListItem,
+  ProgrammingProgramRuntimeState,
+  ProgrammingProgramRuntimeStateSource,
+  ProgrammingProgramsPage
+} from '../api/generated/client'
 
 export type ProgrammingTargetState = 'READY' | 'DEGRADED' | 'UNAVAILABLE'
 
@@ -46,34 +87,6 @@ export interface ProgrammingRuntime {
   safeStateNoControllerOnly: boolean
   observedAt: string
   task?: ProgrammingTaskMetrics | null
-}
-
-/**
- * `GET /programming/projects/{projectId}/programs` — ý định bền vững và trạng
- * thái Core là hai sự thật độc lập. Không được suy `RUNNING` từ
- * `desiredEnabled=true`, nhất là khi Program đang STARTING/WAITING/FAULTED hoặc
- * Core chưa đọc được trạng thái.
- */
-export type ProgrammingProgramRuntimeState =
-  | 'DISABLED'
-  | 'STARTING'
-  | 'RUNNING'
-  | 'WAITING'
-  | 'STOPPING'
-  | 'FAULTED'
-  | 'UNKNOWN'
-
-export interface ProgrammingProgramIntent {
-  programId: string
-  desiredEnabled: boolean
-  generation: number
-  runtimeState: ProgrammingProgramRuntimeState
-  updatedBy: string
-  updatedAtUtcMs: number
-}
-
-export interface ProgrammingProgramIntentList {
-  items: ProgrammingProgramIntent[]
 }
 
 export interface ProgrammingTaskMetrics {
@@ -319,6 +332,16 @@ export interface ProgrammingProject {
   draft?: ProgrammingDraftDocument
   /** `null`/`undefined` khi Draft chưa từng niêm phong hoặc chưa từng Check. */
   latestCheck?: ProgrammingProjectLatestCheck | null
+  /**
+   * `T60-015` — ba trường dưới đây server LUÔN gửi khoá, kể cả khi giá trị là
+   * `null`. `null` nghĩa là "đã xét và chưa biết", không phải `0`/`false`:
+   * khẳng định Draft "sạch" khi chưa biết là giấu việc chưa phát hành.
+   */
+  dirty: boolean | null
+  /** Số thứ tự Revision nền của Draft — nguồn của nhãn `Draft #14` (D-05). */
+  draftSequence: number | null
+  /** Số thứ tự Revision Core ĐANG chạy, chỉ khi nó thuộc đúng Project này. */
+  activeSequence: number | null
 }
 
 /** Payload của từng phần tử `operations[]` trong `PATCH .../draft`

@@ -6,8 +6,8 @@ import { semanticBadgeProps, type SemanticState } from '../shared/semanticState'
 import { ContextDetailsPopover, type ContextDetailsCloseOptions } from './ContextDetailsPopover'
 import { formatObservedAt, type ContextDetailsData } from './contextDetails'
 import type {
-  ProgrammingProgramIntentList,
   ProgrammingProgramRuntimeState,
+  ProgrammingProgramsPage,
   ProgrammingRuntime,
   ProgrammingTargetState,
   RemoteState
@@ -94,7 +94,7 @@ export function ProgrammingContextStrip({
   runtimeStatus: ResourceStatus
   runtime: ProgrammingRuntime | null
   intentStatus: ResourceStatus
-  intents: ProgrammingProgramIntentList | null
+  intents: ProgrammingProgramsPage | null
   intentError: string | null
   editing: ProgrammingEditingContext | null
   canMutate: boolean
@@ -281,7 +281,7 @@ function IntentBadge({ pick, projectStatus, intentStatus, intents, editing }: {
   pick: Pick
   projectStatus: ResourceStatus
   intentStatus: ResourceStatus
-  intents: ProgrammingProgramIntentList | null
+  intents: ProgrammingProgramsPage | null
   editing: ProgrammingEditingContext | null
 }) {
   if (projectStatus === 'loading' || (editing && intentStatus === 'loading')) {
@@ -309,7 +309,7 @@ function RuntimeBadge({ pick, projectStatus, runtimeStatus, runtime, intentStatu
   runtimeStatus: ResourceStatus
   runtime: ProgrammingRuntime | null
   intentStatus: ResourceStatus
-  intents: ProgrammingProgramIntentList | null
+  intents: ProgrammingProgramsPage | null
   editing: ProgrammingEditingContext | null
 }) {
   if (runtimeStatus === 'error' || runtime?.producerState === 'UNAVAILABLE') {
@@ -333,7 +333,7 @@ function RuntimeBadge({ pick, projectStatus, runtimeStatus, runtime, intentStatu
     ? 'fault'
     : counts.UNKNOWN > 0
       ? 'unknown'
-      : counts.STARTING > 0 || counts.STOPPING > 0 || counts.WAITING > 0
+      : counts.WAITING > 0
         ? 'warning'
         : counts.RUNNING > 0
           ? 'good'
@@ -346,13 +346,16 @@ function SemanticBadge({ pick, state, label }: { pick: Pick; state: SemanticStat
   return <StatusBadge {...semanticBadgeProps(pick, state, label)} className="shrink-0" />
 }
 
-function countRuntimeStates(intents: ProgrammingProgramIntentList): Record<ProgrammingProgramRuntimeState, number> {
+function countRuntimeStates(intents: ProgrammingProgramsPage): Record<ProgrammingProgramRuntimeState, number> {
+  // ĐÚNG năm trạng thái (D-07). Hai giá trị chuyển tiếp đã bị gỡ khỏi hợp
+  // đồng: `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức
+  // thì nên không có pha trung gian nào để đếm. Giữ lại hai ô đó là dựng sẵn
+  // chỗ cho một con số không bao giờ khác 0 — và dạy người đọc một mô hình đã
+  // lỗi thời.
   const counts: Record<ProgrammingProgramRuntimeState, number> = {
     DISABLED: 0,
-    STARTING: 0,
     RUNNING: 0,
     WAITING: 0,
-    STOPPING: 0,
     FAULTED: 0,
     UNKNOWN: 0
   }
@@ -361,7 +364,7 @@ function countRuntimeStates(intents: ProgrammingProgramIntentList): Record<Progr
 }
 
 function runtimeStateSummary(counts: Record<ProgrammingProgramRuntimeState, number>): string {
-  const order: ProgrammingProgramRuntimeState[] = ['FAULTED', 'UNKNOWN', 'STARTING', 'STOPPING', 'WAITING', 'RUNNING', 'DISABLED']
+  const order: ProgrammingProgramRuntimeState[] = ['FAULTED', 'UNKNOWN', 'WAITING', 'RUNNING', 'DISABLED']
   return order.filter((state) => counts[state] > 0).map((state) => `${state} ${counts[state]}`).join(' · ')
 }
 
@@ -381,7 +384,7 @@ function contextNotice({
   runtimeStatus: ResourceStatus
   runtime: ProgrammingRuntime | null
   intentStatus: ResourceStatus
-  intents: ProgrammingProgramIntentList | null
+  intents: ProgrammingProgramsPage | null
   intentError: string | null
   editing: ProgrammingEditingContext | null
   canMutate: boolean

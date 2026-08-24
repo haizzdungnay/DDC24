@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useState } from 'react'
 import { Outlet, useParams } from 'react-router-dom'
 import { useProgrammingCapabilities, useProgrammingProgramIntents, useProgrammingProjects, useProgrammingRuntime } from '../api/queries'
-import type { ProgrammingCapabilities, ProgrammingProgramIntentList, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
+import type { ProgrammingCapabilities, ProgrammingProgramsPage, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
 import { roleAtLeast, useAuth } from '../../auth'
 import { ProgrammingHeader } from './ProgrammingHeader'
 import { ProgrammingContextStrip } from './ProgrammingContextStrip'
@@ -12,7 +12,7 @@ interface ProgrammingRuntimeContextValue {
   capabilities: RemoteState<ProgrammingCapabilities>
   runtime: RemoteState<ProgrammingRuntime>
   projects: RemoteState<ProgrammingProjectPage>
-  programIntents: RemoteState<ProgrammingProgramIntentList>
+  programIntents: RemoteState<ProgrammingProgramsPage>
   setEditingContext: (context: ProgrammingEditingContext | null) => void
 }
 

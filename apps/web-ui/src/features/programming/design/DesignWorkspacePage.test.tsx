@@ -53,6 +53,8 @@ function baseProject(): ProgrammingProject {
   return {
     projectId: 'project-1', name: 'AHU-01', etag: '"draft-1:1"',
     activeRevisionId: null, draftRevisionId: 'draft-1', baseRevisionId: 'draft-1', updatedAt: '2026-08-13T00:00:00Z',
+    // `T60-015`: server luôn gửi ba khoá này, kể cả khi giá trị là `null`.
+    dirty: false, draftSequence: 1, activeSequence: null,
     draft: baseDocument()
   }
 }
