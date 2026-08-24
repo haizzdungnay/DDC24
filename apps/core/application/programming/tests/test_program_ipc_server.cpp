@@ -138,6 +138,26 @@ TEST(ProgramIpcCodec, ResponseRoundTrip)
     EXPECT_EQ(EncodeResponseFrame(decoded, &error), frame);
 }
 
+TEST(ProgramIpcCodec, PayloadRequiresPreferredShortestFloatEncoding)
+{
+    ProgramResponse response;
+    response.request_id = bytes(16, 0x00);
+    response.correlation_id = "correlation-id-0001";
+    response.result = ProgramResult::Ok;
+    ProgramCodecError error = ProgramCodecError::None;
+
+    /* [1.25] bằng float16 là preferred/canonical theo RFC 8949 và encoder Go. */
+    response.payload = {0x81, 0xf9, 0x3d, 0x00};
+    EXPECT_FALSE(EncodeResponseFrame(response, &error).empty());
+    EXPECT_EQ(error, ProgramCodecError::None);
+
+    /* Cùng giá trị nhưng ép float32 phải bị từ chối; chính drift này từng làm
+     * STATUS Core COMMITTED bị BE hiểu thành IPC unavailable. */
+    response.payload = {0x81, 0xfa, 0x3f, 0xa0, 0x00, 0x00};
+    EXPECT_TRUE(EncodeResponseFrame(response, &error).empty());
+    EXPECT_EQ(error, ProgramCodecError::InvalidEnvelope);
+}
+
 TEST(ProgramIpcCodec, RejectsTruncatedOversizeAndUnknownMajor)
 {
     ProgramCodecError error = ProgramCodecError::None;

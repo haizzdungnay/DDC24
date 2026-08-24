@@ -35,6 +35,8 @@
 #include "st/st_scheduler.hpp"
 #include "st/st_test_key.hpp"
 
+#include "enable_at_boundary.hpp"
+
 using namespace core;
 using namespace core::programming;
 
@@ -146,11 +148,32 @@ ActivateCommand activation_for(const StageCommand& staged, const std::string& ex
     return command;
 }
 
+/* Package mới handoff ở Disabled theo T59-305/405. Các test lifecycle cần
+ * thực thi thân Program nên phải đi qua chính command PROGRAM_ENABLE, không
+ * được biến fixture thành một lối auto-start song song với production. */
+bool enable_all(ProgrammingRuntimeCoordinator* coordinator, StScheduler* scheduler)
+{
+    const RuntimeOperationSnapshot snapshot = coordinator->snapshot();
+    for (const std::string& instance_id : coordinator->instance_ids()) {
+        ProgramEnableCommand command;
+        command.operation_id = snapshot.operation_id;
+        command.instance_id = instance_id;
+        command.enabled = true;
+        std::string detail;
+        std::string error;
+        if (test::enable_at_boundary(coordinator, scheduler, command, &detail, &error) !=
+            ProgramEnableOutcome::APPLIED)
+            return false;
+    }
+    return true;
+}
+
 /* Một base step đầy đủ: boundary → tick → publish output → báo coordinator. */
 bool run_cycle(StScheduler* scheduler, ProgrammingRuntimeCoordinator* coordinator,
                PointTable* table, PriorityResolver* resolver, uint64_t now_ns)
 {
     coordinator->on_safe_boundary();
+    if (!enable_all(coordinator, scheduler)) return false;
     scheduler->tick(now_ns);
     StIoBridgeStats stats;
     const bool committed = st_apply_all_outputs(scheduler, resolver, table, &stats);
@@ -202,12 +225,15 @@ TEST(ProgrammingPackageLifecycle, OneProgramFailingFirstCycleRollsBackWholePacka
     run_cycle(&scheduler, &coordinator, &table, &resolver, 2000ULL * 1000000ULL);
 
     const LifecycleState state = coordinator.snapshot().state;
-    EXPECT_TRUE(state == LifecycleState::ROLLING_BACK || state == LifecycleState::FAILED)
-        << "gói có Program chết vẫn được tuyên bố thành công";
-    EXPECT_NE(state, LifecycleState::FIRST_CYCLE_OK);
+    ASSERT_EQ(state, LifecycleState::ROLLING_BACK)
+        << "gói có Program chết không arm được whole-package rollback";
+    coordinator.on_safe_boundary();
+    ASSERT_EQ(coordinator.snapshot().state, LifecycleState::ROLLED_BACK)
+        << "topology cũ chưa được khôi phục ở rollback boundary";
 
-    /* LKG không đổi: "old LKG exact" nghĩa là ĐÚNG bản cũ, không phải một bản
-     * ghép từ gói mới và gói cũ. */
+    /* LKG kiểm SAU rollback handoff: trong ROLLING_BACK scheduler vẫn đang sở
+     * hữu shadow candidate, còn topology/LKG cũ được coordinator giữ nguyên ở
+     * `previous_program_set_`. Đọc trước boundary là đọc nhầm phía transaction. */
     EXPECT_EQ(scheduler.find_program("P_a")->last_known_good, lkg_a);
     EXPECT_EQ(scheduler.find_program("P_b")->last_known_good, lkg_b);
 }
@@ -239,6 +265,7 @@ TEST(ProgrammingPackageLifecycle, LkgPromotionIsAllOrNothingAcrossPackage)
     ASSERT_TRUE(coordinator.stage(staged, &detail, &error)) << detail << ": " << error;
     ASSERT_TRUE(coordinator.activate(activation_for(staged), &detail, &error)) << detail;
     coordinator.on_safe_boundary();
+    ASSERT_TRUE(enable_all(&coordinator, &scheduler));
     scheduler.tick(1000ULL * 1000000ULL);
 
     PointTable table;

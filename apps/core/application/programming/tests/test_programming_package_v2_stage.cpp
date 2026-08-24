@@ -25,12 +25,15 @@
 #include "graph/point_table.hpp"
 #include "priority/priority_resolver.hpp"
 #include "st/st_compile.hpp"
+#include "st/st_io_map.hpp"
 #include "st/st_process_image.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_package_v2.hpp"
 #include "st/st_profile_generated.hpp"
 #include "st/st_scheduler.hpp"
 #include "st/st_test_key.hpp"
+
+#include "enable_at_boundary.hpp"
 
 using namespace core;
 using namespace core::programming;
@@ -58,6 +61,30 @@ std::vector<uint8_t> program_ir(const std::string& name, int value)
     StDiagnostic diagnostic;
     EXPECT_TRUE(compile_st_source(source, &module, &diagnostic))
         << diagnostic.code << ": " << diagnostic.message;
+    std::vector<uint8_t> bytes;
+    std::string error;
+    EXPECT_TRUE(serialize_st_ir(module, &bytes, &error)) << error;
+    EXPECT_TRUE(sign_st_artifact(&bytes, st_test_secret_key()));
+    return bytes;
+}
+
+std::vector<uint8_t> signal_program_ir(
+    const std::string& source, const std::string& program_id,
+    const std::vector<StPublishedSignalContract>& signals,
+    const std::vector<StIoMapEntry>& io_map = {})
+{
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    options.program_identity = program_id;
+    options.published_signals = signals;
+    StIrModule module;
+    StDiagnostic diagnostic;
+    EXPECT_TRUE(compile_st_source(source, &module, &diagnostic, options))
+        << diagnostic.code << ": " << diagnostic.message;
+    std::vector<StDiagnostic> binding_diagnostics;
+    EXPECT_TRUE(resolve_io_bindings(&module, io_map, &binding_diagnostics))
+        << (!binding_diagnostics.empty() ? binding_diagnostics.front().code : "") << ": "
+        << (!binding_diagnostics.empty() ? binding_diagnostics.front().message : "");
     std::vector<uint8_t> bytes;
     std::string error;
     EXPECT_TRUE(serialize_st_ir(module, &bytes, &error)) << error;
@@ -150,7 +177,23 @@ TEST(ProgrammingPackageV2Stage, ArtifactV1StillStagesUnderAnyInstanceName)
     const StageCommand command =
         write_candidate(tree, kOperation, kRevision, program_ir("Solo", 7), "P_solo");
     std::string detail;
+    const std::vector<std::string> live_ids_before = coordinator.instance_ids();
     ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
+
+    EXPECT_EQ(coordinator.instance_ids(), live_ids_before)
+        << "PREPARED không được công bố identity live trước safe boundary";
+    EXPECT_EQ(scheduler.find_program("P_solo"), nullptr)
+        << "stage đã gắn Program mới vào topology live";
+
+    ActivateCommand activate;
+    activate.operation_id = kOperation;
+    activate.staged_token = kOperation;
+    activate.cutover = CutoverMode::PROGRAM_ONLY;
+    activate.plan_hash = command.plan_hash;
+    ASSERT_TRUE(coordinator.activate(activate, &detail, &error)) << detail << ": " << error;
+    EXPECT_EQ(scheduler.find_program("P_solo"), nullptr)
+        << "arm đã đổi topology trước safe boundary";
+    coordinator.on_safe_boundary();
 
     ASSERT_EQ(coordinator.instance_ids().size(), 1u);
     EXPECT_EQ(coordinator.instance_ids()[0], "P_solo");
@@ -177,14 +220,29 @@ TEST(ProgrammingPackageV2Stage, PackageV2CreatesOneInstancePerProgram)
     const StageCommand command =
         write_candidate(tree, kOperation, kRevision, package_of(names), "P_ahu");
     std::string detail;
+    const std::vector<std::string> live_ids_before = coordinator.instance_ids();
     ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
+
+    EXPECT_EQ(coordinator.instance_ids(), live_ids_before);
+    for (const std::string& name : names)
+        EXPECT_EQ(scheduler.find_program(name), nullptr) << name << " xuất hiện từ stage";
+
+    ActivateCommand activate;
+    activate.operation_id = kOperation;
+    activate.staged_token = kOperation;
+    activate.cutover = CutoverMode::PROGRAM_ONLY;
+    activate.plan_hash = command.plan_hash;
+    ASSERT_TRUE(coordinator.activate(activate, &detail, &error)) << detail << ": " << error;
+    coordinator.on_safe_boundary();
 
     ASSERT_EQ(coordinator.instance_ids().size(), names.size());
     for (const std::string& name : names) {
         EXPECT_NE(scheduler.find_program(name), nullptr) << name;
         const StProgramInstance* instance = scheduler.find_program(name);
         ASSERT_NE(instance, nullptr);
-        EXPECT_FALSE(instance->pending_artifact.empty()) << name << " chưa được stage";
+        EXPECT_TRUE(instance->pending_artifact.empty()) << name << " còn artifact pending sau handoff";
+        EXPECT_FALSE(instance->enabled) << name << " mới phải fail-closed ở Disabled";
+        EXPECT_EQ(instance->state, StProgramState::DISABLED) << name;
     }
 }
 
@@ -270,6 +328,16 @@ TEST(ProgrammingPackageV2Stage, PerProgramPeriodComesFromPackage)
     std::string detail;
     ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
 
+    for (const std::string& name : names)
+        EXPECT_EQ(scheduler.find_program(name), nullptr) << name << " xuất hiện từ stage";
+    ActivateCommand activate;
+    activate.operation_id = kOperation;
+    activate.staged_token = kOperation;
+    activate.cutover = CutoverMode::PROGRAM_ONLY;
+    activate.plan_hash = command.plan_hash;
+    ASSERT_TRUE(coordinator.activate(activate, &detail, &error)) << detail << ": " << error;
+    coordinator.on_safe_boundary();
+
     for (std::size_t index = 0; index < names.size(); ++index) {
         const StProgramInstance* instance = scheduler.find_program(names[index]);
         ASSERT_NE(instance, nullptr) << names[index];
@@ -297,10 +365,10 @@ TEST(ProgrammingPackageV2Stage, WriterRejectsPeriodOutsideProfileClasses)
     EXPECT_NE(error.find("ngoài ba lớp"), std::string::npos) << error;
 }
 
-/* Gói v2 phải sống sót qua reboot. Trước T59-402 đường khôi phục nạp NGUYÊN khối
- * container vào một instance như thể là artifact v1 — loader IR v1 từ chối, và
- * thiết bị tỉnh dậy không có Program nào. Hỏng đúng vào lúc không ai đang nhìn. */
-TEST(ProgrammingPackageV2Stage, PackageV2SurvivesRestartWithEveryProgram)
+/* Gói v2 phải sống sót qua reboot nhưng checkpoint không mang desiredEnabled.
+ * Vì vậy Core khôi phục đủ topology/artifact ở Disabled và chỉ chạy Program
+ * sau PROGRAM_ENABLE explicit/replay; tự start ở boot là bypass intent bền. */
+TEST(ProgrammingPackageV2Stage, RestartRestoresTopologyFailClosedUntilExplicitEnable)
 {
     TempTree tree;
     ASSERT_FALSE(tree.path.empty());
@@ -353,9 +421,22 @@ TEST(ProgrammingPackageV2Stage, PackageV2SurvivesRestartWithEveryProgram)
     for (std::size_t index = 0; index < names.size(); ++index) {
         const StProgramInstance* instance = restarted.find_program(names[index]);
         ASSERT_NE(instance, nullptr) << names[index] << " mất sau khởi động lại";
-        EXPECT_EQ(instance->state, StProgramState::RUNNING) << names[index];
+        EXPECT_EQ(instance->state, StProgramState::DISABLED) << names[index];
+        EXPECT_FALSE(instance->enabled) << names[index] << " tự bật lại từ checkpoint";
         EXPECT_EQ(instance->period_ms, periods[index]) << names[index];
     }
+
+    ProgramEnableCommand replay;
+    replay.operation_id = kOperation;
+    replay.instance_id = "P_ahu";
+    replay.enabled = true;
+    std::string detail;
+    ASSERT_EQ(test::enable_at_boundary(&coordinator, &restarted, replay, &detail, &error),
+              ProgramEnableOutcome::APPLIED)
+        << detail << ": " << error;
+    EXPECT_EQ(restarted.find_program("P_ahu")->state, StProgramState::RUNNING);
+    EXPECT_EQ(restarted.find_program("P_boiler")->state, StProgramState::DISABLED)
+        << "replay một intent đã làm Program khác tự chạy";
 }
 
 /* T59-404 — bus signal dựng theo ĐÚNG khai báo của package, và dựng LẠI mỗi lần
@@ -397,6 +478,16 @@ TEST(ProgrammingPackageV2Stage, SignalBusIsRebuiltFromPackage)
     std::string detail;
     ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
 
+    EXPECT_EQ(bus.size(), 0u) << "PREPARED đã đổi bank signal live";
+    ActivateCommand activate;
+    activate.operation_id = kOperation;
+    activate.staged_token = kOperation;
+    activate.cutover = CutoverMode::PROGRAM_ONLY;
+    activate.plan_hash = command.plan_hash;
+    ASSERT_TRUE(coordinator.activate(activate, &detail, &error)) << detail << ": " << error;
+    EXPECT_EQ(bus.size(), 0u) << "arm đã đổi bank signal live";
+    coordinator.on_safe_boundary();
+
     ASSERT_EQ(bus.size(), 2u);
     const int supply = bus.index_of("SUPPLY");
     const int reset = bus.index_of("RESET");
@@ -407,26 +498,136 @@ TEST(ProgrammingPackageV2Stage, SignalBusIsRebuiltFromPackage)
     EXPECT_EQ(bus.definition(reset).stale_policy, StStalePolicy::USE_FALLBACK);
     EXPECT_FLOAT_EQ(bus.definition(reset).fallback.r, 5.0f);
 
-    /* Nạp gói KHÔNG có signal trên CÙNG bus đó: bus phải trống lại, không giữ
-     * hợp đồng của gói cũ. Dùng coordinator/journal mới vì gói trước còn đang
-     * dở một lifecycle operation — điều cần chứng minh ở đây là bus được dựng
-     * lại theo package, không phải là hai lệnh stage chồng nhau. */
-    TempTree second_tree;
-    ASSERT_FALSE(second_tree.path.empty());
-    std::filesystem::create_directories(std::filesystem::path(second_tree.path) / "staging");
-    StScheduler second_scheduler(StSchedulerProfile::REV_A);
-    configure_task(&second_scheduler);
-    second_scheduler.set_signal_bus(&bus);
-    ProgrammingCutover second_cutover(CutoverMode::GRAPH_ONLY);
-    ProgrammingRuntimeCoordinator second_coordinator(&second_scheduler, &second_cutover,
-                                                      second_tree.path + "/journal.bin",
-                                                      second_tree.path + "/staging");
-    ASSERT_TRUE(second_coordinator.recover(&error)) << error;
+    /* Kết thúc transaction thứ nhất rồi nạp gói KHÔNG có signal trên chính
+     * coordinator/bus đó. Stage và arm vẫn phải giữ bank cũ; chỉ handoff mới
+     * thay toàn bộ hợp đồng signal bằng bank rỗng. */
+    coordinator.on_output_commit(true);
+    ASSERT_TRUE(coordinator.flush_progress(&error)) << error;
+    ASSERT_EQ(coordinator.snapshot().state, LifecycleState::COMMITTED);
+
     const StageCommand second = write_candidate(
-        second_tree, "33333333-3333-4333-8333-333333333333", kRevision,
-        package_of({"P_ahu"}, {1000u}), "P_ahu");
-    ASSERT_TRUE(second_coordinator.stage(second, &detail, &error)) << detail << ": " << error;
-    EXPECT_EQ(bus.size(), 0u) << "bus giữ khai báo của gói cũ";
+        tree, "33333333-3333-4333-8333-333333333333",
+        "44444444-4444-4444-8444-444444444444", package_of({"P_ahu"}, {1000u}),
+        "P_ahu");
+    ASSERT_TRUE(coordinator.stage(second, &detail, &error)) << detail << ": " << error;
+    EXPECT_EQ(bus.size(), 2u) << "stage đã xoá bank signal cũ";
+    ActivateCommand second_activate;
+    second_activate.operation_id = second.operation_id;
+    second_activate.staged_token = second.operation_id;
+    second_activate.expected_active_revision_id = kRevision;
+    second_activate.cutover = CutoverMode::PROGRAM_ONLY;
+    second_activate.plan_hash = second.plan_hash;
+    ASSERT_TRUE(coordinator.activate(second_activate, &detail, &error))
+        << detail << ": " << error;
+    EXPECT_EQ(bus.size(), 2u) << "arm đã xoá bank signal cũ";
+    coordinator.on_safe_boundary();
+    EXPECT_EQ(bus.size(), 0u) << "handoff giữ khai báo của gói cũ";
+}
+
+/* F-P59-SIGNAL-001: package thật phải bind ref trong artifact vào đúng bank,
+ * publisher ghi draft, consumer BLOCK_PROGRAM thành WAITING ở chu kỳ đầu rồi
+ * tự hồi phục ở boundary kế. Test bus trực tiếp không chứng minh coordinator
+ * đã làm bước resolve ref này. */
+TEST(ProgrammingPackageV2Stage, SourceSignalFlowsThroughPackageCoordinator)
+{
+    TempTree tree;
+    ASSERT_FALSE(tree.path.empty());
+    std::filesystem::create_directories(std::filesystem::path(tree.path) / "staging");
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_task(&scheduler);
+    StSignalBus bus;
+    scheduler.set_signal_bus(&bus);
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover,
+                                               tree.path + "/journal.bin",
+                                               tree.path + "/staging");
+    std::string error;
+    ASSERT_TRUE(coordinator.recover(&error)) << error;
+
+    const std::vector<StPublishedSignalContract> contracts = {
+        {"SHARED_TEMP", StType::REAL, "P_pub"},
+    };
+    StPackageInput input;
+    input.compiler_profile = st_profile_generated::kProfileCode;
+    input.target_abi = st_profile_generated::kTargetAbi;
+    input.programs.push_back({
+        "P_pub",
+        signal_program_ir(
+            "PROGRAM Producer\nVAR value : REAL; END_VAR\n"
+            "value := 42.0;\nSIGNAL_PUBLISH(shared_temp, value);\nEND_PROGRAM\n",
+            "P_pub", contracts),
+        1000u, 0u});
+    input.programs.push_back({
+        "P_cons",
+        signal_program_ir(
+            "PROGRAM Consumer\nVAR_INPUT physical : REAL; END_VAR\n"
+            "VAR_OUTPUT observed : REAL; END_VAR\n"
+            "observed := SIGNAL_READ(SHARED_TEMP);\nEND_PROGRAM\n",
+            "P_cons", contracts,
+            {StIoMapEntry{"physical", "input", "UI-01", StType::REAL, "", false,
+                          0.0f, 0.0f, "LOCAL", "", 0, false}}),
+        1000u, 0u});
+    for (const char* name : {"P_pub", "P_cons"}) {
+        StPouSignature signature;
+        signature.name = name;
+        signature.kind = StPouKind::PROGRAM;
+        input.pou_signatures.push_back(std::move(signature));
+    }
+    StPackageSignal signal;
+    signal.name = "SHARED_TEMP";
+    signal.producer_program = "P_pub";
+    signal.data_type = static_cast<uint8_t>(StType::REAL);
+    signal.freshness_ms = 30000;
+    signal.stale_policy = static_cast<uint8_t>(StStalePolicy::WAIT);
+    input.signals.push_back(signal);
+    std::vector<uint8_t> package;
+    ASSERT_TRUE(WritePackageV2(input, &package, &error)) << error;
+
+    const StageCommand command =
+        write_candidate(tree, kOperation, kRevision, package, "P_pub");
+    std::string detail;
+    ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
+    ActivateCommand activate;
+    activate.operation_id = kOperation;
+    activate.staged_token = kOperation;
+    activate.cutover = CutoverMode::PROGRAM_ONLY;
+    activate.plan_hash = command.plan_hash;
+    ASSERT_TRUE(coordinator.activate(activate, &detail, &error)) << detail << ": " << error;
+    coordinator.on_safe_boundary();
+
+    for (const char* name : {"P_pub", "P_cons"}) {
+        ProgramEnableCommand enable;
+        enable.operation_id = kOperation;
+        enable.instance_id = name;
+        enable.enabled = true;
+        ASSERT_EQ(test::enable_at_boundary(&coordinator, &scheduler, enable, &detail, &error),
+                  ProgramEnableOutcome::APPLIED)
+            << name << ": " << detail << ": " << error;
+    }
+    ASSERT_EQ(bus.size(), 1u);
+    ASSERT_EQ(scheduler.find_program("P_pub")->runtime.program()->signal_refs.size(), 1u);
+    ASSERT_EQ(scheduler.find_program("P_cons")->runtime.program()->signal_refs.size(), 1u);
+    EXPECT_GE(scheduler.find_program("P_pub")->runtime.program()->signal_refs[0].runtime_index, 0);
+    EXPECT_GE(scheduler.find_program("P_cons")->runtime.program()->signal_refs[0].runtime_index, 0);
+
+    PointTable points;
+    IoSnapshot snapshot{};
+    snapshot.ts_ns = 1;
+    snapshot.valid = true;
+    snapshot.ui_value[0] = 7.0f;
+    snapshot.ui_quality[0] = KX_Q_GOOD;
+    points.update_inputs(snapshot);
+    StIoBridgeStats io_stats;
+    ASSERT_TRUE(st_capture_due_inputs(&scheduler, points, 1000ULL * 1000000ULL, &io_stats));
+    scheduler.tick(1000ULL * 1000000ULL);
+    EXPECT_EQ(scheduler.find_program("P_cons")->state, StProgramState::WAITING);
+    EXPECT_EQ(scheduler.find_program("P_cons")->fault_count, 0u);
+    ASSERT_TRUE(st_capture_due_inputs(&scheduler, points, 2000ULL * 1000000ULL, &io_stats));
+    scheduler.tick(2000ULL * 1000000ULL);
+    EXPECT_EQ(scheduler.find_program("P_cons")->state, StProgramState::RUNNING);
+    StValue observed;
+    ASSERT_TRUE(scheduler.find_program("P_cons")->runtime.get_variable("observed", &observed));
+    EXPECT_FLOAT_EQ(observed.r, 42.0f);
 }
 
 /* Scheduler commit bus ở BOUNDARY, trước khi Program nào chạy: mọi consumer
@@ -450,7 +651,7 @@ TEST(ProgrammingPackageV2Stage, SchedulerCommitsSignalsAtBoundary)
     StCell cell{};
     cell.r = 42.0f;
     ASSERT_TRUE(bus.publish(index, cell, 0, "P_pub"));
-    EXPECT_EQ(bus.read(index, 0).state, StSignalReadState::UNAVAILABLE)
+    EXPECT_EQ(bus.read(index, 0).state, StSignalReadState::STALE_HELD)
         << "chưa qua boundary mà đã đọc được";
 
     scheduler.on_base_step(1000ULL * 1000000ULL);
@@ -486,11 +687,23 @@ TEST(ProgrammingPackageV2Stage, SetProgramEnabledAppliesToOneInstance)
     ASSERT_TRUE(coordinator.activate(activate, &detail, &error)) << detail << ": " << error;
     coordinator.on_safe_boundary();
 
+    ASSERT_EQ(scheduler.find_program("P_ahu")->state, StProgramState::DISABLED);
+    ASSERT_EQ(scheduler.find_program("P_boiler")->state, StProgramState::DISABLED);
+
     ProgramEnableCommand enable;
     enable.operation_id = kOperation;
+    enable.instance_id = "P_boiler";
+    enable.enabled = true;
+    ASSERT_EQ(test::enable_at_boundary(&coordinator, &scheduler, enable, &detail, &error),
+              ProgramEnableOutcome::APPLIED)
+        << detail << ": " << error;
+    ASSERT_EQ(scheduler.find_program("P_boiler")->state, StProgramState::RUNNING);
+
     enable.instance_id = "P_ahu";
     enable.enabled = false;
-    ASSERT_TRUE(coordinator.set_program_enabled(enable, &detail, &error)) << detail << ": " << error;
+    ASSERT_EQ(test::enable_at_boundary(&coordinator, &scheduler, enable, &detail, &error),
+              ProgramEnableOutcome::APPLIED)
+        << detail << ": " << error;
     EXPECT_EQ(scheduler.find_program("P_ahu")->state, StProgramState::DISABLED);
     EXPECT_FALSE(scheduler.find_program("P_ahu")->enabled);
     /* Chỉ MỘT Program bị tác động: lệnh cho một instance không được làm gì với
@@ -499,10 +712,14 @@ TEST(ProgrammingPackageV2Stage, SetProgramEnabledAppliesToOneInstance)
 
     /* Tắt lại Program đã dừng là no-op THÀNH CÔNG: intent đã đạt, và trả lỗi ở
      * đây sẽ biến một lần gửi lại thành một lỗi giả. */
-    ASSERT_TRUE(coordinator.set_program_enabled(enable, &detail, &error)) << detail;
+    ASSERT_EQ(test::enable_at_boundary(&coordinator, &scheduler, enable, &detail, &error),
+              ProgramEnableOutcome::APPLIED)
+        << detail;
 
     enable.enabled = true;
-    ASSERT_TRUE(coordinator.set_program_enabled(enable, &detail, &error)) << detail << ": " << error;
+    ASSERT_EQ(test::enable_at_boundary(&coordinator, &scheduler, enable, &detail, &error),
+              ProgramEnableOutcome::APPLIED)
+        << detail << ": " << error;
     EXPECT_EQ(scheduler.find_program("P_ahu")->state, StProgramState::RUNNING);
     EXPECT_TRUE(scheduler.find_program("P_ahu")->enabled);
 
@@ -510,13 +727,15 @@ TEST(ProgrammingPackageV2Stage, SetProgramEnabledAppliesToOneInstance)
      * không tồn tại nghĩa là người gọi và thiết bị đang nói về hai gói khác
      * nhau — im lặng tạo ra nó sẽ giấu đúng sự lệch đó đi. */
     enable.instance_id = "P_ghost";
-    EXPECT_FALSE(coordinator.set_program_enabled(enable, &detail, &error));
+    EXPECT_EQ(test::enable_at_boundary(&coordinator, &scheduler, enable, &detail, &error),
+              ProgramEnableOutcome::REJECTED);
     EXPECT_EQ(detail, "IPC-UNKNOWN-INSTANCE");
     EXPECT_EQ(scheduler.find_program("P_ghost"), nullptr);
 
     /* Identity rác bị chặn trước khi chạm scheduler. */
     enable.instance_id = "../escape";
-    EXPECT_FALSE(coordinator.set_program_enabled(enable, &detail, &error));
+    EXPECT_EQ(test::enable_at_boundary(&coordinator, &scheduler, enable, &detail, &error),
+              ProgramEnableOutcome::REJECTED);
     EXPECT_EQ(detail, "IPC-PAYLOAD");
 }
 
@@ -545,6 +764,17 @@ TEST(ProgrammingPackageV2Stage, NewPackageClearsCandidateOwnership)
         write_candidate(tree, kOperation, kRevision, package_of({"P_ahu"}, {1000u}), "P_ahu");
     std::string detail;
     ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
+    EXPECT_EQ(registry.size(), 1u) << "stage đã rút candidate trước handoff";
+    EXPECT_EQ(registry.owner_of(PointKind::AO, 1), "P_old");
+
+    ActivateCommand activate;
+    activate.operation_id = kOperation;
+    activate.staged_token = kOperation;
+    activate.cutover = CutoverMode::PROGRAM_ONLY;
+    activate.plan_hash = command.plan_hash;
+    ASSERT_TRUE(coordinator.activate(activate, &detail, &error)) << detail << ": " << error;
+    EXPECT_EQ(registry.size(), 1u) << "arm đã rút candidate trước handoff";
+    coordinator.on_safe_boundary();
     EXPECT_EQ(registry.size(), 0u) << "sổ giữ quyền sở hữu của gói cũ";
     EXPECT_EQ(registry.owner_of(PointKind::AO, 1), "");
 }
