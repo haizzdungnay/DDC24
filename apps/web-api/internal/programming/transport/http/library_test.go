@@ -77,6 +77,12 @@ func newLibraryTestMuxWithoutPrincipal(t *testing.T) (http.Handler, string, stri
 
 func newLibraryTestMuxWith(t *testing.T, actual auth.Role, withPrincipal bool) (http.Handler, string, string) {
 	t.Helper()
+	mux, projectID, etag, _ := newLibraryTestMuxWithStore(t, actual, withPrincipal)
+	return mux, projectID, etag
+}
+
+func newLibraryTestMuxWithStore(t *testing.T, actual auth.Role, withPrincipal bool) (http.Handler, string, string, *programmingstore.Store) {
+	t.Helper()
 	fixedNow := time.Date(2026, 8, 11, 9, 0, 0, 0, time.UTC)
 	store, err := programmingstore.OpenProgrammingStore(context.Background(), programmingstore.Options{
 		Path: filepath.Join(t.TempDir(), "programming-v1.sqlite"),
@@ -108,7 +114,7 @@ func newLibraryTestMuxWith(t *testing.T, actual auth.Role, withPrincipal bool) (
 	if err != nil {
 		t.Fatal(err)
 	}
-	return mux, created.Resource["projectId"].(string), created.ETag
+	return mux, created.Resource["projectId"].(string), created.ETag, store
 }
 
 func libraryEntryBody(name string) string {
@@ -184,6 +190,64 @@ func TestLibraryRoutesAdminRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLibraryDeprecateRouteAdminRoundTripAndReadBack(t *testing.T) {
+	mux, projectID, etag, store := newLibraryTestMuxWithStore(t, auth.RoleAdmin, true)
+
+	upsertRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(upsertRecorder, libraryRequest(t, http.MethodPost,
+		"/api/v1/programming/projects/"+projectID+"/library/entries", libraryEntryBody("SCALE_LIN"),
+		etag, "20000000-0000-4000-8000-0000000000a3"))
+	if upsertRecorder.Code != http.StatusOK {
+		t.Fatalf("upsert status=%d body=%s", upsertRecorder.Code, upsertRecorder.Body.String())
+	}
+	var upsert mutationResponse
+	if err := json.Unmarshal(upsertRecorder.Body.Bytes(), &upsert); err != nil {
+		t.Fatal(err)
+	}
+	libraryRevisionID, _ := upsert.Resource["libraryRevisionId"].(string)
+	if _, err := store.PublishProjectLibrary(context.Background(), libraryRevisionID); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/programming/projects/" + projectID + "/library/revisions/" + libraryRevisionID + "/deprecate"
+	requestBody := `{"schemaVersion":"1.0"}`
+	deprecate := httptest.NewRecorder()
+	mux.ServeHTTP(deprecate, libraryRequest(t, http.MethodPost, path, requestBody,
+		upsert.ETag, "20000000-0000-4000-8000-0000000000a4"))
+	if deprecate.Code != http.StatusOK {
+		t.Fatalf("deprecate status=%d body=%s", deprecate.Code, deprecate.Body.String())
+	}
+	var result mutationResponse
+	if err := json.Unmarshal(deprecate.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Resource["libraryState"] != programmingstore.LibraryStateDeprecated ||
+		result.Resource["libraryRevisionId"] != libraryRevisionID || result.ETag == upsert.ETag || result.AuditID == "" {
+		t.Fatalf("deprecate result=%+v", result)
+	}
+	replay := httptest.NewRecorder()
+	mux.ServeHTTP(replay, libraryRequest(t, http.MethodPost, path, requestBody,
+		upsert.ETag, "20000000-0000-4000-8000-0000000000a4"))
+	if replay.Code != http.StatusOK || replay.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("replay status=%d header=%q body=%s", replay.Code,
+			replay.Header().Get("Idempotency-Replayed"), replay.Body.String())
+	}
+
+	search := httptest.NewRecorder()
+	mux.ServeHTTP(search, libraryRequest(t, http.MethodGet,
+		"/api/v1/programming/libraries?projectId="+projectID+"&scope=PROJECT&q=SCALE_LIN", "", "", ""))
+	if search.Code != http.StatusOK {
+		t.Fatalf("read-back status=%d body=%s", search.Code, search.Body.String())
+	}
+	var page libraryPageResponse
+	if err := json.Unmarshal(search.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].LibraryRevisionID != libraryRevisionID ||
+		page.Items[0].LibraryState != programmingstore.LibraryStateDeprecated {
+		t.Fatalf("read-back chưa PUBLISHED->DEPRECATED: %+v", page.Items)
+	}
+}
+
 // Viewer và operator đọc được, nhưng KHÔNG mutate được. Kiểm bằng authorizer
 // thật để chứng minh chính route bị chặn, không phải handler tự từ chối.
 func TestLibraryRoutesRBAC(t *testing.T) {
@@ -246,6 +310,26 @@ func TestLibraryMutationRequiresIdempotencyAndIfMatch(t *testing.T) {
 		path+"/"+libraryTestEntry, "", "", "20000000-0000-4000-8000-0000000000c3"))
 	if recorder.Code == http.StatusOK {
 		t.Fatalf("DELETE thiếu If-Match vẫn chạy: %s", recorder.Body.String())
+	}
+
+	deprecatePath := "/api/v1/programming/projects/" + projectID +
+		"/library/revisions/55555555-5555-4555-8555-555555555551/deprecate"
+	for name, testCase := range map[string]struct {
+		request *http.Request
+		status  int
+	}{
+		"deprecate thiếu idempotency": {libraryRequest(t, http.MethodPost, deprecatePath,
+			`{"schemaVersion":"1.0"}`, etag, ""), http.StatusBadRequest},
+		"deprecate thiếu If-Match": {libraryRequest(t, http.MethodPost, deprecatePath,
+			`{"schemaVersion":"1.0"}`, "", "20000000-0000-4000-8000-0000000000c4"), http.StatusPreconditionRequired},
+		"deprecate thiếu body": {libraryRequest(t, http.MethodPost, deprecatePath,
+			"", etag, "20000000-0000-4000-8000-0000000000c5"), http.StatusBadRequest},
+	} {
+		blocked := httptest.NewRecorder()
+		mux.ServeHTTP(blocked, testCase.request)
+		if blocked.Code != testCase.status {
+			t.Fatalf("%s status=%d want=%d body=%s", name, blocked.Code, testCase.status, blocked.Body.String())
+		}
 	}
 
 	search := httptest.NewRecorder()

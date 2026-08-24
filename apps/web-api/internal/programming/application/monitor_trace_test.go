@@ -88,6 +88,96 @@ func newMonitorTraceService(t *testing.T) *RuntimeService {
 
 func stringPointer(value string) *string { return &value }
 
+// newMonitorDraftV2Service dựng Revision đúng HÌNH DẠNG mà `SealRevision` sinh
+// ra cho Draft v2: biến nằm trong `locals` của POU, KHÔNG có Revision object
+// `VARIABLE` riêng. Nhóm test còn lại của file này dùng hình dạng v1, và chính
+// vì vậy nó không bao giờ chạm được lỗi làm Runtime Monitor trả `items: []` cho
+// mọi Revision thật.
+func newMonitorDraftV2Service(t *testing.T) *RuntimeService {
+	t.Helper()
+	const objectID = "aaaaaaaa-1111-4111-8111-111111111111"
+	store := openAuditTestStore(t)
+	key := sha256.Sum256([]byte("monitor-v2-project-key"))
+	request := sha256.Sum256([]byte("monitor-v2-project-request"))
+	_, draft, err := store.CreateProject(context.Background(), programmingstore.CreateProjectParams{
+		ProjectID: monitorProjectID, DraftID: monitorDraftID, Name: "AHU-01",
+		ContentJSON: []byte(`{"schemaVersion":1}`), ActorID: "admin", Role: "admin",
+		AuditID: "77777777-7777-4777-8777-777777777777", CorrelationID: "monitor-v2-00001",
+		At: time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC), IdempotencyKeySHA256: key, RequestSHA256: request,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	key = sha256.Sum256([]byte("monitor-v2-revision-key"))
+	request = sha256.Sum256([]byte("monitor-v2-revision-request"))
+	pouPayload := `{"objectId":"` + objectID + `","kind":"PROGRAM","name":"AHU_MAIN","language":"ST",` +
+		`"programConfig":{"programId":"` + monitorProgramID + `","periodMs":1000},` +
+		`"locals":[{"variableId":"` + monitorVariableID + `","name":"SupplySetpoint","type":"REAL","class":"INPUT"}]}`
+	_, err = store.CreateRevision(context.Background(), programmingstore.CreateRevisionParams{
+		RevisionID: monitorRevisionID, ProjectID: monitorProjectID, DraftID: monitorDraftID,
+		ExpectedDraftETag: draft.ETag, ManifestJSON: []byte(`{"schemaVersion":1}`),
+		Objects: []programmingstore.RevisionObjectInput{
+			{ObjectID: objectID, Kind: "PROGRAM", PayloadJSON: []byte(pouPayload)},
+			{ObjectID: monitorBindingID, Kind: "BINDING", PayloadJSON: []byte(`{"variableId":"` + monitorVariableID + `","point":{"category":"LOCAL","pointId":"AO-01"},"direction":"WRITE","dataType":"REAL","unit":"V"}`)},
+		},
+		ActorID: "admin", Role: "admin", AuditID: "88888888-8888-4888-8888-888888888888",
+		CorrelationID: "monitor-v2-00002", At: time.Date(2026, 8, 24, 12, 0, 1, 0, time.UTC),
+		IdempotencyKeySHA256: key, RequestSHA256: request,
+	})
+	if err != nil {
+		t.Fatalf("CreateRevision: %v", err)
+	}
+	fixed := time.Date(2026, 8, 24, 12, 0, 2, 0, time.UTC)
+	programValue := 41.0
+	reader := &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)}
+	provider := fakeMonitorProvider{snapshot: MonitorTruthSnapshot{
+		ObservedAt: fixed.Format(time.RFC3339Nano),
+		Points: []MonitorPointTruth{{Category: "LOCAL", PointID: "AO-01", ObservedAt: fixed.Format(time.RFC3339Nano),
+			ActualValue: 62.0, ProgramValue: &programValue, Source: "program", Quality: "GOOD", Unit: "V"}},
+	}}
+	id := 0
+	service, err := NewRuntimeService(RuntimeServiceOptions{
+		Runtime: reader, Store: store, Monitor: provider, ControllerID: "controller-local",
+		Now: func() time.Time { return fixed },
+		NewID: func() string {
+			id++
+			return fmt.Sprintf("99999999-9999-4999-8999-%012d", id)
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeService: %v", err)
+	}
+	return service
+}
+
+// Hồi quy: Draft v2 seal biến vào `locals` của POU. Bản trước chỉ đọc Revision
+// object `VARIABLE` (hình dạng v1) nên `variables` luôn rỗng, mọi Binding bị bỏ
+// qua và màn Theo dõi hiện "Revision đang chạy chưa có biến ánh xạ" kể cả khi
+// Program đang chạy với Binding hợp lệ. Phát hiện khi chạy lane E2E thật
+// (`programming-real.spec.ts`) 2026-08-24.
+func TestGetMonitorResolvesVariablesFromDraftV2Locals(t *testing.T) {
+	service := newMonitorDraftV2Service(t)
+	page, err := service.GetMonitor(context.Background())
+	if err != nil {
+		t.Fatalf("GetMonitor: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("Revision v2 có Binding hợp lệ nhưng monitor trả %d item: %+v", len(page.Items), page)
+	}
+	item := page.Items[0]
+	if item.VariableID != monitorVariableID || item.VariableName != "SupplySetpoint" {
+		t.Fatalf("identity biến sai: %+v", item)
+	}
+	// `programId` runtime (từ `programConfig`) chứ không phải `objectId` của POU:
+	// trộn hai UUID này làm Monitor gắn biến vào một Program không tồn tại.
+	if item.ProgramID != monitorProgramID {
+		t.Fatalf("programId phải là identity runtime, nhận %q", item.ProgramID)
+	}
+	if item.ActualValue != 62.0 || item.ProgramValue != 41.0 || item.Quality != "GOOD" {
+		t.Fatalf("giá trị/chất lượng không đi qua: %+v", item)
+	}
+}
+
 func TestGetMonitorSeparatesProgramActualAndOverrideTruth(t *testing.T) {
 	service := newMonitorTraceService(t)
 	page, err := service.GetMonitor(context.Background())

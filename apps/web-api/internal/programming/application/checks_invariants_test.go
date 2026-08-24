@@ -15,6 +15,13 @@ func programView(objectID string) revisionObjectView {
 	return objectView("PROGRAM", objectID, map[string]any{"objectId": objectID, "kind": "PROGRAM"})
 }
 
+func programViewWithRuntimeID(objectID, programID string) revisionObjectView {
+	return objectView("PROGRAM", objectID, map[string]any{
+		"objectId": objectID, "kind": "PROGRAM",
+		"programConfig": map[string]any{"programId": programID, "objectId": objectID, "periodMs": 1000},
+	})
+}
+
 func bindingView(bindingID, programID, direction, category, pointID string, extIndex int) revisionObjectView {
 	point := map[string]any{"category": category, "pointId": pointID}
 	if extIndex > 0 {
@@ -119,6 +126,23 @@ func TestSignalWithoutPublisherProgramIsRejected(t *testing.T) {
 	}
 }
 
+func TestSignalPublisherUsesStableProgramIDNotPouObjectID(t *testing.T) {
+	objectID := "a1111111-1111-4111-8111-111111111111"
+	programID := "b2222222-2222-4222-8222-222222222222"
+	objects := []revisionObjectView{
+		programViewWithRuntimeID(objectID, programID),
+		signalView("d4444444-4444-4444-8444-444444444441", "SUPPLY_TEMP", "REAL",
+			programID, "HOLD_LAST", 5000, nil),
+	}
+	if diagnostics := packageInvariantDiagnostics(objects); len(diagnostics) != 0 {
+		t.Fatalf("publisher programId hợp lệ bị so nhầm với objectId: %+v", diagnostics)
+	}
+	packaged := packageSignals(objects)
+	if len(packaged) != 1 || packaged[0].Publisher != programID {
+		t.Fatalf("publisher runtime bị đổi identity: %+v", packaged)
+	}
+}
+
 // Freshness ngoài dải là một chính sách stale KHÔNG thực thi được; kiểu ngoài hệ
 // kiểu ST không có biểu diễn nào để truyền.
 func TestSignalFreshnessAndTypeAreValidated(t *testing.T) {
@@ -150,6 +174,42 @@ func TestSignalFallbackIsCoupledToPolicy(t *testing.T) {
 	counts := detailCodes(packageInvariantDiagnostics(objects))
 	if counts["ST-SIG-003"] != 2 {
 		t.Fatalf("ghép policy/fallback=%+v", counts)
+	}
+}
+
+func TestSignalFallbackMustBeRepresentableByDeclaredType(t *testing.T) {
+	program := "a1111111-1111-4111-8111-111111111111"
+	badBool, badInt, badUint := 2.0, 32768.0, -1.0
+	objects := []revisionObjectView{
+		programView(program),
+		signalView("d4444444-4444-4444-8444-444444444441", "BAD_BOOL", "BOOL", program, "USE_FALLBACK", 5000, &badBool),
+		signalView("d4444444-4444-4444-8444-444444444442", "BAD_INT", "INT", program, "USE_FALLBACK", 5000, &badInt),
+		signalView("d4444444-4444-4444-8444-444444444443", "BAD_UINT", "UINT", program, "USE_FALLBACK", 5000, &badUint),
+	}
+	if counts := detailCodes(packageInvariantDiagnostics(objects)); counts["ST-SIG-002"] != 3 {
+		t.Fatalf("fallback ngoài miền không bị Check chặn: %+v", counts)
+	}
+}
+
+func TestSignalFallbackEncodingMatchesCanonicalStCellLayout(t *testing.T) {
+	cases := []struct {
+		dataType string
+		value    float64
+		want     uint64
+	}{
+		{"BOOL", 1, 1},
+		{"INT", -2, uint64(uint32(0xfffffffe))},
+		{"DINT", -2147483648, uint64(uint32(0x80000000))},
+		{"UINT", 65535, 65535},
+		{"REAL", 5.5, uint64(math.Float32bits(5.5))},
+		{"TIME", 2500, 2_500_000_000},
+	}
+	for _, testCase := range cases {
+		got, ok := encodeSignalFallback(testCase.dataType, testCase.value)
+		if !ok || got != testCase.want {
+			t.Errorf("%s(%v) = %#x/%v, muốn %#x/true", testCase.dataType,
+				testCase.value, got, ok, testCase.want)
+		}
 	}
 }
 

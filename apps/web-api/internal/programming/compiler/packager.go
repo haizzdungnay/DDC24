@@ -3,6 +3,7 @@ package compiler
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,14 @@ type PackageProgram struct {
 	// package phải chạy cùng một dãy release, và điều đó chỉ đúng khi chu kỳ là
 	// dữ liệu của package. 0 = theo chu kỳ Task.
 	PeriodMs int64
+	// BudgetUs là ngân sách WCET của Program trong một lần release, đơn vị µs
+	// (DDD §4.3: `<=20% period`). Nó đi TRONG container vì cùng lý do với
+	// `PeriodMs`: ngân sách là dữ liệu của package, không phải thứ runtime tự
+	// đặt. `SEC_PROGRAM_TABLE` đã có ô này từ `T59-106` nhưng writer phía Go
+	// chưa bao giờ điền, nên mọi package v2 do Check dựng đều mang `budget_us=0`
+	// — tức là "chưa đo" — kể cả khi Check vừa tính xong ngân sách
+	// (F-P59-MANIFEST-001). 0 = chưa đo, giữ đường tương thích cũ.
+	BudgetUs int64
 }
 
 // PackageSignal là một Published Signal đi TRONG container. Nó phải đi trong
@@ -59,7 +68,8 @@ type PackageResult struct {
 // Packager bọc N artifact đã có. Gộp chúng sẽ làm mọi test Check phải mock cả
 // hai chức năng dù chỉ dùng một.
 type Packager interface {
-	Package(ctx context.Context, programs []PackageProgram, signals []PackageSignal) (PackageResult, error)
+	Package(ctx context.Context, programs []PackageProgram, signals []PackageSignal,
+		linkedPOUs []LinkedPOU, libraryLock LibraryLock) (PackageResult, error)
 }
 
 type packagerOutput struct {
@@ -83,7 +93,7 @@ type ProcessPackager struct {
 }
 
 func (p ProcessPackager) Package(ctx context.Context, programs []PackageProgram,
-	signals []PackageSignal) (PackageResult, error) {
+	signals []PackageSignal, linkedPOUs []LinkedPOU, libraryLock LibraryLock) (PackageResult, error) {
 	if p.BinaryPath == "" || p.ScratchRoot == "" || p.Timeout < time.Second || p.Timeout > time.Minute {
 		return PackageResult{}, fmt.Errorf("tham số packager không hợp lệ")
 	}
@@ -123,6 +133,16 @@ func (p ProcessPackager) Package(ctx context.Context, programs []PackageProgram,
 		args = append(args, "--program", program.Name+"="+irPath)
 		if program.PeriodMs != 0 {
 			args = append(args, "--period", fmt.Sprintf("%s=%d", program.Name, program.PeriodMs))
+		}
+		if program.BudgetUs != 0 {
+			// CLI nhận số nguyên không dấu tối đa 9 chữ số (`st_package_main.cpp`)
+			// và ô trong container là `uint32`. Chặn ở đây để lỗi chỉ vào dữ liệu
+			// sai chứ không vào một thông báo CLI khó truy.
+			if program.BudgetUs < 0 || program.BudgetUs > 999_999_999 {
+				return PackageResult{}, fmt.Errorf("ngân sách WCET không hợp lệ cho Program %q: %d µs",
+					program.Name, program.BudgetUs)
+			}
+			args = append(args, "--budget", fmt.Sprintf("%s=%d", program.Name, program.BudgetUs))
 		}
 	}
 
@@ -164,6 +184,46 @@ func (p ProcessPackager) Package(ctx context.Context, programs []PackageProgram,
 			return PackageResult{}, err
 		}
 		args = append(args, "--signals", signalPath)
+	}
+	if len(linkedPOUs) > 0 {
+		if err := validatePackagePOUs(linkedPOUs); err != nil {
+			return PackageResult{}, err
+		}
+		payload, err := json.Marshal(struct {
+			SchemaVersion int         `json:"schemaVersion"`
+			POUs          []LinkedPOU `json:"pous"`
+		}{SchemaVersion: 1, POUs: linkedPOUs})
+		if err != nil {
+			return PackageResult{}, err
+		}
+		path := filepath.Join(jobRoot, "pou-table.json")
+		if err := writeExclusive(path, payload, 0o600); err != nil {
+			return PackageResult{}, err
+		}
+		args = append(args, "--pou-table", path)
+	}
+	if libraryLock.SystemVersion != "" {
+		if err := validateLinkedInputs(Input{LibraryLock: libraryLock}); err != nil {
+			return PackageResult{}, err
+		}
+		payload, err := json.Marshal(struct {
+			SchemaVersion int `json:"schemaVersion"`
+			LibraryLock
+		}{SchemaVersion: 1, LibraryLock: libraryLock})
+		if err != nil {
+			return PackageResult{}, err
+		}
+		path := filepath.Join(jobRoot, "library-lock.json")
+		if err := writeExclusive(path, payload, 0o600); err != nil {
+			return PackageResult{}, err
+		}
+		args = append(args, "--library-lock", path)
+	} else {
+		for _, pou := range linkedPOUs {
+			if pou.FromLibrary {
+				return PackageResult{}, fmt.Errorf("POU từ Control Library thiếu library lock")
+			}
+		}
 	}
 
 	cmd := exec.CommandContext(packageCtx, p.BinaryPath, args...)
@@ -215,4 +275,33 @@ func (p ProcessPackager) Package(ctx context.Context, programs []PackageProgram,
 	}
 	return PackageResult{Package: blob, SHA256: digest, ByteSize: int64(len(blob)),
 		ProgramCount: output.ProgramCount, SchemaVersion: output.SchemaVersion, TargetABI: output.TargetABI}, nil
+}
+
+func validatePackagePOUs(items []LinkedPOU) error {
+	seen := make(map[string]struct{}, len(items))
+	previous := ""
+	for _, item := range items {
+		key := strings.ToUpper(item.Name)
+		if !boundedLen(item.Name, 1, 64) || (item.Kind != "FUNCTION" && item.Kind != "FUNCTION_BLOCK") ||
+			len(item.BodySHA256) != sha256.Size*2 || len(item.ContentSHA256) != sha256.Size*2 ||
+			len(item.InputNames) != len(item.InputTypes) || len(item.OutputNames) != len(item.OutputTypes) ||
+			(previous != "" && key < previous) {
+			return fmt.Errorf("POU table không hợp lệ")
+		}
+		if _, duplicate := seen[key]; duplicate {
+			return fmt.Errorf("POU table trùng tên: %s", item.Name)
+		}
+		seen[key] = struct{}{}
+		previous = key
+		if _, err := hex.DecodeString(item.BodySHA256); err != nil {
+			return fmt.Errorf("POU table body hash không hợp lệ")
+		}
+		if _, err := hex.DecodeString(item.ContentSHA256); err != nil {
+			return fmt.Errorf("POU table content hash không hợp lệ")
+		}
+		if item.FromLibrary && (item.LibraryEntryID == "" || item.Version == "") {
+			return fmt.Errorf("POU table library metadata không hợp lệ")
+		}
+	}
+	return nil
 }

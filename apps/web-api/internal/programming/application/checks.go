@@ -1,6 +1,7 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -175,7 +177,16 @@ func (s *CheckService) RequestCheck(ctx context.Context, actor Actor, command Re
 	if err != nil {
 		return CheckAccepted{}, err
 	}
-	inputHash := checkInputHash(revision, s.targetID)
+	var libraryDigest *[sha256.Size]byte
+	if revision.Revision.LibraryRevisionID != "" {
+		libraryRevision, err := s.store.GetLibraryRevision(ctx, revision.Revision.LibraryRevisionID)
+		if err != nil {
+			return CheckAccepted{}, err
+		}
+		value := libraryRevision.ManifestSHA256
+		libraryDigest = &value
+	}
+	inputHash := checkInputHash(revision, s.targetID, libraryDigest)
 	now := s.now().UTC()
 	check, err := s.store.EnqueueCheck(ctx, programmingstore.EnqueueCheckParams{CheckID: s.newID(), RevisionID: command.RevisionID,
 		TargetID: s.targetID, InputSHA256: inputHash, Profile: checkStoreProfile, CompilerVersion: checkCompilerVersion,
@@ -218,6 +229,12 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 		return true, err
 	}
 	inputs, scopeDiagnostics := compilerInputs(revision)
+	if len(scopeDiagnostics) == 0 {
+		inputs, err = s.attachPOULinkInputs(ctx, revision, inputs)
+		if err != nil {
+			return true, err
+		}
+	}
 	// Bất biến cấp package được kiểm TRƯỚC khi biên dịch: một package có hai
 	// Program cùng ghi một output là package sai bất kể từng Program compile
 	// sạch hay không, và biên dịch 32 Program rồi mới báo là lãng phí đúng thứ
@@ -228,6 +245,11 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	scopeDiagnostics = append(scopeDiagnostics, packageInvariantDiagnostics(objectViews)...)
 	if len(scopeDiagnostics) > 0 {
 		return true, s.complete(ctx, check, "FAILED", scopeDiagnostics, nil)
+	}
+	publishedSignals := compilerPublishedSignals(objectViews)
+	for index := range inputs {
+		inputs[index].PublishedSignals = append(
+			[]programmingcompiler.PublishedSignalContract(nil), publishedSignals...)
 	}
 	// Biên dịch TỪNG Program và gộp kết quả. Một Program hỏng không dừng phần
 	// còn lại: người dùng phải thấy hết lỗi của package trong MỘT lần Check.
@@ -270,8 +292,18 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	if len(diagnostics) > 0 {
 		return true, s.complete(ctx, check, "FAILED", diagnostics, nil)
 	}
+	// Published Signal chỉ hợp lệ khi compiler đã lower đúng MỘT lệnh publish
+	// vào artifact của đúng producer. Không được dùng khai báo Draft/manifest
+	// làm bằng chứng thay cho `results[].SignalRefs` thực tế.
+	if signalDiagnostics := compiledSignalPublishDiagnostics(objectViews, inputs, results); len(signalDiagnostics) > 0 {
+		return true, s.complete(ctx, check, "FAILED", signalDiagnostics, nil)
+	}
 
 	artifacts := make([]packageProgramArtifact, 0, len(results))
+	programIDsByObject := make(map[string]string, len(topology))
+	for _, item := range topology {
+		programIDsByObject[item.ObjectID] = item.ProgramID
+	}
 	for index, result := range results {
 		relative, err := s.artifacts.Put(result.ArtifactSHA256, result.Artifact)
 		if err != nil {
@@ -280,15 +312,36 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 		if err := s.artifacts.Verify(relative, result.ArtifactSHA256, int64(len(result.Artifact))); err != nil {
 			return true, err
 		}
+		programID, found := programIDsByObject[inputs[index].SourceID]
+		if !found {
+			return true, fmt.Errorf("topology thiếu Program object %s đã biên dịch", inputs[index].SourceID)
+		}
 		artifacts = append(artifacts, packageProgramArtifact{
-			ProgramID: inputs[index].SourceID, SHA256: hex.EncodeToString(result.ArtifactSHA256[:]),
+			ProgramID: programID, SHA256: hex.EncodeToString(result.ArtifactSHA256[:]),
 			ByteSize: int64(len(result.Artifact)), RelativePath: relative,
 			SchemaVersion: result.ArtifactSchemaVersion, TargetABI: result.TargetABI,
 			CompilerVersion: result.CompilerVersion, LibraryVersion: result.LibraryVersion,
 			IntegrityMode: result.IntegrityMode,
 		})
 	}
-	manifest, err := packageCheckManifestWith(artifacts, results, nil, topology, budget)
+	manifestLibraryLock := packageLibraryLockFrom(objectViews, revision.Revision.LibraryRevisionID)
+	if revision.Revision.LibraryRevisionID != "" {
+		libraryRevision, err := s.store.GetLibraryRevision(ctx, revision.Revision.LibraryRevisionID)
+		if err != nil {
+			return true, err
+		}
+		manifestLibraryLock.ProjectLibraryVersion = libraryRevision.Version
+		manifestLibraryLock.ProjectManifestSHA256 = hex.EncodeToString(libraryRevision.ManifestSHA256[:])
+	}
+	manifestInput := packageManifestInput{
+		Artifacts: artifacts, ProgramManifests: programManifestsOf(results),
+		Topology: topology, Budget: budget,
+		PouGraph: packagePouGraph(objectViews),
+		Signals:  packageManifestSignals(objectViews), Bindings: packageManifestBindings(objectViews),
+		LibraryLock:   manifestLibraryLock,
+		IntegrityMode: results[0].IntegrityMode,
+	}
+	manifest, err := buildPackageCheckManifest(manifestInput)
 	if err != nil {
 		return true, err
 	}
@@ -303,7 +356,9 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 		return true, err
 	}
 	if packageInfo != nil {
-		manifest, err = packageCheckManifestWith(artifacts, results, packageInfo, topology, budget)
+		manifestInput.ContainerSHA256 = hex.EncodeToString(packageInfo.SHA256[:])
+		manifestInput.ContainerBytes = packageInfo.ByteSize
+		manifest, err = buildPackageCheckManifest(manifestInput)
 		if err != nil {
 			return true, err
 		}
@@ -362,11 +417,19 @@ func (s *CheckService) run(ctx context.Context) {
 	}
 }
 
-func checkInputHash(revision programmingstore.RevisionSnapshot, targetID string) [32]byte {
+func checkInputHash(revision programmingstore.RevisionSnapshot, targetID string,
+	libraryManifestSHA256 *[sha256.Size]byte) [32]byte {
 	digest := sha256.New()
 	_, _ = digest.Write(revision.Revision.ManifestSHA256[:])
 	for _, object := range revision.Objects {
 		_, _ = digest.Write(object.PayloadSHA256[:])
+	}
+	for _, pou := range revision.POUObjects {
+		_, _ = digest.Write(pou.ContentSHA256[:])
+	}
+	_, _ = digest.Write([]byte(revision.Revision.LibraryRevisionID))
+	if libraryManifestSHA256 != nil {
+		_, _ = digest.Write(libraryManifestSHA256[:])
 	}
 	_, _ = digest.Write([]byte{0})
 	_, _ = digest.Write([]byte(targetID + "\x00" + checkStoreProfile + "\x00" + checkCompilerVersion))
@@ -419,6 +482,138 @@ func compilerInputs(revision programmingstore.RevisionSnapshot) ([]programmingco
 	return inputs, nil
 }
 
+// attachPOULinkInputs nối ảnh canonical `pou_objects` và Control Library đã
+// pin vào từng compiler job. Mỗi Program vẫn biên dịch riêng để diagnostic có
+// đúng sourceId, nhưng mọi job nhìn cùng một tập helper đã seal và cùng một
+// library lock; source/path không bao giờ lấy từ filesystem của người dùng.
+func (s *CheckService) attachPOULinkInputs(ctx context.Context,
+	revision programmingstore.RevisionSnapshot,
+	inputs []programmingcompiler.Input) ([]programmingcompiler.Input, error) {
+	if revision.Revision.DocumentSchemaVersion < 2 {
+		return inputs, nil
+	}
+	if len(revision.POUObjects) == 0 {
+		return nil, fmt.Errorf("Revision v2 thiếu ảnh canonical pou_objects")
+	}
+	pouByID := make(map[string]programmingstore.RevisionPOUObject, len(revision.POUObjects))
+	for _, pou := range revision.POUObjects {
+		pouByID[pou.ObjectID] = pou
+	}
+
+	libraryVersion := ""
+	libraryEntries := []programmingstore.LibraryEntry{}
+	if revision.Revision.LibraryRevisionID != "" {
+		libraryRevision, err := s.store.GetLibraryRevision(ctx, revision.Revision.LibraryRevisionID)
+		if err != nil {
+			return nil, err
+		}
+		if libraryRevision.Scope != programmingstore.LibraryScopeProject ||
+			(libraryRevision.State != programmingstore.LibraryStatePublished &&
+				libraryRevision.State != programmingstore.LibraryStateDeprecated) ||
+			libraryRevision.ProjectID != revision.Revision.ProjectID {
+			return nil, fmt.Errorf("Revision pin Control Library không hợp lệ")
+		}
+		libraryVersion = libraryRevision.Version
+		libraryEntries, err = s.store.ListLibraryEntries(ctx, libraryRevision.LibraryRevisionID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	entryByID := make(map[string]programmingstore.LibraryEntry, len(libraryEntries))
+	lockEntries := make([]programmingcompiler.LibraryLockEntry, 0, len(libraryEntries))
+	for _, entry := range libraryEntries {
+		if entry.Kind != programmingstore.LibraryKindFunction &&
+			entry.Kind != programmingstore.LibraryKindFunctionBlock {
+			continue
+		}
+		entryByID[entry.EntryID] = entry
+		lockEntries = append(lockEntries, programmingcompiler.LibraryLockEntry{
+			EntryID: entry.EntryID, Name: entry.Name, Kind: entry.Kind, Version: libraryVersion,
+			Origin: "PROJECT",
+		})
+	}
+	sort.Slice(lockEntries, func(left, right int) bool {
+		return strings.ToUpper(lockEntries[left].Name) < strings.ToUpper(lockEntries[right].Name)
+	})
+	lock := programmingcompiler.LibraryLock{}
+	if revision.Revision.LibraryRevisionID != "" {
+		lock = programmingcompiler.LibraryLock{
+			SystemVersion: domain.SystemLibraryVersion, ProjectRevisionID: revision.Revision.LibraryRevisionID,
+			Entries: lockEntries,
+		}
+	}
+
+	requirementsOf := func(dependencies []programmingstore.LibraryDependency) ([]programmingcompiler.LibraryRequirement, error) {
+		result := make([]programmingcompiler.LibraryRequirement, 0, len(dependencies))
+		for _, dependency := range dependencies {
+			entry, found := entryByID[dependency.EntryID]
+			if !found || dependency.Version != libraryVersion {
+				return nil, fmt.Errorf("dependency Control Library %s không khớp lock", dependency.EntryID)
+			}
+			result = append(result, programmingcompiler.LibraryRequirement{
+				Name: entry.Name, Version: dependency.Version, Origin: "PROJECT",
+			})
+		}
+		sort.Slice(result, func(left, right int) bool {
+			return strings.ToUpper(result[left].Name) < strings.ToUpper(result[right].Name)
+		})
+		return result, nil
+	}
+
+	localSources := make([]programmingcompiler.LinkedPOUSource, 0, len(revision.POUObjects)+len(libraryEntries))
+	for _, pou := range revision.POUObjects {
+		if pou.Kind == "PROGRAM" {
+			continue
+		}
+		requirements, err := requirementsOf(pou.Dependencies)
+		if err != nil {
+			return nil, err
+		}
+		localSources = append(localSources, programmingcompiler.LinkedPOUSource{
+			Name: pou.Name, Kind: pou.Kind, Language: pou.Language, Source: append([]byte(nil), pou.SourceBlob...),
+			Origin: "PROJECT", RequiresLibrary: requirements,
+		})
+	}
+	for _, entry := range libraryEntries {
+		if entry.Kind != programmingstore.LibraryKindFunction &&
+			entry.Kind != programmingstore.LibraryKindFunctionBlock {
+			continue
+		}
+		requirements, err := requirementsOf(entry.Dependencies)
+		if err != nil {
+			return nil, err
+		}
+		localSources = append(localSources, programmingcompiler.LinkedPOUSource{
+			Name: entry.Name, Kind: entry.Kind, Language: entry.Language, Source: append([]byte(nil), entry.Source...),
+			Origin: "PROJECT", FromLibrary: true, LibraryEntryID: entry.EntryID, Version: libraryVersion,
+			RequiresLibrary: requirements,
+		})
+	}
+	sort.Slice(localSources, func(left, right int) bool {
+		return strings.ToUpper(localSources[left].Name) < strings.ToUpper(localSources[right].Name)
+	})
+
+	for index := range inputs {
+		root, found := pouByID[inputs[index].SourceID]
+		if !found || root.Kind != "PROGRAM" {
+			return nil, fmt.Errorf("Program %s thiếu ảnh canonical POU", inputs[index].SourceID)
+		}
+		requirements, err := requirementsOf(root.Dependencies)
+		if err != nil {
+			return nil, err
+		}
+		// Source canonical thắng payload UI; hai bản lệch nhau là hỏng snapshot,
+		// không được âm thầm compile bản tiện đọc hơn.
+		if inputs[index].Language != root.Language || !bytes.Equal(inputs[index].Source, root.SourceBlob) {
+			return nil, fmt.Errorf("Program %s lệch revision_objects/pou_objects", root.ObjectID)
+		}
+		inputs[index].LinkedPOUs = append([]programmingcompiler.LinkedPOUSource(nil), localSources...)
+		inputs[index].RootRequiresLibrary = requirements
+		inputs[index].LibraryLock = lock
+	}
+	return inputs, nil
+}
+
 func programCompilerInput(revision programmingstore.RevisionSnapshot,
 	program programmingstore.RevisionObject) (programmingcompiler.Input, *DiagnosticView) {
 	var payload map[string]json.RawMessage
@@ -463,11 +658,25 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 		diagnostic := scopeDiagnostic(programID, domain.MaxSourceBytes)
 		return programmingcompiler.Input{}, &diagnostic
 	}
-	ioMap, diagnostic := ioMapFromRevision(revision, programID)
+	// `programID` ở trên là objectId của POU/source-map. Mapping và runtime dùng
+	// stable `programConfig.programId`; v1 không có config nên hai giá trị trùng.
+	runtimeProgramID := programID
+	if raw := payload["programConfig"]; len(raw) > 0 {
+		var config struct {
+			ProgramID string `json:"programId"`
+		}
+		if json.Unmarshal(raw, &config) != nil || !isUUID(config.ProgramID) {
+			diagnostic := scopeDiagnostic(programID, 0)
+			return programmingcompiler.Input{}, &diagnostic
+		}
+		runtimeProgramID = config.ProgramID
+	}
+	ioMap, diagnostic := ioMapFromRevision(revision, runtimeProgramID)
 	if diagnostic != nil {
 		return programmingcompiler.Input{}, diagnostic
 	}
-	return programmingcompiler.Input{SourceID: programID, Language: language, Source: source, IoMap: ioMap}, nil
+	return programmingcompiler.Input{SourceID: programID, ProgramID: runtimeProgramID,
+		Language: language, Source: source, IoMap: ioMap}, nil
 }
 
 // ioMapFromRevision dựng Binding Manifest (F-PROG-ASBUILT-013/D-07,
@@ -501,8 +710,11 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 			continue
 		}
 		var payload struct {
-			ObjectID string `json:"objectId"`
-			Locals   []struct {
+			ObjectID      string `json:"objectId"`
+			ProgramConfig struct {
+				ProgramID string `json:"programId"`
+			} `json:"programConfig"`
+			Locals []struct {
 				VariableID string `json:"variableId"`
 				ProgramID  string `json:"programId"`
 				Name       string `json:"name"`
@@ -521,7 +733,10 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 			}
 			owner := local.ProgramID
 			if owner == "" {
-				owner = object.ObjectID
+				owner = payload.ProgramConfig.ProgramID
+				if owner == "" {
+					owner = object.ObjectID
+				}
 			}
 			variables[local.VariableID] = variableInfo{name: local.Name, programID: owner,
 				class: local.Class, dataType: local.Type}
@@ -554,9 +769,17 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 			return nil, &diagnostic
 		}
 		variable, found := variables[payload.VariableID]
-		if !found || variable.programID != programID {
+		if !found {
 			diagnostic := scopeDiagnostic(programID, 0)
 			return nil, &diagnostic
+		}
+		// Binding của Program KHÁC không phải lỗi — nó chỉ không thuộc io_map
+		// đang dựng. Trước bản vá này điều kiện `variable.programID != programID`
+		// nằm chung với `!found` và trả diagnostic, nên MỌI package từ hai Program
+		// trở lên có binding đều FAILED ngay ở Program đầu tiên: hàm này chạy một
+		// lần cho từng Program nhưng lại duyệt binding của cả package.
+		if variable.programID != programID {
+			continue
 		}
 		var direction string
 		switch variable.class {
@@ -669,7 +892,12 @@ func (s *CheckService) packageArtifact(ctx context.Context, check programmingsto
 	inputs []programmingcompiler.Input, results []programmingcompiler.Result,
 	artifacts []packageProgramArtifact, topology []packageProgramTopology,
 	signals []programmingcompiler.PackageSignal) (*programmingstore.Artifact, *programmingcompiler.PackageResult, error) {
-	if len(results) == 1 && len(signals) == 0 {
+	// Chỉ giữ artifact v1 cho đúng đường tương thích cũ nơi objectId==programId.
+	// Document v2 được phép tách hai identity; artifact v1 không mang programId
+	// runtime nên phải bọc container v2 dù chỉ có một Program và không có signal.
+	legacySingleIdentity := len(topology) == 1 && topology[0].ObjectID == topology[0].ProgramID
+	if len(results) == 1 && len(signals) == 0 && legacySingleIdentity &&
+		len(results[0].LinkedPOUs) == 0 && inputs[0].LibraryLock.SystemVersion == "" {
 		result := results[0]
 		return &programmingstore.Artifact{ArtifactID: s.newID(), RevisionID: check.RevisionID, CheckID: check.CheckID,
 			SchemaVersion: result.ArtifactSchemaVersion, Profile: checkStoreProfile, TargetABI: result.TargetABI,
@@ -682,21 +910,57 @@ func (s *CheckService) packageArtifact(ctx context.Context, check programmingsto
 		// trong khi không có gì nạp được. Fail-closed và nêu đúng thứ còn thiếu.
 		return nil, nil, fmt.Errorf("package %d Program cần packager container v2", len(results))
 	}
-	// Chu kỳ lấy từ CHÍNH topology mà manifest công bố, không tính lại từ payload
-	// lần hai: hai phép đọc cùng một dữ liệu là hai chỗ để lệch nhau, và lệch ở
-	// đây nghĩa là manifest nói một đằng còn thiết bị chạy một nẻo.
-	periods := make(map[string]int64, len(topology))
+	// Chu kỳ VÀ ngân sách lấy từ CHÍNH topology mà manifest công bố, không tính
+	// lại từ payload lần hai: hai phép đọc cùng một dữ liệu là hai chỗ để lệch
+	// nhau, và lệch ở đây nghĩa là manifest nói một đằng còn thiết bị chạy một
+	// nẻo.
+	//
+	// Khoá tra là `ObjectID`, KHÔNG phải `ProgramID`: `inputs[].SourceID` là
+	// `objectId` của Revision object, nên tra bằng `programId` sẽ trượt ở mọi
+	// Revision có hai giá trị đó khác nhau — và trượt ở đây im lặng cho ra chu
+	// kỳ 0 và ngân sách 0 trong container (F-P59-MANIFEST-001).
+	type programPlan struct {
+		programID          string
+		periodMs, budgetUs int64
+	}
+	plans := make(map[string]programPlan, len(topology))
 	for _, item := range topology {
-		periods[item.ProgramID] = item.PeriodMs
+		plans[item.ObjectID] = programPlan{programID: item.ProgramID,
+			periodMs: item.PeriodMs, budgetUs: item.BudgetUs}
 	}
 	programs := make([]programmingcompiler.PackageProgram, 0, len(results))
 	for index, result := range results {
+		plan, found := plans[inputs[index].SourceID]
+		if !found {
+			// Một Program được biên dịch mà topology không mô tả nghĩa là hai lớp
+			// đang nhìn hai tập Program khác nhau. Đóng gói tiếp sẽ ghi chu kỳ 0
+			// vào container và lỗi chỉ lộ ra ở runtime.
+			return nil, nil, fmt.Errorf("topology thiếu Program %s đã biên dịch", inputs[index].SourceID)
+		}
 		programs = append(programs, programmingcompiler.PackageProgram{
-			Name:     programPackageName(inputs[index].SourceID),
+			// Runtime instance dùng `programId` ổn định, không dùng `objectId`
+			// của POU/source-map. Hai identity có thể khác nhau theo DDD §4.2/§4.3.
+			Name:     programPackageName(plan.programID),
 			Artifact: result.Artifact,
-			PeriodMs: periods[inputs[index].SourceID]})
+			PeriodMs: plan.periodMs,
+			BudgetUs: plan.budgetUs})
 	}
-	packaged, err := s.packager.Package(ctx, programs, signals)
+	linkedPOUs, err := mergeLinkedPOUs(results)
+	if err != nil {
+		return nil, nil, err
+	}
+	libraryLock := programmingcompiler.LibraryLock{}
+	if len(inputs) > 0 {
+		libraryLock = inputs[0].LibraryLock
+		for _, input := range inputs[1:] {
+			left, _ := json.Marshal(libraryLock)
+			right, _ := json.Marshal(input.LibraryLock)
+			if !bytes.Equal(left, right) {
+				return nil, nil, fmt.Errorf("compiler inputs dùng library lock khác nhau")
+			}
+		}
+	}
+	packaged, err := s.packager.Package(ctx, programs, signals, linkedPOUs, libraryLock)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -714,6 +978,34 @@ func (s *CheckService) packageArtifact(ctx context.Context, check programmingsto
 		IntegrityMode: results[0].IntegrityMode}, &packaged, nil
 }
 
+func mergeLinkedPOUs(results []programmingcompiler.Result) ([]programmingcompiler.LinkedPOU, error) {
+	byName := make(map[string]programmingcompiler.LinkedPOU)
+	encoded := make(map[string][]byte)
+	for _, result := range results {
+		for _, item := range result.LinkedPOUs {
+			key := strings.ToUpper(item.Name)
+			raw, err := json.Marshal(item)
+			if err != nil {
+				return nil, err
+			}
+			if previous, found := encoded[key]; found && !bytes.Equal(previous, raw) {
+				return nil, fmt.Errorf("POU %s có metadata compiler không nhất quán giữa các Program", item.Name)
+			}
+			byName[key], encoded[key] = item, raw
+		}
+	}
+	keys := make([]string, 0, len(byName))
+	for key := range byName {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	merged := make([]programmingcompiler.LinkedPOU, 0, len(keys))
+	for _, key := range keys {
+		merged = append(merged, byName[key])
+	}
+	return merged, nil
+}
+
 // programPackageName giữ NGUYÊN Program ID. Tên trong PROGRAM_TABLE là
 // runtime instance identity, không phải tên POU trong mã ST. Đổi UUID thành
 // `P_...` làm API intent gửi ID đã seal nhưng Core chỉ biết một ID
@@ -722,54 +1014,16 @@ func programPackageName(sourceID string) string {
 	return sourceID
 }
 
-// packageCheckManifest tất định: `artifacts` đã sắp theo `programId` từ
-// `compilerInputs`, và `packageSha256` băm đúng dãy đó. Cùng một Revision Check
-// hai lần phải cho cùng `packageSha256` — đó là phép đo duy nhất biến
-// "deterministic build" thành thứ kiểm được.
-func packageCheckManifestWith(artifacts []packageProgramArtifact, results []programmingcompiler.Result,
-	packaged *programmingcompiler.PackageResult, topology []packageProgramTopology,
-	budget packageBudget) (json.RawMessage, error) {
-	digest := sha256.New()
-	for _, artifact := range artifacts {
-		_, _ = digest.Write([]byte(artifact.ProgramID))
-		_, _ = digest.Write([]byte{0})
-		_, _ = digest.Write([]byte(artifact.SHA256))
-		_, _ = digest.Write([]byte{0})
-	}
-	var packageSum [sha256.Size]byte
-	copy(packageSum[:], digest.Sum(nil))
-
-	programManifests := make([]json.RawMessage, 0, len(results))
+// programManifestsOf gom manifest build của TỪNG Program theo đúng thứ tự biên
+// dịch (`compilerInputs` đã sắp theo `objectId`), để manifest package tất định.
+func programManifestsOf(results []programmingcompiler.Result) []json.RawMessage {
+	manifests := make([]json.RawMessage, 0, len(results))
 	for _, result := range results {
 		if len(result.Manifest) > 0 {
-			programManifests = append(programManifests, result.Manifest)
+			manifests = append(manifests, result.Manifest)
 		}
 	}
-	// `contentSha256` băm dãy (programId, artifactSha256) — nó tất định theo NỘI
-	// DUNG và không phụ thuộc container. `containerSha256` là hash của chính
-	// package đã ghi. Giữ riêng hai con số vì chúng trả lời hai câu khác nhau:
-	// "nội dung có đổi không" và "byte nạp lên Core là gì".
-	containerSHA := ""
-	containerBytes := int64(0)
-	if packaged != nil {
-		containerSHA = hex.EncodeToString(packaged.SHA256[:])
-		containerBytes = packaged.ByteSize
-	}
-	return json.Marshal(struct {
-		SchemaVersion    int                      `json:"schemaVersion"`
-		ProgramCount     int                      `json:"programCount"`
-		ContentSHA256    string                   `json:"contentSha256"`
-		ContainerSHA256  string                   `json:"containerSha256,omitempty"`
-		ContainerBytes   int64                    `json:"containerBytes,omitempty"`
-		Artifacts        []packageProgramArtifact `json:"artifacts"`
-		ProgramManifests []json.RawMessage        `json:"programManifests,omitempty"`
-	}{
-		SchemaVersion: 2, ProgramCount: len(artifacts),
-		ContentSHA256:   hex.EncodeToString(packageSum[:]),
-		ContainerSHA256: containerSHA, ContainerBytes: containerBytes,
-		Artifacts:        artifacts,
-		ProgramManifests: programManifests,
-	})
+	return manifests
 }
 
 // revisionObjectViews tách lớp kiểm bất biến khỏi kiểu store: hàm kiểm chỉ cần

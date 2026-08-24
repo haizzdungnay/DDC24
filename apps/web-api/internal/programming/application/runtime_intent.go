@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 )
 
 const intentCallTimeout = 3 * time.Second
+const intentReconcileInterval = 2 * time.Second
 
 // setProgramEnabledPayload là payload IPC `SET_PROGRAM_ENABLED`:
 // `[instanceId, enabled]`. `operationId` đi ở envelope chung như mọi mutation.
@@ -68,6 +70,10 @@ type RuntimeIntentService struct {
 	controllerID string
 	now          func() time.Time
 	newID        func() string
+	intentMu     sync.Mutex
+	lifecycleMu  sync.Mutex
+	cancel       context.CancelFunc
+	wg           sync.WaitGroup
 }
 
 func NewRuntimeIntentService(options RuntimeIntentServiceOptions) (*RuntimeIntentService, error) {
@@ -95,6 +101,8 @@ func NewRuntimeIntentService(options RuntimeIntentServiceOptions) (*RuntimeInten
 // chết ở giữa.
 func (s *RuntimeIntentService) SetProgramEnabled(ctx context.Context, actor Actor,
 	command SetProgramIntentCommand) (MutationResult, error) {
+	s.intentMu.Lock()
+	defer s.intentMu.Unlock()
 	if command.SchemaVersion != "1.0" || !isUUID(command.ProjectID) ||
 		!validText(command.ProgramID, 1, 64) {
 		return MutationResult{}, ErrInvalidRequest
@@ -166,6 +174,82 @@ func (s *RuntimeIntentService) SetProgramEnabled(ctx context.Context, actor Acto
 			"runtimeState": stored.RuntimeState},
 		AuditID: mutation.AuditID, Replay: mutation.Replay,
 	}, nil
+}
+
+// Start đánh dấu observation của boot cũ là UNKNOWN rồi replay intent bền vững
+// xuống Core. Core tự boot mọi Program ở Disabled; chỉ vòng này mới có quyền
+// khôi phục desiredEnabled=true sau khi cả topology và socket đã sẵn sàng.
+func (s *RuntimeIntentService) Start(parent context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.cancel != nil {
+		return nil
+	}
+	if err := s.store.MarkAllProgramRuntimeStatesUnknown(parent, s.now()); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithCancel(parent)
+	s.cancel = cancel
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		ticker := time.NewTicker(intentReconcileInterval)
+		defer ticker.Stop()
+		for {
+			_, _ = s.ReconcileOnce(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	return nil
+}
+
+func (s *RuntimeIntentService) Close() {
+	if s == nil {
+		return
+	}
+	s.lifecycleMu.Lock()
+	cancel := s.cancel
+	s.cancel = nil
+	s.lifecycleMu.Unlock()
+	if cancel != nil {
+		cancel()
+		s.wg.Wait()
+	}
+}
+
+// ReconcileOnce chỉ replay hàng UNKNOWN. REJECTED được giữ FAULTED để không
+// tự restart một Program lỗi vô hạn; lỗi transport giữ UNKNOWN và được thử lại
+// ở tick sau. Hàm public để target harness có thể chứng minh restart mà không
+// phải chờ sleep.
+func (s *RuntimeIntentService) ReconcileOnce(ctx context.Context) (int, error) {
+	s.intentMu.Lock()
+	defer s.intentMu.Unlock()
+	intents, err := s.store.ListAllProgramRuntimeIntents(ctx)
+	if err != nil {
+		return 0, err
+	}
+	replayed := 0
+	for _, intent := range intents {
+		if intent.RuntimeState != "UNKNOWN" {
+			continue
+		}
+		command := SetProgramIntentCommand{SchemaVersion: "1.0", ProjectID: intent.ProjectID,
+			ProgramID: intent.ProgramID, DesiredEnabled: intent.DesiredEnabled,
+			CorrelationID: s.newID()}
+		s.pushToCore(ctx, command, intent)
+		replayed++
+		if ctx.Err() != nil {
+			return replayed, ctx.Err()
+		}
+	}
+	return replayed, nil
 }
 
 // pushToCore đẩy intent xuống Core và ghi read-back. Lỗi ở đây KHÔNG làm hỏng

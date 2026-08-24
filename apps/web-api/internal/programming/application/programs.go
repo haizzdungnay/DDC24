@@ -316,7 +316,7 @@ func programRuntimeStateFromCore(state string) string {
 	switch strings.ToUpper(strings.TrimSpace(state)) {
 	case "RUNNING":
 		return "RUNNING"
-	case "STOPPED", "ACTIVE", "ROLLED_BACK":
+	case "WAITING", "STOPPED", "ACTIVE", "ROLLED_BACK":
 		return "WAITING"
 	case "DISABLED":
 		return "DISABLED"

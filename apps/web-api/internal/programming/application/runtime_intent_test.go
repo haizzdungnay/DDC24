@@ -125,6 +125,53 @@ func TestSetProgramEnabledWritesIntentAndPushesToCore(t *testing.T) {
 	}
 }
 
+// Core boot fail-closed ở Disabled, nên Web API restart phải tách observation
+// RUNNING cũ khỏi boot mới rồi replay đúng intent bền vững. Replay reconciliation
+// không được tăng generation/audit như một thao tác operator mới.
+func TestRuntimeIntentReconcilesPersistedEnableAfterRestart(t *testing.T) {
+	service, runtime, projectID := openIntentService(t)
+	programID := "P_restart"
+	if _, err := service.SetProgramEnabled(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		intentCommand(programID, true, "20000000-0000-4000-8000-000000000499")); err != nil {
+		t.Fatal(err)
+	}
+	if len(runtime.calls) != 1 {
+		t.Fatalf("lệnh ban đầu=%d", len(runtime.calls))
+	}
+	if err := service.store.MarkAllProgramRuntimeStatesUnknown(context.Background(), service.now()); err != nil {
+		t.Fatal(err)
+	}
+
+	restartedRuntime := &fakeIntentRuntime{}
+	counter := 100
+	restarted, err := NewRuntimeIntentService(RuntimeIntentServiceOptions{
+		Store: service.store, Runtime: restartedRuntime, ControllerID: service.controllerID,
+		Now: service.now, NewID: func() string {
+			counter++
+			return fmt.Sprintf("dddddddd-dddd-4ddd-8ddd-%012d", counter)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := restarted.ReconcileOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed != 1 || len(restartedRuntime.calls) != 1 ||
+		restartedRuntime.calls[0].Action != coreipc.ActionSetProgramEnabled {
+		t.Fatalf("reconcile=%d calls=%+v", replayed, restartedRuntime.calls)
+	}
+	intents, err := restarted.ListProgramIntents(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(intents) != 1 || !intents[0].DesiredEnabled || intents[0].Generation != 1 ||
+		intents[0].RuntimeState != "RUNNING" {
+		t.Fatalf("intent sau restart=%+v", intents)
+	}
+}
+
 // Gửi lại cùng idempotency key KHÔNG được đẩy lệnh xuống Core lần hai: một lần
 // gửi lại vì mạng không được thành một lệnh vận hành thứ hai.
 func TestSetProgramEnabledReplayDoesNotResendToCore(t *testing.T) {

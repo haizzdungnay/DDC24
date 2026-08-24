@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+
+	"mkddc-web/internal/programming/domain"
 )
 
 func (s *Store) GetProject(ctx context.Context, projectID string) (ProjectSnapshot, error) {
@@ -151,6 +154,46 @@ func (s *Store) GetRevision(ctx context.Context, revisionID string) (RevisionSna
 		snapshot.Objects = append(snapshot.Objects, object)
 	}
 	if err := rows.Err(); err != nil {
+		return RevisionSnapshot{}, err
+	}
+	// Compiler đọc bảng POU canonical đã seal, không đọc lại hình dạng payload
+	// UI. Revision v1 hợp lệ không có hàng nào; caller giữ đường tương thích đó.
+	pouRows, err := s.db.QueryContext(ctx, `SELECT object_id,kind,name,language,interface_json,
+		source_blob,dependencies_json,content_sha256 FROM pou_objects
+		WHERE revision_id=? ORDER BY name_folded,object_id`, revisionID)
+	if err != nil {
+		return RevisionSnapshot{}, fmt.Errorf("đọc Revision POU objects: %w", err)
+	}
+	defer pouRows.Close()
+	for pouRows.Next() {
+		var object RevisionPOUObject
+		var dependenciesJSON, digest []byte
+		if err := pouRows.Scan(&object.ObjectID, &object.Kind, &object.Name, &object.Language,
+			&object.InterfaceJSON, &object.SourceBlob, &dependenciesJSON, &digest); err != nil {
+			return RevisionSnapshot{}, err
+		}
+		if len(digest) != sha256.Size ||
+			json.Unmarshal(dependenciesJSON, &object.Dependencies) != nil || object.Dependencies == nil {
+			return RevisionSnapshot{}, fmt.Errorf("Revision POU object canonical data hỏng")
+		}
+		copy(object.ContentSHA256[:], digest)
+		domainDependencies := make([]domain.LibraryDependency, len(object.Dependencies))
+		for index, dependency := range object.Dependencies {
+			domainDependencies[index] = domain.LibraryDependency{EntryID: dependency.EntryID, Version: dependency.Version}
+		}
+		expected, digestErr := domain.ProjectLibraryEntryContentSHA256(domain.LibraryEntry{
+			LibraryRevisionID: "revision-snapshot", EntryID: object.ObjectID,
+			Kind: domain.LibraryEntryKind(object.Kind), Name: object.Name,
+			FeatureState: domain.LibraryFeatureAvailable, Language: domain.LibraryLanguage(object.Language),
+			SourceBlob: object.SourceBlob, InterfaceJSON: object.InterfaceJSON,
+			Dependencies: domainDependencies,
+		})
+		if digestErr != nil || expected != object.ContentSHA256 {
+			return RevisionSnapshot{}, fmt.Errorf("Revision POU object checksum mismatch")
+		}
+		snapshot.POUObjects = append(snapshot.POUObjects, object)
+	}
+	if err := pouRows.Err(); err != nil {
 		return RevisionSnapshot{}, err
 	}
 	return snapshot, nil

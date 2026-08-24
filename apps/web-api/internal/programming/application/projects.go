@@ -308,18 +308,42 @@ func (s *ProjectService) SealRevision(ctx context.Context, actor Actor, command 
 	if command.BaseRevisionID != expectedBase {
 		return MutationResult{}, programmingstore.ErrETagConflict
 	}
-	objects, pous, manifest, err := revisionPayload(snapshot.Draft.ContentJSON, command.ProjectID, command.Label, command.Comment)
-	if err != nil {
-		return MutationResult{}, err
-	}
-	revisionID, auditID := s.newID(), s.newID()
 	// Draft library được đóng băng CÙNG lúc với Revision. Pin một library còn
 	// DRAFT nghĩa là pin một thứ vẫn sửa được — mọi POU dependency sau đó trỏ
 	// vào một tập entry có thể đổi sau lưng Revision đã "đóng băng".
 	// Revision v2 khi Draft có POU hoặc có library. `programCount` phải là số
 	// Program THẬT: khai 1 cho một package 8 Program sẽ làm mọi kiểm trần phía
 	// sau chạy trên một con số không đúng.
-	libraryRevisionID, documentSchemaVersion := "", 1
+	libraryRevisionID, libraryVersion, publishLibraryRevisionID := "", "", ""
+	if libraryDraft, libraryErr := s.store.FindProjectLibraryDraft(ctx, command.ProjectID); libraryErr == nil {
+		libraryRevisionID, libraryVersion = libraryDraft.LibraryRevisionID, libraryDraft.Version
+		publishLibraryRevisionID = libraryDraft.LibraryRevisionID
+	} else if !errors.Is(libraryErr, programmingstore.ErrNotFound) {
+		return MutationResult{}, libraryErr
+	} else {
+		// Sau khi một Draft library đã được publish cùng Revision, lần Seal kế
+		// tiếp có thể chỉ sửa Program và không mở library Draft mới. Vẫn phải pin
+		// lại bản PUBLISHED mới nhất; bỏ pin sẽ làm dependencies đã lưu trong
+		// Draft trở thành không phân giải được.
+		revisions, listErr := s.store.ListLibraryRevisions(ctx, command.ProjectID,
+			programmingstore.LibraryScopeProject)
+		if listErr != nil {
+			return MutationResult{}, listErr
+		}
+		for _, candidate := range revisions {
+			if candidate.State == programmingstore.LibraryStatePublished {
+				libraryRevisionID, libraryVersion = candidate.LibraryRevisionID, candidate.Version
+				break
+			}
+		}
+	}
+	objects, pous, manifest, err := revisionPayload(snapshot.Draft.ContentJSON, command.ProjectID,
+		command.Label, command.Comment, libraryVersion)
+	if err != nil {
+		return MutationResult{}, err
+	}
+	revisionID, auditID := s.newID(), s.newID()
+	libraryRevisionIDResolved, documentSchemaVersion := libraryRevisionID, 1
 	programCount := 1
 	if count := len(pous); count > 0 {
 		documentSchemaVersion = 2
@@ -327,16 +351,14 @@ func (s *ProjectService) SealRevision(ctx context.Context, actor Actor, command 
 			programCount = configured
 		}
 	}
-	if libraryDraft, libraryErr := s.store.FindProjectLibraryDraft(ctx, command.ProjectID); libraryErr == nil {
-		libraryRevisionID, documentSchemaVersion = libraryDraft.LibraryRevisionID, 2
-	} else if !errors.Is(libraryErr, programmingstore.ErrNotFound) {
-		return MutationResult{}, libraryErr
+	if libraryRevisionIDResolved != "" {
+		documentSchemaVersion = 2
 	}
 	revision, err := s.store.CreateRevision(ctx, programmingstore.CreateRevisionParams{
 		RevisionID: revisionID, ProjectID: command.ProjectID, DraftID: snapshot.Draft.DraftID, ExpectedDraftETag: etag,
 		ParentRevisionID: snapshot.Draft.BaseRevisionID, ManifestJSON: manifest, Objects: objects,
 		DocumentSchemaVersion: documentSchemaVersion, ProgramCount: programCount, POUObjects: pous,
-		LibraryRevisionID: libraryRevisionID, PublishLibraryRevisionID: libraryRevisionID,
+		LibraryRevisionID: libraryRevisionIDResolved, PublishLibraryRevisionID: publishLibraryRevisionID,
 		ActorID: actor.ID, Role: actor.Role, AuditID: auditID, CorrelationID: command.CorrelationID,
 		At: s.now(), IdempotencyKeySHA256: keyHash, RequestSHA256: requestHash,
 	})

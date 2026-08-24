@@ -2,12 +2,16 @@ package compiler
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"mkddc-web/internal/programming/domain"
 )
 
 func packagerBinary(t *testing.T) string {
@@ -17,11 +21,41 @@ func packagerBinary(t *testing.T) string {
 	}
 	_, current, _, _ := runtime.Caller(0)
 	repo := filepath.Clean(filepath.Join(filepath.Dir(current), "..", "..", "..", "..", ".."))
-	binary := filepath.Join(repo, "build", "fw", "core", "mkddc-st-package")
-	if _, err := os.Stat(binary); err != nil {
-		t.Skip("hãy build CMake gate trước Go integration")
+	candidates := []string{}
+	if explicit := os.Getenv("MKDDC_ST_PACKAGER_BINARY"); explicit != "" {
+		candidates = append(candidates, explicit)
+	} else {
+		candidates = append(candidates,
+			filepath.Join(repo, "build", "verify", "cpp-full", "core", "mkddc-st-package"),
+			filepath.Join(repo, "build", "fw", "core", "mkddc-st-package"))
 	}
-	return binary
+	problems := make([]string, 0, len(candidates))
+	for _, binary := range candidates {
+		if info, err := os.Stat(binary); err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", binary, err))
+			continue
+		} else if info.Mode().Perm()&0o111 == 0 {
+			problems = append(problems, fmt.Sprintf("%s: không executable", binary))
+			continue
+		}
+		out, err := exec.Command(binary, "--version").Output()
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: --version: %v", binary, err))
+			continue
+		}
+		version := string(out)
+		if strings.Contains(version, "profile_sha256="+domain.ProfileSHA256) {
+			return binary
+		}
+		problems = append(problems, fmt.Sprintf("%s: profile không khớp %s (%s)",
+			binary, domain.ProfileSHA256[:12], strings.TrimSpace(version)))
+	}
+	message := "không có packager production đúng profile: " + strings.Join(problems, "; ")
+	if os.Getenv("MKDDC_REQUIRE_PRODUCTION_TOOLS") == "1" {
+		t.Fatal(message)
+	}
+	t.Skip(message + " — chạy cổng cpp trước hoặc đặt MKDDC_ST_PACKAGER_BINARY")
+	return ""
 }
 
 // Package thật phải BYTE-STABLE: cùng input cho đúng cùng byte và cùng hash.
@@ -33,11 +67,11 @@ func TestProcessPackagerIsByteStable(t *testing.T) {
 		{Name: "P_AHU", Artifact: []byte("IR-AHU-BLOB")},
 		{Name: "P_BOILER", Artifact: []byte("IR-BOILER-BLOB")},
 	}
-	first, err := packager.Package(context.Background(), programs, nil)
+	first, err := packager.Package(context.Background(), programs, nil, nil, LibraryLock{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := packager.Package(context.Background(), programs, nil)
+	second, err := packager.Package(context.Background(), programs, nil, nil, LibraryLock{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,12 +95,12 @@ func TestProcessPackagerOrderIsSemantic(t *testing.T) {
 	packager := ProcessPackager{BinaryPath: packagerBinary(t),
 		ScratchRoot: filepath.Join(t.TempDir(), "scratch"), Timeout: 10 * time.Second}
 	forward, err := packager.Package(context.Background(), []PackageProgram{
-		{Name: "P_A", Artifact: []byte("A")}, {Name: "P_B", Artifact: []byte("B")}}, nil)
+		{Name: "P_A", Artifact: []byte("A")}, {Name: "P_B", Artifact: []byte("B")}}, nil, nil, LibraryLock{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	reverse, err := packager.Package(context.Background(), []PackageProgram{
-		{Name: "P_B", Artifact: []byte("B")}, {Name: "P_A", Artifact: []byte("A")}}, nil)
+		{Name: "P_B", Artifact: []byte("B")}, {Name: "P_A", Artifact: []byte("A")}}, nil, nil, LibraryLock{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,11 +120,11 @@ func TestProcessPackagerRejectsHostileProgramNames(t *testing.T) {
 		"tên rỗng":             {Name: "", Artifact: []byte("A")},
 		"artifact rỗng":        {Name: "P_OK", Artifact: nil},
 	} {
-		if _, err := packager.Package(context.Background(), []PackageProgram{program}, nil); err == nil {
+		if _, err := packager.Package(context.Background(), []PackageProgram{program}, nil, nil, LibraryLock{}); err == nil {
 			t.Fatalf("%s: được chấp nhận", name)
 		}
 	}
-	if _, err := packager.Package(context.Background(), nil, nil); err == nil {
+	if _, err := packager.Package(context.Background(), nil, nil, nil, LibraryLock{}); err == nil {
 		t.Fatal("package rỗng được chấp nhận")
 	}
 }

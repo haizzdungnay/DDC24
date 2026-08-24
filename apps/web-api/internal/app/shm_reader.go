@@ -80,7 +80,7 @@ func (s *shmSegment) attachLocked(path string, minLen int) error {
 	// sẽ đọc mãi dữ liệu đóng băng của một segment đã chết mà không hề biết.
 	if s.data != nil && s.path == path &&
 		s.inode == stat.Ino && s.device == uint64(stat.Dev) &&
-		len(s.data) >= minLen {
+		len(s.data) == int(info.Size()) && len(s.data) >= minLen {
 		return nil
 	}
 	s.detachLocked()
@@ -120,7 +120,9 @@ func (s *shmSegment) close() {
 	s.mu.Unlock()
 }
 
-// read trả về một snapshot NHẤT QUÁN dài `minLen` byte của segment tại `path`.
+// read trả về toàn bộ snapshot NHẤT QUÁN hiện có của segment tại `path`, sau
+// khi xác nhận nó dài ít nhất `minLen`. Trả toàn bộ phần nối đuôi là bắt buộc để
+// consumer mới đọc được telemetry optional mà vẫn tương thích producer cũ.
 //
 // Trả lỗi khi: segment chưa tồn tại / ngắn hơn hợp đồng / magic sai / writer giữ
 // seqlock suốt cả shmSeqlockMaxRetry lần thử. Caller PHẢI xử lý lỗi fail-safe —
@@ -132,7 +134,7 @@ func (s *shmSegment) read(path string, minLen int) ([]byte, error) {
 	if err := s.attachLocked(path, minLen); err != nil {
 		return nil, err
 	}
-	dst := make([]byte, minLen)
+	dst := make([]byte, len(s.data))
 	if !seqlockCopy(s.data, dst) {
 		return nil, fmt.Errorf("shm %s: không đọc được snapshot nhất quán", path)
 	}

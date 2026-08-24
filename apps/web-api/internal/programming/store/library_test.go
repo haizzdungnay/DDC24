@@ -122,6 +122,16 @@ func (f *libraryFixture) tryDelete(libraryRevisionID, entryID string) (LibraryEn
 	return result, err
 }
 
+func (f *libraryFixture) tryDeprecate(libraryRevisionID string) (LibraryRevisionMutation, error) {
+	result, err := f.store.DeprecateProjectLibraryRevision(context.Background(), DeprecateProjectLibraryRevisionParams{
+		LibraryRevisionID: libraryRevisionID, Identity: f.identity("library-deprecate"),
+	})
+	if err == nil {
+		f.draft.ETag = result.DraftETag
+	}
+	return result, err
+}
+
 func createLibraryDraftFixture(t *testing.T, store *Store, revisionID, version string) LibraryRevision {
 	t.Helper()
 	ensureProjectFixture(t, store)
@@ -245,15 +255,89 @@ func TestPublishedProjectLibraryIsImmutableAtStoreAndSchema(t *testing.T) {
 	}
 
 	// Deprecate là chuyển trạng thái hợp lệ duy nhất, và là terminal.
-	deprecated, err := store.DeprecateProjectLibrary(ctx, libraryRevisionA)
+	deprecatedMutation, err := fixture.tryDeprecate(libraryRevisionA)
 	if err != nil {
 		t.Fatal(err)
 	}
+	deprecated := deprecatedMutation.Revision
 	if deprecated.State != LibraryStateDeprecated || deprecated.ManifestSHA256 != published.ManifestSHA256 {
 		t.Fatalf("deprecate đổi manifest: %+v", deprecated)
 	}
-	if _, err := store.DeprecateProjectLibrary(ctx, libraryRevisionA); !errors.Is(err, ErrLibraryImmutable) {
+	if _, err := fixture.tryDeprecate(libraryRevisionA); !errors.Is(err, ErrLibraryImmutable) {
 		t.Fatalf("deprecate lần hai: %v", err)
+	}
+}
+
+// Deprecate, audit, receipt idempotency và ETag Draft phải cùng một transaction.
+// Ép audit INSERT lỗi chứng minh không state/ETag/receipt nào lọt ra trước audit.
+func TestDeprecateProjectLibraryIsAtomicAuditedAndIdempotent(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	published := publishedLibraryFixture(t, store)
+	fixture := newLibraryFixture(t, store)
+	beforeETag := fixture.draft.ETag
+	identity := fixture.identity("library-deprecate-atomic")
+	identity.AuditID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa99"
+	params := DeprecateProjectLibraryRevisionParams{
+		LibraryRevisionID: libraryRevisionA, Identity: identity,
+	}
+	if _, err := store.db.Exec(`CREATE TRIGGER fail_library_deprecate_audit
+		BEFORE INSERT ON audit_records
+		WHEN NEW.action='LIBRARY_REVISION_DEPRECATE'
+		BEGIN SELECT RAISE(ABORT, 'injected audit failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DeprecateProjectLibraryRevision(ctx, params); err == nil {
+		t.Fatal("audit lỗi nhưng deprecate vẫn thành công")
+	}
+	readBack, err := store.GetLibraryRevision(ctx, libraryRevisionA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if readBack.State != LibraryStatePublished || readBack.ManifestSHA256 != published.ManifestSHA256 {
+		t.Fatalf("state/manifest lọt qua transaction lỗi: %+v", readBack)
+	}
+	draft, err := store.GetDraft(ctx, fixture.draft.DraftID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if draft.ETag != beforeETag {
+		t.Fatalf("ETag đổi dù transaction rollback: got=%d want=%d", draft.ETag, beforeETag)
+	}
+	var receipts, audits int
+	if err := store.db.QueryRow(`SELECT count(*) FROM mutation_receipts WHERE action='LIBRARY_REVISION_DEPRECATE'`).Scan(&receipts); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.QueryRow(`SELECT count(*) FROM audit_records WHERE action='LIBRARY_REVISION_DEPRECATE'`).Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if receipts != 0 || audits != 0 {
+		t.Fatalf("rollback còn receipt/audit: receipt=%d audit=%d", receipts, audits)
+	}
+	if _, err := store.db.Exec(`DROP TRIGGER fail_library_deprecate_audit`); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := store.DeprecateProjectLibraryRevision(ctx, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := store.DeprecateProjectLibraryRevision(ctx, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Revision.State != LibraryStateDeprecated || first.DraftETag != beforeETag+1 ||
+		first.AuditID == "" || replay.AuditID != first.AuditID || replay.DraftETag != first.DraftETag || !replay.Replay {
+		t.Fatalf("first=%+v replay=%+v", first, replay)
+	}
+	if err := store.db.QueryRow(`SELECT count(*) FROM mutation_receipts WHERE action='LIBRARY_REVISION_DEPRECATE'`).Scan(&receipts); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.QueryRow(`SELECT count(*) FROM audit_records WHERE action='LIBRARY_REVISION_DEPRECATE'`).Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if receipts != 1 || audits != 1 {
+		t.Fatalf("deprecate phải có đúng một receipt/audit: receipt=%d audit=%d", receipts, audits)
 	}
 }
 

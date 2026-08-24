@@ -46,15 +46,18 @@ func (r *perProgramRunner) Compile(_ context.Context, input programmingcompiler.
 // của T59-106 canh. Ở đây chỉ cần một Packager có hành vi tất định để kiểm phần
 // điều phối của Check.
 type fakePackager struct {
-	mu      sync.Mutex
-	calls   int
-	signals []programmingcompiler.PackageSignal
+	mu       sync.Mutex
+	calls    int
+	programs []programmingcompiler.PackageProgram
+	signals  []programmingcompiler.PackageSignal
 }
 
 func (p *fakePackager) Package(_ context.Context, programs []programmingcompiler.PackageProgram,
-	signals []programmingcompiler.PackageSignal) (programmingcompiler.PackageResult, error) {
+	signals []programmingcompiler.PackageSignal, _ []programmingcompiler.LinkedPOU,
+	_ programmingcompiler.LibraryLock) (programmingcompiler.PackageResult, error) {
 	p.mu.Lock()
 	p.calls++
+	p.programs = append([]programmingcompiler.PackageProgram(nil), programs...)
 	p.signals = signals
 	p.mu.Unlock()
 	blob := []byte("PKG")
@@ -70,6 +73,36 @@ func (p *fakePackager) Package(_ context.Context, programs []programmingcompiler
 	}
 	return programmingcompiler.PackageResult{Package: blob, SHA256: sha256.Sum256(blob),
 		ByteSize: int64(len(blob)), ProgramCount: len(programs), SchemaVersion: 2, TargetABI: 3841}, nil
+}
+
+func TestSingleProgramWithDistinctObjectAndRuntimeIdentityForcesV2(t *testing.T) {
+	artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	packager := &fakePackager{}
+	service := &CheckService{packager: packager, artifacts: artifacts,
+		newID: func() string { return "89999999-9999-4999-8999-999999999999" }}
+	objectID := "81111111-1111-4111-8111-111111111111"
+	programID := "82222222-2222-4222-8222-222222222222"
+	artifactBytes := []byte("artifact-distinct-runtime-identity")
+	digest := sha256.Sum256(artifactBytes)
+	stored, packaged, err := service.packageArtifact(context.Background(), programmingstore.Check{},
+		[]programmingcompiler.Input{{SourceID: objectID}},
+		[]programmingcompiler.Result{{Artifact: artifactBytes, ArtifactSHA256: digest}},
+		[]packageProgramArtifact{{ProgramID: programID}},
+		[]packageProgramTopology{{ObjectID: objectID, ProgramID: programID, PeriodMs: 5000,
+			BudgetUs: programBudgetUs(5000)}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if packaged == nil || stored.SchemaVersion != 2 || len(packager.programs) != 1 {
+		t.Fatalf("Document v2 một Program không được bọc v2: stored=%+v packaged=%+v",
+			stored, packaged)
+	}
+	if packager.programs[0].Name != programID || packager.programs[0].PeriodMs != 5000 {
+		t.Fatalf("runtime identity/topology sai: %+v", packager.programs[0])
+	}
 }
 
 var checkServiceSeq int
@@ -111,7 +144,8 @@ func TestSingleProgramPublishedSignalForcesV2AndKeepsProgramIdentity(t *testing.
 		[]programmingcompiler.Input{{SourceID: programID}},
 		[]programmingcompiler.Result{{Artifact: artifactBytes, ArtifactSHA256: digest}},
 		[]packageProgramArtifact{{ProgramID: programID}},
-		[]packageProgramTopology{{ProgramID: programID, PeriodMs: 1000}},
+		[]packageProgramTopology{{ObjectID: programID, ProgramID: programID, PeriodMs: 1000,
+			BudgetUs: programBudgetUs(1000)}},
 		[]programmingcompiler.PackageSignal{{Name: "SUPPLY_TEMP", Publisher: programID,
 			Type: 3, FreshnessMs: 5000, StalePolicy: 0}})
 	if err != nil {

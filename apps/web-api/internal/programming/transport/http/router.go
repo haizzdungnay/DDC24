@@ -42,6 +42,8 @@ var routeDefinitions = []routeDefinition{
 	{method: "GET", path: "/api/v1/programming/libraries", role: auth.RoleViewer},
 	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", role: auth.RoleAdmin, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "GET", path: "/api/v1/programming/point-catalog", role: auth.RoleViewer},
 	{method: "GET", path: "/api/v1/programming/runtime", role: auth.RoleViewer},
 	{method: "GET", path: "/api/v1/programming/runtime/monitor", role: auth.RoleViewer},

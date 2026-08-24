@@ -21,19 +21,23 @@ import (
 // Program rồi mới báo là lãng phí đúng thứ người dùng đang chờ.
 
 type packageBinding struct {
-	programID string
-	variable  string
-	direction string
-	category  string
-	pointID   string
-	deviceID  string
-	extIndex  int
+	bindingID  string
+	programID  string
+	variableID string
+	variable   string
+	direction  string
+	category   string
+	pointID    string
+	deviceID   string
+	extIndex   int
+	writable   bool
 }
 
 type packageSignal struct {
 	signalID      string
 	name          string
 	dataType      string
+	unit          string
 	publisherID   string
 	freshnessMs   float64
 	stalePolicy   string
@@ -63,17 +67,76 @@ func collectPackageObjects(objects []revisionObjectView) ([]packageBinding, []pa
 	bindings := make([]packageBinding, 0)
 	signals := make([]packageSignal, 0)
 	programIDs := make(map[string]struct{})
+	programIDByObject := make(map[string]string)
+	variableOwner := make(map[string]string)
+
+	// Pha 1 dựng bảng identity. `objectId` sở hữu source/source-map, còn
+	// `programId` mới là identity runtime ổn định (DDD §4.2/§4.3). Hai UUID có
+	// thể khác nhau; trộn chúng làm signal hợp lệ bị báo mất publisher và làm
+	// PROGRAM_TABLE dùng sai instance identity.
+	for _, object := range objects {
+		if object.Kind != "PROGRAM" && object.Kind != "FUNCTION" && object.Kind != "FUNCTION_BLOCK" {
+			continue
+		}
+		var payload struct {
+			ProgramConfig struct {
+				ProgramID string `json:"programId"`
+			} `json:"programConfig"`
+			Locals []struct {
+				VariableID string `json:"variableId"`
+				ProgramID  string `json:"programId"`
+			} `json:"locals"`
+		}
+		if json.Unmarshal(object.Payload, &payload) != nil {
+			continue
+		}
+		runtimeID := payload.ProgramConfig.ProgramID
+		if object.Kind == "PROGRAM" {
+			if runtimeID == "" {
+				runtimeID = object.ObjectID
+			}
+			programIDByObject[object.ObjectID] = runtimeID
+			programIDs[runtimeID] = struct{}{}
+		}
+		for _, local := range payload.Locals {
+			owner := local.ProgramID
+			if owner == "" {
+				owner = object.ObjectID
+			}
+			variableOwner[local.VariableID] = owner
+		}
+	}
+	// Biến v1 là Revision object riêng; giữ đường đọc lịch sử nhưng chuẩn hoá
+	// owner về runtime programId nếu payload còn dùng objectId.
+	for _, object := range objects {
+		if object.Kind != "VARIABLE" {
+			continue
+		}
+		var payload struct {
+			VariableID string `json:"variableId"`
+			ProgramID  string `json:"programId"`
+		}
+		if json.Unmarshal(object.Payload, &payload) == nil {
+			variableOwner[payload.VariableID] = payload.ProgramID
+		}
+	}
+	normalizeProgramID := func(value string) string {
+		if mapped := programIDByObject[value]; mapped != "" {
+			return mapped
+		}
+		return value
+	}
 	for _, object := range objects {
 		switch object.Kind {
-		case "PROGRAM":
-			programIDs[object.ObjectID] = struct{}{}
 		case "BINDING":
 			var payload struct {
-				ProgramID string `json:"programId"`
-				Variable  string `json:"variable"`
-				Direction string `json:"direction"`
-				PointID   string `json:"pointId"`
-				Point     struct {
+				BindingID  string `json:"bindingId"`
+				ProgramID  string `json:"programId"`
+				VariableID string `json:"variableId"`
+				Variable   string `json:"variable"`
+				Direction  string `json:"direction"`
+				PointID    string `json:"pointId"`
+				Point      struct {
 					Category string `json:"category"`
 					PointID  string `json:"pointId"`
 					DeviceID string `json:"deviceId"`
@@ -84,9 +147,20 @@ func collectPackageObjects(objects []revisionObjectView) ([]packageBinding, []pa
 			if json.Unmarshal(object.Payload, &payload) != nil {
 				continue
 			}
-			binding := packageBinding{programID: payload.ProgramID, variable: payload.Variable,
+			bindingID := payload.BindingID
+			if bindingID == "" {
+				bindingID = object.ObjectID
+			}
+			owner := payload.ProgramID
+			if owner == "" {
+				owner = variableOwner[payload.VariableID]
+			}
+			owner = normalizeProgramID(owner)
+			binding := packageBinding{bindingID: bindingID, programID: owner,
+				variableID: payload.VariableID, variable: payload.Variable,
 				direction: strings.ToUpper(payload.Direction), category: payload.Point.Category,
-				pointID: payload.Point.PointID, deviceID: payload.Point.DeviceID, extIndex: payload.Point.ExtIndex}
+				pointID: payload.Point.PointID, deviceID: payload.Point.DeviceID,
+				extIndex: payload.Point.ExtIndex, writable: payload.Writable}
 			// Binding v1 để identity điểm ở cấp gốc; v2 gom vào `point`. Đọc cả
 			// hai để một Revision seal trước khi nâng model vẫn kiểm được.
 			if binding.pointID == "" {
@@ -103,6 +177,7 @@ func collectPackageObjects(objects []revisionObjectView) ([]packageBinding, []pa
 				SignalID           string   `json:"signalId"`
 				Name               string   `json:"name"`
 				Type               string   `json:"type"`
+				Unit               string   `json:"unit"`
 				PublisherProgramID string   `json:"publisherProgramId"`
 				FreshnessMs        float64  `json:"freshnessMs"`
 				StalePolicy        string   `json:"stalePolicy"`
@@ -112,7 +187,8 @@ func collectPackageObjects(objects []revisionObjectView) ([]packageBinding, []pa
 				continue
 			}
 			signals = append(signals, packageSignal{signalID: payload.SignalID, name: payload.Name,
-				dataType: payload.Type, publisherID: payload.PublisherProgramID,
+				dataType: payload.Type, unit: payload.Unit,
+				publisherID: normalizeProgramID(payload.PublisherProgramID),
 				freshnessMs: payload.FreshnessMs, stalePolicy: payload.StalePolicy,
 				hasFallback: payload.FallbackValue != nil, fallbackValue: payload.FallbackValue})
 		}
@@ -204,6 +280,14 @@ func signalDiagnostics(signals []packageSignal, programIDs map[string]struct{}) 
 			diagnostics = append(diagnostics, packageDiagnostic("ST-SIG-002",
 				map[string]any{"signalId": signal.signalID, "programId": signal.publisherID},
 				map[string]any{"name": signal.name, "type": signal.dataType}))
+		} else if signal.hasFallback &&
+			(signal.fallbackValue == nil || !validSignalFallback(signal.dataType, *signal.fallbackValue)) {
+			// JSON number là float64 nhưng StCell chỉ có biểu diễn hữu hạn theo
+			// từng kiểu. Chặn tại Check để giá trị an toàn không bị làm tròn hoặc
+			// wrap âm thầm trong worker/package writer.
+			diagnostics = append(diagnostics, packageDiagnostic("ST-SIG-002",
+				map[string]any{"signalId": signal.signalID, "programId": signal.publisherID},
+				map[string]any{"name": signal.name, "type": signal.dataType}))
 		}
 		// Enum ĐÓNG. Trước bản vá này chỉ có phép kiểm cặp đôi bên dưới, nên một
 		// chính sách bịa (`"MAGIC"`, chuỗi rỗng, hay `"HOLD_LAST "` thừa khoảng
@@ -260,10 +344,50 @@ func packageSignals(objects []revisionObjectView) []programmingcompiler.PackageS
 			// phải dưới dạng số thập phân đọc lại: mọi lần đổi biểu diễn là một
 			// lần làm tròn, và làm tròn giá trị an toàn là đúng thứ không được
 			// phép xảy ra âm thầm.
-			bits := uint64(math.Float32bits(float32(*signal.fallbackValue)))
-			item.FallbackBits = &bits
+			if bits, ok := encodeSignalFallback(signal.dataType, *signal.fallbackValue); ok {
+				item.FallbackBits = &bits
+			}
 		}
 		result = append(result, item)
+	}
+	return result
+}
+
+// encodeSignalFallback mã hoá đúng layout 8 byte của StCell. Phần byte không
+// thuộc field đang dùng luôn bằng 0 để package có một biểu diễn canonical.
+func encodeSignalFallback(dataType string, value float64) (uint64, bool) {
+	if !validSignalFallback(dataType, value) {
+		return 0, false
+	}
+	switch dataType {
+	case "BOOL":
+		return uint64(value), true
+	case "INT", "DINT":
+		return uint64(uint32(int32(value))), true
+	case "UINT":
+		return uint64(uint32(value)), true
+	case "REAL":
+		return uint64(math.Float32bits(float32(value))), true
+	case "TIME":
+		// Hợp đồng Draft/REST dùng millisecond; runtime StCell dùng nanosecond.
+		return uint64(int64(value) * 1_000_000), true
+	default:
+		return 0, false
+	}
+}
+
+// compilerPublishedSignals dùng cùng ảnh đã validate với package writer, nhưng
+// giữ type dạng tên vì semantic compiler làm việc ở tầng ST. Mọi Program nhận
+// cùng contract; quyền publish được kiểm bằng ProgramID riêng của job.
+func compilerPublishedSignals(objects []revisionObjectView) []programmingcompiler.PublishedSignalContract {
+	_, signals, _ := collectPackageObjects(objects)
+	sort.Slice(signals, func(left, right int) bool { return signals[left].name < signals[right].name })
+	result := make([]programmingcompiler.PublishedSignalContract, 0, len(signals))
+	for _, signal := range signals {
+		result = append(result, programmingcompiler.PublishedSignalContract{
+			Name: signal.name, Type: signal.dataType,
+			PublisherProgramID: programPackageName(signal.publisherID),
+		})
 	}
 	return result
 }

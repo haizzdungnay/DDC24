@@ -97,6 +97,15 @@ type DeleteLibraryEntryCommand struct {
 	CorrelationID  string
 }
 
+type DeprecateLibraryRevisionCommand struct {
+	ProjectID         string
+	LibraryRevisionID string
+	SchemaVersion     string
+	IfMatch           string
+	IdempotencyKey    string
+	CorrelationID     string
+}
+
 type LibraryService struct {
 	store        *programmingstore.Store
 	now          func() time.Time
@@ -135,7 +144,7 @@ func (s *LibraryService) SearchLibraries(ctx context.Context, command SearchLibr
 	if !validText(command.Query, 0, 64) {
 		return LibraryPage{}, ErrInvalidRequest
 	}
-	offset := 0
+	var after *programmingstore.LibrarySearchKey
 	if command.Cursor != "" {
 		cursor, err := s.decodeLibraryCursor(command.Cursor)
 		if err != nil {
@@ -145,27 +154,22 @@ func (s *LibraryService) SearchLibraries(ctx context.Context, command SearchLibr
 			cursor.Query != command.Query || cursor.ProjectID != command.ProjectID {
 			return LibraryPage{}, ErrInvalidCursor
 		}
-		offset = cursor.Offset
+		after = &programmingstore.LibrarySearchKey{
+			NameFolded: cursor.NameFolded, EntryID: cursor.EntryID, LibraryRevisionID: cursor.LibraryRevisionID,
+		}
 	}
-	// Trần tìm kiếm của store là 101; lấy offset+limit+1 để biết còn trang sau.
-	fetch := offset + command.Limit + 1
-	if fetch > 101 {
-		fetch = 101
-	}
+	// Keyset giữ mỗi lần đọc ở đúng limit+1 (tối đa 101), không tăng chi phí
+	// theo số trang như OFFSET hoặc tải lại toàn bộ prefix từ đầu.
 	entries, err := s.store.SearchLibraryEntries(ctx, programmingstore.LibrarySearchParams{
 		ProjectID: command.ProjectID, Query: command.Query, Kind: command.Kind,
-		Scope: command.Scope, Limit: fetch,
+		Scope: command.Scope, Limit: command.Limit + 1, After: after,
 	})
 	if err != nil {
 		return LibraryPage{}, err
 	}
-	if offset >= len(entries) {
-		return LibraryPage{Items: []LibraryEntryView{}}, nil
-	}
-	window := entries[offset:]
-	page := LibraryPage{Items: make([]LibraryEntryView, 0, min(command.Limit, len(window)))}
+	page := LibraryPage{Items: make([]LibraryEntryView, 0, min(command.Limit, len(entries)))}
 	revisions := make(map[string]programmingstore.LibraryRevision)
-	for _, entry := range window[:min(command.Limit, len(window))] {
+	for _, entry := range entries[:min(command.Limit, len(entries))] {
 		revision, cached := revisions[entry.LibraryRevisionID]
 		if !cached {
 			revision, err = s.store.GetLibraryRevision(ctx, entry.LibraryRevisionID)
@@ -176,9 +180,11 @@ func (s *LibraryService) SearchLibraries(ctx context.Context, command SearchLibr
 		}
 		page.Items = append(page.Items, libraryEntryView(entry, revision))
 	}
-	if len(window) > command.Limit && fetch < 101 {
+	if len(entries) > command.Limit {
+		last := entries[command.Limit-1]
 		encoded, err := s.encodeLibraryCursor(libraryCursor{
-			Offset: offset + command.Limit, Scope: command.Scope, Kind: command.Kind,
+			NameFolded: strings.ToUpper(last.Name), EntryID: last.EntryID, LibraryRevisionID: last.LibraryRevisionID,
+			Scope: command.Scope, Kind: command.Kind,
 			Query: command.Query, ProjectID: command.ProjectID,
 			ExpiresAtUTCMS: s.now().UTC().Add(15 * time.Minute).UnixMilli(),
 		})
@@ -258,6 +264,38 @@ func (s *LibraryService) DeleteEntry(ctx context.Context, actor Actor, command D
 		return MutationResult{}, err
 	}
 	return libraryMutationResult(command.ProjectID, command.EntryID, result), nil
+}
+
+// DeprecateRevision chỉ mở chuyển tiếp PUBLISHED -> DEPRECATED. Publish không
+// có API riêng: nó vẫn thuộc transaction Seal Revision để không tiêu version
+// mà chưa có Revision bất biến nào pin tới.
+func (s *LibraryService) DeprecateRevision(ctx context.Context, actor Actor,
+	command DeprecateLibraryRevisionCommand) (MutationResult, error) {
+	if command.SchemaVersion != "1.0" || !isUUID(command.ProjectID) || !isUUID(command.LibraryRevisionID) {
+		return MutationResult{}, ErrInvalidRequest
+	}
+	identity, err := s.mutationIdentity(actor, command.ProjectID, command.IfMatch,
+		command.IdempotencyKey, command.CorrelationID, map[string]any{
+			"schemaVersion": command.SchemaVersion, "projectId": command.ProjectID,
+			"libraryRevisionId": command.LibraryRevisionID, "state": programmingstore.LibraryStateDeprecated,
+			"ifMatch": command.IfMatch,
+		})
+	if err != nil {
+		return MutationResult{}, err
+	}
+	result, err := s.store.DeprecateProjectLibraryRevision(ctx, programmingstore.DeprecateProjectLibraryRevisionParams{
+		LibraryRevisionID: command.LibraryRevisionID, Identity: identity,
+	})
+	if err != nil {
+		return MutationResult{}, err
+	}
+	resource := map[string]any{
+		"projectId": command.ProjectID, "draftRevisionId": result.DraftID,
+		"libraryRevisionId": result.Revision.LibraryRevisionID, "libraryVersion": result.Revision.Version,
+		"libraryState": result.Revision.State,
+	}
+	return MutationResult{Resource: resource, ETag: FormatDraftETag(result.DraftID, result.DraftETag),
+		AuditID: result.AuditID, Replay: result.Replay}, nil
 }
 
 // mutationIdentity gom bốn thứ luôn đi cùng nhau: ETag Draft đã đọc, khoá
@@ -356,12 +394,14 @@ func libraryEntryView(entry programmingstore.LibraryEntry, revision programmings
 }
 
 type libraryCursor struct {
-	Offset         int    `json:"offset"`
-	Scope          string `json:"scope"`
-	Kind           string `json:"kind"`
-	Query          string `json:"query"`
-	ProjectID      string `json:"projectId"`
-	ExpiresAtUTCMS int64  `json:"expiresAtUtcMs"`
+	NameFolded        string `json:"nameFolded"`
+	EntryID           string `json:"entryId"`
+	LibraryRevisionID string `json:"libraryRevisionId"`
+	Scope             string `json:"scope"`
+	Kind              string `json:"kind"`
+	Query             string `json:"query"`
+	ProjectID         string `json:"projectId"`
+	ExpiresAtUTCMS    int64  `json:"expiresAtUtcMs"`
 }
 
 func (s *LibraryService) encodeLibraryCursor(cursor libraryCursor) (string, error) {
@@ -393,8 +433,10 @@ func (s *LibraryService) decodeLibraryCursor(encoded string) (libraryCursor, err
 		return libraryCursor{}, ErrInvalidCursor
 	}
 	var cursor libraryCursor
-	if err := decodeStrict(payload, &cursor); err != nil || cursor.Offset < 1 || cursor.Offset > 100 ||
-		s.now().UTC().UnixMilli() > cursor.ExpiresAtUTCMS {
+	if err := decodeStrict(payload, &cursor); err != nil ||
+		!validText(cursor.NameFolded, 1, 64) || cursor.NameFolded != strings.ToUpper(cursor.NameFolded) ||
+		!validText(cursor.EntryID, 1, 128) || !validText(cursor.LibraryRevisionID, 1, 128) ||
+		s.now().UTC().UnixMilli() >= cursor.ExpiresAtUTCMS {
 		return libraryCursor{}, ErrInvalidCursor
 	}
 	return cursor, nil
