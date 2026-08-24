@@ -224,6 +224,11 @@ typedef struct {
     uint8_t  fb_bus_count;        /* số phần tử hợp lệ trong fb_bus[] */
     uint8_t  _fb_bus_pad[7];
     kx_bus_metrics_t fb_bus[KX_N_FB_BUS];
+
+    /* T59-702: khoảng cách lớn nhất giữa hai IO_RESP hợp lệ, đo bởi chính
+     * poll loop IOP. Đơn vị microsecond giữ đủ độ phân giải quanh cổng 200 ms;
+     * 0 = chưa có đủ hai phản hồi để đo. Nối cuối để reader cũ không lệch ABI. */
+    uint32_t max_iop_poll_gap_us;
 } kx_io_shm_t;
 
 /* ============ ext_shm: fieldbus (Modbus RTU master) -> hệ thống ============
