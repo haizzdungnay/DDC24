@@ -126,8 +126,16 @@ type webIPCResponse struct {
 	// đúng điều Commission sẽ giải quyết.
 	SafeStateNoControllerOnly bool                 `json:"safeStateNoControllerOnly,omitempty"`
 	Task                      *RuntimeTaskSnapshot `json:"task,omitempty"`
-	Points                    []RuntimePoint       `json:"points,omitempty"`
-	Schedules                 []coreScheduleState  `json:"schedules,omitempty"`
+	// T60-011 — `programs` KHÔNG có `omitempty` và không được thêm vào: struct
+	// này chỉ dùng để DECODE, và điều cần giữ là sự khác nhau giữa "khoá vắng"
+	// (nil ⇒ Core đời cũ ⇒ UNAVAILABLE) và "mảng rỗng" ([] ⇒ Core sống, hệ
+	// không có Program nào). `encoding/json` giữ đúng sự phân biệt đó khi
+	// unmarshal vào `[]T`; đặt `omitempty` ở đây chỉ làm người đọc sau này
+	// tưởng hai thứ ấy là một.
+	Programs          []RuntimeProgramSnapshot `json:"programs"`
+	ProgramsTruncated bool                     `json:"programsTruncated"`
+	Points            []RuntimePoint           `json:"points,omitempty"`
+	Schedules         []coreScheduleState      `json:"schedules,omitempty"`
 }
 
 // coreScheduleState là trạng thái runtime lịch do controller trả về
@@ -294,7 +302,12 @@ func (c *CoreClient) readPointSnapshotOnce(ctx context.Context) (RuntimePointSna
 		SafeState:                 resp.SafeState,
 		SafeStateNoControllerOnly: resp.SafeStateNoControllerOnly,
 		Task:                      resp.Task,
-		Points:                    resp.Points,
+		// Gán thẳng, KHÔNG `append(make(...), ...)`: một lần "chuẩn hoá" như
+		// vậy sẽ biến nil thành slice rỗng và xoá mất đúng thông tin phân biệt
+		// Core-đời-cũ với Core-không-có-Program.
+		Programs:          resp.Programs,
+		ProgramsTruncated: resp.ProgramsTruncated,
+		Points:            resp.Points,
 	}, nil
 }
 

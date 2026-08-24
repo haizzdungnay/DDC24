@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.26.0"
+  version: "1.27.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -2165,19 +2165,32 @@ paths:
       - { $ref: "#/components/parameters/ProgrammingProjectId" }
     get:
       operationId: listProgrammingProgramIntents
-      summary: Đọc ý định Enable/Disable và trạng thái runtime của từng Program
+      summary: Đọc ý định Enable/Disable ghép read-back sống của từng Program
       description: >-
         `desiredEnabled` là điều người vận hành muốn; `runtimeState` là điều
         thiết bị đang làm. Hai trường riêng biệt có chủ ý — gộp chúng sẽ làm một
         Program đã bật nhưng đang FAULTED trông y hệt một Program chưa ai bật.
+
+
+        T60-013/T60-014: phản hồi ghép HAI nguồn khác bản chất và không bao giờ
+        trộn chúng — ý định bền vững (`program_runtime_intents`, sống qua mất
+        điện) và read-back sống (`point_snapshot` của Core, chỉ có giá trị ngay
+        lúc này). `runtimeStateSource` nói dòng đó đến từ nguồn nào; thiếu nó thì
+        một `RUNNING` đọc từ DB một giờ trước trông y hệt một `RUNNING` vừa đọc
+        từ Core. Core im ⇒ `UNAVAILABLE` + `runtimeState = UNKNOWN` + mọi số đo
+        `null`, tuyệt đối không trả giá trị cũ như thể đang sống.
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: t59-405
+      x-implementation-status: t60-013
       responses:
         "200":
-          description: Danh sách intent + trạng thái, sắp theo programId
+          description: >-
+            Bảng Program của Project, sắp theo programId. Luôn 200 kể cả khi Core
+            im: trạng thái Core là NỘI DUNG của câu trả lời, không phải lỗi của
+            request — trả 503 ở đây sẽ xoá luôn phần ý định bền vững, thứ vẫn đọc
+            được và vẫn đúng.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProgrammingProgramIntentList" }
+              schema: { $ref: "#/components/schemas/ProgrammingProgramsPage" }
         "400": { $ref: "#/components/responses/ProgrammingError" }
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
@@ -2529,6 +2542,40 @@ paths:
         "413": { $ref: "#/components/responses/ProgrammingError" }
         "422": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/runtime/recovery-reset:
+    post:
+      operationId: resetProgrammingRecovery
+      summary: Gỡ khoá Core khỏi RECOVERY_REQUIRED (T59-702)
+      description: >-
+        `RECOVERY_REQUIRED` là ngõ cụt có chủ ý — Core không đoán gói nào còn
+        dùng được. Endpoint này là LỐI RA tường minh duy nhất: nó ghi thêm một
+        bản ghi journal (không xoá gì), đưa Core về `IDLE` KHÔNG có Active và
+        giữ safe-state. Phải Commission lại sau đó; không gói nào tự sống lại.
+        Gọi khi Core không ở `RECOVERY_REQUIRED` trả `409`.
+      x-rbac: [admin]
+      x-implementation-status: implemented
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingRecoveryResetRequest" }
+      responses:
+        "200":
+          description: Core đã rời RECOVERY_REQUIRED
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRecoveryResetResult" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409":
+          description: Core không ở RECOVERY_REQUIRED — không có gì để gỡ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRecoveryResetResult" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/audit:
     get:
       operationId: listProgrammingAudit
@@ -2757,7 +2804,9 @@ components:
     ProgrammingProject:
       type: object
       additionalProperties: false
-      required: [projectId, name, etag, activeRevisionId, draftRevisionId, baseRevisionId, updatedAt]
+      required:
+        [projectId, name, etag, activeRevisionId, draftRevisionId, baseRevisionId,
+         updatedAt, dirty, draftSequence, activeSequence]
       properties:
         projectId: { type: string, format: uuid }
         name: { type: string, minLength: 1, maxLength: 120 }
@@ -2790,6 +2839,31 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/ProgrammingProjectLatestCheck" }
             - { type: "null" }
+        # --- T60-015 (Plan 60 §3.1 nhóm B, D-05) ---
+        # Ba trường dưới đây BẮT BUỘC CÓ MẶT, kể cả khi giá trị là `null`: server
+        # cố ý không dùng `omitempty` vì `null` tường minh nói "server đã xét và
+        # chưa biết", còn trường vắng mặt lẫn với "server đời cũ chưa có trường
+        # này". FE render `null` thành `—`, tuyệt đối không thành `0` hay "sạch".
+        dirty:
+          description: >
+            `true` khi `drafts.content_sha256` KHÁC `draftContentSha256` của
+            manifest base Revision (còn việc chưa phát hành); `false` khi trùng
+            byte-for-byte; `null` khi manifest base không mang
+            `draftContentSha256` — khẳng định "sạch" khi chưa biết là giấu việc.
+          type: [boolean, "null"]
+        draftSequence:
+          description: >
+            Số thứ tự Revision nền hiện hành của Draft, dùng cho nhãn `Draft #14`
+            thay cho UUID thô (AC-PGM01-01). `null` khi chưa phân giải được.
+          type: [integer, "null"]
+          minimum: 1
+        activeSequence:
+          description: >
+            Số thứ tự Revision mà Core ĐANG chạy, và CHỈ khi Revision đó thuộc
+            đúng Project này. Core im, hoặc Core chạy một Revision mà DB Web
+            không biết ⇒ `null`; không lấy bản Commission gần nhất thế chỗ.
+          type: [integer, "null"]
+          minimum: 1
     ProgrammingProjectLatestCheck:
       type: object
       additionalProperties: false
@@ -2856,11 +2930,20 @@ components:
     ProgrammingRevision:
       type: object
       additionalProperties: false
-      required: [revisionId, projectId, state, contentHash, createdAt]
+      # `snapshot` nằm trong `required` vì `GET /revisions/{id}` LUÔN gửi khoá
+      # này: `GetRevision` dựng `{manifest, objects}` trên đường thành công, còn
+      # đường thất bại đã trả 404 từ trước. Khai optional là nói contract lỏng
+      # hơn thứ server thực sự bảo đảm, và client sẽ phải viết một nhánh "thiếu
+      # snapshot" không bao giờ chạy tới.
+      required: [revisionId, projectId, state, sequence, contentHash, createdAt, snapshot]
       properties:
         revisionId: { type: string, format: uuid }
         projectId: { type: string, format: uuid }
         state: { type: string, enum: [DRAFT, IMMUTABLE, ACTIVE, LKG, SUPERSEDED] }
+        # T60-015 + D-05 — số thứ tự Revision trong Project, LUÔN >= 1 nên không
+        # nullable: hàng `revisions` không tồn tại thì request đã trả 404 từ
+        # trước đó. Đây là thứ cho phép hiện `Active #12` thay cho UUID thô.
+        sequence: { type: integer, minimum: 1 }
         contentHash: { type: string, pattern: "^[a-f0-9]{64}$" }
         createdAt: { type: string, format: date-time }
         snapshot: { $ref: "#/components/schemas/ProgrammingResource" }
@@ -3217,6 +3300,25 @@ components:
           contentEncoding: base64
         auditId: { type: string, format: uuid }
         correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+    ProgrammingRecoveryResetRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, reason]
+      properties:
+        schemaVersion: { type: string, enum: ["1.0"] }
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Lý do gỡ khoá — đi thẳng vào audit, kể cả khi Core từ chối.
+    ProgrammingRecoveryResetResult:
+      type: object
+      additionalProperties: false
+      required: [applied, auditId]
+      properties:
+        applied: { type: boolean }
+        detailCode: { type: string, maxLength: 64 }
+        auditId: { type: string, format: uuid }
     ProgrammingRetainResetRequest:
       type: object
       additionalProperties: false
@@ -3393,30 +3495,119 @@ components:
         # BẮT BUỘC có mặt. Thiếu `desiredEnabled` KHÁC `desiredEnabled=false`:
         # mặc định về false sẽ biến một payload hỏng thành lệnh TẮT chương trình.
         desiredEnabled: { type: boolean }
-    ProgrammingProgramIntent:
+    ProgrammingProgramRuntimeState:
+      description: >
+        Trạng thái vận hành của một Program theo hợp đồng D-07 (Plan 60 §4.1).
+        `STARTING`/`STOPPING` CỐ Ý không có mặt: `start()`/`stop()`/`disable()`
+        của scheduler đổi trạng thái ĐỒNG BỘ, TỨC THÌ — không có pha trung gian
+        nào để hiển thị. Khai hai giá trị đó vào enum là mời chúng quay lại và
+        làm UI kẹt vĩnh viễn ở một chuyển tiếp không hề tồn tại.
+        `ACTIVE`/`STOPPED`/`ROLLED_BACK` của Core cùng chiếu về `WAITING`; phần
+        bị mất khi chiếu được nói lại bằng `coreState` và `health`.
+      type: string
+      enum: [RUNNING, WAITING, DISABLED, FAULTED, UNKNOWN]
+    ProgrammingProgramRuntimeStateSource:
+      description: >
+        Nguồn của số đo trên chính dòng đó. `CORE_LIVE` = đọc được từ snapshot
+        này của Core. `LAST_KNOWN` = Core sống nhưng không kể tên Program này;
+        giá trị hiển thị là read-back bền vững lần cuối, kèm mốc của chính nó.
+        `UNAVAILABLE` = không đọc được gì, bắt buộc đi kèm
+        `runtimeState = UNKNOWN` và mọi số đo `null`.
+        Không có trường này thì `RUNNING` đọc từ DB (ghi lúc đẩy intent, có thể
+        từ một giờ trước) trông y hệt `RUNNING` vừa đọc từ Core — và đó chính là
+        lúc người vận hành cần phân biệt nhất.
+      type: string
+      enum: [CORE_LIVE, LAST_KNOWN, UNAVAILABLE]
+    ProgrammingProgramHealth:
+      description: >
+        Nhãn sức khoẻ do SERVER tính theo D-04 (Plan 60 §4.2, thứ tự xét
+        1 → 2 → 6 → 3 → 4 → 5 → 7). Nullable ở nơi dùng: Program `DISABLED`/
+        `WAITING` không mang nhãn sức khoẻ nào, và `null` là câu trả lời hợp lệ
+        chứ không phải một giá trị enum bịa thêm cho gọn. FE hiện `null` thành
+        `—`, không bao giờ thành `HEALTHY`.
+      type: string
+      enum: [HEALTHY, DEGRADED, FAULT, UNKNOWN]
+    ProgrammingProgramListItem:
       type: object
       additionalProperties: false
-      required: [programId, desiredEnabled, generation, runtimeState, updatedBy, updatedAtUtcMs]
+      # MỌI trường đều BẮT BUỘC CÓ MẶT, kể cả khi giá trị là `null` — server Go
+      # cố ý không dùng `omitempty`. `null` tường minh nói "server đã xét và chưa
+      # biết", còn trường VẮNG MẶT lẫn với "server đời cũ chưa có trường này".
+      # Client không được suy `null` thành `0`/`false`.
+      required:
+        [programId, desiredEnabled, generation, updatedBy, updatedAtUtcMs,
+         runtimeState, runtimeStateSource, coreState, enabled, observedAt,
+         periodMs, lastExecNs, maxExecNs, missedReleaseCount,
+         consecutiveMissedRelease, lastRunAtUtc, lastRunAgeMs, lane, health]
       properties:
         programId: { type: string, minLength: 1, maxLength: 64 }
-        desiredEnabled: { type: boolean }
+        # --- Ý định bền vững (`program_runtime_intents`) ---
+        # `null` = Project này CHƯA TỪNG ghi intent cho Program đó (Program chỉ
+        # Core biết). KHÁC HẲN `false`, vốn nghĩa là đã có người tắt nó.
+        desiredEnabled: { type: [boolean, "null"] }
         # Chỉ tăng, không bao giờ lùi: Core dùng nó để biết intent nào mới hơn mà
         # KHÔNG phải tin đồng hồ tường của hai máy khác nhau.
-        generation: { type: integer, minimum: 1 }
-        runtimeState:
-          type: string
-          enum: [DISABLED, STARTING, RUNNING, WAITING, STOPPING, FAULTED, UNKNOWN]
-        updatedBy: { type: string, minLength: 1, maxLength: 128 }
-        updatedAtUtcMs: { type: integer, minimum: 0 }
-    ProgrammingProgramIntentList:
+        generation: { type: [integer, "null"], minimum: 1 }
+        updatedBy: { type: [string, "null"], minLength: 1, maxLength: 128 }
+        updatedAtUtcMs: { type: [integer, "null"], minimum: 0 }
+        # --- Read-back (`point_snapshot` của Core) ---
+        runtimeState: { $ref: "#/components/schemas/ProgrammingProgramRuntimeState" }
+        runtimeStateSource: { $ref: "#/components/schemas/ProgrammingProgramRuntimeStateSource" }
+        # NGUYÊN VĂN `StProgramState` của Core. Giữ lại vì `runtimeState` là phép
+        # chiếu CÓ MẤT MÁT: `ACTIVE`, `STOPPED` và `ROLLED_BACK` cùng ra
+        # `WAITING`, nhưng chỉ `ROLLED_BACK` mới kéo `health` xuống `DEGRADED`.
+        coreState: { type: [string, "null"], minLength: 1, maxLength: 32 }
+        # Cờ enable THẬT trong Core, không phải ý định. Lệch với `desiredEnabled`
+        # là một sự kiện vận hành, không phải một lỗi hiển thị.
+        enabled: { type: [boolean, "null"] }
+        observedAt: { type: [string, "null"], format: date-time }
+        # `null` (KHÔNG phải `0`) khi Core không phân giải được chu kỳ hiệu lực.
+        # `0` ở cột Cycle là một số bịa, và nó bịa đúng chỗ người vận hành tin nhất.
+        periodMs: { type: [integer, "null"], minimum: 1 }
+        # THỜI LƯỢNG một lần chạy, KHÔNG phải mốc thời gian — mốc là `lastRunAtUtc`.
+        lastExecNs: { type: [integer, "null"], minimum: 0 }
+        maxExecNs: { type: [integer, "null"], minimum: 0 }
+        # Bộ đếm TÍCH LUỸ từ lúc start. Không dùng nó cho `health`: một lần lỡ
+        # nhịp cách đây một giờ sẽ ghim Program ở DEGRADED vĩnh viễn.
+        missedReleaseCount: { type: [integer, "null"], minimum: 0 }
+        # Bộ đếm LIÊN TIẾP, reset về 0 mỗi lần release đúng hạn — đây mới là thứ
+        # điều 4 của công thức `health` dùng.
+        consecutiveMissedRelease: { type: [integer, "null"], minimum: 0 }
+        # MỐC lần chạy gần nhất — đúng thứ cột `Last Exec` cần. KHÔNG suy ra từ
+        # `lastExecNs`; mốc dựng từ `lastRunMonoNs` trừ trong cùng snapshot rồi
+        # quy về đồng hồ tường.
+        lastRunAtUtc: { type: [string, "null"], format: date-time }
+        lastRunAgeMs: { type: [integer, "null"], minimum: 0 }
+        lane: { type: [integer, "null"], minimum: 0 }
+        health:
+          oneOf:
+            - { $ref: "#/components/schemas/ProgrammingProgramHealth" }
+            - { type: "null" }
+    ProgrammingProgramsPage:
       type: object
       additionalProperties: false
-      required: [items]
+      required: [schemaVersion, projectId, runtimeStateSource, observedAt, programsTruncated, items]
       properties:
+        schemaVersion: { type: string, const: "1.0" }
+        projectId: { type: string, format: uuid }
+        # Mức TRANG: `CORE_LIVE` khi đọc được bảng Program của Core trong lần gọi
+        # này, `UNAVAILABLE` khi không. Mức dòng vẫn có thể hạ xuống
+        # `LAST_KNOWN`/`UNAVAILABLE` riêng.
+        runtimeStateSource: { $ref: "#/components/schemas/ProgrammingProgramRuntimeStateSource" }
+        # Mốc Core chụp snapshot. `null` khi không đọc được — KHÔNG điền đồng hồ
+        # của web-api vào đây, đó là mốc của một quan sát chưa xảy ra.
+        observedAt: { type: [string, "null"], format: date-time }
+        # `null` khi không có bảng nào để nói tới; `true` khi Core đã cắt ở trần
+        # `kMaxProgramsTotal` (32) ⇒ danh sách KHÔNG đầy đủ.
+        programsTruncated: { type: [boolean, "null"] }
         items:
           type: array
-          maxItems: 32
-          items: { $ref: "#/components/schemas/ProgrammingProgramIntent" }
+          # Trần 64 = hợp của HAI nguồn: tối đa 32 Program có intent trong DB
+          # (`maxProgramsTotal` của profile) cộng tối đa 32 Program mà Core kể
+          # tên nhưng Project chưa từng ghi intent. Đặt 32 ở đây sẽ khai hẹp hơn
+          # thứ backend có thể trả.
+          maxItems: 64
+          items: { $ref: "#/components/schemas/ProgrammingProgramListItem" }
     ProgrammingResourcePage:
       type: object
       additionalProperties: false

@@ -343,3 +343,70 @@ func TestDraftV2IdempotencyAndETagSurviveRestart(t *testing.T) {
 		t.Fatalf("Draft sau replay: %+v", document)
 	}
 }
+
+// T59-702 — `setTask` phải chọn đúng Program trong `programOrder`.
+//
+// Trước bản vá, mọi Program nhận cùng một `periodMs`, nên một package nhiều chu
+// kỳ là không dựng được bằng API — dù profile cho `maxTasks: 3` và packager đã
+// nhận `--period` theo từng Program. Test này khoá đúng mối nối đó.
+func TestSetTaskChonDungProgramTheoProgramOrder(t *testing.T) {
+	document := map[string]any{
+		"programs": []any{
+			map[string]any{"programId": "p1", "objectId": "p1", "periodMs": float64(1000)},
+			map[string]any{"programId": "p2", "objectId": "p2", "periodMs": float64(1000)},
+			map[string]any{"programId": "p3", "objectId": "p3", "periodMs": float64(1000)},
+		},
+	}
+	raw := []byte(`{"op":"setTask","task":{"taskId":"slow","periodMs":30000,"programOrder":["p2","p3"]}}`)
+	if err := setTaskCompat(document, raw); err != nil {
+		t.Fatalf("setTask lỗi: %v", err)
+	}
+	want := map[string]float64{"p1": 1000, "p2": 30000, "p3": 30000}
+	for _, item := range collectionOf(document, "programs") {
+		id, _ := item["programId"].(string)
+		got, _ := item["periodMs"].(float64)
+		if got != want[id] {
+			t.Fatalf("%s periodMs=%v, mong đợi %v", id, got, want[id])
+		}
+		if id == "p1" {
+			if _, has := item["taskId"]; has {
+				t.Fatalf("p1 không nằm trong programOrder nhưng bị gán taskId")
+			}
+			continue
+		}
+		if item["taskId"] != "slow" {
+			t.Fatalf("%s thiếu taskId: %v", id, item["taskId"])
+		}
+	}
+}
+
+// Danh sách rỗng giữ nghĩa cũ — Project một chu kỳ không phải sửa gì.
+func TestSetTaskProgramOrderRongApDungChoTatCa(t *testing.T) {
+	document := map[string]any{
+		"programs": []any{
+			map[string]any{"programId": "p1", "objectId": "p1", "periodMs": float64(1000)},
+			map[string]any{"programId": "p2", "objectId": "p2", "periodMs": float64(30000)},
+		},
+	}
+	raw := []byte(`{"op":"setTask","task":{"taskId":"main","periodMs":5000,"programOrder":[]}}`)
+	if err := setTaskCompat(document, raw); err != nil {
+		t.Fatalf("setTask lỗi: %v", err)
+	}
+	for _, item := range collectionOf(document, "programs") {
+		if got, _ := item["periodMs"].(float64); got != 5000 {
+			t.Fatalf("periodMs=%v, mong đợi 5000", got)
+		}
+	}
+}
+
+// `programOrder` trỏ tới Program không tồn tại là lỗi người gọi: im lặng bỏ qua
+// sẽ để lại một Task rỗng mà người dùng tưởng đã cấu hình xong.
+func TestSetTaskTuChoiProgramKhongTonTai(t *testing.T) {
+	document := map[string]any{
+		"programs": []any{map[string]any{"programId": "p1", "objectId": "p1", "periodMs": float64(1000)}},
+	}
+	raw := []byte(`{"op":"setTask","task":{"taskId":"slow","periodMs":30000,"programOrder":["p1","khong-co"]}}`)
+	if err := setTaskCompat(document, raw); err == nil {
+		t.Fatal("phải từ chối programOrder có Program không tồn tại")
+	}
+}

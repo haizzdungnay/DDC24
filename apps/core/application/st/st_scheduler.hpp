@@ -177,8 +177,30 @@ struct StProgramInstance {
     /* Metrics theo Program. Task-level không thay được: với chu kỳ khác nhau,
      * một con số gộp không trả lời được "Program nào lỡ deadline". */
     uint32_t missed_release_count = 0;
+    /* T60-002 — số chu kỳ lỡ LIÊN TIẾP tính tới lần release gần nhất; reset về
+     * 0 ngay khi có một lần release đúng hạn.
+     *
+     * Vì sao cần thêm bên cạnh `missed_release_count`: bộ đếm tích luỹ không
+     * bao giờ giảm, nên dùng nó để kết luận "sức khoẻ hiện tại" sẽ ghim Program
+     * ở DEGRADED vĩnh viễn chỉ vì một lần lỡ nhịp cách đây một giờ. Đây là cùng
+     * khuôn `total`/`consecutive` mà OverrunMonitor đã dùng cho Task. */
+    uint32_t consecutive_missed_release = 0;
+    /* THỜI LƯỢNG của lần chạy gần nhất (không phải mốc thời gian). */
     uint64_t last_exec_ns = 0;
     uint64_t max_exec_ns = 0;
+    /* T60-002 — MỐC THỜI GIAN của lần chạy gần nhất, theo đúng đồng hồ `now_ns`
+     * mà caller chụp một lần cho cả tick (cùng họ với
+     * `RuntimePointSnapshot::captured_monotonic_ns`, nên "tuổi" của số đo tính
+     * được bằng một phép trừ trong cùng một snapshot).
+     *
+     * KHÔNG tái dùng `last_successful_now_ns`: trường đó là mốc của lần chạy
+     * THÀNH CÔNG gần nhất và đang là dấu thời gian nghiệp vụ của ảnh RETAIN
+     * (`st_process_image.cpp`, `st_publish_retain_snapshot`). Ghép thêm nghĩa
+     * "cột Last Exec của UI" vào nó sẽ trói hai thứ không liên quan vào một
+     * biến, và với Program vừa FAULTED nó trả về mốc của lần chạy TỐT trước đó
+     * — tức là báo sai thời điểm Program chết. Trường này ghi ở MỌI lần thân
+     * chương trình được thực thi, kể cả lần kết thúc bằng fault. */
+    uint64_t last_run_mono_ns = 0;
 
     /* T59-403 — lane là đơn vị SONG SONG. Program cùng lane chạy tuần tự theo
      * `order`; lane khác nhau độc lập nên có thể chạy đồng thời mà không đổi

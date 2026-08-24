@@ -357,7 +357,15 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await expect(page.getByRole('heading', { name: 'Lập trình điều khiển' })).toBeVisible()
     expect(await page.evaluate(() => typeof crypto.randomUUID)).toBe('undefined')
     expect(await page.evaluate(() => typeof crypto.subtle)).toBe('undefined')
+    // T60-102/T60-103 ĐẢO CHIỀU khẳng định này: trước Plan 60, Tổng quan in
+    // thẳng `activeRevisionId` dạng UUID ra mặt trước. `AC-PGM01-01` cấm điều
+    // đó — UUID chỉ còn nằm trong popover `Chi tiết`. Giữ nguyên khẳng định
+    // "người dùng vẫn đọc lại được ID thô khi cần", chỉ đổi CHỖ đọc.
+    await expect(page.getByText(ACTIVE_REVISION_ID)).toHaveCount(0)
+    await page.getByRole('button', { name: /Chi tiết|Details/ }).first().click()
     await expect(page.getByText(ACTIVE_REVISION_ID).first()).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByText(ACTIVE_REVISION_ID)).toHaveCount(0)
     await page.screenshot({ path: testInfo.outputPath('01-overview.png'), fullPage: true })
 
     // UJ-PROG-02 — mở workspace Thiết kế qua Project trong Draft panel
@@ -558,11 +566,207 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
 
     const nav = page.getByRole('navigation', { name: 'Điều hướng sáu workspace Lập trình' })
     await expect(nav).toBeVisible()
-    for (const label of ['Tổng quan', 'Chương trình', 'Ánh xạ', 'Thư viện', 'Kiểm tra', 'Runtime']) {
+    // T60-208 rút bottom nav còn BỐN đích (handoff §7); ba bề mặt soạn thảo
+    // chuyển vào ngăn `Thêm`. Khẳng định giữ nguyên: trên màn hẹp vẫn tới được
+    // ĐỦ SÁU workspace — chỉ đổi chỗ đứng của ba đích.
+    for (const label of ['Tổng quan', 'Kiểm tra', 'Runtime']) {
       await expect(nav.getByText(label, { exact: true })).toBeVisible()
+    }
+    await nav.getByRole('button', { name: /Thêm đích Lập trình|More Programming destinations/ }).click()
+    const more = page.getByTestId('programming-mobile-more')
+    // Ngăn `Thêm` dùng nhãn ĐẦY ĐỦ (không phải nhãn rút gọn của thanh nav):
+    // ở đây có chỗ cho tên truy cập được, và tên đầy đủ mới nói rõ đích đến.
+    for (const label of ['Chương trình', 'Điểm & Ánh xạ', 'Thư viện điều khiển']) {
+      await expect(more.getByText(label, { exact: true })).toBeVisible()
     }
     await expect(page.getByText('COMMISSION').first()).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await page.screenshot({ path: testInfo.outputPath('mobile-service-history.png'), fullPage: true })
   })
+})
+
+/* ==================================================================== *
+ * `T60-302` — PGM-01 Overview: bốn khẳng định của Plan 60 §6            *
+ * ==================================================================== */
+
+test.describe('PGM-01 Overview — hợp đồng hiển thị (T60-302)', () => {
+  test('AC-PGM01-05: đúng MỘT hành động chính trên toàn trang', async ({ page }) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, '/eng/programming')
+
+    // Chờ trang dựng xong trước khi đếm: lúc còn skeleton thì CTA chưa quyết,
+    // và đếm sớm sẽ ra 0 mà tưởng là vi phạm hợp đồng.
+    await expect(page.getByTestId('system-health-hero')).toBeVisible()
+
+    // Một trang có hai nút "chính" là một trang không có nút chính nào: người
+    // dùng phải tự đoán cái nào mới là việc nên làm tiếp. Đếm CẢ ba biến thể —
+    // `primary-cta` (đã quyết) và `primary-cta-undecided` (thiếu dữ kiện, cố ý
+    // không đoán) loại trừ nhau, nên tổng phải đúng 1.
+    const decided = await page.getByTestId('primary-cta').count()
+    const undecided = await page.getByTestId('primary-cta-undecided').count()
+    expect(decided + undecided).toBe(1)
+
+    // QuickActions cố ý KHÔNG chứa hành động chính — nó là khối ưu tiên thị
+    // giác thấp; nếu một lối tắt ở đó cũng nổi bật thì `AC-PGM01-05` vỡ mà
+    // không ai thấy.
+    const quick = page.getByTestId('quick-actions')
+    await expect(quick).toBeVisible()
+    await expect(quick.getByTestId('primary-cta')).toHaveCount(0)
+    await expect(quick.getByTestId('primary-cta-undecided')).toHaveCount(0)
+  })
+
+  test('AC-PGM01-01: mặt trước Tổng quan không có chuỗi UUID nào', async ({ page }) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, '/eng/programming')
+    await expect(page.getByTestId('system-health-hero')).toBeVisible()
+
+    // Quét CẢ TRANG bằng regex UUID thay vì kiểm từng chuỗi đã biết: một
+    // revision id mới lọt ra ở khối khác sẽ không bị bắt nếu chỉ kiểm danh
+    // sách cứng.
+    const uuidCount = await page.evaluate(() => {
+      const text = document.body.innerText
+      return (text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? []).length
+    })
+    expect(uuidCount).toBe(0)
+  })
+
+  test('deep-link từ mục cần chú ý đi ĐÚNG trang chủ quản, không dồn hết về Runtime', async ({ page }) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, '/eng/programming')
+
+    await expect(page.getByTestId('system-health-hero')).toBeVisible()
+    // Thẻ không có `data-testid` riêng; định vị bằng chính tiêu đề người dùng
+    // đọc được, để test không phụ thuộc một hook nội bộ có thể bị đổi.
+    const attention = page.locator('section', { has: page.getByText(/Việc cần chú ý|Attention required/) }).first()
+    const links = attention.getByRole('link')
+    const total = await links.count()
+    if (total === 0) {
+      // Không có mục nào thì không có gì để kiểm — nhưng phải nói ra, chứ
+      // không lặng lẽ pass như thể đã kiểm.
+      test.info().annotations.push({ type: 'ghi chú', description: 'Không có mục cần chú ý trong kịch bản mock này' })
+      return
+    }
+    const targets = new Set<string>()
+    for (let i = 0; i < total; i += 1) {
+      const href = await links.nth(i).getAttribute('href')
+      if (href) targets.add(new URL(href, 'http://x').pathname)
+    }
+    // Khuyết tật trước Plan 60: MỌI mục đều trỏ `/eng/programming/runtime`.
+    const allRuntime = [...targets].every((path) => path.endsWith('/runtime'))
+    expect(allRuntime && targets.size > 1).toBe(false)
+  })
+
+  test('Core im: banner nói rõ, vẫn cho sửa, và KHOÁ Đưa vào vận hành', async ({ page }) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    // Core im SAU khi mock đã cài: chỉ chặn đúng đường runtime, giữ nguyên các
+    // đường khác để phân biệt "Core im" với "backend chết".
+    await page.route('**/api/v1/programming/runtime', (route) => route.abort())
+    await login(page)
+    await navigate(page, '/eng/programming')
+
+    const quick = page.getByTestId('quick-actions')
+    await expect(quick).toBeVisible()
+
+    // Commission bị khoá vì không đọc được Core — không được đoán là READY.
+    const commission = quick.locator('[data-quick-action="commission"]')
+    await expect(commission).toHaveAttribute('aria-disabled', 'true')
+    await expect(commission).toHaveAttribute('data-blocked-by', /CORE_/)
+
+    // Nhưng SỬA thì vẫn mở: Core im không phải lý do cấm người ta soạn thảo.
+    await expect(quick.locator('[data-quick-action="edit"]')).not.toHaveAttribute('aria-disabled', 'true')
+  })
+})
+
+/* ==================================================================== *
+ * `T60-304` — bàn phím, RBAC và ĐO THẬT ở hai khổ màn hình             *
+ * ==================================================================== */
+
+test.describe('PGM-01 Overview — a11y, RBAC và số đo khổ màn hình (T60-304)', () => {
+  test('1280×750: nội dung chính KHÔNG bị đẩy xuống dưới màn hình đầu', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', 'Phép đo này thuộc khổ desktop')
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    // 1280×750 là khổ ngặt nhất trong Plan 60 §6: laptop 1280 với thanh trình
+    // duyệt ăn mất chiều cao. Đây là ĐO THẬT, không phải khẳng định bằng lời.
+    await page.setViewportSize({ width: 1280, height: 750 })
+    await login(page)
+    await navigate(page, '/eng/programming')
+    await expect(page.getByTestId('system-health-hero')).toBeVisible()
+
+    const fold = 750
+    for (const id of ['system-health-hero', 'primary-cta', 'primary-cta-undecided']) {
+      const locator = page.getByTestId(id)
+      if (await locator.count() === 0) continue
+      const box = await locator.first().boundingBox()
+      expect(box, `${id} phải có hộp bao`).not.toBeNull()
+      // Mép TRÊN phải nằm trong màn hình đầu: người dùng phải thấy hệ có khoẻ
+      // không và việc nên làm tiếp là gì mà không cần cuộn.
+      expect(box!.y, `${id} bị đẩy xuống dưới màn hình đầu (y=${box!.y})`).toBeLessThan(fold)
+    }
+
+    // Không trang nào được tràn ngang ở khổ này.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflow, `trang tràn ngang ${overflow}px`).toBeLessThanOrEqual(0)
+    await page.screenshot({ path: testInfo.outputPath('overview-1280x750.png'), fullPage: false })
+  })
+
+  test('390 px: không tràn ngang và không chuỗi UUID nằm ngang', async ({ page }, testInfo) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await login(page)
+    await navigate(page, '/eng/programming')
+    await expect(page.getByTestId('system-health-hero')).toBeVisible()
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflow, `trang tràn ngang ${overflow}px ở 390`).toBeLessThanOrEqual(0)
+
+    // `AC-PGM01-01` ở khổ hẹp: một UUID 36 ký tự nằm ngang là thứ chắc chắn đẩy
+    // trang tràn, nên đây vừa là kiểm hợp đồng vừa là kiểm bố cục.
+    const uuidCount = await page.evaluate(() => {
+      const text = document.body.innerText
+      return (text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? []).length
+    })
+    expect(uuidCount).toBe(0)
+    await page.screenshot({ path: testInfo.outputPath('overview-390.png'), fullPage: true })
+  })
+
+  test('bàn phím đi hết: mở Chi tiết, đóng bằng Esc và tiêu điểm trở về đúng nút', async ({ page }) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, '/eng/programming')
+
+    const detailsButton = page.getByRole('button', { name: /Chi tiết|Details/ }).first()
+    await detailsButton.focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    // Trả tiêu điểm là phần hay bị bỏ sót nhất: không trả thì người dùng bàn
+    // phím bị ném về đầu tài liệu và phải Tab lại từ đầu.
+    await expect(detailsButton).toBeFocused()
+  })
+
+  /* MA TRẬN RBAC KHÔNG KIỂM ĐƯỢC Ở TẦNG NÀY.
+   *
+   * Mock đăng nhập của spec này trả `role: 'admin'` cứng (dòng ~269), nên không
+   * có đường nào đăng nhập viewer/operator mà không sửa một mock dùng chung cho
+   * mọi case khác. Dựng một case "viewer" trên phiên admin sẽ là một case GIẢ:
+   * nó xanh mà không chứng minh gì.
+   *
+   * Ma trận RBAC đầy đủ nằm ở mức component:
+   * `overview/QuickActions.test.tsx` — ba vai × bốn lối tắt × bốn tình trạng
+   * Core, gồm cả khẳng định nút bị chặn vẫn NHẬN TIÊU ĐIỂM (dùng
+   * `aria-disabled`, không dùng thuộc tính `disabled`) và `aria-describedby`
+   * trỏ tới đúng câu lý do. `OverviewPage.test.tsx` case `§6-6 viewer` phủ
+   * nhánh "giữ nguyên phần đọc" ở mức trang.
+   * Mức evidence cho RBAC vì vậy là HOST/component, KHÔNG phải E2E. */
 })

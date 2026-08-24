@@ -58,6 +58,31 @@ struct ActivateCommand {
  * Rev A (dù luôn "program-main") để không phải đổi wire format khi
  * Multi-Program cho phép nhiều instance — đúng business rule §4 "field
  * phải có sẵn, không chặn implementation hiện tại". */
+/* T59-702 — lệnh operator bỏ một giao dịch không thể phục hồi.
+ *
+ * `RECOVERY_REQUIRED` là ngõ cụt có chủ ý: Core không đoán, không tự chọn gói
+ * nào cả. Nhưng trước bản này nó cũng không có LỐI RA — mọi action IPC trả
+ * `Unavailable`, nên bo chỉ thoát được bằng cách xoá journal bằng tay, tức là
+ * xoá sổ vận hành để thoát một trạng thái vận hành.
+ *
+ * Lệnh này là lối ra tường minh: chỉ nhận khi đang `RECOVERY_REQUIRED`, ghi
+ * thêm một bản ghi journal (không xoá gì), rồi về `IDLE` **không có Active** và
+ * giữ safe-state. Sau đó phải Commission lại; không có gói nào tự sống lại. */
+struct RecoveryResetCommand {
+    std::string operation_id;
+    /* Ai ra lệnh — đi vào journal/audit. Rỗng là lỗi: một quyết định bỏ giao
+     * dịch mà không có chủ thì không truy được về sau. */
+    std::string actor_id;
+};
+
+enum class RecoveryResetOutcome : uint8_t {
+    APPLIED = 0,
+    /* Không ở `RECOVERY_REQUIRED`: từ chối, vì reset ngoài ngữ cảnh đó sẽ là
+     * một cách bỏ Active đang chạy mà không đi qua Disable/Restore. */
+    NOT_IN_RECOVERY = 1,
+    REJECTED = 2,
+};
+
 struct RetainResetCommand {
     std::string operation_id;
     std::string instance_id = "program-main";
@@ -132,6 +157,9 @@ public:
 
     RetainResetOutcome reset_retain(const RetainResetCommand& command, std::string* detail_code,
                                     std::string* error);
+
+    RecoveryResetOutcome recovery_reset(const RecoveryResetCommand& command,
+                                        std::string* detail_code, std::string* error);
 
     void on_safe_boundary() noexcept;
     void on_output_commit(bool committed) noexcept;

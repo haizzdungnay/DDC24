@@ -8,6 +8,339 @@
 
 ## [Unreleased]
 
+### Plan 60 Batch 1 — mở đường dữ liệu Program và nền FE (2026-08-23)
+
+- **Added — Core C++ `T60-001..003`** (`ad28a51`). *Triệu chứng:* PGM-01 cần
+  bảng Programs sáu cột nhưng Core không phát trạng thái theo từng Program;
+  khối `task` chỉ mô tả `tasks().front()` và báo cáo nó như thể là Task duy
+  nhất. *Nguyên nhân gốc:* từ `T59-402/403` mỗi Program tự release theo chu kỳ
+  riêng nên Task không còn đại diện cho hệ — Program của Task thứ hai trở đi
+  biến mất khỏi snapshot; đồng thời `last_exec_ns` là THỜI LƯỢNG chứ không phải
+  mốc thời gian, và `missed_release_count` tích luỹ nên dùng cho `health` sẽ
+  ghim Program ở DEGRADED vĩnh viễn. *Cách sửa:* `RuntimeProgramSnapshot` +
+  `std::array<…, 32>` bounded (trần `kMaxProgramsTotal`, **không** phải
+  `kMaxProgramsPerTask`=16); duyệt đủ Program của mọi Task với `static_assert`
+  nối hai trần; phân giải `period_ms == 0` về chu kỳ Task thay vì phát `0`;
+  thêm `last_run_mono_ns` (ghi ở mọi lần chạy, kể cả lần kết thúc bằng fault)
+  và `consecutive_missed_release` (reset về 0 khi release đúng hạn); serialize
+  `"programs":[…]` với khoá LUÔN có mặt kể cả khi rỗng — mảng rỗng và thiếu
+  khoá là hai câu trả lời khác nhau. *Verification (HOST):* configure exit `0`,
+  build exit `0`, **ctest 1230/1230 pass** exit `0`.
+- **Added — `apps/web-api` `T60-015`** (`550449f`). *Triệu chứng:* Overview cần
+  nhãn `Draft #14`/`Active #12` và cờ Draft-có-việc-chưa-phát-hành, nhưng
+  `GET /projects` không trả cả hai. *Nguyên nhân gốc:* hai cột đã tồn tại từ
+  `0001_programming_v1.sql` mà chưa được đưa lên tầng application/transport —
+  lỗ hổng **lộ** dữ liệu, không phải thiếu dữ liệu, nên không cần migration.
+  *Cách sửa:* `dirty` so thật `drafts.content_sha256` với
+  `manifest.draftContentSha256` của base Revision, trả `nil` khi không so được
+  chứ tuyệt đối không `false`; `draftSequence`/`activeSequence` trả `nil` khi
+  Core im hoặc Revision không thuộc Project, không lấy bản Commission gần nhất
+  thế chỗ; JSON cố ý bỏ `omitempty` để `null` phân biệt được với trường vắng;
+  tách `GetRevisionHeader` khỏi `GetRevision` vì đường Overview không cần kéo
+  toàn bộ `revision_objects` (mỗi object tới 256 KiB) cho mỗi item.
+  *Verification (HOST):* `go vet ./...` exit `0`; `go test ./... -count=1`
+  exit `0`, 18 package `ok`.
+- **Added — `apps/web-ui` `T60-104`** (`984ebdd`). *Triệu chứng:* Handoff v2.1
+  §3 quy định bảy trạng thái ngữ nghĩa dùng chung, nhưng `StatusBadge` mang một
+  tập khác sinh ra từ nhu cầu trang Point/Alarm. *Nguyên nhân gốc:* tập đó
+  thiếu `reconciling` (không có nó thì mutation hết giờ chỉ còn rơi vào "lỗi"
+  hoặc "xong" — cả hai đều sai, và README §5.5 cấm suy timeout thành thành
+  công) và `disabled` (tắt có chủ đích không phải lỗi, gộp vào `unknown`/
+  `fault` là dạy người vận hành thông tin sai). *Cách sửa:* module
+  `shared/semanticState.ts` ánh xạ bảy trạng thái lên tập badge sẵn có thay vì
+  mở rộng `StatusBadge`, giữ bảng màu là một nguồn duy nhất; mỗi trạng thái bắt
+  buộc có **icon + chữ** và test ép điều đó. *Verification (HOST):*
+  `npx vitest --run --environment jsdom src` — 125 file / 1180 test, 1179 pass.
+  Một fail **ngoài phạm vi Plan 60**: `api/generated/client.test.ts` chờ 31
+  operation trong khi `client.ts` đã lên 32 do `resetProgrammingRecovery`
+  (`T59-702`) đang nằm chưa commit trong cây làm việc — không sửa vì thuộc
+  luồng khác.
+- **Added — Core C++ test `T60-004`** (`ea18a38`). 13 test mới phủ bảy nhóm case
+  của §6 P0-A. Hai chỗ được chứng minh chứ không chỉ được khẳng định:
+  `"programs":[]` kiểm trên **chuỗi thô trước khi parse** — chỉ hỏi parser thì
+  "khoá vắng" và "mảng rỗng" cho cùng một câu trả lời, mà đó đúng là ranh giới
+  `CORE_LIVE` ↔ `UNAVAILABLE`; nhánh tràn đòi `*length == 0` ở bốn sức chứa
+  thiếu khác nhau, vì nguy hiểm thật không phải tràn mà là chuỗi cụt đứt đúng
+  chỗ hợp lệ rồi vẫn parse được ở đầu kia. Trần 32 để **chính scheduler** từ
+  chối Program thứ 33 thay vì test tự đặt con số. *Verification (HOST):*
+  configure/build exit `0`; **ctest 1243/1243 pass** exit `0` (nền 1230), CTIO
+  chạy lại độc lập cùng con số. Hai số đo mới thay ước lượng: payload 32 Program
+  xấu nhất **15 339 B / trần 65 536 B**; nhánh `programs_truncated=true` **không
+  tới được qua scheduler** (`add_program` chặn ở đúng 32) nên chỉ là phòng vệ
+  của lớp serialize. **Mốc M1 ĐẠT** — dump `point_snapshot` thật, 2 Program chu
+  kỳ 50 ms / 200 ms, sinh từ `ScanLoop` + artifact ST đã ký.
+- **Added — `apps/web-ui` `T60-101` + `T60-102`** (`c849510`). *Triệu chứng:*
+  workspace mang hai lớp điều hướng (rail toàn cục 232 px + tab ngang), và ngữ
+  cảnh là panel `<dl>` ~76 px cuộn mất, in thẳng UUID 36 ký tự. *Nguyên nhân
+  gốc:* ngân sách ngang — giữ cả hai lớp thì ở 1280 px workspace còn 828 px và
+  PGM-02 chỉ còn ~328 px cho editor; còn ngữ cảnh thì bị đặt làm khối **nội
+  dung** thay vì thanh trạng thái, lấy định danh kỹ thuật trả lời một câu hỏi
+  nhị phân. *Cách sửa:* `ProgrammingFeatureRail` 220 px theo focus mode `D-01`
+  với mục `← Thoát Lập trình` bắt buộc ở đầu (ở ≥1024 px nút ngăn kéo TopBar là
+  `lg:hidden` nên đây là đường duy nhất rời workspace bằng chuột); chặn render
+  đặt ở `NavRail.isProgrammingFocusRoute` — **chặn render, không xoá mục**,
+  `NAV_GROUPS` nguyên vẹn nên `ADR-032` không bị động tới.
+  `ProgrammingContextStrip` một hàng 38 px `sticky top-16`, bỏ mọi UUID khỏi
+  mặt trước, giữ nguyên từng dòng luật fail-closed. **Không case test nào bị
+  xoá**: 8 case ContextBar + 3 case DesktopNav chuyển sang test mới, hai case cũ
+  khẳng định UUID *hiện* ở mặt trước bị đảo chiều theo `AC-PGM01-01` và nay
+  kiểm chặt hơn bằng regex UUID trên toàn DOM.
+- **Fixed — hai lỗi phát hiện trong cùng phiên** (`c849510`). Strip đặt
+  `sticky top-0` trong khi TopBar là `sticky top-0 z-40 h-16` ⇒ strip trượt
+  xuống dưới TopBar và biến mất đúng lúc cuộn; sửa thành `top-16 z-20`. Chặn
+  render `NavRail` phải phụ thuộc **cả** cờ `PROGRAMMING_REV_A_ENABLED`: cờ tắt
+  thì `/eng/programming` render `UnavailableFeaturePage` nên không có rail thay
+  thế — ẩn rail toàn cục lúc đó để người dùng ≥1024 px mất sạch điều hướng.
+- **Added — `apps/web-ui` `T60-017`** (`c718d65`). Hàm thuần `activeProgramSet()`
+  đọc `snapshot.objects[kind='PROGRAM']` của Active Revision; không tự gọi API
+  (tầng `api/queries` là đường HTTP duy nhất, trộn fetch vào đây sẽ tạo đường
+  đọc thứ hai không đi qua client sinh từ contract). Ba luật fail-closed: không
+  mượn Draft (`NO_ACTIVE_REVISION`, và `REVISION_MISMATCH` khi thân phản hồi
+  thuộc Revision khác); không chế số (`null` ⇒ `—`, không bao giờ `0`); rỗng
+  luôn kèm lý do. *Verification (HOST):* vitest **126 file / 1228 test, 1227
+  pass**, CTIO chạy lại độc lập cùng con số; `npm run lint` exit `0`;
+  `npm run build` exit `0`; `verify-project.sh --component layout` exit `0`.
+- **Added — `apps/web-api` `T60-011`/`T60-012`** (`0c953e1`). Core đã phát
+  `programs[]` từ `ad28a51` nhưng web-api chưa khai field nên `encoding/json` bỏ
+  qua toàn bộ khoá — mọi Program vô hình với BE. Giữ `[]T` để `nil` (Core đời cũ
+  ⇒ `UNAVAILABLE`) khác `[]` (Core sống, hệ không có Program nào) đi suốt ba
+  lớp; khai `omitempty` hay chuẩn hoá nil thành `[]` sẽ trộn hai tình huống đó
+  làm một và báo một bo không đọc được là "không có Program nào". Ánh xạ đặt
+  đúng chỗ đang dựng `Task` nên vẫn dùng chung **một** `point_snapshot` đã
+  coalesce — thêm round-trip riêng sẽ dựng lại đúng cuộc đụng độ đã sinh 503
+  ngắt quãng hồi 2026-08-14.
+- **Added — `apps/web-api` `T60-013`/`T60-014`** (`415dd45`).
+  `GET /projects/{id}/programs` ghép ý định bền vững với read-back sống, thêm
+  `runtimeStateSource ∈ {CORE_LIVE, LAST_KNOWN, UNAVAILABLE}`, `observedAt`,
+  `coreState`, `periodMs`, `lastExecNs`, `maxExecNs`, `missedReleaseCount`,
+  `consecutiveMissedRelease`, `lastRunAtUtc`, `lastRunAgeMs`, `lane`. Đường đọc
+  **không ghi** bảng intent — một read-back không phải một ý định, để nó ghi đè
+  sẽ biến Program đang `FAULTED` thành "người vận hành đã tắt". Core im ⇒
+  `UNKNOWN` + `UNAVAILABLE` với **mọi** số đo `null`, kể cả khi store còn nhớ
+  trạng thái cũ. Cột `Last Exec` lấy **mốc** từ `lastRunMonoNs`, không lấy
+  `lastExecNs` (thời lượng). `health` do server tính (D-04), nullable, dùng
+  `consecutiveMissedRelease` chứ không dùng bộ đếm tích luỹ.
+- **Fixed — `STARTING`/`STOPPING` rò ra hợp đồng qua đường `LAST_KNOWN`**
+  (`415dd45`). CHECK constraint của
+  `program_runtime_intents.last_known_runtime_state` vẫn cho phép hai giá trị
+  đó, nên một dòng DB cũ sẽ đẩy UI kẹt vĩnh viễn ở một chuyển tiếp **không tồn
+  tại** — `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức
+  thì (D-07 cấm hai giá trị này). Nay lọc về `UNKNOWN`/`UNAVAILABLE`.
+- **Fixed — đính chính thứ tự công thức `health` (Plan 60 §4.2)** (`415dd45`).
+  Điều 6 (`ROLLED_BACK ⇒ DEGRADED`) xếp **sau** điều 3 (`WAITING ⇒ null`) trong
+  khi §4.1 ánh xạ `ROLLED_BACK → WAITING`, nên điều 6 là **chữ chết** — mâu
+  thuẫn với chính §4.1 và phần lời D-07. Thứ tự đúng: 1 → 2 → 6 → 3 → 4 → 5 → 7.
+  Bổ sung điều kiện tiên quyết chưa ghi cho điều 5: bỏ qua khi `periodMs = 0`,
+  vì so với ngưỡng `0,8 × 0` sẽ dán `DEGRADED` cho mọi Program từng chạy dù chỉ
+  một nano-giây.
+- **Changed — `desiredEnabled` trở thành nullable** (`415dd45`). Program đang
+  chạy trong Core mà Project chưa từng ghi intent ra `null` thay vì `false` —
+  điền `false` sẽ đọc thành "có người đã tắt nó". Type FE cần `| null` khi làm
+  `T60-016`.
+- **Added — `apps/web-ui` `T60-103`** (`c9539ef`). *Triệu chứng:* sau `T60-102`,
+  nút `Chi tiết` chỉ là một seam — mọi UUID đã bị gỡ khỏi mặt trước theo
+  `AC-PGM01-01` nhưng chưa có bề mặt nào đọc lại `revisionId`/`controllerId`,
+  nên gỡ đi mà không dựng lối đọc thay thế là **xoá dữ liệu** chứ không phải làm
+  gọn. *Cách sửa:* `ContextDetailsPopover` — dialog **không modal** neo dưới nút
+  (lớp phủ toàn màn hình sẽ che chính cái strip mà nó đang giải thích), bảy dòng
+  dữ kiện, mỗi dòng một nút `Copy` có `aria-label` riêng; `Esc` đóng và **trả
+  tiêu điểm về đúng nút đã mở**; bấm ra ngoài đóng nhưng không giật tiêu điểm.
+  Luật ô trống tách sang hàm thuần `contextDetails.ts`: `value` rỗng ⇔ bắt buộc
+  có `missingReason`, chuỗi rỗng/khoảng trắng bị coi là thiếu (nếu không, `Copy`
+  đặt chuỗi rỗng vào clipboard người dùng). `copyToClipboard` nuốt gọn cả hai
+  nhánh hỏng của `navigator.clipboard` nên không promise reject nào làm hỏng
+  strip. *Verification (HOST):* vitest **128 file / 1262 test, 1261 pass**;
+  lint/build exit `0`. 34 test mới; `ProgrammingContextStrip.test.tsx` +45/−0.
+- **Fixed — cảnh báo mất kết nối giả trong popover** (`c9539ef`). Bản đầu dùng
+  cờ nhị phân `coreReadable`, nên trong lần đọc đầu (`status === 'loading'`,
+  `data` còn `null`) popover nói **"Không đọc được từ Core"** — dán một cảnh báo
+  sai lên mỗi lần vào trang. Đổi thành `coreStatus` ba giá trị
+  (`loading`/`readable`/`unreadable`) với thứ tự thắng *đang đọc → Core im → lý
+  do nghiệp vụ*, để "đang đọc lần đầu" không bị nói thành "không đọc được" và
+  "Core im" không bị nói thành "chưa Commission" (README §5.4).
+- **Added — `T59-702` đóng gói hộ, KHÔNG thuộc Plan 60** (`261557c`). Toàn bộ
+  công việc của luồng T59-702 nằm chưa commit trong cây từ 2026-08-23 11:00–11:37
+  (`POST /runtime/recovery-reset` admin-only, Core `program_ipc_server` +
+  `programming_runtime_coordinator` + `st_journal`, schema/golden IPC,
+  `draft_v2.programOrder`, client sinh lại 31 → 32 operation,
+  `scripts/target_soak_10program.py`). Tách thành **commit riêng** để lịch sử
+  không trộn hai luồng. Lý do đóng gói lúc này: `client.ts` được **sinh tự động**
+  từ `openapi.yaml`, mà file đó đã mang endpoint của luồng này, nên `T60-016`
+  không thể chạm tới OpenAPI mà không kéo theo — không tách được bằng thủ thuật
+  hunk vì bản sinh phải khớp bản OpenAPI đã commit thì `check:programming-api`
+  mới xanh. Phần duy nhất do Plan 60 viết trong commit đó là cập nhật
+  `client.test.ts` 31 → 32 kèm khẳng định RBAC admin-only — hoàn tất nốt việc
+  đang dở khiến **gate FE đỏ suốt từ 11:37 hôm trước**.
+- **Changed — Plan 60 §6**: thêm `T60-103` chuyển `DONE` (**14/27**). §8:
+  `AC-PGM01-01` nay đóng **cả hai chiều** — mặt trước sạch UUID, mở `Details`
+  lộ đủ, `Esc` thì UUID biến mất khỏi DOM chứ không nằm ẩn.
+- **Added — `T60-016`: OpenAPI `1.26.0` → `1.27.0`, sinh type FE từ contract**
+  (`b981e54`). *Triệu chứng:* `T60-013/014/015` đã đổi hình dạng phản hồi thật
+  nhưng contract vẫn khai `ProgrammingProgramIntentList` với đúng hai trường —
+  FE muốn dựng bảng Programs thì phải viết tay type theo trí nhớ hoặc đi đọc code
+  Go. *Nguyên nhân gốc:* script sinh client chỉ sinh **bảng endpoint**, không
+  sinh type từ schema, nên mọi schema đọc buộc phải khai tay và không cổng nào
+  bắt chúng khớp OpenAPI. Type khai tay không lệch ồn ào — nó lệch **im lặng**;
+  bằng chứng còn trong repo: enum `runtimeState` khai tay vẫn mang
+  `STARTING`/`STOPPING`, hai giá trị D-07 đã loại. *Cách sửa:*
+  `ProgrammingProgramsPage` + `ProgrammingProgramListItem` (6 + 19 trường), mọi
+  trường `required` kể cả khi nullable; ba enum tách riêng với
+  `ProgrammingProgramRuntimeState` **đúng năm giá trị**; `health` nullable ở
+  **chỗ dùng** chứ không nhét `null` vào enum. Hai schema intent cũ **xoá hẳn** —
+  giữ lại nghĩa là contract đồng thời khẳng định `desiredEnabled` bắt buộc
+  `boolean` và `runtimeState` có thể `STARTING`, nằm ngay cạnh schema nói ngược
+  lại. Generator nay sinh type thẳng từ schema và **ném lỗi** ở mọi nhánh không
+  hiểu thay vì trả `unknown` (một `unknown` lặng lẽ sẽ tắt đúng phần kiểm kiểu
+  mà tệp sinh sinh ra để có). Số operation giữ **32** — đổi hình dạng phản hồi,
+  không thêm route.
+- **Fixed — `ProgrammingRevision.snapshot` khai optional trong khi server luôn
+  gửi** (`b981e54`). Do chính test mới của `contract_sync_test.go` tìm ra.
+  Contract lỏng hơn thứ server bảo đảm sẽ buộc client viết một nhánh "thiếu
+  snapshot" không bao giờ chạy tới. Test mới đọc trường JSON thật bằng `reflect`
+  trên struct handler serialize và khoá bất biến `omitempty` ⇔ `required`; đã ép
+  đỏ bằng đột biến (`lane` → `laneX`) để chứng minh không phải cổng giả.
+- **Changed — re-pin G1 `openapi` theo `1.27.0`** (`dfc8e48`). Hash CTIO tự tính
+  lại bằng `sha256sum` trên chính file đã commit, không lấy theo lời khai của
+  lane. `operationCount` giữ 32. Tách commit riêng nhưng **đi cùng PR** với thay
+  đổi contract sinh ra nó (bài học `TASK-PROG-G1-CONTRACT-REPIN-001`).
+- **Changed — `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` lên `v4.2`**: đồng bộ
+  `OpenAPI v1.26.0` → `v1.27.0` ở hai dòng trạng thái hiện hành. Dòng revision
+  history giữ nguyên `1.26.0` vì đó là lịch sử, không phải trạng thái.
+- **Changed — Plan 60 §6**: `T60-016` chuyển `DONE` (**15/27**). **Mốc M3 ĐẠT** —
+  type đã sinh (không dòng nào viết tay), `contract_sync_test.go` xanh,
+  `check:programming-api` xanh (32 operation đồng bộ).
+- **Added — PGM-01 `T60-201` + `T60-205`** (`9733a37`). `resolvePrimaryCta.ts` +
+  `overviewViewModel.ts` là **hàm thuần có test riêng**, hiện thực đúng bảng năm
+  trạng thái của handoff §3. Quan trọng nhất là **nhánh thứ sáu**: thiếu dữ kiện
+  thì KHÔNG đoán CTA nào cả — khi chưa đọc được trạng thái, câu trả lời đúng là
+  im lặng chứ không phải rơi bừa vào một hành động; một nút Commission hiện ra
+  nhầm lúc là một nút nguy hiểm. `ProgramsSummaryTable` sáu cột theo D-02, **không
+  cột Task** (từ T59-402 mỗi Program tự release theo chu kỳ riêng nên Task không
+  còn là đơn vị chạy) và không cột CPU/core. Cột `Last Exec` lấy **mốc**
+  (`lastRunAtUtc`), không bao giờ lấy `lastExecNs` là **thời lượng**.
+- **Fixed — hai lỗi trong test do lượt trước để lại** (`9733a37`): một assertion
+  chết (`getByText(...).length ?? 1` luôn truthy vì `getByText` trả HTMLElement
+  không có `.length`) và một hằng khai thừa. Không xoá case nào.
+- **Added — PGM-01 `T60-202` + `T60-206`** (`7a2cd4c`). `SystemHealthHero` hợp
+  nhất bốn dữ kiện và **giữ nguyên phân biệt sống còn** giữa
+  `safeStateNoControllerOnly` (cảnh báo nhẹ, Commission là cách giải quyết, không
+  khoá Commission) và safe-state do lỗi thật (nghiêm trọng, giữ Commission khoá)
+  — khác nhau ở mức nghiêm trọng, **câu chữ** và **hệ quả vận hành**, không chỉ ở
+  màu. Kết luận tổng xếp `unknown` **trên** `good` nên màn hình không bao giờ nói
+  "ổn định" khi còn dữ kiện chưa đọc được. `QuickActions` full-width, không nút
+  nào là primary; RBAC vô hiệu hoá **kèm lý do**, dùng `aria-disabled` chứ không
+  dùng `disabled` — `disabled` gỡ nút khỏi thứ tự tab nên người dùng bàn phím sẽ
+  không bao giờ tới được chính lời giải thích viết cho họ.
+- **Added — PGM-01 `T60-203` + `T60-204`** (`2da8258`). Thẻ so sánh dùng nhãn
+  `Draft #14`/`Active #12` (D-05), không lộ UUID kể cả trong drawer; `dirty=null`
+  **không** được đọc thành "sạch" nên không thu gọn thẻ. Số thay đổi **chỉ** đến
+  từ `changes[]` của server — FE không tự diff, và ba nhánh chưa-có-số không
+  render chữ số nào.
+- **Fixed — mục cần chú ý không còn deep-link về một đích cứng** (`2da8258`).
+  Mọi mục trước đây đều nhảy về `/eng/programming/runtime`: bấm một cảnh báo về
+  ánh xạ Điểm rồi bị ném sang trang Runtime, nơi không có gì liên quan. Nay mỗi
+  mục mang một **trang chủ quản** và đích dựng từ đó; `PRG-SAFE-ACTIVE` biến thể
+  "chưa ai điều khiển" dẫn sang **Điểm & Ánh xạ** vì chỗ sửa nằm ở đó, không
+  phải Runtime. `BUG-016` trước đây chỉ sửa được phần "mục bấm được", không sửa
+  phần "bấm tới đâu".
+- **Fixed — `ProgrammingImpact` import mà không re-export** (`2da8258`), lộ ra ở
+  `npm run build` (TS2459) trong khi vitest vẫn xanh — đúng bẫy "vitest không
+  typecheck".
+- **Changed — Plan 60 §6**: `T60-201/202/203/204/206` chuyển `DONE` (**21/27**).
+- **Added — PGM-01 ráp trang + responsive `T60-205`/`T60-207`/`T60-208`**
+  (`62a9d0d`). Sáu khối đã viết xong nhưng KHÔNG khối nào được render — trang vẫn
+  là năm panel cũ. Nay ráp đủ, ma trận sáu nhánh §6 có case riêng từng nhánh.
+  Dưới 768 px bảng Programs đổi sang **thẻ gọn**: `overflow-x-auto` đã đủ để bảng
+  không đẩy cả trang tràn ngang, nhưng nó vẫn bắt người dùng 390 px cuộn ngang
+  trong một ô lồng giữa trang cuộn dọc — thao tác dễ trượt nhất trên cảm ứng.
+  Trong thẻ, tên Program **không** là nút riêng: cả thẻ đã là vùng bấm, hai điều
+  khiển chồng nhau làm cùng một việc khiến trình đọc màn hình đọc ra hai đích cho
+  một mục. **R60-02 giữ nguyên**: `OverviewPage.test.tsx` đi từ 8 lên 25 case,
+  không dòng test nào bị xoá.
+- **Added — kiểm chứng `T60-301`/`T60-302`/`T60-304`** (`6aada96`, `5372207`).
+  E2E thêm bốn case (một primary CTA, quét regex UUID toàn trang, deep-link đúng
+  trang chủ quản, Core im vẫn cho sửa nhưng khoá Commission) và **đo thật**
+  1280×750 + 390 px bằng `boundingBox()`/`scrollWidth` thay vì khẳng định bằng
+  lời. Ma trận RBAC ghi rõ ở mức **HOST/component** chứ không dựng case E2E giả:
+  mock đăng nhập trả `role: admin` cứng, một case "viewer" trên phiên admin sẽ
+  xanh mà không chứng minh gì.
+- **Fixed — hai hồi quy E2E do Plan 60 đổi shell** (`6aada96`). `e2e/programming.
+  spec.ts` đỏ 4/10 sau khi rail thay tab ngang và bottom nav rút còn 4 đích. Cả
+  hai chỗ vỡ đều là hệ quả **có chủ đích**: một case khẳng định UUID *hiện* ở mặt
+  trước (AC-PGM01-01 cố ý đảo), một case duyệt sáu nhãn trong bottom nav. Sửa
+  bằng cách giữ nguyên KHẲNG ĐỊNH, chỉ đổi chỗ kiểm.
+- **Deployed — Foxlinx, đủ bốn tầng** (2026-08-24). FE + BE Go + FW SOM (Core
+  C++) + Fake MCU (kèm iobus, netcfg) lên `SOM-DDC-24-foxlinx`. Năm service
+  `active`; `health` trả `core/io_shm/iobus/mcu_connection/plc_shm` đều `ok`.
+  FE đúng bản (`index-DPr3piBt.js` trên bo trùng hash bản dựng cục bộ, dựng bằng
+  `npm run build:release` vì cờ Programming là **build-time**). `GLIBCXX` cao
+  nhất của các binary là **3.4.29**, dưới trần 3.4.30 của bo.
+  **Bằng chứng mức TARGET**: `T60-015` trả `activeSequence: null` (không phải
+  `0`); `T60-013` trả `runtimeStateSource: UNAVAILABLE` với **mọi** số đo `null`
+  — đúng nhánh (b) của mốc M2, không giá trị cũ nào được trình bày như đang sống.
+  Chi tiết + rollback: `docs/07_records/test-evidence/fw-som/2026-08-24-foxlinx-plan60-deploy.md`.
+- **Changed — Plan 60 §6**: **26/27 `DONE`**. Còn `T60-303` (E2E real-backend)
+  ở `NOT_RUN` — Commission trên bo dừng fail-closed vì `impact.activeOverrides`
+  và `impact.cutover` đều `UNAVAILABLE` khi Core ở `targetState: UNAVAILABLE`.
+  **Không phải hồi quy do Plan 60**: log Core trước lần deploy này có **0 dòng**
+  `programming_mode=st` và mọi Project trên bo đều `activeRevisionId: null`.
+  Runbook mở khoá đã ghi trong hồ sơ evidence.
+- **Changed — gate FE xanh hoàn toàn lần đầu**: `npx vitest --run --environment
+  jsdom src` → **128 file / 1262 test, TẤT CẢ PASS, exit `0`**.
+
+
+
+
+### Plan 60 Batch 0 — dựng baseline thi hành (2026-08-23)
+
+- **Changed — `docs/03_implementation/60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md`**
+  (Plan 60 v1.1 → **v1.2**). Nhánh thi hành `feat/plan60-pgm01` tách từ `main`;
+  re-pin `Baseline source` `a35f578` → **`aa08ac5`** và ghi **bảng baseline đo
+  thật** vào §1 (mức HOST): ctest **1227/1227**, Go 19 package `ok`, FE unit
+  **124 file / 1161 test**, E2E mock **10/10**, contract 31 operation, cổng
+  `verify-project.sh --component layout` và `docs_iso_harness.py --expect` đều
+  PASS — exit code đọc rời cho **cả** configure lẫn build.
+- **Fixed — đính chính trần mảng `programs[]` trong bảng §6** (`T60-001..004`).
+  *Triệu chứng:* plan chỉ định `std::array<RuntimeProgramSnapshot,
+  st_sched_limits::kMaxProgramsPerTask>` (=16). *Nguyên nhân gốc:* `programs[]`
+  là danh sách **toàn hệ thống** (duyệt mọi Task theo `T60-002`), nhưng plan lại
+  lấy trần **per-task**. *Cách sửa:* đổi sang `kMaxProgramsTotal` (**=32**;
+  `st_scheduler.hpp:68`), khớp cả Rev A (`st_profile_generated.hpp:34` = 32).
+  Giữ 16 sẽ cắt im lặng một nửa cấu hình 32 Program hợp lệ — đúng điều `T60-002`
+  cấm. Ngân sách payload cập nhật ~13 KiB trên trần 64 KiB.
+- **Added — Plan 60 §6.1**: `contracts/programming/g1_contract_join_v1.json` vào
+  nhóm file **chỉ CTIO sửa**, vì pin `openapi` (`T60-016` bump `1.26.0 → 1.27.0`)
+  và pin `ipc` nằm cùng file.
+- **Verification:** mọi số dòng §1/§2/§3 mà plan trích dẫn đã đối chiếu lại tại
+  `aa08ac5` và còn đúng (`st_scheduler.cpp:829` `last_exec_ns` là **thời lượng**;
+  `scan_loop.cpp:264` còn khuyết tật `tasks().front()`; `runtime_intent.go:199`;
+  `runtime.go:136` `taskPeriodsMs`; `NavRail.tsx:210` `w-[232px]`; OpenAPI
+  `1.26.0`). Baseline được đo trên **bản xuất sạch của `aa08ac5`** để không lẫn
+  thay đổi chưa commit của phiên khác đang sửa `apps/core/**`.
+- **Housekeeping:** thu hồi ~5 GB đĩa bằng cách xoá 12 thư mục build tái tạo
+  được, không được tham chiếu ở `scripts/`/CI — trong đó 6 thư mục có
+  `CMAKE_HOME_DIRECTORY` trỏ `services/` đã xoá (`PLAN-ARCH-RESTRUCT-002`), tức
+  nguồn của bẫy "configure hỏng nhưng ctest vẫn báo pass". `build/fw` giữ nguyên.
+
+### Prompt thi hành Plan 60 bằng đội multi-agent (2026-08-23)
+
+- **Added — `docs/03_implementation/PROMPT_PLAN60_CTIO_MULTIAGENT_EXECUTION.md`**
+  (`PROMPT-PLAN60-CTIO-MULTIAGENT` v1.0). Prompt cấp quyền CTIO điều phối đội
+  multi-agent thi hành trọn 27 task của `PLAN-FE-PGM-060`: chia **5 lane**
+  (Core C++ / BE Go / FE shell / FE overview / kiểm chứng) kèm **ma trận sở hữu
+  file** một-chủ-một-file, **giao thức git một-người-commit** (chỉ CTIO chạy
+  `git add`/`commit`, cấm `git add -A` và `reset --hard`) để chặn lại đúng lỗi
+  các phiên song song cuốn commit của nhau, lịch **5 batch** suy từ đồ thị phụ
+  thuộc Plan 60 §7, **3 mốc bàn giao** (`T60-003`/`T60-013`/`T60-016`) có tiêu
+  chí chứng cứ thay vì lời khai, 7 bẫy đã dính trước đây, ma trận gate theo
+  lane và mẫu prompt con để spawn lane agent.
+  Ràng buộc tài nguyên đo thật tại `aa08ac5`: đĩa còn ~14 GB (95% đầy) và
+  `build/` đã 18 GB ⇒ **không** dùng worktree-per-lane, cách ly bằng ma trận sở
+  hữu file; `build/fw` độc quyền Lane A; Playwright chỉ một tiến trình; trần
+  **ba** lane chạy song song. Prompt cũng ghim baseline Plan 60 (`a35f578`) đã
+  cũ so với `main` hiện tại nên Batch 0 phải dựng lại baseline và đo lại số
+  trước khi giao việc.
+
 ### Dọn tracker cuối Plan 59 (2026-08-23)
 
 - **Changed:** `T59-602` chuyển **PARTIAL → DONE** — phần còn lại của nó (bật

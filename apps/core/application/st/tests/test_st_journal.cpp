@@ -140,7 +140,7 @@ TEST(StJournal, EraseRemovesFileAndIsIdempotent)
     EXPECT_TRUE(j.erase()) << "xoá file đã không còn tồn tại vẫn phải là no-op thành công";
 }
 
-TEST(StJournal, DecideBootActionCoversAllFivePhasesPerDesignTable)
+TEST(StJournal, DecideBootActionCoversAllPhasesPerDesignTable)
 {
     struct Case { StJournalPhase phase; StJournalBootAction expect; };
     const Case cases[] = {
@@ -149,6 +149,9 @@ TEST(StJournal, DecideBootActionCoversAllFivePhasesPerDesignTable)
         {StJournalPhase::ACTIVE_CANDIDATE, StJournalBootAction::USE_LKG_CANDIDATE_NOT_AUTO_PUBLISHED},
         {StJournalPhase::FIRST_CYCLE_OK, StJournalBootAction::VERIFY_ACTIVE_THEN_FINISH_OR_LKG},
         {StJournalPhase::COMMITTED, StJournalBootAction::USE_COMMITTED_ACTIVE},
+        /* T59-702 — operator đã bỏ giao dịch không phục hồi được: boot sạch,
+         * không Active, không candidate. */
+        {StJournalPhase::RECOVERY_RESET, StJournalBootAction::COLD_START_AFTER_RECOVERY_RESET},
     };
     for (const Case& c : cases) {
         StJournalReadResult r;
@@ -157,6 +160,17 @@ TEST(StJournal, DecideBootActionCoversAllFivePhasesPerDesignTable)
         EXPECT_EQ(st_journal_decide_boot_action(r), c.expect)
             << "phase=" << st_journal_phase_name(c.phase);
     }
+}
+
+/* T59-702 — phase lạ (bản ghi của một Core MỚI HƠN) phải fail-closed, không
+ * được đoán. Đây là chiều dual-reader ngược: bo cũ đọc journal bo mới. */
+TEST(StJournal, UnknownPhaseRaisesIncidentInsteadOfGuessing)
+{
+    StJournalReadResult read;
+    read.status = StJournalReadStatus::OK;
+    read.record.phase = static_cast<StJournalPhase>(200);
+    EXPECT_EQ(st_journal_decide_boot_action(read),
+              StJournalBootAction::NO_VALID_RECORD_RAISE_INCIDENT);
 }
 
 } // namespace core

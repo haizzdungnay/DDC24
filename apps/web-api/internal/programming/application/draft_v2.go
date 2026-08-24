@@ -922,8 +922,46 @@ func setTaskCompat(document map[string]any, raw []byte) error {
 	if !allowedPeriodMs(payload.Task.PeriodMs) {
 		return ErrInvalidRequest
 	}
-	for _, program := range collectionOf(document, "programs") {
+	// T59-702 — `programOrder` phải THẬT SỰ chọn Program, không phải trang trí.
+	//
+	// Profile cho `maxTasks: 3` và ba chu kỳ `1000/5000/30000`, packager đã nhận
+	// `--period <program>=<ms>` theo từng Program, và `packageTopology` đã đếm
+	// Program theo từng chu kỳ. Nhưng tầng draft lại áp một `periodMs` cho MỌI
+	// Program, nên không có đường nào dựng một package nhiều chu kỳ — tức
+	// `VS-PROG-U05` ("10 Program / 3 period") không thể chạy bằng API sản phẩm,
+	// dù mọi tầng dưới đã sẵn sàng.
+	//
+	// Danh sách rỗng giữ nguyên nghĩa cũ (áp cho tất cả) để Project một chu kỳ
+	// không phải sửa gì.
+	programs := collectionOf(document, "programs")
+	if len(payload.Task.ProgramOrder) == 0 {
+		for _, program := range programs {
+			program["periodMs"] = payload.Task.PeriodMs
+			delete(program, "taskId")
+		}
+		return nil
+	}
+	selected := make(map[string]bool, len(payload.Task.ProgramOrder))
+	for _, id := range payload.Task.ProgramOrder {
+		selected[id] = true
+	}
+	matched := 0
+	for _, program := range programs {
+		id, _ := program["programId"].(string)
+		if !selected[id] {
+			continue
+		}
 		program["periodMs"] = payload.Task.PeriodMs
+		if payload.Task.TaskID != "" {
+			program["taskId"] = payload.Task.TaskID
+		}
+		matched++
+	}
+	// Một `programOrder` trỏ tới Program không tồn tại là lỗi người gọi, không
+	// phải một lệnh không-làm-gì: im lặng bỏ qua sẽ để lại một Task rỗng mà
+	// người dùng tưởng đã cấu hình xong.
+	if matched != len(selected) {
+		return ErrInvalidRequest
 	}
 	return nil
 }

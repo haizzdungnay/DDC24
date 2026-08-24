@@ -10,7 +10,7 @@ import type {
   ProgrammingOperationPage,
   ProgrammingOverridePage,
   ProgrammingPointCatalogPage,
-  ProgrammingProgramIntentList,
+  ProgrammingProgramsPage,
   ProgrammingLibraryPage,
   ProgrammingProjectPage,
   ProgrammingRevisionChanges,
@@ -108,17 +108,31 @@ export function useProgrammingProjects(): RemoteState<ProgrammingProjectPage> {
 }
 
 /**
- * `T59-503` — context PGM-01..06 phải đọc riêng desired intent và runtime
- * read-back của từng Program. Khi chưa xác định được Project, trả danh sách
+ * `T59-503` + `T60-013` — context PGM-01..06 phải đọc riêng desired intent và
+ * runtime read-back của từng Program. Khi chưa xác định được Project, trả trang
  * rỗng cục bộ để không dựng request với định danh giả; dependency đổi sang
  * `projectId` thật sẽ tự tải lại.
+ *
+ * HỢP ĐỒNG ĐÃ ĐỔI BẢN CHẤT (đọc kỹ trước khi dùng): `GET /projects/{id}/
+ * programs` nay trả một **trang** ghép ý định bền vững VỚI read-back sống của
+ * Core (`runtimeStateSource`, `periodMs`, `lastRunAtUtc`, `health`…), không
+ * còn là danh sách intent thuần. Tên hook giữ nguyên để không kéo theo một
+ * đợt đổi tên xuyên `ProgrammingLayout`/`ProgrammingContextStrip` ngoài phạm
+ * vi việc này; kiểu trả về `ProgrammingProgramsPage` mới là hợp đồng thật.
  */
-export function useProgrammingProgramIntents(projectId: string | undefined): RemoteState<ProgrammingProgramIntentList> {
+export function useProgrammingProgramIntents(projectId: string | undefined): RemoteState<ProgrammingProgramsPage> {
   const client = useProgrammingApiClient()
   const requestedProjectId = projectId ?? null
-  const load = useCallback((): Promise<{ projectId: string | null; value: ProgrammingProgramIntentList }> => {
-    if (!projectId) return Promise.resolve({ projectId: null, value: { items: [] } })
-    return client.request<ProgrammingProgramIntentList>('listProgrammingProgramIntents', { path: { projectId } })
+  const load = useCallback((): Promise<{ projectId: string | null; value: ProgrammingProgramsPage }> => {
+    // Chưa biết Project thì KHÔNG dựng một trang giả có `runtimeStateSource`
+    // đẹp: `UNAVAILABLE` là câu trả lời đúng cho "chưa đọc được từ đâu cả".
+    if (!projectId) {
+      return Promise.resolve({
+        projectId: null,
+        value: { schemaVersion: '1.0', projectId: '', runtimeStateSource: 'UNAVAILABLE', observedAt: null, programsTruncated: null, items: [] }
+      })
+    }
+    return client.request<ProgrammingProgramsPage>('listProgrammingProgramIntents', { path: { projectId } })
       .then((value) => ({ projectId, value }))
   }, [client, projectId])
   const resource = useProgrammingResource(load, 5000)
@@ -133,6 +147,31 @@ export function useProgrammingProgramIntents(projectId: string | undefined): Rem
     error: resource.error,
     refresh: resource.refresh
   }
+}
+
+/**
+ * `GET /revisions/{revisionId}` — thân Revision thô (`revisionId`, `sequence`,
+ * `contentHash`, `snapshot`). `T60-205` dùng nó cho **đúng một** việc: đọc tập
+ * Program của **Active Revision** qua `overview/activeProgramSet.ts`.
+ *
+ * Trả `unknown` chứ không phải một type hẹp: `snapshot` là object tự do trong
+ * contract, và `activeProgramSet()` đã là nơi duy nhất chịu trách nhiệm thu hẹp
+ * nó một cách fail-closed. Khai một type đẹp ở đây sẽ cho phép chỗ khác đọc
+ * thẳng `snapshot.objects` mà bỏ qua toàn bộ luật "không mượn Draft thay
+ * Active".
+ *
+ * `revisionId` rỗng ⇒ KHÔNG phát request và KHÔNG trả `{}`: hook giữ trạng thái
+ * `loading` do `load` bị treo sẽ nói dối, nên nhánh này reject để `RemoteState`
+ * vào `error` — tầng gọi phân biệt bằng `activeRevisionId === null` trước đó
+ * (`ActiveProgramSetReason.NO_ACTIVE_REVISION`), không bằng lỗi này.
+ */
+export function useProgrammingRevision(revisionId: string | null | undefined): RemoteState<unknown> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => {
+    if (!revisionId) return Promise.reject(new Error('revisionId is required'))
+    return client.request<unknown>('getProgrammingRevision', { path: { revisionId } })
+  }, [client, revisionId])
+  return useProgrammingResource(load, 0)
 }
 
 /** `GET /point-catalog` — tab Điểm & Ánh xạ có nhịp làm mới riêng (UX §0.1

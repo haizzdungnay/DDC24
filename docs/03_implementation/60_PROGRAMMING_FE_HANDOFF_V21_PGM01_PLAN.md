@@ -9,8 +9,9 @@
 | Chủ quản | Dev Lead (FE) + System Architect + Product Owner |
 | Authority đầu vào | `docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/README_FE_HANDOFF.md`, `PGM-01_OVERVIEW_FE_HANDOFF.md`, `assets/PGM-01_overview.png` |
 | Quan hệ với Plan 59 | **Bổ sung, không thay thế.** Plan 59 sở hữu contract/runtime/lifecycle; Plan này sở hữu delta UI của handoff v2.1 |
-| Baseline source | `a35f578` (nhánh `feat/t59-201-control-library-domain`) |
+| Baseline source | `aa08ac5` (= `main`, đo lại 2026-08-23 tại Batch 0). Baseline cũ `a35f578` (nhánh `feat/t59-201-control-library-domain`) **đã lạc hậu**; nhánh thi hành Plan 60 là `feat/plan60-pgm01` tách từ `main` |
 | Phạm vi | Shell dùng chung (README §3) + **PGM-01 Overview trọn vẹn**. PGM-02..06 **ngoài phạm vi** (chỉ thừa hưởng shell) |
+| Prompt thi hành | [`PROMPT-PLAN60-CTIO-MULTIAGENT`](PROMPT_PLAN60_CTIO_MULTIAGENT_EXECUTION.md) v1.0 — đội 5 lane, ma trận sở hữu file, lịch 5 batch |
 
 ---
 
@@ -60,8 +61,25 @@ truy nguyên `AC-PGM01-01..06`.
 | Bảng dùng chung | `shared/components/DataTable.tsx` | Có sẵn, hỗ trợ loading/error/empty |
 | Rail toàn cục | `shared/components/NavRail.tsx` | Rail 4 nhóm của toàn app (`ADR-032`), có hợp đồng test route↔menu |
 
-Số đo FE gần nhất được ghi nhận (Plan 59 §3.6, `T59-503`): **124 file / 1161 test**,
-E2E mock **61/61**. Plan này **không dẫn lại số đó làm bằng chứng**; mọi task phải đo lại.
+**Baseline đo lại tại `aa08ac5` (Batch 0, 2026-08-23, mức HOST)** — đo trên bản
+xuất sạch của `aa08ac5`, không lẫn thay đổi chưa commit của phiên khác:
+
+| Cổng | Lệnh | Số đo | Exit |
+|---|---|---|---|
+| C++ | `cmake --fresh` → `cmake --build` → `ctest` | **1227/1227 pass** | configure `0` / build `0` / ctest `0` |
+| Go | `go vet ./...` + `go test ./... -count=1` | 19 package `ok`, 0 fail | `0` / `0` |
+| FE unit | `npx vitest --run --environment jsdom src` | **124 file / 1161 test pass** | `0` |
+| FE lint | `npm run lint` | pass (kèm `check_ui_strings.py`) | `0` |
+| FE build | `npm run build` | pass, 995 ms | `0` |
+| E2E mock | `npx playwright test e2e/programming.spec.ts` | **10/10 pass** | `0` |
+| Contract | `npm run check:programming-api` | 31 operation đồng bộ | `0` |
+| Cổng dự án | `scripts/verify-project.sh --component layout` | PASS toàn bộ | `0` |
+| Tài liệu | `python3 scripts/docs_iso_harness.py --expect` | PASS, khớp ngưỡng | `0` |
+
+Số cũ của Plan 59 §3.6 (`124 file / 1161 test`, E2E mock `61/61`) **không được dẫn
+lại làm bằng chứng**; bảng trên là số đo của chính Plan 60. Con số E2E `61/61` là
+của **toàn bộ** thư mục `e2e/`; cổng mà Plan 60 dùng (`e2e/programming.spec.ts`)
+là **10** case.
 
 ---
 
@@ -177,6 +195,22 @@ Xét theo thứ tự, dừng ở điều kiện khớp đầu tiên:
 | 6 | Core state là `ROLLED_BACK` | `DEGRADED` |
 | 7 | còn lại (`RUNNING`, không dấu hiệu nào) | `HEALTHY` |
 
+**ĐÍNH CHÍNH THỨ TỰ (2026-08-23, khi thi hành `T60-014`).** Điều 6
+(`ROLLED_BACK ⇒ DEGRADED`) phải được xét **NGAY TRƯỚC** điều 3, không phải sau.
+`ROLLED_BACK` ánh xạ thành `WAITING` theo §4.1, nên với thứ tự viết ban đầu điều
+3 (`WAITING ⇒ null`) luôn khớp trước và **điều 6 không bao giờ chạy tới được** —
+trái với chính bảng §4.1 và phần lời D-07 (*"việc đã có rollback được nói bằng
+`health = DEGRADED`, đúng chỗ của nó"*). Thứ tự đúng: **1 → 2 → 6 → 3 → 4 → 5 →
+7**. Không điều nào khác đổi vị trí. Đây là sửa lỗi soạn thảo để D-04 **thi hành
+được**, không phải đảo quyết định: cả hai chỗ khác của cùng quyết định đều đòi
+`DEGRADED`, chỉ riêng bảng §4.2 xếp sai chỗ làm điều khoản đó thành chữ chết.
+
+**Điều 5 có một điều kiện tiên quyết chưa ghi:** bỏ qua khi `periodMs = 0`. Core
+phát `period_ms = 0` khi không phân giải được chu kỳ hiệu lực; so với ngưỡng
+`0,8 × 0` sẽ dán `DEGRADED` cho mọi Program từng chạy dù chỉ một nano-giây. Cài
+đặt so bằng số nguyên (`periodMs × 800_000` ns) để không phụ thuộc làm tròn dấu
+phẩy động ở đúng cạnh ngưỡng.
+
 **Không dùng `missedReleaseCount` tuyệt đối** cho điều kiện 4: nó là bộ đếm tích luỹ
 từ lúc start, nên một lần lỡ nhịp cách đây một giờ sẽ ghim Program ở `DEGRADED` vĩnh
 viễn. Vì vậy `T60-001/002` thêm `consecutive_missed_release` — đặt cùng chỗ đang cộng
@@ -226,6 +260,18 @@ features/programming/
 
 ## 6. Bảng nhiệm vụ
 
+### 6.1 File dùng chung — chỉ CTIO sửa
+
+`CHANGELOG.md`, Plan 60 (file này), `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md`
+và **`contracts/programming/g1_contract_join_v1.json`**. Lane trả về khối văn bản
+đề xuất; CTIO dán vào và commit.
+
+File thứ tư được thêm ở Batch 0 vì nó là **điểm va chạm đã biết**: pin `openapi`
+(do `T60-016` bump `1.26.0 → 1.27.0`) và pin `ipc` nằm **cùng một file**, và pin
+`ipc` đang được một phiên khác sửa song song. Re-pin phải đi cùng PR với thay đổi
+contract sinh ra nó (bài học `TASK-PROG-G1-CONTRACT-REPIN-001`), nên việc này bị
+tập trung về CTIO thay vì để hai bên cùng ghi.
+
 ### P0-A — FW SOM (Core C++): mở đường xuất trạng thái theo Program
 
 Toàn bộ phép đo **đã có sẵn và đã chạy** trong scheduler. Bốn task dưới đây chỉ
@@ -239,58 +285,58 @@ JSON có tên trường nên thêm trường là **tương thích ngược**, kh
 
 | Mã | Ưu tiên | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---|
-| `T60-001` | P0 | Thêm `RuntimeProgramSnapshot` vào `apps/core/domain/graph/runtime_point_snapshot.hpp` và mảng **kích thước cố định** `std::array<RuntimeProgramSnapshot, st_sched_limits::kMaxProgramsPerTask>` (=16) + `program_count` vào `RuntimePointSnapshot`. Trường: `instance_id[65]`, `state[12]`, `enabled`, `period_ms`, `last_exec_ns`, `max_exec_ns`, `missed_release_count`, **`consecutive_missed_release`** (mới, cho D-04 §4.2), **`last_run_mono_ns`** (mới), `lane`. **Lưu ý đọc nhầm rất dễ xảy ra:** `last_exec_ns` của Core là **THỜI LƯỢNG** một lần chạy (`wall_clock_() - program_start`, `st_scheduler.cpp:829`), **không phải mốc thời gian**. Cột `Last Exec` của thiết kế là mốc thời gian ⇒ bắt buộc có `last_run_mono_ns` riêng. **Không dùng heap** — struct này nằm trên đường realtime, giữ đúng khuôn `std::array` như `rows`/`task` hiện có. | — | `READY` | 0,5 nd |
-| `T60-002` | P0 | Điền mảng ở `apps/core/application/runtime/scan_loop.cpp` (~dòng 262). **Sửa luôn khuyết tật đang có:** khối hiện tại lấy `d_.st_sched->tasks().front()` và báo cáo nó như thể là *Task duy nhất* — sai từ khi `T59-402/403` cho Program chu kỳ riêng và lane riêng. Duyệt đủ Program của mọi Task; `program_count` cắt ở 16 và **đánh dấu bị cắt**, không im lặng bỏ bớt. Đặt `last_run_mono_ns` tại đúng chỗ đang tính `last_exec_ns` (`st_scheduler.cpp:829`) và `consecutive_missed_release` tại chỗ đang cộng `missed_release_count` (`st_scheduler.cpp:105-118`), reset về 0 khi release đúng hạn. | `T60-001` | `READY` | 1,5 nd |
-| `T60-003` | P0 | Serialize `"programs":[…]` trong `runtime_point_snapshot.cpp` (cạnh khối `"task"`, ~dòng 213-230), giữ `noexcept` + bounded. Ngân sách: payload hiện ~5 KiB (24 row + task) trên trần `KX_POINT_SNAPSHOT_MAX_PAYLOAD` = **64 KiB**; 16 Program thêm ~3 KiB ⇒ ~8 KiB, còn xa trần. Tràn vẫn đi đúng nhánh fail-closed sẵn có (`serialize` trả `false` ⇒ `snapshot_ = {}`), **không cắt cụt JSON**. | `T60-001` | `READY` | 0,5 nd |
-| `T60-004` | P0 | Test Core: đủ 16 Program; nhiều Task nhiều chu kỳ; Program `DISABLED`; scheduler rỗng ⇒ `programs: []` (không phải thiếu khoá); ép `set_snapshot_payload_limit_for_test` để chứng minh nhánh tràn fail-closed; round-trip serialize→parse; `consecutive_missed_release` **reset về 0** sau một chu kỳ đúng hạn (chống hồi quy công thức §4.2 điều 4). | `T60-002`, `T60-003` | `READY` | 1 nd |
+| `T60-001` | P0 | Thêm `RuntimeProgramSnapshot` vào `apps/core/domain/graph/runtime_point_snapshot.hpp` và mảng **kích thước cố định** `std::array<RuntimeProgramSnapshot, st_sched_limits::kMaxProgramsTotal>` (**=32**) — **đính chính Batch 0:** bản 1.1 ghi `kMaxProgramsPerTask` (=16), nhưng `programs[]` là danh sách **toàn hệ thống** (mọi Task), nên trần đúng là `kMaxProgramsTotal`; Rev A cũng cho `kMaxProgramsTotal = 32` (`st_profile_generated.hpp:34`). Dùng trần per-task 16 sẽ **cắt mất một nửa** cấu hình 32 Program hợp lệ — đúng thứ task này cấm + `program_count` vào `RuntimePointSnapshot`. Trường: `instance_id[65]`, `state[12]`, `enabled`, `period_ms`, `last_exec_ns`, `max_exec_ns`, `missed_release_count`, **`consecutive_missed_release`** (mới, cho D-04 §4.2), **`last_run_mono_ns`** (mới), `lane`. **Lưu ý đọc nhầm rất dễ xảy ra:** `last_exec_ns` của Core là **THỜI LƯỢNG** một lần chạy (`wall_clock_() - program_start`, `st_scheduler.cpp:829`), **không phải mốc thời gian**. Cột `Last Exec` của thiết kế là mốc thời gian ⇒ bắt buộc có `last_run_mono_ns` riêng. **Không dùng heap** — struct này nằm trên đường realtime, giữ đúng khuôn `std::array` như `rows`/`task` hiện có. | — | `DONE` | 0,5 nd |
+| `T60-002` | P0 | Điền mảng ở `apps/core/application/runtime/scan_loop.cpp` (~dòng 262). **Sửa luôn khuyết tật đang có:** khối hiện tại lấy `d_.st_sched->tasks().front()` và báo cáo nó như thể là *Task duy nhất* — sai từ khi `T59-402/403` cho Program chu kỳ riêng và lane riêng. Duyệt đủ Program của mọi Task; `program_count` cắt ở **32** (`kMaxProgramsTotal`, xem đính chính ở `T60-001`) và **đánh dấu bị cắt**, không im lặng bỏ bớt. Đặt `last_run_mono_ns` tại đúng chỗ đang tính `last_exec_ns` (`st_scheduler.cpp:829`) và `consecutive_missed_release` tại chỗ đang cộng `missed_release_count` (`st_scheduler.cpp:105-118`), reset về 0 khi release đúng hạn. | `T60-001` | `DONE` | 1,5 nd |
+| `T60-003` | P0 | Serialize `"programs":[…]` trong `runtime_point_snapshot.cpp` (cạnh khối `"task"`, ~dòng 213-230), giữ `noexcept` + bounded. Ngân sách: payload hiện ~5 KiB (24 row + task) trên trần `KX_POINT_SNAPSHOT_MAX_PAYLOAD` = **64 KiB**; **32** Program thêm ~8 KiB (≈250 B/Program ở trường hợp xấu nhất: `instanceId` 64 ký tự + 6 số) ⇒ ~13 KiB, còn xa trần. Tràn vẫn đi đúng nhánh fail-closed sẵn có (`serialize` trả `false` ⇒ `snapshot_ = {}`), **không cắt cụt JSON**. | `T60-001` | `DONE` | 0,5 nd |
+| `T60-004` | P0 | Test Core: đủ **32** Program (chạm trần `kMaxProgramsTotal`); nhiều Task nhiều chu kỳ; Program `DISABLED`; scheduler rỗng ⇒ `programs: []` (không phải thiếu khoá); ép `set_snapshot_payload_limit_for_test` để chứng minh nhánh tràn fail-closed; round-trip serialize→parse; `consecutive_missed_release` **reset về 0** sau một chu kỳ đúng hạn (chống hồi quy công thức §4.2 điều 4). | `T60-002`, `T60-003` | `DONE` | 1 nd |
 
 ### P0-B — BE (Go web-api): nối read-back sống và tính `health`
 
 | Mã | Ưu tiên | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---|
-| `T60-011` | P0 | Decode `programs[]`: thêm field vào `webIPCResponse` (`internal/app/core_client.go:108-131`) và `RuntimePointSnapshot` (`internal/app/dto.go:272-283`). Vắng khoá ⇒ `nil`, **khác** mảng rỗng: Core cũ chưa có trường này phải ra `UNAVAILABLE`, không phải "không có Program nào". | `T60-003` | `ORDERED` | 0,5 nd |
-| `T60-012` | P0 | `MonitorTruthSnapshot.Programs` + ánh xạ ở `internal/app/programming_pointcatalog.go:45-80` (cùng chỗ đang dựng `Task`). Giữ nguyên đường coalescing `point_snapshot` hiện có — Core chỉ phát **một** snapshot mỗi scan cycle. | `T60-011` | `ORDERED` | 0,5 nd |
-| `T60-013` | P0 | `GET /projects/{id}/programs` ghép **intent bền vững** (store) + **read-back sống** (snapshot). Thêm `runtimeStateSource ∈ {CORE_LIVE, LAST_KNOWN, UNAVAILABLE}`, `observedAt`, `lastExecNs`, `maxExecNs`, `missedReleaseCount`, `periodMs`. **Không ghi đè bảng intent**; Core im ⇒ `UNKNOWN` + `UNAVAILABLE`, tuyệt đối không trả giá trị cũ như thể đang sống. Ánh xạ trạng thái theo D-07. | `T60-012` | `ORDERED` | 1,5 nd |
-| `T60-014` | P0 | `health` do server tính theo D-04, kèm test biên: 0 lỡ nhịp; có lỡ nhịp; overrun liên tiếp; Core im; Program `DISABLED` (không phải `FAULT`). | `T60-013` | `ORDERED` | 1 nd |
-| `T60-015` | P1 | Hai giá trị dẫn xuất đã có dữ liệu trong DB (nhóm B §3.1): cờ `dirty` = `drafts.content_sha256` ≠ `content_hash` của base revision; và `revisions.sequence` lộ ra `GET /revisions/{id}` + `draftSequence`/`activeSequence` ở item `GET /projects`. **Không cần migration** — cả hai cột đã tồn tại từ `0001_programming_v1.sql`. | — | `READY` | 0,5 nd |
-| `T60-016` | P0 | OpenAPI `1.26.0 → 1.27.0` + `scripts/generate-programming-client.mjs` + type FE + `contract_sync_test.go`. Không viết tay type đã sinh được. | `T60-013..015` | `ORDERED` | 1 nd |
+| `T60-011` | P0 | Decode `programs[]`: thêm field vào `webIPCResponse` (`internal/app/core_client.go:108-131`) và `RuntimePointSnapshot` (`internal/app/dto.go:272-283`). Vắng khoá ⇒ `nil`, **khác** mảng rỗng: Core cũ chưa có trường này phải ra `UNAVAILABLE`, không phải "không có Program nào". | `T60-003` | `DONE` | 0,5 nd |
+| `T60-012` | P0 | `MonitorTruthSnapshot.Programs` + ánh xạ ở `internal/app/programming_pointcatalog.go:45-80` (cùng chỗ đang dựng `Task`). Giữ nguyên đường coalescing `point_snapshot` hiện có — Core chỉ phát **một** snapshot mỗi scan cycle. | `T60-011` | `DONE` | 0,5 nd |
+| `T60-013` | P0 | `GET /projects/{id}/programs` ghép **intent bền vững** (store) + **read-back sống** (snapshot). Thêm `runtimeStateSource ∈ {CORE_LIVE, LAST_KNOWN, UNAVAILABLE}`, `observedAt`, `lastExecNs`, `maxExecNs`, `missedReleaseCount`, `periodMs`. **Không ghi đè bảng intent**; Core im ⇒ `UNKNOWN` + `UNAVAILABLE`, tuyệt đối không trả giá trị cũ như thể đang sống. Ánh xạ trạng thái theo D-07. | `T60-012` | `DONE` | 1,5 nd |
+| `T60-014` | P0 | `health` do server tính theo D-04, kèm test biên: 0 lỡ nhịp; có lỡ nhịp; overrun liên tiếp; Core im; Program `DISABLED` (không phải `FAULT`). | `T60-013` | `DONE` | 1 nd |
+| `T60-015` | P1 | Hai giá trị dẫn xuất đã có dữ liệu trong DB (nhóm B §3.1): cờ `dirty` = `drafts.content_sha256` ≠ `content_hash` của base revision; và `revisions.sequence` lộ ra `GET /revisions/{id}` + `draftSequence`/`activeSequence` ở item `GET /projects`. **Không cần migration** — cả hai cột đã tồn tại từ `0001_programming_v1.sql`. | — | `DONE` | 0,5 nd |
+| `T60-016` | P0 | OpenAPI `1.26.0 → 1.27.0` + `scripts/generate-programming-client.mjs` + type FE + `contract_sync_test.go`. Không viết tay type đã sinh được. | `T60-013..015` | `DONE` | 1 nd |
 
 ### P0-C — Nối FE tới dữ liệu đã có sẵn
 
 | Mã | Ưu tiên | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---|
-| `T60-017` | P0 | **Không cần BE mới** (nhóm A §3.1): adapter FE đọc `GET /revisions/{activeRevisionId}` → `snapshot.objects[kind='PROGRAM']` lấy tên/`language`/`periodMs` khai báo của Program **đang chạy**. Thiếu Active ⇒ danh sách rỗng có lý do, **không mượn Draft**. | — | `READY` | 0,5 nd |
+| `T60-017` | P0 | **Không cần BE mới** (nhóm A §3.1): adapter FE đọc `GET /revisions/{activeRevisionId}` → `snapshot.objects[kind='PROGRAM']` lấy tên/`language`/`periodMs` khai báo của Program **đang chạy**. Thiếu Active ⇒ danh sách rỗng có lý do, **không mượn Draft**. | — | `DONE` | 0,5 nd |
 
 ### P1 — Shell dùng chung (README §3)
 
 | Mã | Ưu tiên | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---|
-| `T60-101` | P0 | `ProgrammingFeatureRail` 220 px dọc theo **focus mode** (D-01): trong `/eng/programming` rail này **thay** `NavRail` toàn cục. Bắt buộc mục `← Thoát Lập trình` ở đầu rail — không được để người dùng mắc kẹt trong workspace. 6 đích + `Project Settings`; tablet thu icon-only; `<768 px` ẩn hoàn toàn (nhường bottom nav). `NAV_GROUPS` **không đổi** nên hợp đồng route↔menu (`ADR-032`) không bị động tới — đây là chặn *render*, không phải xoá mục. Đích phụ thuộc Project vẫn vô hiệu hoá khi chưa có `projectId` (giữ hành vi `T59-503`). | — | `READY` | 2 nd |
-| `T60-102` | P0 | `ProgrammingContextStrip`: một hàng, cao 36–40 px, `position: sticky`, 5 dữ kiện bắt buộc + nút `Details`. **Bỏ mọi UUID khỏi mặt trước.** Giữ nguyên toàn bộ luật fail-closed đã có ở `ProgrammingContextBar` (không suy intent thành `RUNNING`; `UNKNOWN`/`stale`/`offline` tường minh) — đây là **đổi bố cục, không đổi ngữ nghĩa**. | — | `READY` | 2 nd |
-| `T60-103` | P1 | `ContextDetailsPopover`: revision ID thô, `contentHash`, `observedAt`, `controllerId`, mỗi dòng có nút `Copy`; mở/đóng bằng bàn phím, `Esc` đóng, trả focus. | `T60-102` | `ORDERED` | 1 nd |
-| `T60-104` | P1 | `shared/semanticState.ts`: 7 trạng thái ngữ nghĩa của README §3, ánh xạ sang `StatusBadge` hiện hữu, bổ sung `reconciling`/`disabled`; mỗi trạng thái **bắt buộc có icon + chữ**, không chỉ màu. | — | `READY` | 1 nd |
+| `T60-101` | P0 | `ProgrammingFeatureRail` 220 px dọc theo **focus mode** (D-01): trong `/eng/programming` rail này **thay** `NavRail` toàn cục. Bắt buộc mục `← Thoát Lập trình` ở đầu rail — không được để người dùng mắc kẹt trong workspace. 6 đích + `Project Settings`; tablet thu icon-only; `<768 px` ẩn hoàn toàn (nhường bottom nav). `NAV_GROUPS` **không đổi** nên hợp đồng route↔menu (`ADR-032`) không bị động tới — đây là chặn *render*, không phải xoá mục. Đích phụ thuộc Project vẫn vô hiệu hoá khi chưa có `projectId` (giữ hành vi `T59-503`). | — | `DONE` | 2 nd |
+| `T60-102` | P0 | `ProgrammingContextStrip`: một hàng, cao 36–40 px, `position: sticky`, 5 dữ kiện bắt buộc + nút `Details`. **Bỏ mọi UUID khỏi mặt trước.** Giữ nguyên toàn bộ luật fail-closed đã có ở `ProgrammingContextBar` (không suy intent thành `RUNNING`; `UNKNOWN`/`stale`/`offline` tường minh) — đây là **đổi bố cục, không đổi ngữ nghĩa**. | — | `DONE` | 2 nd |
+| `T60-103` | P1 | `ContextDetailsPopover`: revision ID thô, `contentHash`, `observedAt`, `controllerId`, mỗi dòng có nút `Copy`; mở/đóng bằng bàn phím, `Esc` đóng, trả focus. | `T60-102` | `DONE` | 1 nd |
+| `T60-104` | P1 | `shared/semanticState.ts`: 7 trạng thái ngữ nghĩa của README §3, ánh xạ sang `StatusBadge` hiện hữu, bổ sung `reconciling`/`disabled`; mỗi trạng thái **bắt buộc có icon + chữ**, không chỉ màu. | — | `DONE` | 1 nd |
 
 ### P2 — PGM-01 Overview
 
 | Mã | Ưu tiên | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---|
-| `T60-201` | P0 | `overviewViewModel.ts` + `resolvePrimaryCta.ts` — **hàm thuần, có test riêng**, hiện thực đúng bảng 5 trạng thái của handoff §3 (`Draft dirty → Continue Editing`; `Check failed → Fix Check Errors`; `Draft checked & khác Active → Review Changes`; `Ready → Commission`; `Không có thay đổi → Open Runtime`). CTA chỉ suy từ trạng thái server tường minh. | `T60-016` | `ORDERED` | 1,5 nd |
-| `T60-202` | P0 | `SystemHealthHero`: kết nối Core, trạng thái runtime, safe-state, mốc cập nhật authority gần nhất. Giữ nguyên phân biệt `safeStateNoControllerOnly` (cảnh báo nhẹ) ↔ safe-state do lỗi thật (nghiêm trọng) — đã có ở `OverviewPage` hiện hành, **không được làm mất khi viết lại**. | `T60-104` | `ORDERED` | 1,5 nd |
-| `T60-203` | P0 | `DraftActiveCompareCard`: Draft rev + dirty/checked/failed \| Active rev + Running/Stopped/Fault \| số thay đổi **chỉ khi** server trả; nút `Compare` mở drawer. `Draft == Active` ⇒ thu gọn thành “Không có thay đổi chờ vận hành”. | `T60-201`, `T60-015` | `ORDERED` | 2 nd |
-| `T60-204` | P0 | `NeedsAttentionCard`: sắp `fault → warning → info`; mỗi mục `severity + thông điệp người-đọc-được + thực thể + deep-link ĐÚNG trang chủ quản` (Programs/Mapping/Commission/Runtime), thay cho đích cứng `/runtime` hiện tại. Có “Xem tất cả (n)”. | `T60-201` | `ORDERED` | 1,5 nd |
-| `T60-205` | P0 | `ProgramsSummaryTable` 6 cột theo D-02; hàng bấm được → PGM-02 kèm POU đã chọn; **không cột CPU/core**; thiếu số liệu ⇒ `—` kèm lý do (`Chưa đọc được từ Core`), tuyệt đối không `0`; `runtimeStateSource=LAST_KNOWN` phải có nhãn “giá trị cũ”. | `T60-016`, `T60-017`, `T60-104` | `ORDERED` | 2 nd |
-| `T60-206` | P1 | `QuickActions` full-width, độ ưu tiên thị giác thấp (không nút nào là primary — primary chỉ có một, nằm ở `T60-201`); RBAC: viewer/operator thấy nhưng bị vô hiệu hoá kèm giải thích. | `T60-201` | `ORDERED` | 1 nd |
-| `T60-207` | P0 | Ma trận trạng thái đủ 6 nhánh của handoff §6: skeleton **khớp hình học** card/bảng; chưa có Project/Program; Core offline (banner dính, vẫn cho sửa, **khoá Commission**); runtime không đọc được ⇒ `Unknown` (không `0`, không `Stopped`); `Draft==Active`; permission denied giữ nguyên phần đọc. | `T60-202..206` | `ORDERED` | 2 nd |
-| `T60-208` | P1 | Responsive `<768 px`: card xếp chồng; bảng → thẻ gọn; **bottom nav rút còn 4 đích** Overview/Runtime/Check/More; không nội dung tràn ngang; không chuỗi UUID nằm ngang. | `T60-205` | `ORDERED` | 1,5 nd |
+| `T60-201` | P0 | `overviewViewModel.ts` + `resolvePrimaryCta.ts` — **hàm thuần, có test riêng**, hiện thực đúng bảng 5 trạng thái của handoff §3 (`Draft dirty → Continue Editing`; `Check failed → Fix Check Errors`; `Draft checked & khác Active → Review Changes`; `Ready → Commission`; `Không có thay đổi → Open Runtime`). CTA chỉ suy từ trạng thái server tường minh. | `T60-016` | `DONE` | 1,5 nd |
+| `T60-202` | P0 | `SystemHealthHero`: kết nối Core, trạng thái runtime, safe-state, mốc cập nhật authority gần nhất. Giữ nguyên phân biệt `safeStateNoControllerOnly` (cảnh báo nhẹ) ↔ safe-state do lỗi thật (nghiêm trọng) — đã có ở `OverviewPage` hiện hành, **không được làm mất khi viết lại**. | `T60-104` | `DONE` | 1,5 nd |
+| `T60-203` | P0 | `DraftActiveCompareCard`: Draft rev + dirty/checked/failed \| Active rev + Running/Stopped/Fault \| số thay đổi **chỉ khi** server trả; nút `Compare` mở drawer. `Draft == Active` ⇒ thu gọn thành “Không có thay đổi chờ vận hành”. | `T60-201`, `T60-015` | `DONE` | 2 nd |
+| `T60-204` | P0 | `NeedsAttentionCard`: sắp `fault → warning → info`; mỗi mục `severity + thông điệp người-đọc-được + thực thể + deep-link ĐÚNG trang chủ quản` (Programs/Mapping/Commission/Runtime), thay cho đích cứng `/runtime` hiện tại. Có “Xem tất cả (n)”. | `T60-201` | `DONE` | 1,5 nd |
+| `T60-205` | P0 | `ProgramsSummaryTable` 6 cột theo D-02; hàng bấm được → PGM-02 kèm POU đã chọn; **không cột CPU/core**; thiếu số liệu ⇒ `—` kèm lý do (`Chưa đọc được từ Core`), tuyệt đối không `0`; `runtimeStateSource=LAST_KNOWN` phải có nhãn “giá trị cũ”. | `T60-016`, `T60-017`, `T60-104` | `DONE` | 2 nd |
+| `T60-206` | P1 | `QuickActions` full-width, độ ưu tiên thị giác thấp (không nút nào là primary — primary chỉ có một, nằm ở `T60-201`); RBAC: viewer/operator thấy nhưng bị vô hiệu hoá kèm giải thích. | `T60-201` | `DONE` | 1 nd |
+| `T60-207` | P0 | Ma trận trạng thái đủ 6 nhánh của handoff §6: skeleton **khớp hình học** card/bảng; chưa có Project/Program; Core offline (banner dính, vẫn cho sửa, **khoá Commission**); runtime không đọc được ⇒ `Unknown` (không `0`, không `Stopped`); `Draft==Active`; permission denied giữ nguyên phần đọc. | `T60-202..206` | `DONE` | 2 nd |
+| `T60-208` | P1 | Responsive `<768 px`: card xếp chồng; bảng → thẻ gọn; **bottom nav rút còn 4 đích** Overview/Runtime/Check/More; không nội dung tràn ngang; không chuỗi UUID nằm ngang. | `T60-205` | `DONE` | 1,5 nd |
 
 ### P3 — Kiểm chứng
 
 | Mã | Ưu tiên | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---|
-| `T60-301` | P0 | Test component/hàm thuần: CTA resolver phủ **cả 5 hàng** bảng §3 + biên; view model; bảng Programs thiếu dữ liệu; popover Details; rail; context strip. | P1+P2 | `ORDERED` | 2 nd |
-| `T60-302` | P0 | E2E mock bổ sung vào `e2e/programming.spec.ts`: Draft≠Active, Core offline, deep-link từ mục cần chú ý, đúng-một-primary-CTA, không lộ UUID. | `T60-301` | `ORDERED` | 1,5 nd |
+| `T60-301` | P0 | Test component/hàm thuần: CTA resolver phủ **cả 5 hàng** bảng §3 + biên; view model; bảng Programs thiếu dữ liệu; popover Details; rail; context strip. | P1+P2 | `DONE` | 2 nd |
+| `T60-302` | P0 | E2E mock bổ sung vào `e2e/programming.spec.ts`: Draft≠Active, Core offline, deep-link từ mục cần chú ý, đúng-một-primary-CTA, không lộ UUID. | `T60-301` | `DONE` | 1,5 nd |
 | `T60-303` | P1 | E2E real-backend (`e2e/programming-real.spec.ts`): Overview đọc đúng bảng Programs từ Core thật sau Commission + Enable. | `T60-302`, `T60-013` | `ORDERED` | 1,5 nd |
-| `T60-304` | P0 | Bàn phím đi hết mọi hành động kỹ thuật; tương phản sáng/tối; đo tại **1280×750** (nội dung chính không bị đẩy dưới màn hình đầu) và **390 px**; ma trận RBAC viewer/operator/admin. | `T60-301` | `ORDERED` | 1,5 nd |
+| `T60-304` | P0 | Bàn phím đi hết mọi hành động kỹ thuật; tương phản sáng/tối; đo tại **1280×750** (nội dung chính không bị đẩy dưới màn hình đầu) và **390 px**; ma trận RBAC viewer/operator/admin. | `T60-301` | `DONE` | 1,5 nd |
 
 **Tổng: 27 task · ~34,5 người-ngày** (P0-A 3,5 nd · P0-B 5 nd · P0-C 0,5 nd · P1 6 nd · P2 13 nd · P3 6,5 nd).
 
@@ -327,7 +373,7 @@ Ba mốc bàn giao giữa hai lane: `T60-003` (JSON `programs[]` có thật) m�
 
 | AC | Nội dung | Task chủ quản | Bằng chứng |
 |---|---|---|---|
-| `AC-PGM01-01` | Không lộ UUID ở mặt trước | `T60-102`, `T60-103`, `T60-205` | Test khẳng định **không** khớp regex UUID trong DOM mặc định; có nội dung sau khi mở `Details` |
+| `AC-PGM01-01` | Không lộ UUID ở mặt trước | `T60-102`, `T60-103`, `T60-205` | **ĐÓNG CẢ HAI CHIỀU (2026-08-24, `c9539ef`):** `ProgrammingContextStrip.test.tsx` khẳng định DOM mặc định **không** khớp regex UUID ở bốn nhánh trạng thái → mở `Details` → panel chứa đủ ba UUID + `controllerId` → `Esc` → UUID **biến mất khỏi DOM** (không nằm ẩn). Kèm `ContextDetailsPopover.test.tsx`. Còn chờ `T60-205` cho bảng Programs |
 | `AC-PGM01-02` | Draft và Active cùng hiện khi khác nhau | `T60-203` | Component test 2 nhánh (khác / bằng nhau) |
 | `AC-PGM01-03` | Mục cần chú ý deep-link tới đúng trang chủ quản | `T60-204` | Test điều hướng theo từng mã (không dùng đích cứng) + E2E |
 | `AC-PGM01-04` | Không render thiếu-dữ-liệu thành số `0` | `T60-205`, `T60-207` | Test bảng với `undefined`/`UNAVAILABLE` ⇒ `—` |
@@ -404,5 +450,7 @@ Plan 59 W6/W7.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.3 | 2026-08-23 | **Batch 1 (CTIO + 3 lane)** — 13/27 task `DONE`: `T60-001..004` (Core), `T60-011..015` (BE Go), `T60-017`, `T60-101/102/104` (FE shell). **Mốc M1 và M2 đều ĐẠT** bằng chứng cứ: dump `point_snapshot` thật 2 Program khác chu kỳ; hai response thật của `GET .../programs` ở `CORE_LIVE` và `UNAVAILABLE`. **Một đính chính quy phạm ở §4.2** (xem ngay dưới bảng công thức): điều 6 `ROLLED_BACK ⇒ DEGRADED` phải xét **trước** điều 3, vì `ROLLED_BACK` ánh xạ thành `WAITING` (§4.1) nên với thứ tự cũ điều 6 là **chữ chết** — mâu thuẫn với chính §4.1 và phần lời D-07. Thứ tự đúng: 1 → 2 → 6 → 3 → 4 → 5 → 7. Bổ sung điều kiện tiên quyết chưa ghi cho điều 5: bỏ qua khi `periodMs = 0`. **Hai lỗi ngoài dự kiến đã sửa cùng phiên:** `STARTING`/`STOPPING` rò ra hợp đồng qua đường `LAST_KNOWN` (CHECK constraint của store vẫn cho phép, một dòng DB cũ làm UI kẹt vĩnh viễn ở chuyển tiếp không tồn tại); và Context Strip đặt `sticky top-0` trùng tầng TopBar nên trượt xuống dưới và mất tác dụng khi cuộn. **Đổi hợp đồng:** `desiredEnabled` thành nullable — Program chạy trong Core mà Project chưa từng ghi intent ra `null`, không phải `false`. Số đo hợp nhất (HOST, CTIO tự chạy lại): ctest **1243/1243**; go vet/test exit 0, 18 package `ok`; vitest **126 file / 1228 test**, 1227 pass; lint/build/`verify-project.sh --component layout` exit 0. |
+| 1.2 | 2026-08-23 | **Batch 0 (CTIO)** — dựng nhánh `feat/plan60-pgm01` từ `main` và **đo lại baseline thật** tại `aa08ac5` (§1): 1227/1227 ctest, 124 file/1161 test FE, 10/10 E2E mock, cổng layout + docs PASS. Re-pin `Baseline source` `a35f578` → `aa08ac5`. **Một đính chính kỹ thuật trong bảng §6:** `T60-001..004` ghi trần mảng `programs[]` là `st_sched_limits::kMaxProgramsPerTask` (=16) — sai, vì `programs[]` là danh sách **toàn hệ thống** chứ không phải một Task; trần đúng là `kMaxProgramsTotal` (**=32**, và Rev A cũng 32). Giữ nguyên 16 sẽ cắt mất một nửa cấu hình 32 Program hợp lệ, đúng thứ `T60-002` cấm. Ngân sách payload cập nhật theo: ~13 KiB / trần 64 KiB. Xác nhận mọi số dòng §1/§2/§3 trích dẫn còn đúng tại `aa08ac5`. Bổ sung `contracts/programming/g1_contract_join_v1.json` vào nhóm file **chỉ CTIO sửa** (§6.1). |
 | 1.1 | 2026-08-23 | **Chốt 7/7 quyết định** sau khi đọc lại Core/BE. Hai phát hiện làm đổi quyết định so với bản nháp: (1) `start()`/`stop()`/`disable()` của Core là **đồng bộ tức thì** và BE đã ghi rõ `STARTING`/`STOPPING` là chuyển tiếp không tồn tại (`runtime_intent.go:199-201`) ⇒ loại ánh xạ `ACTIVE → STARTING` của bản nháp; (2) `last_exec_ns` là **thời lượng**, không phải mốc thời gian ⇒ cột `Last Exec` cần thêm `last_run_mono_ns`. D-01 chốt **focus mode** vì ngân sách ngang: hai rail chỉ còn 828 px ở 1280 px, không đủ cho PGM-02. Thêm `consecutive_missed_release` (phép đo mới duy nhất) cho công thức `health` §4.2. Trạng thái plan: PLAN_READY; 27 task ≈ 34,5 người-ngày. |
 | 1.0 | 2026-08-23 | Lập plan từ gói FE Handoff v2.1 (README + PGM-01 + mockup `PGM-01_overview.png`), đối chiếu As-Built tại `a35f578`; ghi nhận 6 lỗ hổng dữ liệu backend chặn bảng Programs; 22 task / 3 pha / ~31 người-ngày; 6 quyết định chờ chốt. |

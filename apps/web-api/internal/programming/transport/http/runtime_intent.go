@@ -9,6 +9,53 @@ import (
 	programmingapplication "mkddc-web/internal/programming/application"
 )
 
+type recoveryResetRequest struct {
+	SchemaVersion string `json:"schemaVersion"`
+	Reason        string `json:"reason"`
+}
+
+// handleRecoveryResetRequest — `POST /api/v1/programming/runtime/recovery-reset`.
+//
+// Route nằm ở nhánh `runtime` chứ không phải `operations`: nó không tạo một
+// giao dịch vòng đời nào, nó gỡ khoá một giao dịch đã hỏng. Ai gọi và Core trả
+// gì đều vào audit — kể cả lần bị từ chối.
+func handleRecoveryResetRequest(w http.ResponseWriter, r *http.Request, correlationID string,
+	service *programmingapplication.RuntimeIntentService) bool {
+	if r.Method != http.MethodPost || r.URL.Path != "/api/v1/programming/runtime/recovery-reset" {
+		return false
+	}
+	var request recoveryResetRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeMappedError(w, programmingapplication.ErrInvalidRequest, correlationID)
+		return true
+	}
+	principal := auth.PrincipalFromContext(r.Context())
+	if principal == nil {
+		writeMappedError(w, programmingapplication.ErrInvalidRequest, correlationID)
+		return true
+	}
+	result, err := service.RecoveryReset(r.Context(),
+		programmingapplication.Actor{ID: principal.Username, Role: string(principal.Role)},
+		programmingapplication.RecoveryResetCommand{
+			SchemaVersion: request.SchemaVersion, Reason: request.Reason,
+			IdempotencyKey: r.Header.Get("X-Idempotency-Key"), CorrelationID: correlationID})
+	if err != nil {
+		writeMappedError(w, err, correlationID)
+		return true
+	}
+	// Core từ chối (ví dụ không ở `RECOVERY_REQUIRED`) KHÔNG phải lỗi hạ tầng:
+	// trả 409 để client phân biệt "gọi sai lúc" với "gọi hỏng".
+	status := http.StatusOK
+	if !result.Applied {
+		status = http.StatusConflict
+	}
+	writeRuntimeJSON(w, status, correlationID, map[string]any{
+		"applied": result.Applied, "detailCode": result.DetailCode, "auditId": result.AuditID})
+	return true
+}
+
 type setProgramIntentRequest struct {
 	SchemaVersion  string `json:"schemaVersion"`
 	DesiredEnabled *bool  `json:"desiredEnabled"`

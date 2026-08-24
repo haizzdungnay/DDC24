@@ -228,6 +228,44 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
         writer.append(",\"consecutiveOverruns\":"); writer.append_uint(snapshot.task.consecutive_overruns);
         writer.append("}");
     }
+    /* T60-003 — `programs` LUÔN có mặt, kể cả khi rỗng.
+     *
+     * Mảng rỗng và THIẾU KHOÁ là hai câu trả lời khác nhau và người đọc phải
+     * phân biệt được: rỗng = "Core sống, hệ không có Program nào"; thiếu khoá =
+     * "Core đời cũ chưa biết trường này" ⇒ phía đọc phải ra UNAVAILABLE chứ
+     * không được kết luận là không có Program (Plan 60 §4.2 điều 1). Bỏ khoá khi
+     * rỗng sẽ trộn hai tình huống đó làm một.
+     *
+     * Bounded: chỉ ghi `program_count` phần tử đầu, kẹp thêm theo kích thước
+     * mảng để một `program_count` sai không đọc ra ngoài biên. Tràn buffer đi
+     * đúng nhánh fail-closed sẵn có (`writer.ok()` false ⇒ trả false ⇒ WebIpc
+     * xoá cache), KHÔNG cắt cụt JSON. */
+    writer.append(",\"programs\":[");
+    const std::size_t program_count =
+        snapshot.program_count < snapshot.programs.size() ? snapshot.program_count
+                                                          : snapshot.programs.size();
+    for (std::size_t index = 0; index < program_count; ++index) {
+        const RuntimeProgramSnapshot& program = snapshot.programs[index];
+        if (index != 0) writer.append(",");
+        writer.append("{\"instanceId\":\"");
+        writer.append_escaped(program.instance_id.data(), fixed_length(program.instance_id));
+        writer.append("\",\"state\":\"");
+        writer.append_escaped(program.state.data(), fixed_length(program.state));
+        writer.append("\",\"enabled\":");
+        writer.append(program.enabled ? "true" : "false");
+        writer.append(",\"periodMs\":"); writer.append_uint(program.period_ms);
+        writer.append(",\"lastExecNs\":"); writer.append_uint(program.last_exec_ns);
+        writer.append(",\"maxExecNs\":"); writer.append_uint(program.max_exec_ns);
+        writer.append(",\"missedReleaseCount\":");
+        writer.append_uint(program.missed_release_count);
+        writer.append(",\"consecutiveMissedRelease\":");
+        writer.append_uint(program.consecutive_missed_release);
+        writer.append(",\"lastRunMonoNs\":"); writer.append_uint(program.last_run_mono_ns);
+        writer.append(",\"lane\":"); writer.append_uint(program.lane);
+        writer.append("}");
+    }
+    writer.append("],\"programsTruncated\":");
+    writer.append(snapshot.programs_truncated ? "true" : "false");
     writer.append(",\"points\":[");
     for (std::size_t index = 0; index < snapshot.rows.size(); ++index) {
         const RuntimePointSnapshotRow& row = snapshot.rows[index];

@@ -83,39 +83,53 @@ func scanProjectSnapshot(row rowScanner) (ProjectSnapshot, error) {
 	return snapshot, nil
 }
 
-func (s *Store) GetRevision(ctx context.Context, revisionID string) (RevisionSnapshot, error) {
+// GetRevisionHeader đọc phần định danh của một Revision mà KHÔNG nạp
+// `revision_objects`. Tách ra vì đường Overview chỉ cần `sequence` và
+// `manifest_json`, còn `GetRevision` phải kéo về toàn bộ object của Revision
+// (mỗi object tới 256 KiB) — nạp cả bộ cho MỖI item của `GET /projects` là
+// đắt vô ích.
+func (s *Store) GetRevisionHeader(ctx context.Context, revisionID string) (Revision, error) {
 	if err := validateUUIDs(revisionID); err != nil {
-		return RevisionSnapshot{}, err
+		return Revision{}, err
 	}
-	var snapshot RevisionSnapshot
+	var revision Revision
 	var parent sql.NullString
 	var libraryRevision sql.NullString
 	var manifestDigest []byte
 	err := s.db.QueryRowContext(ctx, `SELECT revision_id,project_id,parent_revision_id,sequence,
 		document_schema_version,program_count,library_revision_id,
 		manifest_json,manifest_sha256,created_by,created_at_utc_ms FROM revisions WHERE revision_id=?`, revisionID).
-		Scan(&snapshot.Revision.RevisionID, &snapshot.Revision.ProjectID, &parent, &snapshot.Revision.Sequence,
-			&snapshot.Revision.DocumentSchemaVersion, &snapshot.Revision.ProgramCount, &libraryRevision,
-			&snapshot.Revision.ManifestJSON, &manifestDigest, &snapshot.Revision.CreatedBy, &snapshot.Revision.CreatedAtUTCMS)
+		Scan(&revision.RevisionID, &revision.ProjectID, &parent, &revision.Sequence,
+			&revision.DocumentSchemaVersion, &revision.ProgramCount, &libraryRevision,
+			&revision.ManifestJSON, &manifestDigest, &revision.CreatedBy, &revision.CreatedAtUTCMS)
 	if errors.Is(err, sql.ErrNoRows) {
-		return RevisionSnapshot{}, ErrNotFound
+		return Revision{}, ErrNotFound
 	}
 	if err != nil {
-		return RevisionSnapshot{}, fmt.Errorf("đọc Revision: %w", err)
+		return Revision{}, fmt.Errorf("đọc Revision: %w", err)
 	}
 	if parent.Valid {
-		snapshot.Revision.ParentRevisionID = parent.String
+		revision.ParentRevisionID = parent.String
 	}
 	if libraryRevision.Valid {
-		snapshot.Revision.LibraryRevisionID = libraryRevision.String
+		revision.LibraryRevisionID = libraryRevision.String
 	}
 	if len(manifestDigest) != sha256.Size {
-		return RevisionSnapshot{}, fmt.Errorf("Revision manifest checksum hỏng")
+		return Revision{}, fmt.Errorf("Revision manifest checksum hỏng")
 	}
-	copy(snapshot.Revision.ManifestSHA256[:], manifestDigest)
-	if got := sha256.Sum256(snapshot.Revision.ManifestJSON); got != snapshot.Revision.ManifestSHA256 {
-		return RevisionSnapshot{}, fmt.Errorf("Revision manifest checksum mismatch")
+	copy(revision.ManifestSHA256[:], manifestDigest)
+	if got := sha256.Sum256(revision.ManifestJSON); got != revision.ManifestSHA256 {
+		return Revision{}, fmt.Errorf("Revision manifest checksum mismatch")
 	}
+	return revision, nil
+}
+
+func (s *Store) GetRevision(ctx context.Context, revisionID string) (RevisionSnapshot, error) {
+	header, err := s.GetRevisionHeader(ctx, revisionID)
+	if err != nil {
+		return RevisionSnapshot{}, err
+	}
+	snapshot := RevisionSnapshot{Revision: header}
 	rows, err := s.db.QueryContext(ctx, `SELECT object_id,kind,payload_json,payload_sha256 FROM revision_objects WHERE revision_id=? ORDER BY kind,object_id`, revisionID)
 	if err != nil {
 		return RevisionSnapshot{}, fmt.Errorf("đọc Revision objects: %w", err)

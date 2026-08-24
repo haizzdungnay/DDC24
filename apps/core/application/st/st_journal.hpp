@@ -35,6 +35,17 @@ enum class StJournalPhase : uint8_t {
     ACTIVE_CANDIDATE = 2,  /* con trỏ đã đổi, chưa chạy cycle nào */
     FIRST_CYCLE_OK = 3,    /* cycle đầu chạy xong không lỗi, chưa checkpoint */
     COMMITTED = 4,         /* checkpoint active + LKG xong */
+    /* T59-702 — operator xác nhận bỏ giao dịch không thể phục hồi.
+     *
+     * Vì sao phải là một phase trong journal chứ không phải xoá file: `RECOVERY_
+     * REQUIRED` là ngõ cụt — mọi action IPC trả `Unavailable`, nên đường thoát
+     * duy nhất trước đây là xoá journal bằng tay trên bo, tức là **xoá sổ vận
+     * hành** để thoát một trạng thái vận hành. Ghi thêm một bản ghi giữ nguyên
+     * lịch sử và để lại dấu ai đã quyết định bỏ.
+     *
+     * Bản ghi này KHÔNG nạp gói nào: sau reset, Core ở `IDLE` không Active, giữ
+     * safe-state, và chờ một Commission tường minh. */
+    RECOVERY_RESET = 5,
 };
 
 const char* st_journal_phase_name(StJournalPhase phase);
@@ -95,6 +106,9 @@ enum class StJournalBootAction : uint8_t {
      * mới; boot bằng LKG đã checksum nếu có; raise incident (§7: "raise
      * incident. SafetyManager độc lập vẫn chạy"). */
     NO_VALID_RECORD_RAISE_INCIDENT,
+    /* "RECOVERY_RESET": operator đã bỏ giao dịch cũ một cách tường minh. Boot
+     * sạch, không Active, không candidate — chờ Commission mới. */
+    COLD_START_AFTER_RECOVERY_RESET,
 };
 
 StJournalBootAction st_journal_decide_boot_action(const StJournalReadResult& read);

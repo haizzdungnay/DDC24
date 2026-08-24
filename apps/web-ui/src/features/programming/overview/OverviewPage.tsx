@@ -1,221 +1,674 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, ClipboardCheck, FolderPlus, Loader2, PlayCircle, XCircle } from 'lucide-react'
+import { ArrowRight, FolderPlus, PencilRuler, WifiOff } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
 import { Panel } from '../../../shared/components/Panel'
 import { Button } from '../../../shared/components/Button'
-import { StateBlock } from '../../../shared/components/StateBlock'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
+import { semanticBadgeProps, semanticStateDescriptor } from '../shared/semanticState'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
-import { useProgrammingRecentAudit } from '../api/queries'
+import { useProgrammingRevision, useProgrammingRevisionChanges } from '../api/queries'
 import { useCreateProgrammingProject } from '../api/mutations'
-import type { ProgrammingProgramIntentList, ProgrammingProject, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
+import { activeProgramSet } from './activeProgramSet'
+import {
+  overviewViewModel,
+  programHealthSemanticState,
+  programRuntimeSemanticState,
+  type OverviewProgramRow,
+  type ProgramsSummaryModel
+} from './overviewViewModel'
+import {
+  primaryCtaLabel,
+  primaryCtaUndecidedLabel,
+  type PrimaryCtaDecision
+} from './resolvePrimaryCta'
+import { SystemHealthHero } from './SystemHealthHero'
+import { DraftActiveCompareCard } from './DraftActiveCompareCard'
+import { NeedsAttentionCard } from './NeedsAttentionCard'
+import { ProgramsSummaryTable } from './ProgramsSummaryTable'
+import {
+  QuickActions,
+  quickActionBlockedLabel,
+  quickActionForPrimaryCta,
+  quickActionItems,
+  type QuickActionBlockReason
+} from './QuickActions'
+import type { ProgrammingProgramHealth, ProgrammingProgramRuntimeState, RemoteState } from '../model/types'
 
 /**
- * `OverviewPage` (PGM-01) — `UJ-PROG-01`. Trong `≤5 giây` phải thấy: Core,
- * bản đang vận hành, safe-state, việc cần chú ý, và hành động tiếp theo
- * (UX §5 PGM-01). KHÔNG đặt CPU/RAM/hash/compiler/% sức khỏe ở đây (§3.1).
+ * `OverviewPage` (PGM-01) — `UJ-PROG-01`, ráp trang theo `T60-207`/`T60-208`.
+ *
+ * TRANG NÀY KHÔNG CÒN TỰ VẼ GÌ VỀ TRẠNG THÁI
+ * ------------------------------------------
+ * Trước `T60-207`, `OverviewPage` tự dựng năm panel với luật riêng của mình
+ * (`RunningApplicationPanel`, `CoreSafeStatePanel`, `DraftAttentionPanel`,
+ * `ProgrammingAttentionList`, `RecentEngineeringTimeline`). Sáu khối của handoff
+ * v2.1 đã được `T60-201..206` viết xong và có test riêng, nên vai trò duy nhất
+ * còn lại của file này là **tầng ráp**: đọc read-model ở tầng layout, gọi đúng
+ * một `overviewViewModel()`, rồi phân phát cho sáu khối. Mọi luật ngữ nghĩa
+ * (fail-closed, `—` kèm lý do, phân biệt safe-state nhẹ/nặng, xếp hạng mức
+ * khẩn) nằm trong các khối đó — nhân bản lại ở đây là dựng nguồn sự thật thứ
+ * hai, đúng thứ `R60-02` cảnh báo.
+ *
+ * MA TRẬN SÁU TRẠNG THÁI (handoff §6) ĐƯỢC ĐÓNG Ở ĐÂY
+ * ---------------------------------------------------
+ * 1. `loading` — khung chờ **khớp hình học** thẻ/bảng thật, không phải một
+ *    dòng "đang tải". Bố cục nhảy khi dữ liệu về đọc y hệt một trang lỗi.
+ * 2. `chưa có Project/Program` — giải thích, và chỉ người đủ quyền mới thấy
+ *    lối tạo.
+ * 3. `Core offline` — banner **dính** (`sticky`), vẫn cho sửa, **khoá
+ *    Commission**. Ba mệnh đề này phải cùng đúng: chặn cả chỉnh sửa là nhốt
+ *    người dùng, mở cả Commission là ghi vào một thiết bị không đọc được.
+ * 4. `runtime không đọc được` — `Unknown`, KHÔNG `0`, KHÔNG `Stopped`.
+ * 5. `Draft == Active` — thẻ so sánh thu gọn.
+ * 6. `permission denied` — giữ nguyên toàn bộ phần đọc, chỉ vô hiệu hoá hành
+ *    động **kèm giải thích**.
+ *
+ * ĐÚNG MỘT CTA CHÍNH (`AC-PGM01-05`)
+ * ----------------------------------
+ * CTA chính là phần tử `data-testid="primary-cta"` ở đầu trang và là chỗ DUY
+ * NHẤT dùng `<Button variant="primary">`. Nó lấy quyết định từ
+ * `resolvePrimaryCta` (`T60-201`) và lấy **điều kiện chặn** từ chính bảng chặn
+ * của `quickActionItems` (`T60-206`) — một bảng RBAC/Core duy nhất cho cả CTA
+ * chính lẫn bốn lối tắt, nên không thể có chuyện CTA chính mở trong khi lối tắt
+ * cùng đích đang khoá.
  */
 export function OverviewPage() {
   const { pick } = useI18n()
+  const { session } = useAuth()
   const { runtime, projects, programIntents } = useProgrammingRuntimeContext()
-  const audit = useProgrammingRecentAudit(5)
+  const canAdmin = roleAtLeast(session?.role, 'admin')
+
+  // Cùng luật chọn Project với `ProgrammingLayout` (route Tổng quan không mang
+  // `projectId`): Project đầu tiên của trang đầu. Rev A khoá một Project trên
+  // mỗi controller nên đây là Project duy nhất.
+  const project = projects.data?.items[0] ?? null
+  const activeRevisionId = runtime.data?.activeRevisionId ?? null
+
+  // `T60-017`: tập Program KHAI BÁO đọc từ chính Revision đang chạy. Hook luôn
+  // được gọi (không đặt trong nhánh) — `useProgrammingRevision` tự từ chối khi
+  // `revisionId` rỗng, và `activeProgramSet` phân biệt "chưa có Active" với
+  // "đọc hỏng" bằng `activeRevisionId`, không bằng lỗi của hook.
+  const revision = useProgrammingRevision(activeRevisionId)
+
+  /* Bảng thay đổi Draft↔Active. `null` = CỐ Ý không hỏi (chưa có Active để so,
+     hoặc Draft đang ngồi đúng trên Revision đang chạy) — thẻ phân biệt hẳn với
+     "hỏi rồi mà hỏng". Hook vẫn được gọi vô điều kiện để giữ thứ tự hook ổn
+     định; truyền `undefined` thì nó không phát request nào. */
+  const baseRevisionId = project?.baseRevisionId ?? null
+  const compareRequested =
+    activeRevisionId !== null && baseRevisionId !== null && activeRevisionId !== baseRevisionId
+  const changesResource = useProgrammingRevisionChanges(
+    compareRequested ? activeRevisionId : undefined,
+    compareRequested ? baseRevisionId : undefined
+  )
+
+  /* Trạng thái đọc của bảng Programs ở mức TRANG. Lỗi thắng, rồi mới tới đang
+     tải: một trang Programs đọc hỏng không được che bằng "đang tải" chỉ vì
+     `GET /runtime` còn chạy. Ngược lại, khi runtime chưa xong thì cũng chưa
+     biết đang chạy gói nào — kết luận "không có Program nào" lúc đó là bịa. */
+  const programsStatus: RemoteState<unknown>['status'] =
+    programIntents.status === 'error'
+      ? 'error'
+      : runtime.status === 'loading' || programIntents.status === 'loading'
+        ? 'loading'
+        : 'ready'
+
+  const vm = overviewViewModel({
+    projectStatus: projects.status,
+    project,
+    runtimeStatus: runtime.status,
+    runtime: runtime.data,
+    programsStatus,
+    programs: programIntents.data,
+    activeSet: activeProgramSet({
+      activeRevisionId,
+      status: revision.status,
+      revision: revision.data
+    })
+  })
+
+  /* Lần đọc ĐẦU của hai read-model nền. `useProgrammingResource` chỉ để
+     `loading` ở lần đầu (poll sau đó giữ nguyên `ready`), nên cờ này không nhấp
+     nháy mỗi 5 giây. */
+  const firstRead = runtime.status === 'loading' || projects.status === 'loading'
+  const noProject = projects.status === 'ready' && (projects.data?.items.length ?? 0) === 0
+  const coreOffline = vm.core.producerState === 'UNAVAILABLE' || runtime.status === 'error'
+
+  const quickActions = {
+    projectId: vm.projectId,
+    role: session?.role ?? null,
+    producerState: vm.core.producerState,
+    safeState: vm.safeState,
+    primaryCtaKind: vm.primaryCta.kind
+  }
+  const primaryKey = quickActionForPrimaryCta(vm.primaryCta.kind)
+  const primaryBlockedBy =
+    quickActionItems(quickActions).find((item) => item.key === primaryKey)?.blockedBy ?? null
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       {/* F-UX-15 (`REV-FE-UIUX-UC-2026-08-18` §7.1): mỗi màn/tab phải có mốc
           tiêu đề riêng trong cây heading. `<h1>` của route Programming nằm ở
-          `ProgrammingLayout` (một và chỉ một), nên ở đây là `<h2>`/`<h3>`.
-          Ẩn thị giác vì thanh tab đã hiện tên — thứ còn thiếu là mốc điều
-          hướng cho trình đọc màn hình, không phải thêm chữ lên màn hình. */}
+          `ProgrammingLayout` (một và chỉ một), nên ở đây là `<h2>`. Ẩn thị giác
+          vì rail đã hiện tên — thứ còn thiếu là mốc điều hướng cho trình đọc
+          màn hình, không phải thêm chữ lên màn hình. */}
       <h2 className="sr-only">{pick('Tổng quan lập trình', 'Programming overview')}</h2>
-      <RunningApplicationPanel runtime={runtime.data} status={runtime.status} programIntents={programIntents} />
-      <CoreSafeStatePanel runtime={runtime.data} status={runtime.status} />
-      <DraftAttentionPanel projects={projects} />
-      <div className="lg:col-span-2">
-        <ProgrammingAttentionList runtime={runtime.data} />
+
+      {coreOffline && <CoreOfflineBanner observedAt={vm.core.observedAt} />}
+
+      <div className="min-w-0 lg:col-span-3">
+        <PrimaryCtaBar decision={vm.primaryCta} blockedBy={primaryBlockedBy} loading={firstRead} />
       </div>
-      <RecentEngineeringTimeline audit={audit} />
+
+      {/* Handoff §1: ba thẻ tóm tắt trên MỘT hàng ở desktop; `<768 px` xếp
+          chồng nhờ lưới một cột mặc định. `min-w-0` để một chuỗi dài trong thẻ
+          không đẩy cả lưới tràn ngang. */}
+      <div className="min-w-0">
+        <SystemHealthHero
+          core={vm.core}
+          safeState={vm.safeState}
+          active={vm.active}
+          runtimeStatus={runtime.status}
+        />
+      </div>
+
+      <div className="min-w-0">
+        {firstRead ? (
+          <CardSkeleton title={pick('Bản nháp ↔ Bản đang vận hành', 'Draft ↔ Active')} rows={4} columns={2} />
+        ) : noProject ? (
+          <NoProjectCard canAdmin={canAdmin} />
+        ) : (
+          <DraftActiveCompareCard
+            draft={vm.draft}
+            active={vm.active}
+            core={vm.core}
+            changes={compareRequested ? changesResource : null}
+            projectId={vm.projectId}
+          />
+        )}
+      </div>
+
+      <div className="min-w-0">
+        {firstRead ? (
+          <CardSkeleton title={pick('Việc cần chú ý', 'Attention required')} rows={3} columns={1} />
+        ) : (
+          <NeedsAttentionCard vm={vm} taskId={runtime.data?.task?.taskId ?? null} />
+        )}
+      </div>
+
+      <ProgramsSection
+        model={vm.programs}
+        projectId={vm.projectId}
+        canAdmin={canAdmin}
+        loading={firstRead || vm.programs.emptyReason === 'LOADING'}
+      />
+
+      <div className="min-w-0 lg:col-span-3">
+        {firstRead ? (
+          <CardSkeleton title={pick('Thao tác nhanh', 'Quick Actions')} rows={1} columns={4} />
+        ) : (
+          <QuickActions {...quickActions} />
+        )}
+      </div>
     </div>
   )
 }
 
-function RunningApplicationPanel({
-  runtime,
-  status,
-  programIntents
+/* ------------------------------------------------------------------ *
+ * Core offline — banner DÍNH (handoff §6)                             *
+ * ------------------------------------------------------------------ */
+
+/**
+ * "Persistent banner" của handoff §6 nghĩa là **không cuộn mất**: người vận
+ * hành đọc tới cuối bảng Programs vẫn phải thấy rằng mọi con số phía trên đến
+ * từ một Core không trả lời.
+ *
+ * `top-[6.5rem]`: `TopBar` là `sticky top-0 h-16` (4 rem) và
+ * `ProgrammingContextStrip` là `sticky top-16` cao 36–40 px. Đặt `top-0` ở đây
+ * sẽ nhét banner xuống dưới hai lớp đó và nó trượt khuất khi cuộn — đúng lỗi đã
+ * sửa một lần ở `T60-102`.
+ *
+ * Banner này KHÔNG chặn gì cả. Việc khoá Commission do bảng chặn của
+ * `quickActionItems` thực hiện, và việc cho phép tiếp tục chỉnh sửa do
+ * `resolvePrimaryCta` giữ (hai hàng đầu của bảng §3 nằm TRƯỚC cổng Core).
+ */
+function CoreOfflineBanner({ observedAt }: { observedAt: string | null }) {
+  const { pick } = useI18n()
+  return (
+    <div
+      data-testid="core-offline-banner"
+      role="alert"
+      className="sticky top-[6.5rem] z-10 flex min-w-0 items-start gap-2 rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)] lg:col-span-3"
+    >
+      <WifiOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <span className="min-w-0">
+        <strong className="font-semibold">{pick('Không kết nối được Core.', 'Core is unreachable.')}</strong>{' '}
+        {pick(
+          'Vẫn chỉnh sửa và Kiểm tra được; Đưa vào vận hành bị khoá cho tới khi đọc lại được Core.',
+          'Editing and Check remain available; Commission stays locked until Core can be read again.'
+        )}
+        <span className="mt-1 block text-xs">
+          {observedAt === null
+            ? pick(
+                'Không có mốc đọc nào gần đây — mọi trạng thái vận hành trên trang này đang là “chưa rõ”.',
+                'There is no recent read — every runtime state on this page is “unknown”.'
+              )
+            : pick(
+                `Mốc đọc gần nhất: ${new Date(observedAt).toLocaleString()}.`,
+                `Last read at ${new Date(observedAt).toLocaleString()}.`
+              )}
+        </span>
+      </span>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ *
+ * CTA chính — đúng MỘT trên toàn trang (`AC-PGM01-05`)                *
+ * ------------------------------------------------------------------ */
+
+function PrimaryCtaBar({
+  decision,
+  blockedBy,
+  loading
 }: {
-  runtime: ProgrammingRuntime | null
-  status: 'loading' | 'ready' | 'error'
-  programIntents: RemoteState<ProgrammingProgramIntentList>
+  decision: PrimaryCtaDecision
+  blockedBy: QuickActionBlockReason | null
+  loading: boolean
 }) {
   const { pick } = useI18n()
   const navigate = useNavigate()
-  if (status === 'loading') return <Panel title={pick('Ứng dụng đang vận hành', 'Running application')}><StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} /></Panel>
-  if (status === 'error' || !runtime) {
+  const title = pick('Bước tiếp theo', 'Next step')
+
+  if (loading) {
     return (
-      <Panel title={pick('Ứng dụng đang vận hành', 'Running application')}>
-        <StateBlock state="offline" title={pick('Không kết nối được Core', 'Core unreachable')} />
+      <Panel title={title}>
+        <div data-testid="primary-cta-skeleton" role="status" className="flex items-center gap-3">
+          <span className="sr-only">{pick('Đang xác định bước tiếp theo…', 'Determining the next step…')}</span>
+          <div className="h-10 w-44 animate-pulse rounded-[var(--radius)] bg-[var(--c-surface-2)]" />
+          <div className="h-3 w-1/3 animate-pulse rounded bg-[var(--c-surface-2)]" />
+        </div>
       </Panel>
     )
   }
-  if (!runtime.activeRevisionId) {
+
+  // Chưa đủ căn cứ ⇒ KHÔNG có CTA chính nào, và phải nói vì sao. Một khoảng
+  // trống im lặng đọc y hệt một lỗi hiển thị.
+  if (decision.kind === null || decision.route === null) {
     return (
-      <Panel title={pick('Ứng dụng đang vận hành', 'Running application')}>
-        <p className="text-sm text-[var(--c-text-dim)]">
-          {pick('Chưa có ứng dụng điều khiển nào được đưa vào vận hành.', 'No control application has been commissioned.')}
+      <Panel title={title}>
+        <p data-testid="primary-cta-undecided" className="text-sm text-[var(--c-text-dim)]">
+          {decision.undecidedReason !== null
+            ? primaryCtaUndecidedLabel(pick, decision.undecidedReason)
+            : pick('Chưa đề xuất được hành động tiếp theo.', 'No next action can be suggested yet.')}
         </p>
       </Panel>
     )
   }
+
+  const blockedLabel = blockedBy !== null ? quickActionBlockedLabel(pick, blockedBy) : null
+  const label = primaryCtaLabel(pick, decision.kind)
+
   return (
-    <Panel title={pick('Ứng dụng đang vận hành', 'Running application')}>
-      <div className="space-y-2 text-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">{pick('Đang vận hành', 'Active revision')}</span>
-          <span className="font-mono text-[var(--c-text)]">{runtime.activeRevisionId}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">{pick('Tác vụ', 'Task')}</span>
-          <StatusBadge state={runtime.taskState === 'RUNNING' ? 'online' : runtime.taskState === 'FAULT' ? 'fault' : 'unknown'} label={runtime.taskState} />
-        </div>
-        <ProgramIntentRuntimeSummary state={programIntents} />
-        <Button size="sm" variant="secondary" icon={<PlayCircle className="h-4 w-4" aria-hidden="true" />} onClick={() => navigate('/eng/programming/runtime')}>
-          {pick('Mở runtime', 'Open runtime')}
+    <Panel title={title}>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          data-testid="primary-cta"
+          data-cta-kind={decision.kind}
+          data-blocked-by={blockedBy ?? undefined}
+          variant="primary"
+          // `aria-disabled` thay cho `disabled` — cùng lý do đã ghi ở
+          // `QuickActions`: nút bị chặn phải còn trong thứ tự tab thì người dùng
+          // bàn phím mới nghe được lý do. `onClick` mới là chỗ chặn thật.
+          aria-disabled={blockedLabel !== null ? 'true' : undefined}
+          aria-describedby={blockedLabel !== null ? 'primary-cta-blocked' : undefined}
+          className={blockedLabel !== null ? 'cursor-not-allowed opacity-60' : undefined}
+          icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
+          onClick={() => {
+            if (blockedLabel !== null || decision.route === null) return
+            navigate(decision.route)
+          }}
+        >
+          {label}
         </Button>
+        {blockedLabel !== null && (
+          <p id="primary-cta-blocked" className="text-xs text-[var(--c-warn-fg)]">
+            {blockedLabel}
+          </p>
+        )}
       </div>
     </Panel>
   )
 }
 
-function ProgramIntentRuntimeSummary({ state }: { state: RemoteState<ProgrammingProgramIntentList> }) {
-  const { pick } = useI18n()
-  if (state.status === 'loading') {
-    return <p role="status" className="text-xs text-[var(--c-text-dim)]">{pick('Đang tải ý định và trạng thái Program…', 'Loading Program intent and runtime state…')}</p>
-  }
-  if (state.status === 'error' || !state.data) {
-    return <p role="alert" className="text-xs text-[var(--c-fault-fg)]">{pick('Không đọc được ý định/trạng thái Program.', 'Program intent/runtime state is unavailable.')}</p>
-  }
-  if (state.data.items.length === 0) {
-    return <p className="text-xs text-[var(--c-text-dim)]">{pick('Chưa có chương trình', 'No programs yet')}</p>
-  }
-  const desired = state.data.items.filter((item) => item.desiredEnabled).length
-  const runtimeCounts = new Map<string, number>()
-  for (const item of state.data.items) runtimeCounts.set(item.runtimeState, (runtimeCounts.get(item.runtimeState) ?? 0) + 1)
-  const runtime = ['FAULTED', 'UNKNOWN', 'STARTING', 'STOPPING', 'WAITING', 'RUNNING', 'DISABLED']
-    .filter((runtimeState) => runtimeCounts.has(runtimeState))
-    .map((runtimeState) => `${runtimeState} ${runtimeCounts.get(runtimeState)}`)
-    .join(' · ')
-  return (
-    <dl className="space-y-2 border-t border-[var(--c-border)] pt-2">
-      <div className="flex items-center justify-between gap-3">
-        <dt className="text-[var(--c-text-dim)]">{pick('Ý định Enable', 'Enable intent')}</dt>
-        <dd><StatusBadge state={desired > 0 ? 'on' : 'off'} label={pick(`${desired}/${state.data.items.length} muốn bật`, `${desired}/${state.data.items.length} enabled by intent`)} /></dd>
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <dt className="text-[var(--c-text-dim)]">{pick('Runtime thực tế', 'Actual runtime')}</dt>
-        <dd className="text-right font-mono text-xs text-[var(--c-text)]">{runtime}</dd>
-      </div>
-    </dl>
-  )
-}
+/* ------------------------------------------------------------------ *
+ * Chưa có Project (handoff §6 nhánh 2)                                *
+ * ------------------------------------------------------------------ */
 
-function CoreSafeStatePanel({ runtime, status }: { runtime: ProgrammingRuntime | null; status: 'loading' | 'ready' | 'error' }) {
+/**
+ * Giải thích trước, lối tạo sau — và lối tạo **chỉ hiện với người đủ quyền**.
+ * Vai `viewer`/`operator` vẫn đọc được lời giải thích: giấu cả câu chữ đi thì
+ * họ chỉ thấy một trang trống và không biết mình đang thiếu quyền hay thiết bị
+ * thật sự chưa có gì.
+ */
+function NoProjectCard({ canAdmin }: { canAdmin: boolean }) {
   const { pick } = useI18n()
-  if (status === 'loading') return <Panel title={pick('Core & trạng thái an toàn', 'Core & safe state')}><StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} /></Panel>
-  const coreState = status === 'error' || !runtime || runtime.producerState === 'UNAVAILABLE'
-    ? 'disconnected'
-    : runtime.producerState === 'DEGRADED'
-      ? 'degraded'
-      : 'connected'
-  const coreLabel = status === 'error' || !runtime || runtime.producerState === 'UNAVAILABLE'
-    ? pick('Không kết nối được Core', 'Core unreachable')
-    : runtime.producerState === 'DEGRADED'
-      ? pick('Core suy giảm', 'Core degraded')
-      : pick('Core đang chạy', 'Core running')
-  return (
-    <Panel title={pick('Core & trạng thái an toàn', 'Core & safe state')}>
-      <div className="space-y-2 text-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">Core</span>
-          <StatusBadge state={coreState} label={coreLabel} />
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">{pick('Trạng thái an toàn', 'Safe state')}</span>
-          <span className="text-[var(--c-text)]">{runtime && status === 'ready' ? (runtime.safeState ? pick('Có', 'Yes') : pick('Không', 'No')) : '—'}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">{pick('Cập nhật lúc', 'Observed at')}</span>
-          <span className="text-[var(--c-text-dim)]">{runtime ? new Date(runtime.observedAt).toLocaleTimeString() : '—'}</span>
-        </div>
-      </div>
-    </Panel>
-  )
-}
-
-function DraftAttentionPanel({ projects }: { projects: RemoteState<ProgrammingProjectPage> }) {
-  const { pick } = useI18n()
-  const { session } = useAuth()
   const navigate = useNavigate()
   const { createProject, creating, error } = useCreateProgrammingProject()
   const [nameDraft, setNameDraft] = useState('')
-  const canAdmin = roleAtLeast(session?.role, 'admin')
 
-  if (projects.status === 'loading') {
-    return <Panel title={pick('Bản nháp cần xử lý', 'Draft needs attention')}><StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} /></Panel>
-  }
-  if (projects.status === 'error' || !projects.data) {
+  return (
+    <Panel title={pick('Bắt đầu', 'Get started')}>
+      <p data-testid="no-project" className="text-sm text-[var(--c-text-dim)]">
+        {pick(
+          'Controller này chưa có Project nào — chưa có bản nháp để chỉnh sửa và chưa có gói nào để đưa vào vận hành.',
+          'This controller has no project yet — there is no draft to edit and no package to commission.'
+        )}
+      </p>
+      {canAdmin ? (
+        <form
+          className="mt-3 space-y-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void createProject(nameDraft || pick('Ứng dụng điều khiển', 'Control application')).then((created) => {
+              if (created) navigate(`/eng/programming/projects/${created.projectId}/programs`)
+            })
+          }}
+        >
+          <label className="block text-xs font-medium text-[var(--c-text-dim)]" htmlFor="programming-new-project-name">
+            {pick('Tên Project', 'Project name')}
+          </label>
+          <input
+            id="programming-new-project-name"
+            className="w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-sm text-[var(--c-text)]"
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.target.value)}
+            placeholder={pick('Ứng dụng điều khiển', 'Control application')}
+          />
+          <Button type="submit" size="sm" icon={<FolderPlus className="h-4 w-4" aria-hidden="true" />} loading={creating}>
+            {pick('Tạo bản nháp', 'Create draft')}
+          </Button>
+          {error && <p className="text-xs text-[var(--c-fault-fg)]">{error}</p>}
+        </form>
+      ) : (
+        <p className="mt-2 text-xs text-[var(--c-text-dim)]">
+          {pick(
+            'Cần quyền admin để tạo Project; vai hiện tại chỉ được xem.',
+            'Creating a project requires the admin role; the current role is read-only.'
+          )}
+        </p>
+      )}
+    </Panel>
+  )
+}
+
+/* ------------------------------------------------------------------ *
+ * Bảng Programs — desktop bảng, `<768 px` thẻ gọn (`T60-208`)         *
+ * ------------------------------------------------------------------ */
+
+function ProgramsSection({
+  model,
+  projectId,
+  canAdmin,
+  loading
+}: {
+  model: ProgramsSummaryModel
+  projectId: string | null
+  canAdmin: boolean
+  loading: boolean
+}) {
+  const { pick } = useI18n()
+  const navigate = useNavigate()
+
+  if (loading) {
     return (
-      <Panel title={pick('Bản nháp cần xử lý', 'Draft needs attention')}>
-        <StateBlock state="error" title={pick('Không tải được Project.', 'Could not load the project.')} detail={projects.error ?? undefined} onRetry={projects.refresh} />
-      </Panel>
+      <div className="min-w-0 lg:col-span-3">
+        <ProgramsTableSkeleton />
+      </div>
     )
   }
-  const project = projects.data.items[0]
-  if (!project) {
+
+  // Rỗng thì bảng và thẻ gọn nói y hệt nhau, nên chỉ vẽ MỘT lần — nhân đôi một
+  // khối trạng thái rỗng chỉ tạo thêm một tiêu đề trùng cho trình đọc màn hình.
+  if (model.rows.length === 0) {
+    const canCreate = canAdmin && projectId !== null && model.emptyReason === 'NO_PROGRAM'
     return (
-      <Panel title={pick('Bản nháp cần xử lý', 'Draft needs attention')}>
-        <p className="text-sm text-[var(--c-text-dim)]">{pick('Chưa có Project nào trên controller này.', 'No project exists on this controller.')}</p>
-        {canAdmin && (
-          <form
-            className="mt-3 space-y-2"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void createProject(nameDraft || pick('Ứng dụng điều khiển', 'Control application')).then((created) => {
-                if (created) navigate(`/eng/programming/projects/${created.projectId}/programs`)
-              })
-            }}
-          >
-            <label className="block text-xs font-medium text-[var(--c-text-dim)]" htmlFor="programming-new-project-name">
-              {pick('Tên Project', 'Project name')}
-            </label>
-            <input
-              id="programming-new-project-name"
-              className="w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-sm text-[var(--c-text)]"
-              value={nameDraft}
-              onChange={(event) => setNameDraft(event.target.value)}
-              placeholder={pick('Ứng dụng điều khiển', 'Control application')}
-            />
-            <Button type="submit" size="sm" icon={<FolderPlus className="h-4 w-4" aria-hidden="true" />} loading={creating}>
-              {pick('Tạo bản nháp', 'Create draft')}
+      <div className="min-w-0 space-y-2 lg:col-span-3">
+        <ProgramsSummaryTable model={model} projectId={projectId} />
+        {canCreate && (
+          <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-3">
+            <p className="min-w-0 text-xs text-[var(--c-text-dim)]">
+              {pick(
+                'Thêm Program đầu tiên trong workspace Thiết kế rồi chạy Kiểm tra trước khi đưa vào vận hành.',
+                'Add the first Program in the design workspace, then run a check before commissioning.'
+              )}
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              data-testid="create-program"
+              icon={<PencilRuler className="h-4 w-4" aria-hidden="true" />}
+              onClick={() => navigate(`/eng/programming/projects/${projectId}/programs`)}
+            >
+              {pick('Tạo chương trình', 'Create Program')}
             </Button>
-            {error && <p className="text-xs text-[var(--c-fault-fg)]">{error}</p>}
-          </form>
+          </div>
         )}
-      </Panel>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Hai hình dạng của CÙNG một dữ liệu (khuôn đã dùng ở `VersionsTab`):
+          bảng sáu cột từ `md` trở lên, thẻ gọn ở `<768 px`. Bảng sáu cột nhét
+          vào 390 px sẽ đẩy cả trang tràn ngang dù đã có `overflow-x-auto` bên
+          trong — handoff §7 cấm chính điều đó. */}
+      <div data-testid="programs-desktop" className="hidden min-w-0 md:block lg:col-span-3">
+        <ProgramsSummaryTable model={model} projectId={projectId} />
+      </div>
+      <div data-testid="programs-compact" className="min-w-0 md:hidden lg:col-span-3">
+        <ProgramsCompactList model={model} projectId={projectId} />
+      </div>
+    </>
+  )
+}
+
+/**
+ * Thẻ gọn cho `<768 px`. Không phải một bảng bị thu nhỏ: mỗi Program là một
+ * thẻ, các dữ kiện xuống dòng thay vì nằm ngang.
+ *
+ * BA LUẬT GIỮ NGUYÊN Y HỆT BẢNG — và giữ bằng cách DÙNG CHUNG hàm, không chép:
+ * trạng thái/sức khoẻ đi qua `programRuntimeSemanticState`/
+ * `programHealthSemanticState` của view model, nên hai hình dạng không thể nói
+ * hai điều khác nhau về cùng một dòng. Thiếu số liệu ra `—` kèm lý do
+ * (`AC-PGM01-04`), `LAST_KNOWN` mang nhãn "giá trị cũ", và KHÔNG chuỗi UUID nào
+ * ra mặt trước (`AC-PGM01-01`, handoff §7 *no horizontal UUID content*).
+ */
+function ProgramsCompactList({ model, projectId }: { model: ProgramsSummaryModel; projectId: string | null }) {
+  const { pick } = useI18n()
+  const navigate = useNavigate()
+  const title = pick('Chương trình đang vận hành', 'Programs in operation')
+
+  return (
+    <Panel title={title}>
+      <ul className="space-y-2">
+        {model.rows.map((row) => (
+          <li
+            key={row.key}
+            data-program-card={row.origin}
+            className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-sm"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <ProgramCardName
+                row={row}
+                onOpen={() => {
+                  if (!projectId || !row.objectId) return
+                  navigate(`/eng/programming/projects/${projectId}/programs?program=${encodeURIComponent(row.objectId)}`)
+                }}
+              />
+              <ProgramStateBadge row={row} />
+            </div>
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              <dt className="text-[var(--c-text-dim)]">{pick('Ngôn ngữ', 'Language')}</dt>
+              <dd className="min-w-0 break-words text-right">
+                {row.language ?? <MissingValue reason={pick('Không có trong gói đang vận hành', 'Not part of the running package')} />}
+              </dd>
+              <dt className="text-[var(--c-text-dim)]">{pick('Chu kỳ', 'Cycle')}</dt>
+              <dd className="min-w-0 break-words text-right">
+                {row.cycle === null ? (
+                  <MissingValue reason={pick('Chưa đọc được từ Core', 'Not read from Core')} />
+                ) : (
+                  `${row.cycle.periodMs} ms · ${row.cycle.source === 'CORE_LIVE' ? pick('Core đang chạy', 'Live from Core') : pick('Khai báo trong gói', 'Declared in the package')}`
+                )}
+              </dd>
+              <dt className="text-[var(--c-text-dim)]">{pick('Chạy gần nhất', 'Last Exec')}</dt>
+              <dd className="min-w-0 break-words text-right">
+                {row.lastRun === null ? (
+                  <MissingValue reason={pick('Chưa đọc được từ Core', 'Not read from Core')} />
+                ) : row.lastRun.atUtc !== null ? (
+                  new Date(row.lastRun.atUtc).toLocaleTimeString()
+                ) : (
+                  pick('Chưa rõ mốc', 'Timestamp unknown')
+                )}
+              </dd>
+              <dt className="text-[var(--c-text-dim)]">{pick('Sức khoẻ', 'Health')}</dt>
+              <dd className="flex min-w-0 justify-end">
+                {row.health === null ? (
+                  <MissingValue reason={pick('Chưa có nhãn từ máy chủ', 'The server assigns no label')} />
+                ) : (
+                  <StatusBadge
+                    {...semanticBadgeProps(pick, programHealthSemanticState(row.health), compactHealthLabel(pick, row.health))}
+                  />
+                )}
+              </dd>
+            </dl>
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  )
+}
+
+function ProgramCardName({ row, onOpen }: { row: OverviewProgramRow; onOpen: () => void }) {
+  const { pick } = useI18n()
+  if (row.name === null) {
+    // KHÔNG in `programId`/`objectId` thay thế, kể cả rút gọn (D-05 đã loại
+    // phương án đó) — `AC-PGM01-01` và handoff §7.
+    return (
+      <MissingValue
+        reason={row.origin === 'LIVE_ONLY'
+          ? pick('Không có trong gói đang vận hành', 'Not part of the running package')
+          : pick('Gói đang vận hành không khai tên', 'The running package declares no name')}
+      />
     )
   }
   return (
-    <Panel title={pick('Bản nháp cần xử lý', 'Draft needs attention')}>
-      <div className="space-y-2 text-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">Project</span>
-          <span className="text-[var(--c-text)]">{project.name}</span>
-        </div>
-        <DraftCheckStatus project={project} />
-        <div className="flex flex-wrap gap-2">
-          <DraftPrimaryAction project={project} navigate={navigate} />
+    <button
+      type="button"
+      onClick={onOpen}
+      className="min-w-0 break-words rounded-[var(--radius)] text-left font-medium text-[var(--c-accent)] underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--c-accent)]"
+    >
+      {row.name}
+    </button>
+  )
+}
+
+function ProgramStateBadge({ row }: { row: OverviewProgramRow }) {
+  const { pick } = useI18n()
+  const stale = semanticStateDescriptor('stale')
+  const StaleIcon = stale.icon
+  return (
+    <span className="flex shrink-0 flex-col items-end gap-1">
+      <StatusBadge
+        {...semanticBadgeProps(pick, programRuntimeSemanticState(row.runtimeState), compactRuntimeStateLabel(pick, row.runtimeState))}
+      />
+      {row.runtimeStateSource === 'LAST_KNOWN' && (
+        <span className="flex items-center gap-1 text-[10px] leading-tight text-[var(--c-warn-fg)]">
+          <StaleIcon className="h-3 w-3" aria-hidden="true" />
+          {pick('giá trị cũ', 'stale value')}
+        </span>
+      )}
+      {row.runtimeStateSource === 'UNAVAILABLE' && (
+        <span className="text-[10px] leading-tight text-[var(--c-text-dim)]">
+          {pick('Chưa đọc được từ Core', 'Not read from Core')}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** `—` KÈM LÝ DO. Không bao giờ `0`: một số `0` luôn được đọc như một sự thật. */
+function MissingValue({ reason }: { reason: string }) {
+  return (
+    <span className="flex flex-col items-end gap-0.5">
+      <span aria-hidden="true" className="text-[var(--c-text-dim)]">—</span>
+      <span className="text-[10px] leading-tight text-[var(--c-text-dim)]">{reason}</span>
+    </span>
+  )
+}
+
+type PickFn = (vi: string, en: string) => string
+
+function compactRuntimeStateLabel(pick: PickFn, state: ProgrammingProgramRuntimeState): string {
+  switch (state) {
+    case 'RUNNING':
+      return pick('Đang chạy', 'Running')
+    case 'WAITING':
+      return pick('Chờ chạy', 'Waiting')
+    case 'DISABLED':
+      return pick('Đã tắt', 'Disabled')
+    case 'FAULTED':
+      return pick('Lỗi', 'Faulted')
+    case 'UNKNOWN':
+      return pick('Chưa rõ', 'Unknown')
+  }
+}
+
+function compactHealthLabel(pick: PickFn, health: ProgrammingProgramHealth): string {
+  switch (health) {
+    case 'HEALTHY':
+      return pick('Bình thường', 'Healthy')
+    case 'DEGRADED':
+      return pick('Suy giảm', 'Degraded')
+    case 'FAULT':
+      return pick('Lỗi', 'Fault')
+    case 'UNKNOWN':
+      return pick('Chưa rõ', 'Unknown')
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Khung chờ — KHỚP HÌNH HỌC (handoff §6 nhánh 1)                      *
+ * ------------------------------------------------------------------ */
+
+/**
+ * Khung chờ của một thẻ: đúng tiêu đề thật, đúng số hàng, đúng số cột. Một dòng
+ * "Đang tải…" chiếm 20 px rồi nhường chỗ cho một thẻ 260 px làm cả lưới nhảy
+ * khi dữ liệu về — người dùng đọc cú nhảy đó thành lỗi hiển thị.
+ */
+function CardSkeleton({ title, rows, columns }: { title: string; rows: number; columns: 1 | 2 | 4 }) {
+  const { pick } = useI18n()
+  // Lớp Tailwind phải là chuỗi NGUYÊN VẸN trong mã nguồn: JIT quét văn bản, một
+  // lớp ghép chuỗi (`sm:grid-cols-${n}`) sẽ không bao giờ được sinh ra CSS.
+  const gridClass = columns === 4
+    ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4'
+    : columns === 2
+      ? 'grid gap-3 sm:grid-cols-2'
+      : 'space-y-2'
+  return (
+    <Panel title={title}>
+      <div data-testid="card-skeleton" role="status" className="space-y-2">
+        <span className="sr-only">{pick('Đang tải…', 'Loading…')}</span>
+        <div className={gridClass}>
+          {Array.from({ length: rows * columns }, (_, index) => (
+            <div key={index} className="space-y-1.5 rounded-[var(--radius)] border border-[var(--c-border)] p-2">
+              <div className="h-3 w-2/3 animate-pulse rounded bg-[var(--c-surface-2)]" />
+              <div className="h-5 w-24 animate-pulse rounded-full bg-[var(--c-surface-2)]" />
+            </div>
+          ))}
         </div>
       </div>
     </Panel>
@@ -223,192 +676,31 @@ function DraftAttentionPanel({ projects }: { projects: RemoteState<ProgrammingPr
 }
 
 /**
- * WP-01 (Overview state model, D-01, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15`
- * §5.2, quyết định CTO/Owner 2026-08-15): `DraftAttentionPanel` trước đây chỉ
- * có 2 nhánh (no-draft/dirty), không phân biệt được Check đang chạy/vừa lỗi/
- * vừa đạt — kỹ sư mở Tổng quan sau một lần Check FAILED chỉ thấy "Tiếp tục
- * chỉnh sửa" giống hệt lúc chưa từng Check. Nay đọc `project.latestCheck`
- * (mới, `GET /projects`) để phân biệt 4/6 trạng thái thiết kế yêu cầu:
- * no-draft, dirty (chưa Check hoặc chưa có Draft nào được niêm phong),
- * checking, failed, ready. Bảng thiết kế còn liệt kê `conflict` (409 khi
- * lưu) — KHÔNG cài ở đây: 409 là phản hồi tức thời của một lần lưu đang diễn
- * ra tại `PGM-02` (đã xử lý sống ở `DesignWorkspacePage`/`useDraftWorkspace`),
- * không phải một trạng thái được server lưu lại — không có "conflict" nào để
- * đọc lại khi mở Tổng quan ở một phiên trình duyệt mới. Xem
- * `docs/03_implementation/56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md`
- * WP-01 mục "Quyết định thiết kế" để có lý do đầy đủ.
+ * Khung chờ của bảng Programs: đúng sáu cột của D-02 và ba hàng thân, bọc trong
+ * cùng khung viền mà bảng thật dùng.
  */
-function draftAttentionState(project: ProgrammingProject): 'dirty' | 'checking' | 'failed' | 'ready' {
-  const state = project.latestCheck?.state
-  if (state === 'QUEUED' || state === 'RUNNING') return 'checking'
-  if (state === 'FAILED' || state === 'TIMED_OUT') return 'failed'
-  if (state === 'PASSED') return 'ready'
-  return 'dirty'
-}
-
-function DraftCheckStatus({ project }: { project: ProgrammingProject }) {
+function ProgramsTableSkeleton() {
   const { pick } = useI18n()
-  const state = draftAttentionState(project)
-  if (state === 'checking') {
-    return (
-      <div className="flex items-center gap-2 text-[var(--c-text-dim)]">
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-        {pick('Đang kiểm tra…', 'Checking…')}
-      </div>
-    )
-  }
-  if (state === 'failed') {
-    return (
-      <div className="flex items-center gap-2 text-[var(--c-fault-fg)]">
-        <XCircle className="h-4 w-4" aria-hidden="true" />
-        {pick('Kiểm tra gần nhất KHÔNG đạt.', 'Latest check FAILED.')}
-      </div>
-    )
-  }
-  if (state === 'ready') {
-    return (
-      <div className="flex items-center gap-2 text-[var(--c-good-fg)]">
-        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-        {pick('Kiểm tra gần nhất đạt — sẵn sàng Đưa vào vận hành.', 'Latest check PASSED — ready to commission.')}
-      </div>
-    )
-  }
   return (
-    <div className="text-[var(--c-text-dim)]">
-      {pick('Đang chỉnh sửa — chưa Kiểm tra lần nào cho bản này.', 'Editing — this draft has not been checked yet.')}
-    </div>
-  )
-}
-
-function DraftPrimaryAction({ project, navigate }: { project: ProgrammingProject; navigate: (path: string) => void }) {
-  const { pick } = useI18n()
-  const state = draftAttentionState(project)
-  const designPath = `/eng/programming/projects/${project.projectId}/programs`
-  const commissionPath = `/eng/programming/projects/${project.projectId}/commission`
-  if (state === 'checking') {
-    return (
-      <Button size="sm" onClick={() => navigate(commissionPath)}>
-        {pick('Xem tiến trình', 'View progress')}
-      </Button>
-    )
-  }
-  if (state === 'failed') {
-    return (
-      <>
-        <Button size="sm" variant="primary" icon={<XCircle className="h-4 w-4" aria-hidden="true" />} onClick={() => navigate(commissionPath)}>
-          {pick('Xem lỗi', 'View errors')}
-        </Button>
-        <Button size="sm" onClick={() => navigate(designPath)}>{pick('Tiếp tục chỉnh sửa', 'Continue editing')}</Button>
-      </>
-    )
-  }
-  if (state === 'ready') {
-    return (
-      <>
-        <Button size="sm" variant="primary" icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />} onClick={() => navigate(commissionPath)}>
-          {pick('Mở Kiểm tra & Đưa vào vận hành', 'Open Check & Commission')}
-        </Button>
-        <Button size="sm" onClick={() => navigate(designPath)}>{pick('Tiếp tục chỉnh sửa', 'Continue editing')}</Button>
-      </>
-    )
-  }
-  return <Button size="sm" onClick={() => navigate(designPath)}>{pick('Tiếp tục chỉnh sửa', 'Continue editing')}</Button>
-}
-
-function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | null }) {
-  const { pick } = useI18n()
-  const navigate = useNavigate()
-  const items: Array<{ code: string; severity: 'error' | 'warning'; text: string; scope: string; action: string }> = []
-  if (runtime?.producerState === 'UNAVAILABLE') items.push({ code: 'PRG-CORE-UNAVAILABLE', severity: 'error', text: pick('Không kết nối được Core.', 'Core is unreachable.'), scope: 'Core', action: pick('Kiểm tra service/Core và kết nối IPC.', 'Check the service/Core and IPC connection.') })
-  else if (runtime?.producerState === 'DEGRADED') items.push({ code: 'PRG-CORE-DEGRADED', severity: 'warning', text: pick('Core đang suy giảm; dữ liệu có thể cũ.', 'Core is degraded; data may be stale.'), scope: 'Core', action: pick('Chỉ chẩn đoán; mọi mutation runtime đang bị khóa.', 'Diagnose only; runtime mutations are locked.') })
-  if (runtime?.taskState === 'FAULT') items.push({ code: 'PRG-TASK-FAULT', severity: 'error', text: pick('Tác vụ điều khiển đang lỗi (FAULT).', 'The control task is faulted.'), scope: runtime.task?.taskId ?? 'Control_Main', action: pick('Mở Runtime để xem số lần quá giờ và trạng thái tác vụ.', 'Open Runtime to inspect overruns and task state.') })
-  if (runtime?.safeState) items.push(
-    runtime.safeStateNoControllerOnly
-      ? {
-          code: 'PRG-SAFE-ACTIVE',
-          severity: 'warning',
-          text: pick(
-            'Safe-state đang tác động vì chưa Program nào ghi output vật lý ở mức trên Default — bình thường nếu logic chỉ dùng Virtual Point.',
-            'Safe-state is active because no Program is writing physical output above Default yet — expected if this logic only uses Virtual Points.'
-          ),
-          scope: runtime.task?.taskId
-            ? `${runtime.task.taskId} / ${pick('các output do Program điều khiển', 'Program-controlled outputs')}`
-            : pick('Các output do Program điều khiển (chưa có danh sách Point)', 'Program-controlled outputs (Point list unavailable)'),
-          action: pick('Không chặn Đưa vào vận hành/Khôi phục. Mở Runtime nếu mong đợi có output vật lý.', 'Does not block Commission/Restore. Open Runtime if you expect a physical output.')
-        }
-      : {
-          code: 'PRG-SAFE-ACTIVE',
-          severity: 'error',
-          text: pick('Safe-state đang tác động do lỗi thật (I/O/dữ liệu cũ/quá giờ); Core chưa cung cấp mã nguyên nhân chi tiết hơn.', 'Safe-state is active due to a real fault (I/O/stale data/overrun); Core did not provide a more detailed reason code.'),
-          scope: runtime.task?.taskId
-            ? `${runtime.task.taskId} / ${pick('các output do Program điều khiển', 'Program-controlled outputs')}`
-            : pick('Các output do Program điều khiển (chưa có danh sách Point)', 'Program-controlled outputs (Point list unavailable)'),
-          action: pick('Giữ Commission/Restore bị khóa; kiểm tra Core, I/O và alarm trước khi phục hồi.', 'Keep Commission/Restore locked; inspect Core, I/O, and alarms before recovery.')
-        }
-  )
-
-  return (
-    <Panel title={pick('Việc cần chú ý', 'Attention required')}>
-      {items.length === 0 ? (
-        <p className="text-sm text-[var(--c-text-dim)]">{pick('Không có việc cần chú ý.', 'Nothing needs attention.')}</p>
-      ) : (
-        <ul className="space-y-2">
-          {/* BUG-016 (TR-MKDDC24-P2-20260814-02 / TC-D08): trước đây mỗi mục là
-              `<li>` phẳng, không click/điều hướng được — người dùng thấy
-              `PRG-SAFE-ACTIVE` nhưng không có lối vào chi tiết. Chi tiết
-              (Active/LKG, safe-state, Core connection, task table) đã có sẵn ở
-              tab Runtime (`RuntimeTab.tsx`) cho cả ba mã `PRG-CORE-*`,
-              `PRG-TASK-FAULT` và `PRG-SAFE-ACTIVE`, nên điều hướng thẳng tới
-              đó thay vì dựng lại một trang chi tiết mới. */}
-          {items.map((item) => (
-            <li key={item.code}>
-              <button
-                type="button"
-                onClick={() => navigate('/eng/programming/runtime')}
-                className="flex w-full items-start gap-2 rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-left text-sm hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--c-accent)]"
-              >
-                <AlertTriangle className={item.severity === 'error' ? 'mt-0.5 h-4 w-4 shrink-0 text-[var(--c-fault-fg)]' : 'mt-0.5 h-4 w-4 shrink-0 text-[var(--c-warn-fg)]'} aria-hidden="true" />
-                <span>
-                  <strong className="font-mono text-xs">{item.code}</strong> — {item.text}
-                  <span className="mt-1 block text-xs text-[var(--c-text-dim)]">{pick('Phạm vi', 'Scope')}: {item.scope} · {pick('Hành động', 'Action')}: {item.action}</span>
-                  <span className="mt-1 block text-xs font-semibold text-[var(--c-accent)]">{pick('Mở Runtime để xem chi tiết →', 'Open Runtime for details →')}</span>
-                </span>
-              </button>
-            </li>
+    <Panel title={pick('Chương trình đang vận hành', 'Programs in operation')}>
+      <div data-testid="programs-table-skeleton" role="status">
+        <span className="sr-only">{pick('Đang đọc danh sách chương trình…', 'Reading the program list…')}</span>
+        <div className="h-3 w-1/3 animate-pulse rounded bg-[var(--c-surface-2)]" />
+        <div className="mt-2 overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]">
+          <div className="grid grid-cols-3 gap-3 border-b border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2 md:grid-cols-6">
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={index} className="h-3 animate-pulse rounded bg-[var(--c-border)]" />
+            ))}
+          </div>
+          {Array.from({ length: 3 }, (_, rowIndex) => (
+            <div key={rowIndex} className="grid grid-cols-3 gap-3 border-b border-[var(--c-border)] px-3 py-3 last:border-0 md:grid-cols-6">
+              {Array.from({ length: 6 }, (_, cellIndex) => (
+                <div key={cellIndex} className="h-4 animate-pulse rounded bg-[var(--c-surface-2)]" />
+              ))}
+            </div>
           ))}
-        </ul>
-      )}
-    </Panel>
-  )
-}
-
-function RecentEngineeringTimeline({ audit }: { audit: ReturnType<typeof useProgrammingRecentAudit> }) {
-  const { pick } = useI18n()
-  if (audit.status === 'loading') return <Panel title={pick('Hoạt động kỹ thuật gần đây', 'Recent engineering activity')}><StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} /></Panel>
-  if (audit.status === 'error' || !audit.data) {
-    return (
-      <Panel title={pick('Hoạt động kỹ thuật gần đây', 'Recent engineering activity')}>
-        <StateBlock state="offline" title={pick('Chưa đọc được nhật ký hoạt động.', 'Activity log is not available yet.')} detail={audit.error ?? undefined} onRetry={audit.refresh} />
-      </Panel>
-    )
-  }
-  if (audit.data.items.length === 0) {
-    return (
-      <Panel title={pick('Hoạt động kỹ thuật gần đây', 'Recent engineering activity')}>
-        <p className="text-sm text-[var(--c-text-dim)]">{pick('Chưa có hoạt động nào.', 'No activity yet.')}</p>
-      </Panel>
-    )
-  }
-  return (
-    <Panel title={pick('Hoạt động kỹ thuật gần đây', 'Recent engineering activity')}>
-      <ul className="space-y-2 text-sm">
-        {audit.data.items.map((entry) => (
-          <li key={entry.auditId} className="flex items-center justify-between gap-2">
-            <span className="text-[var(--c-text)]">{entry.action}</span>
-            <span className="text-[var(--c-text-dim)]">{entry.actorId} · {new Date(entry.occurredAt).toLocaleTimeString()}</span>
-          </li>
-        ))}
-      </ul>
+        </div>
+      </div>
     </Panel>
   )
 }

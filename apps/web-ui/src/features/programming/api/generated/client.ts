@@ -8,12 +8,52 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.26.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.27.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type ProgrammingImpactStatus = "NONE" | "PRESENT" | "UNAVAILABLE";
 export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "outputMappingChanges" | "publishedSignals" | "controlLibrary" | "programSet" | "enableIntent";
+
+// --- Bảng Programs của PGM-01 (T60-013/T60-014), sinh thẳng từ schema OpenAPI.
+// Trường nullable là `| null` chứ KHÔNG phải optional: server luôn gửi khoá, và
+// `null` nghĩa là "đã xét, chưa biết" — không được suy thành `0`/`false`.
+export type ProgrammingProgramRuntimeState = "RUNNING" | "WAITING" | "DISABLED" | "FAULTED" | "UNKNOWN";
+
+export type ProgrammingProgramRuntimeStateSource = "CORE_LIVE" | "LAST_KNOWN" | "UNAVAILABLE";
+
+export type ProgrammingProgramHealth = "HEALTHY" | "DEGRADED" | "FAULT" | "UNKNOWN";
+
+export interface ProgrammingProgramListItem {
+  programId: string;
+  desiredEnabled: boolean | null;
+  generation: number | null;
+  updatedBy: string | null;
+  updatedAtUtcMs: number | null;
+  runtimeState: ProgrammingProgramRuntimeState;
+  runtimeStateSource: ProgrammingProgramRuntimeStateSource;
+  coreState: string | null;
+  enabled: boolean | null;
+  observedAt: string | null;
+  periodMs: number | null;
+  lastExecNs: number | null;
+  maxExecNs: number | null;
+  missedReleaseCount: number | null;
+  consecutiveMissedRelease: number | null;
+  lastRunAtUtc: string | null;
+  lastRunAgeMs: number | null;
+  lane: number | null;
+  health: ProgrammingProgramHealth | null;
+}
+
+export interface ProgrammingProgramsPage {
+  schemaVersion: "1.0";
+  projectId: string;
+  runtimeStateSource: ProgrammingProgramRuntimeStateSource;
+  observedAt: string | null;
+  programsTruncated: boolean | null;
+  items: ProgrammingProgramListItem[];
+}
 
 export interface ProgrammingPublicError {
   code: ProgrammingErrorCode;
@@ -141,6 +181,7 @@ export const PROGRAMMING_ENDPOINTS = {
   "listProgrammingOverrides": { method: "GET", path: "/api/v1/programming/overrides", roles: ["viewer","operator","admin"] },
   "listProgrammingProgramIntents": { method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", roles: ["viewer","operator","admin"] },
   "listProgrammingProjects": { method: "GET", path: "/api/v1/programming/projects", roles: ["viewer","operator","admin"] },
+  "resetProgrammingRecovery": { method: "POST", path: "/api/v1/programming/runtime/recovery-reset", roles: ["admin"] },
   "resetProgrammingRetain": { method: "POST", path: "/api/v1/programming/retain/reset", roles: ["admin"] },
   "restoreProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/restore", roles: ["admin"] },
   "searchProgrammingLibraries": { method: "GET", path: "/api/v1/programming/libraries", roles: ["viewer","operator","admin"] },
