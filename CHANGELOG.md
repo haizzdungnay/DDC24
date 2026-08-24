@@ -209,6 +209,44 @@
 - **Changed — Plan 60 §6**: `T60-016` chuyển `DONE` (**15/27**). **Mốc M3 ĐẠT** —
   type đã sinh (không dòng nào viết tay), `contract_sync_test.go` xanh,
   `check:programming-api` xanh (32 operation đồng bộ).
+- **Added — PGM-01 `T60-201` + `T60-205`** (`9733a37`). `resolvePrimaryCta.ts` +
+  `overviewViewModel.ts` là **hàm thuần có test riêng**, hiện thực đúng bảng năm
+  trạng thái của handoff §3. Quan trọng nhất là **nhánh thứ sáu**: thiếu dữ kiện
+  thì KHÔNG đoán CTA nào cả — khi chưa đọc được trạng thái, câu trả lời đúng là
+  im lặng chứ không phải rơi bừa vào một hành động; một nút Commission hiện ra
+  nhầm lúc là một nút nguy hiểm. `ProgramsSummaryTable` sáu cột theo D-02, **không
+  cột Task** (từ T59-402 mỗi Program tự release theo chu kỳ riêng nên Task không
+  còn là đơn vị chạy) và không cột CPU/core. Cột `Last Exec` lấy **mốc**
+  (`lastRunAtUtc`), không bao giờ lấy `lastExecNs` là **thời lượng**.
+- **Fixed — hai lỗi trong test do lượt trước để lại** (`9733a37`): một assertion
+  chết (`getByText(...).length ?? 1` luôn truthy vì `getByText` trả HTMLElement
+  không có `.length`) và một hằng khai thừa. Không xoá case nào.
+- **Added — PGM-01 `T60-202` + `T60-206`** (`7a2cd4c`). `SystemHealthHero` hợp
+  nhất bốn dữ kiện và **giữ nguyên phân biệt sống còn** giữa
+  `safeStateNoControllerOnly` (cảnh báo nhẹ, Commission là cách giải quyết, không
+  khoá Commission) và safe-state do lỗi thật (nghiêm trọng, giữ Commission khoá)
+  — khác nhau ở mức nghiêm trọng, **câu chữ** và **hệ quả vận hành**, không chỉ ở
+  màu. Kết luận tổng xếp `unknown` **trên** `good` nên màn hình không bao giờ nói
+  "ổn định" khi còn dữ kiện chưa đọc được. `QuickActions` full-width, không nút
+  nào là primary; RBAC vô hiệu hoá **kèm lý do**, dùng `aria-disabled` chứ không
+  dùng `disabled` — `disabled` gỡ nút khỏi thứ tự tab nên người dùng bàn phím sẽ
+  không bao giờ tới được chính lời giải thích viết cho họ.
+- **Added — PGM-01 `T60-203` + `T60-204`** (`2da8258`). Thẻ so sánh dùng nhãn
+  `Draft #14`/`Active #12` (D-05), không lộ UUID kể cả trong drawer; `dirty=null`
+  **không** được đọc thành "sạch" nên không thu gọn thẻ. Số thay đổi **chỉ** đến
+  từ `changes[]` của server — FE không tự diff, và ba nhánh chưa-có-số không
+  render chữ số nào.
+- **Fixed — mục cần chú ý không còn deep-link về một đích cứng** (`2da8258`).
+  Mọi mục trước đây đều nhảy về `/eng/programming/runtime`: bấm một cảnh báo về
+  ánh xạ Điểm rồi bị ném sang trang Runtime, nơi không có gì liên quan. Nay mỗi
+  mục mang một **trang chủ quản** và đích dựng từ đó; `PRG-SAFE-ACTIVE` biến thể
+  "chưa ai điều khiển" dẫn sang **Điểm & Ánh xạ** vì chỗ sửa nằm ở đó, không
+  phải Runtime. `BUG-016` trước đây chỉ sửa được phần "mục bấm được", không sửa
+  phần "bấm tới đâu".
+- **Fixed — `ProgrammingImpact` import mà không re-export** (`2da8258`), lộ ra ở
+  `npm run build` (TS2459) trong khi vitest vẫn xanh — đúng bẫy "vitest không
+  typecheck".
+- **Changed — Plan 60 §6**: `T60-201/202/203/204/206` chuyển `DONE` (**21/27**).
 - **Changed — gate FE xanh hoàn toàn lần đầu**: `npx vitest --run --environment
   jsdom src` → **128 file / 1262 test, TẤT CẢ PASS, exit `0`**.
 
