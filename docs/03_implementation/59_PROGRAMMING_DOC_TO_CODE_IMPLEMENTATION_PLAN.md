@@ -3,11 +3,11 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.4 |
-| Trạng thái | **Active — 52 task; corrective implementation/target MCU FAKE pending; RELEASE_READY NO-GO** |
+| Phiên bản | 2.5 |
+| Trạng thái | **Active — 53 task/9 Wave; chỉ `T59-801` READY cho PGM-02 v2.2 reconciliation; code redesign NO-GO; RELEASE_READY NO-GO** |
 | Ngày | 2026-08-24 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
-| Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04` |
+| Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04`; scoped change request `CR-PROG-PGM02-V22-001` |
 | Detailed Design | [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
 | Supersedes | Plan 53, Plan 54, Plan 56 và `PROGRAMMING_IMPLEMENTATION_TRACKER.md` về công việc tương lai |
 | Release gate | Chỉ mở bằng fresh CI/target/HIL/physical-I/O/soak/provenance/rollback evidence |
@@ -47,7 +47,7 @@ code còn làm được. `RELEASE_READY` vẫn `NO-GO` tới khi evidence thật
 
 | Lớp | Trạng thái hiện tại | Acceptance |
 |---|---|---|
-| `IMPLEMENTATION_CLOSE` | **PENDING** | Corrective source user POU/Signal/atomic/Web IPC/library merge sạch; host gate đầy đủ, trace 82/82 và pin PASS |
+| `IMPLEMENTATION_CLOSE` | **PENDING** | Snapshot `fa1f5f4` từng PASS; current closure mở lại vì `F-P59-GHOST-POU-001` chờ Owner quyết định và affected gate theo semantics đã chốt |
 | `TARGET_FAKE_MCU_DEPLOY` | **PARTIAL (2026-08-24)** | Build đúng commit `fa1f5f4`, backup/install/service/API/UI/read-back **đã có trên Forlinx** với `MCU_MODE=FAKE` ([evidence](../07_records/test-evidence/fw-som/2026-08-24-foxlinx-plan59-corrective-deploy.md)); còn **rollback đầy đủ binary+DB** chưa diễn tập được trên bo |
 | `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** | 10 Program/3 period chạy đủ 24 h; raw JSONL/hash/provenance, fault/signal/restart, `max_iop_poll_gap <200 ms` |
 | `RELEASE_READY` | **NO-GO** | Formal Test Result, residual risk acceptance và mọi Must theo VVP/release authority |
@@ -91,10 +91,17 @@ W0 Contract/Migration foundation
                                                      → W5 Lifecycle + FE/BE E2E
                                                      → W6 Hardening/Packaging
                                                      → W7 Target/HIL/V&V/Release
+
+CR-PROG-PGM02-V22-001 → W8 PGM-02 v2.2 reconciliation (`T59-801` only)
+                         → R1 EDIT → R2 LIVE → R3 SIMULATE
+                           (task downstream chỉ tạo sau baseline pin)
 ```
 
 W1/W2/W3 có thể chạy song song theo contract boundary. Critical path release là
 `T59-001 → T59-006 → T59-106 → T59-305 → T59-406 → T59-501 → T59-602 → T59-703 → T59-707`.
+Đây là critical path của baseline ADR-050. Đường PGM-02 v2.2 hiện dừng tại
+`T59-801`; R1/R2/R3 là packaging đã được Owner duyệt, chưa phải task code hoặc
+trạng thái `ORDERED`.
 
 | Wave | Mục tiêu | Entry | Exit |
 |---|---|---|---|
@@ -106,6 +113,7 @@ W1/W2/W3 có thể chạy song song theo contract boundary. Critical path releas
 | W5 | Atomic lifecycle + sáu-workspace product flow | W2+W4 | Real-backend E2E Draft→Commission→Enable→Runtime→Disable/Restore PASS |
 | W6 | Security/performance/package/release candidate | W5 | RC reproducible; all host gates + install/upgrade/rollback dry-run PASS |
 | W7 | Target/HIL/V&V/release | RC W6 | Required Test Result PASS, residual accepted, release GO record |
+| W8 | Reconcile PGM-02 v2.2 change request | `CR-PROG-PGM02-V22-001` Owner approved | Owner + Architect pin exact baseline/hash; scoped task R1/R2/R3 được lập, chưa code production |
 
 ## 3. Bảng nhiệm vụ master
 
@@ -2677,6 +2685,48 @@ bằng khoá của **chính bo**, nên bê artifact từ bo cũ sang bo mới s�
 Đây là hệ quả trực tiếp của quyết định ký, và nó phải nằm trong runbook trước khi
 có người thay bo lần đầu, không phải sau.
 
+### 3.9 W8 — PGM-02 v2.2 authority reconciliation
+
+W8 chỉ quản change request PGM-02 v2.2. Owner đã duyệt đầu vào sản phẩm tại
+[`CR-PROG-PGM02-V22-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md), nhưng
+System Architect chưa review/pin baseline reconciled. Vì vậy chỉ task tài liệu
+`T59-801` được `READY`; không task production code nào được tạo hoặc tự chuyển
+`ORDERED` trong revision này.
+
+| Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
+|---|---|---|---|---|---|
+| `T59-801` | P0 | `PGM02-V22-WP-00`: inventory và reconcile Product/SRS/Architecture/DDD/UX/assets/contracts/Risk/Trace/VVP/Plan59; xử lý conflict route, Simulation boundary/RBAC và register `F-P59-GHOST-POU-001`; lập task downstream theo increment | `CR-PROG-PGM02-V22-001` Owner approved | **READY — reconciliation only; NO PRODUCTION CODE** | Không còn authority conflict P0; mọi `TBD/PENDING` có owner/impact/gate/unlock; exact revision/hash được Product Owner + System Architect pin; machine-readable contract và requirement→test mapping của từng lát cắt được xác định; docs harness + candidate pin PASS sau khi manifest được cập nhật bởi Document Control; chỉ khi đó mới thêm task R1/R2/R3 với status/gate riêng. |
+
+Hai hồ sơ đầu vào là
+[`REC-PGM02-ST-FBD-REDESIGN-REVIEW-001`](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/reviews/PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md)
+và
+[`PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001`](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/reviews/PGM02_ST_FBD_IMPLEMENTATION_PLAN.md).
+Chúng là supporting review/proposal, không phải tracker thứ hai.
+
+Canonical work-package ID dùng trong mọi controlled record là
+`PGM02-V22-WP-00..13`. Các task cũ dưới đây chỉ là predecessor evidence; trạng
+thái `DONE` của chúng **không** chứng minh redesign mới đã implement:
+
+| Work package canonical | Predecessor evidence Plan59 | Disposition sau `T59-801` |
+|---|---|---|
+| `PGM02-V22-WP-00` | — | `T59-801` READY |
+| `PGM02-V22-WP-01` | `T59-306/503` | task R1 mới |
+| `PGM02-V22-WP-02` | `T59-301/306/506` | task R1 mới |
+| `PGM02-V22-WP-03` | `T59-003/201..205` | task R1 mới |
+| `PGM02-V22-WP-04` | `T59-302/408/506` | task R1 mới |
+| `PGM02-V22-WP-05` | `T59-105/306/506/601` | task R1 mới |
+| `PGM02-V22-WP-06` | `T59-302/408/504/506` | tách EDIT/LIVE/SIMULATE |
+| `PGM02-V22-WP-07` | `T59-106/302/402..407/602/603` | capability/contract mới R3 |
+| `PGM02-V22-WP-08` | `T59-503/506/603` + WP-07 | task R3 mới |
+| `PGM02-V22-WP-09` | `T59-408/501/502/504/505` | task P0 truth + integration R2 mới |
+| `PGM02-V22-WP-10` | `T59-504/506/601/604` | tách budget R1/R2/R3 |
+| `PGM02-V22-WP-11` | `T59-503/506/603/604` | tách acceptance theo increment |
+| `PGM02-V22-WP-12` | `T59-601/603/604/701..706` | verification mới theo increment |
+| `PGM02-V22-WP-13` | `T59-707` chỉ là verdict lịch sử | closeout mới theo increment |
+
+`PGM02-V22-WP-06/10/11/12/13` phải được tách theo R1/R2/R3 khi lập task để
+không có một trạng thái `DONE` mơ hồ cho ba capability khác nhau.
+
 ## 4. Bảng ownership
 
 | Boundary | R | A | Consumer/reviewer |
@@ -2697,12 +2747,15 @@ không đổi theo nhân sự.
 ### 5.1 DoR task
 
 - Task ID/owner/source target/acceptance/dependency rõ trong §3.
-- Product/SRS/DDD/ADR đã Active; không cần approval mới.
+- Với 52 task baseline: Product/SRS/DDD/ADR đã Active. Với `T59-801`: Owner
+  disposition đã có nhưng System Architect/baseline pin còn PENDING; task chỉ
+  được làm reconciliation, không được suy thành quyền code downstream.
 - Contract change có producer/consumer/migration/rollback/test list.
 - Fixture và lệnh test nhỏ nhất đã xác định.
 
-Tất cả task Plan 59 đạt DoR về tài liệu. `ORDERED` chỉ chờ output code của task
-trước, không chờ quyết định.
+Các task baseline và `T59-801` đạt DoR đúng phạm vi ghi trên card. `ORDERED` chỉ
+được dùng khi decision/design/contract của chính lát cắt đã khóa; vì vậy chưa có
+task PGM-02 R1/R2/R3 nào mang trạng thái này.
 
 ### 5.2 DoD task
 
@@ -2734,7 +2787,7 @@ các evidence task còn khả thi.
 
 | Cổng | Trạng thái |
 |---|---|
-| `IMPLEMENTATION_CLOSE` | **PASS (2026-08-24)** — corrective source đã merge `main@fa1f5f4`; full gate cùng cây: `ctest` 1293/1293, TSan 0 cảnh báo, Go 18/18 với compiler/packager production, FE 1492 test + `build:release`, E2E mock 92 + real-backend 1/1 (`HTTP>=500=0`), layout exit 0, trace 82/82 + 44/44, pin 16/16 |
+| `IMPLEMENTATION_CLOSE` | **PENDING** — `main@fa1f5f4` từng PASS full gate (`ctest` 1293/1293, TSan 0 cảnh báo, Go 18/18, FE 1492 test, E2E mock 92 + real-backend 1/1, trace 82/82 + 44/44, pin 16/16), nhưng snapshot đó đã bị supersede về closure bởi `F-P59-GHOST-POU-001`: Owner chưa chọn semantics POU `PROGRAM` không có entry `programs[]`, nên chưa có affected gate theo hành vi được duyệt |
 | `TARGET_FAKE_MCU_DEPLOY` | **PARTIAL (2026-08-24)** — deploy `fa1f5f4` trên Forlinx `MCU_MODE=FAKE`: 5/5 service active, health đủ 6 mục `ok`, Commission 10 Program `SUCCEEDED`, Programs `CORE_LIVE`, Enable/Disable 6/6 ~0,95 s, Monitor đọc `UI-01` GOOD/LIVE, signal producer→consumer FRESH. **Còn thiếu**: diễn tập rollback đầy đủ binary+DB trên bo (`F-P59-ROLLBACK-DB-001`) |
 | `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** — yêu cầu đủ 24 h, không rút ngắn |
 | `RELEASE_READY` | **NO-GO** |
@@ -2750,7 +2803,7 @@ của `main@29c59ec`, không phải evidence cho corrective source mới:
 | 10-Program 24 h + power/RETAIN/LKG | **KHÔNG ĐẠT** — `T59-702`/`T59-704` |
 | Install/upgrade/rollback/provenance/SIGNED | **ĐẠT phần lớn** — SIGNED và provenance đạt ở cả HOST lẫn TARGET; thay controller còn thiếu |
 | CI required checks; không quarantine im lặng | **WAIVED/DEFERRED BY OWNER cho implementation close**; không phải CI PASS, release verdict CI chưa có |
-| Trace/Risk không còn Must thiếu disposition | Trace join **82/82 + 44/44**; risk vẫn 22/22 Open và disposition không đồng nghĩa residual accepted |
+| Trace/Risk không còn Must thiếu disposition | Trace join baseline **82/82 + 44/44**; risk hiện 23/23 Open gồm risk Simulation pre-baseline, và disposition không đồng nghĩa residual accepted |
 
 `RELEASE_READY` = **`NO-GO`**.
 
@@ -2764,6 +2817,7 @@ truy nguyên As-Built đến 2026-08-20.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.5 | 2026-08-24 | Ghi `CR-PROG-PGM02-V22-001` và mở duy nhất `T59-801`/W8 cho authority reconciliation; tổng 53 task/9 Wave. Thêm crosswalk namespaced `PGM02-V22-WP-00..13`, giữ mọi task R1/R2/R3 chưa tạo và code redesign NO-GO tới khi Owner + Architect pin baseline. Sửa `IMPLEMENTATION_CLOSE` về PENDING vì PASS tại `fa1f5f4` là snapshot trước khi `F-P59-GHOST-POU-001` được đăng ký làm quyết định Owner còn mở; release giữ NO-GO. |
 | 1.0/1.1 | 2026-08-20 | Bản nháp 37 task chia Rev A/Rev B; superseded. |
 | 2.0 | 2026-08-20 | Owner chốt một Product; 51 task/8 Wave từ contract đến release, đủ POU/library/multi-Program/signal/enable/output/HIL; mọi implementation task READY/ORDERED, không còn decision blocker. |
 | 2.4 | 2026-08-24 | Đồng bộ số hiện hành **52 task** sau `T59-607`; mở corrective closure cho POU/Signal/atomic/Web IPC/library và bảy finding. Tách `IMPLEMENTATION_CLOSE`, `TARGET_FAKE_MCU_DEPLOY`, `TARGET_FAKE_MCU_SOAK`, `RELEASE_READY`; CI ghi `WAIVED/DEFERRED BY OWNER`, physical MCU/HIL deferred, soak 24 h `NOT_RUN`, formal VVP unified 0/12 PASS. |

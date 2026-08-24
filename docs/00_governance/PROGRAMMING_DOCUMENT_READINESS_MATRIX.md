@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-DRM-001` |
-| Phiên bản | 2.2 |
-| Trạng thái | **Active — `PLAN_READY=PASS`, `IMPLEMENT_READY=PASS`, `IMPLEMENTATION_CLOSE=PENDING`, `RELEASE_READY=NO-GO`** |
+| Phiên bản | 2.3 |
+| Trạng thái | **Active — baseline ADR-050 `PLAN/IMPLEMENT_READY=PASS`; PGM-02 v2.2 chỉ `T59-801=READY`, code NO-GO; `RELEASE_READY=NO-GO`** |
 | Ngày | 2026-08-24 |
 | Chủ quản | System Engineering + Document Control |
 | Product authority | [`PROD-PROG-001` v3.0](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) |
@@ -19,14 +19,17 @@ liệu đã khóa đủ quyết định để team triển khai ngay: đa Progra
 Enable/Disable, scheduling, output ownership, RETAIN, trace, sáu workspace và
 cổng phát hành.
 
-- Không còn Open Decision hoặc `TBD` chặn implementation.
+- Mười hai quyết định unified của baseline vẫn CLOSED. Hai record hiện OPEN:
+  `CR-PROG-PGM02-V22-001` chờ Architect pin baseline sau `T59-801`, và
+  `F-P59-GHOST-POU-001` chờ Owner chọn semantics package.
 - Task phụ thuộc code dùng `ORDERED`, tự chuyển `READY` khi dependency hoàn tất.
 - CI được Product Owner cho phép `WAIVED/DEFERRED BY OWNER` trong phạm vi đóng
   implementation; đây không phải CI PASS và không mở release.
 - Lab Forlinx hiện dùng MCU FAKE vì chưa có MCU/FW/phần cứng; physical MCU/HIL
   được defer, không đổi scenario target/HIL thành PASS.
-- Corrective source POU/Signal/atomic/Web IPC/library đang ở current worktree;
-  phải merge và chạy gate hiện hành trước `IMPLEMENTATION_CLOSE=PASS`.
+- Corrective source tại `fa1f5f4` từng qua full host gate, nhưng
+  `IMPLEMENTATION_CLOSE` hiện PENDING trở lại vì `F-P59-GHOST-POU-001` chưa có
+  quyết định và affected gate theo semantics được duyệt.
 - As-Built một Program/bốn workspace được giữ làm migration fact, không phải
   Product Target.
 
@@ -35,16 +38,28 @@ cổng phát hành.
 | Lớp | Authority hiện hành | Nội dung đã khóa | Gate |
 |---|---|---|---|
 | Product | `PROD-PROG-001` v3.0 | Một Product; capacity 32/16; POU; library; signal; lifecycle; six-workspace IA | PASS |
-| Decision | `ADR-050`, `DEC-PROG-REGISTER-001` | 0 OPEN; compatibility, scheduling, safety, PID, trace và release boundary | PASS |
+| Decision | `ADR-050`, `DEC-PROG-REGISTER-001` v1.1 | 12 unified CLOSED; 2 record OPEN; chỉ Owner disposition cho WP-00 đã có | PASS cho baseline; PGM-02 code PENDING |
 | Requirement | `SRS-PROG-001` v1.0 | 82 requirement: 60 legacy migration + 22 unified target | PASS |
 | Detailed Design | `DDD-SW-PROG-UNIFIED-001` | DD-01..DD-13; model, contract, state, algorithm, error, security, source mapping, rollback | PASS |
 | UX | `UX-WEB-PROG-001` v2.0 + asset PGM-02/PGM-04 desktop/mobile | Sáu workspace, POU tree, Control Library, lifecycle states và safe actions | PASS |
 | Compiler | `DDD-LANG-PROG-001` v1.0 | User Function/FB, purity, instance state, call graph và artifact v2 | PASS |
 | Verification | `VVP-PROG-001` v2.0 | 32 scenario migration + 12 scenario unified; target/HIL authority tách khỏi host | PASS cho implementation; release evidence chờ chạy |
-| Traceability | `TRACE-PROG-001` v6.5 | 82/82 requirement và 44/44 scenario có join máy; formal T/P/R chưa nâng | PASS về tài liệu |
-| Risk | `RSK-PROG-001` v4.20 | 22/22 risk Open; treatment corrective chưa hạ residual | PASS cho implementation; release NO-GO |
-| Execution | `PLAN-PROG-059` v2.4 | 52 task, 8 Wave, một tracker duy nhất; corrective close và target MCU FAKE tách evidence | PASS cho implementation; close pending |
+| Traceability | `TRACE-PROG-001` v6.7 | 82/82 requirement và 44/44 scenario baseline có join máy; PGM-02 v2.2 mới là pre-baseline crosswalk, không đổi D/I/T/P/R | PASS baseline; scoped plan pending |
+| Risk | `RSK-PROG-001` v4.21 | 23/23 risk Open, gồm risk Simulation pre-baseline; không residual nào được hạ bằng approval | PASS baseline; PGM-02 code/release NO-GO |
+| Execution | `PLAN-PROG-059` v2.5 | 53 task, 9 Wave, một tracker duy nhất; chỉ `T59-801` READY trong W8 | baseline theo task hiện hành; PGM-02 downstream NO-GO |
 | Autonomous prompt | `PROMPT-PLAN59-AUTONOMOUS` v2.0 | Chọn task, thực thi, kiểm chứng, commit/PR và cập nhật tracker | READY |
+
+### 1.1 Scoped gate PGM-02 v2.2
+
+| Scope | Change request | Work package được mở | `PLAN_READY` | `IMPLEMENT_READY` | `RELEASE_READY` |
+|---|---|---|---|---|---|
+| `PGM02-V22` | **OWNER_APPROVED / ARCHITECT_PENDING** | Chỉ `PGM02-V22-WP-00` qua `T59-801=READY` | **PENDING** | **R1/R2/R3 NO-GO** | **NO-GO** |
+
+`T59-801` chỉ được inventory/reconcile và lập baseline/task downstream. Nó không
+cho phép viết production code, đổi route Active, đưa Simulation vào runtime hoặc
+tự gắn `ORDERED` cho R1/R2/R3. Điều kiện mở là exact revision/hash của
+Product/SRS/Architecture/DDD/UX/contracts/Risk/Trace/VVP/Plan59 được Product
+Owner + System Architect review/pin và không còn conflict P0.
 
 ## 2. Disposition tài liệu cũ
 
@@ -77,12 +92,13 @@ Plan59 trong change-set đó; không tạo Open Decision mới chỉ để trì 
 
 | Cổng | Trạng thái 2026-08-24 | Điều kiện đổi trạng thái |
 |---|---|---|
-| `IMPLEMENTATION_CLOSE` | **PENDING** | corrective source POU/Signal/atomic/Web IPC/library merge sạch; affected/full host gate, trace 82/82 và pin PASS |
-| `TARGET_FAKE_MCU_DEPLOY` | **PENDING** | build đúng commit, backup/install/service/API/UI/read-back/rollback trên Forlinx; hồ sơ ghi rõ `MCU_MODE=FAKE` |
+| `IMPLEMENTATION_CLOSE` | **PENDING** | Owner chốt `F-P59-GHOST-POU-001`; đồng bộ semantics SRS/DDD/contract/compiler-packager/test và chạy affected/full gate + pin PASS |
+| `TARGET_FAKE_MCU_DEPLOY` | **PARTIAL** | deploy/read-back `fa1f5f4` đã có trên Forlinx `MCU_MODE=FAKE`; còn rollback đầy đủ binary+DB trên bo |
 | `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** | chạy đủ 24 h, raw JSONL/hash/provenance, fault/signal/restart và `max_iop_poll_gap <200 ms` |
 | `RELEASE_READY` | **NO-GO** | CI, formal Test Result, residual acceptance và mọi Must target/HIL/physical theo VVP; waiver đóng implementation không thay điều kiện release |
 
-`PLAN_READY` và `IMPLEMENT_READY` chỉ trao quyền làm việc. `TARGET_FAKE_MCU_DEPLOY`
+`PLAN_READY` và `IMPLEMENT_READY` của baseline ADR-050 chỉ trao quyền làm việc
+trong scope đã pin; không tự áp dụng cho PGM-02 v2.2. `TARGET_FAKE_MCU_DEPLOY`
 và soak chứng minh profile lab, không phải MCU vật lý/HIL. Formal VVP giữ 12
 scenario unified `NOT_RUN` cho tới khi có Test Result đúng thẩm quyền.
 
@@ -90,6 +106,7 @@ scenario unified `NOT_RUN` cho tới khi có Test Result đúng thẩm quyền.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.3 | 2026-08-24 | Tách scoped gate PGM-02 v2.2: Owner approved change request và chỉ `T59-801` READY; Architect pin, `PLAN_READY[PGM02-V22]` và mọi `IMPLEMENT_READY[R1/R2/R3]` giữ PENDING/NO-GO. Đồng bộ Plan59 53 task/9 Wave, Risk 23/23 Open, Trace v6.7 và mở lại `IMPLEMENTATION_CLOSE=PENDING` vì `F-P59-GHOST-POU-001`; deploy MCU FAKE giữ PARTIAL, release NO-GO. |
 | 2.2 | 2026-08-24 | Đồng bộ Plan59 52 task; thêm bốn lớp trạng thái implementation close/deploy MCU FAKE/soak/release; ghi CI owner-deferred, physical MCU/HIL deferred và soak 24 h chưa PASS. |
 | 1.0..1.2 | 2026-08-15 | Ma trận theo Plan 56, có ba hồ sơ thiếu và Product authority treo; superseded. |
 | 2.0 | 2026-08-20 | Hợp nhất một Product; đóng mọi decision/document blocker; chuyển authority thực thi sang Plan59 và tách evidence queue khỏi implementation readiness. |

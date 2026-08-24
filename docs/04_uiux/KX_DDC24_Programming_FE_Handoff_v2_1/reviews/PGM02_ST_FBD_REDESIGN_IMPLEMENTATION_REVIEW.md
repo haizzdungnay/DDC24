@@ -3,20 +3,26 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-PGM02-ST-FBD-REDESIGN-REVIEW-001` |
-| Phiên bản | 1.1 |
-| Trạng thái | **Owner approved change request — WP-00 OPEN; baseline reconciled chưa được pin** |
+| Phiên bản | 1.2 |
+| Trạng thái | **Supporting record — Owner approved change request; `T59-801`/`PGM02-V22-WP-00` READY; Architect PENDING** |
 | Ngày rà soát | 2026-08-24 |
 | Phạm vi | PGM-02 Programs, ST Editor, FBD Editor, Quick Library, EDIT/SIMULATE/LIVE |
 | Mốc mã nguồn | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` (`main`) |
 | Người rà soát | Agent Leader — đối chiếu FE, BE, Core/runtime và browser host |
-| Người duyệt | Product Owner/CTO + System Architect |
+| Người duyệt | Product Owner/CTO — đã duyệt hướng thay đổi; System Architect — `PENDING` review/pin baseline |
 | Tài liệu triển khai kèm theo | [PGM02_ST_FBD_IMPLEMENTATION_PLAN.md](PGM02_ST_FBD_IMPLEMENTATION_PLAN.md) |
-| Quyền thực thi | Plan59 vẫn là tracker duy nhất; Owner đã cho phép làm WP-00, chưa cho phép đánh dấu các increment đã implement |
-| Gate hiện hành | Review package: **OWNER ACCEPTED**; `G-PGM02-00`: **IN PROGRESS**; code redesign: **NO-GO tới khi baseline reconciled được pin**; `RELEASE_READY`: **NO-GO** |
+| Change request chủ quản | [`CR-PROG-PGM02-V22-001`](../../../00_governance/PROGRAMMING_OPEN_DECISIONS.md) |
+| Task thực thi duy nhất đang mở | [`T59-801`](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) — reconciliation only |
+| Quyền thực thi | Plan59 vẫn là tracker duy nhất; chỉ `T59-801` được `READY`, chưa mở task downstream hay code production |
+| Gate hiện hành | Owner disposition: **APPROVED**; Architect baseline review/pin: **PENDING**; `T59-801`: **READY**; R1/R2/R3 code: **NO-GO**; `RELEASE_READY`: **NO-GO** |
 
 > Phân loại bằng chứng: kết quả browser/build/test trong hồ sơ này là **HOST**.
 > Không có bằng chứng board/HIL/physical I/O/timing/power-loss mới và không được
 > dùng hồ sơ này để tuyên bố target hay release PASS.
+
+Tên `WP-00..WP-13` trong supporting record này là alias đọc ngắn. Khi đưa vào
+hồ sơ kiểm soát, trace, risk, task hay evidence phải dùng namespace canonical
+`PGM02-V22-WP-00..PGM02-V22-WP-13`; alias không tự tạo execution authority.
 
 ## 1. Executive Summary
 
@@ -786,21 +792,25 @@ System Architect và không thay bước review/pin baseline reconciled tại
    `R1 EDIT workspace` → `R2 coherent LIVE` → `R3 isolated SIMULATE`.
    Việc R1/R2 hoàn tất không được làm UI giả rằng R3 đã có; release site thật
    vẫn phụ thuộc V&V/target/HIL tương ứng.
-3. **Chốt quyền điều khiển Simulation v1.** Khuyến nghị: viewer/operator chỉ
-   đọc session/snapshot; admin mới create/run/pause/step/reset/stop/set input.
-   Nếu Owner muốn operator điều khiển sandbox, phải phê duyệt rõ phạm vi action;
-   BE RBAC/audit và negative tests phải đổi cùng contract, FE không tự mở quyền.
+3. **Chốt quyền điều khiển Simulation v1.** Viewer/operator chỉ đọc session/
+   snapshot; admin mới create/run/pause/step/reset/stop/set input. BE phải cưỡng
+   chế RBAC/object-scope/audit ở server và có negative tests; FE không tự mở quyền.
 
 Các điểm **không cần Owner quyết**: chọn một cây POU, dùng same catalog,
 giữ FBD domain/reducer, coherent revision join, trace mailbox, process sandbox,
 compiler-generated virtual-input allowlist, multi-task Step semantics,
 CodeMirror/canvas adapter spike, keying/throttling và test strategy.
 
-**OWNER APPROVED — WP-00 OPEN; AWAITING RECONCILED BASELINE PIN**
+Authority chuẩn của quyết định này là `CR-PROG-PGM02-V22-001`; task duy nhất được
+mở là `T59-801`/`PGM02-V22-WP-00`. Record này không thay chữ ký Architect và
+không cấp quyền triển khai R1/R2/R3.
+
+**OWNER APPROVED — T59-801 READY; ARCHITECT BASELINE PIN PENDING**
 
 ### Revision history
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.2 | 2026-08-24 | Nối record vào `CR-PROG-PGM02-V22-001` và `T59-801`, chuẩn hóa namespace `PGM02-V22-WP-*`, tách rõ Owner approved khỏi Architect `PENDING`; chỉ mở reconciliation, không mở code R1/R2/R3 |
 | 1.1 | 2026-08-24 | Ghi nhận Owner chấp thuận target/change request, ba increment `R1 EDIT → R2 LIVE → R3 SIMULATE` và Simulation v1 admin-only; mở WP-00 nhưng chưa pin baseline reconciled hoặc mở release gate |
 | 1.0 | 2026-08-24 | Rà source FE/BE/Core/runtime và browser host đủ 5 viewport; lập ma trận 15 câu FE, 21 BE, 19 runtime, UC-01..08, classification, 17 gap, dependency, 14 WP, migration/risk/3 Owner decisions; không triển khai code |

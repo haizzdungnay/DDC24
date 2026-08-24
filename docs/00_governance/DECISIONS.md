@@ -2,7 +2,7 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-20 (phê duyệt Product Owner/CTO — bốn quyết định phạm vi: hoãn STM32 BSP nhưng gỡ firmware provenance giả, OTA → Rev B, gỡ `expose_bacnet` khỏi Rev A, chốt vòng đời lệnh ghi Modbus RTU; không cấp ADR mới. Trước đó: 2026-08-19 `AUTH-WEBUX-2026-08-19-02` — bốn quyết định người: `T57-3.8` **hoãn sang Rev B**, chủ sở hữu ba task C++, uỷ quyền truy cập board Foxlinx, và **mốc hết hiệu lực của `WAIVED FOR IMPLEMENTATION`**; không cấp ADR mới; trước đó: `ADR-042`…`ADR-049` `Accepted` — chín quyết định theo từng task để mở Wave 3 của Plan 57, ban hành cùng `AUTH-WEBUX-2026-08-19-01`; trước đó: `ADR-034`…`ADR-039` `Accepted` — sáu câu hỏi chặn còn lại của Plan 57 §12: annunciation, chủ sở hữu ngữ nghĩa mô phỏng cảnh báo, kho chỉ số ISA-18.2, chính sách mật khẩu, chủ sở hữu "hiệu lực thực tế" của lịch, và **an toàn quét bus Modbus**; `ADR-033`/`ADR-032` `Accepted` — cách ly route và điều hướng web 4 nhóm)
+**Cập nhật:** 2026-08-24 (đồng bộ bộ đếm: `ADR-052` là ADR hiện hành mới nhất, `ADR-053` là số trống kế tiếp; không cấp ADR mới trong lần sửa này. Trước đó: 2026-08-20 phê duyệt Product Owner/CTO — bốn quyết định phạm vi: hoãn STM32 BSP nhưng gỡ firmware provenance giả, OTA → Rev B, gỡ `expose_bacnet` khỏi Rev A, chốt vòng đời lệnh ghi Modbus RTU; không cấp ADR mới. Trước đó: 2026-08-19 `AUTH-WEBUX-2026-08-19-02` — bốn quyết định người: `T57-3.8` **hoãn sang Rev B**, chủ sở hữu ba task C++, uỷ quyền truy cập board Foxlinx, và **mốc hết hiệu lực của `WAIVED FOR IMPLEMENTATION`**; không cấp ADR mới; trước đó: `ADR-042`…`ADR-049` `Accepted` — chín quyết định theo từng task để mở Wave 3 của Plan 57, ban hành cùng `AUTH-WEBUX-2026-08-19-01`; trước đó: `ADR-034`…`ADR-039` `Accepted` — sáu câu hỏi chặn còn lại của Plan 57 §12: annunciation, chủ sở hữu ngữ nghĩa mô phỏng cảnh báo, kho chỉ số ISA-18.2, chính sách mật khẩu, chủ sở hữu "hiệu lực thực tế" của lịch, và **an toàn quét bus Modbus**; `ADR-033`/`ADR-032` `Accepted` — cách ly route và điều hướng web 4 nhóm)
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa; **bản 2026-08-19 sửa lại lần chuẩn hoá
 2026-07-22**: EasySet parity thành **`ADR-040`** (không phải `ADR-013`) và raw SHM thành **`ADR-041`**
@@ -18,8 +18,9 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 > bounded modules, mục nội tuyến bên dưới), `ADR-032` (điều hướng web 4 nhóm),
 > `ADR-033` (cách ly route khỏi điều hướng) và `ADR-034`…`ADR-039` (sáu quyết
 > định Plan 57 §12, mục nội tuyến bên dưới). Vì vậy `ls docs/adr/` **không** cho
-> biết số nào còn trống. Trước khi đặt số mới, lấy số lớn nhất trong bảng này
-> rồi cộng một. Số cao nhất đã cấp phát: **`ADR-049`** (2026-08-19).
+> biết số nào còn trống. Trước khi đặt số mới, lấy số lớn nhất trong bảng hoặc
+> hồ sơ ADR hiện hành rồi cộng một. Số cao nhất đã cấp phát: **`ADR-052`**
+> (2026-08-22).
 
 | ID | Quyết định hiện hành | Trạng thái |
 |---|---|---|
@@ -1503,4 +1504,5 @@ profile nên profile đổi sẽ gãy build, không gãy ngoài hiện trường
   đặt hẹn giờ an toàn ở đó sẽ biến mỗi lần chỉnh thành sự kiện tương thích
   artifact trong khi không artifact nào phụ thuộc nó.
 
-Số ADR tiếp theo còn trống: **`ADR-052`**.
+ADR hiện hành mới nhất: [`ADR-052`](../adr/ADR-052-programming-ky-artifact-bang-khoa-thiet-bi.md).
+Số ADR tiếp theo còn trống: **`ADR-053`**.

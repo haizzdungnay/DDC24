@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 6.6 |
-| Trạng thái | **Active — 82/82 requirement có dòng máy đọc được; 44/44 scenario được nối; release evidence chưa đủ** |
+| Phiên bản | 6.7 |
+| Trạng thái | **Active — baseline 82/82 requirement và 44/44 scenario; PGM-02 v2.2 pre-baseline, chỉ `T59-801` READY** |
 | Cập nhật | 2026-08-24 |
 | Chủ quản | Verification Lead |
 | Người review | Document Control, Product, Architect và tất cả discipline lead |
@@ -16,10 +16,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối Product v3.0 → 82 requirement → Unified DDD → Plan 59 task → scenario/evidence/release. Legacy matrix phía dưới giữ history. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 82/82 requirement có dòng §6; baseline merged giữ 22/82 `I=Y`. Corrective source Plan59 cho user POU, Published Signal và atomic staging đang ở current worktree, chưa merge nên 22 dòng unified mới vẫn giữ `I=N`. Hai record legacy `BLOCKED`, 42 scenario `NOT_RUN`, 0/44 PASS; CI được owner cho phép `WAIVED/DEFERRED` trong phạm vi đóng implementation, MCU vật lý/HIL được defer vì lab dùng MCU FAKE; release vẫn `RED / NO-GO`. |
-| 4. Thiết kế mới thay đổi điều gì? | ADR-050 thêm 22 requirement và 12 scenario unified; Plan 59 thay Plan 53/56. Evidence legacy không tự kế thừa sang contract v2. |
+| 3. Hệ thống hiện tại đang có gì? | Baseline có 82/82 requirement ở §6, 44/44 scenario được nối, 22/82 `I=Y`, 0/44 formal PASS. PGM-02 v2.2 mới có Owner change request và `T59-801`; chưa có requirement/scenario canonical hay code/evidence để đổi `D/I/T/P/R`. |
+| 4. Thiết kế mới thay đổi điều gì? | ADR-050 giữ baseline unified. `CR-PROG-PGM02-V22-001` mở một vòng reconciliation cho route/workspace và Simulation theo R1 EDIT → R2 LIVE → R3 SIMULATE; Architect/baseline pin còn PENDING. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
-| 6. Điều gì còn bị chặn? | Không còn decision/document blocker cho implementation. Target/HIL/physical I/O/soak/CI/provenance còn thiếu chỉ chặn Release. |
+| 6. Điều gì còn bị chặn? | Baseline ADR-050 vẫn triển khai theo task hiện hành. PGM-02 v2.2 code bị chặn tới khi `T59-801` hoàn tất và Owner + Architect pin baseline; `F-P59-GHOST-POU-001` chờ Owner. Target/HIL/soak/CI/provenance tiếp tục chặn Release. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `docs_iso_harness.py --expect` phải xác nhận 82 dòng D/I/T/P/R, 0 link/ID/invariant lỗi; `trace_bidirectional_check.py` phải xác nhận 82/82 requirement và 44/44 scenario. Đây chỉ là bằng chứng tính nhất quán tài liệu, không thay Test Result, target/HIL hay release approval. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
@@ -299,7 +299,9 @@ tính nhất quán hồ sơ, không đổi trạng thái formal `T/P/R`.
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| 17 decision `DECIDED`; baseline approved | Product + discipline authority + Document Control | **Không còn blocker implementation** theo `AUTH-PROG-2026-08-11-03` |
+| 12 quyết định unified CLOSED; baseline ADR-050 approved | Product + discipline authority + Document Control | Không còn blocker quyền implementation trong baseline đã pin; không áp dụng tự động cho PGM-02 v2.2 |
+| `CR-PROG-PGM02-V22-001` Owner approved, Architect pending | Product Owner + System Architect + Document Control | Hoàn tất `T59-801`; pin Product/SRS/Architecture/DDD/UX/contracts/Risk/Trace/VVP/Plan59 rồi mới thêm task code R1/R2/R3 |
+| `F-P59-GHOST-POU-001` OPEN | Product Owner + Architect + Compiler/BE/Core | Chọn fail Check hay loại POU chưa xếp lịch khỏi package; đồng bộ semantics và chạy affected gate |
 | Source Target chưa implement end-to-end | Dev Leads | commit/build mapping per requirement |
 | Test Result PASS 0/44; 2 record `BLOCKED`, 42 `NOT_RUN` | QA + discipline leads | hoàn tất workflow E2E, rerun và independent review theo VVP |
 | Corrective source 508/509 chưa merge | Dev Leads | commit/PR/merge thật để nâng `I`; target supporting evidence đã có nhưng không nâng `T/P/R` |
@@ -311,6 +313,8 @@ tính nhất quán hồ sơ, không đổi trạng thái formal `T/P/R`.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 6.7 | 2026-08-24 | Thêm §13 pre-baseline crosswalk namespaced `PGM02-V22-WP-00..13`; chỉ `T59-801` READY, không tạo requirement/scenario hay đổi `D/I/T/P/R`. Ghi Owner approved change request, Architect pin/code R1/R2/R3 PENDING/NO-GO và tách `F-P59-GHOST-POU-001` OPEN. |
+| 6.6 | 2026-08-24 | Đồng bộ metadata/crosswalk corrective sau self-review và target deploy: thêm rollback DB vào evidence CORE; giữ 82/82 requirement, 44/44 scenario và mọi formal `T/P/R` không đổi. |
 | 6.5 | 2026-08-24 | Thêm 22 dòng unified vào §6 để đủ 82/82 requirement; mở checker cho `VS-PROG-U01..U12`; cập nhật coverage 44/44 scenario. Giữ corrective source current-worktree ở `I=N`, formal `T/P/R=N`, 0/44 PASS; ghi CI `WAIVED/DEFERRED BY OWNER`, MCU vật lý/HIL deferred và soak MCU FAKE 24 h chưa PASS |
 | 6.4 | 2026-08-21 | Ghi evidence source W5 `T59-503..506`: sáu workspace/lifecycle; Monitor Point + Published Signal fail-closed; ST history/runtime overlay và FBD POU typed; lane real-backend Project→Restore không dùng Programming mock; ST+ gửi đúng payload Draft v2 strict và có API read-back. Ghi số đo HOST/LOCAL current-worktree đã PASS nhưng giữ nguyên 22/60 `I=Y`, 0/32 PASS và mọi `T/P/R`; không claim GitHub CI/target/HIL/release. Ghi đúng finding join hai chiều: script hiện chỉ hiểu 60/32 legacy và FAIL trước 22/12 unified; owner/gate/điều kiện mở ở §8.1 |
 | 2.0 | 2026-08-09 | Trace nhóm SRS/proposal tới 30 scenario, evidence RED |
@@ -419,7 +423,7 @@ qua journey hoặc qua kịch bản xuyên suốt tương ứng.
 | Quy tắc vô hiệu hóa | PASS | §7 và §8: đổi requirement/design/contract/source/board làm mất hiệu lực Test Result phía dưới; không giữ `P` cũ |
 | Kiểm tính nhất quán tự động | PASS khi rerun cùng change set | §8.1 khóa acceptance 82/82 requirement, 44/44 scenario và harness 82 trace rows; không thay Test Result |
 | Trạng thái bằng chứng trung thực | PASS | §5 và §7: 2/44 record `BLOCKED`, 42 `NOT_RUN`, 0/44 PASS, 0/82 released; release gate `RED / NO-GO` |
-| Quyền implementation | **PASS** | §9: baseline approved, 17/17 decision `DECIDED`, chữ ký còn thiếu được miễn cho implementation. Source/Test Result chưa có là công việc cần thực hiện, không phải blocker quyền viết code |
+| Quyền implementation | **PASS có phạm vi** | §9: baseline ADR-050 approved; riêng PGM-02 v2.2 chỉ `T59-801` READY và code R1/R2/R3 NO-GO tới khi Architect pin baseline |
 
 Ma trận này theo dõi trạng thái; nó **không** tạo ra bằng chứng.
 
@@ -458,3 +462,35 @@ Bảng trên là **snapshot tại thời điểm ghi** — với các dòng `IN_
 tra `PROGRAMMING_IMPLEMENTATION_TRACKER.md` §1 để biết trạng thái mới nhất;
 không suy luận trạng thái final từ bảng này một khi Sprint B-E đã kết
 thúc.
+
+## 13. Pre-baseline crosswalk — PGM-02 v2.2
+
+Change request [`CR-PROG-PGM02-V22-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md)
+đã được Owner duyệt để mở duy nhất `T59-801`. System Architect chưa pin baseline
+reconciled, nên bảng này chỉ nối proposal tới predecessor evidence và risk; nó
+không thêm requirement/scenario canonical, không đổi đếm 82/44 và không đổi bất
+kỳ trục `D/I/T/P/R` nào.
+
+Tên `WP-01..13` đã được Plan56 dùng ở §12. Vì vậy mọi record hiện hành phải dùng
+canonical namespace `PGM02-V22-WP-00..13`; tên ngắn trong proposal chỉ là alias.
+
+| Work package canonical | Phạm vi proposal | Predecessor evidence Plan59 | Risk/change gate | Trạng thái trace |
+|---|---|---|---|---|
+| `PGM02-V22-WP-00` | Authority/baseline reconciliation | — | `CR-PROG-PGM02-V22-001`; `F-P59-GHOST-POU-001`; `RSK-PROG-023` | `T59-801 READY`; không đổi D/I/T/P/R |
+| `PGM02-V22-WP-01` | Shared Programs shell/route | `T59-306/503` | route Active phải reconcile | task mới sau T59-801 |
+| `PGM02-V22-WP-02` | Một POU Explorer/identity | `T59-301/306/506` | Draft/Revision/runtime identity | task mới sau T59-801 |
+| `PGM02-V22-WP-03` | Quick Library chung | `T59-003/201..205` | catalog/version/source authority | task mới sau T59-801 |
+| `PGM02-V22-WP-04` | ST surface | `T59-302/408/506` | diagnostic/source-map parity | task R1 mới |
+| `PGM02-V22-WP-05` | FBD canvas | `T59-105/306/506/601` | canonical model/port order | task R1 mới |
+| `PGM02-V22-WP-06` | Workbench | `T59-302/408/504/506` | nguồn dữ liệu theo mode | tách R1/R2/R3 |
+| `PGM02-V22-WP-07` | Simulation infrastructure | `T59-106/302/402..407/602/603` | `RSK-PROG-023`; architecture/contract mới | task R3 mới, code NO-GO |
+| `PGM02-V22-WP-08` | Simulation UI | `T59-503/506/603` + WP-07 | admin-only mutation/read viewer+ | task R3 mới, code NO-GO |
+| `PGM02-V22-WP-09` | LIVE/Compare coherent | `T59-408/501/502/504/505` | revision/artifact/snapshot join | task P0 + R2 mới |
+| `PGM02-V22-WP-10` | Performance | `T59-504/506/601/604` | budget per increment | tách R1/R2/R3 |
+| `PGM02-V22-WP-11` | Responsive/a11y | `T59-503/506/603/604` | viewport/keyboard/permission | tách R1/R2/R3 |
+| `PGM02-V22-WP-12` | E2E/V&V | `T59-601/603/604/701..706` | scenario/Test Result mới phải được pin | tách R1/R2/R3 |
+| `PGM02-V22-WP-13` | Docs/release closeout | `T59-707` là verdict lịch sử | release authority độc lập | closeout mới theo increment |
+
+Predecessor `DONE` chỉ chứng minh capability cũ; không được dùng để gắn
+`IMPLEMENTED/PASS` cho redesign. Khi `T59-801` đóng, Trace chỉ được thêm dòng
+canonical sau khi SRS/VVP cấp ID và baseline tương ứng được pin.

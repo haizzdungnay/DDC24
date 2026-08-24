@@ -53,6 +53,22 @@
   PGM-01 khi chạy đồng thời full C++; chạy riêng 25/25 và chạy lại full 1496/1496
   đều PASS, không sửa acceptance để che lỗi.
 
+- **Changed — đưa quyền mở WP-00 vào authority thực thi.** Đăng ký
+  `CR-PROG-PGM02-V22-001` với Owner `APPROVED`, System Architect `PENDING`; mở
+  duy nhất `T59-801`/`PGM02-V22-WP-00` trong Plan59 v2.5 (53 task/9 Wave) để
+  reconcile baseline, không mở production code. Tách riêng
+  `F-P59-GHOST-POU-001` còn `OPEN`; chuẩn hóa namespace
+  `PGM02-V22-WP-00..13`; thêm `RSK-PROG-023` nhưng giữ 23/23 risk Open; Trace
+  giữ 82 requirement/44 scenario và không nâng `D/I/T/P/R`. Manifest v1.45
+  re-pin 8 hồ sơ authority; R1/R2/R3 và `RELEASE_READY` tiếp tục `NO-GO` tới
+  khi Owner + Architect pin đúng revision/hash reconciled. Verification lát
+  tài liệu: docs harness, trace join, candidate pin và `git diff --check` PASS.
+  Fresh full gate: CMake Release bật Modbus/BACnet/HMI và CTest **1293/1293
+  PASS**; `go vet` + `go test ./... -count=1` PASS; FE **136 file/1496 test**,
+  lint/build PASS, chunk Programming **97,13 KiB gzip**. Lượt Go đầu chạy đồng
+  thời `cmake --fresh` gặp đúng race tool build đang bị thay; chạy lại sau C++
+  hoàn tất PASS, không sửa test hoặc contract để che lỗi.
+
 ### Sửa lỗi xóa Program/POU trả `PRG-ERR-REQ-001` (2026-08-24)
 
 - **Fixed — FE: không xóa được "chương trình ma".** *Triệu chứng:* sau vòng sửa

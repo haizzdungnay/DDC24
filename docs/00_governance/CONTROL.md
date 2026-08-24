@@ -1,10 +1,10 @@
 # Document Control
 
 **ID:** DOC-CTRL-001
-**Phiên bản:** 1.3
+**Phiên bản:** 1.4
 **Trạng thái:** Active
 **Chủ quản:** Project Engineering
-**Cập nhật:** 2026-08-24 (Plan59 v2.4 có 52 task; corrective implementation và deploy MCU FAKE đang chờ bằng chứng mới; `PLAN_READY=PASS`, `IMPLEMENT_READY=PASS`, `IMPLEMENTATION_CLOSE=PENDING`, `TARGET_FAKE_MCU_DEPLOY=PENDING`, `TARGET_FAKE_MCU_SOAK=NOT_RUN`, `RELEASE_READY=NO-GO`)
+**Cập nhật:** 2026-08-24 (Plan59 v2.5 có 53 task/9 Wave; baseline ADR-050 giữ quyền implementation, PGM-02 v2.2 chỉ `T59-801=READY`; `PLAN_READY[PGM02-V22]=PENDING`, code redesign NO-GO, `IMPLEMENTATION_CLOSE=PENDING`, `TARGET_FAKE_MCU_DEPLOY=PARTIAL`, `TARGET_FAKE_MCU_SOAK=NOT_RUN`, `RELEASE_READY=NO-GO`)
 
 ## Mục tiêu
 
@@ -58,17 +58,17 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 |---|---|
 | [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | `PROD-PROG-001` v3.0 Active — một Product, đa Program, POU, Control Library, Published Signal, Enable/Disable và sáu workspace |
 | [Quy tắc kiểm soát tài liệu](DOC_GOVERNANCE.md) | `DOC-GOV-001` Active — ISO-aligned, `DD-01..DD-13`, thang `M0..M5`, ba cổng quyền hạn, harness và bảy quy tắc trung thực |
-| [Programming Decision Register](PROGRAMMING_OPEN_DECISIONS.md) | `DEC-PROG-REGISTER-001` Active — 12 quyết định khóa, 0 Open Decision, không còn decision blocker implementation |
+| [Programming Decision Register](PROGRAMMING_OPEN_DECISIONS.md) | `DEC-PROG-REGISTER-001` v1.1 Active — 12 quyết định unified CLOSED; `CR-PROG-PGM02-V22-001` và `F-P59-GHOST-POU-001` OPEN; chỉ WP-00 được mở |
 | [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | `SRS-PROG-001` v1.0 — 82 requirement gồm migration baseline và Product Target thống nhất |
 | [Programming Unified Product Detailed Design](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | `DDD-SW-PROG-UNIFIED-001` Active — authority về data/contract/state/algorithm/error/source/test/deploy/rollback |
 | [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | `PROG-DOCSET-001` v4.3 — register và thứ tự đọc authority hiện hành |
 | [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | ownership, process/failure boundary, package lifecycle và cutover target |
-| [Programming Document Readiness Matrix](PROGRAMMING_DOCUMENT_READINESS_MATRIX.md) | v2.2 — tách quyền implement khỏi implementation close, target MCU FAKE và release |
-| [Programming Plan 59](../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | `PLAN-PROG-059` v2.4 Active — execution/tracker authority duy nhất, 52 task/8 Wave; corrective closure và target MCU FAKE còn chờ evidence mới |
+| [Programming Document Readiness Matrix](PROGRAMMING_DOCUMENT_READINESS_MATRIX.md) | v2.3 — tách baseline ADR-050 khỏi scoped gate PGM-02 v2.2; code downstream NO-GO |
+| [Programming Plan 59](../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | `PLAN-PROG-059` v2.5 Active — execution/tracker authority duy nhất, 53 task/9 Wave; chỉ `T59-801` READY cho PGM-02 reconciliation |
 | [Prompt tự động Plan59](../03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | Prompt thi hành task Ready/Ordered, kiểm chứng và cập nhật Plan59; không tự nâng evidence host thành release |
 | [Prompt CTO Plan59 W6+W7](../03_implementation/PROMPT_PLAN59_CTO_W6_W7_EXECUTION.md) | `PROMPT-PLAN59-CTO-W6W7` v1.0 — quyền quyết định cho hardening/packaging/RC và target/HIL/V&V; Must physical/soak/RETAIN/install/SIGNED/provenance không được waive |
-| [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | risk/control/owner/evidence/residual gate |
-| [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
+| [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | `RSK-PROG-001` v4.21 — 23/23 Open; risk Simulation pre-baseline không được hạ bằng approval |
+| [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | `TRACE-PROG-001` v6.7 — baseline 82 requirement/44 scenario; PGM-02 v2.2 pre-baseline crosswalk không đổi D/I/T/P/R |
 | [Programming Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | v2.0 — 32 scenario migration + 12 scenario Product thống nhất; release vẫn cần target/HIL record |
 | [Programming Release Record 2026-08-23](../07_records/PROGRAMMING_RELEASE_RECORD_2026-08-23.md) | `PROG-RELEASE-RECORD-2026-08-23` Active — verdict **NO-GO** đã ký; bảng 14 cổng W7, 12 scenario Product và bảy điều kiện mở `GO` |
 | [Programming Unified Baseline Manifest](../07_records/reviews/PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md) | SHA-256 của authority set Product/SRS/DDD/UX/VVP/Trace/Risk/Plan/Prompt |
@@ -138,6 +138,7 @@ contract, risk/trace, test result và bằng chứng target/HIL không bị lo�
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.4 | 2026-08-24 | Ghi controlled change request PGM-02 v2.2: Owner mở duy nhất `T59-801`/WP-00, Architect pin và code R1/R2/R3 còn NO-GO. Đồng bộ Decision Register 2 record OPEN, Plan59 53 task/9 Wave, Risk 23/23 Open, Trace v6.7 và `TARGET_FAKE_MCU_DEPLOY=PARTIAL`; không đổi Product/SRS/DDD/VVP hoặc `RELEASE_READY=NO-GO`. |
 | 1.3 | 2026-08-24 | Đồng bộ Plan59 52 task và tách bốn lớp trạng thái: quyền implementation đã PASS; corrective implementation, deploy/soak MCU FAKE còn chờ evidence mới; CI được owner defer cho đóng implementation và physical MCU/HIL được defer nhưng `RELEASE_READY` giữ `NO-GO`. |
 | 1.2 | 2026-08-23 | Thêm `PROG-RELEASE-RECORD-2026-08-23` vào register và đổi dòng trạng thái theo Plan59 v2.3: W5+W6 đóng sổ, W7 đã **ký** verdict `NO-GO` (trước đây `RELEASE_READY=NO-GO` là trạng thái mặc định chờ đánh giá; nay là một quyết định có chữ ký, có bảng Must và bảy điều kiện mở). |
 | 1.1 | 2026-08-23 | Đồng bộ Plan59 v2.2 sau khi đóng sổ W5: cả tám cổng HOST của W5 PASS trong một lượt sau khi sửa `F-W5-CLOSE-01` (Core không biên dịch được) và `F-W5-CLOSE-02` (helper E2E coi `load` là "đã mount"). Không thay đổi Product/SRS/DDD/VVP và không mở `RELEASE_READY`. |

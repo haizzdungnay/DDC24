@@ -49,7 +49,7 @@ EXPECT = {
     "trace_rows": 82,
     "trace_violations": 0,
     "vs_prog": 44,
-    "rsk_prog": 22,
+    "rsk_prog": 23,
     "od_prog": 12,
     "uc_prog": 17,
     "uj_prog": 8,
