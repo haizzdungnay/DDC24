@@ -247,6 +247,44 @@
   `npm run build` (TS2459) trong khi vitest vẫn xanh — đúng bẫy "vitest không
   typecheck".
 - **Changed — Plan 60 §6**: `T60-201/202/203/204/206` chuyển `DONE` (**21/27**).
+- **Added — PGM-01 ráp trang + responsive `T60-205`/`T60-207`/`T60-208`**
+  (`62a9d0d`). Sáu khối đã viết xong nhưng KHÔNG khối nào được render — trang vẫn
+  là năm panel cũ. Nay ráp đủ, ma trận sáu nhánh §6 có case riêng từng nhánh.
+  Dưới 768 px bảng Programs đổi sang **thẻ gọn**: `overflow-x-auto` đã đủ để bảng
+  không đẩy cả trang tràn ngang, nhưng nó vẫn bắt người dùng 390 px cuộn ngang
+  trong một ô lồng giữa trang cuộn dọc — thao tác dễ trượt nhất trên cảm ứng.
+  Trong thẻ, tên Program **không** là nút riêng: cả thẻ đã là vùng bấm, hai điều
+  khiển chồng nhau làm cùng một việc khiến trình đọc màn hình đọc ra hai đích cho
+  một mục. **R60-02 giữ nguyên**: `OverviewPage.test.tsx` đi từ 8 lên 25 case,
+  không dòng test nào bị xoá.
+- **Added — kiểm chứng `T60-301`/`T60-302`/`T60-304`** (`6aada96`, `5372207`).
+  E2E thêm bốn case (một primary CTA, quét regex UUID toàn trang, deep-link đúng
+  trang chủ quản, Core im vẫn cho sửa nhưng khoá Commission) và **đo thật**
+  1280×750 + 390 px bằng `boundingBox()`/`scrollWidth` thay vì khẳng định bằng
+  lời. Ma trận RBAC ghi rõ ở mức **HOST/component** chứ không dựng case E2E giả:
+  mock đăng nhập trả `role: admin` cứng, một case "viewer" trên phiên admin sẽ
+  xanh mà không chứng minh gì.
+- **Fixed — hai hồi quy E2E do Plan 60 đổi shell** (`6aada96`). `e2e/programming.
+  spec.ts` đỏ 4/10 sau khi rail thay tab ngang và bottom nav rút còn 4 đích. Cả
+  hai chỗ vỡ đều là hệ quả **có chủ đích**: một case khẳng định UUID *hiện* ở mặt
+  trước (AC-PGM01-01 cố ý đảo), một case duyệt sáu nhãn trong bottom nav. Sửa
+  bằng cách giữ nguyên KHẲNG ĐỊNH, chỉ đổi chỗ kiểm.
+- **Deployed — Foxlinx, đủ bốn tầng** (2026-08-24). FE + BE Go + FW SOM (Core
+  C++) + Fake MCU (kèm iobus, netcfg) lên `SOM-DDC-24-foxlinx`. Năm service
+  `active`; `health` trả `core/io_shm/iobus/mcu_connection/plc_shm` đều `ok`.
+  FE đúng bản (`index-DPr3piBt.js` trên bo trùng hash bản dựng cục bộ, dựng bằng
+  `npm run build:release` vì cờ Programming là **build-time**). `GLIBCXX` cao
+  nhất của các binary là **3.4.29**, dưới trần 3.4.30 của bo.
+  **Bằng chứng mức TARGET**: `T60-015` trả `activeSequence: null` (không phải
+  `0`); `T60-013` trả `runtimeStateSource: UNAVAILABLE` với **mọi** số đo `null`
+  — đúng nhánh (b) của mốc M2, không giá trị cũ nào được trình bày như đang sống.
+  Chi tiết + rollback: `docs/07_records/test-evidence/fw-som/2026-08-24-foxlinx-plan60-deploy.md`.
+- **Changed — Plan 60 §6**: **26/27 `DONE`**. Còn `T60-303` (E2E real-backend)
+  ở `NOT_RUN` — Commission trên bo dừng fail-closed vì `impact.activeOverrides`
+  và `impact.cutover` đều `UNAVAILABLE` khi Core ở `targetState: UNAVAILABLE`.
+  **Không phải hồi quy do Plan 60**: log Core trước lần deploy này có **0 dòng**
+  `programming_mode=st` và mọi Project trên bo đều `activeRevisionId: null`.
+  Runbook mở khoá đã ghi trong hồ sơ evidence.
 - **Changed — gate FE xanh hoàn toàn lần đầu**: `npx vitest --run --environment
   jsdom src` → **128 file / 1262 test, TẤT CẢ PASS, exit `0`**.
 
