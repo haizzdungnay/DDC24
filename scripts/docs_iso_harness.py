@@ -46,7 +46,7 @@ EXPECT = {
     "duplicate_doc_id": 0,
     "span_missing": 0,
     "srs_requirements": 82,
-    "trace_rows": 60,
+    "trace_rows": 82,
     "trace_violations": 0,
     "vs_prog": 44,
     "rsk_prog": 22,

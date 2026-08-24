@@ -67,6 +67,7 @@ run_layout() {
   python3 "$repo_root/scripts/verify_wave_gates.py" --self-test
   python3 "$repo_root/scripts/verify_programming_g1_contracts.py" --self-test
   python3 "$repo_root/scripts/verify_programming_artifact_manifest.py" --self-test
+  python3 -m unittest "$repo_root/tests/integration/test_programming_production_tool_gate.py"
 }
 
 run_cpp() {
@@ -94,6 +95,29 @@ run_cpp() {
 run_go() {
   local go_dir
   go_dir="$(active_path web-api)"
+	local compiler_binary="$build_root/cpp-full/core/mkddc-st-compile"
+	local packager_binary="$build_root/cpp-full/core/mkddc-st-package"
+	local expected_profile_sha
+	expected_profile_sha="$(sha256sum "$repo_root/contracts/programming/product_profile_v2.json" | awk '{print $1}')"
+	for production_tool in "$compiler_binary" "$packager_binary"; do
+		if [ ! -x "$production_tool" ]; then
+			printf 'LỖI: thiếu production tool từ chính build của cổng cpp: %s\n' "$production_tool" >&2
+			printf '      chạy --component cpp --profile full với cùng MKDDC_BUILD_ROOT trước cổng go\n' >&2
+			return 1
+		fi
+		local production_version
+		production_version="$("$production_tool" --version)"
+		if [[ "$production_version" != *"profile_sha256=$expected_profile_sha"* ]]; then
+			printf 'LỖI: production tool stale/không chứng minh được profile hiện hành: %s\n' "$production_tool" >&2
+			printf '      cần profile_sha256=%s; nhận: %s\n' "$expected_profile_sha" "$production_version" >&2
+			return 1
+		fi
+		sha256sum "$production_tool"
+		printf '%s\n' "$production_version"
+	done
+	export MKDDC_REQUIRE_PRODUCTION_TOOLS=1
+	export MKDDC_ST_COMPILER_BINARY="$compiler_binary"
+	export MKDDC_ST_PACKAGER_BINARY="$packager_binary"
   if [ "$profile" = "race" ]; then
     (cd "$repo_root/$go_dir" && go vet ./... && go test -race ./... -count=1)
   else

@@ -62,15 +62,17 @@ if [[ ! -f "${keys_dir}/device.key" ]]; then
 fi
 
 core_socket="${runtime_root}/programming.sock"
+core_status_socket="${runtime_root}/core-status.sock"
 "${build_root}/cpp/core/mkddc-programming-core-sim" \
   --socket "${core_socket}" \
+  --web-socket "${core_status_socket}" \
   --state-dir "${runtime_root}/core" \
   --st-trusted-key "${keys_dir}/device.pub" \
   --tick-ms 20 &
 core_pid=$!
 
 for _ in $(seq 1 200); do
-  if [[ -S "${core_socket}" ]]; then
+  if [[ -S "${core_socket}" && -S "${core_status_socket}" ]]; then
     break
   fi
   if ! kill -0 "${core_pid}" 2>/dev/null; then
@@ -78,8 +80,8 @@ for _ in $(seq 1 200); do
   fi
   sleep 0.05
 done
-if [[ ! -S "${core_socket}" ]]; then
-  echo "Core simulator không mở Programming socket trong 10 giây" >&2
+if [[ ! -S "${core_socket}" || ! -S "${core_status_socket}" ]]; then
+  echo "Core simulator không mở đủ Programming/Web socket trong 10 giây" >&2
   exit 1
 fi
 
@@ -91,7 +93,7 @@ env \
   STATIC_DIR="${runtime_root}/static" \
   CORE_PID="${runtime_root}/missing-core.pid" \
   IOBUS_PID="${runtime_root}/missing-iobus.pid" \
-  CORE_SOCK="${runtime_root}/core-status.sock" \
+  CORE_SOCK="${core_status_socket}" \
   HMI_SOCK="${runtime_root}/hmi.sock" \
   NETCFG_SOCK="${runtime_root}/netcfg.sock" \
   IOBUS_CONTROL_SOCK="${runtime_root}/modbus-control.sock" \
