@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	programmingstore "mkddc-web/internal/programming/store"
@@ -25,20 +26,20 @@ func applyDraftOperations(content []byte, operations []json.RawMessage) ([]byte,
 	if err := migrateDraftToV2(document); err != nil {
 		return nil, err
 	}
-	for _, raw := range operations {
+	for index, raw := range operations {
 		var header operationHeader
 		if err := json.Unmarshal(raw, &header); err != nil || header.Op == "" {
-			return nil, ErrInvalidRequest
+			return nil, &DraftOperationError{Index: index, Err: ErrInvalidRequest}
 		}
 		handled, err := applyDraftOperationV2(document, header.Op, raw)
 		if err != nil {
-			return nil, err
+			return nil, &DraftOperationError{Index: index, Op: header.Op, Err: err}
 		}
 		if handled {
 			continue
 		}
 		if err := applyDraftOperation(document, header.Op, raw); err != nil {
-			return nil, err
+			return nil, &DraftOperationError{Index: index, Op: header.Op, Err: err}
 		}
 	}
 	if err := validateDraftDocumentV2(document); err != nil {
@@ -46,6 +47,42 @@ func applyDraftOperations(content []byte, operations []json.RawMessage) ([]byte,
 	}
 	return json.Marshal(document)
 }
+
+// DraftOperationError nói RÕ thao tác nào trong batch bị từ chối.
+//
+// Vì sao cần: `PATCH .../draft` nhận một mảng operation và trả đúng một mã
+// `PRG-ERR-REQ-001` cho cả batch. Khi FE gửi 4–5 thao tác trong một lần Xoá
+// Program, người vận hành (và cả người debug) không có cách nào biết thao tác
+// nào sai — đúng tình huống của `F-P59-DELETE-PROGRAM-001`, nơi một
+// `setTask.programOrder` sai làm cả lệnh Xoá thất bại trong im lặng. Lớp HTTP
+// đặt chỉ số + tên op vào `field` của lỗi công khai; nội dung message vẫn không
+// rò ra ngoài.
+type DraftOperationError struct {
+	Index int
+	Op    string
+	Err   error
+}
+
+func (e *DraftOperationError) Error() string {
+	if e.Op == "" {
+		return fmt.Sprintf("operations[%d]: %v", e.Index, e.Err)
+	}
+	return fmt.Sprintf("operations[%d] (%s): %v", e.Index, e.Op, e.Err)
+}
+
+func (e *DraftOperationError) Unwrap() error { return e.Err }
+
+// Field trả tên trường theo hợp đồng lỗi công khai. Tên op đến từ client nên
+// chỉ nhận chữ/số đã biết; ký tự lạ bị bỏ để field không thành kênh phản chiếu
+// dữ liệu người gọi.
+func (e *DraftOperationError) Field() string {
+	if e.Op == "" || !operationNamePattern.MatchString(e.Op) {
+		return fmt.Sprintf("operations[%d]", e.Index)
+	}
+	return fmt.Sprintf("operations[%d].%s", e.Index, e.Op)
+}
+
+var operationNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]{0,63}$`)
 
 func applyDraftOperation(document map[string]any, operation string, raw []byte) error {
 	switch operation {

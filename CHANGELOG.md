@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### Sửa lỗi xóa Program/POU trả `PRG-ERR-REQ-001` (2026-08-24)
+
+- **Fixed — FE `F-P59-DELETE-PROGRAM-001`.** *Triệu chứng:* bấm "Xóa" một
+  Program (hoặc một user FUNCTION/FUNCTION_BLOCK) trả `400 PRG-ERR-REQ-001`
+  không kèm lý do; giao diện không xóa được gì. *Nguyên nhân gốc:* ba lỗi chồng
+  nhau ở đường ghi của FE.
+  1. Adapter `draftV2.ts` dựng `task.programOrder` từ **toàn bộ** `objects[]`,
+     gồm cả FUNCTION/FUNCTION_BLOCK — những POU không có cấu hình chạy. Backend
+     `setTaskCompat` từ chối cả batch vì "programOrder trỏ tới Program không tồn
+     tại" (ràng buộc đúng, fail-closed). Hệ quả: **mọi** Project có user POU đều
+     hỏng ở Xóa Program, Thêm Program và đổi chu kỳ ở tab Thực thi. Đo bằng
+     `toWorkspaceDocument`: `programOrder` chứa id của `SCALE_LIN`.
+  2. Batch xóa luôn gửi `removeProgram` kể cả cho FUNCTION/FUNCTION_BLOCK, mà
+     backend trả lỗi vì id không nằm trong `programs[]` → **xóa một user FUNCTION
+     chưa bao giờ thành công**.
+  3. Batch xóa gửi kèm `setTask`. Draft v2 không còn object `task` (chu kỳ nằm
+     theo từng Program và `upsertProgram` đã gán), nên thao tác này vừa thừa vừa
+     có hại: `setTaskCompat` ghi đè chu kỳ của **mọi** Program trong danh sách,
+     tức xóa Program A trong Project nhiều chu kỳ âm thầm đổi chu kỳ của B.
+  *Cách sửa:* `programOrder` chỉ gồm POU **có** cấu hình chạy; view model mang
+  thêm `objectId`; batch xóa nay là `removeBinding* → removeVariable* →
+  removeProgram (chỉ khi kind=PROGRAM) → removeObject`, bỏ hẳn `setTask`. Thêm
+  `removeObject` cũng vá một lỗi thứ hai: thiếu nó thì mã nguồn POU vẫn ở lại
+  Draft — người dùng nhận 200 mà POU vẫn hiện nguyên trên danh sách và vẫn có
+  thể đi vào package ở lần Commission sau.
+  *Kiểm chứng:* 3 test FE mới (adapter + xóa PROGRAM + xóa FUNCTION) và 2 test Go
+  đi qua `SaveDraft` thật; cả 5 đã kiểm chứng bằng cách gỡ bản vá (đỏ đúng chỗ).
+
+- **Added — BE Go: lỗi batch Draft nói rõ thao tác nào hỏng.** `PATCH .../draft`
+  nhận một mảng operation nhưng chỉ trả một mã cho cả batch, nên một lần bấm Xóa
+  gồm 4–5 thao tác không có gì để lần. `DraftOperationError` mang chỉ số + tên op
+  và lớp HTTP đặt nó vào `field` (`operations[1].removeProgram`). Tên op đến từ
+  client nên chỉ nhận `[A-Za-z][A-Za-z0-9]{0,63}`, không phản chiếu dữ liệu lạ.
+
 ### Plan 59 corrective — Enable/Disable qua safe boundary và read-back signal (2026-08-24)
 
 - **Fixed — Core C++ `F-P59-ENABLE-BOUNDARY-001`** (`T59-402/405/406`).
