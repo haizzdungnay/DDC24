@@ -15,9 +15,14 @@
 #include <sodium.h>
 
 #include "st/st_artifact.hpp"
+#include "st/st_package_v2.hpp"
+#include "st/st_profile_generated.hpp"
 
 #ifndef ST_COMPILE_CLI_PATH
 #error "ST_COMPILE_CLI_PATH phải được CMake truyền vào"
+#endif
+#ifndef ST_PACKAGE_CLI_PATH
+#error "ST_PACKAGE_CLI_PATH phải được CMake truyền vào"
 #endif
 
 namespace {
@@ -36,6 +41,16 @@ std::string temporary_path(const char* pattern)
         return {};
     }
     ::close(fd);
+    return path.data();
+}
+
+std::string temporary_directory(const char* pattern)
+{
+    std::vector<char> path(pattern, pattern + std::strlen(pattern) + 1);
+    if (::mkdtemp(path.data()) == nullptr) {
+        ADD_FAILURE() << "mkdtemp: " << std::strerror(errno);
+        return {};
+    }
     return path.data();
 }
 
@@ -60,7 +75,44 @@ bool write_text(const std::string& path, const std::string& text)
     return static_cast<bool>(output);
 }
 
-CliRun run_cli(const std::vector<std::string>& arguments)
+nlohmann::json make_fbd_signal_publish_graph()
+{
+    const char* input_node = "30000000-0000-4000-8000-000000000001";
+    const char* publish_node = "30000000-0000-4000-8000-000000000002";
+    const char* output_port = "40000000-0000-4000-8000-000000000001";
+    const char* input_port = "40000000-0000-4000-8000-000000000002";
+    return {
+        {"$schema", "../../fbd_v1.schema.json"}, {"schemaVersion", 1},
+        {"profileId", "revA-1t-1-5-30"},
+        {"graphId", "10000000-0000-4000-8000-000000000059"},
+        {"name", "FBD_SIGNAL_PRODUCER"},
+        {"networks", nlohmann::json::array({{
+            {"id", "20000000-0000-4000-8000-000000000059"},
+            {"name", "MAIN"}, {"order", 0},
+            {"nodes", nlohmann::json::array({
+                {{"id", input_node}, {"kind", "INPUT"}, {"typeRef", "REAL"},
+                 {"executionOrder", 0}, {"parameters", {{"variable", "VALUE"}}},
+                 {"ports", nlohmann::json::array({{
+                     {"id", output_port}, {"name", "OUT"}, {"direction", "OUTPUT"},
+                     {"dataType", "REAL"}, {"unit", nullptr}, {"order", 0}}})}},
+                {{"id", publish_node}, {"kind", "SIGNAL_PUBLISH"},
+                 {"typeRef", "SIGNAL_PUBLISH"}, {"executionOrder", 1},
+                 {"parameters", {{"signal", "SHARED_TEMP"}}},
+                 {"ports", nlohmann::json::array({{
+                     {"id", input_port}, {"name", "IN"}, {"direction", "INPUT"},
+                     {"dataType", "REAL"}, {"unit", nullptr}, {"order", 0}}})}}
+            })},
+            {"wires", nlohmann::json::array({{
+                {"id", "50000000-0000-4000-8000-000000000059"},
+                {"from", {{"nodeId", input_node}, {"portId", output_port}}},
+                {"to", {{"nodeId", publish_node}, {"portId", input_port}}}
+            }})}
+        }})}
+    };
+}
+
+CliRun run_executable(const char* executable,
+                      const std::vector<std::string>& arguments)
 {
     int out_pipe[2];
     if (::pipe(out_pipe) != 0) {
@@ -76,11 +128,11 @@ CliRun run_cli(const std::vector<std::string>& arguments)
         ::close(out_pipe[0]);
         ::dup2(out_pipe[1], STDOUT_FILENO);
         ::close(out_pipe[1]);
-        std::vector<char*> argv{const_cast<char*>(ST_COMPILE_CLI_PATH)};
+        std::vector<char*> argv{const_cast<char*>(executable)};
         for (const std::string& argument : arguments)
             argv.push_back(const_cast<char*>(argument.c_str()));
         argv.push_back(nullptr);
-        ::execv(ST_COMPILE_CLI_PATH, argv.data());
+        ::execv(executable, argv.data());
         std::_Exit(127);
     }
     ::close(out_pipe[1]);
@@ -94,6 +146,11 @@ CliRun run_cli(const std::vector<std::string>& arguments)
     while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
     result.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
     return result;
+}
+
+CliRun run_cli(const std::vector<std::string>& arguments)
+{
+    return run_executable(ST_COMPILE_CLI_PATH, arguments);
 }
 
 /* T59-607 — profile nay đòi `SIGNATURE_REQUIRED`, nên MỌI lệnh biên dịch phải
@@ -132,6 +189,95 @@ CliRun run_cli_signed(std::vector<std::string> arguments)
     return run_cli(arguments);
 }
 
+struct LinkedPouCliFiles {
+    std::string directory;
+    std::string root_path;
+    std::string helper_path;
+    std::string manifest_path;
+    std::string lock_path;
+    std::string artifact_path;
+    std::string pou_table_path;
+    std::string package_path;
+    std::string helper_source;
+    nlohmann::json lock;
+
+    bool create()
+    {
+        directory = temporary_directory("/tmp/mkddc-cli-pou-XXXXXX");
+        if (directory.empty()) return false;
+        root_path = directory + "/main.st";
+        helper_path = directory + "/project_scale.st";
+        manifest_path = directory + "/pou-manifest.json";
+        lock_path = directory + "/library-lock.json";
+        artifact_path = directory + "/main.mkir";
+        pou_table_path = directory + "/pou-table.json";
+        package_path = directory + "/bundle.mkpkg";
+        helper_source =
+            "FUNCTION ProjectScale : REAL\n"
+            "VAR_INPUT x : REAL; END_VAR\n"
+            "ProjectScale := x + 5.0;\n"
+            "END_FUNCTION\n";
+        const std::string root_source =
+            "PROGRAM Main\n"
+            "VAR_OUTPUT y : REAL; END_VAR\n"
+            "y := ProjectScale(4.0);\n"
+            "END_PROGRAM\n";
+        lock = {
+            {"schemaVersion", 1},
+            {"systemVersion", "system-rev-a"},
+            {"projectRevisionId", "project-revision-42"},
+            {"entries", nlohmann::json::array({
+                {{"entryId", "project-entry-scale"},
+                 {"name", "ProjectScale"},
+                 {"kind", "FUNCTION"},
+                 {"version", "2.0.0"},
+                 {"origin", "PROJECT"}},
+            })},
+        };
+        return write_text(root_path, root_source) &&
+               write_text(helper_path, helper_source) &&
+               write_text(lock_path, lock.dump());
+    }
+
+    nlohmann::json manifest(bool declare_root_dependency,
+                            const std::string& root_version = "2.0.0") const
+    {
+        nlohmann::json document = {
+            {"schemaVersion", 1},
+            {"pous", nlohmann::json::array({
+                {{"name", "ProjectScale"},
+                 {"kind", "FUNCTION"},
+                 {"language", "ST"},
+                 {"path", "project_scale.st"},
+                 {"contentSha256", core::compute_source_sha256(helper_source)},
+                 {"origin", "PROJECT"},
+                 {"fromLibrary", true},
+                 {"entryId", "project-entry-scale"},
+                 {"version", "2.0.0"},
+                 {"requiresLibrary", nlohmann::json::array()}},
+            })},
+        };
+        if (declare_root_dependency) {
+            document["rootRequiresLibrary"] = nlohmann::json::array({
+                {{"name", "ProjectScale"},
+                 {"version", root_version},
+                 {"origin", "PROJECT"}},
+            });
+        }
+        return document;
+    }
+
+    ~LinkedPouCliFiles()
+    {
+        for (const std::string* path : {&package_path, &pou_table_path, &artifact_path,
+                                        &lock_path, &manifest_path, &helper_path,
+                                        &root_path}) {
+            if (!path->empty()) ::unlink(path->c_str());
+        }
+        if (!directory.empty()) ::rmdir(directory.c_str());
+    }
+};
+
 } // namespace
 
 TEST(StCompileCli, EmitsDeterministicStructuredTextArtifactAndManifest)
@@ -162,6 +308,111 @@ TEST(StCompileCli, ReportsCompilerProfileVersionForDeployEvidence)
     EXPECT_NE(run.stdout_text.find("profile_id=revA-1t-1-5-30"), std::string::npos);
     EXPECT_NE(run.stdout_text.find("artifact_schema=1"), std::string::npos);
     EXPECT_NE(run.stdout_text.find("target_abi=3841"), std::string::npos);
+}
+
+TEST(StCompileCli, PackagerReportsMachineReadableProfileVersion)
+{
+    const CliRun run = run_executable(ST_PACKAGE_CLI_PATH, {"--version"});
+    ASSERT_EQ(run.exit_code, 0);
+    EXPECT_NE(run.stdout_text.find("packager_version=2"), std::string::npos);
+    EXPECT_NE(run.stdout_text.find("profile_id=revA-1t-1-5-30"),
+              std::string::npos);
+    EXPECT_NE(run.stdout_text.find("profile_sha256="), std::string::npos);
+    EXPECT_NE(run.stdout_text.find("artifact_schema=2"), std::string::npos);
+    EXPECT_NE(run.stdout_text.find("target_abi=3841"), std::string::npos);
+}
+
+TEST(StCompileCli, ProjectLibraryCompilerOutputPackagesAndLoadsWithoutRebuildingSignature)
+{
+    LinkedPouCliFiles files;
+    ASSERT_TRUE(files.create());
+    ASSERT_TRUE(write_text(files.manifest_path, files.manifest(true).dump()));
+
+    const CliRun compiled = run_cli_signed(
+        {"--source", files.root_path, "--source-id", "project-library-main",
+         "--pou-manifest", files.manifest_path, "--library-lock", files.lock_path,
+         "--out", files.artifact_path, "--sandbox"});
+    ASSERT_EQ(compiled.exit_code, 0) << compiled.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(compiled.stdout_text);
+    ASSERT_TRUE(result.at("ok"));
+    ASSERT_EQ(result.at("linkedPous").size(), 1U);
+    const nlohmann::json& linked = result.at("linkedPous")[0];
+    EXPECT_EQ(linked.at("name"), "ProjectScale");
+    EXPECT_EQ(linked.at("kind"), "FUNCTION");
+    EXPECT_TRUE(linked.at("fromLibrary"));
+    EXPECT_EQ(linked.at("origin"), "PROJECT");
+    EXPECT_EQ(linked.at("libraryEntryId"), "project-entry-scale");
+    EXPECT_EQ(linked.at("version"), "2.0.0");
+    EXPECT_EQ(linked.at("inputNames"), nlohmann::json::array({"x"}));
+    EXPECT_EQ(linked.at("inputTypes"), nlohmann::json::array({"REAL"}));
+    EXPECT_TRUE(linked.at("hasReturnType"));
+    EXPECT_EQ(linked.at("returnType"), "REAL");
+    EXPECT_EQ(linked.at("contentSha256").get<std::string>().size(), 64U);
+    EXPECT_EQ(linked.at("bodySha256").get<std::string>().size(), 64U);
+    EXPECT_GT(linked.at("instructionCount").get<uint32_t>(), 0U);
+
+    const nlohmann::json table = {
+        {"schemaVersion", 1},
+        {"pous", result.at("linkedPous")},
+    };
+    ASSERT_TRUE(write_text(files.pou_table_path, table.dump()));
+    const CliRun packaged = run_executable(
+        ST_PACKAGE_CLI_PATH,
+        {"--out", files.package_path, "--program",
+         "Main=" + files.artifact_path, "--pou-table", files.pou_table_path,
+         "--library-lock", files.lock_path});
+    ASSERT_EQ(packaged.exit_code, 0) << packaged.stdout_text;
+
+    const std::vector<uint8_t> package = read_bytes(files.package_path);
+    ASSERT_FALSE(package.empty());
+    core::StPackageView view;
+    const char* error_code = nullptr;
+    ASSERT_TRUE(core::LoadPackageV2(package.data(), package.size(),
+                                    core::st_profile_generated::kProfileCode,
+                                    core::st_profile_generated::kTargetAbi,
+                                    &view, &error_code))
+        << (error_code != nullptr ? error_code : "");
+    ASSERT_EQ(view.pou_signatures.size(), 2U);
+    const core::StPouSignature& decoded = view.pou_signatures[1];
+    EXPECT_EQ(decoded.name, "ProjectScale");
+    EXPECT_TRUE(decoded.from_library);
+    EXPECT_EQ(decoded.library_origin, "PROJECT");
+    EXPECT_EQ(decoded.library_entry_id, "project-entry-scale");
+    EXPECT_EQ(decoded.version, "2.0.0");
+    EXPECT_EQ(decoded.input_names, std::vector<std::string>({"x"}));
+    EXPECT_EQ(decoded.input_types, std::vector<core::StType>({core::StType::REAL}));
+    EXPECT_TRUE(decoded.has_return_type);
+    EXPECT_EQ(decoded.return_type, core::StType::REAL);
+    EXPECT_EQ(decoded.instruction_count,
+              linked.at("instructionCount").get<uint32_t>());
+    EXPECT_EQ(view.library_project_revision_id, "project-revision-42");
+}
+
+TEST(StCompileCli, RootLibraryDependencyIsMandatoryAndVersionExact)
+{
+    LinkedPouCliFiles files;
+    ASSERT_TRUE(files.create());
+
+    ASSERT_TRUE(write_text(files.manifest_path, files.manifest(false).dump()));
+    const CliRun undeclared = run_cli_signed(
+        {"--source", files.root_path, "--source-id", "undeclared-library",
+         "--pou-manifest", files.manifest_path, "--library-lock", files.lock_path});
+    ASSERT_EQ(undeclared.exit_code, 1) << undeclared.stdout_text;
+    const nlohmann::json undeclared_result =
+        nlohmann::json::parse(undeclared.stdout_text);
+    EXPECT_EQ(undeclared_result.at("diagnostics")[0].at("code"), "ST-LIB-001");
+    EXPECT_NE(undeclared_result.at("diagnostics")[0]
+                  .at("message").get<std::string>().find("requiresLibrary"),
+              std::string::npos);
+
+    ASSERT_TRUE(write_text(files.manifest_path,
+                           files.manifest(true, "9.9.9").dump()));
+    const CliRun drift = run_cli_signed(
+        {"--source", files.root_path, "--source-id", "wrong-library-version",
+         "--pou-manifest", files.manifest_path, "--library-lock", files.lock_path});
+    ASSERT_EQ(drift.exit_code, 1) << drift.stdout_text;
+    const nlohmann::json drift_result = nlohmann::json::parse(drift.stdout_text);
+    EXPECT_EQ(drift_result.at("diagnostics")[0].at("code"), "ST-LIB-002");
 }
 
 TEST(StCompileCli, CompilesFbdAndWritesByteExactOutputs)
@@ -325,6 +576,145 @@ TEST(StCompileCli, IoMapInRejectsVirtualPointCategoryForOutputDirection)
     const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
     EXPECT_FALSE(result.at("ok"));
     EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-IOMAP-008");
+}
+
+TEST(StCompileCli, SignalManifestProducesActualPublishReference)
+{
+    const std::string source_path = temporary_path("/tmp/mkddc-cli-signal-src-XXXXXX");
+    const std::string signal_path = temporary_path("/tmp/mkddc-cli-signal-manifest-XXXXXX");
+    const std::string artifact_path = temporary_path("/tmp/mkddc-cli-signal-artifact-XXXXXX");
+    ASSERT_FALSE(source_path.empty());
+    ASSERT_FALSE(signal_path.empty());
+    ASSERT_FALSE(artifact_path.empty());
+    ASSERT_TRUE(write_text(source_path,
+                           "PROGRAM Producer\nVAR value : REAL; END_VAR\n"
+                           "value := 24.5;\n"
+                           "SIGNAL_PUBLISH(SHARED_TEMP, value);\nEND_PROGRAM\n"));
+    ASSERT_TRUE(write_text(signal_path, nlohmann::json({
+        {"schemaVersion", 1},
+        {"programId", "P_pub"},
+        {"signals", nlohmann::json::array({
+            {{"name", "SHARED_TEMP"}, {"type", "REAL"},
+             {"publisherProgramId", "P_pub"}},
+        })},
+    }).dump()));
+
+    const CliRun run = run_cli_signed({"--source", source_path,
+                                       "--source-id", "signal-producer",
+                                       "--signal-manifest", signal_path,
+                                       "--out", artifact_path});
+    ::unlink(source_path.c_str());
+    ::unlink(signal_path.c_str());
+    const std::vector<uint8_t> artifact = read_bytes(artifact_path);
+    ::unlink(artifact_path.c_str());
+
+    ASSERT_EQ(run.exit_code, 0) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    ASSERT_EQ(result.at("signalRefs").size(), 1u);
+    EXPECT_EQ(result.at("signalRefs")[0].at("name"), "SHARED_TEMP");
+    EXPECT_EQ(result.at("signalRefs")[0].at("type"), "REAL");
+    EXPECT_FALSE(result.at("signalRefs")[0].at("read"));
+    EXPECT_TRUE(result.at("signalRefs")[0].at("publish"));
+    EXPECT_EQ(artifact.size(), result.at("artifactBytes").get<std::size_t>());
+    EXPECT_GT(artifact.size(), 0u);
+}
+
+TEST(StCompileCli, FbdSignalManifestProducesActualPublishReference)
+{
+    const std::string source_path = temporary_path("/tmp/mkddc-cli-fbd-signal-src-XXXXXX");
+    const std::string signal_path = temporary_path("/tmp/mkddc-cli-fbd-signal-manifest-XXXXXX");
+    const std::string artifact_path = temporary_path("/tmp/mkddc-cli-fbd-signal-artifact-XXXXXX");
+    ASSERT_FALSE(source_path.empty());
+    ASSERT_FALSE(signal_path.empty());
+    ASSERT_FALSE(artifact_path.empty());
+    ASSERT_TRUE(write_text(source_path, make_fbd_signal_publish_graph().dump()));
+    ASSERT_TRUE(write_text(signal_path, nlohmann::json({
+        {"schemaVersion", 1},
+        {"programId", "P_pub"},
+        {"signals", nlohmann::json::array({
+            {{"name", "SHARED_TEMP"}, {"type", "REAL"},
+             {"publisherProgramId", "P_pub"}},
+        })},
+    }).dump()));
+
+    const CliRun run = run_cli_signed({"--source", source_path,
+                                       "--language", "FBD",
+                                       "--source-id", "fbd-signal-producer",
+                                       "--signal-manifest", signal_path,
+                                       "--out", artifact_path});
+    ::unlink(source_path.c_str());
+    ::unlink(signal_path.c_str());
+    const std::vector<uint8_t> artifact = read_bytes(artifact_path);
+    ::unlink(artifact_path.c_str());
+
+    ASSERT_EQ(run.exit_code, 0) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_EQ(result.at("language"), "FBD");
+    ASSERT_EQ(result.at("signalRefs").size(), 1U);
+    EXPECT_EQ(result.at("signalRefs")[0].at("name"), "SHARED_TEMP");
+    EXPECT_EQ(result.at("signalRefs")[0].at("type"), "REAL");
+    EXPECT_FALSE(result.at("signalRefs")[0].at("read"));
+    EXPECT_TRUE(result.at("signalRefs")[0].at("publish"));
+    EXPECT_EQ(artifact.size(), result.at("artifactBytes").get<std::size_t>());
+    EXPECT_GT(artifact.size(), 0U);
+}
+
+TEST(StCompileCli, FbdSignalManifestKeepsStableWrongPublisherDiagnostic)
+{
+    const std::string source_path = temporary_path("/tmp/mkddc-cli-fbd-signal-wrong-src-XXXXXX");
+    const std::string signal_path = temporary_path("/tmp/mkddc-cli-fbd-signal-wrong-manifest-XXXXXX");
+    ASSERT_FALSE(source_path.empty());
+    ASSERT_FALSE(signal_path.empty());
+    ASSERT_TRUE(write_text(source_path, make_fbd_signal_publish_graph().dump()));
+    ASSERT_TRUE(write_text(signal_path, nlohmann::json({
+        {"schemaVersion", 1},
+        {"programId", "P_other"},
+        {"signals", nlohmann::json::array({
+            {{"name", "SHARED_TEMP"}, {"type", "REAL"},
+             {"publisherProgramId", "P_pub"}},
+        })},
+    }).dump()));
+
+    const CliRun run = run_cli_signed({"--source", source_path,
+                                       "--language", "FBD",
+                                       "--source-id", "fbd-signal-wrong-publisher",
+                                       "--signal-manifest", signal_path});
+    ::unlink(source_path.c_str());
+    ::unlink(signal_path.c_str());
+    ASSERT_EQ(run.exit_code, 1) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-SIG-001");
+    EXPECT_TRUE(result.at("artifact").is_null());
+    EXPECT_TRUE(result.at("signalRefs").empty());
+}
+
+TEST(StCompileCli, SignalManifestRejectsPublishFromWrongProgram)
+{
+    const std::string source_path = temporary_path("/tmp/mkddc-cli-signal-wrong-src-XXXXXX");
+    const std::string signal_path = temporary_path("/tmp/mkddc-cli-signal-wrong-manifest-XXXXXX");
+    ASSERT_FALSE(source_path.empty());
+    ASSERT_FALSE(signal_path.empty());
+    ASSERT_TRUE(write_text(source_path,
+                           "PROGRAM Wrong\nSIGNAL_PUBLISH(SHARED_TEMP, 1.0);\n"
+                           "END_PROGRAM\n"));
+    ASSERT_TRUE(write_text(signal_path, nlohmann::json({
+        {"schemaVersion", 1},
+        {"programId", "P_other"},
+        {"signals", nlohmann::json::array({
+            {{"name", "SHARED_TEMP"}, {"type", "REAL"},
+             {"publisherProgramId", "P_pub"}},
+        })},
+    }).dump()));
+
+    const CliRun run = run_cli_signed({"--source", source_path,
+                                       "--source-id", "signal-wrong-publisher",
+                                       "--signal-manifest", signal_path});
+    ::unlink(source_path.c_str());
+    ::unlink(signal_path.c_str());
+    ASSERT_EQ(run.exit_code, 1) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-SIG-001");
+    EXPECT_TRUE(result.at("artifact").is_null());
 }
 
 /* T59-607 — thiếu khoá phải hỏng NGAY và nói đúng lý do.

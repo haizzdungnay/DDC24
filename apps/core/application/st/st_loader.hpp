@@ -23,6 +23,8 @@
 
 namespace core {
 
+class StSignalBus;
+
 /* Mã lỗi trả cho BE (SPEC §8). Mọi lỗi đều GIỮ NGUYÊN package đang chạy. */
 namespace st_ir_error {
 constexpr const char* kBadHeader        = "IR-E-001";
@@ -102,6 +104,19 @@ struct StLoadedProgram {
      * CRC32 và không phải hash tên trong đường scan. */
     uint8_t                      retain_layout_sha256[32] = {0};
     std::vector<StIrSourceMap>   source_map;
+    /* Published Signal đã được compiler hạ thành chỉ số cố định. Coordinator
+     * bind `runtime_index` vào đúng contract của package trước PREPARED fsync;
+     * executor vì vậy không tra tên hay cấp phát trong chu kỳ quét. */
+    std::vector<StIrSignalRef>   signal_refs;
+    StSignalBus*                 signal_bus = nullptr;
+    std::string                  runtime_instance_id;
+    /* Mọi publish chỉ ghi vào vùng nháp per-Program. Runtime gửi cả batch sang
+     * Signal Bus sau HALT thành công; fault/WAIT xoá nháp nên không thể rò một
+     * phần side effect của chu kỳ lỗi. Các vector được cấp đúng một lần lúc
+     * load, không cấp phát trong scan. */
+    std::vector<StCell>          pending_signal_values;
+    std::vector<uint8_t>         pending_signal_writes;
+    std::vector<uint32_t>        pending_signal_pc;
 
     bool has_retain() const
     {

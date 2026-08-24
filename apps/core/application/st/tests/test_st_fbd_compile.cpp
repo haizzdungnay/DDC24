@@ -180,6 +180,52 @@ json make_ton_graph()
     };
 }
 
+json make_signal_graph(bool publish)
+{
+    const std::string source_node = uuid_for(3, 1);
+    const std::string sink_node = uuid_for(3, 2);
+    const std::string source_port = uuid_for(4, 1);
+    const std::string sink_port = uuid_for(4, 2);
+    const json first = publish
+        ? json{{"id", source_node}, {"kind", "INPUT"}, {"typeRef", "REAL"},
+               {"executionOrder", 0}, {"parameters", {{"variable", "VALUE"}}},
+               {"ports", json::array({{{"id", source_port}, {"name", "OUT"},
+                                        {"direction", "OUTPUT"}, {"dataType", "REAL"},
+                                        {"unit", nullptr}, {"order", 0}}})}}
+        : json{{"id", source_node}, {"kind", "SIGNAL_READ"},
+               {"typeRef", "SIGNAL_READ"}, {"executionOrder", 0},
+               {"parameters", {{"signal", "SHARED_TEMP"}}},
+               {"ports", json::array({{{"id", source_port}, {"name", "OUT"},
+                                        {"direction", "OUTPUT"}, {"dataType", "REAL"},
+                                        {"unit", nullptr}, {"order", 0}}})}};
+    const json second = publish
+        ? json{{"id", sink_node}, {"kind", "SIGNAL_PUBLISH"},
+               {"typeRef", "SIGNAL_PUBLISH"}, {"executionOrder", 1},
+               {"parameters", {{"signal", "SHARED_TEMP"}}},
+               {"ports", json::array({{{"id", sink_port}, {"name", "IN"},
+                                        {"direction", "INPUT"}, {"dataType", "REAL"},
+                                        {"unit", nullptr}, {"order", 0}}})}}
+        : json{{"id", sink_node}, {"kind", "OUTPUT"}, {"typeRef", "REAL"},
+               {"executionOrder", 1}, {"parameters", {{"variable", "OBSERVED"}}},
+               {"ports", json::array({{{"id", sink_port}, {"name", "IN"},
+                                        {"direction", "INPUT"}, {"dataType", "REAL"},
+                                        {"unit", nullptr}, {"order", 0}}})}};
+    return {
+        {"$schema", "../../fbd_v1.schema.json"}, {"schemaVersion", 1},
+        {"profileId", "revA-1t-1-5-30"}, {"graphId", uuid_for(1, 99)},
+        {"name", publish ? "SIGNAL_PRODUCER" : "SIGNAL_CONSUMER"},
+        {"networks", json::array({{
+            {"id", uuid_for(2, 99)}, {"name", "MAIN"}, {"order", 0},
+            {"nodes", json::array({first, second})},
+            {"wires", json::array({{{"id", uuid_for(5, 99)},
+                                     {"from", {{"nodeId", source_node},
+                                               {"portId", source_port}}},
+                                     {"to", {{"nodeId", sink_node},
+                                             {"portId", sink_port}}}}})}
+        }})}
+    };
+}
+
 std::string make_st_source(const json& pair)
 {
     std::ostringstream source;
@@ -432,6 +478,81 @@ TEST(StFbdCompile, RejectsFunctionBlockInstanceWithWrongType)
     const auto result = compile_fbd_source(graph.dump());
     EXPECT_FALSE(result.ok);
     EXPECT_TRUE(has_issue(result, "FBD-SEM-PARAM-001"));
+    EXPECT_TRUE(result.module.code.empty());
+}
+
+TEST(StFbdCompile, SignalReadAndPublishLowerToTheSameTypedIrAsStructuredText)
+{
+    const std::vector<StPublishedSignalContract> signals = {
+        {"SHARED_TEMP", StType::REAL, "P_pub"},
+    };
+    struct Case {
+        bool publish;
+        const char* program_id;
+        const char* st_source;
+    };
+    const Case cases[] = {
+        {false, "P_cons",
+         "PROGRAM SIGNAL_CONSUMER\nVAR_OUTPUT OBSERVED : REAL; END_VAR\n"
+         "OBSERVED := SIGNAL_READ(SHARED_TEMP);\nEND_PROGRAM\n"},
+        {true, "P_pub",
+         "PROGRAM SIGNAL_PRODUCER\nVAR_INPUT VALUE : REAL; END_VAR\n"
+         "SIGNAL_PUBLISH(SHARED_TEMP, VALUE);\nEND_PROGRAM\n"},
+    };
+    for (const Case& item : cases) {
+        SCOPED_TRACE(item.program_id);
+        StCompileOptions options;
+        options.enforce_review_gate = false;
+        options.program_identity = item.program_id;
+        options.published_signals = signals;
+        const FbdCompileResult fbd = compile_fbd_source(make_signal_graph(item.publish).dump(),
+                                                        options);
+        ASSERT_TRUE(fbd.ok)
+            << (fbd.issues.empty() ? "không có issue"
+                                   : fbd.issues[0].code + ": " + fbd.issues[0].path);
+        ASSERT_EQ(fbd.module.signal_refs.size(), 1U);
+        EXPECT_EQ(fbd.module.signal_refs[0].name, "SHARED_TEMP");
+        EXPECT_EQ(fbd.module.signal_refs[0].type, StType::REAL);
+        EXPECT_EQ(fbd.module.signal_refs[0].read, !item.publish);
+        EXPECT_EQ(fbd.module.signal_refs[0].publish, item.publish);
+        EXPECT_TRUE(std::any_of(fbd.module.code.begin(), fbd.module.code.end(),
+                                [&](const StInstr& instruction) {
+                                    return instruction.op ==
+                                           (item.publish ? StOp::SIGNAL_PUBLISH
+                                                         : StOp::SIGNAL_READ);
+                                }));
+
+        StIrModule st;
+        StDiagnostic diagnostic;
+        ASSERT_TRUE(compile_st_source(item.st_source, &st, &diagnostic, options))
+            << diagnostic.code << ": " << diagnostic.message;
+        std::string reason;
+        EXPECT_TRUE(fbd_ir_semantically_equivalent(st, fbd.module, &reason)) << reason;
+    }
+}
+
+TEST(StFbdCompile, SignalSemanticFailuresAreStableAndPublishNoPartialIr)
+{
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    options.program_identity = "P_other";
+    options.published_signals = {{"SHARED_TEMP", StType::REAL, "P_pub"}};
+    FbdCompileResult result = compile_fbd_source(make_signal_graph(true).dump(), options);
+    ASSERT_FALSE(result.ok);
+    ASSERT_FALSE(result.issues.empty());
+    EXPECT_EQ(result.issues[0].code, "FBD-SEM-LOWER-001");
+    EXPECT_NE(result.issues[0].path.find(st_diag_code::kSignalDuplicatePublisher),
+              std::string::npos) << result.issues[0].path;
+    EXPECT_TRUE(result.module.code.empty());
+    EXPECT_TRUE(result.module.signal_refs.empty());
+
+    options.program_identity = "P_cons";
+    options.published_signals.clear();
+    result = compile_fbd_source(make_signal_graph(false).dump(), options);
+    ASSERT_FALSE(result.ok);
+    ASSERT_FALSE(result.issues.empty());
+    EXPECT_NE(result.issues[0].path.find(st_diag_code::kSignalConsumerMissing),
+              std::string::npos) << result.issues[0].path;
     EXPECT_TRUE(result.module.code.empty());
 }
 

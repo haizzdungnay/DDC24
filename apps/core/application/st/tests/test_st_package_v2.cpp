@@ -13,6 +13,7 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <string>
 
 #include <sodium.h>
@@ -102,6 +103,105 @@ TEST(StPackageV2, MultiProgramPackageKeepsProgramOrderAndFlags)
     EXPECT_EQ(view.program_names[0], "Main");
     EXPECT_EQ(view.program_names[1], "Aux");
     EXPECT_TRUE((view.header.flags & st_pkg::kFlagHasMultiProgram) != 0);
+}
+
+TEST(StPackageV2, FullPouSignatureAndLinkedBodyRoundTrip)
+{
+    StPackageInput input = minimal_input();
+    StPouSignature function;
+    function.name = "Blend";
+    function.kind = StPouKind::FUNCTION;
+    function.input_names = {"a", "b"};
+    function.input_types = {StType::REAL, StType::REAL};
+    function.has_return_type = true;
+    function.return_type = StType::REAL;
+    function.has_linked_body = true;
+    function.body_sha256.fill(0x5Au);
+    function.instruction_count = 7;
+    input.pou_signatures.push_back(function);
+
+    std::vector<uint8_t> bytes;
+    std::string error;
+    ASSERT_TRUE(WritePackageV2(input, &bytes, &error)) << error;
+    StPackageView view;
+    const char* code = nullptr;
+    ASSERT_TRUE(load(bytes, &view, &code)) << (code ? code : "");
+    EXPECT_NE(view.header.flags & st_pkg::kFlagPouTableFull, 0u);
+    ASSERT_EQ(view.pou_signatures.size(), 2U);
+    const StPouSignature& decoded = view.pou_signatures[1];
+    EXPECT_EQ(decoded.name, "Blend");
+    EXPECT_EQ(decoded.library_origin, "PROJECT");
+    EXPECT_EQ(decoded.input_names, function.input_names);
+    EXPECT_EQ(decoded.input_types, function.input_types);
+    EXPECT_EQ(decoded.return_type, StType::REAL);
+    EXPECT_EQ(decoded.body_sha256, function.body_sha256);
+    EXPECT_EQ(decoded.instruction_count, 7U);
+}
+
+TEST(StPackageV2, LibraryPouRequiresPinnedLibraryLock)
+{
+    StPackageInput input = minimal_input();
+    StPouSignature function;
+    function.name = "SystemScale";
+    function.kind = StPouKind::FUNCTION;
+    function.from_library = true;
+    function.library_entry_id = "sys-scale";
+    function.version = "1.0.0";
+    function.library_origin = "SYSTEM";
+    function.has_linked_body = true;
+    function.body_sha256.fill(0x6Cu);
+    function.has_return_type = true;
+    function.return_type = StType::REAL;
+    input.pou_signatures.push_back(function);
+    std::vector<uint8_t> bytes;
+    std::string error;
+    EXPECT_FALSE(WritePackageV2(input, &bytes, &error));
+    EXPECT_NE(error.find("LIBRARY_LOCK"), std::string::npos) << error;
+
+    input.library_lock.system_version = "1.0.0";
+    input.library_lock.system_sha256.fill(0xA5u);
+    ASSERT_TRUE(WritePackageV2(input, &bytes, &error)) << error;
+    StPackageView view;
+    const char* code = nullptr;
+    ASSERT_TRUE(load(bytes, &view, &code)) << (code ? code : "");
+    ASSERT_EQ(view.pou_signatures.size(), 2U);
+    EXPECT_TRUE(view.pou_signatures[1].from_library);
+    EXPECT_EQ(view.pou_signatures[1].library_origin, "SYSTEM");
+    EXPECT_EQ(view.library_system_version, "1.0.0");
+}
+
+TEST(StPackageV2, ProjectLibraryOriginRoundTripsWithoutBecomingLocal)
+{
+    StPackageInput input = minimal_input();
+    StPouSignature function;
+    function.name = "ProjectScale";
+    function.kind = StPouKind::FUNCTION;
+    function.from_library = true;
+    function.library_entry_id = "project-entry-scale";
+    function.version = "2.0.0";
+    function.library_origin = "PROJECT";
+    function.has_linked_body = true;
+    function.body_sha256.fill(0x4Bu);
+    function.has_return_type = true;
+    function.return_type = StType::REAL;
+    input.pou_signatures.push_back(function);
+    input.library_lock.system_version = "system-1";
+
+    std::vector<uint8_t> bytes;
+    std::string error;
+    EXPECT_FALSE(WritePackageV2(input, &bytes, &error));
+    EXPECT_NE(error.find("projectRevisionId"), std::string::npos) << error;
+    input.library_lock.project_revision_id = "project-revision-42";
+    ASSERT_TRUE(WritePackageV2(input, &bytes, &error)) << error;
+    StPackageView view;
+    const char* code = nullptr;
+    ASSERT_TRUE(load(bytes, &view, &code)) << (code ? code : "");
+    ASSERT_EQ(view.pou_signatures.size(), 2U);
+    EXPECT_TRUE(view.pou_signatures[1].from_library);
+    EXPECT_EQ(view.pou_signatures[1].library_origin, "PROJECT");
+    EXPECT_EQ(view.pou_signatures[1].library_entry_id, "project-entry-scale");
+    EXPECT_EQ(view.pou_signatures[1].version, "2.0.0");
+    EXPECT_EQ(view.library_project_revision_id, "project-revision-42");
 }
 
 TEST(StPackageV2, WriterRefusesInputBeyondProfileCaps)
@@ -263,9 +363,74 @@ TEST(StPackageV2, RejectsDuplicateOutputOwnerAndDuplicatePublisher)
     StPackageInput publisher_conflict = minimal_input();
     publisher_conflict.signals.push_back({"Setpoint", "Main", 3, 1000});
     publisher_conflict.signals.push_back({"Setpoint", "Main", 3, 1000});
-    ASSERT_TRUE(WritePackageV2(publisher_conflict, &bytes, &error)) << error;
+    EXPECT_FALSE(WritePackageV2(publisher_conflict, &bytes, &error));
+
+    /* Loader vẫn tự bảo vệ khi package đến từ writer khác. Dựng package hợp lệ,
+     * đổi Feedback thành SETPOINT (cùng 8 byte), rồi băm lại để tấn công đi qua
+     * đúng lớp semantic chứ không dừng ở hash. */
+    StPackageInput tampered_publisher = minimal_input();
+    tampered_publisher.signals.push_back({"Setpoint", "Main", 3, 1000});
+    tampered_publisher.signals.push_back({"Feedback", "Main", 3, 1000});
+    ASSERT_TRUE(WritePackageV2(tampered_publisher, &bytes, &error)) << error;
+    const std::string needle = "Feedback";
+    const std::string replacement = "SETPOINT";
+    auto found = std::search(bytes.begin(), bytes.end(), needle.begin(), needle.end());
+    ASSERT_NE(found, bytes.end());
+    std::copy(replacement.begin(), replacement.end(), found);
+    rehash(&bytes);
     EXPECT_FALSE(load(bytes, &view, &code));
     EXPECT_STREQ(code, st_pkg_error::kSignalPublisher);
+}
+
+TEST(StPackageV2, WriterRejectsInvalidSignalContractAndFallbackEncoding)
+{
+    auto rejected = [](const StPackageSignal& signal) {
+        StPackageInput input = minimal_input();
+        input.signals.push_back(signal);
+        std::vector<uint8_t> bytes;
+        std::string error;
+        EXPECT_FALSE(WritePackageV2(input, &bytes, &error)) << signal.name;
+        EXPECT_FALSE(error.empty());
+    };
+
+    rejected({"bad-name", "Main", 3, 1000});
+    rejected({"VALID_NAME", "Missing", 3, 1000});
+    rejected({"VALID_NAME", "Main", 0, 1000});
+    rejected({"VALID_NAME", "Main", 3, 999});
+    rejected({"VALID_NAME", "Main", 1, 1000, 1, 2, true});
+    rejected({"VALID_NAME", "Main", 3, 1000, 0, 1, false});
+    rejected({"VALID_NAME", "Main", 3, 1000, 1, 0x7f800000u, true});
+    rejected({"VALID_NAME", "Main", 4, 1000, 1,
+              std::numeric_limits<uint64_t>::max(), true});
+}
+
+TEST(StPackageV2, AllSignalFallbackTypesRoundTripCanonicalBits)
+{
+    StPackageInput input = minimal_input();
+    input.signals = {
+        {"F_BOOL", "Main", 1, 1000, 1, 1, true},
+        {"F_DINT", "Main", 2, 1000, 1, 0x80000000u, true},
+        {"F_REAL", "Main", 3, 1000, 1, 0x40b00000u, true},
+        {"F_TIME", "Main", 4, 1000, 1, 2500000000ull, true},
+        {"F_INT", "Main", 5, 1000, 1, 0xfffffffeu, true},
+        {"F_UINT", "Main", 6, 1000, 1, 65535u, true},
+    };
+    std::vector<uint8_t> bytes;
+    std::string error;
+    ASSERT_TRUE(WritePackageV2(input, &bytes, &error)) << error;
+    StPackageContents contents;
+    const char* code = nullptr;
+    ASSERT_TRUE(UnpackPackageV2(bytes.data(), bytes.size(),
+                               st_profile_generated::kProfileCode,
+                               st_profile_generated::kTargetAbi, &contents, &code))
+        << (code ? code : "");
+    ASSERT_EQ(contents.signals.size(), input.signals.size());
+    for (std::size_t index = 0; index < input.signals.size(); ++index) {
+        EXPECT_EQ(contents.signals[index].data_type, input.signals[index].data_type);
+        EXPECT_EQ(contents.signals[index].fallback_bits,
+                  input.signals[index].fallback_bits);
+        EXPECT_TRUE(contents.signals[index].has_fallback);
+    }
 }
 
 TEST(StPackageV2, AcceptsDistinctOutputsAndSignals)

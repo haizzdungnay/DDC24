@@ -19,6 +19,12 @@ enum class FbdNodeKind : uint8_t {
     FUNCTION,
     FUNCTION_BLOCK,
     CONVERSION,
+    /* Published Signal là primitive của ngôn ngữ, không phải entry Control
+     * Library. Hai kind riêng giữ shape canonical và không cho một typeRef tùy
+     * ý âm thầm biến thành I/O runtime. Lowerer vẫn sinh đúng AST/opcode chung
+     * với ST; không có executor FBD thứ hai. */
+    SIGNAL_READ,
+    SIGNAL_PUBLISH,
 };
 
 enum class FbdPortDirection : uint8_t { INPUT, OUTPUT };

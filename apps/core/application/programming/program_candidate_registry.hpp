@@ -41,6 +41,8 @@ enum class CandidateWithdrawReason : uint8_t {
     FAULT_TTL_EXPIRED,
     /* Package mới không còn Program này. */
     PACKAGE_REPLACED,
+    /* Consumer BLOCK_PROGRAM vì Published Signal unavailable/stale. */
+    SIGNAL_BLOCKED,
 };
 
 const char* candidate_withdraw_reason_name(CandidateWithdrawReason reason);

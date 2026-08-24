@@ -54,9 +54,31 @@ enum class StProgramState : uint8_t {
     FAULTED,
     ROLLED_BACK,
     REJECTED,
+    /* Published Signal BLOCK_PROGRAM/WAIT: trạng thái phục hồi được, vẫn
+     * được release lại ở chu kỳ kế nhưng không được publish candidate. Đặt ở
+     * cuối để không đổi wire/checkpoint value của các trạng thái đã có. */
+    WAITING,
 };
 
 const char* st_program_state_name(StProgramState s);
+
+/* Ý ĐỊNH Enable/Disable đang chờ RT tiêu thụ. Không mang trạng thái, chỉ mang
+ * điều người vận hành yêu cầu — trạng thái thật vẫn chỉ do RT ghi. */
+enum class StEnableRequest : uint8_t {
+    NONE = 0,
+    ENABLE,
+    DISABLE,
+};
+
+/* Kết quả RT trả lại cho lượt Enable/Disable vừa tiêu thụ ở safe boundary. */
+enum class StEnableAckResult : uint8_t {
+    NONE = 0,
+    APPLIED,
+    /* Trạng thái nguồn không cho phép bật (FAULTED chưa reset, EMPTY...). */
+    REJECTED_STATE,
+    /* Vượt trần Program chạy đồng thời của profile (Rev A: 16). */
+    REJECTED_LIMIT,
+};
 
 /* Giới hạn theo SPEC §2. */
 namespace st_sched_limits {
@@ -284,6 +306,32 @@ struct StProgramInstance {
      * yêu cầu, không suy đoán theo thời gian chờ. */
     std::atomic<bool> pending_retain_reset{false};
     std::atomic<uint64_t> retain_reset_ack_generation{0};
+
+    /* F-P59-ENABLE-BOUNDARY-001 — Enable/Disable đi CÙNG một con đường với
+     * RETAIN reset: non-RT chỉ ARM một yêu cầu, RT áp dụng tại safe boundary.
+     *
+     * Vì sao không cho non-RT sửa thẳng `state`/`enabled` như bản trước: trên
+     * bo thật `SET_PROGRAM_ENABLED` chạy trên IPC worker thread trong khi scan
+     * loop RT đang tick cùng scheduler, nên `StScheduler::start/stop/enable/
+     * disable` gọi từ đó ghi đè `state` ngay giữa lúc RT đang đọc để quyết
+     * định dispatch và đang ghi khi Program fault. Đo bằng
+     * `-fsanitize=thread` trên `EnableIntentAppliesAtSafeBoundaryWhileScanRuns`
+     * ra ba data race: `stop`↔`run_task`, `disable`↔`run_task`,
+     * `start`(vòng đếm trần 16)↔`run_program`. Hậu quả không phải chỉ là cảnh
+     * báo công cụ: một lệnh Disable rơi đúng giữa tick có thể bị chính RT ghi
+     * đè trạng thái ngay sau đó, và Program đã bị người vận hành tắt vẫn chạy
+     * tiếp một chu kỳ với quyền ghi đầu ra.
+     *
+     * `enable_ack_result`/`enable_ack_state` ghi TRƯỚC, `enable_ack_generation`
+     * tăng SAU bằng release — non-RT thấy generation tăng thì chắc chắn thấy
+     * đúng kết quả của chính lượt đó. */
+    std::atomic<uint8_t> pending_enable_request{
+        static_cast<uint8_t>(StEnableRequest::NONE)};
+    std::atomic<uint8_t> enable_ack_result{static_cast<uint8_t>(StEnableAckResult::NONE)};
+    /* Trạng thái tại thời điểm RT từ chối, để non-RT nói được LÝ DO thật cho
+     * người vận hành mà không phải đọc `state` (chính là thứ đang chạy đua). */
+    std::atomic<uint8_t> enable_ack_state{static_cast<uint8_t>(StProgramState::EMPTY)};
+    std::atomic<uint64_t> enable_ack_generation{0};
 };
 
 /* Ảnh topology/IR của cả package được dựng ngoài scheduler sống. Safe boundary
@@ -441,6 +489,10 @@ public:
      * vượt trần. */
     bool set_program_lane(const std::string& instance_id, uint8_t lane, std::string* error);
 
+    /* Trần Program chạy đồng thời của profile đang dùng (Rev A: 16). Hằng
+     * số thuần tuý, không đọc trạng thái nên gọi được từ mọi luồng. */
+    std::size_t max_enabled_programs() const noexcept;
+
     /* Trả false + *error nếu cấu hình vi phạm ràng buộc SPEC §3. Fail-fast:
      * cấu hình sai không được chạy với "phần hợp lệ", vì như vậy hệ chạy khác
      * điều engineer nghĩ mà không ai biết. */
@@ -483,7 +535,13 @@ public:
     bool restore_program_set_at_boundary(const std::string& task_id,
                                          StPreparedProgramSet* previous) noexcept;
 
-    /* Lệnh vòng đời (SPEC §7.3). Trả false nếu chuyển trạng thái không hợp lệ. */
+    /* Lệnh vòng đời (SPEC §7.3). Trả false nếu chuyển trạng thái không hợp lệ.
+     *
+     * CHỈ gọi khi KHÔNG có luồng scan nào đang tick scheduler này: bootstrap
+     * trước khi scan chạy, hoặc test đơn luồng. Bốn hàm này ghi thẳng
+     * `state`/`enabled` mà RT đang đọc mỗi tick. Đường lệnh của người vận
+     * hành lúc hệ ĐANG CHẠY phải đi qua `request_program_enabled()` +
+     * `apply_pending_enable_requests_at_boundary()` (F-P59-ENABLE-BOUNDARY-001). */
     bool start(const std::string& instance_id, std::string* error);
     bool stop(const std::string& instance_id, std::string* error);
     bool enable(const std::string& instance_id, std::string* error);
@@ -500,6 +558,24 @@ public:
      * này để có mốc so sánh xác nhận đã áp dụng. */
     bool request_retain_reset(const std::string& instance_id, std::string* error);
 
+    /* F-P59-ENABLE-BOUNDARY-001. Non-RT ARM ý định Enable/Disable; RT áp dụng
+     * tại safe boundary kế tiếp (`apply_pending_enable_requests_at_boundary`).
+     * KHÔNG gọi `start/stop/enable/disable` từ luồng non-RT khi scan đang
+     * chạy — đó là đường ghi thẳng vào `state` mà RT đang đọc/ghi.
+     *
+     * `*instance` trả lại chính con trỏ vừa tra để caller poll
+     * `enable_ack_generation` mà không phải tra lại; `*ack_baseline` đọc
+     * TRƯỚC khi arm nên "generation tăng" luôn có nghĩa là đã qua đúng một
+     * boundary kể từ yêu cầu này. */
+    enum class StEnableRequestOutcome : uint8_t {
+        ARMED = 0,
+        UNKNOWN_INSTANCE,
+        ALREADY_PENDING,
+    };
+    StEnableRequestOutcome request_program_enabled(const std::string& instance_id, bool enabled,
+                                                   StProgramInstance** instance,
+                                                   uint64_t* ack_baseline, std::string* error);
+
     /* Safe-boundary phase tách riêng để process image chụp input của candidate
      * vừa activate, không chụp artifact cũ rồi execute artifact mới. Gọi lặp
      * lại trong cùng boundary là no-op. */
@@ -511,6 +587,12 @@ public:
      * `ProgrammingRuntimeCoordinator::on_safe_boundary()`). Tách riêng khỏi
      * activation để không trộn hai luồng nghiệp vụ khác nhau vào một hàm. */
     void apply_pending_retain_resets_at_boundary();
+
+    /* F-P59-ENABLE-BOUNDARY-001: áp dụng ý định Enable/Disable đang chờ cho
+     * mọi instance, tại CÙNG safe boundary với activation/retain reset. Không
+     * cấp phát, không throw, không lock. Gọi ở đúng chỗ caller gọi hai hàm
+     * boundary kia (`ProgrammingRuntimeCoordinator::on_safe_boundary()`). */
+    void apply_pending_enable_requests_at_boundary();
 
     /* Một base step. `now_ns` chụp MỘT LẦN bởi caller và dùng chung cho mọi
      * Task. Task period chỉ quyết định có dispatch hay không; tuyệt đối không
@@ -586,6 +668,11 @@ private:
     bool stage_activation(StProgramInstance* program, const std::vector<uint8_t>& artifact,
                           std::string* error, bool is_rollback);
     void apply_pending_retain_resets(StTask& task);
+    void apply_pending_enable_requests(StTask& task) noexcept;
+    /* Số Program đang chiếm suất chạy (RUNNING/WAITING) trên TOÀN scheduler —
+     * trần 16 là trần của thiết bị, không phải của một Task. Chỉ gọi từ RT
+     * (boundary/lệnh bootstrap): vòng lặp này đọc `state` của mọi instance. */
+    std::size_t running_program_count() const noexcept;
     void log_trace(StTraceEventKind kind, uint64_t now_ns, bool ok, const char* task_id,
                    const char* instance_id, const char* code);
 

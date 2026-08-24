@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "st/st_diagnostic.hpp"
+#include "st/st_signal_bus.hpp"
 
 namespace core {
 namespace {
@@ -46,10 +47,12 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
 
     uint32_t pc = 0;
     const char* fault_code = nullptr;
+    bool waiting = false;
 
 /* Thoát fault: ghi mã + pc, tra vị trí ST rồi trả false. Dùng macro để không
  * phải nhân bản 20 lần cùng một khối thoát trong vòng thực thi. */
 #define ST_FAULT(codestr)  do { fault_code = (codestr); goto faulted; } while (0)
+#define ST_WAIT(codestr)   do { waiting = true; fault_code = (codestr); goto faulted; } while (0)
 
     while (pc < n) {
         const StInstr& in = code[pc];
@@ -66,6 +69,36 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
         case StOp::MOV:
             /* Sao chép nguyên ô 8 byte: đúng với mọi kiểu, một lệnh. */
             S[in.dst] = S[in.a];
+            pc++;
+            break;
+
+        case StOp::SIGNAL_READ: {
+            const StIrSignalRef& ref = prog->signal_refs[in.aux];
+            if (prog->signal_bus == nullptr || ref.runtime_index < 0)
+                ST_FAULT(st_diag_code::kRtSignalPublish);
+            const StSignalRead read =
+                prog->signal_bus->read(ref.runtime_index, static_cast<uint64_t>(now_ns));
+            if (read.state == StSignalReadState::UNAVAILABLE)
+                ST_WAIT(st_diag_code::kRtSignalWait);
+            if (read.state == StSignalReadState::NOT_DECLARED)
+                ST_FAULT(st_diag_code::kRtSignalContract);
+            /* HOLD_PRIVATE: stale giữ nguyên biến đích. Compiler bảo đảm
+             * SIGNAL_READ chỉ xuất hiện ở RHS trực tiếp và dst chính là biến
+             * người dùng, không phải temp bị MOV tiếp sau đó. */
+            if (read.state != StSignalReadState::STALE_HELD)
+                S[in.dst] = read.value;
+            pc++;
+            break;
+        }
+
+        case StOp::SIGNAL_PUBLISH:
+            if (in.aux >= prog->pending_signal_values.size() ||
+                in.aux >= prog->pending_signal_writes.size() ||
+                in.aux >= prog->pending_signal_pc.size())
+                ST_FAULT(st_diag_code::kRtSignalPublish);
+            prog->pending_signal_values[in.aux] = S[in.a];
+            prog->pending_signal_writes[in.aux] = 1;
+            prog->pending_signal_pc[in.aux] = pc;
             pc++;
             break;
 
@@ -482,7 +515,8 @@ done:
 
 faulted:
     if (fault) {
-        fault->faulted = true;
+        fault->faulted = !waiting;
+        fault->waiting = waiting;
         fault->code = fault_code;
         fault->pc = pc;
         prog->source_position(pc, &fault->line, &fault->column);
@@ -490,6 +524,7 @@ faulted:
     return false;
 
 #undef ST_FAULT
+#undef ST_WAIT
 }
 
 } // namespace core

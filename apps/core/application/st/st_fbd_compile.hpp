@@ -19,7 +19,7 @@
 
 namespace core {
 
-constexpr const char* kFbdLowererVersion = "fwsom-fbd-1.0.0";
+constexpr const char* kFbdLowererVersion = "fwsom-fbd-1.1.0";
 
 /* Neo vị trí FBD deterministic. `line/column` là khóa compact được ghi trong
  * MKDDCIR1 DEBUG_SOURCEMAP; manifest provenance ánh xạ khóa này về UUID gốc.
@@ -66,6 +66,8 @@ FbdCompileResult compile_fbd_source(std::string_view source, const StCompileOpti
 struct FbdLowerResult {
     bool ok = false;
     StProgram program;
+    std::string canonical_source;
+    std::vector<FbdSourceAnchor> source_anchors;
     std::vector<FbdIssue> issues;
 };
 

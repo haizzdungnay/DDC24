@@ -56,6 +56,15 @@ constexpr const char* kRtPidInvalidDt    = "ST-RT-009";
 /* TASK-PROG-304: Task overrun ngân sách 3 lần liên tiếp (OD-PROG-012).
  * Chuyển đúng TASK đó FAULT, không phải lỗi của riêng một Program. */
 constexpr const char* kRtTaskOverrun     = "ST-RT-010";
+/* Published Signal WAIT/unavailable là trạng thái có thể phục hồi, không làm
+ * Program FAULTED. Publish bị từ chối sau khi package đã bind là lỗi runtime
+ * contract và phải fail-closed cả chu kỳ. */
+constexpr const char* kRtSignalWait      = "ST-RT-011";
+constexpr const char* kRtSignalPublish   = "ST-RT-012";
+/* Ref đã bind nhưng runtime bank không còn khai báo tương ứng là contract drift,
+ * không phải tình trạng dữ liệu tạm thời. Chờ sẽ tạo vòng WAIT vô hạn nên phải
+ * fault fail-closed để operator thấy lỗi package/runtime. */
+constexpr const char* kRtSignalContract  = "ST-RT-013";
 
 /* Vượt giới hạn tài nguyên (st_limits.hpp). Tách riêng khỏi ST-SYN-* để BE
  * phân biệt được "chương trình sai" với "chương trình quá lớn" — hai hành
@@ -113,6 +122,7 @@ constexpr const char* kSignalDuplicatePublisher = "ST-SIG-001";
 constexpr const char* kSignalTypeMismatch       = "ST-SIG-002";
 constexpr const char* kSignalFreshnessRange     = "ST-SIG-003";
 constexpr const char* kSignalConsumerMissing    = "ST-SIG-004";
+constexpr const char* kSignalReadContext        = "ST-SIG-005";
 
 /* Output ownership: một binding output chỉ có một Program owner (DDD §4.6). */
 constexpr const char* kOutputOwnerConflict   = "ST-OWN-001";

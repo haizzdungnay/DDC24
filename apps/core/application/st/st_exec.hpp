@@ -24,6 +24,9 @@ namespace core {
 
 struct StExecFault {
     bool        faulted = false;
+    /* WAIT là backpressure nghiệp vụ của Published Signal, không phải runtime
+     * fault: scheduler giữ Program RUNNING và thử lại ở release kế tiếp. */
+    bool        waiting = false;
     const char* code = nullptr;   /* ST-RT-* (hằng tĩnh, không cấp phát) */
     uint32_t    pc = 0;
     int         line = 0;

@@ -61,7 +61,7 @@ TEST(StPouRegistry, BuildsSortedSymbolTableAndCallGraph)
 {
     Fixture fixture;
     fixture.add(fn("Zulu", "Zulu := Alpha(x);\n"));
-    fixture.add(fn("Alpha", "Alpha := Ramp(x);\n"));
+    fixture.add(fn("Alpha", "Alpha := Ramp(x);\n"), {{"Ramp", "1.0.0"}});
 
     StPouRegistryResult result;
     StDiagnostic diag;
@@ -201,6 +201,32 @@ TEST(StPouRegistry, MatchingLibraryVersionIsAccepted)
     StDiagnostic diag;
     EXPECT_TRUE(st_build_pou_registry(fixture.sources, kLibrary, &result, &diag))
         << diag.code << ": " << diag.message;
+}
+
+TEST(StPouRegistry, LibraryCallMustBeDeclaredByTheCaller)
+{
+    Fixture fixture;
+    fixture.add(fn("Alpha", "Alpha := Ramp(x);\n"));
+    StPouRegistryResult result;
+    StDiagnostic diag;
+    EXPECT_FALSE(st_build_pou_registry(fixture.sources, kLibrary, &result, &diag));
+    EXPECT_EQ(diag.code, st_diag_code::kLibraryEntryMissing);
+    EXPECT_NE(diag.message.find("requiresLibrary"), std::string::npos) << diag.message;
+}
+
+TEST(StPouRegistry, LibraryFunctionBlockMustBeDeclaredByTheOwner)
+{
+    Fixture fixture;
+    fixture.add(
+        "PROGRAM Main\n"
+        "VAR block : Latch; END_VAR\n"
+        "block(IN := TRUE);\n"
+        "END_PROGRAM\n");
+    StPouRegistryResult result;
+    StDiagnostic diag;
+    EXPECT_FALSE(st_build_pou_registry(fixture.sources, kLibrary, &result, &diag));
+    EXPECT_EQ(diag.code, st_diag_code::kLibraryEntryMissing);
+    EXPECT_NE(diag.message.find("requiresLibrary"), std::string::npos) << diag.message;
 }
 
 TEST(StPouRegistry, DuplicateAndAmbiguousNamesAreRejected)

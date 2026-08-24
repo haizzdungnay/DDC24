@@ -19,7 +19,12 @@
 
 #include "st/st_fbd_compile.hpp"
 #include "st/st_fbd_model.hpp"
+#include "st/st_compile.hpp"
+#include "st/st_ir.hpp"
 #include "st/st_parser.hpp"
+#include "st/st_runtime.hpp"
+#include "st/st_semantic.hpp"
+#include "st/st_test_key.hpp"
 
 namespace core {
 namespace {
@@ -98,6 +103,69 @@ json make_user_pou_graph(const std::string& type_ref, const std::string& kind,
                                            {"wires", wires}}})}};
 }
 
+json make_fbd_ton_block(const std::string& name)
+{
+    const std::string input_node = uuid_for(13, 1);
+    const std::string constant_node = uuid_for(13, 2);
+    const std::string ton_node = uuid_for(13, 3);
+    const std::string output_node = uuid_for(13, 4);
+    const std::string input_out = uuid_for(14, 1);
+    const std::string constant_out = uuid_for(14, 2);
+    const std::string ton_in = uuid_for(14, 3);
+    const std::string ton_pt = uuid_for(14, 4);
+    const std::string ton_q = uuid_for(14, 5);
+    const std::string ton_et = uuid_for(14, 6);
+    const std::string output_in = uuid_for(14, 7);
+    return {
+        {"$schema", "../../fbd_v1.schema.json"}, {"schemaVersion", 1},
+        {"profileId", "revA-1t-1-5-30"}, {"graphId", uuid_for(11, 1)},
+        {"name", name},
+        {"networks", json::array({{
+            {"id", uuid_for(12, 1)}, {"name", "MAIN"}, {"order", 0},
+            {"nodes", json::array({
+                {{"id", input_node}, {"kind", "INPUT"}, {"typeRef", "BOOL"},
+                 {"executionOrder", 0}, {"parameters", {{"variable", "ENABLE"}}},
+                 {"ports", json::array({{{"id", input_out}, {"name", "OUT"},
+                                          {"direction", "OUTPUT"}, {"dataType", "BOOL"},
+                                          {"unit", nullptr}, {"order", 0}}})}},
+                {{"id", constant_node}, {"kind", "CONSTANT"}, {"typeRef", "TIME"},
+                 {"executionOrder", 1}, {"parameters", {{"value", 1000000000}}},
+                 {"ports", json::array({{{"id", constant_out}, {"name", "OUT"},
+                                          {"direction", "OUTPUT"}, {"dataType", "TIME"},
+                                          {"unit", nullptr}, {"order", 0}}})}},
+                {{"id", ton_node}, {"kind", "FUNCTION_BLOCK"}, {"typeRef", "TON"},
+                 {"executionOrder", 2}, {"parameters", {{"instance", "TIMER"}}},
+                 {"ports", json::array({
+                     {{"id", ton_in}, {"name", "IN"}, {"direction", "INPUT"},
+                      {"dataType", "BOOL"}, {"unit", nullptr}, {"order", 0}},
+                     {{"id", ton_pt}, {"name", "PT"}, {"direction", "INPUT"},
+                      {"dataType", "TIME"}, {"unit", nullptr}, {"order", 1}},
+                     {{"id", ton_q}, {"name", "Q"}, {"direction", "OUTPUT"},
+                      {"dataType", "BOOL"}, {"unit", nullptr}, {"order", 2}},
+                     {{"id", ton_et}, {"name", "ET"}, {"direction", "OUTPUT"},
+                      {"dataType", "TIME"}, {"unit", nullptr}, {"order", 3}}
+                 })}},
+                {{"id", output_node}, {"kind", "OUTPUT"}, {"typeRef", "BOOL"},
+                 {"executionOrder", 3}, {"parameters", {{"variable", "OUT"}}},
+                 {"ports", json::array({{{"id", output_in}, {"name", "IN"},
+                                          {"direction", "INPUT"}, {"dataType", "BOOL"},
+                                          {"unit", nullptr}, {"order", 0}}})}}
+            })},
+            {"wires", json::array({
+                {{"id", uuid_for(15, 1)},
+                 {"from", {{"nodeId", input_node}, {"portId", input_out}}},
+                 {"to", {{"nodeId", ton_node}, {"portId", ton_in}}}},
+                {{"id", uuid_for(15, 2)},
+                 {"from", {{"nodeId", constant_node}, {"portId", constant_out}}},
+                 {"to", {{"nodeId", ton_node}, {"portId", ton_pt}}}},
+                {{"id", uuid_for(15, 3)},
+                 {"from", {{"nodeId", ton_node}, {"portId", ton_q}}},
+                 {"to", {{"nodeId", output_node}, {"portId", output_in}}}}
+            })}
+        }})}
+    };
+}
+
 const StExpr* find_user_call(const StExpr* expr)
 {
     if (expr == nullptr) return nullptr;
@@ -124,6 +192,30 @@ bool has_issue(const std::vector<FbdIssue>& issues, const std::string& code)
     for (const FbdIssue& issue : issues)
         if (issue.code == code) return true;
     return false;
+}
+
+bool activate_module(const StIrModule& module, StProgramRuntime* runtime)
+{
+    std::vector<uint8_t> bytes;
+    std::string error;
+    if (!serialize_st_ir(module, &bytes, &error)) {
+        ADD_FAILURE() << error;
+        return false;
+    }
+    if (!sign_st_artifact(&bytes, st_test_secret_key())) return false;
+    StLoadError load_error;
+    if (!runtime->activate(bytes.data(), bytes.size(), &load_error)) {
+        ADD_FAILURE() << load_error.code << ": " << load_error.message;
+        return false;
+    }
+    return true;
+}
+
+StValue read_value(StProgramRuntime* runtime, const char* name)
+{
+    StValue value;
+    EXPECT_TRUE(runtime->get_variable(name, &value));
+    return value;
 }
 
 } // namespace
@@ -232,7 +324,7 @@ TEST(StFbdUserPou, UnknownTypeRefIsAcceptedByModelAndResolvedLater)
     EXPECT_TRUE(marked);
 }
 
-TEST(StFbdUserPou, CodegenStillRefusesUnlinkedUserCall)
+TEST(StFbdUserPou, CodegenRefusesOnlyAnUnlinkedUserCall)
 {
     /* Trung thực về ranh giới: lower ĐƯỢC, sinh mã CHƯA. Liên kết lời gọi POU vào
      * IR chạy được thuộc T59-106. Điều bắt buộc là nó fail-closed chứ không sinh
@@ -245,6 +337,300 @@ TEST(StFbdUserPou, CodegenStillRefusesUnlinkedUserCall)
     EXPECT_TRUE(has_issue(compiled.issues, "FBD-SEM-LOWER-001") ||
                 has_issue(compiled.issues, "FBD-LIMIT-IR-001"))
         << compiled.issues.front().code;
+}
+
+TEST(StFbdUserPou, LinkedFbdFunctionExecutesThroughTheSharedTypedIr)
+{
+    FbdLowerResult fbd = lower_fbd_source_to_program(
+        make_user_pou_graph("Blend", "FUNCTION").dump());
+    ASSERT_TRUE(fbd.ok);
+    StProgram function;
+    StDiagnostic diag;
+    ASSERT_TRUE(parse_st_pou(
+        "FUNCTION Blend : REAL\n"
+        "VAR_INPUT IN1 : REAL; IN2 : REAL; END_VAR\n"
+        "Blend := IN1 + IN2;\nEND_FUNCTION\n",
+        &function, &diag)) << diag.message;
+
+    std::vector<StPouSource> sources = {{&fbd.program, {}}, {&function, {}}};
+    StPouRegistryResult registry;
+    ASSERT_TRUE(st_build_pou_registry(sources, {}, &registry, &diag)) << diag.message;
+    ASSERT_TRUE(typecheck_st_pou_set(sources, registry, &diag))
+        << diag.code << ": " << diag.message;
+    StIrModule module;
+    std::vector<StLinkedPouInfo> linked;
+    ASSERT_TRUE(compile_st_to_ir_linked(fbd.program, fbd.canonical_source, sources,
+                                        registry, &module, &linked, &diag))
+        << diag.code << ": " << diag.message;
+    ASSERT_EQ(linked.size(), 1U);
+    EXPECT_EQ(linked[0].name, "Blend");
+    EXPECT_GT(linked[0].instruction_count, 0U);
+
+    StProgramRuntime runtime;
+    ASSERT_TRUE(activate_module(module, &runtime));
+    ASSERT_TRUE(runtime.set_variable("a", StValue::make_real(2.5f)));
+    ASSERT_TRUE(runtime.set_variable("b", StValue::make_real(4.0f)));
+    ASSERT_TRUE(runtime.execute(0).ok);
+    EXPECT_FLOAT_EQ(read_value(&runtime, "y").r, 6.5f);
+}
+
+TEST(StFbdUserPou, FbdDocumentCanDefineAUserFunction)
+{
+    json definition = make_user_pou_graph("MAX", "FUNCTION");
+    definition["name"] = "MaxFbd";
+    const std::vector<StPouTextSource> sources = {
+        {"main", "Main", StPouTextSource::Language::ST, StPouKind::PROGRAM,
+         "PROGRAM Main\nVAR_INPUT a : REAL; b : REAL; END_VAR\n"
+         "VAR_OUTPUT y : REAL; END_VAR\ny := MaxFbd(a, b);\nEND_PROGRAM\n", {}},
+        {"max-fbd", "MaxFbd", StPouTextSource::Language::FBD, StPouKind::FUNCTION,
+         definition.dump(), {}},
+    };
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    StPouBundleCompileResult bundle;
+    StDiagnostic diag;
+    ASSERT_TRUE(compile_st_pou_bundle(sources, {}, &bundle, &diag, options))
+        << diag.code << ": " << diag.message;
+    StProgramRuntime runtime;
+    ASSERT_TRUE(activate_module(bundle.programs[0].module, &runtime));
+    ASSERT_TRUE(runtime.set_variable("a", StValue::make_real(7.0f)));
+    ASSERT_TRUE(runtime.set_variable("b", StValue::make_real(3.0f)));
+    ASSERT_TRUE(runtime.execute(0).ok);
+    EXPECT_FLOAT_EQ(read_value(&runtime, "y").r, 7.0f);
+    ASSERT_EQ(bundle.programs[0].linked_pous.size(), 1U);
+    EXPECT_EQ(bundle.programs[0].linked_pous[0].name, "MaxFbd");
+}
+
+TEST(StFbdUserPou, FbdDocumentCanDefineAStateIsolatedFunctionBlock)
+{
+    json definition = make_user_pou_graph("MAX", "FUNCTION");
+    definition["name"] = "MaxFb";
+    const std::vector<StPouTextSource> sources = {
+        {"main", "Main", StPouTextSource::Language::ST, StPouKind::PROGRAM,
+         "PROGRAM Main\nVAR_INPUT x : REAL; z : REAL; END_VAR\n"
+         "VAR_OUTPUT y : REAL; END_VAR\nVAR block : MaxFb; END_VAR\n"
+         "block(a := x, b := z); y := block.y;\nEND_PROGRAM\n", {}},
+        {"max-fbd", "MaxFb", StPouTextSource::Language::FBD,
+         StPouKind::FUNCTION_BLOCK, definition.dump(), {}},
+    };
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    StPouBundleCompileResult bundle;
+    StDiagnostic diag;
+    ASSERT_TRUE(compile_st_pou_bundle(sources, {}, &bundle, &diag, options))
+        << diag.code << ": " << diag.message;
+    StProgramRuntime runtime;
+    ASSERT_TRUE(activate_module(bundle.programs[0].module, &runtime));
+    ASSERT_TRUE(runtime.set_variable("x", StValue::make_real(1.0f)));
+    ASSERT_TRUE(runtime.set_variable("z", StValue::make_real(9.0f)));
+    ASSERT_TRUE(runtime.execute(0).ok);
+    EXPECT_FLOAT_EQ(read_value(&runtime, "y").r, 9.0f);
+}
+
+TEST(StFbdUserPou, FbdDefinedFunctionBlockKeepsTonStatePerInstance)
+{
+    const std::vector<StPouTextSource> sources = {
+        {"main", "Main", StPouTextSource::Language::ST, StPouKind::PROGRAM,
+         "PROGRAM Main\nVAR_INPUT a : BOOL; b : BOOL; END_VAR\n"
+         "VAR_OUTPUT aOut : BOOL; bOut : BOOL; END_VAR\n"
+         "VAR first : DelayFb; second : DelayFb; END_VAR\n"
+         "first(ENABLE := a); second(ENABLE := b); "
+         "aOut := first.OUT; bOut := second.OUT;\nEND_PROGRAM\n", {}},
+        {"delay-fbd", "DelayFb", StPouTextSource::Language::FBD,
+         StPouKind::FUNCTION_BLOCK, make_fbd_ton_block("DelayFb").dump(), {}},
+    };
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    StPouBundleCompileResult bundle;
+    StDiagnostic diag;
+    ASSERT_TRUE(compile_st_pou_bundle(sources, {}, &bundle, &diag, options))
+        << diag.code << ": " << diag.message;
+    ASSERT_EQ(bundle.programs.size(), 1U);
+    StProgramRuntime runtime;
+    ASSERT_TRUE(activate_module(bundle.programs[0].module, &runtime));
+
+    ASSERT_TRUE(runtime.set_variable("a", StValue::make_bool(false)));
+    ASSERT_TRUE(runtime.set_variable("b", StValue::make_bool(false)));
+    ASSERT_TRUE(runtime.execute(0).ok);
+    EXPECT_FALSE(read_value(&runtime, "aOut").b);
+    EXPECT_FALSE(read_value(&runtime, "bOut").b);
+
+    ASSERT_TRUE(runtime.set_variable("a", StValue::make_bool(true)));
+    ASSERT_TRUE(runtime.execute(1100000000ULL).ok);
+    EXPECT_FALSE(read_value(&runtime, "aOut").b);
+    EXPECT_FALSE(read_value(&runtime, "bOut").b);
+    ASSERT_TRUE(runtime.execute(2200000000ULL).ok);
+    EXPECT_TRUE(read_value(&runtime, "aOut").b);
+    EXPECT_FALSE(read_value(&runtime, "bOut").b);
+
+    ASSERT_TRUE(runtime.set_variable("b", StValue::make_bool(true)));
+    ASSERT_TRUE(runtime.execute(2200000000ULL).ok);
+    EXPECT_TRUE(read_value(&runtime, "aOut").b);
+    EXPECT_FALSE(read_value(&runtime, "bOut").b);
+    ASSERT_TRUE(runtime.execute(3300000000ULL).ok);
+    EXPECT_TRUE(read_value(&runtime, "aOut").b);
+    EXPECT_TRUE(read_value(&runtime, "bOut").b);
+}
+
+TEST(StFbdUserPou, FunctionLocalsAreReinitializedForEveryInlineCall)
+{
+    const std::vector<StPouTextSource> sources = {
+        {"main", "", StPouTextSource::Language::ST, StPouKind::PROGRAM,
+         "PROGRAM Main\nVAR_OUTPUT a : INT; b : INT; END_VAR\n"
+         "a := Bump(0); b := Bump(0);\nEND_PROGRAM\n", {}},
+        {"bump", "", StPouTextSource::Language::ST, StPouKind::FUNCTION,
+         "FUNCTION Bump : INT\nVAR_INPUT x : INT; END_VAR\nVAR tmp : INT; END_VAR\n"
+         "tmp := tmp + 1; Bump := x + tmp;\nEND_FUNCTION\n", {}},
+    };
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    StPouBundleCompileResult bundle;
+    StDiagnostic diag;
+    ASSERT_TRUE(compile_st_pou_bundle(sources, {}, &bundle, &diag, options))
+        << diag.code << ": " << diag.message;
+    ASSERT_EQ(bundle.programs.size(), 1U);
+    StProgramRuntime runtime;
+    ASSERT_TRUE(activate_module(bundle.programs[0].module, &runtime));
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        ASSERT_TRUE(runtime.execute(cycle).ok);
+        EXPECT_EQ(read_value(&runtime, "a").i, 1);
+        EXPECT_EQ(read_value(&runtime, "b").i, 1);
+    }
+}
+
+TEST(StFbdUserPou, UserFunctionBlockStateIsIsolatedPerInstance)
+{
+    const std::vector<StPouTextSource> sources = {
+        {"main", "", StPouTextSource::Language::ST, StPouKind::PROGRAM,
+         "PROGRAM Main\nVAR_OUTPUT aOut : INT; bOut : INT; END_VAR\n"
+         "VAR a : Counter; b : Counter; END_VAR\n"
+         "a(step := 1); b(step := 2); aOut := a.value; bOut := b.value;\n"
+         "END_PROGRAM\n", {}},
+        {"counter", "", StPouTextSource::Language::ST, StPouKind::FUNCTION_BLOCK,
+         "FUNCTION_BLOCK Counter\nVAR_INPUT step : INT; END_VAR\n"
+         "VAR_OUTPUT value : INT; END_VAR\nVAR count : INT; END_VAR\n"
+         "count := count + step; value := count;\nEND_FUNCTION_BLOCK\n", {}},
+    };
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    StPouBundleCompileResult bundle;
+    StDiagnostic diag;
+    ASSERT_TRUE(compile_st_pou_bundle(sources, {}, &bundle, &diag, options))
+        << diag.code << ": " << diag.message;
+    StProgramRuntime runtime;
+    ASSERT_TRUE(activate_module(bundle.programs[0].module, &runtime));
+    ASSERT_TRUE(runtime.execute(0).ok);
+    EXPECT_EQ(read_value(&runtime, "aOut").i, 1);
+    EXPECT_EQ(read_value(&runtime, "bOut").i, 2);
+    ASSERT_TRUE(runtime.execute(1).ok);
+    EXPECT_EQ(read_value(&runtime, "aOut").i, 2);
+    EXPECT_EQ(read_value(&runtime, "bOut").i, 4);
+}
+
+TEST(StFbdUserPou, LockedSystemLibrarySourceIsTheExecutableImplementation)
+{
+    StPouTextSource main;
+    main.source_id = "main";
+    main.source =
+        "PROGRAM Main\nVAR_OUTPUT y : REAL; END_VAR\n"
+        "y := SysScale(2.0);\nEND_PROGRAM\n";
+    main.requires_library = {{"SysScale", "1.2.0", "SYSTEM"}};
+    StPouTextSource library_source;
+    library_source.source_id = "sys-scale";
+    library_source.pou_name = "SysScale";
+    library_source.declared_kind = StPouKind::FUNCTION;
+    library_source.source =
+        "FUNCTION SysScale : REAL\nVAR_INPUT x : REAL; END_VAR\n"
+        "SysScale := x * 3.0;\nEND_FUNCTION\n";
+    library_source.from_library = true;
+    library_source.library_entry_id = "lib-entry-sys-scale";
+    library_source.version = "1.2.0";
+    library_source.library_origin = "SYSTEM";
+    const std::vector<StLibraryEntry> lock = {
+        {"SysScale", StPouKind::FUNCTION, "1.2.0", "lib-entry-sys-scale"},
+    };
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    StPouBundleCompileResult bundle;
+    StDiagnostic diag;
+    ASSERT_TRUE(compile_st_pou_bundle({main, library_source}, lock, &bundle, &diag,
+                                      options))
+        << diag.code << ": " << diag.message;
+    ASSERT_EQ(bundle.programs.size(), 1U);
+    ASSERT_EQ(bundle.programs[0].linked_pous.size(), 1U);
+    EXPECT_TRUE(bundle.programs[0].linked_pous[0].from_library);
+    EXPECT_EQ(bundle.programs[0].linked_pous[0].library_entry_id,
+              "lib-entry-sys-scale");
+    EXPECT_EQ(bundle.programs[0].linked_pous[0].version, "1.2.0");
+    EXPECT_EQ(bundle.programs[0].linked_pous[0].library_origin, "SYSTEM");
+    StProgramRuntime runtime;
+    ASSERT_TRUE(activate_module(bundle.programs[0].module, &runtime));
+    ASSERT_TRUE(runtime.execute(0).ok);
+    EXPECT_FLOAT_EQ(read_value(&runtime, "y").r, 6.0f);
+}
+
+TEST(StFbdUserPou, LockedProjectLibrarySourceExecutesWithProjectProvenance)
+{
+    StPouTextSource main;
+    main.source_id = "main";
+    main.source =
+        "PROGRAM Main\nVAR_OUTPUT y : REAL; END_VAR\n"
+        "y := ProjectScale(4.0);\nEND_PROGRAM\n";
+    main.requires_library = {{"ProjectScale", "2.0.0", "PROJECT"}};
+    StPouTextSource library_source;
+    library_source.source_id = "project-scale";
+    library_source.pou_name = "ProjectScale";
+    library_source.declared_kind = StPouKind::FUNCTION;
+    library_source.source =
+        "FUNCTION ProjectScale : REAL\nVAR_INPUT x : REAL; END_VAR\n"
+        "ProjectScale := x + 5.0;\nEND_FUNCTION\n";
+    library_source.from_library = true;
+    library_source.library_entry_id = "project-entry-scale";
+    library_source.version = "2.0.0";
+    library_source.library_origin = "PROJECT";
+    const std::vector<StLibraryEntry> lock = {
+        {"ProjectScale", StPouKind::FUNCTION, "2.0.0", "project-entry-scale",
+         "PROJECT"},
+    };
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    StPouBundleCompileResult bundle;
+    StDiagnostic diag;
+    ASSERT_TRUE(compile_st_pou_bundle({main, library_source}, lock, &bundle, &diag,
+                                      options))
+        << diag.code << ": " << diag.message;
+    ASSERT_EQ(bundle.programs.size(), 1U);
+    ASSERT_EQ(bundle.programs[0].linked_pous.size(), 1U);
+    const StLinkedPouInfo& linked = bundle.programs[0].linked_pous[0];
+    EXPECT_TRUE(linked.from_library);
+    EXPECT_EQ(linked.library_entry_id, "project-entry-scale");
+    EXPECT_EQ(linked.version, "2.0.0");
+    EXPECT_EQ(linked.library_origin, "PROJECT");
+    StProgramRuntime runtime;
+    ASSERT_TRUE(activate_module(bundle.programs[0].module, &runtime));
+    ASSERT_TRUE(runtime.execute(0).ok);
+    EXPECT_FLOAT_EQ(read_value(&runtime, "y").r, 9.0f);
+}
+
+TEST(StFbdUserPou, PublicBundleApiRejectsLibraryBackedProgramRoot)
+{
+    StPouTextSource source;
+    source.source_id = "bad-library-program";
+    source.pou_name = "LibraryProgram";
+    source.declared_kind = StPouKind::PROGRAM;
+    source.source = "PROGRAM LibraryProgram\nEND_PROGRAM\n";
+    source.from_library = true;
+    source.library_entry_id = "library-program-entry";
+    source.version = "1.0.0";
+    source.library_origin = "PROJECT";
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    StPouBundleCompileResult bundle;
+    StDiagnostic diag;
+    EXPECT_FALSE(compile_st_pou_bundle({source}, {}, &bundle, &diag, options));
+    EXPECT_EQ(diag.code, st_diag_code::kPouSignatureInvalid);
+    EXPECT_NE(diag.message.find("cannot be a PROGRAM"), std::string::npos)
+        << diag.message;
 }
 
 TEST(StFbdUserPou, SourceMapAnchorsSurviveUserPouNodes)

@@ -14,7 +14,8 @@ TEST(ShmLayout, IoShmV5OffsetsMatchWebAndTools)
     EXPECT_EQ(offsetof(kx_io_shm_t, iop_rx), static_cast<std::size_t>(508));
     EXPECT_EQ(offsetof(kx_io_shm_t, modbus_diag), static_cast<std::size_t>(1560));
     EXPECT_EQ(sizeof(kx_modbus_diag_t), static_cast<std::size_t>(48));
-    EXPECT_EQ(sizeof(kx_io_shm_t), static_cast<std::size_t>(3568));
+    EXPECT_EQ(offsetof(kx_io_shm_t, max_iop_poll_gap_us), static_cast<std::size_t>(3568));
+    EXPECT_EQ(sizeof(kx_io_shm_t), static_cast<std::size_t>(3576));
 }
 
 /* Telemetry northbound/southbound (finding F-03/F-04) + MBR-B110.

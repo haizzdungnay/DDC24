@@ -172,6 +172,10 @@ struct StExpr {
          * library đã pin. Tách hai việc này là điều kiện để có được thông điệp
          * "thiếu entry" khác với "sai version" khác với "đệ quy". */
         USER_CALL,
+        /* T59-404/F-P59-SIGNAL-001: đọc Published Signal bằng contract đã
+         * pin ở Check. Tên được giữ trong artifact để coordinator resolve một
+         * lần; executor chỉ dùng index, không tra chuỗi trong scan. */
+        SIGNAL_READ,
     };
 
     Kind kind = Kind::LITERAL;
@@ -195,6 +199,7 @@ struct StExpr {
 
     StFunc      func = StFunc::ABS;
     std::string user_call_name;          /* USER_CALL: tên POU/entry được gọi */
+    std::string signal_name;             /* SIGNAL_READ */
     std::vector<std::unique_ptr<StExpr>> args;
 
     StType      result_type = StType::REAL;   /* điền bởi st_semantic */
@@ -221,7 +226,7 @@ struct StIfBranch {
 };
 
 struct StStmt {
-    enum class Kind : uint8_t { ASSIGN, IF, FB_CALL };
+    enum class Kind : uint8_t { ASSIGN, IF, FB_CALL, SIGNAL_PUBLISH };
 
     Kind kind = Kind::ASSIGN;
 
@@ -242,6 +247,22 @@ struct StStmt {
     int                   fb_line = 0;
     int                   fb_column = 0;
     int                   fb_length = 1;
+
+    /* SIGNAL_PUBLISH(name, value); — side effect duy nhất được phép ở source.
+     * Runtime chỉ flush bản ghi sau khi toàn bộ cycle thành công. */
+    std::string             signal_name;
+    std::unique_ptr<StExpr> signal_value;
+    int                     signal_line = 0;
+    int                     signal_column = 0;
+    int                     signal_length = 1;
+};
+
+/* Contract compiler nhận từ Revision/package manifest. `producer_program`
+ * là runtime Program ID, không phải objectId/sourceId. */
+struct StPublishedSignalContract {
+    std::string name;
+    StType type = StType::REAL;
+    std::string producer_program;
 };
 
 /* ---- Chương trình ---- */

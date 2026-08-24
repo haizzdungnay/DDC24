@@ -71,6 +71,10 @@ enum class StSignalReadState : uint8_t {
 struct StSignalRead {
     StCell            value{};
     StSignalReadState state = StSignalReadState::NOT_DECLARED;
+    /* Phân biệt giá trị thật/fallback với ô zero-initialized nội bộ. Trạng thái
+     * STALE_HELD trước lần publish đầu tiên vẫn hợp lệ cho HOLD_PRIVATE, nhưng
+     * không được phép lộ ra diagnostics/API như một giá trị 0 có thật. */
+    bool              has_value = false;
     uint64_t          published_at_ns = 0;
     /* Số thứ tự bản commit đang đọc. Hai lần đọc cùng generation phải cho cùng
      * giá trị — đây là thứ test dùng để chứng minh không có đọc rách. */
@@ -87,14 +91,19 @@ struct StSignalDefinition {
     bool          has_fallback = false;
 };
 
+struct StSignalDiagnosticSnapshot {
+    StSignalDefinition definition;
+    StSignalRead read;
+};
+
 /* Bus signal của một package. Không thread-safe cho việc THÊM signal (chỉ xảy ra
  * lúc nạp package, ngoài chu kỳ quét); publish và read thì an toàn cho một
  * publisher + nhiều consumer đồng thời.
  */
 class StSignalBus {
 public:
-    /* Khai báo signal. Trả false + `*error` nếu trùng tên, vượt trần, hoặc
-     * `USE_FALLBACK` mà không có giá trị dự phòng. */
+    /* Khai báo signal. Trả false + `*error` nếu identity/type/freshness/policy/
+     * fallback không hợp lệ, trùng tên không phân biệt hoa thường hoặc vượt trần. */
     bool declare(const StSignalDefinition& definition, std::string* error);
     void clear();
 
@@ -120,6 +129,13 @@ public:
      * phải một phép chuyển đổi ngầm. */
     bool publish(int index, const StCell& value, uint64_t now_ns, const char* publisher);
 
+    /* Publish all-or-nothing cho một Program. Kiểm toàn bộ index/publisher
+     * trước khi ghi bất kỳ ô nháp nào, nhờ đó một lỗi phòng thủ ở ref thứ N
+     * không để lại N-1 side effect chờ commit ở boundary kế tiếp. */
+    bool publish_batch(const StIrSignalRef* refs, const StCell* values,
+                       const uint8_t* writes, std::size_t count,
+                       uint64_t now_ns, const char* publisher);
+
     /* Đổi bản nháp thành bản đọc được. Gọi ĐÚNG MỘT LẦN mỗi chu kỳ, tại boundary,
      * trên luồng quét. */
     void commit_at_boundary();
@@ -133,6 +149,11 @@ public:
      * tăng `unavailable_read_count`: một màn hình poll trạng thái không phải là
      * consumer runtime và không được làm méo số đo lỗi của consumer thật. */
     StSignalRead inspect(int index, uint64_t now_ns) const;
+
+    /* Chụp contract + value trong CÙNG một bank/read guard cho IPC. Không dùng
+     * `size()` rồi `definition()`/`inspect()` rời rạc: safe-boundary có thể đổi
+     * bank giữa các lời gọi và tạo ảnh lai hai package. */
+    std::vector<StSignalDiagnosticSnapshot> inspect_all(uint64_t now_ns) const;
 
     /* Producer bị disable/fault: giá trị dừng lại ở lần publish cuối và sẽ quá
      * hạn theo đúng freshness của nó. KHÔNG xoá giá trị — xoá nghĩa là biến một
@@ -165,6 +186,23 @@ private:
 
     uint8_t acquire_active_bank() const noexcept;
     void release_bank(uint8_t bank) const noexcept;
+    /* F-P59-SIGNAL-READBACK-001 — chụp một Slot kèm KIỂM TRA generation trước
+     * và sau khi chép (mẫu seqlock).
+     *
+     * Vì sao cần: hai bản chỉ bảo đảm "trọn bản cũ hoặc trọn bản mới" cho
+     * reader chạy TRONG cùng chu kỳ với publisher. Reader non-RT
+     * (`inspect_all` gọi từ IPC worker thread cho STATUS/Runtime Monitor) có
+     * thể còn đang chép bản `live` khi scan RT commit — bản đó thành nháp và
+     * `publish()` của chu kỳ kế ghi đè ngay lên nó. Không kiểm generation thì
+     * Monitor có thể trả một `value` của chu kỳ N ghép với `published_at_ns`
+     * của chu kỳ N+1, tức là một số đo "tươi" theo một mốc thời gian không
+     * thuộc về nó.
+     *
+     * Trên đường RT vòng lặp này KHÔNG bao giờ lặp lại: scan là bên duy nhất
+     * commit nên generation không thể đổi giữa hai lần đọc trong cùng tick.
+     * Chi phí thêm cho RT đúng bằng một atomic load, không lock, không cấp phát. */
+    bool snapshot_slot(const Bank& bank, std::size_t index, Slot* out,
+                       uint64_t* generation) const noexcept;
     static int index_of(const Bank& bank, const std::string& name);
     static bool declare(Bank* bank, const StSignalDefinition& definition, std::string* error);
     StSignalRead read_impl(uint8_t bank, int index, uint64_t now_ns,

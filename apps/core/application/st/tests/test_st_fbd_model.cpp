@@ -22,6 +22,54 @@ std::string read_golden()
     return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 }
 
+json make_signal_graph(bool publish)
+{
+    const char* source_node = "30000000-0000-4000-8000-000000000001";
+    const char* sink_node = "30000000-0000-4000-8000-000000000002";
+    const char* source_port = "40000000-0000-4000-8000-000000000001";
+    const char* sink_port = "40000000-0000-4000-8000-000000000002";
+    const json first = publish
+        ? json{{"id", source_node}, {"kind", "INPUT"}, {"typeRef", "REAL"},
+               {"executionOrder", 0}, {"parameters", {{"variable", "VALUE"}}},
+               {"ports", json::array({{{"id", source_port}, {"name", "OUT"},
+                                        {"direction", "OUTPUT"}, {"dataType", "REAL"},
+                                        {"unit", nullptr}, {"order", 0}}})}}
+        : json{{"id", source_node}, {"kind", "SIGNAL_READ"},
+               {"typeRef", "SIGNAL_READ"}, {"executionOrder", 0},
+               {"parameters", {{"signal", "SHARED_TEMP"}}},
+               {"ports", json::array({{{"id", source_port}, {"name", "OUT"},
+                                        {"direction", "OUTPUT"}, {"dataType", "REAL"},
+                                        {"unit", nullptr}, {"order", 0}}})}};
+    const json second = publish
+        ? json{{"id", sink_node}, {"kind", "SIGNAL_PUBLISH"},
+               {"typeRef", "SIGNAL_PUBLISH"}, {"executionOrder", 1},
+               {"parameters", {{"signal", "SHARED_TEMP"}}},
+               {"ports", json::array({{{"id", sink_port}, {"name", "IN"},
+                                        {"direction", "INPUT"}, {"dataType", "REAL"},
+                                        {"unit", nullptr}, {"order", 0}}})}}
+        : json{{"id", sink_node}, {"kind", "OUTPUT"}, {"typeRef", "REAL"},
+               {"executionOrder", 1}, {"parameters", {{"variable", "OBSERVED"}}},
+               {"ports", json::array({{{"id", sink_port}, {"name", "IN"},
+                                        {"direction", "INPUT"}, {"dataType", "REAL"},
+                                        {"unit", nullptr}, {"order", 0}}})}};
+    return {
+        {"$schema", "../../fbd_v1.schema.json"}, {"schemaVersion", 1},
+        {"profileId", "revA-1t-1-5-30"},
+        {"graphId", "10000000-0000-4000-8000-000000000099"},
+        {"name", publish ? "SIGNAL_PRODUCER" : "SIGNAL_CONSUMER"},
+        {"networks", json::array({{
+            {"id", "20000000-0000-4000-8000-000000000099"},
+            {"name", "MAIN"}, {"order", 0},
+            {"nodes", json::array({first, second})},
+            {"wires", json::array({{{"id", "50000000-0000-4000-8000-000000000099"},
+                                     {"from", {{"nodeId", source_node},
+                                               {"portId", source_port}}},
+                                     {"to", {{"nodeId", sink_node},
+                                             {"portId", sink_port}}}}})}
+        }})}
+    };
+}
+
 bool has_issue(const FbdValidationResult& result, const std::string& code)
 {
     return std::any_of(result.issues.begin(), result.issues.end(), [&](const FbdIssue& issue) {
@@ -175,6 +223,58 @@ TEST(StFbdModel, RejectsOversizeBeforeJsonParsing)
     const auto result = validate_and_canonicalize_fbd(oversized);
     EXPECT_FALSE(result.ok);
     EXPECT_TRUE(has_issue(result, "FBD-SCHEMA-SIZE-001"));
+}
+
+TEST(StFbdModel, PublishedSignalNodesHaveOneCanonicalShape)
+{
+    for (const bool publish : {false, true}) {
+        SCOPED_TRACE(publish ? "publish" : "read");
+        const FbdValidationResult result =
+            validate_and_canonicalize_fbd(make_signal_graph(publish).dump());
+        ASSERT_TRUE(result.ok)
+            << (result.issues.empty() ? "không có issue"
+                                      : result.issues[0].code + ": " +
+                                            result.issues[0].path);
+        ASSERT_EQ(result.document.networks.size(), 1U);
+        ASSERT_EQ(result.document.networks[0].nodes.size(), 2U);
+        const FbdNode& signal_node = result.document.networks[0].nodes[publish ? 1 : 0];
+        EXPECT_EQ(signal_node.kind, publish ? FbdNodeKind::SIGNAL_PUBLISH
+                                           : FbdNodeKind::SIGNAL_READ);
+        ASSERT_EQ(signal_node.ports.size(), 1U);
+        EXPECT_EQ(signal_node.ports[0].order, 0U);
+        EXPECT_EQ(signal_node.ports[0].name, publish ? "IN" : "OUT");
+        const auto parameter = signal_node.parameters.find("signal");
+        ASSERT_NE(parameter, signal_node.parameters.end());
+        ASSERT_NE(std::get_if<std::string>(&parameter->second), nullptr);
+        EXPECT_EQ(*std::get_if<std::string>(&parameter->second), "SHARED_TEMP");
+    }
+}
+
+TEST(StFbdModel, PublishedSignalNodesRejectAmbiguousParametersAndPorts)
+{
+    json graph = make_signal_graph(false);
+    graph["networks"][0]["nodes"][0]["parameters"] = {{"signal", "../SECRET"}};
+    FbdValidationResult result = validate_and_canonicalize_fbd(graph.dump());
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(has_issue(result, "FBD-SEM-PARAM-001"));
+
+    graph = make_signal_graph(false);
+    graph["networks"][0]["nodes"][0]["ports"][0]["name"] = "VALUE";
+    result = validate_and_canonicalize_fbd(graph.dump());
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(has_issue(result, "FBD-SEM-PORT-SHAPE-001"));
+
+    graph = make_signal_graph(true);
+    graph["networks"][0]["nodes"][1]["parameters"]["extra"] = true;
+    result = validate_and_canonicalize_fbd(graph.dump());
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(has_issue(result, "FBD-SEM-PARAM-001"));
+
+    graph = make_signal_graph(true);
+    graph["networks"][0]["nodes"][1]["ports"][0]["direction"] = "OUTPUT";
+    result = validate_and_canonicalize_fbd(graph.dump());
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(has_issue(result, "FBD-SEM-PORT-SHAPE-001"));
 }
 
 } // namespace

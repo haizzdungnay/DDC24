@@ -71,6 +71,7 @@ add_library(core_application STATIC
     application/st/st_exec.cpp
     application/st/st_public_key.cpp
     application/st/st_scheduler.cpp
+    application/st/st_runtime_snapshot.cpp
     application/programming/program_candidate_registry.cpp
     application/st/st_signal_bus.cpp
     application/st/st_value_trace.cpp
@@ -231,6 +232,7 @@ if(CORE_BUILD_TESTS)
       application/programming/tests/test_program_ipc_server.cpp
       application/programming/tests/test_programming_runtime_coordinator.cpp
       application/programming/tests/test_programming_package_v2_stage.cpp
+      application/programming/tests/test_programming_stage_atomicity.cpp
       adapters/ipc/tests/test_program_ipc_unix.cpp
       application/programming/tests/test_program_error_catalog.cpp
       adapters/ipc/tests/test_web_ipc.cpp domain/graph/tests/test_graph_runtime.cpp
@@ -277,11 +279,12 @@ if(CORE_BUILD_TESTS)
   target_compile_definitions(core_tests PRIVATE
       ST_VALIDATE_CLI_PATH="$<TARGET_FILE:mkddc-st-validate>"
       ST_COMPILE_CLI_PATH="$<TARGET_FILE:mkddc-st-compile>"
+      ST_PACKAGE_CLI_PATH="$<TARGET_FILE:mkddc-st-package>"
       ST_SAMPLE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/application/st/samples"
       PROGRAMMING_IPC_CONTRACT_DIR="${MKDDC_CONTRACTS_SOURCE_DIR}/ipc/programming_v1"
       PROGRAMMING_PROFILE_CONTRACT_DIR="${CONTRACT_PROGRAMMING_DIR}"
       CORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-  add_dependencies(core_tests mkddc-st-validate mkddc-st-compile)
+  add_dependencies(core_tests mkddc-st-validate mkddc-st-compile mkddc-st-package)
   if(TARGET GTest::gtest_main)
     target_link_libraries(core_tests PRIVATE GTest::gtest_main)
   else()

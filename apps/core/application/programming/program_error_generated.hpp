@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "69178447b0996c5110748c0d76365bf977db324807aab0a2ffac67e0e9f3e7dc";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.7.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "d5757655b0d84ec1d836d7742ad7ee6c9e15d486873169ac2f8586e289d7a11b";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.7.1";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -93,7 +93,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 126> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 134> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -114,8 +114,12 @@ inline constexpr std::array<ComponentErrorMapping, 126> kComponentErrorMappings 
     {"compiler", "ST-CLI-KEY", ProgramPublicError::Unavailable },
     {"compiler", "ST-CLI-KEY-EXISTS", ProgramPublicError::Conflict },
     {"compiler", "ST-CLI-KEY-REQUIRED", ProgramPublicError::Unavailable },
+    {"compiler", "ST-CLI-LIBRARY-LOCK", ProgramPublicError::LibVersion },
     {"compiler", "ST-CLI-LIMIT", ProgramPublicError::Scope },
+    {"compiler", "ST-CLI-POU-MANIFEST", ProgramPublicError::PouKind },
+    {"compiler", "ST-CLI-POU-PATH", ProgramPublicError::Request },
     {"compiler", "ST-CLI-SANDBOX", ProgramPublicError::Unavailable },
+    {"compiler", "ST-CLI-SIGNAL-MANIFEST", ProgramPublicError::Check },
     {"compiler", "ST-CLI-TOOLARGE", ProgramPublicError::Scope },
     {"compiler", "ST-IOMAP-001", ProgramPublicError::MapIdentity },
     {"compiler", "ST-IOMAP-002", ProgramPublicError::MapIdentity },
@@ -164,6 +168,7 @@ inline constexpr std::array<ComponentErrorMapping, 126> kComponentErrorMappings 
     {"compiler", "ST-SIG-002", ProgramPublicError::MapType },
     {"compiler", "ST-SIG-003", ProgramPublicError::SignalFreshness },
     {"compiler", "ST-SIG-004", ProgramPublicError::SignalPublisher },
+    {"compiler", "ST-SIG-005", ProgramPublicError::Check },
     {"compiler", "ST-SYN-001", ProgramPublicError::Check },
     {"compiler", "ST-SYN-002", ProgramPublicError::Scope },
     {"compiler", "ST-WORKER-CRASH", ProgramPublicError::Unavailable },
@@ -211,6 +216,9 @@ inline constexpr std::array<ComponentErrorMapping, 126> kComponentErrorMappings 
     {"runtime", "ST-RT-008", ProgramPublicError::Commission },
     {"runtime", "ST-RT-009", ProgramPublicError::Commission },
     {"runtime", "ST-RT-010", ProgramPublicError::Commission },
+    {"runtime", "ST-RT-011", ProgramPublicError::Unavailable },
+    {"runtime", "ST-RT-012", ProgramPublicError::Commission },
+    {"runtime", "ST-RT-013", ProgramPublicError::Commission },
     {"st-control-api", "API-E-001", ProgramPublicError::Request },
     {"st-control-api", "API-E-002", ProgramPublicError::Request },
     {"st-control-api", "API-E-003", ProgramPublicError::Target },

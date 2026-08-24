@@ -15,7 +15,10 @@
 #ifndef CORE_ST_POU_REGISTRY_HPP
 #define CORE_ST_POU_REGISTRY_HPP
 
+#include <array>
+#include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "st/st_diagnostic.hpp"
@@ -30,17 +33,47 @@ struct StLibraryEntry {
     std::string name;
     StPouKind   kind = StPouKind::FUNCTION;
     std::string version;
+    std::string entry_id;
+    std::string origin = "SYSTEM";
+
+    StLibraryEntry() = default;
+    StLibraryEntry(std::string entry_name, StPouKind entry_kind,
+                   std::string entry_version, std::string id = {},
+                   std::string entry_origin = "SYSTEM")
+        : name(std::move(entry_name)), kind(entry_kind),
+          version(std::move(entry_version)), entry_id(std::move(id)),
+          origin(std::move(entry_origin)) {}
 };
 
 /* Yêu cầu library mà một POU khai. Thiếu entry hoặc lệch version đều fail-closed. */
 struct StLibraryRequirement {
     std::string name;
     std::string version;
+    std::string library_origin;
+
+    StLibraryRequirement() = default;
+    StLibraryRequirement(std::string entry_name, std::string entry_version,
+                         std::string entry_origin = {})
+        : name(std::move(entry_name)), version(std::move(entry_version)),
+          library_origin(std::move(entry_origin)) {}
 };
 
 struct StPouSource {
     const StProgram* pou = nullptr;
     std::vector<StLibraryRequirement> requires_library;
+    bool        from_library = false;
+    std::string library_entry_id;
+    std::string library_origin;
+    std::string version;
+
+    StPouSource() = default;
+    StPouSource(const StProgram* source_pou,
+                std::vector<StLibraryRequirement> requirements = {},
+                bool library_source = false, std::string entry_id = {},
+                std::string source_version = {}, std::string source_origin = {})
+        : pou(source_pou), requires_library(std::move(requirements)),
+          from_library(library_source), library_entry_id(std::move(entry_id)),
+          library_origin(std::move(source_origin)), version(std::move(source_version)) {}
 };
 
 /* Cạnh call graph đã phân giải, sắp xếp ổn định theo (caller, callee). */
@@ -59,9 +92,20 @@ struct StPouSignature {
     std::string name;
     StPouKind   kind = StPouKind::FUNCTION;
     bool        from_library = false;
+    std::string version;
+    std::string library_entry_id;
+    std::string library_origin;
+    std::vector<std::string> input_names;
     std::vector<StType> input_types;
+    std::vector<std::string> output_names;
+    std::vector<StType> output_types;
     bool        has_return_type = false;
     StType      return_type = StType::REAL;
+    /* Metadata của thân đã link. `has_linked_body=false` giữ đúng wire legacy
+     * của package v2; khi true writer phát hành POU_TABLE đầy đủ. */
+    bool                    has_linked_body = false;
+    std::array<uint8_t, 32> body_sha256{};
+    uint32_t                instruction_count = 0;
 };
 
 struct StPouRegistryResult {

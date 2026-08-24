@@ -1,5 +1,8 @@
 #include "st/st_signal_bus.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <cstring>
 
 namespace core {
@@ -11,6 +14,44 @@ namespace {
 uint64_t freshness_ns(uint32_t freshness_ms)
 {
     return static_cast<uint64_t>(freshness_ms) * 1000000ull;
+}
+
+bool signal_name_valid(const std::string& value)
+{
+    if (value.empty() || value.size() > kMaxPouNameLength) return false;
+    const unsigned char first = static_cast<unsigned char>(value.front());
+    if (!std::isalpha(first) && value.front() != '_') return false;
+    return std::all_of(value.begin() + 1, value.end(), [](char raw) {
+        const unsigned char ch = static_cast<unsigned char>(raw);
+        return std::isalnum(ch) || raw == '_';
+    });
+}
+
+bool signal_name_equal(const std::string& left, const std::string& right)
+{
+    if (left.size() != right.size()) return false;
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        if (std::toupper(static_cast<unsigned char>(left[index])) !=
+            std::toupper(static_cast<unsigned char>(right[index])))
+            return false;
+    }
+    return true;
+}
+
+bool fallback_value_valid(const StSignalDefinition& definition)
+{
+    if (!definition.has_fallback) return true;
+    switch (definition.type) {
+    case StType::BOOL: return true;
+    case StType::DINT: return true;
+    case StType::REAL: return std::isfinite(definition.fallback.r);
+    case StType::TIME: return definition.fallback.t >= 0;
+    case StType::INT:
+        return definition.fallback.i >= -32768 && definition.fallback.i <= 32767;
+    case StType::UINT:
+        return definition.fallback.i >= 0 && definition.fallback.i <= 65535;
+    }
+    return false;
 }
 
 } // namespace
@@ -39,7 +80,7 @@ bool st_stale_policy_from_name(const char* name, StStalePolicy* out)
 int StSignalBus::index_of(const Bank& bank, const std::string& name)
 {
     for (std::size_t index = 0; index < bank.count; ++index)
-        if (bank.definitions[index].name == name) return static_cast<int>(index);
+        if (signal_name_equal(bank.definitions[index].name, name)) return static_cast<int>(index);
     return -1;
 }
 
@@ -50,8 +91,21 @@ bool StSignalBus::declare(Bank* bank, const StSignalDefinition& definition, std:
         if (error) *error = "vượt trần " + std::to_string(kMaxRuntimeSignals) + " signal";
         return false;
     }
-    if (definition.name.empty()) {
-        if (error) *error = "signal không có tên";
+    if (!signal_name_valid(definition.name)) {
+        if (error) *error = "signal không có IEC identifier hợp lệ";
+        return false;
+    }
+    if (definition.publisher_program.empty()) {
+        if (error) *error = "signal '" + definition.name + "' không có publisher";
+        return false;
+    }
+    if (static_cast<uint8_t>(definition.type) < static_cast<uint8_t>(StType::BOOL) ||
+        static_cast<uint8_t>(definition.type) > static_cast<uint8_t>(StType::UINT) ||
+        definition.freshness_ms < 1000u || definition.freshness_ms > 90000u ||
+        static_cast<uint8_t>(definition.stale_policy) >
+            static_cast<uint8_t>(StStalePolicy::WAIT) ||
+        !fallback_value_valid(definition)) {
+        if (error) *error = "signal '" + definition.name + "' có contract không hợp lệ";
         return false;
     }
     if (index_of(*bank, definition.name) >= 0) {
@@ -211,6 +265,47 @@ bool StSignalBus::publish(int index, const StCell& value, uint64_t now_ns, const
     return true;
 }
 
+bool StSignalBus::publish_batch(const StIrSignalRef* refs, const StCell* values,
+                                const uint8_t* writes, std::size_t count,
+                                uint64_t now_ns, const char* publisher)
+{
+    if ((count != 0 && (refs == nullptr || values == nullptr || writes == nullptr)) ||
+        publisher == nullptr)
+        return false;
+    const uint8_t bank_index = acquire_active_bank();
+    Bank& bank = banks_[bank_index];
+    /* Pha 1 chỉ kiểm, tuyệt đối chưa ghi draft. */
+    for (std::size_t index = 0; index < count; ++index) {
+        if (writes[index] == 0) continue;
+        const int runtime_index = refs[index].runtime_index;
+        if (!refs[index].publish || runtime_index < 0 ||
+            static_cast<std::size_t>(runtime_index) >= bank.count) {
+            release_bank(bank_index);
+            return false;
+        }
+        const StSignalDefinition& definition =
+            bank.definitions[static_cast<std::size_t>(runtime_index)];
+        if (definition.name != refs[index].name ||
+            definition.type != refs[index].type ||
+            definition.publisher_program != publisher) {
+            release_bank(bank_index);
+            return false;
+        }
+    }
+    /* Pha 2 chỉ chạy sau khi toàn batch đã hợp lệ. */
+    const std::size_t draft = 1u - bank.live.load(std::memory_order_acquire);
+    for (std::size_t index = 0; index < count; ++index) {
+        if (writes[index] == 0) continue;
+        Slot& slot = bank.buffers[draft]
+            [static_cast<std::size_t>(refs[index].runtime_index)];
+        slot.value = values[index];
+        slot.published_at_ns = now_ns;
+        slot.ever_published = true;
+    }
+    release_bank(bank_index);
+    return true;
+}
+
 void StSignalBus::commit_at_boundary()
 {
     const uint8_t bank_index = acquire_active_bank();
@@ -233,6 +328,36 @@ void StSignalBus::commit_at_boundary()
     release_bank(bank_index);
 }
 
+bool StSignalBus::snapshot_slot(const Bank& bank, std::size_t index, Slot* out,
+                                uint64_t* generation) const noexcept
+{
+    /* Cùng khuôn seqlock đã dùng cho SHM ở `IobusReader::read_from`: đọc mốc
+     * bằng acquire, chép, đọc lại mốc; khác nhau thì chép lại. Giữ nguyên khuôn
+     * đó thay vì phát minh một biến thể thứ hai — hai cách làm cùng một việc
+     * trong một hệ là thứ khiến người review sau phải đoán cái nào đúng.
+     *
+     * Số lần thử có trần: một writer commit liên tục không được biến một lần
+     * đọc STATUS thành vòng lặp không giới hạn trên IPC worker thread. Với base
+     * step 1 s của Rev A, chạm tới lần thử thứ hai đã là hiếm.
+     *
+     * KHÔNG dùng `std::atomic_thread_fence`: GCC từ chối biên dịch nó dưới
+     * `-fsanitize=thread` (`-Werror=tsan`), tức là thêm nó vào đây sẽ làm mất
+     * luôn khả năng chạy TSan trên chính module này — đắt hơn nhiều so với thứ
+     * nó mua được. */
+    constexpr int kMaxAttempts = 5;
+    for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+        const uint64_t before = bank.generation.load(std::memory_order_acquire);
+        const std::size_t live = bank.live.load(std::memory_order_acquire);
+        *out = bank.buffers[live][index];
+        const uint64_t after = bank.generation.load(std::memory_order_acquire);
+        if (before == after) {
+            *generation = after;
+            return true;
+        }
+    }
+    return false;
+}
+
 StSignalRead StSignalBus::read_impl(uint8_t bank_index, int index, uint64_t now_ns,
                                     bool count_unavailable) const
 {
@@ -242,26 +367,41 @@ StSignalRead StSignalBus::read_impl(uint8_t bank_index, int index, uint64_t now_
         result.state = StSignalReadState::NOT_DECLARED;
         return result;
     }
-    const std::size_t live = bank.live.load(std::memory_order_acquire);
     const StSignalDefinition& definition = bank.definitions[static_cast<std::size_t>(index)];
-    const Slot& slot = bank.buffers[live][static_cast<std::size_t>(index)];
-    result.generation = bank.generation.load(std::memory_order_acquire);
+    Slot slot{};
+    const bool consistent =
+        snapshot_slot(bank, static_cast<std::size_t>(index), &slot, &result.generation);
     result.published_at_ns = slot.published_at_ns;
 
     auto unavailable = [&]() {
         if (count_unavailable)
             bank.unavailable_reads.fetch_add(1, std::memory_order_relaxed);
         result.state = StSignalReadState::UNAVAILABLE;
-        if (definition.has_fallback) result.value = definition.fallback;
+        if (definition.has_fallback) {
+            result.value = definition.fallback;
+            result.has_value = true;
+        }
         return result;
     };
 
+    if (!consistent) {
+        /* Không chụp được một ảnh nhất quán trong số lần thử cho phép. Trả
+         * UNAVAILABLE thay vì một cặp value/timestamp có thể lệch chu kỳ:
+         * "chưa đọc được" là câu trả lời thật, "một số đo sai mốc" thì không. */
+        return unavailable();
+    }
+
     if (!slot.ever_published) {
-        /* Chưa ai publish. `USE_FALLBACK` vẫn có câu trả lời khai báo; hai chính
-         * sách kia thì không — và bịa một giá trị ở đây đúng là lối "im lặng
-         * thay bằng 0" mà DDD §10 cấm. */
+        /* Chưa ai publish được xử như stale theo đúng policy. HOLD_LAST không
+         * cần một value giả: executor thấy STALE_HELD và giữ nguyên biến local
+         * của consumer. WAIT mới chặn chu kỳ. */
+        if (definition.stale_policy == StStalePolicy::HOLD_LAST) {
+            result.state = StSignalReadState::STALE_HELD;
+            return result;
+        }
         if (definition.stale_policy == StStalePolicy::USE_FALLBACK) {
             result.value = definition.fallback;
+            result.has_value = true;
             result.state = StSignalReadState::STALE_FALLBACK;
             return result;
         }
@@ -271,6 +411,7 @@ StSignalRead StSignalBus::read_impl(uint8_t bank_index, int index, uint64_t now_
     const uint64_t age_ns = now_ns >= slot.published_at_ns ? now_ns - slot.published_at_ns : 0;
     if (age_ns <= freshness_ns(definition.freshness_ms)) {
         result.value = slot.value;
+        result.has_value = true;
         result.state = StSignalReadState::FRESH;
         return result;
     }
@@ -278,10 +419,12 @@ StSignalRead StSignalBus::read_impl(uint8_t bank_index, int index, uint64_t now_
     switch (definition.stale_policy) {
     case StStalePolicy::HOLD_LAST:
         result.value = slot.value;
+        result.has_value = true;
         result.state = StSignalReadState::STALE_HELD;
         return result;
     case StStalePolicy::USE_FALLBACK:
         result.value = definition.fallback;
+        result.has_value = true;
         result.state = StSignalReadState::STALE_FALLBACK;
         return result;
     case StStalePolicy::WAIT:
@@ -302,6 +445,24 @@ StSignalRead StSignalBus::inspect(int index, uint64_t now_ns) const
 {
     const uint8_t bank = acquire_active_bank();
     const StSignalRead result = read_impl(bank, index, now_ns, false);
+    release_bank(bank);
+    return result;
+}
+
+std::vector<StSignalDiagnosticSnapshot> StSignalBus::inspect_all(uint64_t now_ns) const
+{
+    const uint8_t bank = acquire_active_bank();
+    std::vector<StSignalDiagnosticSnapshot> result;
+    try {
+        result.reserve(banks_[bank].count);
+        for (std::size_t index = 0; index < banks_[bank].count; ++index) {
+            result.push_back({banks_[bank].definitions[index],
+                              read_impl(bank, static_cast<int>(index), now_ns, false)});
+        }
+    } catch (...) {
+        release_bank(bank);
+        throw;
+    }
     release_bank(bank);
     return result;
 }

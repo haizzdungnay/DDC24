@@ -22,6 +22,7 @@ namespace core {
 
 struct StExecResult {
     bool        ok = false;
+    bool        waiting = false;
     const char* error = nullptr; /* hằng tĩnh, không cấp phát; nullptr khi ok */
     const char* fault_code = nullptr;
     uint32_t    fault_pc = 0;

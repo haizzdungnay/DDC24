@@ -9,6 +9,7 @@ const char* candidate_withdraw_reason_name(CandidateWithdrawReason reason)
     case CandidateWithdrawReason::OPERATOR_DISABLE: return "OPERATOR_DISABLE";
     case CandidateWithdrawReason::FAULT_TTL_EXPIRED: return "FAULT_TTL_EXPIRED";
     case CandidateWithdrawReason::PACKAGE_REPLACED: return "PACKAGE_REPLACED";
+    case CandidateWithdrawReason::SIGNAL_BLOCKED: return "SIGNAL_BLOCKED";
     }
     return "?";
 }

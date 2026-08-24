@@ -511,6 +511,25 @@ private:
         return expression;
     }
 
+    std::unique_ptr<StExpr> signal_read_expression(const FbdNetwork& network,
+                                                   const FbdNode& node,
+                                                   const FbdPort& output)
+    {
+        const std::string* signal = string_parameter(node, "signal");
+        const auto inputs = ports_with_direction(node, FbdPortDirection::INPUT);
+        const auto outputs = ports_with_direction(node, FbdPortDirection::OUTPUT);
+        if (!signal || node.parameters.size() != 1 || !inputs.empty() ||
+            outputs.size() != 1 || outputs[0]->id != output.id ||
+            output.name != "OUT" || output.order != 0) {
+            fail("FBD-SEM-PORT-SPEC-001", node_path(network, node));
+            return nullptr;
+        }
+        auto expression = std::make_unique<StExpr>();
+        expression->kind = StExpr::Kind::SIGNAL_READ;
+        expression->signal_name = *signal;
+        return expression;
+    }
+
     std::unique_ptr<StExpr> expression_for_output(const FbdNetwork& network,
                                                   const FbdNode& node,
                                                   const FbdPort& output)
@@ -549,6 +568,12 @@ private:
             break;
         case FbdNodeKind::CONVERSION:
             result = conversion_expression(network, node, output);
+            break;
+        case FbdNodeKind::SIGNAL_READ:
+            result = signal_read_expression(network, node, output);
+            break;
+        case FbdNodeKind::SIGNAL_PUBLISH:
+            fail("FBD-SEM-PORT-SPEC-001", node_path(network, node) + ".ports");
             break;
         case FbdNodeKind::FUNCTION_BLOCK: {
             const auto found = fb_instance_.find(node.id);
@@ -599,6 +624,30 @@ private:
         return true;
     }
 
+    bool emit_signal_publish(const FbdNetwork& network, const FbdNode& node)
+    {
+        const std::string* signal = string_parameter(node, "signal");
+        const auto inputs = ports_with_direction(node, FbdPortDirection::INPUT);
+        const auto outputs = ports_with_direction(node, FbdPortDirection::OUTPUT);
+        if (!signal || node.parameters.size() != 1 || inputs.size() != 1 ||
+            !outputs.empty() || inputs[0]->name != "IN" || inputs[0]->order != 0) {
+            return fail("FBD-SEM-PORT-SPEC-001", node_path(network, node));
+        }
+        auto value = source_for_input(network, node, *inputs[0]);
+        if (!value) return false;
+        const FbdSourceAnchor* anchor = anchor_for_port(*inputs[0]);
+        if (!anchor) return fail("FBD-LIMIT-SOURCEMAP-001", node_path(network, node));
+        StStmt statement;
+        statement.kind = StStmt::Kind::SIGNAL_PUBLISH;
+        statement.signal_name = *signal;
+        statement.signal_value = std::move(value);
+        statement.signal_line = anchor->line;
+        statement.signal_column = anchor->column;
+        statement.signal_length = 1;
+        program_->body.push_back(std::move(statement));
+        return true;
+    }
+
     bool emit_output_assignment(const FbdNetwork& network, const FbdNode& node)
     {
         const std::string* variable = string_parameter(node, "variable");
@@ -629,6 +678,8 @@ private:
                     if (!emit_fb_call(network, node)) return false;
                 } else if (node.kind == FbdNodeKind::OUTPUT) {
                     if (!emit_output_assignment(network, node)) return false;
+                } else if (node.kind == FbdNodeKind::SIGNAL_PUBLISH) {
+                    if (!emit_signal_publish(network, node)) return false;
                 }
             }
         }
@@ -665,6 +716,8 @@ FbdLowerResult lower_fbd_source_to_program(std::string_view source)
         result.issues = lowerer.issues();
         return result;
     }
+    result.canonical_source = validated.canonical_json;
+    result.source_anchors = lowerer.source_anchors();
     result.ok = true;
     return result;
 }
@@ -691,7 +744,17 @@ FbdCompileResult compile_fbd_source(std::string_view source, const StCompileOpti
     }
 
     StDiagnostic diagnostic;
-    if (!typecheck_st_program(&program, &diagnostic)) {
+    const bool signal_aware = !options.published_signals.empty() ||
+                              !options.program_identity.empty();
+    std::vector<StPouSource> sources{{&program, {}}};
+    StPouRegistryResult registry;
+    const bool typed = signal_aware
+                           ? st_build_pou_registry(sources, {}, &registry, &diagnostic) &&
+                                 typecheck_st_pou_set(sources, registry, &diagnostic,
+                                                      options.published_signals,
+                                                      options.program_identity)
+                           : typecheck_st_program(&program, &diagnostic);
+    if (!typed) {
         add_issue(&result.issues, "FBD-SEM-LOWER-001", "$.lowering." + diagnostic.code);
         return result;
     }
@@ -704,7 +767,13 @@ FbdCompileResult compile_fbd_source(std::string_view source, const StCompileOpti
     }
 
     StIrModule candidate;
-    if (!compile_st_to_ir(program, validated.canonical_json, &candidate, &diagnostic)) {
+    const bool compiled = signal_aware
+                              ? compile_st_to_ir_linked(program, validated.canonical_json,
+                                                        sources, registry, &candidate, nullptr,
+                                                        &diagnostic, options)
+                              : compile_st_to_ir(program, validated.canonical_json,
+                                                 &candidate, &diagnostic);
+    if (!compiled) {
         add_issue(&result.issues, "FBD-LIMIT-IR-001", "$.lowering." + diagnostic.code);
         return result;
     }

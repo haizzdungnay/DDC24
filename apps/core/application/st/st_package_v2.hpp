@@ -57,6 +57,9 @@ constexpr uint16_t kFlagHasSignals      = 1u << 0;
 constexpr uint16_t kFlagHasLibraryLock  = 1u << 1;
 constexpr uint16_t kFlagHasMultiProgram = 1u << 2;
 constexpr uint16_t kFlagHasRetain       = 1u << 3;
+/* Khi tắt, POU_TABLE giữ byte layout legacy. Khi bật, mỗi record mang đầy đủ
+ * provenance/chữ ký của thân đã inline. */
+constexpr uint16_t kFlagPouTableFull    = 1u << 4;
 
 } // namespace st_pkg
 
@@ -74,6 +77,7 @@ constexpr const char* kBadRecord       = "PKG-E-007";
 constexpr const char* kResourceLimit   = "PKG-E-008";
 constexpr const char* kOutputOwner     = "PKG-E-009";
 constexpr const char* kSignalPublisher = "PKG-E-010";
+constexpr const char* kLibraryLock     = "PKG-E-011";
 } // namespace st_pkg_error
 
 struct StPackageProgram {
@@ -149,11 +153,13 @@ struct StPackageView {
     std::vector<uint32_t> program_periods_ms;
     std::vector<uint32_t> program_budget_us;
     std::vector<std::string> pou_names;
+    std::vector<StPouSignature> pou_signatures;
     std::vector<std::string> signal_names;
     std::vector<std::string> output_point_ids;
     uint32_t fb_instance_count = 0;
     uint32_t retain_bytes = 0;
     std::string library_system_version;
+    std::string library_project_revision_id;
 };
 
 /* Ghi package v2. Trả false kèm `*error` khi input vượt trần profile hoặc thiếu

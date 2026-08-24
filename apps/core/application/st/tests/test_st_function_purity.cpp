@@ -139,7 +139,11 @@ TEST(StFunctionPurity, FunctionCallingStatefulLibraryBlockIsImpure)
         "FUNCTION Scale : REAL\nVAR_INPUT x : REAL; END_VAR\nScale := Latch(x);\nEND_FUNCTION\n");
     ASSERT_NE(caller, nullptr);
     StDiagnostic diag;
-    EXPECT_FALSE(build({caller.get()}, &diag));
+    std::vector<StPouSource> sources = {
+        {caller.get(), {{"Latch", "2.1.0"}}},
+    };
+    StPouRegistryResult result;
+    EXPECT_FALSE(st_build_pou_registry(sources, kLibrary, &result, &diag));
     EXPECT_EQ(diag.code, st_diag_code::kPouFunctionNotPure);
     EXPECT_NE(diag.message.find("Latch"), std::string::npos) << diag.message;
 }
@@ -153,7 +157,11 @@ TEST(StFunctionPurity, ProgramCallingFunctionBlockGetsKindCodeNotPurityCode)
         "PROGRAM Main\nVAR_OUTPUT y : REAL; END_VAR\ny := Latch(1.0);\nEND_PROGRAM\n");
     ASSERT_NE(program, nullptr);
     StDiagnostic diag;
-    EXPECT_FALSE(build({program.get()}, &diag));
+    std::vector<StPouSource> sources = {
+        {program.get(), {{"Latch", "2.1.0"}}},
+    };
+    StPouRegistryResult result;
+    EXPECT_FALSE(st_build_pou_registry(sources, kLibrary, &result, &diag));
     EXPECT_EQ(diag.code, st_diag_code::kPouSignatureInvalid);
     EXPECT_NE(diag.message.find("instance"), std::string::npos) << diag.message;
 }
@@ -243,7 +251,53 @@ TEST(StFunctionPurity, FunctionBlockMayKeepStateAndCallPureFunctions)
         "END_FUNCTION_BLOCK\n");
     ASSERT_NE(block, nullptr);
     StDiagnostic diag;
-    EXPECT_TRUE(build({block.get()}, &diag)) << diag.code << ": " << diag.message;
+    std::vector<StPouSource> sources = {
+        {block.get(), {{"Ramp", "1.0.0"}}},
+    };
+    StPouRegistryResult result;
+    EXPECT_TRUE(st_build_pou_registry(sources, kLibrary, &result, &diag))
+        << diag.code << ": " << diag.message;
+}
+
+TEST(StFunctionPurity, FunctionCannotPublishOrReadRuntimeSignal)
+{
+    {
+        StProgram function = make_function("PublishFromFunction");
+        StStmt publish;
+        publish.kind = StStmt::Kind::SIGNAL_PUBLISH;
+        publish.signal_name = "SHARED_TEMP";
+        publish.signal_line = 7;
+        publish.signal_column = 3;
+        publish.signal_value = std::make_unique<StExpr>();
+        publish.signal_value->kind = StExpr::Kind::LITERAL;
+        publish.signal_value->literal = StValue::make_real(1.0f);
+        function.body.push_back(std::move(publish));
+
+        StDiagnostic diag;
+        EXPECT_FALSE(build({&function}, &diag));
+        EXPECT_EQ(diag.code, st_diag_code::kPouFunctionNotPure);
+        EXPECT_EQ(diag.line, 7);
+        EXPECT_NE(diag.message.find("side effects"), std::string::npos) << diag.message;
+    }
+
+    {
+        StProgram function = make_function("ReadFromFunction");
+        StStmt assign;
+        assign.kind = StStmt::Kind::ASSIGN;
+        assign.assign_target = function.name;
+        assign.assign_expr = std::make_unique<StExpr>();
+        assign.assign_expr->kind = StExpr::Kind::SIGNAL_READ;
+        assign.assign_expr->signal_name = "SHARED_TEMP";
+        assign.assign_expr->line = 9;
+        assign.assign_expr->column = 5;
+        function.body.push_back(std::move(assign));
+
+        StDiagnostic diag;
+        EXPECT_FALSE(build({&function}, &diag));
+        EXPECT_EQ(diag.code, st_diag_code::kPouFunctionNotPure);
+        EXPECT_EQ(diag.line, 9);
+        EXPECT_NE(diag.message.find("runtime I/O"), std::string::npos) << diag.message;
+    }
 }
 
 } // namespace core
