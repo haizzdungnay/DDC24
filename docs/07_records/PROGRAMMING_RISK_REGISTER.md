@@ -774,6 +774,7 @@ Open**, S×L và residual không đổi; chưa claim target/HIL, Test Result hay
 |---|---|---|---|
 | `RSK-PROG-009` | Lệnh Enable/Disable của người vận hành không còn ghi `state`/`enabled` từ IPC worker thread. Non-RT chỉ ARM ý định; RT áp dụng tại safe boundary rồi ack bằng generation, nên một lệnh Disable không thể bị chính scan ghi đè giữa tick và Program đã tắt không chạy thêm chu kỳ nào với quyền ghi đầu ra | Fault/restart/power matrix trên target và Test Result `VS-PROG-U05/U08`; host TSan 0 cảnh báo đã có | `OPEN — SOURCE HOST PASS` |
 | `RSK-PROG-010` | Trần 16 Program chạy đồng thời được kiểm **trước** khi chạm bất kỳ trường nào; lệnh bị từ chối không còn để lại `STOPPED`/`enabled=true` nửa vời. `TIMED_OUT` tách khỏi `REJECTED` nên BE không hiểu "chưa biết" thành "đã từ chối" | Đo trần 16 trên target với 10 Program fixture (`T59-702`) | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-022` | `install.sh` chụp và `rollback.sh` khôi phục store Programming cùng binary; rollback chỉ-binary sau một bản có migration không còn để `mkddc-web` chết câm | Diễn tập rollback ĐẦY ĐỦ (binary+DB) trên bo — thao tác file DB trên bo bị chặn ở phiên này | `OPEN — SOURCE HOST PASS, TARGET PARTIAL` |
 | `RSK-PROG-018` | Runtime Monitor tra biến theo `locals` của Draft v2 (không chỉ object `VARIABLE` v1) và giữ `snapshot.Points` của Core khi PLC SHM chưa attach, nên màn Theo dõi không còn báo "chưa có biến ánh xạ" cho một Revision đang chạy có Binding hợp lệ | Đo trên target với point vật lý và Test Result `VS-PROG-U06/U07`; lane E2E host nay `HTTP>=500=0`, `console.error=0` | `OPEN — SOURCE HOST PASS` |
 | `RSK-PROG-017` | Read-back Published Signal cho reader non-RT (`inspect_all` dùng cho STATUS/Runtime Monitor) kiểm `generation` trước/sau khi chép theo đúng khuôn seqlock của SHM, nên Monitor không còn trả `value` của chu kỳ N ghép với `published_at_ns` của chu kỳ N+1 | Đo trên target với producer/consumer thật và Test Result `VS-PROG-U06`; host guard hiện là xác suất + TSan | `OPEN — SOURCE HOST PASS` |
 
@@ -792,8 +793,17 @@ hình hai luồng đó rồi chạy `-DMKDDC_SANITIZE=thread` mới lộ ra ba d
 
 Số đo: `ctest` **1293/1293**; TSan toàn core **0 cảnh báo** với suppression chỉ
 gồm hai seqlock cố ý; Go **18/18** package với compiler/packager production; FE
-vitest/lint/`build:release` sạch. **22/22 risk giữ Open**, S×L và residual không
-đổi; không claim target/HIL/Test Result/release.
+vitest/lint/`build:release` sạch.
+
+Bổ sung **mức TARGET** (bo Foxlinx `MCU_MODE=FAKE`, commit `fa1f5f4`): Enable/
+Disable 6/6 lượt `APPLIED` với thời gian ~0,95 s (đúng một base step, mốc chờ
+1500 ms còn dư ~55 %), 0 `Busy`; Monitor đọc `LOCAL:UI-01` = 25,1 °C `GOOD`/
+`LIVE`; Published Signal producer→consumer `FRESH`/`MATCHED`; 10 Program chạy
+với `overrunCount = 0`. Chi tiết:
+[`2026-08-24-foxlinx-plan59-corrective-deploy.md`](test-evidence/fw-som/2026-08-24-foxlinx-plan59-corrective-deploy.md).
+
+**22/22 risk giữ Open**, S×L và residual không đổi; MCU FAKE không thay bằng
+chứng MCU/HIL vật lý, và deploy không thay soak 24 h hay release approval.
 
 ## 6. Treatment/acceptance record bắt buộc
 

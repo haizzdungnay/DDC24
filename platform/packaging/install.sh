@@ -252,6 +252,22 @@ if [ -x "$SBIN/mkddc-core" ]; then
              "$SHAREDIR/provenance.json" "$SHAREDIR/checksums.sha256"; do
         [ -e "$f" ] && cp -a "$f" "$SNAP/" || true
     done
+    # F-P59-ROLLBACK-DB-001 — CHỤP CẢ STORE PROGRAMMING, không chỉ binary.
+    #
+    # BE tự chạy migration khi khởi động và **từ chối chạy** nếu schema mới hơn
+    # binary ("schema Programming mới hơn binary: version N"). Vì vậy rollback
+    # chỉ-binary sau một bản có migration làm mkddc-web crash-loop và web tier
+    # chết hẳn — đo thật trên bo Foxlinx 2026-08-24: sau khi hạ binary về bản
+    # trước migration `0012`, service restart 7 lần rồi bỏ cuộc, `/api/v1/health`
+    # từ chối kết nối. Không có bản chụp DB thì đường quay lại không tồn tại.
+    #
+    # Chụp cả `-wal`/`-shm`: bỏ hai file đó có thể khôi phục một DB thiếu đúng
+    # phần giao dịch cuối, và hỏng theo kiểu im lặng.
+    for db in "$DATADIR/config/programming/programming-v1.sqlite" \
+              "$DATADIR/config/programming/programming-v1.sqlite-wal" \
+              "$DATADIR/config/programming/programming-v1.sqlite-shm"; do
+        [ -e "$db" ] && cp -a "$db" "$SNAP/" || true
+    done
     ln -sfn "$SNAP" "$BACKUP_ROOT/previous"
     echo "INFO: đã chụp bản đang chạy ($prev_ver) vào $SNAP"
 fi

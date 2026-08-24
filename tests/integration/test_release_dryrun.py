@@ -186,6 +186,13 @@ class ReleaseDryRunTest(unittest.TestCase):
         io_conf.write_text("# nguoi van hanh da sua\nAI0=CUSTOM\n", encoding="utf-8")
         artifact = root / "data/mkddc/programming/artifacts/keep.bin"
         artifact.write_bytes(b"artifact cua khach")
+        # F-P59-ROLLBACK-DB-001: store Programming của bản ĐANG CHẠY. BE tự chạy
+        # migration khi khởi động và từ chối chạy nếu schema mới hơn binary, nên
+        # snapshot thiếu file này là rollback không có đường về (đo thật trên bo
+        # Foxlinx 2026-08-24: mkddc-web crash-loop sau khi hạ binary).
+        programming_db = root / "data/config/programming/programming-v1.sqlite"
+        programming_db.parent.mkdir(parents=True, exist_ok=True)
+        programming_db.write_bytes(b"SQLite format 3\x00schema-11-ban-cu")
         env_path = root / "etc/mkddc-web.env"
         secret_before = [l for l in env_path.read_text(encoding="utf-8").splitlines()
                          if l.startswith("JWT_SECRET=")][0]
@@ -208,6 +215,13 @@ class ReleaseDryRunTest(unittest.TestCase):
             self.assertTrue((snapshot / name).is_file(), f"snapshot thiếu {name}")
             self.assertEqual(sha256(snapshot / name), old_digests[rel],
                              f"snapshot {name} không phải bản đang chạy")
+
+        self.assertTrue((snapshot / "programming-v1.sqlite").is_file(),
+                        "snapshot thiếu store Programming — rollback sau một bản có "
+                        "migration sẽ để mkddc-web từ chối khởi động")
+        self.assertEqual((snapshot / "programming-v1.sqlite").read_bytes(),
+                         b"SQLite format 3\x00schema-11-ban-cu",
+                         "snapshot store Programming không phải bản đang chạy")
 
         self.assertEqual(io_conf.read_text(encoding="utf-8"),
                          "# nguoi van hanh da sua\nAI0=CUSTOM\n",
@@ -287,6 +301,16 @@ class ReleaseDryRunTest(unittest.TestCase):
                          b"artifact cua khach", "rollback làm mất artifact")
         pre = list((root / "var/backups/mkddc").glob("pre-rollback-*"))
         self.assertTrue(pre, "rollback không chụp lại bản hiện tại — lùi xong hết đường tiến")
+
+        # F-P59-ROLLBACK-DB-001: store Programming phải quay về ĐÚNG bản đi cùng
+        # binary được khôi phục, và bản đang chạy phải được giữ lại trong
+        # `pre-rollback-*` — mất nó là mất toàn bộ Project/Revision mới.
+        programming_db = root / "data/config/programming/programming-v1.sqlite"
+        self.assertEqual(programming_db.read_bytes(), b"SQLite format 3\x00schema-11-ban-cu",
+                         "rollback không khôi phục store Programming — mkddc-web sẽ từ chối "
+                         "khởi động vì schema mới hơn binary")
+        self.assertTrue((pre[0] / "programming-v1.sqlite.pre-rollback").is_file(),
+                        "rollback không giữ lại store đang chạy trước khi ghi đè")
 
 
 if __name__ == "__main__":
