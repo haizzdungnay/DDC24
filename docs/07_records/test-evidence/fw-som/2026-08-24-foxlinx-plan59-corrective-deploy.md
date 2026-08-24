@@ -168,6 +168,30 @@ Kiểm chứng chạy thật trên bo với một Project có **1 PROGRAM + 1 FU
 Trường `field` là phần thêm ở BE: trước đó một batch 4–5 thao tác chỉ trả đúng
 một mã cho cả mảng, nên không có gì để lần ra thao tác nào sai.
 
+## 6c. Vòng thứ hai của lỗi xóa — "chương trình ma"
+
+Sau bản sửa 6b, người dùng báo tiếp `400` với `field: "operations[0].removeProgram"`.
+Nguyên nhân: batch xóa chọn thao tác theo **kind**, trong khi một POU kind
+`PROGRAM` vẫn có thể không có mục nào trong `programs[]` — hoặc do tạo bằng
+`upsertObject` mà chưa xếp lịch, hoặc là **di chứng của chính lỗi xóa cũ**.
+
+Rà toàn bộ 16 Project trên bo: **3 Project mang POU kiểu này** —
+`SOAK-10P-…172521/SOAK_04`, `SOAK-10P-…110141/SOAK_00`,
+`FOX-P5-FULL-CHECK/AHU_MasterSequence`.
+
+Deploy bản sửa (FE `assets/index-CWnCMUEs.js`) rồi chạy thật trên bo:
+
+| Phép đo | Kết quả |
+|---|---|
+| Xóa `SOAK_04` (POU ma **có sẵn từ trước**) bằng batch mới (`removeObject`) | **200**; ma còn lại: `[]`; draft còn `objects=2 / programs=2` |
+| Dựng lại ma trong Project scratch rồi Seal → Check | **PASSED** — và `impact.programSet` đếm **2** Program |
+
+Phép đo thứ hai là `F-P59-GHOST-POU-001`: `packageTopology` đóng gói mọi POU kind
+`PROGRAM` và **tự đặt chu kỳ 1000 ms** khi POU không có cấu hình chạy. Một POU
+chưa ai xếp lịch vì thế vẫn đi vào package như Program thật. Ghi vào Plan 59 §3.5
+và Risk Register để owner chốt hướng (fail-closed ở Check, hay loại khỏi
+package); không tự đổi trong vòng này.
+
 ## 7. Rollback (cập nhật theo bản sửa)
 
 ```bash
