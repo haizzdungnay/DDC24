@@ -1,0 +1,297 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1080" viewBox="0 0 1680 1080" fill="#cbd5e1" role="img" aria-labelledby="title desc">
+  <title id="title">PGM-02B FBD Editor Target reference</title>
+  <desc id="desc">FBD node-edge canvas với Quick Library, Inspector, typed ports, diagnostics, mode safety và sáu trạng thái loading, error, permission, unknown, stale, offline.</desc>
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="#34435b" opacity=".62"/>
+    </pattern>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#08111f"/>
+      <stop offset="1" stop-color="#17243c"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="7" stdDeviation="11" flood-color="#020617" flood-opacity=".38"/>
+    </filter>
+    <style>
+      .ui{font-family:Inter,"Segoe UI",Arial,sans-serif}
+      .mono{font-family:"JetBrains Mono","SFMono-Regular",Consolas,monospace}
+      .title{font-size:22px;font-weight:750;fill:#f8fafc}
+      .h2{font-size:14px;font-weight:700;fill:#e2e8f0}
+      .label{font-size:12px;font-weight:650;fill:#cbd5e1}
+      .small{font-size:11px;fill:#a8b5c8}
+      .tiny{font-size:10px;fill:#94a3b8}
+      .panel{fill:#111c2f;stroke:#334155;stroke-width:1}
+      .panel2{fill:#0b1424;stroke:#253651;stroke-width:1}
+      .line{stroke:#334155;stroke-width:1}
+      .focus{fill:#102c43;stroke:#38bdf8;stroke-width:1.5}
+      .pill{fill:#1d293d;stroke:#475569}
+      .safe{fill:#0e2925;stroke:#34d399}
+      .warn{fill:#352812;stroke:#fbbf24}
+      .danger{fill:#341924;stroke:#fb7185}
+      .muted{fill:#182337;stroke:#475569}
+    </style>
+  </defs>
+
+  <rect width="1680" height="1080" fill="#0b1527"/>
+  <text x="24" y="26" class="ui small">PGM-02B · TARGET v2.2 · DỮ LIỆU MINH HỌA, KHÔNG PHẢI BẰNG CHỨNG RUNTIME</text>
+
+  <g filter="url(#shadow)">
+    <rect x="20" y="40" width="1640" height="790" rx="18" fill="#08101d" stroke="#475569"/>
+  </g>
+  <rect x="20" y="40" width="1640" height="64" rx="18" fill="#111e33"/>
+  <rect x="20" y="88" width="1640" height="16" fill="#111e33"/>
+  <text x="44" y="79" class="ui title">FBD Editor · ZONE_CONTROL</text>
+  <text x="378" y="78" class="ui small">Foxlinx Tower / AHU-02</text>
+  <rect x="1014" y="55" width="76" height="34" rx="8" class="focus"/>
+  <text x="1037" y="77" class="ui label" fill="#7dd3fc">EDIT</text>
+  <rect x="1098" y="55" width="102" height="34" rx="8" class="pill"/>
+  <text x="1118" y="77" class="ui label">SIMULATE</text>
+  <rect x="1208" y="55" width="76" height="34" rx="8" class="pill"/>
+  <text x="1230" y="77" class="ui label">LIVE</text>
+  <rect x="1298" y="55" width="154" height="34" rx="8" class="safe"/>
+  <text x="1315" y="76" class="ui small" fill="#a7f3d0">● Saved · Draft r17</text>
+  <rect x="1462" y="55" width="174" height="34" rx="8" class="muted"/>
+  <text x="1479" y="76" class="ui small">Admin · Core online</text>
+
+  <!-- Context and safety -->
+  <rect x="36" y="116" width="1608" height="50" rx="9" class="panel"/>
+  <text x="52" y="137" class="ui tiny">DOCUMENT</text>
+  <text x="52" y="156" class="ui label">Saved Draft r17 · objectId …d10f</text>
+  <line x1="292" y1="127" x2="292" y2="156" class="line"/>
+  <text x="310" y="137" class="ui tiny">CANVAS LIMIT</text>
+  <text x="310" y="156" class="ui label">22 / 256 nodes · 27 / 512 edges</text>
+  <rect x="750" y="126" width="876" height="30" rx="7" class="warn"/>
+  <text x="768" y="146" class="ui small" fill="#fde68a">AN TOÀN MODE: EDIT sửa Saved Draft · SIM chạy sandbox, không physical I/O · LIVE mở sealed Active và chỉ đọc</text>
+
+  <!-- Explorer -->
+  <rect x="36" y="180" width="220" height="476" rx="10" class="panel"/>
+  <text x="52" y="207" class="ui h2">POU EXPLORER</text>
+  <rect x="50" y="220" width="192" height="30" rx="7" class="panel2"/>
+  <text x="63" y="240" class="ui small">⌕ Tìm POU…</text>
+  <text x="52" y="279" class="ui tiny">PROGRAMS</text>
+  <text x="64" y="310" class="ui small">ST  AHU_SUPPLY</text>
+  <rect x="48" y="322" width="196" height="36" rx="7" class="focus"/>
+  <text x="64" y="345" class="ui label">◇ FBD  ZONE_CONTROL</text>
+  <text x="64" y="382" class="ui small">ST  PUMP_LEAD_LAG</text>
+  <text x="52" y="422" class="ui tiny">FUNCTION BLOCKS</text>
+  <text x="64" y="449" class="ui small">◇ FB  PID_LOOP</text>
+  <text x="64" y="478" class="ui small">◇ FB  ALARM_DELAY</text>
+  <line x1="50" y1="507" x2="242" y2="507" class="line"/>
+  <text x="52" y="533" class="ui tiny">IDENTITY GUARD</text>
+  <text x="52" y="554" class="ui small">Selection = objectId</text>
+  <text x="52" y="574" class="ui small">Runtime = programId</text>
+  <text x="52" y="594" class="ui tiny">Node/port ID không đổi theo label</text>
+  <rect x="50" y="612" width="192" height="28" rx="6" class="muted"/>
+  <text x="65" y="631" class="ui tiny">+ POU · admin trong EDIT</text>
+
+  <!-- FBD Canvas -->
+  <rect x="270" y="180" width="780" height="476" rx="10" class="panel"/>
+  <rect x="270" y="180" width="780" height="42" rx="10" fill="#19263c"/>
+  <rect x="270" y="212" width="780" height="10" fill="#19263c"/>
+  <text x="288" y="207" class="ui h2">ZONE_CONTROL.fbd</text>
+  <rect x="670" y="190" width="56" height="24" rx="6" class="muted"/>
+  <text x="687" y="207" class="ui tiny">↶</text>
+  <rect x="734" y="190" width="56" height="24" rx="6" class="muted"/>
+  <text x="751" y="207" class="ui tiny">↷</text>
+  <rect x="798" y="190" width="72" height="24" rx="6" class="muted"/>
+  <text x="814" y="207" class="ui tiny">100%</text>
+  <rect x="878" y="190" width="70" height="24" rx="6" class="muted"/>
+  <text x="898" y="207" class="ui tiny">Save</text>
+  <rect x="958" y="190" width="74" height="24" rx="6" class="focus"/>
+  <text x="976" y="207" class="ui tiny">Check</text>
+  <rect x="282" y="234" width="756" height="406" rx="8" fill="#0a1322"/>
+  <rect x="282" y="234" width="756" height="406" rx="8" fill="none" stroke="#253651"/>
+
+  <!-- Edges behind nodes -->
+  <path d="M438 326 C486 326 486 326 528 326" fill="none" stroke="#38bdf8" stroke-width="3"/>
+  <path d="M438 430 C486 430 486 374 528 374" fill="none" stroke="#f59e0b" stroke-width="3"/>
+  <path d="M668 326 C716 326 716 326 756 326" fill="none" stroke="#a78bfa" stroke-width="3"/>
+  <path d="M668 390 C716 390 716 398 756 398" fill="none" stroke="#f59e0b" stroke-width="3"/>
+  <path d="M900 326 C944 326 944 350 1008 350" fill="none" stroke="#34d399" stroke-width="3"/>
+  <path d="M668 456 C718 456 720 488 756 488" fill="none" stroke="#fb7185" stroke-width="3" stroke-dasharray="7 5"/>
+
+  <!-- Input nodes -->
+  <g filter="url(#shadow)">
+    <rect x="308" y="286" width="132" height="80" rx="9" fill="#12304a" stroke="#38bdf8"/>
+  </g>
+  <text x="324" y="311" class="ui tiny">AI_ZONE_TEMP</text>
+  <text x="324" y="339" class="ui h2">21.8 °C</text>
+  <circle cx="440" cy="326" r="6" fill="#38bdf8"/>
+  <g filter="url(#shadow)">
+    <rect x="308" y="390" width="132" height="80" rx="9" fill="#342711" stroke="#f59e0b"/>
+  </g>
+  <text x="324" y="415" class="ui tiny">SP_ZONE</text>
+  <text x="324" y="443" class="ui h2">22.0 °C</text>
+  <circle cx="440" cy="430" r="6" fill="#f59e0b"/>
+
+  <!-- PID node -->
+  <g filter="url(#shadow)">
+    <rect x="528" y="276" width="142" height="222" rx="10" fill="#251e45" stroke="#a78bfa" stroke-width="1.5"/>
+  </g>
+  <rect x="528" y="276" width="142" height="38" rx="10" fill="#382e66"/>
+  <rect x="528" y="304" width="142" height="10" fill="#382e66"/>
+  <text x="576" y="301" class="ui h2">PID</text>
+  <text x="544" y="331" class="ui tiny">PV</text>
+  <text x="544" y="379" class="ui tiny">SP</text>
+  <text x="544" y="423" class="ui tiny">EN</text>
+  <text x="544" y="459" class="ui tiny">RST</text>
+  <text x="625" y="331" class="ui tiny">OUT</text>
+  <text x="625" y="395" class="ui tiny">Q</text>
+  <circle cx="528" cy="326" r="6" fill="#38bdf8"/>
+  <circle cx="528" cy="374" r="6" fill="#f59e0b"/>
+  <circle cx="528" cy="418" r="6" fill="#34d399"/>
+  <circle cx="528" cy="456" r="6" fill="#fb7185"/>
+  <circle cx="670" cy="326" r="6" fill="#a78bfa"/>
+  <circle cx="670" cy="390" r="6" fill="#f59e0b"/>
+  <rect x="544" y="472" width="110" height="18" rx="4" class="warn"/>
+  <text x="554" y="485" class="ui tiny" fill="#fde68a">REVIEW_REQUIRED</text>
+
+  <!-- Limit node -->
+  <g filter="url(#shadow)">
+    <rect x="756" y="276" width="146" height="170" rx="10" fill="#15302e" stroke="#34d399" stroke-width="1.5"/>
+  </g>
+  <rect x="756" y="276" width="146" height="38" rx="10" fill="#1b4641"/>
+  <rect x="756" y="304" width="146" height="10" fill="#1b4641"/>
+  <text x="805" y="301" class="ui h2">LIMIT</text>
+  <text x="772" y="331" class="ui tiny">IN</text>
+  <text x="772" y="403" class="ui tiny">MIN</text>
+  <text x="772" y="427" class="ui tiny">MAX</text>
+  <text x="854" y="331" class="ui tiny">OUT</text>
+  <circle cx="756" cy="326" r="6" fill="#a78bfa"/>
+  <circle cx="756" cy="398" r="6" fill="#f59e0b"/>
+  <circle cx="756" cy="422" r="6" fill="#f59e0b"/>
+  <circle cx="902" cy="326" r="6" fill="#34d399"/>
+  <text x="796" y="403" class="ui tiny">0.0</text>
+  <text x="796" y="427" class="ui tiny">100.0</text>
+
+  <!-- Output node -->
+  <g filter="url(#shadow)">
+    <rect x="906" y="312" width="112" height="78" rx="9" fill="#17312d" stroke="#34d399"/>
+  </g>
+  <text x="922" y="338" class="ui tiny">AO_DAMPER</text>
+  <text x="922" y="366" class="ui h2">— %</text>
+  <circle cx="906" cy="350" r="6" fill="#34d399"/>
+
+  <!-- Invalid loose edge -->
+  <circle cx="756" cy="488" r="7" fill="#fb7185"/>
+  <text x="778" y="493" class="ui small" fill="#fda4af">Type mismatch · BOOL → REAL</text>
+  <rect x="306" y="548" width="700" height="70" rx="8" class="warn"/>
+  <text x="322" y="573" class="ui label">Atomic gesture</text>
+  <text x="430" y="573" class="ui small">Drop lên edge → ADD_NODE_AND_CONNECT · một transaction / một undo</text>
+  <text x="322" y="597" class="ui tiny">Ambiguous port mở chooser · Cancel/type mismatch = zero mutation</text>
+
+  <!-- Quick Library -->
+  <rect x="1064" y="180" width="248" height="476" rx="10" class="panel"/>
+  <text x="1080" y="207" class="ui h2">QUICK LIBRARY</text>
+  <rect x="1078" y="220" width="220" height="32" rx="7" class="panel2"/>
+  <text x="1091" y="241" class="ui small">⌕ block, timer, limit…</text>
+  <text x="1080" y="277" class="ui tiny">★ FAVORITES</text>
+  <rect x="1078" y="288" width="220" height="54" rx="8" class="focus"/>
+  <text x="1092" y="310" class="ui label">LIMIT</text>
+  <text x="1092" y="329" class="ui tiny">Math · 4 typed ports</text>
+  <rect x="1078" y="350" width="220" height="54" rx="8" class="panel2"/>
+  <text x="1092" y="372" class="ui label">TON</text>
+  <text x="1092" y="391" class="ui tiny">Timer · stateful · READY</text>
+  <rect x="1078" y="412" width="220" height="58" rx="8" class="warn"/>
+  <text x="1092" y="434" class="ui label">PID</text>
+  <text x="1092" y="454" class="ui tiny" fill="#fde68a">REVIEW_REQUIRED · locked</text>
+  <text x="1080" y="503" class="ui tiny">CANVAS INSERT</text>
+  <text x="1080" y="526" class="ui small">Drop trống → ADD_NODE</text>
+  <text x="1080" y="548" class="ui small">Drop edge → ADD + CONNECT</text>
+  <text x="1080" y="570" class="ui tiny">Ports từ registry signature</text>
+  <rect x="1078" y="600" width="220" height="40" rx="7" class="safe"/>
+  <text x="1092" y="625" class="ui small" fill="#a7f3d0">Keyboard insert có parity</text>
+
+  <!-- Inspector -->
+  <rect x="1326" y="180" width="318" height="476" rx="10" class="panel"/>
+  <text x="1342" y="207" class="ui h2">INSPECTOR · LIMIT</text>
+  <text x="1342" y="239" class="ui tiny">NODE / PORT IDENTITY</text>
+  <text x="1342" y="264" class="ui label">node-08 · SYSTEM/LIMIT@1</text>
+  <text x="1342" y="288" class="ui small">IN · REAL · required</text>
+  <text x="1342" y="310" class="ui small">MIN · REAL · 0.0</text>
+  <text x="1342" y="332" class="ui small">MAX · REAL · 100.0</text>
+  <text x="1342" y="354" class="ui small">OUT · REAL · output</text>
+  <line x1="1342" y1="374" x2="1628" y2="374" class="line"/>
+  <text x="1342" y="401" class="ui tiny">DIAGNOSTIC</text>
+  <rect x="1340" y="413" width="288" height="70" rx="8" class="danger"/>
+  <text x="1354" y="437" class="ui label">FBD-TYPE-004 · edge-27</text>
+  <text x="1354" y="458" class="ui small">BOOL không nối được vào REAL</text>
+  <text x="1354" y="476" class="ui tiny">Chọn port tương thích · Xóa edge</text>
+  <line x1="1342" y1="501" x2="1628" y2="501" class="line"/>
+  <text x="1342" y="528" class="ui tiny">MODE SAFETY</text>
+  <rect x="1340" y="540" width="288" height="100" rx="8" class="safe"/>
+  <text x="1354" y="565" class="ui small">EDIT · graph Draft · admin</text>
+  <text x="1354" y="589" class="ui small">SIM · virtual point image</text>
+  <text x="1354" y="613" class="ui small">LIVE · Active graph · read-only</text>
+  <text x="1354" y="632" class="ui tiny">Mismatch → không overlay port value</text>
+
+  <!-- Bottom workbench -->
+  <rect x="36" y="670" width="1608" height="144" rx="10" class="panel"/>
+  <rect x="36" y="670" width="1608" height="40" rx="10" fill="#19263c"/>
+  <text x="54" y="696" class="ui label">Problems  2</text>
+  <text x="152" y="696" class="ui small">Watch</text>
+  <text x="214" y="696" class="ui small">Trace</text>
+  <text x="272" y="696" class="ui small">Search</text>
+  <text x="334" y="696" class="ui small">Cross Reference</text>
+  <rect x="52" y="724" width="1574" height="72" rx="8" class="danger"/>
+  <text x="70" y="750" class="ui label">2 errors · Check failed · Active r15 vẫn Running</text>
+  <text x="70" y="774" class="ui small">edge-27 type mismatch · PID REVIEW_REQUIRED · Focus node / Copy diagnostic</text>
+
+  <!-- Required state strip -->
+  <text x="24" y="866" class="ui h2">TRẠNG THÁI BẮT BUỘC · giữ node-edge semantics, không dựng card/form thay canvas</text>
+
+  <g transform="translate(24 884)">
+    <rect width="258" height="160" rx="12" class="panel"/>
+    <text x="16" y="28" class="ui label">LOADING</text>
+    <rect x="16" y="45" width="210" height="78" rx="8" fill="#26364f"/>
+    <circle cx="55" cy="84" r="18" fill="#334155"/>
+    <rect x="84" y="68" width="112" height="10" rx="5" fill="#475569"/>
+    <rect x="84" y="89" width="92" height="10" rx="5" fill="#334155"/>
+    <text x="16" y="149" class="ui tiny">Canvas skeleton · tools disabled</text>
+  </g>
+  <g transform="translate(294 884)">
+    <rect width="258" height="160" rx="12" class="danger"/>
+    <text x="16" y="28" class="ui label">ERROR</text>
+    <text x="16" y="56" class="ui small">Không tải được FBD graph.</text>
+    <text x="16" y="78" class="ui tiny">PRG-ERR-REQ-001</text>
+    <rect x="16" y="101" width="82" height="30" rx="7" class="muted"/>
+    <text x="36" y="121" class="ui small">Thử lại</text>
+    <text x="16" y="149" class="ui tiny">Không dựng graph một phần</text>
+  </g>
+  <g transform="translate(564 884)">
+    <rect width="258" height="160" rx="12" class="warn"/>
+    <text x="16" y="28" class="ui label">PERMISSION</text>
+    <text x="16" y="56" class="ui small">Canvas chỉ đọc.</text>
+    <text x="16" y="78" class="ui tiny">Add · Connect · Delete disabled</text>
+    <rect x="16" y="101" width="146" height="30" rx="7" class="muted"/>
+    <text x="31" y="121" class="ui small">Xem quyền truy cập</text>
+    <text x="16" y="149" class="ui tiny">Selection/zoom vẫn dùng được</text>
+  </g>
+  <g transform="translate(834 884)">
+    <rect width="258" height="160" rx="12" class="muted"/>
+    <text x="16" y="28" class="ui label">UNKNOWN</text>
+    <text x="16" y="56" class="ui small">Chưa xác nhận snapshot.</text>
+    <text x="16" y="78" class="ui tiny">Port values: —</text>
+    <rect x="16" y="101" width="90" height="30" rx="7" class="panel2"/>
+    <text x="32" y="121" class="ui small">Làm mới</text>
+    <text x="16" y="149" class="ui tiny">Không suy mutation success</text>
+  </g>
+  <g transform="translate(1104 884)">
+    <rect width="258" height="160" rx="12" class="warn"/>
+    <text x="16" y="28" class="ui label">STALE</text>
+    <text x="16" y="56" class="ui small">PV 21.8 °C · dữ liệu cũ</text>
+    <text x="16" y="78" class="ui tiny">Observed 09:42:18 UTC</text>
+    <path d="M16 91 h170" stroke="#fbbf24" stroke-width="2"/>
+    <text x="16" y="121" class="ui small">Edge overlay bị gạch</text>
+    <text x="16" y="149" class="ui tiny">Badge + time luôn visible</text>
+  </g>
+  <g transform="translate(1374 884)">
+    <rect width="282" height="160" rx="12" class="danger"/>
+    <text x="16" y="28" class="ui label">OFFLINE</text>
+    <text x="16" y="56" class="ui small">Controller ngoại tuyến.</text>
+    <text x="16" y="78" class="ui h2">Mọi port value: —</text>
+    <rect x="16" y="101" width="90" height="30" rx="7" class="muted"/>
+    <text x="32" y="121" class="ui small">Thử lại</text>
+    <text x="16" y="149" class="ui tiny">Graph source vẫn chỉ đọc</text>
+  </g>
+</svg>

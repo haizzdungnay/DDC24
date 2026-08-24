@@ -8,6 +8,114 @@
 
 ## [Unreleased]
 
+### Review và implementation plan PGM-02 ST/FBD redesign (2026-08-24)
+
+- **Added — leadership review PGM-02 ST/FBD.** Đối chiếu handoff v2.2 với
+  Product/SRS/Architecture/DDD/UX và mã nguồn FE/BE/Core/runtime tại
+  `3d2db5d8`; phân loại `KEEP/REFACTOR/REDESIGN/NEW/BLOCKED`, lập 17 gap và
+  tách rõ review ready khỏi implementation/release NO-GO. Finding P0 gồm Active
+  value có thể đứng cạnh Draft khác revision, runtime snapshot có thể lai trong
+  Commission transition, Core Trace có data race/chưa pin revision và BE còn
+  truth defect ở UNKNOWN/impact/Trace. Browser HOST với real local stack kiểm ở
+  1920/1440/1280/1024/390: đúng hai cây POU, FBD card list, 1280 chỉ còn 382 px
+  cho editor và mobile vẫn edit; REST tested path trả 2xx và console error bằng
+  0. Bổ sung ma trận source-backed đủ 21 capability BE (5 implemented/12
+  partial/4 missing) và 19 capability runtime/FW-SOM theo boundary A/B/C/D,
+  trả lời 15 câu hỏi FE và review UC-01..UC-08. Core targeted test **119/119**
+  và các gate BE/source liên quan PASS; không chạy lại toàn bộ FE unit/build
+  trong lượt review. Đây không phải target/HIL evidence.
+
+- **Added — kế hoạch 14 work package `WP-00..WP-13`.** Khóa dependency và lane
+  song song cho shared shell, one POU Explorer, Quick Library, ST, FBD canvas,
+  workbench, coherent LIVE, isolated Simulation, performance, responsive,
+  E2E/V&V và docs closeout. Mỗi WP có scope/files/FE/BE/FW-SOM/dependency/
+  acceptance/tests/risk/complexity; đề xuất ba increment `EDIT -> LIVE ->
+  SIMULATE`. Plan khóa project context/query/legacy redirect, Compare typed
+  Draft↔Active trong WP-09, Simulation RBAC + compiler allowlist, multi-task
+  Step semantics và thứ tự approval WP-00/WP-13. Plan59 vẫn là execution tracker
+  duy nhất; hai hồ sơ mới ở trạng thái `READY FOR OWNER REVIEW`, không tự cho
+  phép implementation.
+
+- **Changed — chỉ mục UI/UX và handoff FE.** `docs/04_uiux/README.md` đăng ký
+  Programming authority/handoff; `README_FE_HANDOFF.md` liên kết review và plan,
+  đồng thời ghi rõ chúng không thay authority Plan59 hay `RELEASE_READY`.
+  Verification tài liệu: docs harness/link/diff checks được ghi lại trong cùng
+  phiên sau khi hoàn tất nội dung.
+
+- **Changed — ghi nhận quyết định Owner mở WP-00.** Product Owner/CTO chấp thuận
+  target/change request, thứ tự `R1 EDIT → R2 LIVE → R3 SIMULATE` và Simulation
+  v1 admin-only. Hồ sơ không giả chữ ký Architect: code redesign vẫn khóa tới
+  khi baseline reconciled được Owner + System Architect review/pin và ánh xạ vào
+  Plan59. Gate trước commit đo mới: CMake Release đủ Modbus/BACnet/HMI và CTest
+  **1293/1293 PASS**; `go vet` + `go test ./... -count=1` PASS; FE **136 file /
+  1496 test PASS**, lint/build PASS; docs harness, candidate pin 16/16 và
+  `git diff --check` PASS. Lần FE đầu có một timeout tranh tài nguyên ở test
+  PGM-01 khi chạy đồng thời full C++; chạy riêng 25/25 và chạy lại full 1496/1496
+  đều PASS, không sửa acceptance để che lỗi.
+
+- **Changed — đưa quyền mở WP-00 vào authority thực thi.** Đăng ký
+  `CR-PROG-PGM02-V22-001` với Owner `APPROVED`, System Architect `PENDING`; mở
+  duy nhất `T59-801`/`PGM02-V22-WP-00` trong Plan59 v2.5 (53 task/9 Wave) để
+  reconcile baseline, không mở production code. Tách riêng
+  `F-P59-GHOST-POU-001` còn `OPEN`; chuẩn hóa namespace
+  `PGM02-V22-WP-00..13`; thêm `RSK-PROG-023` nhưng giữ 23/23 risk Open; Trace
+  giữ 82 requirement/44 scenario và không nâng `D/I/T/P/R`. Manifest v1.45
+  re-pin 8 hồ sơ authority; R1/R2/R3 và `RELEASE_READY` tiếp tục `NO-GO` tới
+  khi Owner + Architect pin đúng revision/hash reconciled. Verification lát
+  tài liệu: docs harness, trace join, candidate pin và `git diff --check` PASS.
+  Fresh full gate: CMake Release bật Modbus/BACnet/HMI và CTest **1293/1293
+  PASS**; `go vet` + `go test ./... -count=1` PASS; FE **136 file/1496 test**,
+  lint/build PASS, chunk Programming **97,13 KiB gzip**. Lượt Go đầu chạy đồng
+  thời `cmake --fresh` gặp đúng race tool build đang bị thay; chạy lại sau C++
+  hoàn tất PASS, không sửa test hoặc contract để che lỗi.
+
+- **Added — hoàn tất gói Candidate để Owner + System Architect review/pin
+  chính xác output WP-00.** Bổ sung Detailed Design PGM-02 đủ `DD-01..DD-13`,
+  `ADR-053` Proposed về Simulation worker cách ly, hợp đồng máy đọc được kèm
+  schema/verifier, Quick Library spec và ba SVG desktop/mobile render được.
+  Đồng bộ Candidate overlay qua Product/SRS/Architecture/Unified DDD/FE Design/
+  Interface/UI-UX/VVP/Trace/Risk/Plan59/governance: tổng **89 requirement / 47
+  scenario**, 23/23 risk vẫn Open, manifest v1.48 **17/17** file và 16 card
+  `T59-802..817` đều **NO EXECUTION AUTHORITY**. `T59-801` chuyển sang `REVIEW`;
+  R1/R2/R3 tiếp tục `NO-GO` tới khi Owner + Architect pin đúng revision/hash.
+  Quy tắc exact pin nay tách hai lớp: manifest ghim 17 hồ sơ Markdown; record
+  duyệt phải ghi candidate Git commit SHA để khóa contract/schema/ADR/handoff/
+  SVG — riêng kết quả 17/17 không mở `PLAN_READY`.
+  Gate Candidate đo tại change-set: contract self-test **16/16 mutation bị từ
+  chối đúng**, wave-gate self-test **10/10**, docs ISO harness, bidirectional
+  trace, candidate pin và `git diff --check` đều PASS. Không đổi source runtime
+  hoặc OpenAPI Active; SVG đã render/kiểm tra trực quan tại 1800×1100 và
+  1680×1080. Full gate đo mới: CMake Release bật Modbus/BACnet/HMI, build và
+  CTest **1293/1293 PASS**; Go vet/test không cache tại `apps/web-api` PASS; FE
+  **136 file/1496 test**, lint và build PASS, chunk Programming **97,13 KiB
+  gzip**; `verify-project --component layout` PASS. Sửa luôn hướng dẫn Go trong
+  `AGENTS.md`: lệnh cũ chạy ở repo root thất bại vì không có root Go module,
+  lệnh authority nay chạy trong `apps/web-api`. Không chạy Chrome DevTools vì
+  change-set chỉ gồm tài liệu, contract, script gate và asset tham chiếu, không
+  đổi hành vi React/Vite.
+
+- **Changed — ban hành `AUTH-PROG-2026-08-24-05` và mở triển khai PGM-02 v2.2.**
+  Ghi nhận chỉ thị điện tử của Phạm Đình Chương trong hai vai trò Product
+  Owner/CTO + System Architect; exact-pin Candidate
+  `413a043748dce3b44d2c5076412de761760ba17a`, hoàn tất `T59-801`, chuyển
+  `T59-802` READY và `T59-803..817` ORDERED theo predecessor. Cả ba
+  `IMPLEMENT_READY[R1 EDIT|R2 LIVE|R3 SIMULATE]` được mở, nhưng Plan59 vẫn bắt
+  buộc chạy tuần tự. `ADR-053` chuyển Accepted cho implementation; Detailed
+  Design giữ `M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`, không giả
+  M4/M5, Test Result, CI, target hoặc HIL. Chốt `F-P59-GHOST-POU-001`: Draft
+  được giữ PROGRAM POU chưa schedule, còn Check/Package phải fail-closed bằng
+  `PRG-ERR-CHECK-001`/`ST-POU-005`, cấm tự loại hoặc synthesize 1000 ms;
+  corrective source/test và `IMPLEMENTATION_CLOSE` vẫn PENDING. Trước commit,
+  reconcile thêm năm lệch P0 giữa DDD và machine contract: tách feature/signature
+  state, phủ identity POU/library/signal, khóa ST-string/FBD-object và runtime
+  enable intent riêng, tách HTTP 400/422, cùng full typed idempotent replay qua
+  migration `0013`. Manifest v1.49 re-pin **17/17**; contract v1.1 self-test
+  **23/23**, docs harness, trace
+  **89/89 requirement + 47/47 scenario**, wave self-test **10/10** và diff-check
+  PASS. Fresh host gate: CMake Release bật Modbus/BACnet/HMI, build + CTest
+  **1293/1293**; Go vet/test `-count=1`; FE **136 file/1496 test**, lint/build
+  PASS, chunk Programming **97,13 KiB gzip**. `RELEASE_READY` tiếp tục `NO-GO`.
+
 ### Sửa lỗi xóa Program/POU trả `PRG-ERR-REQ-001` (2026-08-24)
 
 - **Fixed — FE: không xóa được "chương trình ma".** *Triệu chứng:* sau vòng sửa

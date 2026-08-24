@@ -3,19 +3,26 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-SW-PROG-UNIFIED-001` |
-| Phiên bản | 1.1 |
-| Trạng thái | **Active — IMPLEMENT_READY** |
-| Ngày | 2026-08-21 |
+| Phiên bản | 1.3 |
+| Trạng thái | **Baseline 1.1 Active; PGM-02 v2.2 `M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`, chưa phải As-Built** |
+| Ngày | 2026-08-24 |
 | Chủ quản | System/Runtime Architecture |
 | Reviewer | Compiler, Core, BE, FE, Controls, Security, Verification |
-| Approver | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` |
-| Requirement nguồn | `PR-PROG-001..024`; `SRS-PROG-001` unified amendment |
+| Approver implementation | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` và `AUTH-PROG-2026-08-24-05` |
+| Requirement nguồn | Baseline: `PR-PROG-001..024`; PGM-02 Target: `PR-PROG-025..030`, `SYS-REQ-PROG-116`, `SWR-REQ-PROG-FE-119`, `SWR-REQ-PROG-BE-116..117`, `SWR-REQ-PROG-CORE-117..118`, `NFR-REQ-PROG-112` |
+| Exact Candidate PGM-02 | `413a043748dce3b44d2c5076412de761760ba17a` |
 | Supersedes khi xung đột | Các giới hạn thiết kế một Task/một Program và mọi nhãn `TARGET-PENDING` về user Function/FB |
 | As-Built baseline | `49a2ad1`; source hiện hành là migration input, không phải Product Target |
 
 ## 0. Quyết định đã khóa
 
-Không còn Open Decision hoặc TBD kỹ thuật chặn implementation:
+Với **baseline 1.1**, không còn Open Decision hoặc TBD kỹ thuật chặn
+implementation theo `AUTH-PROG-2026-08-20-04`. PGM-02 v2.2 cũng đã được
+Product Owner/CTO + System Architect pin exact Candidate
+`413a043748dce3b44d2c5076412de761760ba17a` bằng
+`AUTH-PROG-2026-08-24-05`: ba `IMPLEMENT_READY` đều `GO`, nhưng task scheduler
+vẫn bắt buộc `R1 EDIT → R2 LIVE → R3 SIMULATE`. Đây là quyền implement, không
+phải M4/M5, As-Built, Test Result hay release evidence.
 
 | Chủ đề | Quyết định target |
 |---|---|
@@ -29,6 +36,7 @@ Không còn Open Decision hoặc TBD kỹ thuật chặn implementation:
 | Scheduler | Independent release theo deadline; không có semantic dependency do creation order; multicore là optimization giữ cùng semantics. |
 | Trace | Implement ring buffer Core bounded; không giữ `TRACE_START` ma trong contract. |
 | PID | Có trong registry nhưng feature label `REVIEW_REQUIRED` tới khi Controls/Safety evidence đạt. |
+| PROGRAM chưa xếp lịch | Draft được phép chứa POU kind PROGRAM chưa có `programs[]`; Check/Package fail closed `PRG-ERR-CHECK-001` + `ST-POU-005`, không tự loại POU và không tổng hợp period `1000 ms`. |
 
 ## 1. Mục tiêu, actor, phạm vi và success criteria
 
@@ -302,6 +310,27 @@ Ctrl+Z/Y bounded history. All async state has loading/empty/error/permission/
 stale/offline/unknown. Breakpoints: desktop >=1280, tablet 768..1279, mobile
 <768 read/operate-light only. Visible focus >=2 px; text contrast >=4.5:1.
 
+### 8.1 Target overlay PGM-02 v2.2
+
+Thiết kế chi tiết có phạm vi hẹp hơn và là authority Target tại
+[`DDD-SW-PGM02-WORKSPACE-001`](PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md).
+Nó đã được pin cho implementation theo `AUTH-PROG-2026-08-24-05`, nhưng không
+đổi thành As-Built trước khi có source/evidence. Target khóa các điểm sau:
+
+| Chủ đề | Candidate target | Trạng thái authority |
+|---|---|---|
+| Increment | `R1 EDIT → R2 LIVE → R3 SIMULATE`; mỗi increment có flag, gate và verdict riêng | Exact Candidate đã pin; thực thi đúng dependency |
+| Route | `/eng/programming/programs?project=<uuid>&pou=<objectId>&mode=EDIT|LIVE|SIMULATE`; route project-scoped cũ chỉ là redirect tương thích | Approved for implementation |
+| Identity | Editor chọn POU bằng `objectId`; `programId` chỉ thuộc cấu hình PROGRAM; tuple document/value phải exact | Contract Target đã pin |
+| R1 | Typed Draft, Quick Library signature authoritative, semantic reference/refactor và diagnostic anchor chính xác | `IMPLEMENT_READY[PGM02-R1]=GO`; `T59-802=READY` |
+| R2 | Source immutable của Active Revision ghép coherent với runtime value; workspace LIVE read-only cho mọi role | `IMPLEMENT_READY[PGM02-R2]=GO`; task `ORDERED` sau R1 |
+| R3 | Worker ephemeral cách ly; Simulation mutation chỉ `admin`; không production handle/output/RETAIN | `IMPLEMENT_READY[PGM02-R3]=GO`; task `ORDERED` sau R2; `ADR-053` Accepted |
+| Responsive | `<768 px` chỉ đọc source/status/diagnostic; không authoring hoặc session mutation | Approved for implementation |
+
+Vì route và mobile policy trên khác baseline 1.1, consumer không được chọn tùy
+ý giữa hai bản. Rollback của từng increment phải trả toàn bộ consumer về
+route/policy baseline, không tạo trạng thái lai.
+
 ## 9. Error, safety và security
 
 | Failure/abuse | Detection | Giữ/đổi state | Recovery |
@@ -316,6 +345,7 @@ stale/offline/unknown. Breakpoints: desktop >=1280, tablet 768..1279, mobile
 | Corrupt artifact/RETAIN/journal | Loader/recovery | Fail closed; LKG/cold-init policy | Restore LKG, alert/audit. |
 | Unauthorized mutation | BE before service | No side effect | 403 + audit reject. |
 | Malicious source/bundle | bounded parser/importer | Zero mutation | stable error, rate-limit/audit. |
+| PROGRAM POU thiếu cấu hình chạy | Check/Package | Draft giữ nguyên; không tạo package; Active/LKG giữ nguyên | `PRG-ERR-CHECK-001` + `ST-POU-005`; bổ sung `programs[]`, không synthesize `1000 ms`. |
 
 PID registry remains callable only under feature status `REVIEW_REQUIRED`; FE
 shows warning and Check blocks Commission unless profile includes Controls/Safety
@@ -352,6 +382,9 @@ RT thread; hidden fallback từ signal/Point missing thành zero.
 | `VS-PROG-U10` | FE real-backend E2E | Sáu workspace, POU/library/mapping/check/commission/enable/runtime. |
 | `VS-PROG-U11` | Trace/load/soak | Core trace bounded, 24 h, no poll gap >=200 ms, no leak/deadlock. |
 | `VS-PROG-U12` | PID Controls/Safety | Saturation/anti-windup/override/release evidence; chỉ test này mở label ready. |
+| `VS-PROG-U13` | PGM-02 R1 contract/host/browser | Typed Draft/signature/reference/refactor/anchor và EDIT read-back; positive/negative/fault. |
+| `VS-PROG-U14` | PGM-02 R2 producer→UI/read-back | Active source/value tuple coherent; mismatch/stale/offline/revision switch fail closed. |
+| `VS-PROG-U15` | PGM-02 R3 isolation/RBAC/determinism | Admin-only mutation, virtual time deterministic, quota/restart/expiry và zero physical output. |
 
 Host test đóng implementation behavior; U05/U08/U09/U11/U12 cần target/HIL để
 đóng release. Evidence ghi commit/image/config/hash/operator/reviewer; không kế
@@ -392,17 +425,21 @@ rollback. Residual risk chỉ giảm bằng evidence, không bằng tài liệu 
 | `DD-10` | PASS | §10 source/dependency/build/package. |
 | `DD-11` | PASS | §11 fixture/expected/authority. |
 | `DD-12` | PASS | §12 migration/deploy/rollback. |
-| `DD-13` | PASS | §13 risk/decision/sign-off; không còn design TBD. |
+| `DD-13` | PASS ở lớp thiết kế/authority | §13 baseline; §8.1 và `DDD-SW-PGM02-WORKSPACE-001` ghi exact pin, `ADR-053` Accepted, waiver implementation và Test Result/release vẫn mở. |
 
 | Vai trò | Trạng thái |
 |---|---|
 | Product Owner/CTO + System Architect | **ACCEPT — `AUTH-PROG-2026-08-20-04`** |
 | Compiler/Core/BE/FE/Controls/Security/QA | `WAIVED FOR IMPLEMENTATION`; finding hậu kiểm sửa trong task, không chặn code |
 | Release authority | Chưa ký; chỉ đánh giá sau target/HIL evidence |
+| PGM-02 v2.2 — Product Owner/CTO + System Architect | **AUTHORIZED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-24-05`**, exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; không phải M4/M5/Test Result |
+| PGM-02 consumer/discipline reviewers | **WAIVED FOR IMPLEMENTATION**; phản hồi hậu kiểm theo task, không chặn code |
 
 ## Lịch sử
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.2-candidate | 2026-08-24 | Thêm overlay PGM-02 v2.2 dẫn formal DDD, khóa ba increment, route/identity/mobile target và `VS-PROG-U13..U15`; giữ baseline 1.1 Active và toàn bộ increment `NO-GO` chờ exact pin. |
+| 1.3 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`, exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` và mức `M3 REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`; mở R1/R2/R3 theo dependency, chốt Check/Package fail closed `ST-POU-005`; giữ Target chưa As-Built, U13–U15 NOT_RUN và release NO-GO. |
 | 1.1 | 2026-08-21 | `ADR-051` ký TTL hold-last: "expired candidate" ở §7.1 và hàng WCET/exception ở §9 nay có con số — lệnh cuối của Program ngừng publish sống tối đa **60 s** rồi bị rút, resolver/interlock/safe-state chọn giá trị tiếp theo. Không đổi kiến trúc, contract hay capacity. |
 | 1.0 | 2026-08-20 | Khóa thiết kế thống nhất multi-Program, POU, library, signal, lifecycle, scheduler, output safety, migration và verification; không còn Open Decision/TBD chặn implementation. |

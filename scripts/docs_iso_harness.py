@@ -37,7 +37,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Ngưỡng kỳ vọng hiện hành. Cập nhật cùng lúc với hồ sơ, không cập nhật sau.
 EXPECT = {
-    "baseline_files": 16,
+    "baseline_files": 17,
     "support_files": 5,
     "link_missing": 0,
     "anchor_missing": 0,
@@ -45,15 +45,15 @@ EXPECT = {
     "fence_bad": 0,
     "duplicate_doc_id": 0,
     "span_missing": 0,
-    "srs_requirements": 82,
-    "trace_rows": 82,
+    "srs_requirements": 89,
+    "trace_rows": 89,
     "trace_violations": 0,
-    "vs_prog": 44,
-    "rsk_prog": 22,
+    "vs_prog": 47,
+    "rsk_prog": 23,
     "od_prog": 12,
     "uc_prog": 17,
     "uj_prog": 8,
-    "ux_req": 24,
+    "ux_req": 27,
     "svg_assets": 14,
 }
 
@@ -67,6 +67,7 @@ BASELINE = [
     "docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md",
     "docs/03_architecture/PROGRAMMING_ARCHITECTURE.md",
     "docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md",
+    "docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md",
     "docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md",
     "docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md",
     "docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md",

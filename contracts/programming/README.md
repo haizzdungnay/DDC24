@@ -15,6 +15,7 @@ python3 scripts/generate_programming_errors.py
 python3 scripts/generate_programming_errors.py --check
 python3 scripts/verify_programming_fbd_contract.py --self-test
 python3 scripts/verify_programming_artifact_manifest.py --self-test
+python3 scripts/verify_programming_pgm02_contract.py --self-test
 ```
 
 ## Thành phần
@@ -40,6 +41,8 @@ python3 scripts/verify_programming_artifact_manifest.py --self-test
 | `g1_contract_join_v1.json` | manifest join G1 khóa hash/major/số đếm của OpenAPI, IPC, profile, artifact, error, store, source bundle cùng chuỗi migration, thứ tự deploy/rollback và flag OFF |
 | `pou_library_registry_v1.json` | **nguồn duy nhất** của Control Library SYSTEM: 40 entry (15 operator, 20 kFuncs, 5 FB), port/kiểu/nhãn/`featureState`; palette FE và allowlist FBD của Core đều sinh từ đây |
 | `pou_library_registry_v1.schema.json` | schema registry; `dispatch` khai compiler nhận diện entry ở đâu nên entry không có đường dispatch thật bị từ chối |
+| `pgm02_workspace_v1.json` | candidate máy đọc được của `PGM02-V22-WP-00`: khóa route, identity Draft/Active/runtime, typed EDIT/refactor/reference/diagnostic, Quick Library, LIVE read-only, Simulation admin-only không có quyền output và ngân sách NFR; chưa phải baseline đã được Architect pin |
+| `pgm02_workspace_v1.schema.json` | schema fail-closed của candidate PGM-02; cố ý giữ `IMPLEMENT_READY[R1/R2/R3]=NO_GO` tới khi Owner + System Architect pin đúng revision/hash |
 | `fbd_v1.schema.json` | schema canonical của graph/network/node/port/wire FBD |
 | `fbd_keyboard_commands_v1.json` | registry 11 command/shortcut keyboard-first và giới hạn undo/redo |
 | `fbd/golden/ahu_fan_enable.json` | graph mẫu hợp lệ dùng chung cho Core và FE |

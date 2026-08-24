@@ -11,7 +11,8 @@ Các tài liệu interface được phục hồi nguyên văn. [Interface Baseli
 | [CONFIG_SCHEMA](CONFIG_SCHEMA_MK-DDC-24_VI.md) | System config JSON schema, point tag/name namespaces, historian.conf |
 | [GRAPH_SCHEMA](GRAPH_SCHEMA_MK-DDC-24_VI.md) | Graph/component JSON schema |
 | [REST_API_OPENAPI](REST_API_OPENAPI_MK-DDC-24_VI.md) | REST API spec, historian policy/query + point namespace errors |
-| [contracts/openapi/openapi.yaml](../../../contracts/openapi/openapi.yaml) | REST API OpenAPI 3.1 v1.6.0 (machine-readable) |
+| [contracts/openapi/openapi.yaml](../../../contracts/openapi/openapi.yaml) | REST API OpenAPI 3.1 v1.28.0 (machine-readable Active) |
+| [Programming Interface Specification](PROGRAMMING_INTERFACE_SPEC.md) | Baseline 2.0 + PGM-02 v2.1-candidate overlay; Candidate không sửa OpenAPI Active trước exact pin |
 | [MODBUS_REGISTER_MAP](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | Modbus register map — **SUPERSEDED một phần 2026-08-04** (xem banner trong file) |
 | [MODBUS_RTU_API_SPEC](MODBUS_RTU_API_SPEC.md) | REST/WebSocket API Modbus RTU đề xuất — **In Review 2026-08-04** |
 | [MODBUS_RTU_INTERFACE_SPEC](MODBUS_RTU_INTERFACE_SPEC.md) | Luồng end-to-end, interface matrix và contract runtime v2 — **In Review 2026-08-04** |

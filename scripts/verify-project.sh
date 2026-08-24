@@ -11,7 +11,7 @@ build_root="${MKDDC_BUILD_ROOT:-$repo_root/build/verify}"
 usage() {
   printf '%s\n' \
     'Dùng: scripts/verify-project.sh [--component NAME] [--profile NAME]' \
-    '     scripts/verify-project.sh --wave W0..W7 [--repeat N]' \
+    '     scripts/verify-project.sh --wave W0..W8 [--repeat N]' \
     '' \
     'Component: layout | cpp | go | frontend | e2e | e2e-real | firmware | release | all' \
     'Profile C++: baseline | modbus | bacnet | modbus-bacnet | full (mặc định)' \
@@ -64,6 +64,7 @@ run_layout() {
   python3 "$repo_root/scripts/generate_programming_errors.py" --check
   python3 -m unittest "$repo_root/tests/integration/test_programming_error_catalog.py"
   python3 "$repo_root/scripts/verify_programming_ipc_actions.py" --self-test
+  python3 "$repo_root/scripts/verify_programming_pgm02_contract.py" --self-test
   python3 "$repo_root/scripts/verify_wave_gates.py" --self-test
   python3 "$repo_root/scripts/verify_programming_g1_contracts.py" --self-test
   python3 "$repo_root/scripts/verify_programming_artifact_manifest.py" --self-test

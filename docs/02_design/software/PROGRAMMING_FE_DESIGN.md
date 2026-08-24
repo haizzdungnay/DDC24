@@ -3,18 +3,20 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FE-PROG-001` |
-| Phiên bản | 1.5 |
-| Trạng thái | **M3 AS-BUILT CẬP NHẬT — IA sáu workspace, POU/Published Signal và Library deprecate ở cây làm việc; browser target/formal VVP chưa chạy** |
+| Phiên bản | 1.6-candidate (baseline hiệu lực: 1.5) |
+| Trạng thái | **M3 AS-BUILT baseline + PGM-02 v2.2 TARGET CANDIDATE; Architect exact pin PENDING, code R1/R2/R3 NO-GO** |
 | Ngày | 2026-08-24 |
 | Chủ quản | Frontend Lead |
 | Người review | UX Lead, Backend Lead, Verification Lead |
 | Người phê duyệt | Frontend Lead + System Architect |
-| Nguồn | `UX-WEB-PROG-001`, `IFSPEC-PROG-001`, `DM-PROG-001` |
-| Requirement | `SWR-REQ-PROG-FE-101..115` |
+| Nguồn | `UX-WEB-PROG-001`, `IFSPEC-PROG-001`, `DM-PROG-001`; Candidate `DDD-SW-PGM02-WORKSPACE-001`, `PGM02-WORKSPACE-V1`, `CR-PROG-PGM02-V22-001` |
+| Requirement | Baseline `SWR-REQ-PROG-FE-101..118`; Candidate thêm `SWR-REQ-PROG-FE-119` |
+| Authority Candidate | Owner mở duy nhất `T59-801`/`PGM02-V22-WP-00`; `PLAN_READY=PENDING`; mọi production code PGM-02 v2.2 `NO-GO` |
 
-> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
-> `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
-> không còn chặn viết/merge code. Review và browser/evidence chưa có vẫn thực hiện trong task.
+> **Phạm vi waiver cũ:** `AUTH-PROG-2026-08-11-03` chỉ áp dụng baseline đã ký,
+> không mở quyền code cho PGM-02 v2.2 Candidate. Candidate chỉ được triển khai sau
+> khi Product Owner + System Architect pin exact revision/hash và gate increment
+> tương ứng chuyển `IMPLEMENT_READY=PASS`.
 
 ## 0. Đọc nhanh
 
@@ -23,10 +25,10 @@
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **FE dựng code như thế nào** cho sáu workspace: thư mục feature, mô hình state, query/mutation, xử lý lỗi và chiến lược test. Trong khi [UI/UX Design](../../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) nói *người dùng thấy gì*, file này nói *React tổ chức ra sao*. |
 | 2. Ai phải đọc file này? | FE Lead và lập trình viên FE (chủ quản); UX đối chiếu với hồ sơ UI/UX; BE đọc §4 để biết FE sẽ gọi gì và kỳ vọng lỗi ra sao; QA đọc §10. |
 | 3. Hệ thống hiện tại đang có gì? | Cây làm việc có sáu route canonical: Tổng quan, Chương trình, Điểm & Ánh xạ, Thư viện, Kiểm tra, Runtime. Draft v2 authoring có POU `PROGRAM/FUNCTION/FUNCTION_BLOCK`, Published Signal và Library lifecycle; generated client bám OpenAPI `1.28.0`. Đây chưa phải bản đã deploy/read-back trên Forlinx. |
-| 4. Thiết kế mới thay đổi điều gì? | `PublishedSignalsPanel` cho phép khai báo producer/type/unit/freshness/stale policy/fallback theo validator BE; Library chỉ deprecate đúng `PUBLISHED` qua xác nhận admin, ETag/idempotency và server read-back. Mọi `UNAVAILABLE/STALE/invalid` giữ nguyên, không hiển thị số 0 giả. |
-| 5. Team phải sửa module/contract nào? | §11/§12: `ProgrammingRoutes`, `design/mapping/PublishedSignalsPanel`, `model/{draftV2,signals,library}`, `library/LibraryPage`, `api/{generated/client,mutations}`, OpenAPI; producer Core/BE ở `DDD-BE-PROG-001` và `DDD-FWSOM-PROG-001`. |
-| 6. Điều gì còn bị chặn? | Cần hoàn tất affected FE gates và kiểm trình duyệt thật desktop/mobile với Console/Network; sau đó deploy/read-back Forlinx MCU FAKE. Soak 24 giờ/formal VVP chưa chạy; HIL vật lý `DEFERRED_NO_HARDWARE`; CI `SKIPPED_BY_OWNER`. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Unit/component/build/lint xác nhận source; browser desktop/mobile xác nhận route, modal deprecate, signal authoring, Console/Network; target xác nhận API read-back cùng exact bundle hash. Không kế thừa evidence 2026-08-13 cho bundle Plan 59 mới. |
+| 4. Thiết kế mới thay đổi điều gì? | Baseline giữ Published Signal/Library hiện có. Candidate §16.1 thay PGM-02 bằng một shell/Explorer, ST transaction surface, true FBD canvas, Quick Library và ba mode tách truth `EDIT/LIVE/SIMULATE`; `<768` read-only. |
+| 5. Team phải sửa module/contract nào? | §16.1: route resolver/shell/mode machine/adapters/Quick Library/canvas/workbench/keyed overlay/simulation UI; chỉ dùng generated OpenAPI typed Draft/reference/diagnostic/LIVE/session contract. |
+| 6. Điều gì còn bị chặn? | PGM-02 Candidate chờ Architect exact pin, OpenAPI/producer contracts và task R1/R2/R3; không code từ hồ sơ này. Browser/target/HIL/formal VVP vẫn là evidence riêng sau implementation. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `VS-PROG-U13..U15` và bảng §16.1 tách unit/real-BE browser/producer-chain/target/HIL. Asset hoặc host mock không chứng minh LIVE/Simulation. |
 
 Điều FE **không** sở hữu, nêu sớm để tránh viết nhầm: Draft persistence, tính
 diff, readiness, phân quyền, runtime state, chất lượng Point, bên thắng arbitration
@@ -34,10 +36,10 @@ và audit. Tất cả đều là sự thật từ server; FE chỉ hiển thị 
 
 ## 0.1 Cấu trúc theo sáu workspace (Plan 59)
 
-Route và thư mục bám đúng IA bốn workspace ở
-[UX §3](../../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) và cây component ở UX §22.
-Chờ [`OD-PROG-016`](../../00_governance/PROGRAMMING_OPEN_DECISIONS.md); nếu bị
-từ chối thì quay lại năm thư mục route của IA sáu trang.
+Route và thư mục dưới đây mô tả đúng IA sáu workspace baseline ở
+[UX §2–§5](../../04_uiux/PROGRAMMING_UI_UX_DESIGN.md). PGM-02 v2.2 Candidate
+không được ghi đè As-Built này; overlay route/component mới nằm ở §16.1 và chỉ
+thay baseline sau exact-revision pin.
 
 ```text
 features/programming/
@@ -99,7 +101,7 @@ runtime state, Point quality, priority winner hoặc audit truth.
 ## 2. Cấu trúc feature và module dùng chung
 
 > Cây thư mục và danh sách route **là §0.1**, không lặp lại ở đây. Mục này chỉ
-> mô tả các module cắt ngang mà cả bốn workspace dùng chung. Nếu §0.1 và §2 có
+> mô tả các module cắt ngang mà cả sáu workspace dùng chung. Nếu §0.1 và §2 có
 > vẻ mâu thuẫn thì §0.1 đúng.
 
 ```text
@@ -256,8 +258,9 @@ VERIFYING → SUCCEEDED | REJECTED | FAILED | UNKNOWN_RECONCILING
 - Skip link, một `h1`, landmark, tree/table semantics, focus trap/restore,
   live-region tiết chế cho progress và Problems count.
 - State có text+icon; không chỉ màu. FBD keyboard path là release gate.
-- Desktop >=1440 đầy đủ; 1024–1439 panel co; <1024 cho read/light edit và cảnh
-  báo khuyến nghị desktop khi authoring FBD.
+- Baseline ngoài PGM-02 giữ responsive policy hiện hành. Riêng PGM-02 Candidate:
+  `>=1280` full shell, 1024–1279 compact dock, 768–1023 drawer và `<768`
+  read-only có **0** mutation control cho ST/FBD/Simulation.
 
 ## 9. Error recovery
 
@@ -318,7 +321,7 @@ cũng chuyển điều kiện hiện mục từ `LEGACY_GRAPH_DEMO_ENABLED` sang
 
 ## 12. Component, hook, type và ownership
 
-> Cây thư mục hiệu lực **chỉ có một**: `§0.1` cho bốn workspace và `§2` cho các
+> Cây thư mục baseline hiệu lực **chỉ có một**: `§0.1` cho sáu workspace và `§2` cho các
 > module cắt ngang. Mục này **không** lặp lại cây, chỉ mở chi tiết nội dung của
 > `api/` và `model/` cùng quyền sở hữu state.
 
@@ -465,10 +468,85 @@ chỉ update cache khi sequence/resource version hợp lệ, còn lại invalida
 | `layout/`, `shared/` | presentational props/a11y | direct fetch/global mutation |
 | `overview/`, `design/`, `commission/`, `runtime/` | route composition/error boundary | duplicated domain types |
 
+### 16.1 PGM-02 v2.2 Target Candidate — R1/R2/R3
+
+Phần này là overlay Target cho PGM-02; §11 vẫn là As-Built. Không xóa/rewrite
+domain FBD hoặc Draft adapters đã đúng. Mọi component Target phải nằm sau
+capability/feature flag riêng và fail closed khi producer chưa khớp version.
+
+```text
+ProgrammingRoutes
+└── /eng/programming/programs?project=&pou=&mode=
+    └── ProgramsWorkspaceShell
+        ├── ProgrammingContextStrip + ProgrammingProjectContext
+        ├── ProgramModeMachine (EDIT | LIVE | SIMULATE)
+        ├── PouExplorer                 selection = objectId
+        ├── StTransactionSurface | FbdNodeEdgeCanvas
+        ├── QuickLibraryPanel | PouInspector
+        └── ProgrammingWorkbench
+            ├── Problems ├── Watch ├── Trace
+            └── Search   └── CrossReference
+```
+
+| Slice | State/data authority | FE hành vi bắt buộc | Mutation |
+|---|---|---|---|
+| R1 EDIT | Saved Draft typed v1/v2 + ETag + `objectId`; Library signature SYSTEM/PROJECT | resolver 0/1/nhiều/invalid Project; một Explorer; insert/refactor/reference/diagnostic exact; read-back sau save | admin qua server; một editor transaction/Undo; analysis/cancel/conflict zero mutation |
+| R2 LIVE | immutable Active Revision + tuple `controllerId/activeRevisionId/programId/observationId/snapshotSequence/quality` | tải runtime rồi sealed source; keyed overlay ≤10 Hz; gap/cutover clear+rejoin; missing/stale/offline không thành zero | **không có** cho mọi role |
+| R3 SIMULATE | capability + immutable Saved-Draft snapshot + server session/read model | nhãn `SIMULATION — NO REAL OUTPUT`; virtual input/Watch/Trace; RUN/PAUSE/STEP/RESET/SPEED/STOP theo state | server admin-only; viewer/operator/admin chỉ đọc theo object scope |
+
+`objectId` và `programId` là hai identity khác nhau. Query `pou` luôn là
+`objectId`; runtime join chỉ dùng mapping được seal trong Active Revision. FE
+không so tên, không suy UUID và không overlay khi document/value tuple mismatch.
+
+Quick Library không có danh sách ST/FBD viết tay. `QuickLibraryPanel` normalize
+public `ProgrammingLibrarySignature`; chỉ hiện `FUNCTION`/`FUNCTION_BLOCK`.
+FUNCTION insert call template. FUNCTION_BLOCK tìm/chọn hoặc tạo instance rồi
+insert declaration+invocation. FBD drop/keyboard insert dùng canonical
+node/port/wire model và `port.order`; Insert & Connect chỉ tự nối khi đúng một
+port compatible, còn ambiguity mở chooser. Cancel/type mismatch/signature
+unavailable không đổi document, history hoặc Recent.
+
+| Source Target | Trách nhiệm | Giữ/reuse |
+|---|---|---|
+| `features/programming/ProgrammingRoutes.tsx` | canonical route, legacy redirect và allowlisted deep-link | auth/layout route guards |
+| `features/programming/programs/{ProgramsWorkspaceShell,ProgrammingProjectContext}.tsx` | shell/context/resolver/mode buffers | `useDraftWorkspace`, generated hooks |
+| `features/programming/programs/programModeMachine.ts` | transition/capability/dirty guard tách ba mode | discriminated union, không boolean `isRunning` |
+| `features/programming/design/PouTree.tsx` → adapter `PouExplorer` | một tree, objectId selection, semantic action | Draft v2 grouping/identity |
+| `features/programming/design/editor/*` | ST transaction/diagnostic/reference/overlay adapters | tokenizer/history/find/format hiện có |
+| `features/programming/fbd/{model,commands}.ts` | canonical graph/commands/undo/port order | **KEEP/EXTEND**, không rewrite |
+| `features/programming/fbd/FbdNodeEdgeCanvas.tsx` | renderer/controller node-edge, keyboard/pan/zoom/snap | validator/reducer hiện có |
+| `features/programming/library/QuickLibraryPanel.tsx` | search/category/signature/atomic insert | PGM-04 catalog/query; không fallback registry UI |
+| `features/programming/programs/workbench/*` | Problems/Watch/Trace/Search/References | shared panels/adapters, mode-aware source |
+| `features/programming/programs/live/*` | sealed document + keyed observation store | generated runtime/monitor/trace client |
+| `features/programming/programs/simulation/*` | capability/session/controls/input/observation | generated API only; cấm browser executor |
+
+Budget Target theo `PGM02-WORKSPACE-V1`: Programming chunk gzip R1/R2/R3 lần
+lượt `<=125/145/165 KiB`; typing p95 `<=50 ms`; pointer-to-paint p95 `<=32 ms`;
+open POU p95 `<=250 ms`; steady JS heap `<=96 MiB`; mỗi mode switch tăng
+`<=5 MiB`; FBD `<=256` node/`<=512` edge. Topology và observation store tách
+nhau để sample không re-render toàn canvas. Breakpoint/focus/contrast theo
+`UX-REQ-027`; `<768` không render Edit/Insert/Save/Check/Simulation controls.
+
+| Verification Candidate | Fixture/expected | Evidence/authority |
+|---|---|---|
+| `FE-PGM02-R1-01` | 0/1/2 Project, invalid deep-link; 15 Draft op; ST/FBD/library/refactor/diagnostic; exact read-back và zero mutation lỗi | unit/component + real-BE browser; nối `VS-PROG-U13` |
+| `FE-PGM02-R2-01` | Active cutover, hash mismatch, sequence gap, stale/offline/missing; old overlay clear trong ≤1 render cycle | producer→IPC→BE→FE + target fault; nối `VS-PROG-U14` |
+| `FE-PGM02-R3-01` | role matrix, capability absent/mismatch, deterministic step, quota/expiry/crash và zero physical-output | HTTP/browser + target/HIL signed result; nối `VS-PROG-U15` |
+| `FE-PGM02-NFR-01` | 1280×750/1024/768/390, keyboard/axe/reduced motion, chunk/latency/heap/canvas max | browser performance/a11y report theo từng increment |
+
+Rollback từng increment chỉ tắt capability/route consumer tương ứng và giữ
+Draft/Revision/Active/LKG. R2 rollback hủy overlay/subscription, không gửi
+lifecycle command. R3 rollback reject create, stop/reap session rồi gỡ worker;
+session ephemeral không được phục hồi sau reboot.
+
 ## 17. Blocker, lịch sử và phê duyệt
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
+| PGM-02 v2.2 exact revision/hash chưa được pin | Product Owner + System Architect + Document Control | Review/reconcile Product/SRS/Architecture/DDD/UX/assets/contracts/Risk/Trace/VVP/Plan59; harness và candidate pin PASS; ký exact Candidate trước khi tạo quyền code |
+| R1 typed Draft/signature/reference/refactor/diagnostic contract chưa Active | BE + Compiler + FE Leads | OpenAPI/generated client/error/generator pin; `IMPLEMENT_READY[PGM02-R1]=PASS` |
+| R2 producer tuple/lifecycle/Trace coherence chưa có evidence | Core/Runtime + BE + FE + QA | producer→IPC→BE→FE/read-back contract và fault/concurrency tests; `IMPLEMENT_READY[PGM02-R2]=PASS` |
+| R3 worker/session/isolation contract chưa Active | Architect + Security + Runtime + BE + FE | isolated worker/RBAC/audit/quota/zero-output plan pin; `IMPLEMENT_READY[PGM02-R3]=PASS` |
 | `S5-F` usability test cần người dùng thật | UX Lead + Product | `≥5` kỹ thuật viên BMS thật chưa từng dùng sản phẩm + fixture `AHU-01` trên controller lab (Plan 53 §5.9) |
 | `VS-PROG-027/029/030` cần soak/power-fault/HIL vật lý | Core + HW + QA | Board/HIL fixture theo Plan 53 P6 |
 | Test Result chính thức cho `VS-PROG-020/022/025/026/028/032` | Verification Lead | Target supporting evidence đã có; executor + reviewer độc lập chạy/ký theo VVP §11 |
@@ -495,11 +573,14 @@ chỉ update cache khi sequence/resource version hợp lệ, còn lại invalida
 | 1.3 | 2026-08-13 | `EV-PROG-P5-510`: FE 62 file/510 test, lint/build và Playwright PASS; thêm `@axe-core/playwright`, quét WCAG A/AA bốn workspace desktop/mobile. Foxlinx corrective có 0 Console error/warn, 0 failed Programming request, axe 8/8 scan 0 violation; rollback/tái deploy PASS. Source chưa merge, positive binding target/usability/reviewer độc lập còn mở. |
 | 1.4 | 2026-08-13 | Đóng audit live 1.2 ở mức implementation/supporting evidence: HTTP-safe UUID/SHA, full return URL, live batch Save+hoàn nguyên, READY-only Restore, RETAIN fail-closed contract-only, safe-state detail, Export/Import, mặc định vi, bottom nav/card mobile và sửa hai finding axe. Artifact cuối Foxlinx hash `30ee0743…`; axe live 6/6 sạch. Positive binding/recommission/usability/Test Result vẫn mở. |
 | 1.5 | 2026-08-24 | Đồng bộ Plan 59 với IA sáu route, Draft v2 POU/Published Signal và Library `PUBLISHED→DEPRECATED`; khóa invalid/stale/unavailable không thành zero và tách host/browser/Forlinx MCU FAKE/soak/VVP/HIL evidence. |
+| 1.6-candidate | 2026-08-24 | Thêm overlay Detailed Design FE PGM-02 v2.2 cho route/shell/identity/Quick Library/ST/FBD/Workbench và ba increment; khóa `<768` read-only, budget/test/source map; Owner mở WP-00, Architect pin và code R1/R2/R3 còn PENDING/NO-GO. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
 | FE + UX + BE + Core + QA + Ops | **PLAN 59 IMPLEMENTATION_CLOSE PENDING** | source POU/Signal/Library hiện tại; còn affected FE gates, browser và exact merged commit |
 | Frontend Lead + System Architect | **APPROVED FOR IMPLEMENTATION; RELEASE NO-GO** | Forlinx MCU FAKE deploy/soak và formal VVP `NOT_RUN`; HIL `DEFERRED_NO_HARDWARE` |
+| Product Owner — PGM-02 v2.2 | **APPROVED CHANGE REQUEST / WP-00 ONLY** | `CR-PROG-PGM02-V22-001`; không thay exact Candidate sign-off |
+| System Architect — PGM-02 v2.2 | **PENDING exact revision/hash pin** | mọi production code R1/R2/R3 `NO-GO` |
 
 Tự kiểm `DD-01..DD-13`:
 
@@ -508,16 +589,16 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-01` Metadata | PASS | Bảng đầu file; lịch sử và bảng ký §17 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 ranh giới; nêu rõ FE **không** sở hữu Draft/quyền/runtime truth |
 | `DD-03` As-Built | PASS | §11 dẫn sáu route, `PublishedSignalsPanel`, `LibraryPage`, `api/*` và `model/{types,draftV2,signals,library}`; nêu rõ source chưa có target evidence mới |
-| `DD-04` Target ownership | PASS | §2 cấu trúc feature; §12 quyền sở hữu component/hook/type |
+| `DD-04` Target ownership | PASS | §2/§12 baseline; §16.1 khóa owner/state/source Target Candidate PGM-02 |
 | `DD-05` Data từng field | PASS | §3 mô hình state; §12 kiểu dữ liệu; hợp đồng field chi tiết ở UI/UX §19 |
 | `DD-06` Interface | PASS | §4 query và mutation; đường dẫn chính xác tra ở UI/UX §24 và `IFSPEC-PROG-001` |
 | `DD-07` State/algorithm | PASS | §7 state machine Commission; §13 thuật toán mutation và xử lý lỗi |
-| `DD-08` UX flow | PASS | §5 editor, §6 mapping, §16 ánh xạ trang ↔ code và phụ thuộc dữ liệu; §8 RBAC/i18n/accessibility |
+| `DD-08` UX flow | PASS | §5 editor, §6 mapping, §16/§16.1 ánh xạ trang ↔ code/flow/mode/asset; §8 RBAC/i18n/accessibility |
 | `DD-09` Error/safety/security | PASS | §9 phục hồi lỗi; §14 security/performance/accessibility; không optimistic active, không tự replay |
-| `DD-10` Repository mapping | PASS | §0.1 cây thư mục bốn workspace; §1, §2, §11, §12 — đường dẫn cụ thể trong `apps/web-ui/src/` |
-| `DD-11` Verification | PASS | §10/§15 tách unit/component/build, Chrome desktop/mobile, target MCU FAKE, soak/formal VVP và HIL |
+| `DD-10` Repository mapping | PASS | §0.1 cây thư mục sáu workspace; §1, §2, §11, §12 và §16.1 — đường dẫn cụ thể trong `apps/web-ui/src/` |
+| `DD-11` Verification | PASS | §10/§15 baseline và §16.1 tách R1 real-BE, R2 producer chain, R3 target/HIL zero-output và NFR |
 | `DD-12` Compatibility/deploy/rollback | PASS | §15 deploy và rollback; §0.1 năm chuyển hướng route (nay đã As-Built ở `ProgrammingRoutes.tsx`); chi tiết rollout/cờ/migration ở UI/UX §11.1 và §28 |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation, **BLOCKED cho release** | Owner: FE Lead, UX, BE, Core, QA, Ops. Plan 59 còn affected/browser/target/soak/VVP; HIL vật lý deferred. Điều kiện mở ghi ở §17. |
+| `DD-13` Trace/risk/decision/sign-off | PASS baseline; **BLOCKED cho PGM-02 implementation và release** | Owner: Product Owner + System Architect; gate `T59-801/PLAN_READY`; mở khi exact Candidate pin + harness PASS. Sau đó mỗi increment cần gate/test riêng; release vẫn cần target/HIL. |
 
 Blocker có đủ owner/ảnh hưởng/gate/điều kiện mở. Evidence lịch sử
 `EV-PROG-P5-510` không được tái sử dụng để xác nhận bundle Plan 59 mới. Assurance,

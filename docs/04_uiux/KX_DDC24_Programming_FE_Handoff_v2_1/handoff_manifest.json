@@ -1,5 +1,8 @@
 {
-  "package": "KX-DDC24 Programming FE Handoff v2.1",
+  "package": "KX-DDC24 Programming FE Handoff v2.2",
+  "version": "2.2",
+  "status": "TARGET_NOT_AS_BUILT",
+  "formalDetailedDesign": "../../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md",
   "pages": [
     {
       "id": "PGM-01",
@@ -8,8 +11,23 @@
     },
     {
       "id": "PGM-02",
-      "doc": "PGM-02_PROGRAMS_FE_HANDOFF.md",
-      "asset": "assets/PGM-02_programs.png"
+      "doc": "PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md",
+      "asset": "assets/PGM-02_ST_FBD_combined_reference.svg",
+      "supplement": "PGM-02_QUICK_LIBRARY_SIM_LIVE_SPEC_v2_2.md",
+      "variants": [
+        {
+          "id": "PGM-02A",
+          "language": "ST",
+          "doc": "PGM-02A_ST_EDITOR_FE_HANDOFF_v2_2.md",
+          "asset": "assets/PGM-02A_ST_editor_reference.svg"
+        },
+        {
+          "id": "PGM-02B",
+          "language": "FBD",
+          "doc": "PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md",
+          "asset": "assets/PGM-02B_FBD_editor_reference.svg"
+        }
+      ]
     },
     {
       "id": "PGM-03",
