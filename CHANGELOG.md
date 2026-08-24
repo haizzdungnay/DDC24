@@ -91,9 +91,26 @@
   "Monitor đang ngoại tuyến" được thay bằng đọc thật hàng `SupplyTemp` → `UI-01`
   → `21.5` → `GOOD`, và ngân sách 5xx/console hạ về **0**.
 
+- **Fixed — deploy/rollback `F-P59-ROLLBACK-DB-001`.** *Triệu chứng:* diễn tập
+  rollback tầng web trên bo Foxlinx làm `mkddc-web` crash-loop 7 lần rồi bỏ cuộc;
+  `/api/v1/health` từ chối kết nối. *Nguyên nhân gốc:* BE tự chạy migration khi
+  khởi động (bản này thêm `0012`) và **từ chối chạy** khi schema mới hơn binary
+  — đúng fail-closed. Nhưng `install.sh` chỉ chụp binary và `rollback.sh` chỉ
+  khôi phục binary, nên rollback sau **bất kỳ** bản nào có migration đều để web
+  tier chết mà quy trình không hề nói tới. *Cách sửa:* `install.sh` chụp thêm
+  `programming-v1.sqlite` (+ `-wal`/`-shm`) vào cùng snapshot với binary;
+  `rollback.sh` khôi phục nó, giữ DB đang chạy ở `pre-rollback-*` (mất nó là mất
+  toàn bộ Project/Revision mới) và in cảnh báo chỉ thẳng tới
+  `programming-backups` khi snapshot không có DB. *Kiểm chứng:*
+  `tests/integration/test_release_dryrun.py` khoá cả hai chiều — gỡ bản vá thì
+  đỏ đúng hai chỗ (snapshot thiếu DB, rollback không khôi phục DB).
+
 - **Changed — hồ sơ authority.** Risk Register 4.20 (§5.55), Traceability 6.6,
   Plan 59 §3.5 "Sửa kèm W4" + hai hàng finding ở bảng corrective closure,
   manifest baseline **1.42** re-pin dòng 1/4/6/10/13/14/15 kèm đánh giá impact.
+  Sau khi deploy: `IMPLEMENTATION_CLOSE` **PASS**, `TARGET_FAKE_MCU_DEPLOY`
+  **PARTIAL** (thiếu diễn tập rollback binary+DB trên bo), evidence target ở
+  `docs/07_records/test-evidence/fw-som/2026-08-24-foxlinx-plan59-corrective-deploy.md`.
   `RELEASE_READY` giữ **NO-GO**; 22/22 risk giữ Open.
 
 ### Plan 60 Batch 1 — mở đường dữ liệu Program và nền FE (2026-08-23)

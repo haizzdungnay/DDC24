@@ -48,7 +48,7 @@ code còn làm được. `RELEASE_READY` vẫn `NO-GO` tới khi evidence thật
 | Lớp | Trạng thái hiện tại | Acceptance |
 |---|---|---|
 | `IMPLEMENTATION_CLOSE` | **PENDING** | Corrective source user POU/Signal/atomic/Web IPC/library merge sạch; host gate đầy đủ, trace 82/82 và pin PASS |
-| `TARGET_FAKE_MCU_DEPLOY` | **PENDING** | Build đúng commit, backup/install/service/API/UI/read-back/rollback trên Forlinx và ghi rõ `MCU_MODE=FAKE` |
+| `TARGET_FAKE_MCU_DEPLOY` | **PARTIAL (2026-08-24)** | Build đúng commit `fa1f5f4`, backup/install/service/API/UI/read-back **đã có trên Forlinx** với `MCU_MODE=FAKE` ([evidence](../07_records/test-evidence/fw-som/2026-08-24-foxlinx-plan59-corrective-deploy.md)); còn **rollback đầy đủ binary+DB** chưa diễn tập được trên bo |
 | `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** | 10 Program/3 period chạy đủ 24 h; raw JSONL/hash/provenance, fault/signal/restart, `max_iop_poll_gap <200 ms` |
 | `RELEASE_READY` | **NO-GO** | Formal Test Result, residual risk acceptance và mọi Must theo VVP/release authority |
 
@@ -2249,6 +2249,7 @@ Các finding này thuộc lại task hiện hữu, không tạo tracker/task aut
 | `F-P59-EVIDENCE-001` | `T59-701..707` | trace 82/82, pin hiện hành, risk treatment, deploy/soak record đúng commit và phân lớp evidence |
 | `F-P59-ENABLE-BOUNDARY-001` | `T59-402/405/406` | `SET_PROGRAM_ENABLED` không ghi `state`/`enabled` từ IPC worker thread; ARM + áp dụng tại safe boundary, ack có generation; trần 16 kiểm TRƯỚC khi chạm trường; TSan 0 cảnh báo trên đường này |
 | `F-P59-SIGNAL-READBACK-001` | `T59-404/504` | reader non-RT (`inspect_all` cho STATUS/Monitor) không trả `value` ghép với `published_at_ns` của chu kỳ khác; seqlock `generation` + retry |
+| `F-P59-ROLLBACK-DB-001` | `T59-605/606/705` | `install.sh` chụp và `rollback.sh` khôi phục store Programming cùng binary; rollback chỉ-binary sau một bản có migration làm `mkddc-web` từ chối khởi động |
 | `F-P59-MONITOR-VARS-001` | `T59-504/505` | Runtime Monitor tra biến theo `locals` của Draft v2 (không chỉ object `VARIABLE` v1) và giữ `snapshot.Points` của Core khi PLC SHM chưa attach; lane E2E thật đạt `HTTP>=500=0`/`console.error=0`, không còn ngoại lệ `503` |
 
 **Hai finding cuối phát hiện ở chính vòng self-review 2026-08-24**, bằng cách
@@ -2713,8 +2714,8 @@ các evidence task còn khả thi.
 
 | Cổng | Trạng thái |
 |---|---|
-| `IMPLEMENTATION_CLOSE` | **PENDING** — corrective source chưa merge/full-gate/pin |
-| `TARGET_FAKE_MCU_DEPLOY` | **PENDING** — chưa có target record cho corrective commit |
+| `IMPLEMENTATION_CLOSE` | **PASS (2026-08-24)** — corrective source đã merge `main@fa1f5f4`; full gate cùng cây: `ctest` 1293/1293, TSan 0 cảnh báo, Go 18/18 với compiler/packager production, FE 1492 test + `build:release`, E2E mock 92 + real-backend 1/1 (`HTTP>=500=0`), layout exit 0, trace 82/82 + 44/44, pin 16/16 |
+| `TARGET_FAKE_MCU_DEPLOY` | **PARTIAL (2026-08-24)** — deploy `fa1f5f4` trên Forlinx `MCU_MODE=FAKE`: 5/5 service active, health đủ 6 mục `ok`, Commission 10 Program `SUCCEEDED`, Programs `CORE_LIVE`, Enable/Disable 6/6 ~0,95 s, Monitor đọc `UI-01` GOOD/LIVE, signal producer→consumer FRESH. **Còn thiếu**: diễn tập rollback đầy đủ binary+DB trên bo (`F-P59-ROLLBACK-DB-001`) |
 | `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** — yêu cầu đủ 24 h, không rút ngắn |
 | `RELEASE_READY` | **NO-GO** |
 
