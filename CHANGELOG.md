@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Review và implementation plan PGM-02 ST/FBD redesign (2026-08-24)
+
+- **Added — leadership review PGM-02 ST/FBD.** Đối chiếu handoff v2.2 với
+  Product/SRS/Architecture/DDD/UX và mã nguồn FE/BE/Core/runtime tại
+  `3d2db5d8`; phân loại `KEEP/REFACTOR/REDESIGN/NEW/BLOCKED`, lập 17 gap và
+  tách rõ review ready khỏi implementation/release NO-GO. Finding P0 gồm Active
+  value có thể đứng cạnh Draft khác revision, runtime snapshot có thể lai trong
+  Commission transition, Core Trace có data race/chưa pin revision và BE còn
+  truth defect ở UNKNOWN/impact/Trace. Browser HOST với real local stack kiểm ở
+  1920/1440/1280/1024/390: đúng hai cây POU, FBD card list, 1280 chỉ còn 382 px
+  cho editor và mobile vẫn edit; REST tested path trả 2xx và console error bằng
+  0. Bổ sung ma trận source-backed đủ 21 capability BE (5 implemented/12
+  partial/4 missing) và 19 capability runtime/FW-SOM theo boundary A/B/C/D,
+  trả lời 15 câu hỏi FE và review UC-01..UC-08. Core targeted test **119/119**
+  và các gate BE/source liên quan PASS; không chạy lại toàn bộ FE unit/build
+  trong lượt review. Đây không phải target/HIL evidence.
+
+- **Added — kế hoạch 14 work package `WP-00..WP-13`.** Khóa dependency và lane
+  song song cho shared shell, one POU Explorer, Quick Library, ST, FBD canvas,
+  workbench, coherent LIVE, isolated Simulation, performance, responsive,
+  E2E/V&V và docs closeout. Mỗi WP có scope/files/FE/BE/FW-SOM/dependency/
+  acceptance/tests/risk/complexity; đề xuất ba increment `EDIT -> LIVE ->
+  SIMULATE`. Plan khóa project context/query/legacy redirect, Compare typed
+  Draft↔Active trong WP-09, Simulation RBAC + compiler allowlist, multi-task
+  Step semantics và thứ tự approval WP-00/WP-13. Plan59 vẫn là execution tracker
+  duy nhất; hai hồ sơ mới ở trạng thái `READY FOR OWNER REVIEW`, không tự cho
+  phép implementation.
+
+- **Changed — chỉ mục UI/UX và handoff FE.** `docs/04_uiux/README.md` đăng ký
+  Programming authority/handoff; `README_FE_HANDOFF.md` liên kết review và plan,
+  đồng thời ghi rõ chúng không thay authority Plan59 hay `RELEASE_READY`.
+  Verification tài liệu: docs harness/link/diff checks được ghi lại trong cùng
+  phiên sau khi hoàn tất nội dung.
+
+- **Changed — ghi nhận quyết định Owner mở WP-00.** Product Owner/CTO chấp thuận
+  target/change request, thứ tự `R1 EDIT → R2 LIVE → R3 SIMULATE` và Simulation
+  v1 admin-only. Hồ sơ không giả chữ ký Architect: code redesign vẫn khóa tới
+  khi baseline reconciled được Owner + System Architect review/pin và ánh xạ vào
+  Plan59. Gate trước commit đo mới: CMake Release đủ Modbus/BACnet/HMI và CTest
+  **1293/1293 PASS**; `go vet` + `go test ./... -count=1` PASS; FE **136 file /
+  1496 test PASS**, lint/build PASS; docs harness, candidate pin 16/16 và
+  `git diff --check` PASS. Lần FE đầu có một timeout tranh tài nguyên ở test
+  PGM-01 khi chạy đồng thời full C++; chạy riêng 25/25 và chạy lại full 1496/1496
+  đều PASS, không sửa acceptance để che lỗi.
+
 ### Sửa lỗi xóa Program/POU trả `PRG-ERR-REQ-001` (2026-08-24)
 
 - **Fixed — FE: không xóa được "chương trình ma".** *Triệu chứng:* sau vòng sửa

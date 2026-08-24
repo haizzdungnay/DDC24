@@ -112,3 +112,13 @@ Each page is DONE only when:
 - error/empty/offline states are implemented.
 - permission matrix is tested.
 - no regression to Draft/Active semantics.
+
+## 7. PGM-02 leadership review package
+
+- [Rà soát kiến trúc và khoảng trống PGM-02 ST/FBD](reviews/PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md)
+- [Kế hoạch triển khai đề xuất PGM-02 ST/FBD](reviews/PGM02_ST_FBD_IMPLEMENTATION_PLAN.md)
+
+Ngày 2026-08-24, Product Owner/CTO đã chấp thuận change request để mở WP-00,
+khóa ba increment `R1 EDIT → R2 LIVE → R3 SIMULATE` và Simulation v1 admin-only.
+Baseline reconciled vẫn phải được Owner + System Architect review/pin trước khi
+sửa mã redesign. Hai hồ sơ không thay Plan59 và không đổi `RELEASE_READY`.
