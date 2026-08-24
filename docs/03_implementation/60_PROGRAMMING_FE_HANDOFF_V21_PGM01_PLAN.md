@@ -333,10 +333,10 @@ JSON có tên trường nên thêm trường là **tương thích ngược**, kh
 
 | Mã | Ưu tiên | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---|
-| `T60-301` | P0 | Test component/hàm thuần: CTA resolver phủ **cả 5 hàng** bảng §3 + biên; view model; bảng Programs thiếu dữ liệu; popover Details; rail; context strip. | P1+P2 | `ORDERED` | 2 nd |
-| `T60-302` | P0 | E2E mock bổ sung vào `e2e/programming.spec.ts`: Draft≠Active, Core offline, deep-link từ mục cần chú ý, đúng-một-primary-CTA, không lộ UUID. | `T60-301` | `ORDERED` | 1,5 nd |
+| `T60-301` | P0 | Test component/hàm thuần: CTA resolver phủ **cả 5 hàng** bảng §3 + biên; view model; bảng Programs thiếu dữ liệu; popover Details; rail; context strip. | P1+P2 | `DONE` | 2 nd |
+| `T60-302` | P0 | E2E mock bổ sung vào `e2e/programming.spec.ts`: Draft≠Active, Core offline, deep-link từ mục cần chú ý, đúng-một-primary-CTA, không lộ UUID. | `T60-301` | `DONE` | 1,5 nd |
 | `T60-303` | P1 | E2E real-backend (`e2e/programming-real.spec.ts`): Overview đọc đúng bảng Programs từ Core thật sau Commission + Enable. | `T60-302`, `T60-013` | `ORDERED` | 1,5 nd |
-| `T60-304` | P0 | Bàn phím đi hết mọi hành động kỹ thuật; tương phản sáng/tối; đo tại **1280×750** (nội dung chính không bị đẩy dưới màn hình đầu) và **390 px**; ma trận RBAC viewer/operator/admin. | `T60-301` | `ORDERED` | 1,5 nd |
+| `T60-304` | P0 | Bàn phím đi hết mọi hành động kỹ thuật; tương phản sáng/tối; đo tại **1280×750** (nội dung chính không bị đẩy dưới màn hình đầu) và **390 px**; ma trận RBAC viewer/operator/admin. | `T60-301` | `DONE` | 1,5 nd |
 
 **Tổng: 27 task · ~34,5 người-ngày** (P0-A 3,5 nd · P0-B 5 nd · P0-C 0,5 nd · P1 6 nd · P2 13 nd · P3 6,5 nd).
 
