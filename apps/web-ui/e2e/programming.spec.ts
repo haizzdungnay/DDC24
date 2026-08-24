@@ -683,3 +683,90 @@ test.describe('PGM-01 Overview — hợp đồng hiển thị (T60-302)', () => 
     await expect(quick.locator('[data-quick-action="edit"]')).not.toHaveAttribute('aria-disabled', 'true')
   })
 })
+
+/* ==================================================================== *
+ * `T60-304` — bàn phím, RBAC và ĐO THẬT ở hai khổ màn hình             *
+ * ==================================================================== */
+
+test.describe('PGM-01 Overview — a11y, RBAC và số đo khổ màn hình (T60-304)', () => {
+  test('1280×750: nội dung chính KHÔNG bị đẩy xuống dưới màn hình đầu', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', 'Phép đo này thuộc khổ desktop')
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    // 1280×750 là khổ ngặt nhất trong Plan 60 §6: laptop 1280 với thanh trình
+    // duyệt ăn mất chiều cao. Đây là ĐO THẬT, không phải khẳng định bằng lời.
+    await page.setViewportSize({ width: 1280, height: 750 })
+    await login(page)
+    await navigate(page, '/eng/programming')
+    await expect(page.getByTestId('system-health-hero')).toBeVisible()
+
+    const fold = 750
+    for (const id of ['system-health-hero', 'primary-cta', 'primary-cta-undecided']) {
+      const locator = page.getByTestId(id)
+      if (await locator.count() === 0) continue
+      const box = await locator.first().boundingBox()
+      expect(box, `${id} phải có hộp bao`).not.toBeNull()
+      // Mép TRÊN phải nằm trong màn hình đầu: người dùng phải thấy hệ có khoẻ
+      // không và việc nên làm tiếp là gì mà không cần cuộn.
+      expect(box!.y, `${id} bị đẩy xuống dưới màn hình đầu (y=${box!.y})`).toBeLessThan(fold)
+    }
+
+    // Không trang nào được tràn ngang ở khổ này.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflow, `trang tràn ngang ${overflow}px`).toBeLessThanOrEqual(0)
+    await page.screenshot({ path: testInfo.outputPath('overview-1280x750.png'), fullPage: false })
+  })
+
+  test('390 px: không tràn ngang và không chuỗi UUID nằm ngang', async ({ page }, testInfo) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await login(page)
+    await navigate(page, '/eng/programming')
+    await expect(page.getByTestId('system-health-hero')).toBeVisible()
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflow, `trang tràn ngang ${overflow}px ở 390`).toBeLessThanOrEqual(0)
+
+    // `AC-PGM01-01` ở khổ hẹp: một UUID 36 ký tự nằm ngang là thứ chắc chắn đẩy
+    // trang tràn, nên đây vừa là kiểm hợp đồng vừa là kiểm bố cục.
+    const uuidCount = await page.evaluate(() => {
+      const text = document.body.innerText
+      return (text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? []).length
+    })
+    expect(uuidCount).toBe(0)
+    await page.screenshot({ path: testInfo.outputPath('overview-390.png'), fullPage: true })
+  })
+
+  test('bàn phím đi hết: mở Chi tiết, đóng bằng Esc và tiêu điểm trở về đúng nút', async ({ page }) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, '/eng/programming')
+
+    const detailsButton = page.getByRole('button', { name: /Chi tiết|Details/ }).first()
+    await detailsButton.focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    // Trả tiêu điểm là phần hay bị bỏ sót nhất: không trả thì người dùng bàn
+    // phím bị ném về đầu tài liệu và phải Tab lại từ đầu.
+    await expect(detailsButton).toBeFocused()
+  })
+
+  /* MA TRẬN RBAC KHÔNG KIỂM ĐƯỢC Ở TẦNG NÀY.
+   *
+   * Mock đăng nhập của spec này trả `role: 'admin'` cứng (dòng ~269), nên không
+   * có đường nào đăng nhập viewer/operator mà không sửa một mock dùng chung cho
+   * mọi case khác. Dựng một case "viewer" trên phiên admin sẽ là một case GIẢ:
+   * nó xanh mà không chứng minh gì.
+   *
+   * Ma trận RBAC đầy đủ nằm ở mức component:
+   * `overview/QuickActions.test.tsx` — ba vai × bốn lối tắt × bốn tình trạng
+   * Core, gồm cả khẳng định nút bị chặn vẫn NHẬN TIÊU ĐIỂM (dùng
+   * `aria-disabled`, không dùng thuộc tính `disabled`) và `aria-describedby`
+   * trỏ tới đúng câu lý do. `OverviewPage.test.tsx` case `§6-6 viewer` phủ
+   * nhánh "giữ nguyên phần đọc" ở mức trang.
+   * Mức evidence cho RBAC vì vậy là HOST/component, KHÔNG phải E2E. */
+})
