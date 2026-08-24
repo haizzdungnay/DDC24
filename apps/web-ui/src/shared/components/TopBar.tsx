@@ -150,7 +150,15 @@ export function TopBar({ connectionState, alarmCount, unackedCount = 0, annuncia
         <button className="flex h-10 items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-xs font-semibold sm:px-3" onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')} aria-label={pick("Đổi ngôn ngữ", "Toggle language")}>
           {lang.toUpperCase()} <ChevronDown className="h-4 w-4" />
         </button>
-        <Button variant="ghost" size="sm" icon={<LogOut className="h-4 w-4" />} onClick={logout}><span className="hidden sm:inline">{t('logout')}</span></Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<LogOut className="h-4 w-4" aria-hidden="true" />}
+          aria-label={t('logout')}
+          onClick={logout}
+        >
+          <span className="hidden sm:inline">{t('logout')}</span>
+        </Button>
       </div>
     </header>
   )

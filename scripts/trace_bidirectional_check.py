@@ -41,7 +41,7 @@ ALIAS = {
 }
 
 RE_REQ = r"\b((?:SYS|SWR|FW|NFR|HW)-REQ-PROG-[A-Z]*-?\d+)\b"
-RE_VS = r"\b(VS-PROG-\d{3})\b"
+RE_VS = r"\b(VS-PROG-(?:\d{3}|U\d{2}))\b"
 
 
 def section(text: str, start: str, end: str) -> str:
@@ -66,7 +66,7 @@ def main() -> int:
         "## 7.",
     )
     rows = re.findall(
-        r"^\|\s*`([^`]+)`\s*\|[^|]*\|[^|]*\|\s*([0-9/\.\s]+?)\s*\|\s*"
+        r"^\|\s*`([^`]+)`\s*\|[^|]*\|[^|]*\|\s*([0-9U/\.\s]+?)\s*\|\s*"
         r"([YN](?:/[YN]){4})\s*\|",
         sec6,
         re.M,
@@ -82,8 +82,8 @@ def main() -> int:
             failures.append(f"alias không giải được ở §6: {alias!r}")
             continue
         resolved.add(ALIAS[m.group(1)] + m.group(2))
-        for num in re.findall(r"\d{3}", scenarios):
-            row_scenarios.add("VS-PROG-" + num)
+        for token in re.findall(r"\d{3}|U\d{2}", scenarios):
+            row_scenarios.add("VS-PROG-" + token)
 
     missing_rows = sorted(srs_req - resolved)
     extra_rows = sorted(resolved - srs_req)

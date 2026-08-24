@@ -143,35 +143,47 @@ func TestProcessRunnerRejectsSourceOneOverBeforeSpawn(t *testing.T) {
 // officialCompilerBinary — T59-607: chọn binary compiler THẬT và từ chối một
 // binary đã lạc hậu so với contract.
 //
-// Hai test dưới đây trước đây trỏ cứng vào `build/fw`, trong khi cổng `cpp` của
-// `verify-project.sh` dựng ở `build/verify/cpp-full`. Hệ quả: đổi contract xong
-// chạy `--wave W6` thì cổng `go` đỏ bằng một binary CŨ — thông báo lỗi nói
-// "metadata success thiếu/sai", nghe như hồi quy code chứ không như "hãy dựng
-// lại". Nay thử cả hai thư mục và so `profileSha256` của binary với hằng sinh
-// từ contract; lệch thì SKIP kèm lý do thật, không FAIL giả.
+// Cổng đầy đủ luôn truyền MKDDC_ST_COMPILER_BINARY từ chính build cpp-full.
+// Khi chạy `go test` độc lập, ưu tiên build/fw vì đó là build canonical theo
+// AGENTS.md; build/verify chỉ là fallback. Vẫn so profileSha256 và cổng release
+// đặt MKDDC_REQUIRE_PRODUCTION_TOOLS=1 nên không có đường SKIP giả xanh.
 func officialCompilerBinary(t *testing.T) string {
 	t.Helper()
 	_, current, _, _ := runtime.Caller(0)
 	repo := filepath.Clean(filepath.Join(filepath.Dir(current), "..", "..", "..", "..", ".."))
-	candidates := []string{
-		filepath.Join(repo, "build", "verify", "cpp-full", "core", "mkddc-st-compile"),
-		filepath.Join(repo, "build", "fw", "core", "mkddc-st-compile"),
+	candidates := []string{}
+	if explicit := os.Getenv("MKDDC_ST_COMPILER_BINARY"); explicit != "" {
+		candidates = append(candidates, explicit)
+	} else {
+		candidates = append(candidates,
+			filepath.Join(repo, "build", "fw", "core", "mkddc-st-compile"),
+			filepath.Join(repo, "build", "verify", "cpp-full", "core", "mkddc-st-compile"))
 	}
+	problems := make([]string, 0, len(candidates))
 	for _, binary := range candidates {
-		if _, err := os.Stat(binary); err != nil {
+		if info, err := os.Stat(binary); err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", binary, err))
+			continue
+		} else if info.Mode().Perm()&0o111 == 0 {
+			problems = append(problems, fmt.Sprintf("%s: không executable", binary))
 			continue
 		}
 		out, err := exec.Command(binary, "--version").Output()
 		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: --version: %v", binary, err))
 			continue
 		}
 		if strings.Contains(string(out), "profile_sha256="+domain.ProfileSHA256) {
 			return binary
 		}
-		t.Skipf("binary %s dựng từ profile cũ (contract hiện tại %s) — chạy lại cổng cpp",
-			binary, domain.ProfileSHA256[:12])
+		problems = append(problems, fmt.Sprintf("%s: profile không khớp %s (%s)",
+			binary, domain.ProfileSHA256[:12], strings.TrimSpace(string(out))))
 	}
-	t.Skip("hãy build CMake gate trước Go integration")
+	message := "không có compiler production đúng profile: " + strings.Join(problems, "; ")
+	if os.Getenv("MKDDC_REQUIRE_PRODUCTION_TOOLS") == "1" {
+		t.Fatal(message)
+	}
+	t.Skip(message + " — chạy cổng cpp trước hoặc đặt MKDDC_ST_COMPILER_BINARY")
 	return ""
 }
 
@@ -227,5 +239,46 @@ func TestProcessRunnerWithOfficialCompilerResolvesIoMapIntoArtifact(t *testing.T
 	}
 	if badResult.OK || len(badResult.Diagnostics) == 0 || badResult.Diagnostics[0].Code != "ST-IOMAP-002" {
 		t.Fatalf("io_map hỏng kết quả=%+v", badResult)
+	}
+}
+
+func TestProcessRunnerWithOfficialCompilerEmitsPublishedSignalRefs(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sandbox compiler chỉ hỗ trợ Linux")
+	}
+	binary := officialCompilerBinary(t)
+	runner := ProcessRunner{BinaryPath: binary, ScratchRoot: filepath.Join(t.TempDir(), "scratch"), Timeout: 10 * time.Second, SigningKeyPath: testSigningKeyPath(t)}
+	contracts := []PublishedSignalContract{{
+		Name: "SHARED_TEMP", Type: "REAL", PublisherProgramID: "P_pub",
+	}}
+	result, err := runner.Compile(context.Background(), Input{
+		SourceID:  "33333333-3333-4333-8333-333333333333",
+		ProgramID: "P_pub",
+		Language:  "ST",
+		Source: []byte("PROGRAM Producer\nVAR value : REAL; END_VAR\n" +
+			"value := 25.0;\nSIGNAL_PUBLISH(SHARED_TEMP, value);\nEND_PROGRAM\n"),
+		PublishedSignals: contracts,
+	})
+	if err != nil || !result.OK {
+		t.Fatalf("compile Published Signal=%+v err=%v", result, err)
+	}
+	if len(result.SignalRefs) != 1 || result.SignalRefs[0].Name != "SHARED_TEMP" ||
+		result.SignalRefs[0].Type != "REAL" || result.SignalRefs[0].Read || !result.SignalRefs[0].Publish {
+		t.Fatalf("signalRefs không chứng minh actual SIGNAL_PUBLISH: %+v", result.SignalRefs)
+	}
+
+	bad, err := runner.Compile(context.Background(), Input{
+		SourceID:  "44444444-4444-4444-8444-444444444444",
+		ProgramID: "P_other",
+		Language:  "ST",
+		Source: []byte("PROGRAM Wrong\nSIGNAL_PUBLISH(SHARED_TEMP, 1.0);\n" +
+			"END_PROGRAM\n"),
+		PublishedSignals: contracts,
+	})
+	if err != nil {
+		t.Fatalf("source publisher sai phải trả Result{OK:false}, không phải worker error: %v", err)
+	}
+	if bad.OK || len(bad.Diagnostics) == 0 || bad.Diagnostics[0].Code != "ST-SIG-001" {
+		t.Fatalf("publisher sai không bị chặn đúng contract: %+v", bad)
 	}
 }

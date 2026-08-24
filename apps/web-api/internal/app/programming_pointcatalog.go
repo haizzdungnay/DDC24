@@ -51,25 +51,13 @@ func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx
 	if err != nil {
 		return programmingapplication.MonitorTruthSnapshot{}, err
 	}
-	points, err := adapter.app.ReadPoints(ctx)
-	if err != nil {
-		return programmingapplication.MonitorTruthSnapshot{}, err
-	}
-	physical := make(map[string]RuntimePoint, len(snapshot.Points))
-	for _, point := range snapshot.Points {
-		physical[point.ID] = point
-	}
-	trackedOverrides := map[string]overrideSnapshot{}
-	if adapter.app.overrides != nil {
-		trackedOverrides = adapter.app.overrides.Snapshot()
-	}
 	result := programmingapplication.MonitorTruthSnapshot{
 		ObservedAt:                snapshot.SnapshotObservedAtUTC,
 		CapturedMonotonicNs:       snapshot.CapturedMonotonicNs,
 		SafeState:                 snapshot.SafeState,
 		SafeStateNoControllerOnly: snapshot.SafeStateNoControllerOnly,
 		ProgramsTruncated:         snapshot.ProgramsTruncated,
-		Points:                    make([]programmingapplication.MonitorPointTruth, 0, len(points)),
+		Points:                    []programmingapplication.MonitorPointTruth{},
 	}
 	// T60-012 — bảng Program đi cùng ĐÚNG snapshot này, không phải một
 	// round-trip thứ hai: Core (`WebIpc::drain`) chỉ chấp nhận MỘT
@@ -103,6 +91,46 @@ func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx
 			LastExecNS: snapshot.Task.LastExecNS, MaxExecNS: snapshot.Task.MaxExecNS,
 			OverrunCount: snapshot.Task.OverrunCount, ConsecutiveOverruns: snapshot.Task.ConsecutiveOverruns,
 		}
+	}
+
+	/* Bảng task/program VÀ point vật lý thuộc cùng point_snapshot qua Web IPC,
+	   nên vẫn là truth sống khi PLC SHM chưa attach (host simulator hoặc lúc
+	   producer SHM đang khởi động). Không được vứt `snapshot.Points` chỉ vì
+	   đường Point Catalog/SHM phụ trợ hỏng: làm vậy đã khiến Core báo UI-01=21.5
+	   nhưng Runtime Monitor trả mảng rỗng. Point Catalog CRUD vẫn fail theo SHM;
+	   riêng Monitor dùng snapshot Core, giữ quality/value nguyên nguồn. */
+	points, pointsErr := adapter.app.ReadPoints(ctx)
+	if pointsErr != nil {
+		trackedOverrides := map[string]overrideSnapshot{}
+		if adapter.app.overrides != nil {
+			trackedOverrides = adapter.app.overrides.Snapshot()
+		}
+		result.Points = make([]programmingapplication.MonitorPointTruth, 0, len(snapshot.Points))
+		for _, point := range snapshot.Points {
+			truth := programmingapplication.MonitorPointTruth{
+				Category: "LOCAL", PointID: point.ID,
+				ObservedAt: snapshot.SnapshotObservedAtUTC, ActualValue: point.Value,
+				ProgramValue: point.ProgramValue, Source: point.Source,
+				EffectivePriority: point.EffectivePriority,
+				Quality:           pointCatalogQuality(PointDTO{Quality: point.Quality}), Unit: point.Unit,
+			}
+			if tracked, exists := trackedOverrides[canonicalPointID(point.ID)]; exists {
+				truth.OverrideActor = tracked.User
+				remaining := int64(tracked.RemainingS)
+				truth.OverrideRemainingS = &remaining
+			}
+			result.Points = append(result.Points, truth)
+		}
+		return result, nil
+	}
+	result.Points = make([]programmingapplication.MonitorPointTruth, 0, len(points))
+	physical := make(map[string]RuntimePoint, len(snapshot.Points))
+	for _, point := range snapshot.Points {
+		physical[point.ID] = point
+	}
+	trackedOverrides := map[string]overrideSnapshot{}
+	if adapter.app.overrides != nil {
+		trackedOverrides = adapter.app.overrides.Snapshot()
 	}
 	for _, point := range points {
 		category, deviceID := pointCatalogCategory(point)

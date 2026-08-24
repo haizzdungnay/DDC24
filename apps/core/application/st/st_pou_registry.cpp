@@ -57,12 +57,68 @@ void collect_stmt(const StStmt& stmt, std::vector<CallSite>* out)
     case StStmt::Kind::FB_CALL:
         for (const StFbArg& arg : stmt.fb_args) collect_expr(arg.value.get(), out);
         return;
+    case StStmt::Kind::SIGNAL_PUBLISH:
+        collect_expr(stmt.signal_value.get(), out);
+        return;
     }
 }
 
 void collect_stmts(const std::vector<StStmt>& body, std::vector<CallSite>* out)
 {
     for (const StStmt& stmt : body) collect_stmt(stmt, out);
+}
+
+const StExpr* find_signal_read(const StExpr* expr)
+{
+    if (expr == nullptr) return nullptr;
+    if (expr->kind == StExpr::Kind::SIGNAL_READ) return expr;
+    if (const StExpr* found = find_signal_read(expr->lhs.get())) return found;
+    if (const StExpr* found = find_signal_read(expr->rhs.get())) return found;
+    if (const StExpr* found = find_signal_read(expr->operand.get())) return found;
+    for (const auto& argument : expr->args)
+        if (const StExpr* found = find_signal_read(argument.get())) return found;
+    return nullptr;
+}
+
+struct SignalAccess {
+    bool publish = false;
+    int line = 0;
+    int column = 0;
+};
+
+bool find_signal_access(const std::vector<StStmt>& body, SignalAccess* out)
+{
+    for (const StStmt& stmt : body) {
+        if (stmt.kind == StStmt::Kind::SIGNAL_PUBLISH) {
+            *out = {true, stmt.signal_line, stmt.signal_column};
+            return true;
+        }
+        const StExpr* read = nullptr;
+        switch (stmt.kind) {
+        case StStmt::Kind::ASSIGN:
+            read = find_signal_read(stmt.assign_expr.get());
+            break;
+        case StStmt::Kind::IF:
+            for (const StIfBranch& branch : stmt.branches) {
+                if ((read = find_signal_read(branch.cond.get())) != nullptr) break;
+                if (find_signal_access(branch.body, out)) return true;
+            }
+            break;
+        case StStmt::Kind::FB_CALL:
+            for (const StFbArg& argument : stmt.fb_args) {
+                read = find_signal_read(argument.value.get());
+                if (read != nullptr) break;
+            }
+            break;
+        case StStmt::Kind::SIGNAL_PUBLISH:
+            break;
+        }
+        if (read != nullptr) {
+            *out = {false, read->line, read->column};
+            return true;
+        }
+    }
+    return false;
 }
 
 /* `set_diag` là helper cục bộ của từng translation unit trong lớp này (parser và
@@ -90,6 +146,14 @@ const char* function_state_violation(const StProgram& pou, int* line, int* colum
         *line = pou.fbs.front().line; *column = pou.fbs.front().column;
         return "declares a function block instance; instances carry state";
     }
+    SignalAccess signal;
+    if (find_signal_access(pou.body, &signal)) {
+        *line = signal.line;
+        *column = signal.column;
+        return signal.publish
+                   ? "publishes a Published Signal; a pure FUNCTION has no side effects"
+                   : "reads a Published Signal; a pure FUNCTION has no runtime I/O";
+    }
     if (!pou.has_return_type) {
         *line = pou.line; *column = pou.column;
         return "has no return type";
@@ -109,6 +173,29 @@ bool fail(StDiagnostic* diag, const char* code, const std::string& message,
         diag->length = 1;
     }
     return false;
+}
+
+const StLibraryRequirement* find_library_requirement(const StPouSource& source,
+                                                     const std::string& folded_name)
+{
+    const auto found = std::find_if(
+        source.requires_library.begin(), source.requires_library.end(),
+        [&folded_name](const StLibraryRequirement& requirement) {
+            return fold(requirement.name) == folded_name;
+        });
+    return found == source.requires_library.end() ? nullptr : &*found;
+}
+
+bool require_declared_library_dependency(const StPouSource& source,
+                                         const std::string& callee_name,
+                                         int line, int column,
+                                         StDiagnostic* diag)
+{
+    if (find_library_requirement(source, fold(callee_name)) != nullptr) return true;
+    return fail(diag, st_diag_code::kLibraryEntryMissing,
+                "POU '" + source.pou->name + "' uses library entry '" +
+                    callee_name + "' but does not declare it in requiresLibrary",
+                line, column);
 }
 
 } // namespace
@@ -135,6 +222,7 @@ bool st_build_pou_registry(const std::vector<StPouSource>& sources,
      * trùng entry library — nếu trùng thì mỗi lần gọi là mơ hồ, và "ưu tiên bên
      * nào" là loại quy ước ngầm gây sai lệch điều khiển im lặng. */
     std::map<std::string, const StProgram*> pou_by_name;
+    std::map<std::string, const StPouSource*> source_by_name;
     for (const StPouSource& source : sources) {
         if (source.pou == nullptr)
             return fail(diag, st_diag_code::kPouSignatureInvalid, "POU rỗng trong tập nguồn", 0, 0);
@@ -144,11 +232,43 @@ bool st_build_pou_registry(const std::vector<StPouSource>& sources,
             return fail(diag, st_diag_code::kPouSignatureInvalid,
                         "duplicate POU name '" + pou.name + "' (names are case-insensitive)",
                         pou.line, pou.column);
-        if (library_by_name.count(key) != 0)
+        source_by_name[key] = &source;
+        if (!source.from_library && library_by_name.count(key) != 0)
             return fail(diag, st_diag_code::kPouSignatureInvalid,
                         "POU name '" + pou.name +
                             "' is ambiguous: a Control Library entry already uses it",
                         pou.line, pou.column);
+        if (source.from_library) {
+            const auto locked = library_by_name.find(key);
+            if (locked == library_by_name.end())
+                return fail(diag, st_diag_code::kLibraryEntryMissing,
+                            "library POU '" + pou.name + "' has source but no lock entry",
+                            pou.line, pou.column);
+            if (locked->second->kind != pou.kind)
+                return fail(diag, st_diag_code::kPouSignatureInvalid,
+                            "library POU '" + pou.name + "' kind differs from lock",
+                            pou.line, pou.column);
+            if (source.version.empty() || locked->second->version != source.version)
+                return fail(diag, st_diag_code::kLibraryVersionDrift,
+                            "library POU '" + pou.name + "' source version '" +
+                                source.version + "' differs from locked version '" +
+                                locked->second->version + "'",
+                            pou.line, pou.column);
+            if (source.library_entry_id.empty() ||
+                (!locked->second->entry_id.empty() &&
+                 locked->second->entry_id != source.library_entry_id))
+                return fail(diag, st_diag_code::kLibraryVersionDrift,
+                            "library POU '" + pou.name +
+                                "' entryId differs from locked entry",
+                            pou.line, pou.column);
+            if (source.library_origin.empty() ||
+                (!locked->second->origin.empty() &&
+                 locked->second->origin != source.library_origin))
+                return fail(diag, st_diag_code::kLibraryVersionDrift,
+                            "library POU '" + pou.name +
+                                "' origin differs from locked entry",
+                            pou.line, pou.column);
+        }
     }
 
     for (const auto& item : pou_by_name) out->pou_order.push_back(item.second->name);
@@ -170,9 +290,18 @@ bool st_build_pou_registry(const std::vector<StPouSource>& sources,
         StPouSignature signature;
         signature.name = pou.name;
         signature.kind = pou.kind;
-        signature.from_library = false;
-        for (const StVarDecl* input : pou.by_storage(StStorage::VAR_INPUT))
+        signature.from_library = source_by_name.at(item.first)->from_library;
+        signature.version = source_by_name.at(item.first)->version;
+        signature.library_entry_id = source_by_name.at(item.first)->library_entry_id;
+        signature.library_origin = source_by_name.at(item.first)->library_origin;
+        for (const StVarDecl* input : pou.by_storage(StStorage::VAR_INPUT)) {
+            signature.input_names.push_back(input->name);
             signature.input_types.push_back(input->type);
+        }
+        for (const StVarDecl* output : pou.by_storage(StStorage::VAR_OUTPUT)) {
+            signature.output_names.push_back(output->name);
+            signature.output_types.push_back(output->type);
+        }
         signature.has_return_type = pou.has_return_type;
         signature.return_type = pou.return_type;
         out->signatures.push_back(std::move(signature));
@@ -181,7 +310,14 @@ bool st_build_pou_registry(const std::vector<StPouSource>& sources,
     /* Yêu cầu library: entry phải tồn tại VÀ đúng version đã pin. Hai lỗi này có
      * mã riêng vì cách sửa khác nhau — thêm entry, hay đổi pin. */
     for (const StPouSource& source : sources) {
+        std::set<std::string> declared;
         for (const StLibraryRequirement& need : source.requires_library) {
+            if (!declared.insert(fold(need.name)).second)
+                return fail(diag, st_diag_code::kPouSignatureInvalid,
+                            "POU '" + source.pou->name +
+                                "' declares library dependency '" + need.name +
+                                "' more than once",
+                            source.pou->line, source.pou->column);
             const auto found = library_by_name.find(fold(need.name));
             if (found == library_by_name.end())
                 return fail(diag, st_diag_code::kLibraryEntryMissing,
@@ -193,6 +329,13 @@ bool st_build_pou_registry(const std::vector<StPouSource>& sources,
                             "library entry '" + need.name + "' is version '" +
                                 found->second->version + "' but '" + source.pou->name +
                                 "' pinned '" + need.version + "'",
+                            source.pou->line, source.pou->column);
+            if (!need.library_origin.empty() &&
+                found->second->origin != need.library_origin)
+                return fail(diag, st_diag_code::kLibraryVersionDrift,
+                            "library entry '" + need.name + "' origin '" +
+                                found->second->origin + "' differs from required origin '" +
+                                need.library_origin + "'",
                             source.pou->line, source.pou->column);
         }
     }
@@ -215,11 +358,20 @@ bool st_build_pou_registry(const std::vector<StPouSource>& sources,
                                 "' resolves to neither a Project POU nor a pinned library entry",
                             call.line, call.column);
 
-            const bool is_library = (in_project == pou_by_name.end());
+            const bool is_library =
+                (in_project == pou_by_name.end()) ||
+                source_by_name.at(in_project->first)->from_library;
             const std::string callee =
-                is_library ? in_library->second->name : in_project->second->name;
+                in_project != pou_by_name.end() ? in_project->second->name
+                                                : in_library->second->name;
             const StPouKind callee_kind =
-                is_library ? in_library->second->kind : in_project->second->kind;
+                in_project != pou_by_name.end() ? in_project->second->kind
+                                                : in_library->second->kind;
+
+            if (is_library && fold(callee) != fold(pou.name) &&
+                !require_declared_library_dependency(source, callee, call.line,
+                                                     call.column, diag))
+                return false;
 
             /* PROGRAM là đơn vị lập lịch, không phải hàm — gọi nó không có nghĩa
              * ở bất kỳ ngữ cảnh nào. */
@@ -247,7 +399,7 @@ bool st_build_pou_registry(const std::vector<StPouSource>& sources,
             /* Số đối số kiểm được ngay từ chữ ký; kiểu của từng đối số thuộc lớp
              * lowering vì nó cần suy kiểu biểu thức (T59-105). Bảng chữ ký ở trên
              * là để lớp đó dùng lại, không dựng bảng thứ hai. */
-            if (!is_library) {
+            if (in_project != pou_by_name.end()) {
                 const std::size_t expected =
                     in_project->second->by_storage(StStorage::VAR_INPUT).size();
                 if (call.arg_count != expected)
@@ -262,13 +414,29 @@ bool st_build_pou_registry(const std::vector<StPouSource>& sources,
                                 call.line, call.column);
             }
             edges.push_back({pou.name, callee, is_library, call.line, call.column});
-            if (!is_library) adjacency[fold(pou.name)].insert(key);
+            if (in_project != pou_by_name.end()) adjacency[fold(pou.name)].insert(key);
             /* Gọi CHÍNH MÌNH là đệ quy trực tiếp — bắt ngay tại đây để thông điệp
              * chỉ đúng dòng gọi, thay vì báo một chu trình dài khó đọc. */
             if (fold(callee) == fold(pou.name))
                 return fail(diag, st_diag_code::kPouRecursion,
                             "direct recursion: '" + pou.name + "' calls itself",
                             call.line, call.column);
+        }
+
+        for (const StFbDecl& instance : pou.fbs) {
+            if (!instance.is_user_type) continue;
+            const std::string key = fold(instance.user_type_name);
+            const auto in_project = pou_by_name.find(key);
+            const auto in_library = library_by_name.find(key);
+            const bool is_library =
+                (in_project == pou_by_name.end() && in_library != library_by_name.end()) ||
+                (in_project != pou_by_name.end() &&
+                 source_by_name.at(in_project->first)->from_library);
+            if (is_library &&
+                !require_declared_library_dependency(source, instance.user_type_name,
+                                                     instance.line, instance.column,
+                                                     diag))
+                return false;
         }
     }
 

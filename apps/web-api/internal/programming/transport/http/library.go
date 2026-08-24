@@ -49,6 +49,10 @@ type upsertLibraryEntryRequest struct {
 	StateLayout   *programmingapplication.LibraryStateLayoutCommand `json:"stateLayout,omitempty"`
 }
 
+type deprecateLibraryRevisionRequest struct {
+	SchemaVersion string `json:"schemaVersion"`
+}
+
 // handleLibraryRequest phải khớp theo ĐƯỜNG DẪN, không chỉ theo sự có mặt của
 // `projectId`. Nhiều route Project khác cũng mang `{projectId}` (ví dụ
 // `POST /projects/{id}/draft/revisions`); nhận diện bằng PathValue sẽ nuốt luôn
@@ -63,6 +67,9 @@ func handleLibraryRequest(w http.ResponseWriter, r *http.Request, correlationID 
 	case r.Method == http.MethodDelete && strings.Contains(path, "/library/entries/") &&
 		r.PathValue("projectId") != "" && r.PathValue("entryId") != "":
 		handleDeleteLibraryEntry(w, r, correlationID, service)
+	case r.Method == http.MethodPost && strings.HasSuffix(path, "/deprecate") &&
+		r.PathValue("projectId") != "" && r.PathValue("libraryRevisionId") != "":
+		handleDeprecateLibraryRevision(w, r, correlationID, service)
 	default:
 		return false
 	}
@@ -121,6 +128,26 @@ func handleDeleteLibraryEntry(w http.ResponseWriter, r *http.Request, correlatio
 		IfMatch: r.Header.Get("If-Match"), IdempotencyKey: r.Header.Get("X-Idempotency-Key"),
 		CorrelationID: correlationID,
 	})
+	if err != nil {
+		writeMappedError(w, err, correlationID)
+		return
+	}
+	writeMutation(w, http.StatusOK, correlationID, result)
+}
+
+func handleDeprecateLibraryRevision(w http.ResponseWriter, r *http.Request, correlationID string,
+	service *programmingapplication.LibraryService) {
+	var request deprecateLibraryRevisionRequest
+	if err := decodeStrictRequest(r, &request); err != nil {
+		writeMappedError(w, err, correlationID)
+		return
+	}
+	result, err := service.DeprecateRevision(r.Context(), requestActor(r),
+		programmingapplication.DeprecateLibraryRevisionCommand{
+			ProjectID: r.PathValue("projectId"), LibraryRevisionID: r.PathValue("libraryRevisionId"),
+			SchemaVersion: request.SchemaVersion, IfMatch: r.Header.Get("If-Match"),
+			IdempotencyKey: r.Header.Get("X-Idempotency-Key"), CorrelationID: correlationID,
+		})
 	if err != nil {
 		writeMappedError(w, err, correlationID)
 		return

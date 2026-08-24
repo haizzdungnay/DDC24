@@ -23,13 +23,16 @@
 #include <unistd.h>
 
 #include "graph/point_table.hpp"
+#include "graph/runtime_point_snapshot.hpp"
 #include "ipc/program_ipc_unix.hpp"
+#include "ipc/web_ipc.hpp"
 #include "priority/priority_resolver.hpp"
 #include "programming/program_candidate_registry.hpp"
 #include "programming/programming_cutover.hpp"
 #include "programming/programming_runtime_coordinator.hpp"
 #include "st/st_scheduler.hpp"
 #include "st/st_process_image.hpp"
+#include "st/st_runtime_snapshot.hpp"
 #include "st/st_signal_bus.hpp"
 #include "st/st_value_trace.hpp"
 
@@ -49,6 +52,13 @@ uint64_t monotonic_now_ns()
         std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
 }
 
+uint64_t utc_now_ms()
+{
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -57,6 +67,7 @@ int main(int argc, char** argv)
     using namespace core::programming;
 
     std::string socket_path;
+    std::string web_socket_path;
     std::string state_dir;
     /* T59-607 — simulator dùng ĐÚNG loader production, nên khi profile đòi chữ
      * ký nó cũng phải biết tin khoá nào. Không có tuỳ chọn này thì lane
@@ -68,6 +79,8 @@ int main(int argc, char** argv)
         const std::string argument = argv[index];
         if (argument == "--socket" && index + 1 < argc) {
             socket_path = argv[++index];
+        } else if (argument == "--web-socket" && index + 1 < argc) {
+            web_socket_path = argv[++index];
         } else if (argument == "--state-dir" && index + 1 < argc) {
             state_dir = argv[++index];
         } else if (argument == "--tick-ms" && index + 1 < argc) {
@@ -80,7 +93,8 @@ int main(int argc, char** argv)
         } else if (argument == "--st-trusted-key" && index + 1 < argc) {
             trusted_key_paths.push_back(argv[++index]);
         } else if (argument == "--help") {
-            std::printf("usage: mkddc-programming-core-sim --socket PATH --state-dir DIR "
+            std::printf("usage: mkddc-programming-core-sim --socket PATH --web-socket PATH "
+                        "--state-dir DIR "
                         "[--tick-ms N] [--st-trusted-key FILE]\n");
             return 0;
         } else {
@@ -88,8 +102,11 @@ int main(int argc, char** argv)
             return 2;
         }
     }
-    if (socket_path.empty() || state_dir.empty() || socket_path.size() >= 100) {
-        std::fprintf(stderr, "thiếu --socket/--state-dir hoặc socket path quá dài\n");
+    if (socket_path.empty() || web_socket_path.empty() || state_dir.empty() ||
+        socket_path.size() >= 100 || web_socket_path.size() >= 100 ||
+        socket_path == web_socket_path) {
+        std::fprintf(stderr,
+                     "thiếu --socket/--web-socket/--state-dir, socket trùng hoặc quá dài\n");
         return 2;
     }
 
@@ -153,9 +170,9 @@ int main(int argc, char** argv)
     /* T59-505: một INPUT tổng hợp duy nhất để journey real-backend chứng minh
      * Binding đi trọn qua compiler -> package -> process-image -> first-cycle
      * barrier. Đây là dữ liệu HOST-ONLY, không đến từ I/O process/SHM và tuyệt
-     * đối không phải bằng chứng physical/HIL. Regular monitor socket vẫn không
-     * tồn tại, nên Web API/UI tiếp tục fail-closed 503 thay vì trình bày mẫu này
-     * như telemetry phần cứng. */
+     * đối không phải bằng chứng physical/HIL. Snapshot monitor gắn nhãn host
+     * simulator qua target identity của BE; nó chỉ chứng minh read-back
+     * lifecycle/Program, không biến input này thành telemetry phần cứng. */
     IoSnapshot host_input;
     host_input.ts_ns = monotonic_now_ns();
     host_input.ui_value[0] = 21.5f;
@@ -174,6 +191,25 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "không mở được Programming IPC: %s\n", error.c_str());
         return 1;
     }
+    WebIpc web;
+    if (!web.open(web_socket_path)) {
+        std::fprintf(stderr, "không mở được Web IPC: %s\n", web_socket_path.c_str());
+        endpoint.close();
+        return 1;
+    }
+    RuntimePointSnapshotPublisher snapshot_publisher;
+    uint64_t next_snapshot_id = 1;
+    auto publish_monitor_snapshot = [&](uint64_t now_ns) {
+        const OutputCmd resolved = priority_resolver.resolve();
+        RuntimePointSnapshot snapshot = snapshot_publisher.build(
+            next_snapshot_id++, utc_now_ms(), now_ns, point_table, host_input,
+            resolved, priority_resolver, false, false);
+        st_populate_runtime_snapshot(&scheduler,
+                                     cutover.current() == CutoverMode::PROGRAM_ONLY,
+                                     &snapshot);
+        web.publish_point_snapshot(snapshot);
+    };
+    publish_monitor_snapshot(monotonic_now_ns());
 
     struct sigaction action {};
     action.sa_handler = on_signal;
@@ -182,9 +218,10 @@ int main(int argc, char** argv)
 
     std::thread ipc_thread([&] { endpoint.run(&server, &shutdown_requested); });
     std::fprintf(stderr,
-                 "INFO programming_core_sim.ready socket=%s synthetic_point=LOCAL:UI-01 "
+                 "INFO programming_core_sim.ready socket=%s web_socket=%s "
+                 "synthetic_point=LOCAL:UI-01 "
                  "value=21.5 quality=GOOD host_only=1\n",
-                 socket_path.c_str());
+                 socket_path.c_str(), web_socket_path.c_str());
 
     const auto interval = std::chrono::milliseconds(tick_ms);
     auto next = std::chrono::steady_clock::now();
@@ -205,11 +242,17 @@ int main(int argc, char** argv)
             coordinator.on_output_commit(outputs_committed);
             trace.on_boundary(scheduler, now_ns);
         }
+        publish_monitor_snapshot(now_ns);
+        /* point_snapshot được WebIpc trả từ cache ngay trong drain(). Mọi
+         * mutation legacy ngoài phạm vi simulator bị từ chối tường minh. */
+        for (const WebCommand& command : web.drain())
+            web.respond_rejected(command, "host simulator read-only");
         next += interval;
         std::this_thread::sleep_until(next);
     }
 
     endpoint.close();
+    web.close();
     if (ipc_thread.joinable()) ipc_thread.join();
     std::fprintf(stderr, "INFO programming_core_sim.stopped\n");
     return 0;

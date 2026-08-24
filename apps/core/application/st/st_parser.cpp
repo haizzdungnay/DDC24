@@ -814,8 +814,28 @@ private:
          *   ident ':=' -> phép gán
          * Lời gọi HÀM chuẩn không bao giờ đứng ở vị trí câu lệnh vì hàm không
          * có tác dụng phụ; nếu người dùng viết vậy, semantic báo ST-SEM-012. */
+        if (peek().upper == "SIGNAL_PUBLISH" &&
+            peek_at(1).kind == Token::Kind::LParen)
+            return parse_signal_publish(out, diag);
         if (peek_at(1).kind == Token::Kind::LParen) return parse_fb_call(out, diag);
         return parse_assign(out, diag);
+    }
+
+    bool parse_signal_publish(StStmt* out, StDiagnostic* diag)
+    {
+        const Token call = advance();
+        out->kind = StStmt::Kind::SIGNAL_PUBLISH;
+        out->signal_line = call.line;
+        out->signal_column = call.column;
+        out->signal_length = call.length;
+        if (!expect(Token::Kind::LParen, "'(' in SIGNAL_PUBLISH", diag)) return false;
+        if (!at_ident() || is_keyword(peek().upper))
+            return fail("expected Published Signal identifier", diag);
+        out->signal_name = advance().text;
+        if (!expect(Token::Kind::Comma, "',' after Published Signal name", diag)) return false;
+        if (!parse_expr(&out->signal_value, diag)) return false;
+        if (!expect(Token::Kind::RParen, "')' to close SIGNAL_PUBLISH", diag)) return false;
+        return expect(Token::Kind::Semicolon, "';' after SIGNAL_PUBLISH", diag);
     }
 
     bool parse_if(StStmt* out, StDiagnostic* diag)
@@ -1167,6 +1187,20 @@ private:
             /* Gọi hàm chuẩn */
             if (peek().kind == Token::Kind::LParen) {
                 advance();
+                if (t.upper == "SIGNAL_READ") {
+                    if (!at_ident() || is_keyword(peek().upper))
+                        return fail("expected Published Signal identifier", diag);
+                    const Token signal = advance();
+                    if (!expect(Token::Kind::RParen,
+                                "')' to close SIGNAL_READ", diag)) return false;
+                    auto n = std::make_unique<StExpr>();
+                    n->kind = StExpr::Kind::SIGNAL_READ;
+                    n->signal_name = signal.text;
+                    n->line = t.line; n->column = t.column;
+                    n->length = t.length;
+                    *out = std::move(n);
+                    return true;
+                }
                 StFunc f;
                 auto n = std::make_unique<StExpr>();
                 if (st_func_from_name(t.upper, &f)) {

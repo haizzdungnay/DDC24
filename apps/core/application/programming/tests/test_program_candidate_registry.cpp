@@ -233,6 +233,45 @@ TEST(ProgramCandidateRegistry, DisableWithdrawsCandidateAndOutputFallsToDefault)
         << "đầu ra kẹt ở giá trị cuối của Program đã dừng";
 }
 
+TEST(ProgramCandidateRegistry, SignalBlockedWithdrawsCandidateImmediately)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    std::string error;
+    StTaskConfig task;
+    task.id = "main";
+    task.period_ms = 1000;
+    task.budget_ms = 199;
+    ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
+    ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
+    ASSERT_TRUE(scheduler.request_activation("P_ahu", program_with_output("Ahu", 2), &error))
+        << error;
+    scheduler.tick(0);
+    ASSERT_TRUE(scheduler.start("P_ahu", &error)) << error;
+
+    PriorityResolver resolver;
+    resolver.set_default_ao(2, 0.0f);
+    ProgramCandidateRegistry registry;
+    ASSERT_TRUE(st_register_instance_candidates(*scheduler.find_program("P_ahu"), &registry,
+                                                scheduler.base_step_count(), &error));
+    PointTable table;
+    StIoBridgeStats stats;
+    scheduler.tick(1000ULL * 1000000ULL);
+    ASSERT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &stats));
+    ASSERT_EQ(resolver.winning_ao_level(2), PRIO_LOCAL_LOGIC);
+
+    /* Executor đặt WAITING khi SIGNAL_READ theo BLOCK_PROGRAM không có dữ
+     * liệu. Candidate phải rút ngay, không giữ tới TTL của lỗi runtime. */
+    scheduler.find_program("P_ahu")->state = StProgramState::WAITING;
+    EXPECT_EQ(st_withdraw_stale_outputs(&scheduler, &resolver,
+                                        60000ULL * 1000000ULL,
+                                        &registry, &stats), 1u);
+    EXPECT_EQ(resolver.winning_ao_level(2), PRIO_DEFAULT);
+    const auto* claim = registry.find(PointKind::AO, 2);
+    ASSERT_NE(claim, nullptr);
+    EXPECT_FALSE(claim->active);
+    EXPECT_EQ(claim->withdraw_reason, CandidateWithdrawReason::SIGNAL_BLOCKED);
+}
+
 /* Không có đường Program → SHM/IOP/MCU trực tiếp (kiến trúc §7). Kiểm bằng cách
  * đọc CHÍNH mã nguồn của lớp process image: mọi đường ra AO/DO phải đi qua
  * `PriorityResolver`. Một test hành vi không chứng minh được điều này — nó chỉ

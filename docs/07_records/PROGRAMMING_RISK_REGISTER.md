@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.19 |
+| Phiên bản | 4.20 |
 | Trạng thái | **Active — 22/22 Open; implementation controls ready, residual chờ evidence** |
-| Ngày | 2026-08-21 |
+| Ngày | 2026-08-24 |
 | Chủ quản | Product + Architecture + QA |
 | Người review | Risk owners, Safety, Security, Operations Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
@@ -768,6 +768,33 @@ Evidence hiện là source/component/browser HOST/LOCAL: FE **1161 test**, E2E m
 **61/61**, real-backend **1/1** và Chrome desktop/mobile sạch. **22/22 risk giữ
 Open**, S×L và residual không đổi; chưa claim target/HIL, Test Result hay release.
 
+### 5.55 Cập nhật treatment source self-review 2026-08-24 (`F-P59-ENABLE-BOUNDARY-001`, `F-P59-SIGNAL-READBACK-001`)
+
+| Risk | Control thêm trong corrective source | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-009` | Lệnh Enable/Disable của người vận hành không còn ghi `state`/`enabled` từ IPC worker thread. Non-RT chỉ ARM ý định; RT áp dụng tại safe boundary rồi ack bằng generation, nên một lệnh Disable không thể bị chính scan ghi đè giữa tick và Program đã tắt không chạy thêm chu kỳ nào với quyền ghi đầu ra | Fault/restart/power matrix trên target và Test Result `VS-PROG-U05/U08`; host TSan 0 cảnh báo đã có | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-010` | Trần 16 Program chạy đồng thời được kiểm **trước** khi chạm bất kỳ trường nào; lệnh bị từ chối không còn để lại `STOPPED`/`enabled=true` nửa vời. `TIMED_OUT` tách khỏi `REJECTED` nên BE không hiểu "chưa biết" thành "đã từ chối" | Đo trần 16 trên target với 10 Program fixture (`T59-702`) | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-018` | Runtime Monitor tra biến theo `locals` của Draft v2 (không chỉ object `VARIABLE` v1) và giữ `snapshot.Points` của Core khi PLC SHM chưa attach, nên màn Theo dõi không còn báo "chưa có biến ánh xạ" cho một Revision đang chạy có Binding hợp lệ | Đo trên target với point vật lý và Test Result `VS-PROG-U06/U07`; lane E2E host nay `HTTP>=500=0`, `console.error=0` | `OPEN — SOURCE HOST PASS` |
+| `RSK-PROG-017` | Read-back Published Signal cho reader non-RT (`inspect_all` dùng cho STATUS/Runtime Monitor) kiểm `generation` trước/sau khi chép theo đúng khuôn seqlock của SHM, nên Monitor không còn trả `value` của chu kỳ N ghép với `published_at_ns` của chu kỳ N+1 | Đo trên target với producer/consumer thật và Test Result `VS-PROG-U06`; host guard hiện là xác suất + TSan | `OPEN — SOURCE HOST PASS` |
+
+`F-P59-MONITOR-VARS-001` lộ ra khi chạy lại lane E2E thật để xác nhận bản sửa
+Enable/Disable: lane đó trước đây coi một `503 /runtime/monitor` và một
+console error là hợp lệ, tức chính cái vỏ bọc giữ lỗi sống. Bài học đi kèm: một
+ngoại lệ được viết vào acceptance phải có ngày hết hạn và lý do kỹ thuật kiểm
+lại được, nếu không nó trở thành chỗ trú của lỗi thật.
+
+Cách phát hiện — ghi lại vì nó là bài học quy trình, không chỉ là hai bản vá:
+mọi acceptance của W4 chạy **đơn luồng**, trong khi trên bo `SET_PROGRAM_ENABLED`
+chạy trên IPC worker thread song song với scan `SCHED_FIFO 80`. Dựng lại đúng mô
+hình hai luồng đó rồi chạy `-DMKDDC_SANITIZE=thread` mới lộ ra ba data race.
+`T59-403` từng ghi "TSan 0 cảnh báo" nhưng TSan **không được chạy lại** sau khi
+`T59-405` thêm đường Enable/Disable — đó là lý do lỗi sống tới vòng này.
+
+Số đo: `ctest` **1293/1293**; TSan toàn core **0 cảnh báo** với suppression chỉ
+gồm hai seqlock cố ý; Go **18/18** package với compiler/packager production; FE
+vitest/lint/`build:release` sạch. **22/22 risk giữ Open**, S×L và residual không
+đổi; không claim target/HIL/Test Result/release.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -788,6 +815,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 4.20 | 2026-08-24 | Ghi §5.55 cho ba finding của vòng self-review: Enable/Disable ghi trạng thái từ IPC worker thread (3 data race đo bằng TSan), read-back Published Signal ghép chéo chu kỳ cho reader non-RT, và Runtime Monitor luôn trả `items: []` vì chỉ tra biến kiểu Revision v1. Cả hai đã có bản sửa + test hồi quy; `ctest` 1293/1293, TSan toàn core 0 cảnh báo, Go 18/18, FE sạch. Giữ 22/22 Open; không đổi S×L/residual và không claim target/HIL/Test Result |
 | 4.19 | 2026-08-21 | Ghi `T59-506` và chốt evidence HOST/LOCAL của W5: ST history 50 snapshot/20 undo-redo + cursor, runtime overlay không biến invalid thành 0, FBD lấy POU interface typed; ST+ gửi đúng payload Draft v2 strict; FE 1161 test, E2E mock 61/61, real-backend 1/1 và Chrome desktop/mobile sạch. Giữ 22/22 Open; chưa có GitHub CI/Test Result/target/HIL |
 | 4.18 | 2026-08-21 | Ghi `T59-505`: lane Project→Restore dùng backend/compiler/Core simulator thật, cấu hình tách khỏi mock và CI job có guard cấm `page.route`. Giữ 22/22 Open; lane đang được gate, không claim CI PASS và không đổi HOST thành target/HIL/physical I/O/release |
 | 4.17 | 2026-08-21 | Ghi `T59-504`: Monitor LOCAL/VP/MB_RTU tách candidate/actual/source/priority, Published Signal snapshot riêng và trace công bố mẫu rơi; mọi invalid/mismatch/unavailable fail-closed. Giữ 22/22 Open vì binding/soak/I/O vật lý/Test Result chưa có |

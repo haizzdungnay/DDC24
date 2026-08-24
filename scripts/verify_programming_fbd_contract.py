@@ -127,6 +127,8 @@ def validate_graph(
                 SCALAR_TYPES if kind in {"INPUT", "OUTPUT", "CONSTANT"}
                 else PURE_FUNCTIONS if kind == "FUNCTION"
                 else STATEFUL_FUNCTIONS if kind == "FUNCTION_BLOCK"
+                else {"SIGNAL_READ"} if kind == "SIGNAL_READ"
+                else {"SIGNAL_PUBLISH"} if kind == "SIGNAL_PUBLISH"
                 else CONVERSIONS
             )
             if type_ref not in allowed:
@@ -140,6 +142,10 @@ def validate_graph(
             if kind in {"FUNCTION", "FUNCTION_BLOCK", "CONVERSION"} and (
                 not input_count or not output_count
             ):
+                errors.append(f"port shape không hợp lệ: {node['id']}")
+            if kind == "SIGNAL_READ" and (input_count or output_count != 1):
+                errors.append(f"port shape không hợp lệ: {node['id']}")
+            if kind == "SIGNAL_PUBLISH" and (input_count != 1 or output_count):
                 errors.append(f"port shape không hợp lệ: {node['id']}")
             port_orders: set[int] = set()
             port_names: set[str] = set()
@@ -295,7 +301,7 @@ def validate_manifest(
     expected = {
         "contractId": "PROGRAMMING-FBD-V1",
         "version": 1,
-        "lowererVersion": "fwsom-fbd-1.0.0",
+        "lowererVersion": "fwsom-fbd-1.1.0",
         "profileId": "revA-1t-1-5-30",
         "schemaSha256": digest(SCHEMA_PATH),
         "keyboardSha256": digest(KEYBOARD_PATH),

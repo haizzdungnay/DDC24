@@ -37,8 +37,25 @@ var (
 
 type Input struct {
 	SourceID string
-	Language string
-	Source   []byte
+	// ProgramID là identity runtime ghi trong PROGRAM_TABLE và signal publisher.
+	// SourceID vẫn là objectId/source-map; hai identity được phép khác nhau.
+	ProgramID string
+	Language  string
+	Source    []byte
+	// LinkedPOUs là toàn bộ implementation FUNCTION/FUNCTION_BLOCK mà Program
+	// có thể gọi. Worker ghi từng source vào scratch riêng rồi truyền một
+	// pou-manifest content-addressed; không có path nào đến từ payload người dùng.
+	LinkedPOUs []LinkedPOUSource
+	// RootRequiresLibrary là dependency của chính PROGRAM root. Root đi qua
+	// --source nên không xuất hiện trong pous[]; thiếu field riêng sẽ làm call
+	// library không khai dependency vẫn được resolver chấp nhận.
+	RootRequiresLibrary []LibraryRequirement
+	// LibraryLock là version pin đã seal cùng Revision. Giá trị zero giữ đường
+	// tương thích cho Revision v1 không dùng user POU/PROJECT Library.
+	LibraryLock LibraryLock
+	// PublishedSignals là contract cấp package mà semantic/lowering dùng để
+	// chấp nhận SIGNAL_READ/SIGNAL_PUBLISH và đóng ref thật vào artifact.
+	PublishedSignals []PublishedSignalContract
 	// IoMap là Binding Manifest (F-PROG-ASBUILT-013/D-07,
 	// REV-PROG-ASBUILT-GAP-2026-08-14) — mỗi entry map một VAR_INPUT/VAR_OUTPUT
 	// ST khai báo trong Source tới một Point thật. Rỗng = hành vi cũ trước vá
@@ -47,6 +64,47 @@ type Input struct {
 	// biến/trùng physical output...) là trách nhiệm của compiler CLI
 	// (`resolve_io_bindings()`), không lặp logic đó ở đây.
 	IoMap []IoMapEntry
+}
+
+type PublishedSignalContract struct {
+	Name               string `json:"name"`
+	Type               string `json:"type"`
+	PublisherProgramID string `json:"publisherProgramId"`
+}
+
+type LibraryRequirement struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Origin  string `json:"origin,omitempty"`
+}
+
+// LinkedPOUSource phân biệt POU cục bộ với implementation lấy từ Control
+// Library. PROJECT_LIBRARY không được gộp với PROJECT: gộp hai nguồn làm
+// package khai sai provenance và loader không thể ép library lock.
+type LinkedPOUSource struct {
+	Name            string
+	Kind            string
+	Language        string
+	Source          []byte
+	Origin          string
+	FromLibrary     bool
+	LibraryEntryID  string
+	Version         string
+	RequiresLibrary []LibraryRequirement
+}
+
+type LibraryLockEntry struct {
+	EntryID string `json:"entryId"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Version string `json:"version"`
+	Origin  string `json:"origin"`
+}
+
+type LibraryLock struct {
+	SystemVersion     string             `json:"systemVersion"`
+	ProjectRevisionID string             `json:"projectRevisionId"`
+	Entries           []LibraryLockEntry `json:"entries"`
 }
 
 // IoMapEntry khớp field-for-field với `core::StIoMapEntry` JSON shape mà
@@ -99,6 +157,36 @@ type Result struct {
 	// tin request đã gửi IoMap) — validateSuccess() ép bằng đúng
 	// len(input.IoMap), 0 khi Check không gửi io_map (hành vi cũ, hợp lệ).
 	IoBindingCount int64
+	LinkedPOUs     []LinkedPOU
+	SignalRefs     []SignalRef
+}
+
+type SignalRef struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Read    bool   `json:"read"`
+	Publish bool   `json:"publish"`
+}
+
+// LinkedPOU là record compiler đã lower THẬT SỰ và là nguồn duy nhất để
+// ProcessPackager sinh SEC_POU_TABLE. Backend không tự dựng lại signature từ
+// Draft vì đó sẽ là một bảng thứ hai có thể trôi khỏi code đang chạy.
+type LinkedPOU struct {
+	Name             string   `json:"name"`
+	Kind             string   `json:"kind"`
+	Origin           string   `json:"origin"`
+	FromLibrary      bool     `json:"fromLibrary"`
+	LibraryEntryID   string   `json:"libraryEntryId"`
+	Version          string   `json:"version"`
+	ContentSHA256    string   `json:"contentSha256"`
+	BodySHA256       string   `json:"bodySha256"`
+	InstructionCount uint32   `json:"instructionCount"`
+	InputNames       []string `json:"inputNames"`
+	InputTypes       []string `json:"inputTypes"`
+	OutputNames      []string `json:"outputNames"`
+	OutputTypes      []string `json:"outputTypes"`
+	HasReturnType    bool     `json:"hasReturnType"`
+	ReturnType       string   `json:"returnType"`
 }
 
 type Runner interface {
@@ -146,9 +234,16 @@ type cliResponse struct {
 	IntegrityMode           *string         `json:"integrityMode"`
 	SignaturePresent        *bool           `json:"signaturePresent"`
 	TargetABI               int64           `json:"targetAbi"`
+	LinkedPOUs              []LinkedPOU     `json:"linkedPous"`
+	SignalRefs              []SignalRef     `json:"signalRefs"`
 }
 
 func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error) {
+	// Revision v1 không tách objectId/runtime programId. Giữ tương thích bằng
+	// đúng identity nguồn; Revision v2 luôn truyền ProgramID tường minh.
+	if input.ProgramID == "" {
+		input.ProgramID = input.SourceID
+	}
 	// T59-607 — fail-closed ngay ở biên: profile đòi chữ ký mà worker không có
 	// khoá thì mọi artifact sinh ra đều bị Core từ chối. Báo tại đây để lỗi chỉ
 	// tay vào cấu hình, không tay vào Commission.
@@ -157,11 +252,18 @@ func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error)
 	}
 	if r.BinaryPath == "" || r.ScratchRoot == "" || r.Timeout < time.Second || r.Timeout > time.Minute ||
 		(input.Language != "ST" && input.Language != "FBD") || len(input.Source) == 0 || len(input.Source) > 65536 ||
-		len(input.SourceID) < 1 || len(input.SourceID) > 128 || strings.ContainsAny(input.SourceID, "/\\") {
+		len(input.SourceID) < 1 || len(input.SourceID) > 128 || strings.ContainsAny(input.SourceID, "/\\") ||
+		len(input.ProgramID) < 1 || len(input.ProgramID) > 64 || strings.ContainsAny(input.ProgramID, "/\\\x00") {
 		return Result{}, fmt.Errorf("tham số compiler worker không hợp lệ")
 	}
 	if len(input.IoMap) > 256 {
 		return Result{}, fmt.Errorf("tham số compiler worker không hợp lệ")
+	}
+	if err := validatePublishedSignals(input); err != nil {
+		return Result{}, err
+	}
+	if err := validateLinkedInputs(input); err != nil {
+		return Result{}, err
 	}
 	for _, entry := range input.IoMap {
 		if !boundedLen(entry.Variable, 1, 128) || !boundedLen(entry.PointID, 1, 64) ||
@@ -214,6 +316,68 @@ func (r ProcessRunner) Compile(ctx context.Context, input Input) (Result, error)
 			return Result{}, err
 		}
 		args = append(args, "--io-map-in", ioMapPath)
+	}
+	if len(input.LinkedPOUs) > 0 || len(input.RootRequiresLibrary) > 0 {
+		pouItems := make([]map[string]any, 0, len(input.LinkedPOUs))
+		for index, pou := range input.LinkedPOUs {
+			filename := fmt.Sprintf("pou-%04d.src", index)
+			if err := writeExclusive(filepath.Join(jobRoot, filename), pou.Source, 0o600); err != nil {
+				return Result{}, err
+			}
+			digest := sha256.Sum256(pou.Source)
+			item := map[string]any{
+				"name": pou.Name, "kind": pou.Kind, "language": pou.Language,
+				"path": filename, "contentSha256": hex.EncodeToString(digest[:]),
+				"origin": pou.Origin, "fromLibrary": pou.FromLibrary,
+			}
+			if pou.LibraryEntryID != "" {
+				item["entryId"] = pou.LibraryEntryID
+				item["version"] = pou.Version
+			}
+			if len(pou.RequiresLibrary) > 0 {
+				item["requiresLibrary"] = pou.RequiresLibrary
+			}
+			pouItems = append(pouItems, item)
+		}
+		payload, err := json.Marshal(map[string]any{"schemaVersion": 1, "pous": pouItems,
+			"rootRequiresLibrary": input.RootRequiresLibrary})
+		if err != nil {
+			return Result{}, err
+		}
+		path := filepath.Join(jobRoot, "pou-manifest.json")
+		if err := writeExclusive(path, payload, 0o600); err != nil {
+			return Result{}, err
+		}
+		args = append(args, "--pou-manifest", path)
+	}
+	if len(input.PublishedSignals) > 0 {
+		payload, err := json.Marshal(struct {
+			SchemaVersion int                       `json:"schemaVersion"`
+			ProgramID     string                    `json:"programId"`
+			Signals       []PublishedSignalContract `json:"signals"`
+		}{SchemaVersion: 1, ProgramID: input.ProgramID, Signals: input.PublishedSignals})
+		if err != nil {
+			return Result{}, err
+		}
+		path := filepath.Join(jobRoot, "signal-manifest.json")
+		if err := writeExclusive(path, payload, 0o600); err != nil {
+			return Result{}, err
+		}
+		args = append(args, "--signal-manifest", path)
+	}
+	if input.LibraryLock.SystemVersion != "" {
+		payload, err := json.Marshal(struct {
+			SchemaVersion int `json:"schemaVersion"`
+			LibraryLock
+		}{SchemaVersion: 1, LibraryLock: input.LibraryLock})
+		if err != nil {
+			return Result{}, err
+		}
+		path := filepath.Join(jobRoot, "library-lock.json")
+		if err := writeExclusive(path, payload, 0o600); err != nil {
+			return Result{}, err
+		}
+		args = append(args, "--library-lock", path)
 	}
 	args = append(args, "--sandbox")
 
@@ -275,6 +439,104 @@ func boundedLen(text string, min, max int) bool {
 	return len(text) >= min && len(text) <= max
 }
 
+func validatePublishedSignals(input Input) error {
+	if len(input.PublishedSignals) > 512 {
+		return fmt.Errorf("tham số compiler worker không hợp lệ")
+	}
+	seen := make(map[string]struct{}, len(input.PublishedSignals))
+	validType := func(value string) bool {
+		switch value {
+		case "BOOL", "INT", "DINT", "UINT", "REAL", "TIME":
+			return true
+		default:
+			return false
+		}
+	}
+	for _, signal := range input.PublishedSignals {
+		key := strings.ToUpper(signal.Name)
+		if !boundedLen(signal.Name, 1, 64) || strings.ContainsRune(signal.Name, '\x00') ||
+			!validType(signal.Type) || !boundedLen(signal.PublisherProgramID, 1, 64) ||
+			strings.ContainsAny(signal.PublisherProgramID, "/\\\x00") {
+			return fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+		if _, duplicate := seen[key]; duplicate {
+			return fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
+}
+
+func validateLinkedInputs(input Input) error {
+	if len(input.LinkedPOUs) > domain.MaxUserPou || len(input.LibraryLock.Entries) > domain.MaxUserPou {
+		return fmt.Errorf("tham số compiler worker không hợp lệ")
+	}
+	seenPOU := make(map[string]struct{}, len(input.LinkedPOUs))
+	for _, requirement := range input.RootRequiresLibrary {
+		if !boundedLen(requirement.Name, 1, 64) || !boundedLen(requirement.Version, 1, 64) ||
+			(requirement.Origin != "" && requirement.Origin != "PROJECT" && requirement.Origin != "SYSTEM") {
+			return fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+	}
+	for _, pou := range input.LinkedPOUs {
+		key := strings.ToUpper(pou.Name)
+		if !boundedLen(pou.Name, 1, 64) || strings.ContainsAny(pou.Name, "/\\\x00") ||
+			(pou.Kind != "FUNCTION" && pou.Kind != "FUNCTION_BLOCK") ||
+			(pou.Language != "ST" && pou.Language != "FBD") || len(pou.Source) < 1 ||
+			len(pou.Source) > domain.MaxSourceBytes {
+			return fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+		if _, duplicate := seenPOU[key]; duplicate {
+			return fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+		seenPOU[key] = struct{}{}
+		switch pou.Origin {
+		case "PROJECT":
+			if !pou.FromLibrary && (pou.LibraryEntryID != "" || pou.Version != "") {
+				return fmt.Errorf("tham số compiler worker không hợp lệ")
+			}
+		case "SYSTEM":
+			if !pou.FromLibrary {
+				return fmt.Errorf("tham số compiler worker không hợp lệ")
+			}
+		default:
+			return fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+		if pou.FromLibrary && (!boundedLen(pou.LibraryEntryID, 1, 128) || !boundedLen(pou.Version, 1, 64)) {
+			return fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+		for _, requirement := range pou.RequiresLibrary {
+			if !boundedLen(requirement.Name, 1, 64) || !boundedLen(requirement.Version, 1, 64) ||
+				(requirement.Origin != "" && requirement.Origin != "PROJECT" && requirement.Origin != "SYSTEM") {
+				return fmt.Errorf("tham số compiler worker không hợp lệ")
+			}
+		}
+	}
+	if input.LibraryLock.SystemVersion == "" {
+		if input.LibraryLock.ProjectRevisionID != "" || len(input.LibraryLock.Entries) != 0 {
+			return fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+		return nil
+	}
+	if !boundedLen(input.LibraryLock.SystemVersion, 1, 64) || len(input.LibraryLock.ProjectRevisionID) > 128 {
+		return fmt.Errorf("tham số compiler worker không hợp lệ")
+	}
+	seenLock := make(map[string]struct{}, len(input.LibraryLock.Entries))
+	for _, entry := range input.LibraryLock.Entries {
+		key := strings.ToUpper(entry.Name)
+		if !boundedLen(entry.EntryID, 1, 128) || !boundedLen(entry.Name, 1, 64) ||
+			(entry.Kind != "FUNCTION" && entry.Kind != "FUNCTION_BLOCK") ||
+			!boundedLen(entry.Version, 1, 64) || (entry.Origin != "PROJECT" && entry.Origin != "SYSTEM") {
+			return fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+		if _, duplicate := seenLock[key]; duplicate {
+			return fmt.Errorf("tham số compiler worker không hợp lệ")
+		}
+		seenLock[key] = struct{}{}
+	}
+	return nil
+}
+
 func decodeCLIResponse(raw []byte) (cliResponse, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -321,8 +583,15 @@ func validateSuccess(response cliResponse, artifactPath, manifestPath string, in
 		*response.CompilerProfile != domain.ProfileCode || *response.ProfileID != domain.ProfileID ||
 		*response.ProfileSHA256 != domain.ProfileSHA256 ||
 		*response.LibraryVersion != domain.ProfileLibraryVersion ||
-		*response.IntegrityMode != expectedArtifactIntegrityMode() {
+		*response.IntegrityMode != expectedArtifactIntegrityMode() || response.LinkedPOUs == nil ||
+		response.SignalRefs == nil {
 		return Result{}, fmt.Errorf("%w: metadata success thiếu/sai", ErrInvalidOutput)
+	}
+	if err := validateLinkedOutput(response.LinkedPOUs, input.LinkedPOUs); err != nil {
+		return Result{}, err
+	}
+	if err := validateSignalOutput(response.SignalRefs, input); err != nil {
+		return Result{}, err
 	}
 	// T59-607 — chữ ký phải KHỚP CHÍNH SÁCH, theo cả hai chiều.
 	//
@@ -416,7 +685,85 @@ func validateSuccess(response cliResponse, artifactPath, manifestPath string, in
 		Manifest: canonicalManifest, CompilerVersion: response.CompilerVersion, ArtifactSchemaVersion: response.ArtifactSchemaVersion,
 		CompilerProfile: *response.CompilerProfile, ProfileID: *response.ProfileID, ProfileSHA256: *response.ProfileSHA256,
 		LibraryVersion: *response.LibraryVersion, IntegrityMode: *response.IntegrityMode, TargetABI: response.TargetABI,
-		IoBindingCount: *response.IoBindingCount}, nil
+		IoBindingCount: *response.IoBindingCount, LinkedPOUs: response.LinkedPOUs,
+		SignalRefs: response.SignalRefs}, nil
+}
+
+func validateSignalOutput(output []SignalRef, input Input) error {
+	expected := make(map[string]PublishedSignalContract, len(input.PublishedSignals))
+	for _, signal := range input.PublishedSignals {
+		expected[strings.ToUpper(signal.Name)] = signal
+	}
+	seen := make(map[string]struct{}, len(output))
+	for _, ref := range output {
+		key := strings.ToUpper(ref.Name)
+		contract, found := expected[key]
+		if !found || ref.Name != contract.Name || ref.Type != contract.Type ||
+			(!ref.Read && !ref.Publish) ||
+			(ref.Publish && contract.PublisherProgramID != input.ProgramID) {
+			return fmt.Errorf("%w: signalRefs không khớp contract", ErrInvalidOutput)
+		}
+		if _, duplicate := seen[key]; duplicate {
+			return fmt.Errorf("%w: signalRefs trùng", ErrInvalidOutput)
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
+}
+
+func validateLinkedOutput(output []LinkedPOU, sources []LinkedPOUSource) error {
+	expected := make(map[string]LinkedPOUSource, len(sources))
+	for _, source := range sources {
+		expected[strings.ToUpper(source.Name)] = source
+	}
+	seen := make(map[string]struct{}, len(output))
+	previous := ""
+	validType := func(value string) bool {
+		switch value {
+		case "BOOL", "INT", "DINT", "UINT", "REAL", "TIME":
+			return true
+		default:
+			return false
+		}
+	}
+	for _, item := range output {
+		key := strings.ToUpper(item.Name)
+		source, found := expected[key]
+		if !found || (previous != "" && key < previous) {
+			return fmt.Errorf("%w: linkedPous không khớp input/không tất định", ErrInvalidOutput)
+		}
+		previous = key
+		if _, duplicate := seen[key]; duplicate {
+			return fmt.Errorf("%w: linkedPous trùng", ErrInvalidOutput)
+		}
+		seen[key] = struct{}{}
+		digest := sha256.Sum256(source.Source)
+		expectedFromLibrary := source.FromLibrary
+		if item.Name != source.Name || item.Kind != source.Kind || item.Origin != source.Origin ||
+			item.FromLibrary != expectedFromLibrary ||
+			item.LibraryEntryID != source.LibraryEntryID || item.Version != source.Version ||
+			item.ContentSHA256 != hex.EncodeToString(digest[:]) || len(item.BodySHA256) != sha256.Size*2 ||
+			len(item.InputNames) != len(item.InputTypes) || len(item.OutputNames) != len(item.OutputTypes) ||
+			(item.Kind == "FUNCTION" && !item.HasReturnType) ||
+			(item.Kind == "FUNCTION_BLOCK" && item.HasReturnType) ||
+			(item.HasReturnType && !validType(item.ReturnType)) || (!item.HasReturnType && item.ReturnType != "") {
+			return fmt.Errorf("%w: linkedPous metadata sai", ErrInvalidOutput)
+		}
+		if _, err := hex.DecodeString(item.BodySHA256); err != nil {
+			return fmt.Errorf("%w: linkedPous body hash sai", ErrInvalidOutput)
+		}
+		for index, name := range item.InputNames {
+			if !boundedLen(name, 1, 64) || !validType(item.InputTypes[index]) {
+				return fmt.Errorf("%w: linkedPous input signature sai", ErrInvalidOutput)
+			}
+		}
+		for index, name := range item.OutputNames {
+			if !boundedLen(name, 1, 64) || !validType(item.OutputTypes[index]) {
+				return fmt.Errorf("%w: linkedPous output signature sai", ErrInvalidOutput)
+			}
+		}
+	}
+	return nil
 }
 
 func ensurePrivateDirectory(root string) error {

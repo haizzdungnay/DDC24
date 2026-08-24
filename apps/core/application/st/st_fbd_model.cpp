@@ -100,11 +100,13 @@ bool parse_type(const std::string& value, StType* out)
 
 bool parse_kind(const std::string& value, FbdNodeKind* out)
 {
-    static const std::array<std::pair<const char*, FbdNodeKind>, 6> kinds{{
+    static const std::array<std::pair<const char*, FbdNodeKind>, 8> kinds{{
         {"INPUT", FbdNodeKind::INPUT}, {"OUTPUT", FbdNodeKind::OUTPUT},
         {"CONSTANT", FbdNodeKind::CONSTANT}, {"FUNCTION", FbdNodeKind::FUNCTION},
         {"FUNCTION_BLOCK", FbdNodeKind::FUNCTION_BLOCK},
         {"CONVERSION", FbdNodeKind::CONVERSION},
+        {"SIGNAL_READ", FbdNodeKind::SIGNAL_READ},
+        {"SIGNAL_PUBLISH", FbdNodeKind::SIGNAL_PUBLISH},
     }};
     for (const auto& item : kinds) {
         if (value == item.first) {
@@ -164,7 +166,8 @@ bool known_to_registry(const std::string& type_ref)
 {
     return scalar_types().count(type_ref) != 0 || pure_functions().count(type_ref) != 0 ||
            stateful_functions().count(type_ref) != 0 ||
-           explicit_conversions().count(type_ref) != 0;
+           explicit_conversions().count(type_ref) != 0 || type_ref == "SIGNAL_READ" ||
+           type_ref == "SIGNAL_PUBLISH";
 }
 
 /* Trả false nếu `type_ref` chắc chắn sai. Với FUNCTION/FUNCTION_BLOCK, một
@@ -198,6 +201,10 @@ bool node_type_ref_matches_kind(FbdNode* node)
         return true;
     case FbdNodeKind::CONVERSION:
         return explicit_conversions().count(node->type_ref) != 0;
+    case FbdNodeKind::SIGNAL_READ:
+        return node->type_ref == "SIGNAL_READ";
+    case FbdNodeKind::SIGNAL_PUBLISH:
+        return node->type_ref == "SIGNAL_PUBLISH";
     }
     return false;
 }
@@ -220,6 +227,12 @@ bool node_port_shape_matches_kind(const FbdNode& node)
     case FbdNodeKind::FUNCTION_BLOCK:
     case FbdNodeKind::CONVERSION:
         return input_count > 0 && output_count > 0;
+    case FbdNodeKind::SIGNAL_READ:
+        return node.ports.size() == 1 && input_count == 0 && output_count == 1 &&
+               node.ports[0].name == "OUT" && node.ports[0].order == 0;
+    case FbdNodeKind::SIGNAL_PUBLISH:
+        return node.ports.size() == 1 && input_count == 1 && output_count == 0 &&
+               node.ports[0].name == "IN" && node.ports[0].order == 0;
     }
     return false;
 }
@@ -227,6 +240,18 @@ bool node_port_shape_matches_kind(const FbdNode& node)
 bool is_stateful(const FbdNode& node)
 {
     return node.kind == FbdNodeKind::FUNCTION_BLOCK;
+}
+
+bool signal_parameters_match_kind(const FbdNode& node)
+{
+    if (node.kind != FbdNodeKind::SIGNAL_READ &&
+        node.kind != FbdNodeKind::SIGNAL_PUBLISH)
+        return true;
+    if (node.parameters.size() != 1) return false;
+    const auto found = node.parameters.find("signal");
+    if (found == node.parameters.end()) return false;
+    const auto* signal = std::get_if<std::string>(&found->second);
+    return signal != nullptr && is_identifier(*signal);
 }
 
 bool parameters_are_bounded(const json& value)
@@ -500,6 +525,9 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
             }
             if (!node_port_shape_matches_kind(node)) {
                 add_issue(&result, "FBD-SEM-PORT-SHAPE-001", node_path + ".ports");
+            }
+            if (!signal_parameters_match_kind(node)) {
+                add_issue(&result, "FBD-SEM-PARAM-001", node_path + ".parameters");
             }
             network.nodes.push_back(std::move(node));
         }

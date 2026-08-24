@@ -15,7 +15,15 @@ export const FBD_MAX_PORTS_PER_NODE = 16
 
 export type FbdDataType = (typeof PROGRAMMING_TYPES)[number]['name']
 export const FBD_DATA_TYPES: readonly FbdDataType[] = PROGRAMMING_TYPES.map((item) => item.name)
-export type FbdNodeKind = 'INPUT' | 'OUTPUT' | 'CONSTANT' | 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
+export type FbdNodeKind =
+  | 'INPUT'
+  | 'OUTPUT'
+  | 'CONSTANT'
+  | 'FUNCTION'
+  | 'FUNCTION_BLOCK'
+  | 'CONVERSION'
+  | 'SIGNAL_READ'
+  | 'SIGNAL_PUBLISH'
 export type FbdPortDirection = 'INPUT' | 'OUTPUT'
 export type FbdParameterValue = boolean | number | string
 
@@ -70,6 +78,21 @@ export interface FbdIssue {
   path: string
 }
 
+/** Phần contract Published Signal mà validator FBD cần. Kiểu cấu trúc này cố
+ * ý không phụ thuộc view model của editor để có thể đối soát trực tiếp payload
+ * Draft v2 mà API trả về. */
+export interface FbdSignalDefinition {
+  name: string
+  type: FbdDataType
+  unit?: string
+  publisherProgramId: string
+}
+
+export interface FbdValidationContext {
+  programId: string
+  signals: readonly FbdSignalDefinition[]
+}
+
 /* WP-03 (D-06, REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15 §8.4): registry này
  * PHẢI khớp đúng những gì C++ compiler thật sự chấp nhận
  * (`st_func_from_name`/`StFbType`, `apps/core/application/st/`), không phải
@@ -93,6 +116,14 @@ const conversions = new Set([
   'REAL_TO_DINT', 'REAL_TO_UINT',
 ])
 const scalarTypes = new Set<string>(FBD_DATA_TYPES)
+const knownRegistryTypeRefs = new Set<string>([
+  ...scalarTypes,
+  ...pureFunctions,
+  ...statefulFunctions,
+  ...conversions,
+  'SIGNAL_READ',
+  'SIGNAL_PUBLISH',
+])
 const canonicalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const identifier = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
 
@@ -153,9 +184,14 @@ export function collectFbdInterfaceVariables(document: FbdDocument): FbdInterfac
 
 function typeRefMatchesKind(node: FbdNode): boolean {
   if (node.kind === 'INPUT' || node.kind === 'OUTPUT' || node.kind === 'CONSTANT') return scalarTypes.has(node.typeRef)
-  if (node.kind === 'FUNCTION') return pureFunctions.has(node.typeRef)
-  if (node.kind === 'FUNCTION_BLOCK') return statefulFunctions.has(node.typeRef)
-  return conversions.has(node.typeRef)
+  if (node.kind === 'FUNCTION') {
+    return pureFunctions.has(node.typeRef) || !knownRegistryTypeRefs.has(node.typeRef)
+  }
+  if (node.kind === 'FUNCTION_BLOCK') {
+    return statefulFunctions.has(node.typeRef) || !knownRegistryTypeRefs.has(node.typeRef)
+  }
+  if (node.kind === 'CONVERSION') return conversions.has(node.typeRef)
+  return node.typeRef === node.kind
 }
 
 function portShapeMatchesKind(node: FbdNode): boolean {
@@ -163,14 +199,49 @@ function portShapeMatchesKind(node: FbdNode): boolean {
   const outputs = node.ports.length - inputs
   if (node.kind === 'INPUT' || node.kind === 'CONSTANT') return inputs === 0 && outputs > 0
   if (node.kind === 'OUTPUT') return inputs > 0 && outputs === 0
+  if (node.kind === 'SIGNAL_READ') {
+    const port = node.ports[0]
+    return node.ports.length === 1 && inputs === 0 && outputs === 1 &&
+      port?.name === 'OUT' && port.order === 0
+  }
+  if (node.kind === 'SIGNAL_PUBLISH') {
+    const port = node.ports[0]
+    return node.ports.length === 1 && inputs === 1 && outputs === 0 &&
+      port?.name === 'IN' && port.order === 0
+  }
   return inputs > 0 && outputs > 0
 }
 
-export function validateFbdDocument(document: FbdDocument): FbdIssue[] {
+function isSignalNode(node: FbdNode): node is FbdNode & { kind: 'SIGNAL_READ' | 'SIGNAL_PUBLISH' } {
+  return node.kind === 'SIGNAL_READ' || node.kind === 'SIGNAL_PUBLISH'
+}
+
+export function validateFbdDocument(document: FbdDocument, context?: FbdValidationContext): FbdIssue[] {
   const issues: FbdIssue[] = []
   const add = (code: string, path: string) => {
     if (issues.length < 64) issues.push({ code, path })
   }
+  const signalByName = new Map<string, FbdSignalDefinition>()
+  const ambiguousSignalNames = new Set<string>()
+  context?.signals.forEach((signal, index) => {
+    const path = `$signals[${index}]`
+    const foldedName = signal.name.toLocaleUpperCase('en-US')
+    const valid = identifier.test(signal.name) && FBD_DATA_TYPES.includes(signal.type) &&
+      signal.publisherProgramId.length > 0 &&
+      (signal.unit === undefined || (signal.unit.length > 0 && signal.unit.length <= 32))
+    if (!valid) {
+      add('FBD-SEM-SIGNAL-MODEL-001', path)
+      return
+    }
+    if (ambiguousSignalNames.has(foldedName) || signalByName.has(foldedName)) {
+      ambiguousSignalNames.add(foldedName)
+      signalByName.delete(foldedName)
+      add('FBD-SEM-SIGNAL-MODEL-001', `${path}.name`)
+      return
+    }
+    signalByName.set(foldedName, signal)
+  })
+  const publishedSignals = new Set<string>()
   if (document.$schema !== '../../fbd_v1.schema.json' || document.schemaVersion !== 1 ||
       document.profileId !== FBD_PROFILE_ID || !canonicalUuid.test(document.graphId) ||
       !identifier.test(document.name)) {
@@ -211,6 +282,14 @@ export function validateFbdDocument(document: FbdDocument): FbdIssue[] {
         (typeof value === 'number' && (!Number.isFinite(value) ||
           (Number.isInteger(value) && (value < -2_147_483_648 || value > 2_147_483_647))))
       )) add('FBD-SEM-PARAMETER-001', `${nodePath}.parameters`)
+      const signalName = isSignalNode(node) && parameters.length === 1 &&
+        parameters[0]?.[0] === 'signal' && typeof parameters[0][1] === 'string' &&
+        identifier.test(parameters[0][1])
+        ? parameters[0][1]
+        : null
+      if (isSignalNode(node) && signalName === null) {
+        add('FBD-SEM-PARAM-001', `${nodePath}.parameters`)
+      }
       if (node.ports.length < 1 || node.ports.length > FBD_MAX_PORTS_PER_NODE) {
         add('FBD-LIMIT-PORT-001', `${nodePath}.ports`)
       }
@@ -229,6 +308,27 @@ export function validateFbdDocument(document: FbdDocument): FbdIssue[] {
         ports.set(port.id, { node, port })
       })
       if (!portShapeMatchesKind(node)) add('FBD-SEM-PORT-SHAPE-001', `${nodePath}.ports`)
+      if (context && isSignalNode(node) && signalName !== null) {
+        const foldedName = signalName.toLocaleUpperCase('en-US')
+        const definition = signalByName.get(foldedName)
+        if (!definition || definition.name !== signalName) {
+          add('FBD-SEM-SIGNAL-REF-001', `${nodePath}.parameters.signal`)
+        } else {
+          const port = node.ports[0]
+          if (!port || port.dataType !== definition.type || port.unit !== (definition.unit ?? null)) {
+            add('FBD-SEM-SIGNAL-PORT-001', `${nodePath}.ports`)
+          }
+          if (node.kind === 'SIGNAL_PUBLISH') {
+            if (definition.publisherProgramId !== context.programId) {
+              add('FBD-SEM-SIGNAL-PUBLISHER-001', `${nodePath}.parameters.signal`)
+            }
+            if (publishedSignals.has(foldedName)) {
+              add('FBD-SEM-SIGNAL-PUBLISH-COUNT-001', `${nodePath}.parameters.signal`)
+            }
+            publishedSignals.add(foldedName)
+          }
+        }
+      }
     })
     if (network.nodes.length < 1 || network.nodes.length > FBD_MAX_BLOCKS) {
       add('FBD-LIMIT-BLOCK-001', `${networkPath}.nodes`)

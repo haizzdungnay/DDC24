@@ -165,10 +165,25 @@ func startTestHMIBroker(t *testing.T, broker *HMIBroker) (context.CancelFunc, <-
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- broker.Serve(ctx) }()
-	deadline := time.Now().Add(2 * time.Second)
+	// Hạn 2 s cũ đủ khi chạy riêng gói này nhưng KHÔNG đủ khi `go test ./...`
+	// chạy 17 gói song song trên máy đang build thứ khác: đo thật 2026-08-24,
+	// `TestHMIBrokerRestartInvalidatesSession` đỏ với "broker socket was not
+	// created" trong lần chạy đầy đủ rồi xanh ngay khi chạy một mình. Một cổng
+	// đỏ vì máy bận là cổng không ai còn tin, nên hạn ở đây phải là hạn của
+	// "chắc chắn hỏng", không phải của "máy rảnh".
+	deadline := time.Now().Add(20 * time.Second)
 	for {
 		if _, err := os.Stat(broker.cfg.HMISock); err == nil {
 			return cancel, done
+		}
+		// Serve() thoát sớm (cổng bận, quyền, cấu hình sai) thì không có
+		// socket nào sẽ xuất hiện — báo đúng lỗi đó thay vì đợi hết hạn rồi
+		// báo một triệu chứng không nói lên nguyên nhân.
+		select {
+		case err := <-done:
+			cancel()
+			t.Fatalf("broker dừng trước khi tạo socket: %v", err)
+		default:
 		}
 		if time.Now().After(deadline) {
 			cancel()

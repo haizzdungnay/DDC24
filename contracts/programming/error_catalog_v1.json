@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.7.0",
+  "catalogVersion": "1.7.1",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     {
@@ -610,6 +610,26 @@
     },
     {
       "component": "compiler",
+      "detailCode": "ST-CLI-LIBRARY-LOCK",
+      "publicCode": "PRG-ERR-LIB-VERSION-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-POU-MANIFEST",
+      "publicCode": "PRG-ERR-POU-KIND-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-POU-PATH",
+      "publicCode": "PRG-ERR-REQ-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-SIGNAL-MANIFEST",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
       "detailCode": "ST-CLI-SANDBOX",
       "publicCode": "PRG-ERR-UNAVAILABLE-001"
     },
@@ -855,6 +875,11 @@
     },
     {
       "component": "compiler",
+      "detailCode": "ST-SIG-005",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
       "detailCode": "ST-SYN-001",
       "publicCode": "PRG-ERR-CHECK-001"
     },
@@ -1087,6 +1112,21 @@
     {
       "component": "runtime",
       "detailCode": "ST-RT-010",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-011",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-012",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-013",
       "publicCode": "PRG-ERR-COM-001"
     },
     {

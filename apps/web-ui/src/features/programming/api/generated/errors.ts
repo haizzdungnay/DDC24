@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "69178447b0996c5110748c0d76365bf977db324807aab0a2ffac67e0e9f3e7dc" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.7.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "d5757655b0d84ec1d836d7742ad7ee6c9e15d486873169ac2f8586e289d7a11b" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.7.1" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
@@ -58,8 +58,12 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-CLI-KEY": "PRG-ERR-UNAVAILABLE-001",
   "compiler\u0000ST-CLI-KEY-EXISTS": "PRG-ERR-CONFLICT-001",
   "compiler\u0000ST-CLI-KEY-REQUIRED": "PRG-ERR-UNAVAILABLE-001",
+  "compiler\u0000ST-CLI-LIBRARY-LOCK": "PRG-ERR-LIB-VERSION-001",
   "compiler\u0000ST-CLI-LIMIT": "PRG-ERR-SCOPE-001",
+  "compiler\u0000ST-CLI-POU-MANIFEST": "PRG-ERR-POU-KIND-001",
+  "compiler\u0000ST-CLI-POU-PATH": "PRG-ERR-REQ-001",
   "compiler\u0000ST-CLI-SANDBOX": "PRG-ERR-UNAVAILABLE-001",
+  "compiler\u0000ST-CLI-SIGNAL-MANIFEST": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-CLI-TOOLARGE": "PRG-ERR-SCOPE-001",
   "compiler\u0000ST-IOMAP-001": "PRG-ERR-MAP-003",
   "compiler\u0000ST-IOMAP-002": "PRG-ERR-MAP-003",
@@ -108,6 +112,7 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-SIG-002": "PRG-ERR-MAP-004",
   "compiler\u0000ST-SIG-003": "PRG-ERR-SIGNAL-FRESHNESS-001",
   "compiler\u0000ST-SIG-004": "PRG-ERR-SIGNAL-PUBLISHER-001",
+  "compiler\u0000ST-SIG-005": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SYN-001": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SYN-002": "PRG-ERR-SCOPE-001",
   "compiler\u0000ST-WORKER-CRASH": "PRG-ERR-UNAVAILABLE-001",
@@ -155,6 +160,9 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "runtime\u0000ST-RT-008": "PRG-ERR-COM-001",
   "runtime\u0000ST-RT-009": "PRG-ERR-COM-001",
   "runtime\u0000ST-RT-010": "PRG-ERR-COM-001",
+  "runtime\u0000ST-RT-011": "PRG-ERR-UNAVAILABLE-001",
+  "runtime\u0000ST-RT-012": "PRG-ERR-COM-001",
+  "runtime\u0000ST-RT-013": "PRG-ERR-COM-001",
   "st-control-api\u0000API-E-001": "PRG-ERR-REQ-001",
   "st-control-api\u0000API-E-002": "PRG-ERR-REQ-001",
   "st-control-api\u0000API-E-003": "PRG-ERR-TARGET-001",

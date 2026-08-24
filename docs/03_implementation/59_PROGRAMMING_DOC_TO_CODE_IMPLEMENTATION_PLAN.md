@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.3 |
-| Trạng thái | **Active — PLAN_READY / IMPLEMENT_READY** |
-| Ngày | 2026-08-23 |
+| Phiên bản | 2.4 |
+| Trạng thái | **Active — 52 task; corrective implementation/target MCU FAKE pending; RELEASE_READY NO-GO** |
+| Ngày | 2026-08-24 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04` |
 | Detailed Design | [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
@@ -36,10 +36,26 @@ Kết quả cuối:
 | `ORDERED` | Đã thiết kế xong; tự chuyển READY khi task dependency DONE, không cần approval mới. |
 | `EVIDENCE_QUEUE` | Implementation đã/đang làm; chạy khi có lab/target window. Không chặn task code độc lập. |
 | `REVIEW` | Code complete, đang review/fix finding trong cùng task. |
+| `PARTIAL` | Chỉ một phần acceptance có evidence; phần còn lại được nêu rõ, không suy thành DONE. |
+| `WAIVED/DEFERRED BY OWNER` | Owner loại khỏi phạm vi đóng implementation hiện tại; không phải PASS và không mở release. |
 
 **Không dùng trạng thái `BLOCKED` cho task implementation trong plan.** Thiếu
 hardware/credential/CI là resource/evidence queue, không phải lý do dừng các Wave
 code còn làm được. `RELEASE_READY` vẫn `NO-GO` tới khi evidence thật đủ.
+
+### 0.2 Bốn lớp trạng thái không được trộn
+
+| Lớp | Trạng thái hiện tại | Acceptance |
+|---|---|---|
+| `IMPLEMENTATION_CLOSE` | **PENDING** | Corrective source user POU/Signal/atomic/Web IPC/library merge sạch; host gate đầy đủ, trace 82/82 và pin PASS |
+| `TARGET_FAKE_MCU_DEPLOY` | **PENDING** | Build đúng commit, backup/install/service/API/UI/read-back/rollback trên Forlinx và ghi rõ `MCU_MODE=FAKE` |
+| `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** | 10 Program/3 period chạy đủ 24 h; raw JSONL/hash/provenance, fault/signal/restart, `max_iop_poll_gap <200 ms` |
+| `RELEASE_READY` | **NO-GO** | Formal Test Result, residual risk acceptance và mọi Must theo VVP/release authority |
+
+Product Owner cho phép bỏ CI vì chưa có ngân sách và defer physical MCU/FW/HIL
+vì lab chưa có phần cứng. Disposition đúng là `WAIVED/DEFERRED BY OWNER`, không
+phải PASS. MCU FAKE cho phép chứng minh deploy/soak software trên target nhưng
+không chứng minh AO/DO, watchdog/safe-timeout MCU hay HIL vật lý.
 
 ## 1. Baseline và nguyên tắc thực thi
 
@@ -1800,6 +1816,63 @@ thật trên target (`T59-702`).
 
 **Evidence level.** Host/local. Không phải GitHub CI, không phải target/HIL.
 
+#### Sửa kèm W4 (2026-08-24) — Enable/Disable chạy sai luồng, và một read-back ghép chéo chu kỳ
+
+Hai lỗi dưới đây không lộ ra ở bất kỳ acceptance nào của W4 vì mọi test của
+W4 chạy **đơn luồng**, còn trên bo thì `SET_PROGRAM_ENABLED` chạy trên IPC
+worker thread (`main.cpp` dựng `programming_ipc_thread` riêng) song song với
+scan loop `SCHED_FIFO 80`. Cách phát hiện: dựng lại đúng mô hình hai luồng đó
+trong test rồi chạy dưới `-DMKDDC_SANITIZE=thread`.
+
+**`F-P59-ENABLE-BOUNDARY-001`.** `set_program_enabled()` gọi thẳng
+`StScheduler::start/stop/enable/disable` từ luồng non-RT, tức ghi
+`StProgramInstance::state`/`enabled` ngay khi RT đang đọc để quyết định dispatch
+và đang ghi khi Program fault. TSan đo ra **3 data race**: `stop` ↔ `run_task`,
+`disable` ↔ `run_task`, và vòng đếm trần 16 trong `start` ↔ `run_program`.
+Hệ quả không dừng ở cảnh báo công cụ: một lệnh Disable rơi đúng giữa tick có
+thể bị RT ghi đè trạng thái ngay sau đó, và Program người vận hành vừa tắt còn
+chạy thêm một chu kỳ **với quyền ghi đầu ra**.
+
+Bản sửa cho Enable/Disable đi đúng con đường đã dùng cho RETAIN reset: non-RT
+chỉ ARM (`request_program_enabled`), RT áp dụng tại safe boundary
+(`apply_pending_enable_requests_at_boundary`) rồi trả kết quả qua
+`enable_ack_generation`/`enable_ack_result`/`enable_ack_state`; coordinator chờ
+có giới hạn 1500 ms và phân biệt `APPLIED`/`REJECTED`/`TIMED_OUT`. `TIMED_OUT`
+map sang `Busy` chứ không phải `Rejected` — lệnh vẫn có thể áp dụng ở boundary
+kế, nên báo "đã từ chối" là nói sai với người vận hành.
+
+Sửa kèm trong cùng bản: **trần 16 Program kiểm TRƯỚC khi chạm bất kỳ trường
+nào**. Đường cũ enable xong mới phát hiện vượt trần, để lại Program ở
+`STOPPED`/`enabled=true` — một lệnh bị từ chối vẫn kịp đổi trạng thái nửa vời,
+đúng thứ luật §1.2.6 cấm.
+
+**`F-P59-SIGNAL-READBACK-001`.** Cùng vòng race-check phát hiện
+`program_ipc_server.cpp` gọi `signal_bus()->inspect_all()` trên IPC worker
+thread. Double-buffer của `T59-404` chỉ bảo đảm "trọn bản cũ hoặc trọn bản mới"
+cho reader chạy **trong cùng chu kỳ** với publisher; reader non-RT có thể còn
+đang chép bản `live` khi scan commit — bản đó thành nháp và `publish()` chu kỳ
+kế ghi đè lên chính nó. Kết quả: Runtime Monitor có thể trả `value` của chu kỳ
+N ghép với `published_at_ns` của chu kỳ N+1, tức một số đo "tươi" theo mốc thời
+gian không thuộc về nó. Đo được ở 1/3 lần chạy trên bản chưa sửa. Bản sửa dùng
+đúng khuôn seqlock đã có cho SHM (`IobusReader::read_from`): đọc `generation`
+trước/sau khi chép, khác nhau thì chép lại, trần 5 lần thử.
+
+**`F-P59-MONITOR-VARS-001`** (phát hiện khi chạy lại lane E2E thật để xác nhận
+bản sửa Enable/Disable). Màn "Theo dõi" luôn hiện "Revision đang chạy chưa có
+biến ánh xạ" dù Program đang chạy với Binding hợp lệ. Hai lỗi chồng nhau:
+`ReadProgrammingMonitorSnapshot` để lỗi đọc PLC SHM nuốt luôn `snapshot.Points`
+mà Core phát qua Web IPC; và `GetMonitor` chỉ tra biến ở Revision object
+`VARIABLE` kiểu v1 trong khi `SealRevision` của Draft v2 seal biến vào `locals`
+của POU — nên bảng `variables` luôn rỗng và **mọi** Binding bị bỏ qua với **mọi**
+Revision. Lane E2E trước đây che đúng lỗi này bằng một kỳ vọng "Monitor đang
+ngoại tuyến" cộng một ngoại lệ `503` được coi là hợp lệ; nay lane đọc thật hàng
+`SupplyTemp → UI-01 → 21.5 → GOOD` và ngân sách 5xx/console hạ về **0**.
+
+Số đo: `ctest` **1293/1293**; TSan toàn core **0 cảnh báo** (2 test
+`StCompileCli` không chạy được dưới TSan vì `RLIMIT_AS 256 MB` của sandbox
+compiler, cả hai PASS ở build thường — không hạ trần sandbox để làm xanh TSan).
+Chi tiết: [`2026-08-24-tsan-enable-boundary.md`](../07_records/test-evidence/programming/2026-08-24-tsan-enable-boundary.md).
+
 ### W5 — Lifecycle atomic và sản phẩm FE↔BE↔Core
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
@@ -2160,6 +2233,37 @@ mang cùng lỗ hổng; việc gom helper dùng chung thuộc `T59-604`.
 **Evidence level.** Toàn bộ HOST/LOCAL. Không phải GitHub CI, target, HIL hay
 release evidence; `RELEASE_READY` giữ `NO-GO`.
 
+#### Corrective closure Plan59 ngày 2026-08-24 — chưa phải bằng chứng DONE
+
+Review sau W7 phát hiện các acceptance trước đây chưa phủ trọn luồng thực tế.
+Các finding này thuộc lại task hiện hữu, không tạo tracker/task authority thứ hai:
+
+| Finding | Task phải đối chiếu lại | Acceptance bắt buộc trước `IMPLEMENTATION_CLOSE=PASS` |
+|---|---|---|
+| `F-P59-ATOMIC-001` | `T59-401/501/503` | `stage_impl()` dựng `StPreparedProgramSet` và prepared signal bank cô lập; `PREPARED` fsync trước mọi live mutation; một safe-boundary handoff toàn bộ hoặc zero-mutation |
+| `F-P59-POU-001` | `T59-101..106/302/401/505` | user FUNCTION/FB đi source→typed IR→package→loader→runtime thật cho ST và FBD; purity/recursion/layout/fault path fail closed |
+| `F-P59-SIGNAL-001` | `T59-301/304/404/504/505` | `SIGNAL_READ=0x71`, `SIGNAL_PUBLISH=0x72`, signal-ref section `0x0009`; producer→snapshot→consumer và stale/disable/recovery không dựng zero |
+| `F-P59-MANIFEST-001` | `T59-302/305/605/606` | Check/package khóa POU table, library lock, signal refs, topology, resource budget và provenance deterministic |
+| `F-P59-UI-001` | `T59-203/503/504/506` | authoring Library/POU/Published Signal, read-back API và browser Console/Network desktop/mobile |
+| `F-P59-GATE-001` | `T59-007/505/606` | affected/full production binary gates trên cùng worktree/commit; không dùng số đo W5/W6 cũ sau contract change |
+| `F-P59-EVIDENCE-001` | `T59-701..707` | trace 82/82, pin hiện hành, risk treatment, deploy/soak record đúng commit và phân lớp evidence |
+| `F-P59-ENABLE-BOUNDARY-001` | `T59-402/405/406` | `SET_PROGRAM_ENABLED` không ghi `state`/`enabled` từ IPC worker thread; ARM + áp dụng tại safe boundary, ack có generation; trần 16 kiểm TRƯỚC khi chạm trường; TSan 0 cảnh báo trên đường này |
+| `F-P59-SIGNAL-READBACK-001` | `T59-404/504` | reader non-RT (`inspect_all` cho STATUS/Monitor) không trả `value` ghép với `published_at_ns` của chu kỳ khác; seqlock `generation` + retry |
+| `F-P59-MONITOR-VARS-001` | `T59-504/505` | Runtime Monitor tra biến theo `locals` của Draft v2 (không chỉ object `VARIABLE` v1) và giữ `snapshot.Points` của Core khi PLC SHM chưa attach; lane E2E thật đạt `HTTP>=500=0`/`console.error=0`, không còn ngoại lệ `503` |
+
+**Hai finding cuối phát hiện ở chính vòng self-review 2026-08-24**, bằng cách
+chạy `-DMKDDC_SANITIZE=thread` trên đúng mô hình luồng của bo (scan RT +
+IPC worker), thứ mà chưa acceptance nào của W4 từng làm cho đường Enable/Disable.
+Số đo và stack trace: [`2026-08-24-tsan-enable-boundary.md`](../07_records/test-evidence/programming/2026-08-24-tsan-enable-boundary.md).
+Lưu ý đọc lại `T59-403`: dòng "TSan 0 cảnh báo" ở đó đúng cho lane worker tại
+thời điểm đóng task, nhưng TSan **không được chạy lại** sau khi `T59-405` thêm
+đường Enable/Disable — đó là lý do lỗi sống sót tới tận vòng này.
+
+Corrective source hiện có trong current worktree nhưng chưa merge và chưa có
+full gate/target record mới, vì vậy chưa được đổi task sang một lần `DONE` mới hay
+nâng trace `I`. Khi merge, bổ sung commit/file/symbol/build hash vào Trace/Risk
+và ghi số đo mới; bằng chứng W5/W6 cũ chỉ còn regression history.
+
 ### W6 — Hardening, packaging và Release Candidate
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
@@ -2510,13 +2614,13 @@ kiện bắt buộc vì bước 2 restart dịch vụ.
 
 | Task | Priority | Việc làm / source chính | Dependency | Status | Acceptance |
 |---|---|---|---|---|---|
-| `T59-701` | P0 | Khôi phục GitHub Actions account và chạy full RC workflow | RC T59-606 | EVIDENCE_QUEUE | **12 job** khởi chạy thật (gồm lane Programming real-backend); required checks PASS trên RC commit. Việc job tồn tại trong workflow không phải CI evidence. |
+| `T59-701` | P0 | Khôi phục GitHub Actions account và chạy full RC workflow | RC T59-606 | **WAIVED/DEFERRED BY OWNER — không phải PASS** | CI chưa có ngân sách. Được loại khỏi phạm vi `IMPLEMENTATION_CLOSE`; vẫn là evidence thiếu của `RELEASE_READY`. Job tồn tại trong workflow không phải CI evidence. |
 | `T59-702` | P0 | Deploy target 10-Program fixture, timing/fault/Web-BE loss | T59-606 | EVIDENCE_QUEUE | 24 h; 3 period; no poll gap >=200 ms; fault isolation/signal freshness đúng. |
-| `T59-703` | P0 | Physical I/O HIL cho ST và FBD output | T59-606 | EVIDENCE_QUEUE | AO/DO đo bằng instrument; full candidate/safety path; Disable/rollback physical đúng. |
-| `T59-704` | P0 | RETAIN/power-cut/reboot/enable-intent/LKG matrix | T59-606 | EVIDENCE_QUEUE | >=10 power cuts; cold-init/recovery exact; no corrupt accepted/partial active. |
+| `T59-703` | P0 | Physical I/O HIL cho ST và FBD output | T59-606 | **DEFERRED BY OWNER — MCU FAKE, không phải HIL PASS** | Chưa có MCU/FW/phần cứng. AO/DO instrument, candidate/safety path và Disable/rollback physical vẫn là evidence release tương lai. |
+| `T59-704` | P0 | RETAIN/power-cut/reboot/enable-intent/LKG matrix | T59-606 | **EVIDENCE_QUEUE — physical MCU path deferred** | Với MCU FAKE vẫn chạy restart/process-fault/journal recovery; physical power-cut/MCU safe path chưa được coi PASS. |
 | `T59-705` | P0 | Fresh install/upgrade/controller replacement/rollback rehearsal | T59-606 | **PARTIAL — CÀI ĐÈ THẬT xong trên bo; còn thay controller và backup/restore trên dữ liệu vận hành** | Cross-build aarch64 + `GOARCH=arm64`, dựng cây `build/release` rồi chạy trọn **cài mới → nâng cấp → rollback** trên chính bo Foxlinx với `MKDDC_INSTALL_ROOT` (ghi vào cây giả, không cài đè). Trả lời được câu mà `T59-606` trên host không trả lời được: script chạy đúng trên Buildroot (BusyBox `adduser`/`addgroup`, không có `getent`/`useradd`). Provisioning khoá thiết bị chạy trên bo, `device.key` mode `0600`, nâng cấp không sinh lại; rollback khôi phục `mkddc-st-package`; cấu hình và artifact còn nguyên. **Sự cố lần chạy đầu, đã ghi đầy đủ:** bản diễn tập làm **dừng `mkddc-iobus` thật** ~50 s — wrapper `systemctl` bỏ sót lời gọi sau `&&` và trả `0` cho `is-enabled`, nên nhánh `&& systemctl restart mkddc-pty` chạy thật và PTY biến mất. Vá lộ thêm lỗi nặng hơn: thân wrapper trong `rollback.sh` gọi **chính nó** — rollback THẬT trên bo sẽ đệ quy vô hạn, lỗi chưa bao giờ chạy vì mọi lần trước đều ở chế độ diễn tập. Sau vá, chạy lại trên bo: mốc `ExecMainStartTimestamp` của iobus/core/pty **không đổi** — không dịch vụ nào bị chạm. 2 test đọc mã nguồn khoá cả ba điều kiện. **Còn lại:** cài đè thật (cần cửa sổ bảo trì vì sẽ restart iobus/netcfg), thay controller (cần bo thứ hai), backup/restore trên dữ liệu vận hành thật. Evidence: `docs/07_records/test-evidence/fw-som/2026-08-22-foxlinx-t59705-rehearsal.md`. | **Cập nhật 2026-08-23 (TARGET):** cài đè thật `main@29c59ec` lên bo — `sha256sum --check` 7/7 OK, `install.sh` chạy trọn trên Buildroot, bốn dịch vụ `mkddc-core`/`mkddc-iobus`/`mkddc-web-pi`/`mkddc-netcfg` trở lại `active` (mốc khởi động đổi từ 2026-08-21/22 sang `2026-08-22 21:56:30` — đây chính là lý do thao tác cần cửa sổ bảo trì). `/data/config/users.conf` **không** bị ghi đè. Binary cross-build `-static-libstdc++` chạy được trên Buildroot `GLIBCXX_3.4.30`. Evidence: `docs/07_records/test-evidence/fw-som/2026-08-23-foxlinx-t59705-install-signed.md`.
-| `T59-706` | P0 | PID Controls/Safety target review và evidence | T59-602/703 | EVIDENCE_QUEUE | Saturation/anti-windup/override/release pass; approval token; label READY. |
-| `T59-707` | P0 | Chạy full V&V unified + trace/risk/release record | T59-701..706 | **DONE — verdict `NO-GO` đã ký** | Release record `PROG-RELEASE-RECORD-2026-08-23` tổng hợp 14 cổng W7 (**10 PASS / 0 FAIL / 4 NOT_RUN**, không có `NOT_RUN` im lặng — cả bốn đều có chủ, runbook và điều kiện mở), 12 scenario `VS-PROG-U01..U12` (7 PASS ở mức HOST, 2 PASS một phần, 3 NOT_RUN) và bảng Must. Ba Must **không đạt**: physical AO/DO ST+FBD (`T59-703`), soak 24 h (`T59-702`), power-cut/RETAIN/LKG (`T59-704`) — nhóm này không được waive, nên verdict là **NO-GO**. Bảy điều kiện mở `GO` ghi trong record. |
+| `T59-706` | P0 | PID Controls/Safety target review và evidence | T59-602/703 | **DEFERRED BY OWNER — không gắn READY** | Chờ physical Controls/Safety evidence; host/unit evidence không thay approval token hoặc target label. |
+| `T59-707` | P0 | Chạy full V&V unified + trace/risk/release record | T59-701..706 | **DONE — verdict lịch sử `NO-GO` đã ký; current closure chưa có verdict mới** | Release record `PROG-RELEASE-RECORD-2026-08-23` tổng hợp RC cũ `main@29c59ec`. Các nhãn HOST/PARTIAL trong record là engineering disposition, **không phải formal Test Result PASS**; VVP unified vẫn 12/12 `NOT_RUN`. Corrective source mới phải có closure/deploy record riêng; `RELEASE_READY` tiếp tục `NO-GO`. |
 
 ### 3.8 Ghi chú thực thi W7 — cái gì đã có bằng chứng, cái gì chặn bởi cái gì
 
@@ -2532,18 +2636,19 @@ dịch vụ *thật* trong 50 giây, vì wrapper chặn `systemctl` bỏ sót c�
 chạm vào bo đang vận hành — giả định "chế độ an toàn thì không có tác dụng phụ"
 phải được **kiểm**, không được **tin**.
 
-**Ranh giới của phần còn lại.** Không task nào dưới đây bị chặn bởi mã nguồn; tất
-cả bị chặn bởi tài nguyên vật lý hoặc bởi một cửa sổ thời gian.
+**Ranh giới hiện tại.** Corrective implementation phải merge/gate lại trước khi
+dùng làm input deploy. Những disposition bên dưới chỉ quản phần evidence ngoài;
+waiver/defer không biến ô chưa chạy thành PASS.
 
 | Task | Chặn bởi | Cần gì để mở |
 |---|---|---|
-| `T59-701` | Chưa chạy được trên GitHub Actions | Một lần chạy thật trên RC commit |
-| `T59-702` | **Mật khẩu tài khoản `admin` của bo** + thời gian | Cài đè thật + **24 h** chạy liên tục với fixture 10 Program; không đo được bằng cách rút ngắn |
-| `T59-703` | **Thiết bị đo và người tại tủ** | Đồng hồ/scope đo AO/DO thật; không có đường thay thế bằng phần mềm |
-| `T59-704` | **Thao tác vật lý** | ≥10 lần cắt nguồn thật; nguồn lập trình được hoặc người trực |
+| `T59-701` | CI chưa có ngân sách | Owner đã `WAIVED/DEFERRED` cho implementation close; release muốn PASS vẫn cần một run thật trên RC |
+| `T59-702` | Cửa sổ target liên tục | Deploy đúng corrective commit + **24 h** fixture 10 Program MCU FAKE; không rút ngắn |
+| `T59-703` | Chưa có MCU/FW/phần cứng/thiết bị đo | Owner defer; khi mở lại cần AO/DO instrument và người tại tủ |
+| `T59-704` | Cửa sổ fault/restart; phần physical chưa có | Chạy phần process/restart với MCU FAKE; ≥10 physical power-cut thuộc release evidence tương lai |
 | `T59-705` (phần còn lại) | Phần cứng | ~~Cài đè thật~~ **xong 2026-08-23**; còn bo **thứ hai** cho kịch bản thay controller |
-| `T59-706` | `T59-703` | Evidence PID trên target trước, review Controls/Safety sau |
-| `T59-707` | `T59-701..706` | Không tổng hợp được một verdict từ các ô còn trống |
+| `T59-706` | `T59-703` | Owner defer; không gắn READY trước evidence PID target + review Controls/Safety |
+| `T59-707` | Corrective commit/deploy/soak chưa có record | Tạo closure record mới; release verdict vẫn `NO-GO` nếu các Must còn deferred/not-run |
 
 **Một điểm của `ADR-052` phải vào runbook thay bo (`T59-705`).** Artifact được ký
 bằng khoá của **chính bo**, nên bê artifact từ bo cũ sang bo mới sẽ bị từ chối —
@@ -2604,17 +2709,27 @@ trước, không chờ quyết định.
 Thiếu một dòng trên → `NO-GO`, nhưng không được dùng để dừng sửa code hoặc làm
 các evidence task còn khả thi.
 
-**Trạng thái 2026-08-23 (đã ký, xem `PROG-RELEASE-RECORD-2026-08-23`):**
+**Trạng thái current-scope 2026-08-24:**
+
+| Cổng | Trạng thái |
+|---|---|
+| `IMPLEMENTATION_CLOSE` | **PENDING** — corrective source chưa merge/full-gate/pin |
+| `TARGET_FAKE_MCU_DEPLOY` | **PENDING** — chưa có target record cho corrective commit |
+| `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** — yêu cầu đủ 24 h, không rút ngắn |
+| `RELEASE_READY` | **NO-GO** |
+
+**Record đã ký ngày 2026-08-23** (`PROG-RELEASE-RECORD-2026-08-23`) là snapshot
+của `main@29c59ec`, không phải evidence cho corrective source mới:
 
 | Dòng gate | Trạng thái |
 |---|---|
-| W0..W6 DONE trên RC commit | **ĐẠT** — `main@29c59ec`, `--wave W6` 10/10 HOST |
+| W0..W6 DONE trên RC commit | **HISTORICAL PASS** — `main@29c59ec`, `--wave W6` 10/10 HOST; current corrective input chưa gate lại |
 | `T59-701..707` evidence + verdict | **một phần** — `T59-707` đã ký `NO-GO`; `T59-701..704`/`706` còn EVIDENCE_QUEUE |
 | Physical AO/DO ST+FBD | **KHÔNG ĐẠT** — `T59-703` |
 | 10-Program 24 h + power/RETAIN/LKG | **KHÔNG ĐẠT** — `T59-702`/`T59-704` |
 | Install/upgrade/rollback/provenance/SIGNED | **ĐẠT phần lớn** — SIGNED và provenance đạt ở cả HOST lẫn TARGET; thay controller còn thiếu |
-| CI required checks; không quarantine im lặng | **một phần** — danh sách cách ly nay **rỗng** và có guard tự hết hạn (`T59-604`); verdict CI chưa có |
-| Trace/Risk không còn Must thiếu disposition | **ĐẠT** — mọi Must có disposition trong release record, ba Must ghi rõ KHÔNG ĐẠT |
+| CI required checks; không quarantine im lặng | **WAIVED/DEFERRED BY OWNER cho implementation close**; không phải CI PASS, release verdict CI chưa có |
+| Trace/Risk không còn Must thiếu disposition | Trace join **82/82 + 44/44**; risk vẫn 22/22 Open và disposition không đồng nghĩa residual accepted |
 
 `RELEASE_READY` = **`NO-GO`**.
 
@@ -2630,6 +2745,7 @@ truy nguyên As-Built đến 2026-08-20.
 |---|---|---|
 | 1.0/1.1 | 2026-08-20 | Bản nháp 37 task chia Rev A/Rev B; superseded. |
 | 2.0 | 2026-08-20 | Owner chốt một Product; 51 task/8 Wave từ contract đến release, đủ POU/library/multi-Program/signal/enable/output/HIL; mọi implementation task READY/ORDERED, không còn decision blocker. |
+| 2.4 | 2026-08-24 | Đồng bộ số hiện hành **52 task** sau `T59-607`; mở corrective closure cho POU/Signal/atomic/Web IPC/library và bảy finding. Tách `IMPLEMENTATION_CLOSE`, `TARGET_FAKE_MCU_DEPLOY`, `TARGET_FAKE_MCU_SOAK`, `RELEASE_READY`; CI ghi `WAIVED/DEFERRED BY OWNER`, physical MCU/HIL deferred, soak 24 h `NOT_RUN`, formal VVP unified 0/12 PASS. |
 | 2.3 | 2026-08-23 | Hợp nhất W6 vào `main` và đóng W6 trọn vẹn: `T59-607` bật `SIGNATURE_REQUIRED` (profile 2.1) và nối chính sách tới hành vi ở Core/backend/gate; ba finding hợp nhất `F-W6-MERGE-01..03` và hai finding `F-607-01/02`. Cài đè **thật** lên bo Foxlinx và chứng minh đường ký ADR-052 chạy trên phần cứng (`T59-705` một phần). `T59-707` ký verdict **`NO-GO`** với release record `PROG-RELEASE-RECORD-2026-08-23`: ba Must physical/soak/power-cut chưa có evidence và không được waive. |
 | 2.2 | 2026-08-23 | Đóng sổ W5 trên cây làm việc thật: chạy lại cả tám cổng trong một lượt lộ ra `F-W5-CLOSE-01` (overload `stage_activation` mới không biên dịch được — kéo đỏ cả `cpp` lẫn `e2e-real`) và `F-W5-CLOSE-02` (helper đăng nhập E2E coi sự kiện `load` là "đã mount"), cả hai được sửa trong cùng change-set; W5 đạt **8/8 PASS** mức HOST. Không đổi `RELEASE_READY=NO-GO`. |
 | 2.1 | 2026-08-21 | Cập nhật W5 theo source/evidence host: đóng T59-503/504/506; sau khi sửa vòng render Draft adapter, read-back PROJECT Library `PUBLISHED` và payload ST+ đúng Draft v2 strict, đóng T59-505 bằng `e2e-real` 1/1 PASS. Mở gate `e2e-real` riêng, ép C++ `cmake --fresh`, mở anti-mock guard cho mọi BrowserContext và cập nhật T59-701 thành 12 job; chưa claim GitHub CI/target/HIL/release và không đổi `RELEASE_READY=NO-GO`. |

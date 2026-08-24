@@ -1,0 +1,27 @@
+# ThreadSanitizer suppressions — MK-DDC-24
+#
+# Chỉ chứa các mẫu seqlock CỐ Ý, đã có test hành vi riêng chứng minh không đọc
+# rách. Mọi cảnh báo NGOÀI danh sách này phải coi là lỗi thật, không được thêm
+# dòng mới vào đây để "làm xanh" một race chưa hiểu.
+#
+# Cách dùng:
+#   cmake --fresh -S . -B build/tsan -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+#     -DMKDDC_SANITIZE=thread -DCMAKE_CROSSCOMPILING_EMULATOR="/usr/bin/setarch;$(uname -m);-R"
+#   TSAN_OPTIONS="suppressions=$PWD/platform/tsan/suppressions.txt" \
+#     setarch $(uname -m) -R ./build/tsan/core/core_tests
+# (`setarch -R` tắt ASLR: kernel mặc định của máy dev cấp entropy mmap lớn hơn
+#  vùng shadow TSan chịu được, thiếu nó binary chết ngay với
+#  "unexpected memory mapping".)
+
+# 1) Seqlock SHM iobus↔core (`IobusReader::read_from`): writer là tiến trình
+#    iobus, reader là scan core. Payload đọc/ghi bằng lệnh thường có chủ đích;
+#    tính nhất quán do bộ đếm `seq` chẵn/lẻ + retry bảo đảm.
+#    Test hành vi: IobusReader.NoTornReadUnderConcurrentWriter.
+race:core::IobusReader::read_from
+
+# 2) Seqlock Published Signal (`StSignalBus::publish` ghi bản nháp, reader
+#    non-RT chép bản live). Nhất quán do `generation` + retry ở
+#    `StSignalBus::snapshot_slot` (F-P59-SIGNAL-READBACK-001).
+#    Test hành vi: StSignalBus.ConcurrentReadNeverSeesTornValue và
+#    StSignalBus.ConcurrentInspectNeverPairsValueWithForeignTimestamp.
+race:core::StSignalBus::publish

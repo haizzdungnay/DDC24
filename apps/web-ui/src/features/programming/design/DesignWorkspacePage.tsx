@@ -305,7 +305,12 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
         />
       </div>
       <div hidden={tab !== 'mapping'}>
-        <MappingTab document={document} saving={workspace.saving} onSave={workspace.save} />
+        <MappingTab
+          draft={workspace.project.draft}
+          document={document}
+          saving={workspace.saving}
+          onSave={workspace.save}
+        />
       </div>
       <div hidden={tab !== 'execution'}>
         <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} onPendingOperationsChange={updateExecutionOperations} discardVersion={discardVersion} />

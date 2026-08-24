@@ -136,6 +136,7 @@ void IoCache::write_io(const IoSnapshot& s, const IobusMetrics& m)
     shm_->iop_crc_err  = m.crc_error_count.load(std::memory_order_relaxed);
     shm_->iop_timeout  = m.timeout_count.load(std::memory_order_relaxed);
     shm_->iop_seq_err  = m.seq_error_count.load(std::memory_order_relaxed);
+    shm_->max_iop_poll_gap_us = m.max_iop_poll_gap_us();
     KX_WRITE_END(shm_);
 }
 

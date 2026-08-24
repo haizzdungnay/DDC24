@@ -1,22 +1,53 @@
-import { useMemo, useState } from 'react'
-import { AlertTriangle, Library, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { AlertTriangle, ArchiveX, History, Library, Lock, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { Panel } from '../../../shared/components/Panel'
 import { StateBlock } from '../../../shared/components/StateBlock'
+import { Button } from '../../../shared/components/Button'
+import { Modal } from '../../../shared/components/Modal'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
 import { createUuid } from '../../../shared/crypto'
 import { useProgrammingLibrary, useProgrammingProjects, type LibrarySearchFilters } from '../api/queries'
 import { useProgrammingLibraryEntryMutations, type LibraryEntryDraft } from '../api/mutations'
+import { useDraftWorkspace } from '../design/useDraftWorkspace'
 import { PROGRAMMING_REVIEW_GATED_FEATURES } from '../api/generated/profile'
+import {
+  groupLibraryEntries,
+  libraryDependents,
+  libraryEntryPermissions,
+  libraryRevisionDeprecationBlock,
+  libraryUsagesByEntryId,
+  type LibraryEntryGroup,
+  type LibraryMutationBlock,
+  type LibraryUsage
+} from '../model/library'
+import { draftLibraryLock } from '../model/signals'
 import type { ProgrammingLibraryEntry } from '../model/types'
 
 /**
- * PGM-04 — Control Library (DDD-SW-PROG-UNIFIED-001 §8, UX §11).
+ * PGM-04 — Control Library (DDD-SW-PROG-UNIFIED-001 §8, UX §3.4/§11).
  *
  * Trang này CHỈ hiển thị trạng thái review-gate; nó không có checkbox nào để
  * "duyệt" một feature. Token phê duyệt Controls/Safety suy ra từ contract profile
  * và chỉ generator dựng được (T59-205) — một ô tick ở đây sẽ là đúng thứ DDD §9
  * cấm.
+ *
+ * T59-203 (`F-P59-UI-001`) bổ sung phần authoring còn thiếu và sửa hai lỗi thật
+ * của bản trước:
+ *
+ * 1. **Chọn nhầm version.** `GET /libraries` trả MỌI version của một entry
+ *    (`store/library.go: SearchLibraryEntries` không lọc `state`), nên
+ *    `entries.find(entryId)` lấy một version tuỳ ý — chi tiết hiển thị có thể
+ *    thuộc bản đã DEPRECATED trong khi nút xoá lại tác động lên bản DRAFT. Nay
+ *    danh sách gom theo entry và version history hiện tường minh.
+ * 2. **`projectId` lấy từ `items[0]`** thay vì từ route, nên deep-link tới
+ *    Project khác trong tương lai sẽ mở nhầm thư viện. Nay đọc route trước.
+ *
+ * Ghi entry luôn rơi vào DRAFT library đang mở (server tự mở bản minor kế tiếp
+ * nếu cần), còn publish xảy ra khi niêm phong Revision ở PGM-05. Chỉ chuyển
+ * tiếp một chiều PUBLISHED -> DEPRECATED có endpoint riêng; trang tuyệt đối
+ * không dựng một hành động Publish độc lập.
  */
 const REVIEW_GATED = new Set<string>(
   PROGRAMMING_REVIEW_GATED_FEATURES.filter((item) => !item.approved).map((item) => item.featureId)
@@ -25,52 +56,158 @@ const REVIEW_GATED = new Set<string>(
 type ScopeFilter = '' | 'SYSTEM' | 'PROJECT'
 type KindFilter = '' | 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
 
+/** Cùng biểu thức mà store ép (`libraryIECNamePattern`) — không chặt hơn, không
+ *  lỏng hơn: chặt hơn thì chặn tên server nhận, lỏng hơn thì đẩy lỗi xuống 400. */
+const LIBRARY_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/
+const LIBRARY_SOURCE_MAX_BYTES = 65536
+
+type EditorMode = { kind: 'create' } | { kind: 'edit'; entry: ProgrammingLibraryEntry; savesNewVersion: boolean }
+
+interface ReadBack {
+  entryId: string
+  action: 'save' | 'delete' | 'deprecate'
+  state: 'reading' | 'done'
+  libraryRevisionId?: string
+  libraryVersion?: string
+}
+
 export function LibraryPage() {
   const { pick } = useI18n()
   const { session } = useAuth()
   const canAdmin = roleAtLeast(session?.role, 'admin')
+  const routeParams = useParams<{ projectId: string }>()
   const projects = useProgrammingProjects()
-  const project = projects.data?.items[0]
+  // Route là nguồn sự thật; danh sách chỉ là đường lùi cho lối vào cũ không
+  // mang `projectId` (Rev A chỉ có một Project/controller).
+  const projectId = routeParams.projectId ?? projects.data?.items[0]?.projectId
+  const projectSummary = projects.data?.items.find((item) => item.projectId === projectId) ?? projects.data?.items[0]
+  const workspace = useDraftWorkspace(projectId)
 
   const [scope, setScope] = useState<ScopeFilter>('')
   const [kind, setKind] = useState<KindFilter>('')
   const [query, setQuery] = useState('')
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [etag, setEtag] = useState<string | null>(null)
+  const [editor, setEditor] = useState<EditorMode | null>(null)
+  const [deprecationCandidate, setDeprecationCandidate] = useState<ProgrammingLibraryEntry | null>(null)
+  const [blocked, setBlocked] = useState<LibraryMutationBlock | null>(null)
+  const [readBack, setReadBack] = useState<ReadBack | null>(null)
 
   const filters = useMemo<LibrarySearchFilters>(
     () => ({
-      projectId: project?.projectId,
+      projectId,
       scope: scope === '' ? undefined : scope,
       kind: kind === '' ? undefined : kind,
       query: query.trim() === '' ? undefined : query.trim()
     }),
-    [project?.projectId, scope, kind, query]
+    [projectId, scope, kind, query]
   )
   const library = useProgrammingLibrary(filters)
-  const currentEtag = etag ?? project?.etag ?? ''
-  const { saveEntry, deleteEntry, pending, error } = useProgrammingLibraryEntryMutations(project?.projectId)
+  const currentEtag = etag ?? workspace.project?.etag ?? projectSummary?.etag ?? ''
+  const { saveEntry, deleteEntry, deprecateRevision, pending, error, conflict, reset } =
+    useProgrammingLibraryEntryMutations(projectId)
 
-  const entries = library.data?.items ?? []
-  const selected = entries.find((item) => item.entryId === selectedEntryId) ?? null
+  const entries = useMemo(() => library.data?.items ?? [], [library.data])
+  const groups = useMemo(() => groupLibraryEntries(entries), [entries])
+  const selected = groups.find((group) => group.key === selectedKey) ?? null
+  const usages = useMemo(() => libraryUsagesByEntryId(workspace.project?.draft), [workspace.project?.draft])
+  const dependents = useMemo(() => (selected ? libraryDependents(selected, entries) : []), [selected, entries])
+  const permissions = selected
+    ? libraryEntryPermissions(selected, { canAdmin, hasProject: Boolean(projectId), dependents })
+    : null
+  const lock = workspace.project?.draft ? draftLibraryLock(workspace.project.draft) : null
 
-  async function handleCreate(draft: LibraryEntryDraft) {
-    const next = await saveEntry(currentEtag, draft)
-    if (next) {
-      setEtag(next)
+  /* Read-back thật: chỉ báo "đã lưu" SAU khi danh sách được đọc lại từ server.
+   * Bám vào identity của `library.data` (mỗi lần fetch xong là một object mới)
+   * nên không có đường nào hiện giá trị lạc quan rồi thôi. */
+  const libraryData = library.data
+  const readBackRef = useRef<ReadBack | null>(null)
+  readBackRef.current = readBack
+  useEffect(() => {
+    if (!libraryData) return
+    const current = readBackRef.current
+    if (!current || current.state !== 'reading') return
+    setReadBack({ ...current, state: 'done' })
+  }, [libraryData])
+
+  const afterMutation = useCallback(
+    (nextEtag: string, entryId: string, action: ReadBack['action'], revision?: ProgrammingLibraryEntry) => {
+      setEtag(nextEtag)
+      setReadBack({
+        entryId,
+        action,
+        state: 'reading',
+        ...(revision
+          ? { libraryRevisionId: revision.libraryRevisionId, libraryVersion: revision.libraryVersion }
+          : {})
+      })
       library.refresh()
       projects.refresh()
+      workspace.reload()
+    },
+    [library, projects, workspace]
+  )
+
+  async function handleSave(draft: LibraryEntryDraft) {
+    // Hàng rào thật, không phải mẹo ẩn nút: kể cả khi một nút bị bỏ sót
+    // `disabled`, đường ghi vẫn dừng ở đây và nói rõ lý do.
+    if (!canAdmin) {
+      setBlocked('NEEDS_ADMIN')
+      return
     }
+    if (!projectId) {
+      setBlocked('NO_PROJECT')
+      return
+    }
+    if (editor?.kind === 'edit' && editor.entry.scope === 'SYSTEM') {
+      setBlocked('SYSTEM_IMMUTABLE')
+      return
+    }
+    setBlocked(null)
+    const result = await saveEntry(currentEtag, draft)
+    if (!result) return
+    afterMutation(result.etag, draft.entryId, 'save')
+    setSelectedKey(`PROJECT/${draft.entryId}`)
+    setEditor(null)
   }
 
-  async function handleDelete(entryId: string) {
-    const next = await deleteEntry(currentEtag, entryId)
-    if (next) {
-      setEtag(next)
-      setSelectedEntryId(null)
-      library.refresh()
-      projects.refresh()
+  async function handleDelete(group: LibraryEntryGroup) {
+    const permission = libraryEntryPermissions(group, {
+      canAdmin,
+      hasProject: Boolean(projectId),
+      dependents: libraryDependents(group, entries)
+    })
+    if (!permission.canDelete) {
+      setBlocked(permission.deleteBlock)
+      return
     }
+    setBlocked(null)
+    const result = await deleteEntry(currentEtag, group.entryId)
+    if (!result) return
+    afterMutation(result.etag, group.entryId, 'delete')
+    setSelectedKey(null)
+    setEditor(null)
+  }
+
+  async function handleDeprecate(revision: ProgrammingLibraryEntry) {
+    const block = libraryRevisionDeprecationBlock(revision, {
+      canAdmin,
+      hasProject: Boolean(projectId)
+    })
+    if (block) {
+      setBlocked(block)
+      setDeprecationCandidate(null)
+      return
+    }
+    setBlocked(null)
+    const result = await deprecateRevision(currentEtag, revision.libraryRevisionId)
+    if (!result) return
+    afterMutation(result.etag, revision.entryId, 'deprecate', {
+      ...revision,
+      libraryVersion: result.libraryVersion,
+      libraryState: result.libraryState
+    })
+    setDeprecationCandidate(null)
   }
 
   return (
@@ -90,26 +227,124 @@ export function LibraryPage() {
           onKind={setKind}
           onQuery={setQuery}
         />
+        <LibraryVersionLock lock={lock} status={workspace.status} />
       </Panel>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <Panel title={pick('Danh sách khối', 'Blocks')}>
+      {conflict && (
+        <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm">
+          <p className="font-semibold text-[var(--c-warn-fg)]">{pick('Bản nháp đã thay đổi ở phiên khác.', 'The draft changed in another session.')}</p>
+          <p className="mt-1 text-[var(--c-text)]">{conflict}</p>
+          <div className="mt-2 flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                reset()
+                setEtag(null)
+                workspace.reload()
+                library.refresh()
+                projects.refresh()
+              }}
+            >
+              {pick('Tải lại thư viện', 'Reload the library')}
+            </Button>
+          </div>
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
+          {error}
+        </p>
+      )}
+      {blocked && <MutationBlockNotice block={blocked} />}
+      {readBack && <ReadBackNotice readBack={readBack} entries={entries} />}
+
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Panel
+          className="min-w-0"
+          title={pick('Danh sách khối', 'Blocks')}
+          action={
+            canAdmin ? (
+              <Button
+                size="sm"
+                icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+                disabled={!projectId}
+                onClick={() => {
+                  setBlocked(null)
+                  setEditor({ kind: 'create' })
+                }}
+              >
+                {pick('Khối PROJECT mới', 'New PROJECT block')}
+              </Button>
+            ) : undefined
+          }
+        >
           <LibraryList
             state={library.status}
-            entries={entries}
+            groups={groups}
             errorMessage={library.error}
             onRetry={library.refresh}
-            selectedEntryId={selectedEntryId}
-            onSelect={setSelectedEntryId}
+            selectedKey={selectedKey}
+            onSelect={(key) => {
+              setSelectedKey(key)
+              setBlocked(null)
+            }}
           />
         </Panel>
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           <Panel title={pick('Chi tiết', 'Details')}>
-            <LibraryDetail entry={selected} canAdmin={canAdmin} pending={pending} onDelete={handleDelete} />
+            <LibraryDetail
+              group={selected}
+              usages={selected ? usages.get(selected.entryId.toUpperCase()) ?? [] : []}
+              usageSource={workspace.status}
+              dependents={dependents}
+              permissions={permissions}
+              pending={pending}
+              canDeprecate={canAdmin && Boolean(projectId)}
+              onEdit={(group) => {
+                const permission = libraryEntryPermissions(group, {
+                  canAdmin,
+                  hasProject: Boolean(projectId),
+                  dependents: libraryDependents(group, entries)
+                })
+                if (!permission.canSave) {
+                  setBlocked(permission.saveBlock)
+                  return
+                }
+                setBlocked(null)
+                setEditor({ kind: 'edit', entry: group.current, savesNewVersion: permission.savesNewVersion })
+              }}
+              onDelete={handleDelete}
+              onDeprecate={(revision) => {
+                setBlocked(null)
+                setDeprecationCandidate(revision)
+              }}
+            />
           </Panel>
-          <Panel title={pick('Tạo khối PROJECT', 'New PROJECT block')}>
+          <Panel
+            title={
+              editor?.kind === 'edit'
+                ? pick('Sửa khối PROJECT', 'Edit PROJECT block')
+                : pick('Tạo khối PROJECT', 'New PROJECT block')
+            }
+          >
             {canAdmin ? (
-              <LibraryEntryForm disabled={pending || !project} onSubmit={handleCreate} />
+              editor ? (
+                <LibraryEntryForm
+                  key={editor.kind === 'edit' ? editor.entry.entryId : 'create'}
+                  mode={editor}
+                  disabled={pending || !projectId}
+                  projectEntries={groups.filter((group) => group.scope === 'PROJECT')}
+                  onCancel={() => setEditor(null)}
+                  onSubmit={handleSave}
+                />
+              ) : (
+                <p className="text-sm text-[var(--c-text-dim)]">
+                  {pick(
+                    'Chọn một khối PROJECT rồi bấm Sửa, hoặc bấm “Khối PROJECT mới” để tạo khối.',
+                    'Select a PROJECT block and choose Edit, or use “New PROJECT block” to create one.'
+                  )}
+                </p>
+              )
             ) : (
               <p className="text-sm text-[var(--c-text-dim)]">
                 {pick(
@@ -118,15 +353,182 @@ export function LibraryPage() {
                 )}
               </p>
             )}
-            {error && (
-              <p role="alert" className="mt-2 text-sm text-[var(--c-fault-fg)]">
-                {error}
-              </p>
-            )}
           </Panel>
         </div>
       </div>
+
+      <Modal
+        open={deprecationCandidate !== null}
+        title={pick('Ngừng sử dụng phiên bản thư viện?', 'Deprecate this library version?')}
+        confirmLabel={pick('Ngừng sử dụng', 'Deprecate')}
+        cancelLabel={pick('Giữ phiên bản', 'Keep version')}
+        danger
+        confirmLoading={pending}
+        confirmDisabled={pending}
+        onClose={() => {
+          if (!pending) setDeprecationCandidate(null)
+        }}
+        onConfirm={() => {
+          if (deprecationCandidate) void handleDeprecate(deprecationCandidate)
+        }}
+      >
+        <p>
+          {pick(
+            'Toàn bộ phiên bản PROJECT Library này sẽ chuyển sang DEPRECATED; mọi khối trong phiên bản đều bị ảnh hưởng.',
+            'This entire PROJECT Library version will become DEPRECATED; every block in the version is affected.'
+          )}
+        </p>
+        {deprecationCandidate && (
+          <p className="mt-2 break-all font-medium text-[var(--c-text)]">
+            {deprecationCandidate.libraryVersion} · {deprecationCandidate.libraryRevisionId}
+          </p>
+        )}
+        <p className="mt-2">
+          {pick(
+            'Revision đã niêm phong vẫn bất biến và tiếp tục ghim đúng nội dung cũ. Việc phát hành phiên bản mới chỉ xảy ra khi niêm phong Revision, không xảy ra từ hành động này.',
+            'Sealed revisions stay immutable and keep their pinned content. A new version is published only when a revision is sealed, never by this action.'
+          )}
+        </p>
+      </Modal>
     </div>
+  )
+}
+
+function LibraryVersionLock({
+  lock,
+  status
+}: {
+  lock: ReturnType<typeof draftLibraryLock>
+  status: 'loading' | 'ready' | 'error'
+}) {
+  const { pick } = useI18n()
+  if (status === 'loading') {
+    return (
+      <p className="mt-3 text-xs text-[var(--c-text-dim)]">
+        {pick('Đang đọc khoá phiên bản thư viện…', 'Reading the library version lock…')}
+      </p>
+    )
+  }
+  if (status === 'error' || !lock) {
+    return (
+      <p role="status" className="mt-3 flex items-center gap-1.5 text-xs text-[var(--c-warn-fg)]">
+        <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+        {pick(
+          'Chưa đọc được khoá phiên bản thư viện của bản nháp.',
+          'The draft’s library version lock could not be read.'
+        )}
+      </p>
+    )
+  }
+  return (
+    <dl aria-label={pick('Khoá phiên bản thư viện', 'Library version lock')} className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+      <div className="flex gap-1.5">
+        <dt className="text-[var(--c-text-dim)]">{pick('Profile SYSTEM', 'SYSTEM profile')}</dt>
+        <dd className="font-medium">{lock.systemProfile || '—'}</dd>
+      </div>
+      <div className="flex gap-1.5">
+        <dt className="text-[var(--c-text-dim)]">{pick('Phiên bản SYSTEM', 'SYSTEM version')}</dt>
+        <dd className="font-medium">{lock.systemVersion || '—'}</dd>
+      </div>
+      <div className="flex gap-1.5">
+        <dt className="text-[var(--c-text-dim)]">{pick('Thư viện PROJECT đã ghim', 'Pinned PROJECT library')}</dt>
+        <dd className="font-medium">
+          {lock.projectLibraryRevisionId ?? pick('Chưa có bản nào', 'None yet')}
+        </dd>
+      </div>
+    </dl>
+  )
+}
+
+function MutationBlockNotice({ block }: { block: LibraryMutationBlock }) {
+  const { pick } = useI18n()
+  const message: Record<LibraryMutationBlock, string> = {
+    SYSTEM_IMMUTABLE: pick(
+      'Khối SYSTEM thuộc registry chỉ đọc — máy chủ từ chối mọi thao tác sửa hoặc xoá lên nó.',
+      'SYSTEM blocks belong to the read-only registry — the server rejects every edit or delete on them.'
+    ),
+    NEEDS_ADMIN: pick(
+      'Thao tác này cần quyền quản trị.',
+      'This action requires an administrator role.'
+    ),
+    NO_PROJECT: pick(
+      'Chưa xác định được Project nên không có bản nháp thư viện để ghi.',
+      'No project is resolved, so there is no library draft to write to.'
+    ),
+    PUBLISHED_IMMUTABLE: pick(
+      'Phiên bản đã phát hành là bất biến — chỉ khối trong bản nháp mới xoá được. Hãy sửa để tạo phiên bản mới.',
+      'A published version is immutable — only blocks in the draft can be deleted. Edit it to create a new version.'
+    ),
+    DEPRECATE_REQUIRES_PUBLISHED: pick(
+      'Chỉ phiên bản PROJECT Library ở trạng thái PUBLISHED mới có thể chuyển sang DEPRECATED.',
+      'Only a PUBLISHED PROJECT Library version can transition to DEPRECATED.'
+    ),
+    DEPENDED_ON: pick(
+      'Khối khác trong cùng phiên bản thư viện đang phụ thuộc khối này; gỡ phụ thuộc trước khi xoá.',
+      'Another block in the same library version depends on this one; remove the dependency before deleting.'
+    )
+  }
+  return (
+    <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
+      {message[block]}
+    </p>
+  )
+}
+
+function ReadBackNotice({ readBack, entries }: { readBack: ReadBack; entries: ProgrammingLibraryEntry[] }) {
+  const { pick } = useI18n()
+  if (readBack.state === 'reading') {
+    return (
+      <p role="status" className="rounded-[var(--radius)] border border-[var(--c-border)] p-3 text-sm text-[var(--c-text-dim)]">
+        {pick('Đang đọc lại từ máy chủ…', 'Reading back from the server…')}
+      </p>
+    )
+  }
+  const stored = entries.filter((entry) => entry.entryId === readBack.entryId)
+  if (readBack.action === 'deprecate') {
+    const revisionEntries = entries.filter((entry) => entry.libraryRevisionId === readBack.libraryRevisionId)
+    const confirmed = revisionEntries.length > 0 && revisionEntries.every((entry) => entry.libraryState === 'DEPRECATED')
+    return confirmed ? (
+      <p role="status" className="rounded-[var(--radius)] border border-[var(--c-border)] p-3 text-sm">
+        {pick('Máy chủ xác nhận phiên bản thư viện', 'The server confirms library version')}{' '}
+        <strong>{readBack.libraryVersion ?? revisionEntries[0].libraryVersion}</strong> · DEPRECATED
+      </p>
+    ) : (
+      <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
+        {pick(
+          'Máy chủ chưa trả lại phiên bản ở trạng thái DEPRECATED — không hiển thị xác nhận lạc quan.',
+          'The server has not returned the version in DEPRECATED state — no optimistic confirmation is shown.'
+        )}
+      </p>
+    )
+  }
+  if (readBack.action === 'delete') {
+    const remaining = stored.filter((entry) => entry.libraryState === 'DRAFT')
+    return (
+      <p role="status" className="rounded-[var(--radius)] border border-[var(--c-border)] p-3 text-sm">
+        {remaining.length === 0
+          ? pick('Máy chủ xác nhận đã xoá khối khỏi bản nháp thư viện.', 'The server confirms the block was removed from the library draft.')
+          : pick('Máy chủ vẫn còn khối này trong bản nháp — hãy tải lại và kiểm tra.', 'The server still lists this block in the draft — reload and check.')}
+      </p>
+    )
+  }
+  const draft = stored.find((entry) => entry.libraryState === 'DRAFT') ?? stored[0]
+  if (!draft) {
+    return (
+      <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
+        {pick(
+          'Đã lưu nhưng máy chủ không trả về khối vừa ghi — không hiển thị giá trị lạc quan.',
+          'Saved, but the server did not return the block that was written — no optimistic value is shown.'
+        )}
+      </p>
+    )
+  }
+  return (
+    <p role="status" className="rounded-[var(--radius)] border border-[var(--c-border)] p-3 text-sm">
+      {pick('Máy chủ đã trả lại khối', 'The server returned the block')}{' '}
+      <strong>{draft.name}</strong> · {draft.libraryVersion} · {draft.libraryState} ·{' '}
+      <span className="font-mono text-xs">{draft.contentSha256.slice(0, 16)}…</span>
+    </p>
   )
 }
 
@@ -188,18 +590,18 @@ function LibraryFilters({
 
 function LibraryList({
   state,
-  entries,
+  groups,
   errorMessage,
   onRetry,
-  selectedEntryId,
+  selectedKey,
   onSelect
 }: {
   state: 'loading' | 'ready' | 'error'
-  entries: ProgrammingLibraryEntry[]
+  groups: LibraryEntryGroup[]
   errorMessage: string | null
   onRetry: () => void
-  selectedEntryId: string | null
-  onSelect: (entryId: string) => void
+  selectedKey: string | null
+  onSelect: (key: string) => void
 }) {
   const { pick } = useI18n()
   if (state === 'loading') {
@@ -215,7 +617,7 @@ function LibraryList({
       />
     )
   }
-  if (entries.length === 0) {
+  if (groups.length === 0) {
     return (
       <StateBlock
         state="empty"
@@ -225,26 +627,37 @@ function LibraryList({
   }
   return (
     <ul className="flex flex-col divide-y divide-[var(--c-border)]" aria-label={pick('Danh sách khối Thư viện điều khiển', 'Control Library blocks')}>
-      {entries.map((entry) => (
-        <li key={entry.libraryRevisionId + '/' + entry.entryId}>
+      {groups.map((group) => (
+        <li key={group.key}>
           <button
             type="button"
-            onClick={() => onSelect(entry.entryId)}
-            aria-current={entry.entryId === selectedEntryId ? 'true' : undefined}
-            className={`flex w-full items-center justify-between gap-2 px-1 py-2 text-left text-sm ${
-              entry.entryId === selectedEntryId ? 'text-[var(--c-accent)]' : ''
+            onClick={() => onSelect(group.key)}
+            aria-current={group.key === selectedKey ? 'true' : undefined}
+            className={`flex w-full flex-col items-stretch gap-1 px-1 py-2 text-left text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-2 ${
+              group.key === selectedKey ? 'text-[var(--c-accent)]' : ''
             }`}
           >
             <span className="flex min-w-0 items-center gap-2">
               <Library className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span className="truncate font-medium">{entry.name}</span>
+              <span className="truncate font-medium">{group.name}</span>
               <span className="shrink-0 rounded bg-[var(--c-surface-2)] px-1.5 py-0.5 text-xs text-[var(--c-text-dim)]">
-                {entry.scope}
+                {group.scope}
               </span>
+              {group.scope === 'SYSTEM' && (
+                <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--c-text-dim)]" aria-label={pick('Chỉ đọc', 'Read-only')} />
+              )}
             </span>
-            <span className="flex shrink-0 items-center gap-2 text-xs text-[var(--c-text-dim)]">
-              {entry.kind}
-              {REVIEW_GATED.has(entry.name) && <ReviewGateBadge />}
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--c-text-dim)] sm:shrink-0 sm:flex-nowrap">
+              {group.kind}
+              <span>
+                {group.current.libraryVersion} · {group.current.libraryState}
+              </span>
+              {group.versions.length > 1 && (
+                <span>
+                  {pick('· %n phiên bản', '· %n versions').replace('%n', String(group.versions.length))}
+                </span>
+              )}
+              {REVIEW_GATED.has(group.name) && <ReviewGateBadge />}
             </span>
           </button>
         </li>
@@ -268,68 +681,212 @@ function ReviewGateBadge() {
 }
 
 function LibraryDetail({
-  entry,
-  canAdmin,
+  group,
+  usages,
+  usageSource,
+  dependents,
+  permissions,
   pending,
-  onDelete
+  canDeprecate,
+  onEdit,
+  onDelete,
+  onDeprecate
 }: {
-  entry: ProgrammingLibraryEntry | null
-  canAdmin: boolean
+  group: LibraryEntryGroup | null
+  usages: LibraryUsage[]
+  usageSource: 'loading' | 'ready' | 'error'
+  dependents: string[]
+  permissions: ReturnType<typeof libraryEntryPermissions> | null
   pending: boolean
-  onDelete: (entryId: string) => void
+  canDeprecate: boolean
+  onEdit: (group: LibraryEntryGroup) => void
+  onDelete: (group: LibraryEntryGroup) => void
+  onDeprecate: (revision: ProgrammingLibraryEntry) => void
 }) {
   const { pick } = useI18n()
-  if (!entry) {
+  if (!group || !permissions) {
     return <p className="text-sm text-[var(--c-text-dim)]">{pick('Chọn một khối để xem chi tiết.', 'Select a block to see its details.')}</p>
   }
+  const entry = group.current
   return (
-    <dl className="flex flex-col gap-2 text-sm">
-      <Row label={pick('Tên', 'Name')} value={entry.name} />
-      <Row label={pick('Loại', 'Kind')} value={entry.kind} />
-      <Row label={pick('Phạm vi', 'Scope')} value={entry.scope} />
-      <Row label={pick('Phiên bản thư viện', 'Library version')} value={`${entry.libraryVersion} · ${entry.libraryState}`} />
-      <Row label={pick('Hash nội dung', 'Content hash')} value={entry.contentSha256.slice(0, 16) + '…'} />
-      <Row
-        label={pick('Kích thước state', 'State size')}
-        value={
-          entry.stateLayoutKnown
-            ? `${entry.stateSizeBytes} B`
-            : pick('Chưa biết — chờ biên dịch', 'Unknown — pending compile')
-        }
+    <div className="flex flex-col gap-3">
+      <dl className="flex flex-col gap-2 text-sm">
+        <Row label={pick('Tên', 'Name')} value={entry.name} />
+        <Row label={pick('Loại', 'Kind')} value={entry.kind} />
+        <Row label={pick('Phạm vi', 'Scope')} value={entry.scope} />
+        <Row label={pick('Ngôn ngữ', 'Language')} value={entry.language ?? '—'} />
+        <Row label={pick('Phiên bản thư viện', 'Library version')} value={`${entry.libraryVersion} · ${entry.libraryState}`} />
+        <Row label={pick('Hash nội dung', 'Content hash')} value={entry.contentSha256.slice(0, 16) + '…'} />
+        <Row
+          label={pick('Kích thước state', 'State size')}
+          value={
+            entry.stateLayoutKnown
+              ? `${entry.stateSizeBytes} B`
+              : pick('Chưa biết — chờ biên dịch', 'Unknown — pending compile')
+          }
+        />
+        <Row
+          label={pick('Phụ thuộc', 'Dependencies')}
+          value={
+            entry.dependencies.length === 0
+              ? pick('Không có', 'None')
+              : entry.dependencies.map((item) => `${item.entryId.slice(0, 8)}@${item.version}`).join(', ')
+          }
+        />
+        <Row
+          label={pick('Khối phụ thuộc vào nó', 'Depended on by')}
+          value={dependents.length === 0 ? pick('Không có', 'None') : dependents.join(', ')}
+        />
+      </dl>
+
+      <LibraryUsageList usages={usages} source={usageSource} />
+      <LibraryVersionHistory
+        group={group}
+        canDeprecate={canDeprecate}
+        pending={pending}
+        onDeprecate={onDeprecate}
       />
-      <Row
-        label={pick('Phụ thuộc', 'Dependencies')}
-        value={
-          entry.dependencies.length === 0
-            ? pick('Không có', 'None')
-            : entry.dependencies.map((item) => `${item.entryId.slice(0, 8)}@${item.version}`).join(', ')
-        }
-      />
+
       {REVIEW_GATED.has(entry.name) && (
-        <p role="note" className="text-[var(--c-warn)]">
+        <p role="note" className="text-sm text-[var(--c-warn)]">
           {pick(
             'Khối này chưa qua review Controls/Safety nên Kiểm tra sẽ từ chối mọi Program dùng nó.',
             'This block has not passed Controls/Safety review, so Check rejects any program that uses it.'
           )}
         </p>
       )}
-      {entry.scope === 'PROJECT' && canAdmin && entry.libraryState === 'DRAFT' && (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => onDelete(entry.entryId)}
-          className="mt-1 flex items-center gap-1.5 self-start rounded border border-[var(--c-border)] px-2 py-1 text-sm"
-        >
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-          {pick('Xoá khối', 'Delete block')}
-        </button>
+
+      {entry.scope === 'SYSTEM' ? (
+        <p className="text-sm text-[var(--c-text-dim)]">
+          {pick(
+            'Khối SYSTEM là registry chỉ đọc: không sửa, không xoá, không tạo phiên bản.',
+            'SYSTEM blocks come from the read-only registry: no edit, no delete, no new version.'
+          )}
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            icon={<Pencil className="h-4 w-4" aria-hidden="true" />}
+            disabled={pending || !permissions.canSave}
+            onClick={() => onEdit(group)}
+          >
+            {permissions.savesNewVersion ? pick('Sửa — tạo phiên bản mới', 'Edit — create a new version') : pick('Sửa khối', 'Edit block')}
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+            disabled={pending || !permissions.canDelete}
+            onClick={() => onDelete(group)}
+          >
+            {pick('Xoá khối', 'Delete block')}
+          </Button>
+        </div>
       )}
-      {entry.scope === 'SYSTEM' && (
-        <p className="text-[var(--c-text-dim)]">
-          {pick('Khối SYSTEM là registry chỉ đọc, không sửa được.', 'SYSTEM blocks come from the read-only registry.')}
+      {permissions.savesNewVersion && entry.scope === 'PROJECT' && (
+        <p className="text-xs text-[var(--c-text-dim)]">
+          {pick(
+            'Phiên bản hiện tại đã phát hành. Lưu thay đổi sẽ mở một phiên bản nháp mới; nó chỉ được phát hành khi bạn niêm phong Revision ở trang Kiểm tra.',
+            'The current version is published. Saving opens a new draft version; it is published only when you seal a revision on the Check page.'
+          )}
         </p>
       )}
-    </dl>
+    </div>
+  )
+}
+
+function LibraryUsageList({ usages, source }: { usages: LibraryUsage[]; source: 'loading' | 'ready' | 'error' }) {
+  const { pick } = useI18n()
+  return (
+    <section aria-label={pick('Nơi sử dụng', 'Usage')} className="border-t border-[var(--c-border)] pt-2">
+      <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Nơi sử dụng', 'Usage')}</h3>
+      {source === 'loading' && <p className="text-sm text-[var(--c-text-dim)]">{pick('Đang đọc bản nháp…', 'Reading the draft…')}</p>}
+      {source === 'error' && (
+        <p className="text-sm text-[var(--c-warn-fg)]">
+          {pick('Chưa đọc được bản nháp nên chưa biết nơi sử dụng.', 'The draft could not be read, so usage is unknown.')}
+        </p>
+      )}
+      {source === 'ready' &&
+        (usages.length === 0 ? (
+          <p className="text-sm text-[var(--c-text-dim)]">
+            {pick('Chưa POU nào trong bản nháp khai khối này là phụ thuộc.', 'No POU in the draft declares this block as a dependency.')}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-1 text-sm">
+            {usages.map((usage) => (
+              <li key={usage.objectId} className="flex justify-between gap-3">
+                <span className="truncate">{usage.name}</span>
+                <span className="shrink-0 text-xs text-[var(--c-text-dim)]">{usage.kind}</span>
+              </li>
+            ))}
+          </ul>
+        ))}
+    </section>
+  )
+}
+
+function LibraryVersionHistory({
+  group,
+  canDeprecate,
+  pending,
+  onDeprecate
+}: {
+  group: LibraryEntryGroup
+  canDeprecate: boolean
+  pending: boolean
+  onDeprecate: (revision: ProgrammingLibraryEntry) => void
+}) {
+  const { pick } = useI18n()
+  return (
+    <section aria-label={pick('Lịch sử phiên bản', 'Version history')} className="border-t border-[var(--c-border)] pt-2">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase text-[var(--c-text-dim)]">
+        <History className="h-3.5 w-3.5" aria-hidden="true" />
+        {pick('Lịch sử phiên bản', 'Version history')}
+      </h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="text-xs uppercase text-[var(--c-text-dim)]">
+              <th className="py-1 pr-3">{pick('Phiên bản', 'Version')}</th>
+              <th className="py-1 pr-3">{pick('Trạng thái', 'State')}</th>
+              <th className="py-1 pr-3">{pick('Hash', 'Hash')}</th>
+              {canDeprecate && <th className="py-1 text-right">{pick('Thao tác', 'Action')}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {group.versions.map((version) => (
+              <tr key={version.libraryRevisionId} className="border-t border-[var(--c-border)]">
+                <td className="py-1 pr-3 font-medium">{version.libraryVersion}</td>
+                <td className="py-1 pr-3">{version.libraryState}</td>
+                <td className="py-1 pr-3 font-mono text-xs">{version.contentSha256.slice(0, 12)}…</td>
+                {canDeprecate && (
+                  <td className="py-1 text-right">
+                    {version.scope === 'PROJECT' && version.libraryState === 'PUBLISHED' ? (
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        icon={<ArchiveX className="h-4 w-4" aria-hidden="true" />}
+                        disabled={pending}
+                        aria-label={pick(
+                          `Ngừng sử dụng phiên bản ${version.libraryVersion}`,
+                          `Deprecate version ${version.libraryVersion}`
+                        )}
+                        onClick={() => onDeprecate(version)}
+                      >
+                        {pick('Ngừng sử dụng', 'Deprecate')}
+                      </Button>
+                    ) : (
+                      <span aria-label={pick('Không có thao tác', 'No action')} className="text-[var(--c-text-dim)]">—</span>
+                    )}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
@@ -342,29 +899,69 @@ function Row({ label, value }: { label: string; value: string }) {
   )
 }
 
-function LibraryEntryForm({ disabled, onSubmit }: { disabled: boolean; onSubmit: (draft: LibraryEntryDraft) => void }) {
+function LibraryEntryForm({
+  mode,
+  disabled,
+  projectEntries,
+  onCancel,
+  onSubmit
+}: {
+  mode: EditorMode
+  disabled: boolean
+  projectEntries: LibraryEntryGroup[]
+  onCancel: () => void
+  onSubmit: (draft: LibraryEntryDraft) => void
+}) {
   const { pick } = useI18n()
-  const [name, setName] = useState('')
-  const [kind, setKind] = useState<'FUNCTION' | 'FUNCTION_BLOCK'>('FUNCTION')
+  const existing = mode.kind === 'edit' ? mode.entry : null
+  const [name, setName] = useState(existing?.name ?? '')
+  const [kind, setKind] = useState<'FUNCTION' | 'FUNCTION_BLOCK'>(
+    existing?.kind === 'FUNCTION_BLOCK' ? 'FUNCTION_BLOCK' : 'FUNCTION'
+  )
+  const [language, setLanguage] = useState<'ST' | 'FBD'>(existing?.language === 'FBD' ? 'FBD' : 'ST')
   const [source, setSource] = useState('')
+  const [dependencies, setDependencies] = useState<string[]>(
+    existing ? existing.dependencies.map((item) => item.entryId) : []
+  )
+  const [touched, setTouched] = useState(false)
+
+  const sourceBytes = new TextEncoder().encode(source).length
+  const nameError = !LIBRARY_NAME_PATTERN.test(name.trim())
+  const sourceError = sourceBytes < 1 || sourceBytes > LIBRARY_SOURCE_MAX_BYTES
+  const invalid = nameError || sourceError
+  const selectableDependencies = projectEntries.filter((group) => group.entryId !== existing?.entryId)
 
   return (
     <form
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault()
+        setTouched(true)
+        if (invalid) return
         onSubmit({
-          entryId: createUuid(),
+          entryId: existing?.entryId ?? createUuid(),
           kind,
           name: name.trim(),
-          language: 'ST',
+          language,
           source,
-          interface: { inputs: [] }
+          // SearchLibraryEntries trả lại interface đã canonical hoá. Khi sửa
+          // một entry, giữ nguyên contract đó thay vì âm thầm thay bằng một
+          // interface rỗng (interface là một phần của content hash/provenance
+          // phía server). Entry mới chưa có contract nên bắt đầu bằng object
+          // rỗng tương thích với API hiện hành.
+          interface: existing?.interface ?? { inputs: [] },
+          dependencies: dependencies.map((entryId) => ({
+            entryId,
+            version: projectEntries.find((group) => group.entryId === entryId)?.current.libraryVersion ?? '1.0.0'
+          }))
         })
-        setName('')
-        setSource('')
       }}
     >
+      {existing && (
+        <p className="text-xs text-[var(--c-text-dim)]">
+          {pick('Đang sửa', 'Editing')} <strong>{existing.name}</strong> · {existing.libraryVersion} · {existing.libraryState}
+        </p>
+      )}
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-[var(--c-text-dim)]">{pick('Tên khối', 'Block name')}</span>
         <input
@@ -372,9 +969,17 @@ function LibraryEntryForm({ disabled, onSubmit }: { disabled: boolean; onSubmit:
           onChange={(event) => setName(event.target.value)}
           required
           maxLength={64}
-          pattern="[A-Za-z][A-Za-z0-9_]*"
+          aria-invalid={touched && nameError ? 'true' : undefined}
           className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5"
         />
+        {touched && nameError && (
+          <span role="alert" className="text-xs text-[var(--c-fault-fg)]">
+            {pick(
+              'Tên phải bắt đầu bằng chữ cái và chỉ gồm chữ, số hoặc gạch dưới, tối đa 64 ký tự.',
+              'The name must start with a letter and contain only letters, digits or underscores, up to 64 characters.'
+            )}
+          </span>
+        )}
       </label>
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-[var(--c-text-dim)]">{pick('Loại', 'Kind')}</span>
@@ -388,22 +993,71 @@ function LibraryEntryForm({ disabled, onSubmit }: { disabled: boolean; onSubmit:
         </select>
       </label>
       <label className="flex flex-col gap-1 text-sm">
-        <span className="text-[var(--c-text-dim)]">{pick('Mã nguồn ST', 'ST source')}</span>
+        <span className="text-[var(--c-text-dim)]">{pick('Ngôn ngữ', 'Language')}</span>
+        <select
+          value={language}
+          onChange={(event) => setLanguage(event.target.value as 'ST' | 'FBD')}
+          className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5"
+        >
+          <option value="ST">ST</option>
+          <option value="FBD">FBD</option>
+        </select>
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-[var(--c-text-dim)]">
+          {language === 'FBD' ? pick('Nội dung FBD (JSON)', 'FBD content (JSON)') : pick('Mã nguồn ST', 'ST source')}
+        </span>
         <textarea
           value={source}
           onChange={(event) => setSource(event.target.value)}
           required
           rows={5}
+          aria-invalid={touched && sourceError ? 'true' : undefined}
           className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5 font-mono text-xs"
         />
+        {existing && (
+          <span className="text-xs text-[var(--c-text-dim)]">
+            {pick(
+              'Máy chủ không trả lại mã nguồn của khối đã lưu, nên ô này luôn bắt đầu trống: hãy dán lại toàn bộ mã của phiên bản mới.',
+              'The server does not return the stored source, so this field always starts empty: paste the full source of the new version.'
+            )}
+          </span>
+        )}
+        {touched && sourceError && (
+          <span role="alert" className="text-xs text-[var(--c-fault-fg)]">
+            {pick('Mã nguồn phải dài 1..65536 byte.', 'The source must be 1..65536 bytes long.')}
+          </span>
+        )}
       </label>
-      <button
-        type="submit"
-        disabled={disabled}
-        className="self-start rounded bg-[var(--c-accent)] px-3 py-1.5 text-sm font-medium text-[var(--c-on-accent,#fff)] disabled:opacity-50"
-      >
-        {pick('Lưu vào bản nháp thư viện', 'Save to library draft')}
-      </button>
+      {selectableDependencies.length > 0 && (
+        <fieldset className="flex flex-col gap-1 text-sm">
+          <legend className="text-[var(--c-text-dim)]">{pick('Phụ thuộc khối PROJECT', 'PROJECT block dependencies')}</legend>
+          {selectableDependencies.map((group) => (
+            <label key={group.entryId} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={dependencies.includes(group.entryId)}
+                onChange={(event) =>
+                  setDependencies((current) =>
+                    event.target.checked ? [...current, group.entryId] : current.filter((id) => id !== group.entryId)
+                  )
+                }
+              />
+              <span>
+                {group.name} · {group.current.libraryVersion}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="primary" size="sm" disabled={disabled} icon={<Save className="h-4 w-4" aria-hidden="true" />}>
+          {pick('Lưu vào bản nháp thư viện', 'Save to library draft')}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+          {pick('Huỷ', 'Cancel')}
+        </Button>
+      </div>
     </form>
   )
 }

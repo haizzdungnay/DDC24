@@ -54,6 +54,15 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # `IPC-TRACE-REJECTED` (tham số ngoài dải, hoặc thao tác nhầm phiên của
         # người khác). Số public giữ nguyên 30.
         #
+        # Cập nhật corrective Plan59 (2026-08-24): 126→134 detail. Bốn mã
+        # `ST-CLI-LIBRARY-LOCK`/`ST-CLI-POU-MANIFEST`/`ST-CLI-POU-PATH`/
+        # `ST-CLI-SIGNAL-MANIFEST` cho manifest POU/library/signal ở CLI, một
+        # mã `ST-SIG-005` cho signal-ref, và ba mã runtime `ST-RT-011..013`.
+        # Số public giữ nguyên 30 — cả tám ánh xạ vào public code đã có.
+        # Con số ở đây phải sửa CÙNG change-set với catalog: để nó lạc hậu là
+        # biến một gate thành cảnh báo giả, và lần sau người đọc sẽ sửa số cho
+        # xanh mà không đọc xem thứ gì vừa được thêm.
+        #
         # Cập nhật `T59-405`: 120→122 detail. Hai mã core-ipc mới cho intent
         # Enable/Disable: `IPC-UNKNOWN-INSTANCE` (Program không có trong package
         # đang chạy → NOT_FOUND, vì người gọi và thiết bị đang nói về hai gói
@@ -74,7 +83,7 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # trong cùng gate.
         catalog, raw, schema_raw = GENERATOR.load_and_validate()
         self.assertEqual(len(catalog["publicErrors"]), 30)
-        self.assertEqual(len(catalog["componentDetails"]), 126)
+        self.assertEqual(len(catalog["componentDetails"]), 134)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
 

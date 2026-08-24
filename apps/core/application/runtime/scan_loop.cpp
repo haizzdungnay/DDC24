@@ -1,10 +1,9 @@
 #include "runtime/scan_loop.hpp"
 
 #include "graph/point_writer.hpp"
+#include "st/st_runtime_snapshot.hpp"
 
-#include <algorithm>
 #include <cstdio>
-#include <cstring>
 #include <ctime>
 
 namespace core {
@@ -259,75 +258,9 @@ void ScanLoop::step()
     RuntimePointSnapshot runtime_snapshot = snapshot_publisher_.build(
         next_snapshot_id_++, static_cast<uint64_t>(clock.utc_epoch_ms), clock.monotonic_ns, *d_.table,
         last_io_, out, *d_.resolver, d_.safe->active(), safe_state_no_controller_only);
-    if (d_.st_sched && !d_.st_sched->tasks().empty()) {
-        const StTask& task = *d_.st_sched->tasks().front();
-        RuntimeTaskSnapshot& target = runtime_snapshot.task;
-        target.present = true;
-        const std::string& task_id = task.config().id;
-        std::memcpy(target.id.data(), task_id.data(),
-                    std::min(task_id.size(), target.id.size() - 1));
-        target.period_ms = task.config().period_ms;
-        target.budget_ms = task.config().budget_ms;
-        const char* state = task.monitor().should_force_safe() ? "FAULT" :
-            (program_owner && task.enabled() ? "RUNNING" : "STOPPED");
-        std::memcpy(target.state.data(), state,
-                    std::min(std::strlen(state), target.state.size() - 1));
-        target.run_count = task.stats().run_count;
-        target.missed_release_count = task.stats().missed_release_count;
-        target.last_exec_ns = task.stats().last_exec_ns;
-        target.max_exec_ns = task.stats().max_exec_ns;
-        target.overrun_count = task.monitor().stats().total;
-        target.consecutive_overruns = task.monitor().stats().consecutive;
-    }
-    /* T60-002 — bảng Program TOÀN HỆ THỐNG.
-     *
-     * Khối `task` ở trên chỉ mô tả `tasks().front()`. Từ T59-402/403, mỗi
-     * Program tự release theo chu kỳ riêng và chạy trên lane riêng, nên một
-     * Task KHÔNG còn đại diện được cho hệ: mọi Program thuộc Task thứ hai trở
-     * đi trước đây không hề xuất hiện trong snapshot, và chu kỳ báo ra là chu kỳ
-     * Task chứ không phải chu kỳ thật của Program. Vòng lặp dưới đây duyệt đủ
-     * Program của MỌI Task và báo số đo theo từng Program.
-     *
-     * Không heap, không chuỗi động: mảng đích cấp phát tĩnh trong
-     * `RuntimePointSnapshot`, chỉ copy bounded vào buffer cố định. */
-    static_assert(KX_POINT_SNAPSHOT_MAX_PROGRAMS >= st_sched_limits::kMaxProgramsTotal,
-                  "trần programs[] của snapshot phải phủ hết trần Program toàn hệ thống của "
-                  "scheduler (st_sched_limits::kMaxProgramsTotal) — lệch đi là cắt mất Program");
-    if (d_.st_sched) {
-        std::size_t filled = 0;
-        for (const auto& task : d_.st_sched->tasks()) {
-            if (runtime_snapshot.programs_truncated) break;
-            for (const auto& program : task->programs()) {
-                if (filled >= runtime_snapshot.programs.size()) {
-                    /* Cắt phải NÓI RA. Bỏ bớt trong im lặng làm người vận hành
-                     * đọc một danh sách thiếu mà tin là đủ. */
-                    runtime_snapshot.programs_truncated = true;
-                    break;
-                }
-                RuntimeProgramSnapshot& slot = runtime_snapshot.programs[filled++];
-                const std::string& instance_id = program->instance_id;
-                std::memcpy(slot.instance_id.data(), instance_id.data(),
-                            std::min(instance_id.size(), slot.instance_id.size() - 1));
-                const char* program_state = st_program_state_name(program->state);
-                std::memcpy(slot.state.data(), program_state,
-                            std::min(std::strlen(program_state), slot.state.size() - 1));
-                slot.enabled = program->enabled;
-                /* `period_ms == 0` nghĩa là "theo chu kỳ Task" (T59-402). Phân
-                 * giải ở đây thay vì đẩy `0` ra ngoài: `0 ms` ở cột Cycle là một
-                 * số bịa, và người đọc không có cách nào biết nó nghĩa là
-                 * "thừa kế Task". */
-                slot.period_ms = program->period_ms != 0 ? program->period_ms
-                                                         : task->config().period_ms;
-                slot.last_exec_ns = program->last_exec_ns;
-                slot.max_exec_ns = program->max_exec_ns;
-                slot.missed_release_count = program->missed_release_count;
-                slot.consecutive_missed_release = program->consecutive_missed_release;
-                slot.last_run_mono_ns = program->last_run_mono_ns;
-                slot.lane = program->lane;
-            }
-        }
-        runtime_snapshot.program_count = filled;
-    }
+    /* Task/Program read-back dùng cùng một helper với simulator E2E để đường
+     * debug browser không thể trôi khỏi contract chạy thật trên board. */
+    st_populate_runtime_snapshot(d_.st_sched, program_owner, &runtime_snapshot);
     d_.web->publish_point_snapshot(runtime_snapshot);
 
     for (const WebCommand& cmd : pending_alarm_) {

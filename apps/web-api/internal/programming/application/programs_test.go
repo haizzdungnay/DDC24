@@ -482,7 +482,7 @@ func TestListProgramsReportsCoreTruncation(t *testing.T) {
 // việc `STARTING`/`STOPPING` KHÔNG BAO GIỜ được bày ra như trạng thái hợp lệ.
 func TestProgramRuntimeStateMappingFollowsD07(t *testing.T) {
 	cases := map[string]string{
-		"RUNNING": "RUNNING", "STOPPED": "WAITING", "ACTIVE": "WAITING",
+		"RUNNING": "RUNNING", "WAITING": "WAITING", "STOPPED": "WAITING", "ACTIVE": "WAITING",
 		"ROLLED_BACK": "WAITING", "DISABLED": "DISABLED", "FAULTED": "FAULTED",
 		"REJECTED": "FAULTED", "EMPTY": "UNKNOWN", "STAGED": "UNKNOWN",
 		"VALIDATED": "UNKNOWN", "READY": "UNKNOWN", "": "UNKNOWN",

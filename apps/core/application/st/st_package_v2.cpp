@@ -1,7 +1,10 @@
 #include "st/st_package_v2.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
@@ -10,6 +13,7 @@
 #include <sodium.h>
 
 #include "st/st_profile_generated.hpp"
+#include "st/st_ir.hpp"
 
 namespace core {
 namespace {
@@ -66,6 +70,12 @@ void append_u32(std::vector<uint8_t>* buffer, uint32_t value)
         buffer->push_back(static_cast<uint8_t>((value >> (8 * index)) & 0xFFu));
 }
 
+void append_u16(std::vector<uint8_t>* buffer, uint16_t value)
+{
+    buffer->push_back(static_cast<uint8_t>(value & 0xFFu));
+    buffer->push_back(static_cast<uint8_t>((value >> 8) & 0xFFu));
+}
+
 void append_u64(std::vector<uint8_t>* buffer, uint64_t value)
 {
     for (std::size_t index = 0; index < 8; ++index)
@@ -100,6 +110,66 @@ bool read_string(const uint8_t* data, std::size_t size, std::size_t* cursor,
     out->assign(reinterpret_cast<const char*>(data + *cursor), length);
     *cursor += length;
     return true;
+}
+
+bool valid_signal_identifier(const std::string& value)
+{
+    if (value.empty() || value.size() > kMaxPouNameLength) return false;
+    const unsigned char first = static_cast<unsigned char>(value.front());
+    if (!std::isalpha(first) && value.front() != '_') return false;
+    return std::all_of(value.begin() + 1, value.end(), [](char raw) {
+        const unsigned char ch = static_cast<unsigned char>(raw);
+        return std::isalnum(ch) || raw == '_';
+    });
+}
+
+std::string fold_signal_name(const std::string& value)
+{
+    std::string folded;
+    folded.reserve(value.size());
+    for (char raw : value) {
+        const unsigned char ch = static_cast<unsigned char>(raw);
+        folded.push_back(static_cast<char>(std::toupper(ch)));
+    }
+    return folded;
+}
+
+bool valid_signal_type(uint8_t type)
+{
+    return type >= static_cast<uint8_t>(StType::BOOL) &&
+           type <= static_cast<uint8_t>(StType::UINT);
+}
+
+/* SEC_SIGNAL_DEFS mang toàn bộ 8 byte của StCell. Kiểm cả phần byte không dùng
+ * để mỗi giá trị chỉ có một encoding và gói không thể giấu dữ liệu trong
+ * padding. */
+bool valid_fallback_bits(uint8_t type, uint64_t bits, bool has_fallback)
+{
+    if (!has_fallback) return bits == 0;
+    const uint32_t low = static_cast<uint32_t>(bits);
+    if ((type != static_cast<uint8_t>(StType::TIME)) && (bits >> 32) != 0)
+        return false;
+    switch (static_cast<StType>(type)) {
+    case StType::BOOL:
+        return low <= 1u;
+    case StType::DINT:
+        return true; /* mọi mẫu int32 đều hợp lệ; high32 đã bằng 0 */
+    case StType::REAL: {
+        float value = 0.0f;
+        std::memcpy(&value, &low, sizeof(value));
+        return std::isfinite(value);
+    }
+    case StType::TIME:
+        return bits <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+    case StType::INT: {
+        int32_t value = 0;
+        std::memcpy(&value, &low, sizeof(value));
+        return value >= -32768 && value <= 32767;
+    }
+    case StType::UINT:
+        return low <= 65535u;
+    }
+    return false;
 }
 
 struct SectionPlan {
@@ -146,20 +216,124 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
         return fail(error, "số binding vượt trần " +
                                std::to_string(st_profile_generated::kMaxPackageBindings));
 
+    const bool full_pou_table = std::any_of(
+        input.pou_signatures.begin(), input.pou_signatures.end(),
+        [](const StPouSignature& signature) {
+            return signature.has_linked_body || signature.from_library;
+        });
+    const bool has_library_pou = std::any_of(
+        input.pou_signatures.begin(), input.pou_signatures.end(),
+        [](const StPouSignature& signature) { return signature.from_library; });
+    if (has_library_pou && input.library_lock.system_version.empty())
+        return fail(error, "POU từ library bắt buộc có SEC_LIBRARY_LOCK");
+    const bool has_project_library_pou = std::any_of(
+        input.pou_signatures.begin(), input.pou_signatures.end(),
+        [](const StPouSignature& signature) {
+            return signature.from_library && signature.library_origin == "PROJECT";
+        });
+    if (has_project_library_pou && input.library_lock.project_revision_id.empty())
+        return fail(error, "POU từ PROJECT library bắt buộc có projectRevisionId");
+
+    std::set<std::string> program_names;
+    for (const StPackageProgram& program : input.programs) {
+        if (program.program_name.empty() ||
+            !program_names.insert(program.program_name).second)
+            return fail(error, "PROGRAM_TABLE có identity rỗng hoặc trùng: '" +
+                                   program.program_name + "'");
+    }
+    std::set<std::string> signal_names;
+    for (const StPackageSignal& signal : input.signals) {
+        if (!valid_signal_identifier(signal.name))
+            return fail(error, "signal '" + signal.name + "' không phải IEC identifier hợp lệ");
+        if (!signal_names.insert(fold_signal_name(signal.name)).second)
+            return fail(error, "signal '" + signal.name + "' trùng tên không phân biệt hoa thường");
+        if (program_names.count(signal.producer_program) == 0)
+            return fail(error, "signal '" + signal.name + "' trỏ publisher không có trong PROGRAM_TABLE");
+        if (!valid_signal_type(signal.data_type))
+            return fail(error, "signal '" + signal.name + "' có dataType không hợp lệ");
+        if (signal.freshness_ms < 1000u || signal.freshness_ms > 90000u)
+            return fail(error, "signal '" + signal.name + "' có freshness ngoài dải 1000..90000 ms");
+        if (signal.stale_policy > 2u ||
+            (signal.stale_policy == 1u) != signal.has_fallback ||
+            !valid_fallback_bits(signal.data_type, signal.fallback_bits,
+                                 signal.has_fallback))
+            return fail(error, "signal '" + signal.name + "' có fallback/policy không canonical");
+    }
+
     std::vector<SectionPlan> sections;
 
-    /* POU_TABLE: tên + kind + số input + có kiểu trả về hay không. */
+    /* POU_TABLE legacy giữ nguyên byte khi chưa có thân POU link. Có thân link
+     * thì cờ kFlagPouTableFull chọn record đầy đủ; reader hiện tại đọc được cả
+     * hai mà package v2 cũ không cần migrate. */
     {
         SectionPlan plan;
         plan.type = st_pkg::SEC_POU_TABLE;
         plan.item_count = static_cast<uint32_t>(input.pou_signatures.size());
         for (const StPouSignature& signature : input.pou_signatures) {
             if (!append_string(&plan.payload, signature.name, error)) return false;
+            if (!full_pou_table) {
+                plan.payload.push_back(static_cast<uint8_t>(signature.kind));
+                plan.payload.push_back(signature.has_return_type ? 1u : 0u);
+                plan.payload.push_back(static_cast<uint8_t>(signature.input_types.size()));
+                for (StType type : signature.input_types)
+                    plan.payload.push_back(static_cast<uint8_t>(type));
+                continue;
+            }
+            if (signature.input_names.size() != signature.input_types.size() ||
+                signature.output_names.size() != signature.output_types.size())
+                return fail(error, "POU '" + signature.name +
+                                       "' có tên/type cổng không song song");
+            if (signature.input_types.size() > st_profile_generated::kMaxVariables ||
+                signature.output_types.size() > st_profile_generated::kMaxVariables)
+                return fail(error, "POU '" + signature.name +
+                                       "' vượt trần số cổng của profile");
+            if (signature.has_linked_body &&
+                std::all_of(signature.body_sha256.begin(), signature.body_sha256.end(),
+                            [](uint8_t byte) { return byte == 0; }))
+                return fail(error, "POU linked '" + signature.name +
+                                       "' thiếu bodySha256");
+            if (signature.kind != StPouKind::PROGRAM && !signature.has_linked_body)
+                return fail(error, "POU helper '" + signature.name +
+                                       "' thiếu thân đã linked");
+            if (signature.instruction_count > st_ir::kMaxInstructions)
+                return fail(error, "POU '" + signature.name +
+                                       "' vượt trần instruction của profile");
+            if (signature.from_library &&
+                (signature.library_entry_id.empty() || signature.version.empty() ||
+                 (signature.library_origin != "PROJECT" &&
+                  signature.library_origin != "SYSTEM")))
+                return fail(error, "POU library '" + signature.name +
+                                       "' thiếu entryId/version/origin hợp lệ");
             plan.payload.push_back(static_cast<uint8_t>(signature.kind));
+            plan.payload.push_back(signature.from_library ? 1u : 0u);
             plan.payload.push_back(signature.has_return_type ? 1u : 0u);
-            plan.payload.push_back(static_cast<uint8_t>(signature.input_types.size()));
-            for (StType type : signature.input_types)
-                plan.payload.push_back(static_cast<uint8_t>(type));
+            plan.payload.push_back(signature.has_return_type
+                                       ? static_cast<uint8_t>(signature.return_type)
+                                       : 0u);
+            const std::string origin = signature.from_library
+                                           ? signature.library_origin
+                                           : std::string("PROJECT");
+            if (!append_string(&plan.payload, signature.library_entry_id, error) ||
+                !append_string(&plan.payload, signature.version, error) ||
+                !append_string(&plan.payload, origin, error))
+                return false;
+            append_u16(&plan.payload,
+                       static_cast<uint16_t>(signature.input_types.size()));
+            for (std::size_t index = 0; index < signature.input_types.size(); ++index) {
+                if (!append_string(&plan.payload, signature.input_names[index], error))
+                    return false;
+                plan.payload.push_back(static_cast<uint8_t>(signature.input_types[index]));
+            }
+            append_u16(&plan.payload,
+                       static_cast<uint16_t>(signature.output_types.size()));
+            for (std::size_t index = 0; index < signature.output_types.size(); ++index) {
+                if (!append_string(&plan.payload, signature.output_names[index], error))
+                    return false;
+                plan.payload.push_back(static_cast<uint8_t>(signature.output_types[index]));
+            }
+            plan.payload.insert(plan.payload.end(), signature.body_sha256.begin(),
+                                signature.body_sha256.end());
+            append_u32(&plan.payload, signature.instruction_count);
         }
         sections.push_back(std::move(plan));
     }
@@ -223,14 +397,6 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
         plan.type = st_pkg::SEC_SIGNAL_DEFS;
         plan.item_count = static_cast<uint32_t>(input.signals.size());
         for (const StPackageSignal& signal : input.signals) {
-            if (signal.stale_policy > 2)
-                return fail(error, "signal '" + signal.name + "' có chính sách stale không hợp lệ");
-            /* `USE_FALLBACK` không kèm giá trị dự phòng là chính sách rỗng; giá
-             * trị dự phòng ở chính sách khác là dữ liệu không bao giờ dùng tới
-             * nhưng vẫn làm người đọc tin rằng nó sẽ được dùng. */
-            if ((signal.stale_policy == 1u) != signal.has_fallback)
-                return fail(error, "signal '" + signal.name +
-                                       "': USE_FALLBACK và giá trị dự phòng phải đi liền nhau");
             if (!append_string(&plan.payload, signal.name, error)) return false;
             if (!append_string(&plan.payload, signal.producer_program, error)) return false;
             plan.payload.push_back(signal.data_type);
@@ -311,6 +477,7 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
     if (!input.library_lock.system_version.empty()) flags |= st_pkg::kFlagHasLibraryLock;
     if (input.programs.size() > 1) flags |= st_pkg::kFlagHasMultiProgram;
     if (input.retain_bytes > 0) flags |= st_pkg::kFlagHasRetain;
+    if (full_pou_table) flags |= st_pkg::kFlagPouTableFull;
     put_u16(out, kOffFlags, flags);
     put_u32(out, kOffArtifactBytes, static_cast<uint32_t>(total));
 
@@ -401,6 +568,13 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
         return reject(error_code, st_pkg_error::kBadHeader);
     if (header.section_count == 0 || header.section_count > st_pkg::kMaxSections)
         return reject(error_code, st_pkg_error::kBadSectionTable);
+    constexpr uint16_t kKnownFlags = st_pkg::kFlagHasSignals |
+                                     st_pkg::kFlagHasLibraryLock |
+                                     st_pkg::kFlagHasMultiProgram |
+                                     st_pkg::kFlagHasRetain |
+                                     st_pkg::kFlagPouTableFull;
+    if ((header.flags & static_cast<uint16_t>(~kKnownFlags)) != 0)
+        return reject(error_code, st_pkg_error::kBadHeader);
 
     /* Vùng chữ ký phải bằng 0 khi chưa ký; khác 0 nghĩa là artifact đã bị chạm. */
     for (std::size_t index = kOffSignature; index < st_pkg::kHeaderSize; ++index)
@@ -442,6 +616,9 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
         entries.push_back(entry);
     }
 
+    bool library_pou_seen = false;
+    bool project_library_pou_seen = false;
+    bool library_lock_seen = false;
     for (const Entry& entry : entries) {
         const uint8_t* payload = data + entry.offset;
         std::size_t cursor = 0;
@@ -451,15 +628,115 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
                 return reject(error_code, st_pkg_error::kResourceLimit);
             for (uint32_t index = 0; index < entry.items; ++index) {
                 std::string name;
-                if (!read_string(payload, entry.bytes, &cursor, &name) ||
-                    cursor + 3 > entry.bytes)
+                if (!read_string(payload, entry.bytes, &cursor, &name))
                     return reject(error_code, st_pkg_error::kBadRecord);
-                cursor += 2;
-                const uint8_t inputs = payload[cursor++];
-                if (cursor + inputs > entry.bytes)
-                    return reject(error_code, st_pkg_error::kBadRecord);
-                cursor += inputs;
-                out->pou_names.push_back(std::move(name));
+                StPouSignature signature;
+                signature.name = name;
+                if ((header.flags & st_pkg::kFlagPouTableFull) == 0) {
+                    if (cursor + 3 > entry.bytes)
+                        return reject(error_code, st_pkg_error::kBadRecord);
+                    const uint8_t kind = payload[cursor++];
+                    const uint8_t has_return = payload[cursor++];
+                    const uint8_t inputs = payload[cursor++];
+                    if (kind > static_cast<uint8_t>(StPouKind::FUNCTION_BLOCK) ||
+                        has_return > 1u || cursor + inputs > entry.bytes)
+                        return reject(error_code, st_pkg_error::kBadRecord);
+                    signature.kind = static_cast<StPouKind>(kind);
+                    signature.has_return_type = has_return != 0;
+                    for (uint8_t input = 0; input < inputs; ++input) {
+                        const uint8_t type = payload[cursor++];
+                        if (type < static_cast<uint8_t>(StType::BOOL) ||
+                            type > static_cast<uint8_t>(StType::UINT))
+                            return reject(error_code, st_pkg_error::kBadRecord);
+                        signature.input_types.push_back(static_cast<StType>(type));
+                    }
+                } else {
+                    if (cursor + 4 > entry.bytes)
+                        return reject(error_code, st_pkg_error::kBadRecord);
+                    const uint8_t kind = payload[cursor++];
+                    const uint8_t from_library = payload[cursor++];
+                    const uint8_t has_return = payload[cursor++];
+                    const uint8_t return_type = payload[cursor++];
+                    if (kind > static_cast<uint8_t>(StPouKind::FUNCTION_BLOCK) ||
+                        from_library > 1u || has_return > 1u ||
+                        (has_return != 0u &&
+                         (return_type < static_cast<uint8_t>(StType::BOOL) ||
+                          return_type > static_cast<uint8_t>(StType::UINT))))
+                        return reject(error_code, st_pkg_error::kBadRecord);
+                    signature.kind = static_cast<StPouKind>(kind);
+                    signature.from_library = from_library != 0;
+                    signature.has_return_type = has_return != 0;
+                    if (signature.has_return_type)
+                        signature.return_type = static_cast<StType>(return_type);
+                    if (!read_string(payload, entry.bytes, &cursor,
+                                     &signature.library_entry_id) ||
+                        !read_string(payload, entry.bytes, &cursor,
+                                     &signature.version) ||
+                        !read_string(payload, entry.bytes, &cursor,
+                                     &signature.library_origin) || cursor + 2 > entry.bytes)
+                        return reject(error_code, st_pkg_error::kBadRecord);
+                    if ((signature.from_library &&
+                         (signature.library_entry_id.empty() || signature.version.empty() ||
+                          (signature.library_origin != "PROJECT" &&
+                           signature.library_origin != "SYSTEM"))) ||
+                        (!signature.from_library && signature.library_origin != "PROJECT"))
+                        return reject(error_code, st_pkg_error::kBadRecord);
+                    const uint16_t inputs = read_u16(payload, cursor);
+                    cursor += 2;
+                    if (inputs > st_profile_generated::kMaxVariables)
+                        return reject(error_code, st_pkg_error::kResourceLimit);
+                    for (uint16_t input = 0; input < inputs; ++input) {
+                        std::string port_name;
+                        if (!read_string(payload, entry.bytes, &cursor, &port_name) ||
+                            cursor >= entry.bytes)
+                            return reject(error_code, st_pkg_error::kBadRecord);
+                        const uint8_t type = payload[cursor++];
+                        if (type < static_cast<uint8_t>(StType::BOOL) ||
+                            type > static_cast<uint8_t>(StType::UINT))
+                            return reject(error_code, st_pkg_error::kBadRecord);
+                        signature.input_names.push_back(std::move(port_name));
+                        signature.input_types.push_back(static_cast<StType>(type));
+                    }
+                    if (cursor + 2 > entry.bytes)
+                        return reject(error_code, st_pkg_error::kBadRecord);
+                    const uint16_t outputs = read_u16(payload, cursor);
+                    cursor += 2;
+                    if (outputs > st_profile_generated::kMaxVariables)
+                        return reject(error_code, st_pkg_error::kResourceLimit);
+                    for (uint16_t output = 0; output < outputs; ++output) {
+                        std::string port_name;
+                        if (!read_string(payload, entry.bytes, &cursor, &port_name) ||
+                            cursor >= entry.bytes)
+                            return reject(error_code, st_pkg_error::kBadRecord);
+                        const uint8_t type = payload[cursor++];
+                        if (type < static_cast<uint8_t>(StType::BOOL) ||
+                            type > static_cast<uint8_t>(StType::UINT))
+                            return reject(error_code, st_pkg_error::kBadRecord);
+                        signature.output_names.push_back(std::move(port_name));
+                        signature.output_types.push_back(static_cast<StType>(type));
+                    }
+                    if (cursor + signature.body_sha256.size() + 4 > entry.bytes)
+                        return reject(error_code, st_pkg_error::kBadRecord);
+                    std::copy_n(payload + cursor, signature.body_sha256.size(),
+                                signature.body_sha256.begin());
+                    cursor += signature.body_sha256.size();
+                    signature.instruction_count = read_u32(payload, cursor);
+                    cursor += 4;
+                    signature.has_linked_body = signature.kind != StPouKind::PROGRAM;
+                    if ((signature.has_linked_body &&
+                         std::all_of(signature.body_sha256.begin(),
+                                     signature.body_sha256.end(),
+                                     [](uint8_t byte) { return byte == 0; })) ||
+                        signature.instruction_count > st_ir::kMaxInstructions)
+                        return reject(error_code, st_pkg_error::kBadRecord);
+                    library_pou_seen = library_pou_seen || signature.from_library;
+                    project_library_pou_seen =
+                        project_library_pou_seen ||
+                        (signature.from_library &&
+                         signature.library_origin == "PROJECT");
+                }
+                out->pou_names.push_back(name);
+                out->pou_signatures.push_back(std::move(signature));
             }
             break;
         }
@@ -527,22 +804,34 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
                 /* Chính sách stale kiểm ở LOADER, không chỉ ở writer: gói tới
                  * tay runtime có thể do một writer khác phiên bản sinh, và một
                  * chính sách thứ tư buộc runtime phải đoán. */
-                if (payload[cursor + 5] > 2u) return reject(error_code, st_pkg_error::kBadRecord);
+                const uint8_t data_type = payload[cursor];
+                const uint32_t freshness_ms = read_u32(payload, cursor + 1);
+                const uint8_t stale_policy = payload[cursor + 5];
+                const uint64_t fallback_bits = read_u64(payload, cursor + 6);
+                const bool has_fallback = stale_policy == 1u;
+                if (!valid_signal_identifier(name) || !valid_signal_type(data_type) ||
+                    freshness_ms < 1000u || freshness_ms > 90000u ||
+                    stale_policy > 2u ||
+                    !valid_fallback_bits(data_type, fallback_bits, has_fallback))
+                    return reject(error_code, st_pkg_error::kBadRecord);
+                if (std::find(out->program_names.begin(), out->program_names.end(), producer) ==
+                    out->program_names.end())
+                    return reject(error_code, st_pkg_error::kSignalPublisher);
                 if (signals_out != nullptr) {
                     StPackageSignal signal;
                     signal.name = name;
                     signal.producer_program = producer;
-                    signal.data_type = payload[cursor];
-                    signal.freshness_ms = read_u32(payload, cursor + 1);
-                    signal.stale_policy = payload[cursor + 5];
-                    signal.fallback_bits = read_u64(payload, cursor + 6);
-                    signal.has_fallback = signal.stale_policy == 1u;
+                    signal.data_type = data_type;
+                    signal.freshness_ms = freshness_ms;
+                    signal.stale_policy = stale_policy;
+                    signal.fallback_bits = fallback_bits;
+                    signal.has_fallback = has_fallback;
                     signals_out->push_back(std::move(signal));
                 }
                 cursor += 14;
                 /* Đúng MỘT publisher cho mỗi signal (DDD §4.5). Kiểm ở loader vì
                  * artifact có thể tới từ nơi khác chứ không chỉ từ writer này. */
-                if (!published.insert(name).second)
+                if (!published.insert(fold_signal_name(name)).second)
                     return reject(error_code, st_pkg_error::kSignalPublisher);
                 out->signal_names.push_back(std::move(name));
             }
@@ -584,6 +873,8 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
             if (!read_string(payload, entry.bytes, &cursor, &revision))
                 return reject(error_code, st_pkg_error::kBadRecord);
             out->library_system_version = std::move(version);
+            out->library_project_revision_id = std::move(revision);
+            library_lock_seen = true;
             break;
         }
         case st_pkg::SEC_RESOURCE_BUDGET: {
@@ -614,6 +905,10 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
     }
 
     if (out->program_names.empty()) return reject(error_code, st_pkg_error::kBadSectionTable);
+    if (library_pou_seen && !library_lock_seen)
+        return reject(error_code, st_pkg_error::kLibraryLock);
+    if (project_library_pou_seen && out->library_project_revision_id.empty())
+        return reject(error_code, st_pkg_error::kLibraryLock);
     /* Mỗi Program phải có đúng một blob IR. Lệch số nghĩa là gói thiếu thân
      * chương trình cho một Program nào đó — nạp nó sẽ cho một instance không
      * chạy được mà không ai báo. */

@@ -205,9 +205,26 @@ type RevisionObject struct {
 	PayloadSHA256 [32]byte
 }
 
+// RevisionPOUObject là ảnh canonical mà compiler/Check phải đọc. Nó tách khỏi
+// RevisionObject vì payload tài liệu còn mang metadata UI/programConfig, trong
+// khi bảng `pou_objects` đã được seal nguyên tử cùng dependency/version của
+// Control Library. Đọc ngược payload tài liệu rồi tự dựng dependency lần nữa sẽ
+// tạo hai nguồn sự thật và làm mất version pin.
+type RevisionPOUObject struct {
+	ObjectID      string
+	Kind          string
+	Name          string
+	Language      string
+	InterfaceJSON []byte
+	SourceBlob    []byte
+	Dependencies  []LibraryDependency
+	ContentSHA256 [32]byte
+}
+
 type RevisionSnapshot struct {
-	Revision Revision
-	Objects  []RevisionObject
+	Revision   Revision
+	Objects    []RevisionObject
+	POUObjects []RevisionPOUObject
 }
 
 type EnqueueCheckParams struct {

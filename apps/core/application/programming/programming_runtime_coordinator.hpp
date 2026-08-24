@@ -99,6 +99,15 @@ struct ProgramEnableCommand {
     bool        enabled = false;
 };
 
+/* Kết quả của một lệnh `SET_PROGRAM_ENABLED`. Tách `TIMED_OUT` khỏi
+ * `REJECTED` vì hai thứ đòi hai hành động khác nhau ở phía gọi: timeout là
+ * "chưa biết", gọi lại được (lệnh idempotent); rejected là "đã trả lời không". */
+enum class ProgramEnableOutcome : uint8_t {
+    APPLIED = 0,
+    REJECTED,
+    TIMED_OUT,
+};
+
 enum class RetainResetOutcome : uint8_t {
     APPLIED = 0,      /* Đã áp dụng ở boundary VÀ force-flush persisted image thành công. */
     REJECTED,         /* Revision không khớp active, hoặc instance chưa có program loaded. */
@@ -149,11 +158,15 @@ public:
     void set_candidate_registry(ProgramCandidateRegistry* registry) { candidates_ = registry; }
     ProgramCandidateRegistry* candidate_registry() const { return candidates_; }
 
-    /* Áp intent Enable/Disable lên đúng một Program. Trả false + `*detail_code`
-     * khi instance không có, khi trạng thái không cho phép, hoặc khi vượt trần
-     * 16 Program chạy đồng thời. */
-    bool set_program_enabled(const ProgramEnableCommand& command, std::string* detail_code,
-                             std::string* error);
+    /* Áp intent Enable/Disable lên đúng một Program. Chạy trên IPC worker
+     * thread (non-RT): ARM yêu cầu rồi CHỜ CÓ GIỚI HẠN tới khi safe boundary
+     * áp dụng, giống hệt `reset_retain()` — xem F-P59-ENABLE-BOUNDARY-001 tại
+     * `StProgramInstance`. `REJECTED` + `*detail_code` khi instance không có,
+     * trạng thái không cho phép, hoặc vượt trần Program chạy đồng thời;
+     * `TIMED_OUT` khi boundary chưa tới trong hạn (không được coi là thành
+     * công, và cũng không được coi là đã từ chối). */
+    ProgramEnableOutcome set_program_enabled(const ProgramEnableCommand& command,
+                                             std::string* detail_code, std::string* error);
 
     RetainResetOutcome reset_retain(const RetainResetCommand& command, std::string* detail_code,
                                     std::string* error);
@@ -187,6 +200,35 @@ private:
      * còn phải biết trước tên Program — đó là dữ liệu của package, không phải
      * của bootstrap. */
     bool ensure_topology(const std::vector<PackageProgramSlice>& slices, std::string* error);
+
+    /* Dựng hợp đồng signal của gói mới vào một BANK RỜI của bus. `*prepared`
+     * true nghĩa là có một bank đang chờ và caller phải activate hoặc discard.
+     * Khác `rebuild_signal_bus()`: hàm này KHÔNG chạm bank đang live. */
+    bool prepare_signal_replacement(const std::vector<StPackageSignal>& signals, bool* prepared,
+                                    std::string* detail_code, std::string* error);
+
+    /* Ảnh chụp danh tính một package. `prepared_identity_` không đè lên
+     * danh tính live trước safe boundary; `previous_identity_` đi cùng topology
+     * cũ để rollback khôi phục đúng một transaction, không ghép nửa cũ/nửa
+     * mới. */
+    struct CoordinatorIdentity {
+        std::string instance_id;
+        std::vector<std::string> instance_ids;
+        std::string operation_id;
+        std::string revision_id;
+        std::string artifact_hash;
+        std::string plan_hash;
+        std::string detail_code;
+        uint64_t artifact_byte_size = 0;
+        bool staged_restore = false;
+    };
+    CoordinatorIdentity capture_identity() const;
+    /* Đổi ownership identity với các field live bằng swap O(1). Chỉ dùng ở
+     * safe boundary; copy string/vector tại đó có thể cấp phát heap và phá
+     * giới hạn WCET của scan. */
+    void swap_live_identity(CoordinatorIdentity* identity) noexcept;
+    bool append_phase(StJournalPhase phase, const CoordinatorIdentity& identity,
+                      std::string* error);
     /* Tách artifact thành các lát Program. v1 -> đúng một lát dùng
      * `command.instance_id`; v2 -> N lát lấy tên và chu kỳ từ chính package. */
     bool split_package(const std::vector<uint8_t>& bytes, const std::string& fallback_instance,
@@ -198,6 +240,12 @@ private:
      * runtime không được tin nó chỉ vì writer của mình đã kiểm. */
     bool rebuild_signal_bus(const std::vector<StPackageSignal>& signals, std::string* detail_code,
                             std::string* error);
+    /* Chuyển một khai báo signal của package sang dạng runtime. Tách ra vì cả
+     * đường boot lẫn đường Commission đều cần, và hai bản chuyển đổi song song
+     * là hai bộ ngữ nghĩa để trôi khỏi nhau. */
+    static bool signal_definition_from_package(const StPackageSignal& signal,
+                                               StSignalDefinition* out, std::string* detail_code,
+                                               std::string* error);
 
     /* T59-501 — kết luận barrier chu kỳ đầu ở mức GÓI. */
     enum class PackageCycleVerdict : uint8_t {
@@ -233,6 +281,24 @@ private:
     std::atomic<uint64_t> ao_override_levels_{0};
     std::atomic<uint64_t> do_override_levels_{0};
     std::atomic<bool> impact_snapshot_valid_{false};
+
+    /* F-P59-ATOMIC-001: coordinator sở hữu cả hai phía của handoff.
+     * `prepared_program_set_` chỉ chứa shadow trước boundary. Sau swap,
+     * `previous_program_set_` giữ nguyên topology cũ tới khi COMMITTED bền
+     * vững hoặc rollback. Hai bool phân biệt "topology cũ rỗng hợp lệ"
+     * với "không có topology để khôi phục". */
+    StPreparedProgramSet prepared_program_set_;
+    StPreparedProgramSet previous_program_set_;
+    /* `prepared_identity_` là carrier O(1) cho handoff; sau forward swap nó
+     * chứa identity live cũ. `transaction_identity_` giữ nguyên candidate để
+     * OPERATION_STATUS vẫn nhận diện đúng giao dịch nếu sau đó rollback. */
+    CoordinatorIdentity prepared_identity_;
+    CoordinatorIdentity transaction_identity_;
+    CoordinatorIdentity previous_identity_;
+    bool prepared_identity_valid_ = false;
+    bool previous_program_set_valid_ = false;
+    bool signal_replacement_prepared_ = false;
+    bool signal_replacement_active_ = false;
 
     /* Chỉ IPC worker đọc/ghi; scan không chạm các string/vector này. */
     std::string operation_id_;

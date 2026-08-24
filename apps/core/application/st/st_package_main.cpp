@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <sodium.h>
 
 #include "st/st_artifact.hpp"
 #include "st/st_package_v2.hpp"
@@ -85,6 +86,149 @@ bool read_signals(const std::string& path, std::vector<core::StPackageSignal>* o
     return true;
 }
 
+bool parse_type(const std::string& name, core::StType* out)
+{
+    if (name == "BOOL") { *out = core::StType::BOOL; return true; }
+    if (name == "INT") { *out = core::StType::INT; return true; }
+    if (name == "DINT") { *out = core::StType::DINT; return true; }
+    if (name == "UINT") { *out = core::StType::UINT; return true; }
+    if (name == "REAL") { *out = core::StType::REAL; return true; }
+    if (name == "TIME") { *out = core::StType::TIME; return true; }
+    return false;
+}
+
+bool decode_sha256(const std::string& text, std::array<uint8_t, 32>* out)
+{
+    if (text.size() != 64) return false;
+    auto nibble = [](char ch) -> int {
+        if (ch >= '0' && ch <= '9') return ch - '0';
+        if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+        if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+        return -1;
+    };
+    for (std::size_t index = 0; index < out->size(); ++index) {
+        const int high = nibble(text[index * 2]);
+        const int low = nibble(text[index * 2 + 1]);
+        if (high < 0 || low < 0) return false;
+        (*out)[index] = static_cast<uint8_t>((high << 4) | low);
+    }
+    return true;
+}
+
+bool read_pou_table(const std::string& path, std::vector<core::StPouSignature>* out,
+                    std::string* error)
+{
+    std::ifstream input(path);
+    if (!input) { *error = "khong doc duoc " + path; return false; }
+    const nlohmann::json document = nlohmann::json::parse(input, nullptr, false);
+    if (document.is_discarded() || !document.is_object() ||
+        document.value("schemaVersion", 0) != 1 ||
+        !document.contains("pous") || !document.at("pous").is_array()) {
+        *error = "pou-table phai la schemaVersion=1 voi mang pous";
+        return false;
+    }
+    if (document.at("pous").size() > core::st_profile_generated::kMaxObjects) {
+        *error = "pou-table vuot tran POU cua profile";
+        return false;
+    }
+    out->clear();
+    try {
+        for (const nlohmann::json& item : document.at("pous")) {
+            core::StPouSignature signature;
+            signature.name = item.at("name").get<std::string>();
+            const std::string kind = item.at("kind").get<std::string>();
+            if (kind == "FUNCTION") signature.kind = core::StPouKind::FUNCTION;
+            else if (kind == "FUNCTION_BLOCK")
+                signature.kind = core::StPouKind::FUNCTION_BLOCK;
+            else { *error = "pou-table chi nhan FUNCTION/FUNCTION_BLOCK"; return false; }
+            signature.from_library = item.value("fromLibrary", false);
+            signature.library_origin = item.value("origin", std::string("PROJECT"));
+            if (item.contains("libraryEntryId") && !item.at("libraryEntryId").is_null())
+                signature.library_entry_id = item.at("libraryEntryId").get<std::string>();
+            if (item.contains("version") && !item.at("version").is_null())
+                signature.version = item.at("version").get<std::string>();
+            if (signature.from_library &&
+                (signature.library_entry_id.empty() || signature.version.empty() ||
+                 (signature.library_origin != "PROJECT" &&
+                  signature.library_origin != "SYSTEM"))) {
+                *error = "POU library can libraryEntryId/version/origin hop le";
+                return false;
+            }
+            if (!signature.from_library && signature.library_origin != "PROJECT") {
+                *error = "POU local phai co origin PROJECT";
+                return false;
+            }
+            signature.has_return_type = item.value("hasReturnType", false);
+            if (signature.has_return_type) {
+                const std::string type = item.at("returnType").get<std::string>();
+                if (!parse_type(type, &signature.return_type)) {
+                    *error = "returnType POU khong hop le";
+                    return false;
+                }
+            }
+            signature.input_names = item.value("inputNames", std::vector<std::string>{});
+            signature.output_names = item.value("outputNames", std::vector<std::string>{});
+            if (signature.input_names.size() >
+                    core::st_profile_generated::kMaxVariables ||
+                signature.output_names.size() >
+                    core::st_profile_generated::kMaxVariables) {
+                *error = "chu ky POU vuot tran cong cua profile";
+                return false;
+            }
+            for (const std::string& type :
+                 item.value("inputTypes", std::vector<std::string>{})) {
+                core::StType parsed;
+                if (!parse_type(type, &parsed)) { *error = "inputType POU khong hop le"; return false; }
+                signature.input_types.push_back(parsed);
+            }
+            for (const std::string& type :
+                 item.value("outputTypes", std::vector<std::string>{})) {
+                core::StType parsed;
+                if (!parse_type(type, &parsed)) { *error = "outputType POU khong hop le"; return false; }
+                signature.output_types.push_back(parsed);
+            }
+            if (!decode_sha256(item.at("bodySha256").get<std::string>(),
+                               &signature.body_sha256)) {
+                *error = "bodySha256 POU khong hop le";
+                return false;
+            }
+            signature.instruction_count = item.at("instructionCount").get<uint32_t>();
+            signature.has_linked_body = true;
+            out->push_back(std::move(signature));
+        }
+    } catch (const std::exception& exception) {
+        *error = std::string("pou-table thieu/sai field: ") + exception.what();
+        return false;
+    }
+    return true;
+}
+
+bool read_package_library_lock(const std::string& path,
+                               core::StPackageLibraryLock* out,
+                               std::string* error)
+{
+    std::ifstream input(path);
+    if (!input) { *error = "khong doc duoc " + path; return false; }
+    const nlohmann::json document = nlohmann::json::parse(input, nullptr, false);
+    if (document.is_discarded() || !document.is_object() ||
+        document.value("schemaVersion", 0) != 1) {
+        *error = "library-lock phai co schemaVersion=1";
+        return false;
+    }
+    try {
+        out->system_version = document.at("systemVersion").get<std::string>();
+        out->project_revision_id = document.at("projectRevisionId").get<std::string>();
+    } catch (const std::exception& exception) {
+        *error = std::string("library-lock thieu/sai field: ") + exception.what();
+        return false;
+    }
+    const std::string canonical = document.dump();
+    crypto_hash_sha256(out->system_sha256.data(),
+                       reinterpret_cast<const unsigned char*>(canonical.data()),
+                       canonical.size());
+    return !out->system_version.empty();
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -92,6 +236,8 @@ int main(int argc, char** argv)
     std::string out_path;
     std::vector<core::StPackageProgram> programs;
     std::vector<core::StPackageSignal> signals;
+    std::vector<core::StPouSignature> linked_pous;
+    core::StPackageLibraryLock library_lock;
 
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
@@ -139,8 +285,21 @@ int main(int argc, char** argv)
             std::string signal_error;
             if (!read_signals(argv[++index], &signals, &signal_error))
                 return fail("ST-CLI-IO", signal_error);
+        } else if (argument == "--pou-table" && index + 1 < argc) {
+            std::string pou_error;
+            if (!read_pou_table(argv[++index], &linked_pous, &pou_error))
+                return fail("ST-CLI-POU-TABLE", pou_error);
+        } else if (argument == "--library-lock" && index + 1 < argc) {
+            std::string lock_error;
+            if (!read_package_library_lock(argv[++index], &library_lock, &lock_error))
+                return fail("ST-CLI-LIBRARY-LOCK", lock_error);
         } else if (argument == "--version") {
-            std::printf("mkddc-st-package %s\n", core::st_profile_generated::kProfileId);
+            std::printf("packager_version=2 profile_id=%s profile_sha256=%s "
+                        "artifact_schema=%u target_abi=%u\n",
+                        core::st_profile_generated::kProfileId,
+                        core::st_profile_generated::kProfileSha256,
+                        static_cast<unsigned>(core::st_pkg::kSchemaVersion),
+                        static_cast<unsigned>(core::st_profile_generated::kTargetAbi));
             return 0;
         } else {
             return fail("ST-CLI-ARGS", "tham so khong hop le: " + argument);
@@ -154,6 +313,7 @@ int main(int argc, char** argv)
     input.target_abi = core::st_profile_generated::kTargetAbi;
     input.programs = programs;
     input.signals = signals;
+    input.library_lock = library_lock;
     /* Mỗi Program là một POU kind PROGRAM. Bảng signature đầy đủ (FUNCTION/FB,
      * cổng, kiểu) đến cùng `T59-305`; khai thiếu ở đây tốt hơn khai bừa, vì
      * loader kiểm bảng này và một bản khai sai sẽ được nạp như thật. */
@@ -163,6 +323,8 @@ int main(int argc, char** argv)
         signature.kind = core::StPouKind::PROGRAM;
         input.pou_signatures.push_back(signature);
     }
+    input.pou_signatures.insert(input.pou_signatures.end(), linked_pous.begin(),
+                                linked_pous.end());
 
     std::vector<uint8_t> package;
     std::string error;

@@ -163,12 +163,63 @@ func (s *RuntimeService) GetMonitor(ctx context.Context) (MonitorPageView, error
 	}
 	variables := make(map[string]monitorVariable)
 	bindings := make([]monitorBinding, 0)
+	// Draft v2 KHÔNG seal biến thành Revision object `VARIABLE` riêng — biến
+	// nằm trong `locals` của chính POU (`draft.go` chỉ ghi METADATA/POU/SIGNAL/
+	// BINDING). Bản trước chỉ đọc nhánh `VARIABLE` v1, nên bảng `variables`
+	// LUÔN rỗng, mọi Binding bị `continue` bỏ qua và Runtime Monitor trả
+	// `items: []` cho MỌI Revision — màn Theo dõi không bao giờ hiện được một
+	// biến ánh xạ nào. Đọc cả hai nguồn như `checks_invariants.go` đã làm:
+	// `locals` của POU cho Draft v2, object `VARIABLE` cho Revision v1 cũ.
+	programIDByObject := make(map[string]string)
+	for _, object := range revision.Objects {
+		if object.Kind != "PROGRAM" && object.Kind != "FUNCTION" && object.Kind != "FUNCTION_BLOCK" {
+			continue
+		}
+		var payload struct {
+			ProgramConfig struct {
+				ProgramID string `json:"programId"`
+			} `json:"programConfig"`
+			Locals []struct {
+				VariableID string `json:"variableId"`
+				ProgramID  string `json:"programId"`
+				Name       string `json:"name"`
+			} `json:"locals"`
+		}
+		if err := json.Unmarshal(object.PayloadJSON, &payload); err != nil {
+			return MonitorPageView{}, fmt.Errorf("decode POU monitor: %w", err)
+		}
+		// `objectId` sở hữu source; `programId` mới là identity runtime ổn
+		// định (DDD §4.2/§4.3). Trộn hai UUID này làm Monitor gắn biến vào một
+		// Program không tồn tại ở runtime.
+		runtimeID := payload.ProgramConfig.ProgramID
+		if object.Kind == "PROGRAM" {
+			if runtimeID == "" {
+				runtimeID = object.ObjectID
+			}
+			programIDByObject[object.ObjectID] = runtimeID
+		}
+		for _, local := range payload.Locals {
+			owner := local.ProgramID
+			if owner == "" {
+				owner = runtimeID
+			}
+			if owner == "" {
+				owner = object.ObjectID
+			}
+			variables[local.VariableID] = monitorVariable{
+				VariableID: local.VariableID, ProgramID: owner, Name: local.Name,
+			}
+		}
+	}
 	for _, object := range revision.Objects {
 		switch object.Kind {
 		case "VARIABLE":
 			var value monitorVariable
 			if err := json.Unmarshal(object.PayloadJSON, &value); err != nil {
 				return MonitorPageView{}, fmt.Errorf("decode Variable monitor: %w", err)
+			}
+			if mapped := programIDByObject[value.ProgramID]; mapped != "" {
+				value.ProgramID = mapped
 			}
 			variables[value.VariableID] = value
 		case "BINDING":

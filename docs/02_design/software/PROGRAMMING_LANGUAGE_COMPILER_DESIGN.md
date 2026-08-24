@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LANG-PROG-001` |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Trạng thái | **Active — IMPLEMENT_READY; user POU/library semantics đã khóa** |
-| Ngày | 2026-08-20 |
+| Ngày | 2026-08-24 |
 | Chủ quản | Compiler Lead + Controls Lead |
 | Người review | Core Lead, FE Lead, Verification Lead, Security Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -21,10 +21,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **viết được gì trong ST và FBD**, biên dịch ra sao, và lỗi biên dịch trông như thế nào. Định nghĩa tập con ngôn ngữ, hệ kiểu, thư viện block, và **một IR chung** để ST và FBD cho ra cùng ngữ nghĩa. |
 | 2. Ai phải đọc file này? | Compiler và Controls (chủ quản); Core đọc để biết IR nào phải chạy được; FE đọc §7 (hợp đồng diagnostic) để hiển thị lỗi đúng dòng/đúng node; QA đọc §12. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-200..203` đã có ST/type/IR, FBD canonical/equivalence và provenance. `TASK-PROG-205` nối compiler worker sandbox; P3/P4 nối verified artifact loader/runtime mà không link parser/compiler vào `mkddc-core`. Local POU và target WCET/HIL còn thiếu. |
-| 4. Thiết kế mới thay đổi điều gì? | Compiler non-RT sinh cùng `MKDDCIR1` và manifest ngoài artifact, tách `fileSha256` khỏi `integritySha256`; manifest khóa source/compiler/profile/library/ABI/build key. Unknown version/hash/profile/source map bị reject trước khi consumer publish output. |
-| 5. Team phải sửa module/contract nào? | §11. Compiler: tách `st_compiler_lib` khỏi đường RT; BE: gọi CLI/API có giới hạn từ worker, **không bao giờ gọi trong scan**; FE: dùng hợp đồng diagnostic §7. Giới hạn lấy `min(khả năng client, khả năng target, policy)`. |
-| 6. Điều gì còn bị chặn? | Không còn decision blocker cho code. Local POU, target load/WCET/HIL và Test Result vẫn là gate sau; compiler worker/Check và no-parser-RT source gates đã có. |
+| 3. Hệ thống hiện tại đang có gì? | Baseline có ST/FBD typed IR và package v2. Corrective source current-worktree đã thêm parser/registry/runtime user FUNCTION/FB, signal intrinsic và manifest POU/library/signal; chưa merge/full-gate nên chưa là implementation closure evidence. |
+| 4. Thiết kế mới thay đổi điều gì? | IR đơn giữ `MKDDCIR1/schema 1`, compiler `fwsom-st-1.2.0`; `SIGNAL_READ=0x71`, `SIGNAL_PUBLISH=0x72`, signal-ref section `0x0009`. Container nhiều POU/Program là `MKDDCIR2/layout 2`; hai format không được gọi lẫn nhau. |
+| 5. Team phải sửa module/contract nào? | §11. Compile CLI nhận `--pou-manifest`, `--library-lock`, `--signal-manifest`; package CLI nhận POU table/library lock. BE sinh manifest authoritative; Core chỉ nạp IR/package đã verify, không parse source trên RT path. |
+| 6. Điều gì còn bị chặn? | Không còn decision blocker. Current corrective source phải merge và qua compiler/package/runtime/E2E gate; target load/WCET/soak và formal Test Result vẫn mở. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-200..203`: Task 203 có build lặp 100 lần, targeted `35/35`, manifest mutation `7/7`, CTest `927/927` và Go/FE regression PASS. Đây là evidence host; `VS-PROG-003/005/006/023` chưa PASS vì worker/target và independent review chưa đủ. |
 
 Lưu ý thẩm quyền: `ST_SUBSET_SPEC_MK-DDC-24_VI.md` chỉ **mô tả cái đang có**. Khi
@@ -50,12 +50,12 @@ thứ ba, pointer/dynamic allocation/recursion, multi-controller distributed tas
 
 | Nội dung | As-Built 2026-08-09 | Target authority / gap |
 |---|---|---|
-| Parser/semantic/compiler | `apps/core/application/st/st_parser.cpp`, `st_semantic.cpp`, `st_compile.cpp`; `st_fbd_model.*`; `st_fbd_compile.*`; `st_artifact_manifest.*` tại `2c2bfb4` | ST và FBD đều đi qua `StProgram` typed, semantic checker, IR và manifest chung trong thư viện compiler non-RT; local POU còn target |
-| CLI | `mkddc-st-validate`, `mkddc-st-compile` từ `apps/core/CMakeLists.txt` | BE worker gọi API/CLI bounded, không gọi trong scan |
-| ST unit | `PROGRAM` duy nhất; assignment, `IF/ELSIF/ELSE`, FB call | Target bắt buộc `PROGRAM/FUNCTION/FUNCTION_BLOCK`; implementation theo T59-101..105 |
+| Parser/semantic/compiler | `apps/core/application/st/st_parser.cpp`, `st_semantic.cpp`, `st_compile.cpp`, `st_pou_registry.*`, `st_fbd_model.*`, `st_fbd_compile.*` | Current worktree dùng chung typed POU registry/call graph/lowering cho ST và FBD; source chưa merge nên trace `I` chưa nâng |
+| CLI | `mkddc-st-validate`, `mkddc-st-compile`, `mkddc-st-package` từ `apps/core/CMakeLists.txt` | Compile nhận POU/library/signal manifest; package nhận POU table/library lock; mọi file đọc trước worker sandbox, bounded và không chạy trong scan |
+| ST unit | Baseline `PROGRAM`; current worktree parse `PROGRAM/FUNCTION/FUNCTION_BLOCK` | FUNCTION pure; FB instance state/private layout; recursion/kind/arity fail closed bằng stable diagnostic |
 | Type | `BOOL`, `INT=int16`, `DINT=int32`, `UINT=uint16`, `REAL=float32`, `TIME=int64`; VAR input/output/local/retain | Sáu type scalar là baseline; bounded ENUM không thuộc phạm vi hiện hành |
 | FB/function | TON, TOF, R/F_TRIG; ABS/MIN/MAX/LIMIT/SEL/SQRT/conversion | Built-in registry + user POU registry được sinh từ nguồn chung theo T59-003 |
-| FBD | schema/golden/keyboard + `fbd/equivalence_v1.json`; `st_fbd_model.*`, `st_fbd_compile.*`; FE `features/programming/fbd/*` | Lowerer `fwsom-fbd-1.0.0`, 20 cặp equivalence và source map `pc→networkId/nodeId/portId/unit` đã có; library semantic chưa hỗ trợ vẫn reject fail-closed |
+| FBD | schema/golden/keyboard + `fbd/equivalence_v1.json`; `st_fbd_model.*`, `st_fbd_compile.*`; FE `features/programming/fbd/*` | FBD schema v1 dual-compatible; lowerer `fwsom-fbd-1.1.0` thêm `USER_CALL`, `SIGNAL_READ` và `SIGNAL_PUBLISH`, vẫn giữ source map và reject unknown kind |
 | Giới hạn | `st_limits.hpp`, `st_ir.hpp`, generated profile; parser kiểm source UTF-8/NUL/64 KiB và full consumption | Tiếp tục lấy min(client capability, target capability, policy) ở worker/consumer |
 | Runtime wiring | `st_compiler_lib` không link vào `mkddc-core`; bootstrap/coordinator nạp verified artifact, symbol scan giữ parser/compiler ngoài runtime | Đúng boundary compiler non-RT; target timing/HIL thuộc lifecycle/release |
 
@@ -128,6 +128,12 @@ không được thay bằng unitless.
   trước call là giá trị cycle trước và phải có warning; gọi hai lần là error.
 - Chia 0, overflow, non-finite, invalid timer và instruction budget vượt là
   runtime fault có source map; staging output cycle đó bị hủy.
+- `SIGNAL_READ(name)` trả typed value theo signal manifest và stale policy; tên
+  không tồn tại/type lệch/consumer chưa khai báo bị reject ở Check. Khi policy
+  `WAIT` chưa có snapshot hợp lệ, Program chờ và không publish output cycle đó.
+- `SIGNAL_PUBLISH(name, value)` chỉ hợp lệ với signal do Program hiện tại sở hữu;
+  type/unit phải exact. Publish được stage trong cycle và chỉ xuất hiện ở signal
+  bank committed tại boundary; lỗi Program hủy toàn bộ publish đang chờ.
 
 ## 5. FBD canonical model
 
@@ -147,8 +153,8 @@ Nếu có lỗi, `ok=false`, module rỗng và không được publish partial a
 | Entity/field | Kiểu | Bắt buộc | Invariant |
 |---|---|---|---|
 | `network.id/order` | UUID/u16 | có | order unique, 0..255 |
-| `node.id/kind/typeRef` | UUID/enum/string | có | kind thuộc block/input/output/constant/conversion |
-| `node.parameters` | typed map | tùy loại | schema library versioned; không unknown required field |
+| `node.id/kind/typeRef` | UUID/enum/string | có | gồm block/input/output/constant/conversion/`SIGNAL_READ`/`SIGNAL_PUBLISH`; unknown reject |
+| `node.parameters` | typed map | tùy loại | node signal bắt buộc `parameters.signal`; library node dùng schema versioned |
 | `port.id/direction/dataType/unit` | UUID/enum/enum/string? | có | type/unit phải tương thích |
 | `wire.id/from/to` | UUID/port ref | có | một driver/input; không dangling |
 | `executionOrder` | u16? | derived/explicit | deterministic; conflict hoặc cycle bị reject |
@@ -222,12 +228,13 @@ options ghi manifest ngoài phần hash semantic nhưng nằm trong provenance.
 compile(revision, target):
   assert canonical_hash(revision) == requested_hash
   enforce_size_utf8_and_schema_limits()
-  units = parse_all_programs_and_fbd()
+  units = parse_all_programs_functions_fb_and_fbd()
+  load_and_verify(pou_manifest, library_lock, signal_manifest)
   symbols = build_project_symbol_table(units)
   reject_duplicate_or_recursive_dependency(symbols)
   typed = typecheck_units_bindings_task(units, target)
   normalized = stable_normalize(typed)
-  ir = lower_to_common_ir(normalized, target.library_manifest)
+  ir = lower_to_common_ir(normalized, library_lock, signal_manifest)
   prove_bounded_control_flow_and_resources(ir)
   bytes = serialize_mkddcir1(ir)
   return artifact(bytes, sha256(bytes)), diagnostics, source_map
@@ -251,11 +258,11 @@ artifact active.
 
 | Trách nhiệm | As-Built | Target sửa/tạo |
 |---|---|---|
-| lexer/parser/AST | `apps/core/application/st/st_parser.*`, `st_program.*`, `st_fbd_model.*` | **ST subset/type ở Task 200; FBD parser/canonicalizer ở Task 201**; thêm project POU sau Task 203 |
-| semantic | `st_semantic.*`, `st_io_map.*` | **sáu type/conversion/overflow đã có**; unit/library/dependency validator còn mở |
-| lowering/IR | `st_compile.*`, `st_ir.*`, `st_loader.*`, `st_fbd_compile.*`, `st_artifact_manifest.*` | **ST/FBD cùng typed IR, serializer, source map và runtime semantic; manifest ngoài artifact giữ provenance đầy đủ** |
-| CLI | `st_validate_main.cpp`, `st_compile_main.cpp` | **compile ST/FBD, `--source-id`, `--manifest-out`, hash đặt tên rõ và diagnostic có vị trí đã có**; worker deadline thuộc Task 205 |
-| BE worker | chưa có | `apps/web-api/internal/programming/compiler` |
+| lexer/parser/AST | `apps/core/application/st/st_parser.*`, `st_program.*`, `st_pou_registry.*`, `st_fbd_model.*` | Current worktree: ba POU kind, canonical signature, call graph và FB layout; chờ merge |
+| semantic | `st_semantic.*`, `st_io_map.*`, `st_pou_registry.*` | purity/recursion/kind/arity/library DAG/signal publisher-consumer; unknown fail closed |
+| lowering/IR | `st_compile.*`, `st_ir.*`, `st_loader.*`, `st_fbd_compile.*`, `st_artifact_manifest.*` | IR `MKDDCIR1/schema 1`; opcode signal `0x71/0x72`; `SEC_SIGNAL_REFS=0x0009`; ST/FBD dùng chung `USER_CALL` |
+| CLI | `st_validate_main.cpp`, `st_compile_main.cpp`, `st_package_main.cpp` | compile: `--pou-manifest`, `--library-lock`, `--signal-manifest`; package: `--pou-table`, `--library-lock`; mọi manifest được hash vào provenance |
+| BE worker | `apps/web-api/internal/programming/compiler/{runner,packager}.go` | BE tạo input từ immutable Revision, không tin metadata FE; current corrective source chưa merge |
 | contract | `contracts/programming/fbd_v1.schema.json`, `artifact_build_manifest_v1.schema.json`, `fbd_keyboard_commands_v1.json`, `fbd/{golden,manifest,equivalence_v1.json}`, `golden/build_manifest_{st,fbd}_v1.json` | **profile/library/hash/source map đã pin bằng schema + golden**; bundle source-only thuộc Task 206 |
 | test | `test_st_fbd_model.cpp`, `test_st_fbd_compile.cpp`, `test_st_artifact_manifest.cpp`, `test_st_compile_cli.cpp`, `fuzz_st_fbd_model.cpp`, verifier contract | equivalence, build 100 lần, CLI thật, mutation fail-closed và source map ST/FBD đã có; target load ở gate sau |
 
@@ -276,8 +283,12 @@ artifact active.
 ## 13. Grammar và conversion contract cho implement
 
 ```ebnf
+pou           = program | function | function_block ;
 program       = "PROGRAM" identifier declarations statement_list "END_PROGRAM" ;
-statement     = assignment | if_statement | fb_call ;
+function      = "FUNCTION" identifier ":" scalar_type declarations statement_list "END_FUNCTION" ;
+function_block= "FUNCTION_BLOCK" identifier declarations statement_list "END_FUNCTION_BLOCK" ;
+statement     = assignment | if_statement | fb_call | signal_publish ;
+signal_publish= "SIGNAL_PUBLISH" "(" string_literal "," expression ")" ";" ;
 assignment    = identifier ":=" expression ";" ;
 if_statement  = "IF" expression "THEN" statement_list
                 { "ELSIF" expression "THEN" statement_list }
@@ -289,6 +300,8 @@ compare_expr  = add_expr [ ("="|"<>"|"<"|"<="|">"|">=") add_expr ] ;
 add_expr      = mul_expr { ("+"|"-") mul_expr } ;
 mul_expr      = unary_expr { ("*"|"/"|"MOD") unary_expr } ;
 unary_expr    = ["NOT"|"-"|"+"] primary ;
+primary       = literal | identifier | function_call | signal_read ;
+signal_read   = "SIGNAL_READ" "(" string_literal ")" ;
 ```
 
 | From → To | Implicit | Explicit | Runtime lỗi |
@@ -317,12 +330,13 @@ không có semantic riêng ở FE.
 
 | Blocker | Owner | Gate | Điều kiện mở |
 |---|---|---|---|
-| User FUNCTION/FB chưa implement | Compiler + Controls | implementation | T59-101..105; **không phải decision blocker** |
+| User FUNCTION/FB + signal source chưa có merge/gate closure | Compiler + Controls + Core | implementation close | merge current worktree; compile/package/runtime/E2E full gate; cập nhật Trace bằng commit/file/symbol |
 | PID end-user label chưa có evidence | Controls + Safety | release label | T59-205/T59-706; implementation registry vẫn tiếp tục |
 | Target WCET chưa đo | Core + QA | release | T59-702 target load/soak evidence PASS |
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
 |---|---|---|---|
+| 1.1 | 2026-08-24 | Đồng bộ corrective As-Built: ba POU kind, CLI POU/library/signal manifests, IR `MKDDCIR1/schema 1`, signal opcode `0x71/0x72`, section `0x0009`, FBD lowerer 1.1.0 và ranh giới package `MKDDCIR2/layout 2`; giữ trạng thái chưa merge/full-gate/target. | Compiler + Core + System Engineering |
 | 0.1 | 2026-08-09 | Thiết kế ST/FBD, pipeline, diagnostics, determinism, limits và source mapping | System Engineering |
 | 0.2 | 2026-08-09 | Bổ sung EBNF implementable, conversion/unit matrix và diagnostic ownership; chuyển Detailed Draft chờ review | System Engineering |
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; nêu rõ xung đột `INT=int32` vs `INT=int16` là blocker `OD-PROG-002` | System Engineering |
@@ -336,7 +350,7 @@ không có semantic riêng ở FE.
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Compiler + Controls Lead | **TASK-PROG-200..203 + worker source DONE; local POU/target còn mở** | `2c2bfb4`, `e8c289e`, `10d9ad6`, `EV-PROG-G2-200..203` |
+| Compiler + Controls Lead | **Baseline DONE; corrective user POU/signal current-worktree, chưa closure** | source mapping §2/§11; chờ commit merge và gate mới |
 | Core + FE + QA + Security | **WAIVED FOR IMPLEMENTATION; evidence độc lập còn mở** | `AUTH-PROG-2026-08-11-03` |
 | System Architect + Product Owner | **APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; OD-PROG-002/005/006 đã DECIDED |
 
@@ -346,7 +360,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §14 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §1 mục tiêu, actor, tiêu chí thành công; §4–§5 giới hạn tập con ST/FBD |
-| `DD-03` As-Built | PASS | §2 bảng As-Built dẫn đúng `st_parser.cpp`, `st_semantic.cpp`, `st_compile.cpp`, CLI, `st_limits.hpp`, `st_ir.hpp` và ghi rõ `st_compiler_lib` **chưa link** vào `mkddc-core` |
+| `DD-03` As-Built | PASS | §2 dẫn parser/semantic/compile/POU registry/FBD/CLI và phân biệt baseline merged với corrective current-worktree chưa merge |
 | `DD-04` Target ownership | PASS | §3 pipeline và ownership: compiler chạy ngoài RT, Core chỉ nhận IR đã verify |
 | `DD-05` Data từng field | PASS | §4.2 type/literal, §5 mô hình FBD canonical, §13 grammar và hợp đồng conversion |
 | `DD-06` Interface | PASS | §7 hợp đồng diagnostic (vị trí nguồn, mã, mức) là interface chính với BE/FE; §3 giao diện CLI/thư viện |
@@ -360,4 +374,5 @@ Tự kiểm `DD-01..DD-13`:
 
 Thiết kế đủ quyền implementation. `TASK-PROG-200..203` đã implement ST/type,
 FBD canonical, lowering/equivalence và artifact/source-map provenance trên host;
-local POU và runtime target vẫn chưa được tuyên bố hoàn tất.
+corrective user POU/signal chưa được tuyên bố hoàn tất trước merge/full gate;
+runtime target/soak và formal Test Result vẫn chưa PASS.

@@ -251,8 +251,10 @@ IopResult IopClient::get_io(IopIoResp* out)
             return res;
         }
         last_io_resp_ns_ = now_ns();
-        if (metrics_)
+        if (metrics_) {
+            metrics_->record_valid_io_response(last_io_resp_ns_);
             metrics_->last_valid_sample_cnt.store(out->sample_cnt, std::memory_order_relaxed);
+        }
     }
     return res;
 }

@@ -224,6 +224,42 @@ func (s *Store) ListProgramRuntimeIntents(ctx context.Context, projectID string)
 	return intents, rows.Err()
 }
 
+// ListAllProgramRuntimeIntents phục vụ duy nhất vòng reconciliation lúc Web
+// API khởi động lại. Sắp theo Project rồi Program để thứ tự replay tất định và
+// trần 16 của từng Project không phụ thuộc thứ tự SQLite trả hàng.
+func (s *Store) ListAllProgramRuntimeIntents(ctx context.Context) ([]ProgramRuntimeIntent, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT project_id,program_id,desired_enabled,generation,
+		last_known_runtime_state,updated_by,updated_at_utc_ms
+		FROM program_runtime_intents ORDER BY project_id,program_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	intents := make([]ProgramRuntimeIntent, 0)
+	for rows.Next() {
+		intent, err := scanProgramIntent(rows)
+		if err != nil {
+			return nil, err
+		}
+		intents = append(intents, intent)
+	}
+	return intents, rows.Err()
+}
+
+// MarkAllProgramRuntimeStatesUnknown tách observation cũ khỏi boot mới. Một
+// hàng RUNNING trước mất điện không phải bằng chứng Core sau restart đang chạy;
+// giữ nó sẽ làm UI nói RUNNING trong khi Core cố ý boot fail-closed Disabled.
+// Không đổi desired_enabled/generation/actor vì đây là observation, không phải
+// một ý định vận hành mới.
+func (s *Store) MarkAllProgramRuntimeStatesUnknown(ctx context.Context, at time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE program_runtime_intents
+		SET last_known_runtime_state='UNKNOWN',updated_at_utc_ms=?`, at.UTC().UnixMilli())
+	if err != nil {
+		return fmt.Errorf("đánh dấu runtime intent cần reconcile: %w", err)
+	}
+	return nil
+}
+
 // CountEnabledPrograms đếm số Program đang có intent Enabled trong Project. Trần
 // 16 được ép ở lớp application; store chỉ cung cấp con số đếm được để lớp đó
 // không phải tự đếm bằng cách đọc hết rồi lọc.

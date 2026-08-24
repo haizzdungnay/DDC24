@@ -41,7 +41,9 @@ static_assert(offsetof(kx_io_shm_t, counters_since_ms) == 3104, "web counters_si
 static_assert(offsetof(kx_io_shm_t, fb_bus_count) == 3112, "web bus count offset changed");
 static_assert(offsetof(kx_io_shm_t, fb_bus) == 3120, "web bus array offset changed");
 static_assert(sizeof(kx_bus_metrics_t) == 112, "web bus metrics stride changed");
-static_assert(sizeof(kx_io_shm_t) == 3568, "web io_shm size changed");
+static_assert(offsetof(kx_io_shm_t, max_iop_poll_gap_us) == 3568,
+              "web IOP poll gap offset changed");
+static_assert(sizeof(kx_io_shm_t) == 3576, "web io_shm size changed");
 
 namespace {
 
@@ -98,6 +100,24 @@ TEST(IoCache, StaleAndCommunicationFailureReliability)
         EXPECT_EQ(cache.shm()->ui_quality[i], KX_Q_BAD);
         EXPECT_EQ(cache.shm()->ui_reliability[i], KX_REL_COMMUNICATION_FAILURE);
     }
+    cache.detach();
+    cleanup_shm();
+}
+
+TEST(IoCache, PublishesActualMaximumIopPollGap)
+{
+    if (shm_exists())
+        GTEST_SKIP() << "/dev/shm/mkddc_io_shm đang tồn tại (iobus thật đang chạy?) — skip";
+
+    IoCache cache;
+    IobusMetrics metrics;
+    ASSERT_TRUE(cache.attach());
+    metrics.record_valid_io_response(1'000'000'000ull);
+    metrics.record_valid_io_response(1'010'250'000ull); /* 10,250 ms */
+    metrics.record_valid_io_response(1'018'000'000ull); /* gap nhỏ hơn */
+    IoSnapshot snapshot;
+    cache.write_io(snapshot, metrics);
+    EXPECT_EQ(cache.shm()->max_iop_poll_gap_us, 10'250u);
     cache.detach();
     cleanup_shm();
 }

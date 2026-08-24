@@ -462,7 +462,7 @@ TEST(ProgrammingRuntimeCoordinator, CorruptJournalKeepsGraphAndBlocksMutation)
     EXPECT_EQ(detail, "IPC-RECOVERY-REQUIRED");
 }
 
-TEST(ProgrammingRuntimeCoordinator, CommittedCheckpointRestoresExactRuntimeAcrossCoreRestart)
+TEST(ProgrammingRuntimeCoordinator, CommittedCheckpointRestoresPackageFailClosedAcrossCoreRestart)
 {
     TempTree tree;
     ASSERT_FALSE(tree.path.empty());
@@ -501,7 +501,9 @@ TEST(ProgrammingRuntimeCoordinator, CommittedCheckpointRestoresExactRuntimeAcros
     EXPECT_EQ(restarted_cutover.current(), CutoverMode::PROGRAM_ONLY);
     const StProgramInstance* program = restarted_scheduler.find_program("program-main");
     ASSERT_NE(program, nullptr);
-    EXPECT_EQ(program->state, StProgramState::RUNNING);
+    EXPECT_EQ(program->state, StProgramState::DISABLED)
+        << "checkpoint không mang desiredEnabled nhưng Core đã tự start";
+    EXPECT_FALSE(program->enabled);
     EXPECT_FALSE(program->last_known_good.empty());
 }
 
@@ -550,7 +552,9 @@ TEST(ProgrammingRuntimeCoordinator, RestartDuringActiveCandidateRestoresPriorLkg
     EXPECT_EQ(cutover.current(), CutoverMode::PROGRAM_ONLY);
     const StProgramInstance* program = scheduler.find_program("program-main");
     ASSERT_NE(program, nullptr);
-    EXPECT_EQ(program->state, StProgramState::RUNNING);
+    EXPECT_EQ(program->state, StProgramState::DISABLED)
+        << "khôi phục LKG không được tự suy ra enable intent";
+    EXPECT_FALSE(program->enabled);
 }
 
 TEST(ProgrammingRuntimeCoordinator, PriorityImpactIsUnavailableUntilScanSnapshotAndThenExact)

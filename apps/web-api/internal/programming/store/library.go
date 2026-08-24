@@ -28,8 +28,9 @@ var (
 )
 
 const (
-	actionLibraryEntryUpsert = "LIBRARY_ENTRY_UPSERT"
-	actionLibraryEntryDelete = "LIBRARY_ENTRY_DELETE"
+	actionLibraryEntryUpsert       = "LIBRARY_ENTRY_UPSERT"
+	actionLibraryEntryDelete       = "LIBRARY_ENTRY_DELETE"
+	actionLibraryRevisionDeprecate = "LIBRARY_REVISION_DEPRECATE"
 
 	LibraryScopeSystem  = "SYSTEM"
 	LibraryScopeProject = "PROJECT"
@@ -194,12 +195,35 @@ type DeleteProjectLibraryEntryParams struct {
 	Identity          LibraryMutationIdentity
 }
 
+type DeprecateProjectLibraryRevisionParams struct {
+	LibraryRevisionID string
+	Identity          LibraryMutationIdentity
+}
+
+type LibraryRevisionMutation struct {
+	Revision  LibraryRevision
+	DraftID   string
+	DraftETag int64
+	AuditID   string
+	Replay    bool
+}
+
 type LibrarySearchParams struct {
 	ProjectID string
 	Query     string
 	Kind      string
 	Scope     string
 	Limit     int
+	After     *LibrarySearchKey
+}
+
+// LibrarySearchKey là khoá keyset của danh sách Control Library. Thứ tự phải
+// khớp tuyệt đối với ORDER BY trong SearchLibraryEntries; libraryRevisionId là
+// tie-break cuối vì cùng một entry có thể tồn tại ở nhiều revision.
+type LibrarySearchKey struct {
+	NameFolded        string
+	EntryID           string
+	LibraryRevisionID string
 }
 
 type RecordLibraryUsageParams struct {
@@ -479,6 +503,20 @@ func (s *Store) UpsertProjectLibraryEntry(ctx context.Context, params UpsertProj
 	if err := requireMutableProjectLibraryOfProjectTx(ctx, tx, libraryRevisionID, params.Identity.ProjectID); err != nil {
 		return LibraryEntryMutation{}, err
 	}
+	// Dependency của PROJECT Library luôn trỏ tới entry trong CHÍNH revision
+	// đang sửa. Khi mutation đầu tiên sau một bản publish tự mở Draft minor mới,
+	// client vẫn chỉ có snapshot PUBLISHED cũ và vì vậy gửi version cũ. Clone đã
+	// re-pin toàn bộ entry sang version mới; nếu tin payload cũ ở đây thì riêng
+	// entry vừa sửa lại bị kéo ngược về version parent và Publish/Check thất bại
+	// với LIB-VERSION-001. Version của revision trong transaction mới là nguồn
+	// sự thật: pin lại trước khi tính content hash và ghi DB.
+	revision, err := getLibraryRevisionTx(ctx, tx, libraryRevisionID)
+	if err != nil {
+		return LibraryEntryMutation{}, err
+	}
+	for index := range entry.Dependencies {
+		entry.Dependencies[index].Version = revision.Version
+	}
 	entry.LibraryRevisionID = libraryRevisionID
 	if entry.ContentSHA256, err = libraryEntryDigest(entry); err != nil {
 		return LibraryEntryMutation{}, err
@@ -689,18 +727,95 @@ func publishProjectLibraryTx(ctx context.Context, tx *sql.Tx, libraryRevisionID 
 	return nil
 }
 
-func (s *Store) DeprecateProjectLibrary(ctx context.Context, libraryRevisionID string) (LibraryRevision, error) {
-	if err := validateUUIDs(libraryRevisionID); err != nil {
-		return LibraryRevision{}, err
+func (s *Store) DeprecateProjectLibraryRevision(ctx context.Context,
+	params DeprecateProjectLibraryRevisionParams) (LibraryRevisionMutation, error) {
+	if err := validateLibraryMutationIdentity(params.Identity); err != nil {
+		return LibraryRevisionMutation{}, err
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE library_revisions SET state='DEPRECATED' WHERE library_revision_id=? AND scope='PROJECT' AND state='PUBLISHED'`, libraryRevisionID)
+	if err := validateUUIDs(params.LibraryRevisionID); err != nil {
+		return LibraryRevisionMutation{}, err
+	}
+	at := params.Identity.At.UTC().UnixMilli()
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return LibraryRevision{}, fmt.Errorf("deprecate PROJECT library: %w", err)
+		return LibraryRevisionMutation{}, err
 	}
-	if rows, _ := result.RowsAffected(); rows != 1 {
-		return LibraryRevision{}, ErrLibraryImmutable
+	defer tx.Rollback()
+	receipt, found, err := readMutationReceiptTx(ctx, tx, params.Identity.ActorID, actionLibraryRevisionDeprecate,
+		params.LibraryRevisionID, params.Identity.IdempotencyKeySHA256, params.Identity.RequestSHA256, at)
+	if err != nil {
+		return LibraryRevisionMutation{}, err
 	}
-	return s.GetLibraryRevision(ctx, libraryRevisionID)
+	if found {
+		if err := tx.Commit(); err != nil {
+			return LibraryRevisionMutation{}, err
+		}
+		revision, err := s.GetLibraryRevision(ctx, params.LibraryRevisionID)
+		if err != nil {
+			return LibraryRevisionMutation{}, err
+		}
+		if revision.State != LibraryStateDeprecated {
+			return LibraryRevisionMutation{}, fmt.Errorf("receipt deprecate lệch read-back PROJECT library")
+		}
+		return LibraryRevisionMutation{Revision: revision, DraftID: receipt.DraftID,
+			DraftETag: receipt.ETag, AuditID: receipt.AuditID, Replay: true}, nil
+	}
+	revision, err := getLibraryRevisionTx(ctx, tx, params.LibraryRevisionID)
+	if err != nil {
+		return LibraryRevisionMutation{}, err
+	}
+	// Sai Project được che thành not-found để một admin không dùng route này
+	// thăm dò identity library của Project khác.
+	if revision.Scope != LibraryScopeProject || revision.ProjectID != params.Identity.ProjectID {
+		return LibraryRevisionMutation{}, ErrNotFound
+	}
+	if revision.State != LibraryStatePublished {
+		return LibraryRevisionMutation{}, ErrLibraryImmutable
+	}
+	draftID, nextETag, err := lockProjectDraftTx(ctx, tx, params.Identity, at)
+	if err != nil {
+		return LibraryRevisionMutation{}, err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE library_revisions SET state='DEPRECATED'
+		WHERE library_revision_id=? AND project_id=? AND scope='PROJECT' AND state='PUBLISHED'`,
+		params.LibraryRevisionID, params.Identity.ProjectID)
+	if err != nil {
+		return LibraryRevisionMutation{}, fmt.Errorf("deprecate PROJECT library: %w", err)
+	}
+	if rows, err := result.RowsAffected(); err != nil {
+		return LibraryRevisionMutation{}, err
+	} else if rows != 1 {
+		return LibraryRevisionMutation{}, ErrLibraryImmutable
+	}
+	details, _ := json.Marshal(map[string]any{
+		"libraryRevisionId": params.LibraryRevisionID, "version": revision.Version,
+		"previousState": LibraryStatePublished, "state": LibraryStateDeprecated,
+	})
+	if _, err := appendAuditTx(ctx, tx, AuditInput{
+		AuditID: params.Identity.AuditID, ActorID: params.Identity.ActorID, Role: params.Identity.Role,
+		Action: actionLibraryRevisionDeprecate, TargetType: "LIBRARY_REVISION", TargetID: params.LibraryRevisionID,
+		OccurredAtUTCMS: at, ResultCode: "OK", CorrelationID: params.Identity.CorrelationID, DetailsJSON: details,
+	}); err != nil {
+		return LibraryRevisionMutation{}, err
+	}
+	if err := writeMutationReceiptTx(ctx, tx, params.Identity.ActorID, actionLibraryRevisionDeprecate,
+		params.LibraryRevisionID, params.Identity.IdempotencyKeySHA256, params.Identity.RequestSHA256,
+		mutationReceiptResult{ProjectID: params.Identity.ProjectID, DraftID: draftID,
+			RevisionID: params.LibraryRevisionID, ETag: nextETag, AuditID: params.Identity.AuditID}, at); err != nil {
+		return LibraryRevisionMutation{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return LibraryRevisionMutation{}, err
+	}
+	deprecated, err := s.GetLibraryRevision(ctx, params.LibraryRevisionID)
+	if err != nil {
+		return LibraryRevisionMutation{}, err
+	}
+	if deprecated.State != LibraryStateDeprecated {
+		return LibraryRevisionMutation{}, fmt.Errorf("read-back PROJECT library chưa DEPRECATED")
+	}
+	return LibraryRevisionMutation{Revision: deprecated, DraftID: draftID,
+		DraftETag: nextETag, AuditID: params.Identity.AuditID}, nil
 }
 
 func (s *Store) GetLibraryRevision(ctx context.Context, libraryRevisionID string) (LibraryRevision, error) {
@@ -810,21 +925,41 @@ func (s *Store) SearchLibraryEntries(ctx context.Context, params LibrarySearchPa
 			return nil, err
 		}
 	}
+	if params.After != nil {
+		if err := validateText("library search after name", params.After.NameFolded, 1, 64); err != nil {
+			return nil, fmt.Errorf("library search key không hợp lệ: %w", err)
+		}
+		if err := validateText("library search after entryId", params.After.EntryID, 1, 128); err != nil {
+			return nil, fmt.Errorf("library search key không hợp lệ: %w", err)
+		}
+		if err := validateText("library search after revisionId", params.After.LibraryRevisionID, 1, 128); err != nil {
+			return nil, fmt.Errorf("library search key không hợp lệ: %w", err)
+		}
+		if params.After.NameFolded != strings.ToUpper(params.After.NameFolded) {
+			return nil, fmt.Errorf("library search key không canonical")
+		}
+	}
 	query := strings.ToUpper(strings.TrimSpace(params.Query))
 	var result []LibraryEntry
 	if s.system != nil && (params.Scope == "" || params.Scope == LibraryScopeSystem) {
 		for _, entry := range s.system.Entries {
-			if (params.Kind == "" || entry.Kind == params.Kind) && (query == "" || strings.Contains(strings.ToUpper(entry.Name), query) || strings.Contains(strings.ToUpper(entry.EntryID), query)) {
+			if (params.Kind == "" || entry.Kind == params.Kind) &&
+				(query == "" || strings.Contains(strings.ToUpper(entry.Name), query) || strings.Contains(strings.ToUpper(entry.EntryID), query)) &&
+				(params.After == nil || compareLibraryEntryWithKey(entry, *params.After) > 0) {
 				result = append(result, cloneLibraryEntry(entry))
 			}
 		}
 	}
 	if params.Scope != LibraryScopeSystem && params.ProjectID != "" {
+		arguments := []any{params.ProjectID, params.Kind, params.Kind, query, query, query}
+		arguments = append(arguments, librarySearchAfterSQLArgs(params.After, params.Limit)...)
 		rows, err := s.db.QueryContext(ctx, libraryEntrySelect+` JOIN library_revisions r USING(library_revision_id)
 			WHERE r.scope='PROJECT' AND r.project_id=? AND (?='' OR e.kind=?)
 			AND (?='' OR instr(e.name_folded,?)>0 OR instr(upper(e.entry_id),?)>0)
-			ORDER BY e.name_folded,e.entry_id LIMIT ?`, params.ProjectID, params.Kind, params.Kind,
-			query, query, query, params.Limit)
+			AND (?='' OR e.name_folded>? OR
+				(e.name_folded=? AND e.entry_id>?) OR
+				(e.name_folded=? AND e.entry_id=? AND e.library_revision_id>?))
+			ORDER BY e.name_folded,e.entry_id,e.library_revision_id LIMIT ?`, arguments...)
 		if err != nil {
 			return nil, err
 		}
@@ -841,15 +976,49 @@ func (s *Store) SearchLibraryEntries(ctx context.Context, params LibrarySearchPa
 		}
 	}
 	sort.Slice(result, func(left, right int) bool {
-		if strings.EqualFold(result[left].Name, result[right].Name) {
-			return result[left].EntryID < result[right].EntryID
-		}
-		return strings.ToUpper(result[left].Name) < strings.ToUpper(result[right].Name)
+		return compareLibraryEntries(result[left], result[right]) < 0
 	})
 	if len(result) > params.Limit {
 		result = result[:params.Limit]
 	}
 	return result, nil
+}
+
+func librarySearchAfterSQLArgs(after *LibrarySearchKey, limit int) []any {
+	if after == nil {
+		return []any{"", "", "", "", "", "", "", limit}
+	}
+	return []any{after.NameFolded, after.NameFolded, after.NameFolded, after.EntryID,
+		after.NameFolded, after.EntryID, after.LibraryRevisionID, limit}
+}
+
+func compareLibraryEntries(left, right LibraryEntry) int {
+	return compareLibraryEntryWithKey(left, LibrarySearchKey{
+		NameFolded: strings.ToUpper(right.Name), EntryID: right.EntryID, LibraryRevisionID: right.LibraryRevisionID,
+	})
+}
+
+func compareLibraryEntryWithKey(entry LibraryEntry, key LibrarySearchKey) int {
+	nameFolded := strings.ToUpper(entry.Name)
+	if nameFolded < key.NameFolded {
+		return -1
+	}
+	if nameFolded > key.NameFolded {
+		return 1
+	}
+	if entry.EntryID < key.EntryID {
+		return -1
+	}
+	if entry.EntryID > key.EntryID {
+		return 1
+	}
+	if entry.LibraryRevisionID < key.LibraryRevisionID {
+		return -1
+	}
+	if entry.LibraryRevisionID > key.LibraryRevisionID {
+		return 1
+	}
+	return 0
 }
 
 type preparedPOUObject struct {

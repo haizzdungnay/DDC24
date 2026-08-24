@@ -90,6 +90,53 @@ afterEach(() => {
 })
 
 describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
+  it('mount Published Signals trên route Mapping bằng raw Draft v2, không qua adapter làm mất signals[]', async () => {
+    const project = baseProject()
+    project.draft = {
+      schemaVersion: 2,
+      project: { projectId: 'project-1', name: 'AHU-01', functionalTags: [] },
+      objects: [{
+        objectId: '22222222-2222-4222-8222-222222222222',
+        kind: 'PROGRAM',
+        name: 'AirHandler',
+        language: 'ST',
+        source: 'PROGRAM AirHandler\nEND_PROGRAM',
+        interface: { inputs: [], outputs: [] },
+        locals: [],
+        dependencies: []
+      }],
+      programs: [{
+        programId: '11111111-1111-4111-8111-111111111111',
+        objectId: '22222222-2222-4222-8222-222222222222',
+        periodMs: 1000
+      }],
+      signals: [{
+        signalId: '44444444-4444-4444-8444-444444444444',
+        name: 'SupplyTemp',
+        type: 'REAL',
+        unit: 'degC',
+        publisherProgramId: '11111111-1111-4111-8111-111111111111',
+        freshnessMs: 5000,
+        stalePolicy: 'HOLD_LAST'
+      }],
+      bindings: [],
+      library: { systemProfile: 'CORE_REVA', systemVersion: '1', projectLibraryRevisionId: null },
+      execution: {}
+    } as unknown as ProgrammingDraftDocument
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?tab=mapping')
+
+    expect(await screen.findByRole('tab', { name: 'Điểm & Ánh xạ' })).toHaveAttribute('aria-selected', 'true')
+    const table = await screen.findByRole('table', { name: 'Bảng Published Signal của bản nháp' })
+    expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('AirHandler')
+    expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('5000 ms')
+  })
+
   it('nạp Draft thật và cho phép thêm chương trình ST qua PATCH batch upsertProgram+setTask', async () => {
     let counter = 0
     vi.stubGlobal('crypto', {

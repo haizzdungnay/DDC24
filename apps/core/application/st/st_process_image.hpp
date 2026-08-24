@@ -60,11 +60,14 @@ bool st_apply_outputs(const StProgramInstance& inst, PriorityResolver* resolver,
 bool st_apply_outputs(const StProgramInstance& inst, PriorityResolver* resolver,
                       PointTable* table, StIoBridgeStats* stats);
 
-/* Đường ScanLoop: chỉ chụp Task đến hạn, sau safe-boundary activation. */
+/* Đường ScanLoop: chỉ chụp Task đến hạn, sau safe-boundary activation.
+ * Instance WAITING vẫn phải nhận snapshot input mới để lần retry cùng
+ * generation không fault vì dùng ảnh cũ. */
 bool st_capture_due_inputs(StScheduler* sched, const PointTable& table, uint64_t now_ns,
                            StIoBridgeStats* stats);
 
-/* API tương thích test/supporting: nạp mọi instance RUNNING cho generation kế. */
+/* API tương thích test/supporting: nạp mọi instance RUNNING hoặc WAITING cho
+ * generation kế. */
 bool st_load_all_inputs(StScheduler* sched, const PointTable& table, StIoBridgeStats* stats);
 
 /* Batch của toàn Task: chỉ instance chạy thành công ở base-step hiện tại được

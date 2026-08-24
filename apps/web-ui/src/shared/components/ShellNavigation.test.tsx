@@ -45,6 +45,9 @@ describe('shell user navigation', () => {
     const helpLink = screen.getByRole('link', { name: 'Help' })
     expect(helpLink.getAttribute('href')).toMatch(/^\/help\?topic=/)
     expect(screen.getByRole('link', { name: 'User' })).toHaveAttribute('href', '/me')
+    // Nhãn chữ bị ẩn dưới breakpoint `sm`, nên nút icon cần accessible name
+    // độc lập để Chrome/axe không báo `button-name` ở mobile.
+    expect(screen.getByRole('button', { name: 'Logout' })).toBeInTheDocument()
   })
 
   it('does not expose User info in the sidebar', () => {

@@ -310,7 +310,7 @@ func objectByID(document map[string]any, collection, idField, id string) (map[st
 // Không phải nhân bản thừa: đường thứ nhất là tài liệu người dùng, đường thứ hai
 // là dữ liệu compiler/Check đọc — trộn chúng lại sẽ buộc một bên đọc định dạng
 // của bên kia.
-func revisionPayload(content []byte, projectID, label, comment string) ([]programmingstore.RevisionObjectInput,
+func revisionPayload(content []byte, projectID, label, comment, projectLibraryVersion string) ([]programmingstore.RevisionObjectInput,
 	[]programmingstore.POUObjectInput, []byte, error) {
 	var document map[string]any
 	if err := json.Unmarshal(content, &document); err != nil {
@@ -392,7 +392,11 @@ func revisionPayload(content []byte, projectID, label, comment string) ([]progra
 				if !ok {
 					return nil, nil, nil, ErrInvalidRequest
 				}
-				dependencies = append(dependencies, programmingstore.LibraryDependency{EntryID: id})
+				// Version không do browser tự chọn. Revision library đã được service
+				// resolve trước Seal và là nguồn duy nhất để pin toàn bộ usage.
+				dependencies = append(dependencies, programmingstore.LibraryDependency{
+					EntryID: id, Version: projectLibraryVersion,
+				})
 			}
 		}
 		pous = append(pous, programmingstore.POUObjectInput{

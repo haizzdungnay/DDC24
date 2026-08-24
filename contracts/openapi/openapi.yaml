@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.27.0"
+  version: "1.28.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-08-13"
-  note: "v1.20.0 hiện thực monitor/trace bounded và task metrics authoritative; giữ tương thích schema major 1."
+  date: "2026-08-24"
+  note: "v1.28.0 thêm keyset cursor Control Library và mutation admin PUBLISHED sang DEPRECATED; publish vẫn chỉ qua Seal Revision atomic."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -2160,6 +2160,42 @@ paths:
         "404": { $ref: "#/components/responses/ProgrammingError" }
         "409": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+      - { $ref: "#/components/parameters/ProgrammingLibraryRevisionId" }
+    post:
+      operationId: deprecateProgrammingLibraryRevision
+      summary: Đánh dấu một PROJECT Library revision PUBLISHED là DEPRECATED
+      description: >-
+        Chỉ mở chuyển tiếp PUBLISHED sang DEPRECATED. Endpoint này không publish
+        library; publish vẫn nằm trong cùng transaction với Seal Revision để
+        không tiêu version mà chưa có Revision bất biến pin tới.
+      x-rbac: [admin]
+      x-implementation-status: f-p59-ui-001
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingLibraryRevisionDeprecateRequest" }
+      responses:
+        "200":
+          description: Library revision đã chuyển PUBLISHED sang DEPRECATED; ETag Draft của Project tăng
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/projects/{projectId}/programs:
     parameters:
       - { $ref: "#/components/parameters/ProgrammingProjectId" }
@@ -2629,6 +2665,11 @@ components:
       schema: { type: string, minLength: 1, maxLength: 64 }
     ProgrammingLibraryEntryId:
       name: entryId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProgrammingLibraryRevisionId:
+      name: libraryRevisionId
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -3486,6 +3527,12 @@ components:
           items: { $ref: "#/components/schemas/ProgrammingLibraryDependency" }
         # Vắng mặt nghĩa là layout chưa biết. FUNCTION không được mang khối này.
         stateLayout: { $ref: "#/components/schemas/ProgrammingLibraryStateLayout" }
+    ProgrammingLibraryRevisionDeprecateRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
     ProgrammingProgramIntentRequest:
       type: object
       additionalProperties: false
@@ -3921,6 +3968,9 @@ components:
             timeouts: { type: integer }
             seq_errors: { type: integer }
             last_io_resp_ms: { type: integer }
+            max_poll_gap_ms:
+              type: number
+              description: Khoảng cách lớn nhất giữa hai IO_RESP hợp lệ do iobus đo; vắng nếu producer cũ chưa hỗ trợ
         scan:
           type: object
           description: Nguá»“n = mkddc-core (Ä‘á»c tá»« kx_plc_shm)

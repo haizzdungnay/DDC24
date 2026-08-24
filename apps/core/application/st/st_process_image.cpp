@@ -283,7 +283,10 @@ bool st_capture_due_inputs(StScheduler* scheduler, const PointTable& table, uint
     for (auto& task : scheduler->tasks()) {
         if (!task->enabled() || !task->due(now_ns)) continue;
         for (auto& program : task->programs()) {
-            if (program->state != StProgramState::RUNNING || !program->runtime.loaded()) continue;
+            if ((program->state != StProgramState::RUNNING &&
+                 program->state != StProgramState::WAITING) ||
+                !program->runtime.loaded())
+                continue;
             if (!st_load_inputs(program.get(), table, generation, stats)) all_valid = false;
         }
     }
@@ -297,7 +300,10 @@ bool st_load_all_inputs(StScheduler* scheduler, const PointTable& table, StIoBri
     bool all_valid = true;
     for (auto& task : scheduler->tasks()) {
         for (auto& program : task->programs()) {
-            if (program->state != StProgramState::RUNNING || !program->runtime.loaded()) continue;
+            if ((program->state != StProgramState::RUNNING &&
+                 program->state != StProgramState::WAITING) ||
+                !program->runtime.loaded())
+                continue;
             if (!st_load_inputs(program.get(), table, generation, stats)) all_valid = false;
         }
     }
@@ -472,6 +478,11 @@ uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* res
                 /* Lệnh operator: rút NGAY tại safe boundary, không chờ TTL. */
                 should_withdraw = true;
                 reason = programming::CandidateWithdrawReason::OPERATOR_DISABLE;
+            } else if (p.state == StProgramState::WAITING) {
+                /* BLOCK_PROGRAM không được giữ proposal cũ: signal contract
+                 * đã chọn rút candidate thay vì chạy bằng dữ liệu không hợp lệ. */
+                should_withdraw = true;
+                reason = programming::CandidateWithdrawReason::SIGNAL_BLOCKED;
             } else if (hold_ttl_ns > 0 && p.output_commit_now_ns > 0 &&
                       now_ns >= p.output_commit_now_ns + hold_ttl_ns) {
                 /* ADR-051: TTL đo TUỔI CỦA LỆNH CUỐI, không đo trạng thái. Ràng

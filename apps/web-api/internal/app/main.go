@@ -174,6 +174,12 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		app.programmingRuntime = runtimeService
 		checks.Start(context.Background())
 		operations.Start(context.Background())
+		if reconcileErr := intents.Start(context.Background()); reconcileErr != nil {
+			operations.Close()
+			checks.Close()
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi động đối chiếu Programming intent: %w", reconcileErr)
+		}
 	}
 	app.pointNamespaceWriter = writeConfigFileAtomic
 	app.overrides = NewOverrideRegistry()
@@ -194,6 +200,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	app.systemHistory = NewSystemHistoryRing(app.startedAt)
 	if err := app.migrateLegacyPointConfig(); err != nil {
 		if app.programmingStore != nil {
+			app.programmingIntents.Close()
 			app.programmingOperations.Close()
 			app.programmingChecks.Close()
 			_ = app.programmingStore.Close()
@@ -212,6 +219,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	historian, err := OpenHistorianPolicyService(filepath.Join(cfg.ConfigDir, "historian.conf"), time.Now, func() (uint64, error) { return filesystemFreeBytes(cfg.ConfigDir) })
 	if err != nil {
 		if app.programmingStore != nil {
+			app.programmingIntents.Close()
 			app.programmingOperations.Close()
 			app.programmingChecks.Close()
 			_ = app.programmingStore.Close()
@@ -504,6 +512,9 @@ func (a *App) Close() error {
 		historianErr = a.historianV2.Close()
 	}
 	if a.programmingStore != nil {
+		if a.programmingIntents != nil {
+			a.programmingIntents.Close()
+		}
 		if a.programmingOperations != nil {
 			a.programmingOperations.Close()
 		}

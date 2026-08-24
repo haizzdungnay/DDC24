@@ -12,17 +12,18 @@ import { type FbdDataType, type FbdNodeKind, type FbdParameterValue } from './mo
  * Core cho phép SCALE/DEADBAND/CTU/PI vốn không tồn tại, đồng thời từ chối
  * SQRT cùng bốn conversion mà palette vẫn chào người dùng. */
 
-export type FbdPaletteCategory = LibraryCategory
+export type FbdPaletteCategory = LibraryCategory | 'signals'
 
 export interface FbdPalettePortTemplate {
   name: string
   direction: 'INPUT' | 'OUTPUT'
   dataType: FbdDataType
+  unit?: string | null
 }
 
 export interface FbdPaletteEntry {
   id: string
-  kind: Extract<FbdNodeKind, 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'>
+  kind: Extract<FbdNodeKind, 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION' | 'SIGNAL_READ' | 'SIGNAL_PUBLISH'>
   typeRef: string
   category: FbdPaletteCategory
   labelVi: string
@@ -31,6 +32,9 @@ export interface FbdPaletteEntry {
   polymorphic: boolean
   allowedTypes: readonly FbdDataType[]
   defaultType: FbdDataType
+  /** Tham số canonical gắn lúc tạo node. Registry tĩnh không cần trường này;
+   * Published Signal dùng `{ signal: <tên> }` và không cho editor đoán lại. */
+  parameters?: Readonly<Record<string, FbdParameterValue>>
   /** Tên các port đổi theo T khi `SET_NODE_TYPE`; port không có trong danh
    *  sách này giữ nguyên kiểu cố định (vd `OUT:BOOL` của phép so sánh). */
   typedPortNames: readonly string[]

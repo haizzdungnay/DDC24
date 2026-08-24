@@ -10,6 +10,13 @@
  *        Bất biến: MỌI lỗi đều trả JSON có `errorCode` ổn định và cờ
  *        `keepsRunningPackage`. BE không bao giờ phải đoán xem chương trình
  *        đang chạy có bị ảnh hưởng không.
+ *
+ *        LUỒNG: hiện chưa có transport production nào gọi hàm này (chỉ test).
+ *        Nếu nối nó vào một luồng phục vụ request trong lúc scan loop đang
+ *        chạy thì `program_start/stop/enable/disable` PHẢI chuyển sang
+ *        `StScheduler::request_program_enabled()` + safe boundary
+ *        (F-P59-ENABLE-BOUNDARY-001): gọi thẳng `start/stop/enable/disable`
+ *        từ luồng non-RT là ghi vào `state` mà RT đang đọc mỗi tick.
  */
 #ifndef CORE_ST_CONTROL_API_HPP
 #define CORE_ST_CONTROL_API_HPP

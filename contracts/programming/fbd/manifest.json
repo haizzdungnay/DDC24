@@ -1,9 +1,9 @@
 {
   "contractId": "PROGRAMMING-FBD-V1",
   "version": 1,
-  "lowererVersion": "fwsom-fbd-1.0.0",
+  "lowererVersion": "fwsom-fbd-1.1.0",
   "profileId": "revA-1t-1-5-30",
-  "schemaSha256": "4279397cf24e9510232d2ef7f259eaf1b889dc1503eef7888c84cbe2035a356a",
+  "schemaSha256": "fcdd01c7f0a1c283d550fa48aea4c1bf8575e67d16ed39d619f7b183a46ca58c",
   "keyboardSha256": "9bce7f03c3d874790ecad18aa797ef20959090bccd8cc9d0c5f049904e69b64c",
   "goldenSha256": "133798a65bb9bb638d8e1a1103ac892415eb740d33e990715191ba0887f40f51",
   "equivalenceSha256": "57c58f8865d1137843341753d20f95cb853d37b364f8a6520e7220d28061edf1",
