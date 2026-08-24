@@ -9,6 +9,7 @@
     "version",
     "status",
     "sourceBaselineCommit",
+    "approvedCandidateCommit",
     "authority",
     "pins",
     "route",
@@ -30,30 +31,32 @@
       "required": ["major", "minor"],
       "properties": {
         "major": { "const": 1 },
-        "minor": { "type": "integer", "minimum": 0 }
+        "minor": { "const": 1 }
       }
     },
-    "status": { "const": "TARGET_CANDIDATE" },
+    "status": { "const": "TARGET_APPROVED_FOR_IMPLEMENTATION" },
     "sourceBaselineCommit": { "$ref": "#/$defs/sha1" },
+    "approvedCandidateCommit": { "$ref": "#/$defs/sha1" },
     "authority": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["changeRequest", "workPackage", "task", "ownerDisposition", "architectDisposition", "planReady", "implementReady", "releaseReady"],
+      "required": ["authorization", "changeRequest", "workPackage", "task", "ownerDisposition", "architectDisposition", "planReady", "implementReady", "releaseReady"],
       "properties": {
+        "authorization": { "const": "AUTH-PROG-2026-08-24-05" },
         "changeRequest": { "const": "CR-PROG-PGM02-V22-001" },
         "workPackage": { "const": "PGM02-V22-WP-00" },
         "task": { "const": "T59-801" },
-        "ownerDisposition": { "const": "APPROVED_WP00_ONLY" },
-        "architectDisposition": { "const": "PENDING_EXACT_REVISION_PIN" },
-        "planReady": { "const": "PENDING" },
+        "ownerDisposition": { "const": "APPROVED_FULL_PLAN" },
+        "architectDisposition": { "const": "APPROVED_EXACT_REVISION_PIN" },
+        "planReady": { "const": "PASS" },
         "implementReady": {
           "type": "object",
           "additionalProperties": false,
           "required": ["R1_EDIT", "R2_LIVE", "R3_SIMULATE"],
           "properties": {
-            "R1_EDIT": { "const": "NO_GO" },
-            "R2_LIVE": { "const": "NO_GO" },
-            "R3_SIMULATE": { "const": "NO_GO" }
+            "R1_EDIT": { "const": "GO" },
+            "R2_LIVE": { "const": "GO" },
+            "R3_SIMULATE": { "const": "GO" }
           }
         },
         "releaseReady": { "const": "NO_GO" }
@@ -148,7 +151,7 @@
     "quickLibrary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["authorities", "publicFields", "unsupportedPolicy", "favoritesPersistence", "recentLimit", "favoritesLimit", "insertionTransaction", "signatureStates", "systemSignatureProjection", "projectSignatureSource", "unavailableFallback"],
+      "required": ["authorities", "publicFields", "unsupportedPolicy", "favoritesPersistence", "recentLimit", "favoritesLimit", "insertionTransaction", "featureStates", "signatureStates", "signatureAuthorities", "systemSignatureProjection", "projectSignatureSource", "deprecatedLibraryVersionAlias", "insertPolicy", "unavailableFallback"],
       "properties": {
         "authorities": { "$ref": "#/$defs/nonEmptyStrings" },
         "publicFields": { "$ref": "#/$defs/nonEmptyStrings" },
@@ -157,21 +160,36 @@
         "recentLimit": { "type": "integer", "minimum": 1, "maximum": 50 },
         "favoritesLimit": { "type": "integer", "minimum": 1, "maximum": 256 },
         "insertionTransaction": { "const": "ONE_UNDO_STEP" },
-        "signatureStates": { "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["READY", "REVIEW_REQUIRED", "UNAVAILABLE"] } },
+        "featureStates": { "type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true, "items": { "enum": ["READY", "REVIEW_REQUIRED", "UNSUPPORTED", "DEPRECATED"] } },
+        "signatureStates": { "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["VERIFIED", "DECLARED", "UNAVAILABLE"] } },
+        "signatureAuthorities": { "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": { "enum": ["SYSTEM_REGISTRY", "PROJECT_INTERFACE"] } },
         "systemSignatureProjection": { "const": "CANONICAL_REGISTRY_EXACT" },
         "projectSignatureSource": { "const": "PROJECT_INTERFACE_JSON" },
+        "deprecatedLibraryVersionAlias": { "const": "MUST_EQUAL_VERSION" },
+        "insertPolicy": { "const": "FEATURE_READY_AND_SIGNATURE_AVAILABLE" },
         "unavailableFallback": { "const": false }
       }
     },
     "edit": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["draft", "pouRefactor", "references", "diagnostics"],
+      "required": ["check", "draft", "pouRefactor", "references", "diagnostics"],
       "properties": {
+        "check": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unscheduledProgramPouPolicy", "publicError", "detailCode", "synthesizedPeriodMs"],
+          "properties": {
+            "unscheduledProgramPouPolicy": { "const": "DRAFT_ALLOWED_CHECK_PACKAGE_FAIL_CLOSED" },
+            "publicError": { "const": "PRG-ERR-CHECK-001" },
+            "detailCode": { "const": "ST-POU-005" },
+            "synthesizedPeriodMs": { "const": false }
+          }
+        },
         "draft": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["method", "path", "ifMatchRequired", "requestEnvelopeSchemaVersion", "contentSchemaVersions", "firstWriteMigration", "typedSchemas", "operationDiscriminator", "operations", "responseContentSchema", "conflictError"],
+          "required": ["method", "path", "ifMatchRequired", "requestEnvelopeSchemaVersion", "contentSchemaVersions", "firstWriteMigration", "typedSchemas", "sourceRepresentation", "programConfigFields", "runtimeEnableIntentSeparate", "replaceProgramSourceIdentity", "deprecatedReplaceProgramSourceAlias", "operationDiscriminator", "operations", "responseContentSchema", "conflictError", "malformedRequestStatus", "semanticValidationStatus", "idempotencyReplay", "idempotencyStorage"],
           "properties": {
             "method": { "const": "PATCH" },
             "path": { "const": "/api/v1/programming/projects/{projectId}/draft" },
@@ -180,10 +198,27 @@
             "contentSchemaVersions": { "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": { "enum": [1, 2] } },
             "firstWriteMigration": { "const": "V1_TO_V2_DETERMINISTIC" },
             "typedSchemas": { "$ref": "#/$defs/nonEmptyStrings" },
+            "sourceRepresentation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["ST", "FBD"],
+              "properties": {
+                "ST": { "const": "STRING" },
+                "FBD": { "const": "CANONICAL_OBJECT" }
+              }
+            },
+            "programConfigFields": { "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["objectId", "programId", "periodMs"] } },
+            "runtimeEnableIntentSeparate": { "const": true },
+            "replaceProgramSourceIdentity": { "const": "objectId" },
+            "deprecatedReplaceProgramSourceAlias": { "const": "programId_FOR_ONE_COMPATIBILITY_MAJOR" },
             "operationDiscriminator": { "const": "op" },
             "operations": { "type": "array", "minItems": 15, "maxItems": 15, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
             "responseContentSchema": { "const": "ProgrammingDraftDocumentV2" },
-            "conflictError": { "const": "PRG-ERR-CONFLICT-001" }
+            "conflictError": { "const": "PRG-ERR-CONFLICT-001" },
+            "malformedRequestStatus": { "const": 400 },
+            "semanticValidationStatus": { "const": 422 },
+            "idempotencyReplay": { "const": "FULL_TYPED_READ_BACK" },
+            "idempotencyStorage": { "const": "DEDICATED_BOUNDED_DRAFT_SNAPSHOT_MIGRATION_0013" }
           }
         },
         "pouRefactor": {
@@ -202,7 +237,7 @@
         "references": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["method", "path", "queryFields", "responseFields", "states", "sourceIdentity", "targetIdentity", "mutationEndpoint"],
+          "required": ["method", "path", "queryFields", "responseFields", "states", "sourceIdentity", "targetIdentities", "targetIdentityRule", "cursorBinding", "mutationEndpoint"],
           "properties": {
             "method": { "const": "GET" },
             "path": { "const": "/api/v1/programming/projects/{projectId}/draft/references" },
@@ -210,7 +245,9 @@
             "responseFields": { "$ref": "#/$defs/nonEmptyStrings" },
             "states": { "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": { "enum": ["READY", "UNAVAILABLE"] } },
             "sourceIdentity": { "const": "sourcePouObjectId" },
-            "targetIdentity": { "const": "objectId_OR_entryId" },
+            "targetIdentities": { "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["targetObjectId", "targetEntryId+targetVersion", "targetSignalId"] } },
+            "targetIdentityRule": { "const": "EXACTLY_ONE_TARGET_IDENTITY" },
+            "cursorBinding": { "const": "draftRevisionId+etag+contentSha256+targetFilter" },
             "mutationEndpoint": { "const": false }
           }
         },

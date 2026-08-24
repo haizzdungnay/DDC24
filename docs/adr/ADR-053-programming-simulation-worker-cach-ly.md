@@ -2,14 +2,17 @@
 
 - Ngày: 2026-08-24
 - Chủ quản: System Architect + Runtime/Security Leads
-- Trạng thái: **Proposed — Product Owner đã duyệt scope R3 và admin-only mutation;
-  System Architect exact-revision decision/pin PENDING**
+- Phiên bản: 1.0
+- Trạng thái: **Accepted cho implementation — `AUTH-PROG-2026-08-24-05`**;
+  Candidate review input ở `413a043748dce3b44d2c5076412de761760ba17a`,
+  Accepted bytes được pin bằng SHA-256 trong authority record bên ngoài ADR
 - Liên quan: `CR-PROG-PGM02-V22-001` · `SYS-REQ-PROG-116` ·
   `SWR-REQ-PROG-BE-117` · `SWR-REQ-PROG-CORE-118` · `RSK-PROG-023` ·
   [`DDD-SW-PGM02-WORKSPACE-001`](../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md)
   §3–§6/§8–§12 · `VS-PROG-U15`
-- Gate: `T59-801` đang REVIEW; `T59-814..817` chỉ là card Candidate
-  `NO EXECUTION AUTHORITY`; R3 production code `NO-GO`
+- Gate: `T59-801` DONE; `IMPLEMENT_READY[PGM02-R3]=GO`; `T59-814..817`
+  ORDERED theo dependency và `T59-814` chỉ tự chuyển READY sau `T59-813 DONE`;
+  `RELEASE_READY=NO-GO`
 
 ## Vấn đề
 
@@ -19,7 +22,7 @@ trong browser, trong `mkddc-web` hoặc trong process `mkddc-core` production đ
 làm mờ failure boundary: lỗi parser/executor, quota hoặc dependency nhầm có thể
 ảnh hưởng control loop, Active/LKG hoặc I/O thật.
 
-## Quyết định Candidate
+## Quyết định
 
 1. Mỗi Simulation session tạo đúng một executable
    `mkddc-programming-sim-worker` **ephemeral**, có lifetime bằng session. Đây
@@ -90,7 +93,7 @@ reap process/FD/socket và không đổi Active/LKG/runtime counter.
 - Quyết định này không cho phép online force/override, Commission hoặc bất kỳ
   mutation nào trong LIVE.
 
-## Kiểm chứng bắt buộc trước khi Accepted/enable
+## Kiểm chứng bắt buộc trước khi enable/closeout
 
 1. Static/link inspection chứng minh worker không có forbidden dependency.
 2. Role-action matrix: viewer và operator gọi bảy action, tổng 14/14 trả 403,
@@ -106,14 +109,24 @@ reap process/FD/socket và không đổi Active/LKG/runtime counter.
 
 Host unit test hoặc simulator không thay mục 6.
 
-## Disposition cần ký
+## Disposition
 
 | Vai trò | Trạng thái | Điều kiện |
 |---|---|---|
-| Product Owner | **APPROVED scope R3 + admin-only mutation** | `CR-PROG-PGM02-V22-001`; không phải approval kỹ thuật exact revision |
-| System Architect | **PENDING** | review process/forbidden dependency/protocol/lifecycle/resource và pin exact revision/hash |
-| Runtime + Security Leads | **PENDING** | threat/fault/resource review; chấp nhận sandbox policy và negative gates |
-| Verification/Controls/Safety | **PENDING** | pin fixture/evidence/pass authority cho `VS-PROG-U15` |
+| Product Owner/CTO | **APPROVED** | Phạm Đình Chương, chỉ thị điện tử 2026-08-24; scope R3 + admin-only mutation |
+| System Architect | **APPROVED EXACT REVISION** | Phạm Đình Chương; `AUTH-PROG-2026-08-24-05`; Candidate input `413a043`; Accepted ADR hash được ghi ở authority record để tránh self-hash vòng |
+| Runtime + Security Leads | **WAIVED FOR IMPLEMENTATION** | finding phải sửa trong task; threat/fault/resource review và negative gate vẫn bắt buộc trước closeout/release |
+| Verification/Controls/Safety | **WAIVED FOR IMPLEMENTATION** | không thay fixture/Test Result/evidence/pass authority của `VS-PROG-U15` |
+| Document Control | **WAIVED FOR IMPLEMENTATION** | không tạo maturity M4/M5; controlled baseline/release approval vẫn theo `DOC-GOV-001` |
 
-ADR chỉ chuyển `Accepted` sau khi các review Candidate hoàn tất. Trạng thái
-`Proposed` không cho phép tạo production worker hoặc mở `IMPLEMENT_READY[R3]`.
+ADR đã `Accepted` để làm đầu vào implementation theo uỷ quyền của Product
+Owner/CTO + System Architect. Acceptance này không cho phép bỏ scheduler: R3 chỉ
+bắt đầu sau R2/T59-813. Nó cũng không chứng minh worker đã được implement, không
+thay các review/evidence nêu trên và không mở `RELEASE_READY`.
+
+## Lịch sử
+
+| Phiên bản | Ngày | Nội dung |
+|---|---|---|
+| 1.0 | 2026-08-24 | `Accepted` theo `AUTH-PROG-2026-08-24-05`; Candidate input `413a043`, Accepted bytes pin bằng SHA-256 ngoài ADR; review ngoài Owner/Architect `WAIVED FOR IMPLEMENTATION`, giữ dependency R1→R2→R3 và release NO-GO. |
+| 0.1-candidate | 2026-08-24 | Đề xuất worker ephemeral cách ly, admin-only mutation, resource/fault boundary và V&V bắt buộc. |

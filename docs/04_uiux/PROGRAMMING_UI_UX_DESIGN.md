@@ -3,13 +3,13 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `UX-WEB-PROG-001` |
-| Phiên bản | 2.1 |
-| Trạng thái | **Active cho baseline thống nhất; PGM-02 v2.2 là TARGET CANDIDATE, không phải As-Built** |
+| Phiên bản | 2.2 |
+| Trạng thái | **Active; PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION, không phải As-Built** |
 | Ngày | 2026-08-24 |
 | Chủ quản | UX Lead + Frontend Lead |
-| Người phê duyệt | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` |
-| Nguồn | Product v3.0; ADR-050; `SRS-PROG-001`; `DDD-SW-PROG-UNIFIED-001`; PGM-02 Candidate: `DDD-SW-PGM02-WORKSPACE-001` + `PGM02-WORKSPACE-V1` |
-| PGM-02 v2.2 authority | Owner đã duyệt change request và mở `T59-801`/`PGM02-V22-WP-00`; Architect `PENDING_EXACT_REVISION_PIN`; R1/R2/R3 code `NO-GO` |
+| Người phê duyệt implementation | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` và `AUTH-PROG-2026-08-24-05` |
+| Nguồn | Product v3.2; ADR-050; `SRS-PROG-001` v1.2; `DDD-SW-PROG-UNIFIED-001` v1.3; PGM-02 Target: `DDD-SW-PGM02-WORKSPACE-001` v0.3 + `PGM02-WORKSPACE-V1` |
+| PGM-02 v2.2 authority | Exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; `T59-801=DONE`, `T59-802=READY`, task sau `ORDERED`; ba `IMPLEMENT_READY=GO`; `RELEASE_READY=NO-GO` |
 | As-Built migration | Source hiện hành vẫn dùng route Project-scoped, mobile short-edit và editor/PouTree hiện có; không được đổi nhãn thành PGM-02 v2.2 As-Built |
 
 ## 0. Kết luận thiết kế
@@ -24,16 +24,16 @@ Programming có sáu workspace. Người dùng tạo và chỉnh ba loại POU t
   state/RETAIN; bản định nghĩa không có cycle hay Enable riêng.
 
 Baseline thống nhất được duyệt ngày 2026-08-20 vẫn là authority cho phần đã
-triển khai. Riêng PGM-02 v2.2 trong revision này là **Target Candidate**: route,
-mode, Quick Library, responsive và identity mới không phải As-Built, không được
-dùng để claim implementation hay runtime.
+triển khai. PGM-02 v2.2 trong revision này là **Target đã được phê duyệt cho
+implementation**: route, mode, Quick Library, responsive và identity mới vẫn
+không phải As-Built và không được dùng để claim runtime/evidence.
 
-Product Owner đã cho phép đối soát `PGM02-V22-WP-00`. System Architect chưa
-pin exact revision/hash của Product/SRS/DDD/UX/assets/contracts/Risk/Trace/VVP/
-Plan59, nên `PLAN_READY[PGM02-V22]` còn `PENDING` và
-`IMPLEMENT_READY[PGM02-R1|R2|R3]` đều `NO-GO`. Asset Target trong §4
-ghi dữ liệu minh họa, không phải evidence runtime; browser/target/HIL/formal
-Test Result vẫn là lớp bằng chứng riêng.
+`AUTH-PROG-2026-08-24-05` đã pin exact Candidate
+`413a043748dce3b44d2c5076412de761760ba17a`: `PLAN_READY[PGM02-V22]=PASS` và
+ba `IMPLEMENT_READY=GO`, nhưng scheduler vẫn buộc R1→R2→R3. Asset Target trong
+§4 ghi dữ liệu minh họa, không phải evidence runtime; consumer review được
+`WAIVED FOR IMPLEMENTATION`, còn browser/target/HIL/formal Test Result vẫn là
+lớp bằng chứng riêng và release vẫn NO-GO.
 
 ## 1. Persona, quyền và nguyên tắc
 
@@ -53,7 +53,7 @@ dừng Program đang chạy.
 | ID | Route | Mục tiêu | Hành động chính |
 |---|---|---|---|
 | `PGM-01` | `/eng/programming` | Tổng quan controller, Draft, Active, Core, attention | Tiếp tục công việc ưu tiên |
-| `PGM-02` | Candidate: `/eng/programming/programs?project=<uuid>&pou=<objectId>&mode=<EDIT|LIVE|SIMULATE>`; baseline/legacy: `/eng/programming/projects/:id/programs` | Một POU Explorer, ST/FBD surface, Quick Library, Inspector và Workbench; legacy redirect giữ context | EDIT POU/Draft; LIVE Active read-only; SIMULATE sandbox khi capability thật có |
+| `PGM-02` | Target: `/eng/programming/programs?project=<uuid>&pou=<objectId>&mode=<EDIT|LIVE|SIMULATE>`; baseline/legacy: `/eng/programming/projects/:id/programs` | Một POU Explorer, ST/FBD surface, Quick Library, Inspector và Workbench; legacy redirect giữ context | EDIT POU/Draft; LIVE Active read-only; SIMULATE sandbox khi capability thật có |
 | `PGM-03` | `/eng/programming/projects/:id/mapping` | Variable, Point, output owner, Published Signal | Lưu mapping/signal |
 | `PGM-04` | `/eng/programming/projects/:id/library` | SYSTEM/PROJECT Control Library, version, usage | Tạo/sửa library entry |
 | `PGM-05` | `/eng/programming/projects/:id/commission` | Check, impact, Commission, reconcile, rollback | Kiểm tra / Đưa vào vận hành |
@@ -62,8 +62,8 @@ dừng Program đang chạy.
 Route cũ redirect giữ `projectId`, `program/pou/mode/line/column/length/node/port/
 edge/returnTo` và không được làm mất Draft buffer. Resolver PGM-02 xử lý rõ 0,
 1, nhiều hoặc Project invalid; không chọn item đầu hay fallback local-storage.
-Không hiện internal Task order như dependency sản phẩm. Canonical route Candidate
-chỉ thay route baseline sau exact-revision pin của Architect.
+Không hiện internal Task order như dependency sản phẩm. Canonical route Target đã
+được pin cho implementation; route legacy chỉ là redirect tương thích.
 
 ### 2.1 Tám journey
 
@@ -89,7 +89,7 @@ Primary action dẫn tới đúng workspace và giữ Project context.
 
 ### 3.2 PGM-02 — POU và editor
 
-Target Candidate dùng một workspace chung: POU Explorer, ST editor hoặc true FBD
+Target dùng một workspace chung: POU Explorer, ST editor hoặc true FBD
 node-edge canvas, Quick Library, Inspector và Bottom Workbench
 `Problems/Watch/Trace/Search/Cross Reference`. Tree nhóm `PROGRAMS`, `FUNCTIONS`,
 `FUNCTION BLOCKS`; selection canonical là `objectId`, còn runtime dùng
@@ -151,6 +151,11 @@ location; impact phân nhóm Program, library, signal, output, RETAIN và enable
 intent. Commission chỉ mở khi Check của đúng Revision PASS, acknowledgement hiện
 hành và server readiness PASS. Timeout không hiện thành công; UI poll read-back.
 Restore LKG là action riêng, có re-auth/reason/impact và authoritative read-back.
+
+Khi Draft có PROGRAM POU chưa xếp lịch, PGM-02 vẫn cho Save. PGM-05 phải trình
+bày Check fail bằng `PRG-ERR-CHECK-001` + `ST-POU-005`, focus/link về đúng POU
+và hướng dẫn bổ sung cấu hình chạy; UI không được báo Ready, loại im lặng POU
+khỏi package hoặc hiển thị chu kỳ tự sinh `1000 ms`.
 
 ### 3.6 PGM-06 — Runtime và bảo trì
 
@@ -338,11 +343,11 @@ Playwright/target Test Result.
 | 0.1..1.1 | 2026-08-09..13 | Thiết kế/bằng chứng cho IA bốn workspace; superseded về Product Target. |
 | 2.0 | 2026-08-20 | Viết lại authority sáu workspace; POU/Library/Signal/Enable lifecycle, visual mapping, 17 UC, 24 UX requirement và acceptance; loại toàn bộ contradiction phạm vi cũ khỏi nội dung Active. |
 | 2.1-candidate | 2026-08-24 | Reconcile PGM-02 v2.2 route/identity/EDIT-LIVE-SIMULATE/Quick Library/FBD canvas/responsive và thêm `UX-REQ-025..027`; Owner chỉ mở WP-00, Architect exact pin và code R1/R2/R3 còn PENDING/NO-GO. |
+| 2.2 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` và exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; phê duyệt Target cho implementation theo R1→R2→R3, thêm flow `ST-POU-005` fail closed cho PROGRAM POU chưa xếp lịch; giữ chưa As-Built, U13–U15/evidence pending và release NO-GO. |
 
 | Vai trò | Disposition |
 |---|---|
 | Product Owner/CTO + System Architect — baseline v2.0 | **ACCEPT — `AUTH-PROG-2026-08-20-04`** |
-| Product Owner/CTO — PGM-02 v2.1 Candidate | **APPROVED CHANGE REQUEST / WP-00 ONLY** |
-| System Architect — PGM-02 v2.1 Candidate | **PENDING exact revision/hash pin; không có code authority** |
-| UX/FE/BE/QA/a11y | Review trong task Plan59; finding thuộc scope sửa trước merge, không chặn entry implementation |
+| Product Owner/CTO + System Architect — PGM-02 v2.2 | **AUTHORIZED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-24-05`**, exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` |
+| UX/FE/BE/QA/a11y | **WAIVED FOR IMPLEMENTATION**; hậu kiểm trong task Plan59, không phải M4/M5 hoặc Test Result |
 | Release authority | Chờ `VS-PROG-U*`, target/HIL/usability/provenance theo Plan59 W7 |

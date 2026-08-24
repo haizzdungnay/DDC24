@@ -3,26 +3,26 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `SRS-PROG-001` |
-| Phiên bản | 1.1-candidate (baseline hiệu lực: 1.0) |
-| Trạng thái | **Unified Product baseline Active + 7 requirement PGM-02 v2.2 TARGET CANDIDATE; Architect exact pin PENDING** |
+| Phiên bản | 1.2 |
+| Trạng thái | **Active; 89 requirement, gồm 7 requirement PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION nhưng chưa verified/As-Built** |
 | Ngày | 2026-08-20 |
 | Chủ quản | Product + System Engineering |
 | Reviewer | Software/Runtime Architect, UX/FE Lead, BE Lead, HW/FW Lead, Verification Lead |
 | Approver | Product Owner |
-| Nguồn | `PROD-PROG-001` v3.0 Active + v3.1 Candidate; `AUTH-PROG-2026-08-20-04`; `CR-PROG-PGM02-V22-001`; ADR-005/020/021/023; Modbus approval 2026-08-05 |
+| Nguồn | `PROD-PROG-001` v3.2; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; `CR-PROG-PGM02-V22-001`; ADR-005/020/021/023; Modbus approval 2026-08-05 |
 | Phạm vi | Một Product Programming: multi-Program; PROGRAM/FUNCTION/FUNCTION_BLOCK; ST/FBD; Control Library; Published Signal; Local/VP/MB_RTU |
 
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |
 |---|---|
-| 1. File này dùng để quyết định hoặc triển khai việc gì? | Baseline chốt 82 điều hệ thống; revision này thêm 7 điều PGM-02 v2.2 Candidate, tổng 89 ID. Bảy điều mới chưa trao quyền code trước exact-revision pin. |
+| 1. File này dùng để quyết định hoặc triển khai việc gì? | Baseline chốt 82 điều hệ thống; revision này phê duyệt thêm 7 điều PGM-02 v2.2 cho implementation, tổng 89 ID. Quyền code đã mở nhưng verification/As-Built vẫn phải chứng minh theo từng increment. |
 | 2. Ai phải đọc file này? | Product Owner (duyệt phạm vi), mọi discipline lead (nhận phần được phân bổ ở §9), QA (dựng scenario từ tiêu chí chấp nhận). Dev đọc phần của layer mình trước khi đọc thiết kế. |
 | 3. Hệ thống hiện tại đang có gì? | Chưa requirement nào được implement end-to-end. Đường control production vẫn là graph. Modbus RTU Point contract đã `Active` (approval 2026-08-05) và được dùng lại, không viết lại. `contracts/iop/iop_protocol.h` và safe-timeout `200 ms` trên MCU đã có mã nguồn. |
-| 4. Thiết kế mới thay đổi điều gì? | Giữ 82 requirement baseline và thêm `SYS-116`, `FE-119`, `BE-116/117`, `CORE-117/118`, `NFR-112` cho PGM-02 theo `R1 EDIT → R2 LIVE → R3 SIMULATE`. Detailed Design Candidate là `DDD-SW-PGM02-WORKSPACE-001`. |
+| 4. Thiết kế mới thay đổi điều gì? | Giữ 82 requirement baseline và phê duyệt `SYS-116`, `FE-119`, `BE-116/117`, `CORE-117/118`, `NFR-112` cho PGM-02 theo `R1 EDIT → R2 LIVE → R3 SIMULATE`. Detailed Design Target là `DDD-SW-PGM02-WORKSPACE-001`. |
 | 5. Team phải sửa module/contract nào? | Phân bổ ở §9: FE → `apps/web-ui`; BE → `mkddc-web`; Core → `mkddc-core`; MCU → firmware STM32; HW → schematic/BOM/test point. Ranh giới không được vượt: FE không quyết quyền, BE không chạy control step, Core không sở hữu Project, MCU không biết Revision (§12). |
-| 6. Điều gì còn bị chặn? | Baseline 82 requirement vẫn theo authority cũ. Bảy requirement PGM-02 Candidate chờ Product Owner + System Architect pin exact revision/hash; R1/R2/R3 code đều NO-GO. Release evidence target/HIL vẫn là cổng riêng. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Baseline trace tới 44 scenario; PGM-02 Candidate nối `VS-PROG-U13..U15`, tất cả `NOT_RUN`. Không kế thừa host/browser/docs thành Test Result hoặc target/HIL PASS. |
+| 6. Điều gì còn bị chặn? | Không còn blocker authority để viết code PGM-02: `T59-801=DONE`, `T59-802=READY`, task sau `ORDERED` theo dependency. U13–U15, target/HIL, residual risk và release evidence vẫn là cổng riêng. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Baseline trace tới 44 scenario; PGM-02 nối `VS-PROG-U13..U15`, tất cả `NOT_RUN`. Không kế thừa host/browser/docs thành Test Result hoặc target/HIL PASS. |
 
 Mọi giới hạn một Task/một Program trong revision cũ chỉ còn là As-Built migration
 input. `AUTH-PROG-2026-08-20-04` supersede quyết định phạm vi trái Product v3.0.
@@ -99,7 +99,7 @@ không phải điều kiện xin phép trước P1.
 | `SWR-REQ-PROG-BE-109` | Read model runtime/monitor phải giữ producer timestamp, freshness, quality và arbitration; không thay unknown bằng giá trị mặc định. | PRG-PT-003; PRG-UX-003 | Must | Integration | Contract test đủ GOOD/UNCERTAIN/BAD/STALE/OFFLINE/UNKNOWN. |
 | `SWR-REQ-PROG-BE-110` | API phải versioned, có error envelope ổn định, correlation và không dùng message tự do làm logic FE. | NFR-PRG-PROP-009 | Must | Contract test | OpenAPI/handler/FE types cùng schema; mọi lỗi có code, retryability và keeps-running truth. |
 | `SWR-REQ-PROG-BE-111` | Store phải persist POU kind/interface/dependency, library revision, signal definition và per-Program runtime intent bằng migration có backup. | `SYS-109..113` | Must | Store+restart | Round-trip/restart/migration v1→v2 không tự Commission hoặc mất Revision/audit. |
-| `SWR-REQ-PROG-BE-112` | Check phải compile toàn package nhiều Program/POU, khóa library DAG, signal publisher, output owner và resource profile. | `SYS-109..115` | Must | Integration | One-over/recursion/duplicate publisher-owner fail; Active/LKG không đổi. |
+| `SWR-REQ-PROG-BE-112` | Check phải compile toàn package nhiều Program/POU, khóa library DAG, signal publisher, output owner và resource profile. Draft được chứa PROGRAM POU chưa xếp lịch; Check/Package phải fail closed bằng `PRG-ERR-CHECK-001` + `ST-POU-005`, cấm tự loại POU hoặc tự sinh chu kỳ `1000 ms`. | `SYS-109..116`; `F-P59-GHOST-POU-001` | Must | Integration | One-over/recursion/duplicate publisher-owner fail; PROGRAM POU thiếu cấu hình chạy trả đúng public/detail code và zero package mutation; Active/LKG không đổi. |
 | `SWR-REQ-PROG-BE-113` | API phải cung cấp Library và Program Enable/Disable operation có RBAC, idempotency, audit, reconcile và read-back Core. | `PR-PROG-004/011/017` | Must | Contract+integration | Route mới khớp OpenAPI/FE/Core và timeout không replay. |
 | `SWR-REQ-PROG-BE-114` | Monitor/trace phải đọc per-Program/signal/candidate từ Core authority; trace không được giả sub-cycle bằng BE polling. | `PR-PROG-015` | Must | Integration+load | Core trace bounded; sample sequence/timestamp monotonic; unavailable explicit. |
 | `SWR-REQ-PROG-BE-115` | Compiler worker phải tạo artifact v2/package manifest/library lock deterministic cho ST/FBD và không tin metadata do FE tự tính. | `PR-PROG-002/004/009` | Must | Golden+negative | Rebuild byte/hash stable; tamper/version drift reject. |
@@ -166,12 +166,13 @@ không phải điều kiện xin phép trước P1.
   FBD semantics, type/capacity và error namespace.
 - Product, Architecture, Controls/Safety, HW/FW, UX và Verification ký.
 
-Các điều trên đã được đáp ứng cho 82 requirement baseline. Riêng bảy requirement
-PGM-02 Candidate chỉ qua gate khi Product Owner + System Architect review/pin
-exact revision/hash của Product/SRS/Architecture/DDD/UX/assets/contracts/Risk/
-Trace/VVP/Plan59, docs harness và candidate pin PASS. Trước thời điểm đó
-`T59-801` chỉ được REVIEW hồ sơ; `T59-802..817` không có execution authority và
-`IMPLEMENT_READY[PGM02-R1|R2|R3]=NO-GO`.
+Các điều trên đã được đáp ứng cho 82 requirement baseline. Bảy requirement
+PGM-02 được Product Owner/CTO + System Architect phê duyệt cho implementation
+bằng `AUTH-PROG-2026-08-24-05`, ghim exact Candidate
+`413a043748dce3b44d2c5076412de761760ba17a`. `PLAN_READY[PGM02-V22]=PASS` và
+ba `IMPLEMENT_READY=GO`; `T59-801=DONE`, `T59-802=READY`, các task sau
+`ORDERED` và chỉ chạy khi dependency R1→R2→R3 thỏa. Điều này không đổi U13–U15
+`NOT_RUN` hoặc `RELEASE_READY=NO-GO`.
 
 ## 9. Rationale và phân bổ theo nhóm
 
@@ -207,7 +208,8 @@ vật lý. Một requirement chỉ được đóng khi tất cả consumer của
 | Published Signal + output single-owner + Disable withdrawal | `DECIDED` | `AUTH-PROG-2026-08-20-04` | Product + Runtime/Safety | double buffer, freshness policy, Check ownership và HIL |
 | IA sáu workspace `PGM-01..06` | `DECIDED` | `AUTH-PROG-2026-08-20-04` | Product + UX | migrate bốn-workspace routes; thêm Programs/Mapping/Library riêng |
 | Baseline unified Product/SRS/DDD/Plan 59 | `DECIDED — APPROVED` | `AUTH-PROG-2026-08-20-04` | Product + System | consumer review waived for implementation; release evidence không waive |
-| PGM-02 route/mode/increment và Simulation admin-only mutation | `OWNER DECIDED — CANDIDATE PIN PENDING` | `CR-PROG-PGM02-V22-001` | Product Owner; System Architect pin | chỉ mở WP-00; route canonical, R1→R2→R3 và role matrix không được tự đổi; code/release NO-GO |
+| PGM-02 route/mode/increment và Simulation admin-only mutation | `DECIDED — APPROVED FOR IMPLEMENTATION` | `AUTH-PROG-2026-08-24-05` | Product Owner/CTO + System Architect | exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; route canonical, R1→R2→R3 và role matrix không được tự đổi; release vẫn NO-GO |
+| PROGRAM POU chưa xếp lịch | `DECIDED — IMPLEMENTATION PENDING` | `AUTH-PROG-2026-08-24-05`; `F-P59-GHOST-POU-001` | Product Owner/CTO + System Architect | Draft cho phép; Check/Package fail closed `PRG-ERR-CHECK-001` + `ST-POU-005`; cấm exclude/synthesize 1000 ms; chỉ đóng implementation sau source/test |
 
 ## 11. Verification allocation
 
@@ -277,6 +279,7 @@ biến kết quả thành PASS nếu không có phê duyệt thay đổi baselin
 | 0.6 | 2026-08-11 | Phê duyệt toàn bộ 60 requirement và 13 nhóm giá trị target theo `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; baseline được phép đưa vào contract/code production; chữ ký discipline/Verification còn thiếu được miễn cho implementation |
 | 1.0 | 2026-08-20 | Owner bỏ phân chia Rev A/B; bổ sung 22 requirement cho multi-Program, POU, library, signal, Enable/Disable, sáu workspace và target soak; tổng 82 requirement, không còn design-decision blocker. |
 | 1.1-candidate | 2026-08-24 | Thêm 7 requirement PGM-02 v2.2 (`SYS-116`, `FE-119`, `BE-116/117`, `CORE-117/118`, `NFR-112`), tổng 89; nối R1/R2/R3 và Simulation admin-only theo Owner change request; Architect exact pin và code/release giữ PENDING/NO-GO. |
+| 1.2 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`, phê duyệt 7 requirement PGM-02 cho implementation, mở ba increment theo thứ tự R1→R2→R3; chốt Check/Package fail closed `ST-POU-005` cho PROGRAM POU chưa xếp lịch; giữ U13–U15 NOT_RUN và release NO-GO. |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|
@@ -285,8 +288,7 @@ biến kết quả thành PASS nếu không có phê duyệt thay đổi baselin
 | Controls/Safety Reviewer | **WAIVED FOR IMPLEMENTATION** | review hậu kiểm |
 | UX/FE, BE, FW/HW Lead | **WAIVED FOR IMPLEMENTATION** | review theo task, không chặn code |
 | Verification Lead | **WAIVED FOR IMPLEMENTATION** | evidence theo task, không chặn code |
-| Product Owner — PGM-02 v2.2 | **APPROVED CHANGE REQUEST / WP-00 ONLY** | `CR-PROG-PGM02-V22-001`; chưa phải chữ ký exact revision |
-| System Architect — PGM-02 v2.2 | **PENDING exact revision/hash pin** | chặn mọi production code R1/R2/R3 |
+| Product Owner/CTO + System Architect — PGM-02 v2.2 | **AUTHORIZED FOR IMPLEMENTATION — Phạm Đình Chương, 2026-08-24** | `AUTH-PROG-2026-08-24-05`; exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; không phải M4/M5 hay Test Result |
 
 ## 15. Phụ lục — Tự kiểm cổng M3 (loại: Requirements)
 
@@ -303,12 +305,13 @@ Cổng lấy theo [Plan 54 §7](../03_implementation/54_PROGRAMMING_DOCUMENTATIO
 | Allocation theo layer | PASS | §9 owner thiết kế + consumer; §12 biên loại trừ giữa FE/BE/Core/MCU/HW |
 | Verification method | PASS | §2–§7 cột “Kiểm chứng” (`T/D/A/I`, HIL, fault injection); §11 phân bổ theo layer |
 | Acceptance định lượng | PASS | §2–§7 cột “Tiêu chí chấp nhận”; ngưỡng số ở `NFR-101..108` (ví dụ Check `p95 ≤2 s`, poll gap `<200 ms`) |
-| Không lẫn solution chưa duyệt | PASS baseline; Candidate rõ trạng thái | 82 requirement baseline `DECIDED`; bảy PGM-02 requirement ghi `TARGET CANDIDATE`, owner/gate/unlock ở §8/§10/§14 |
-| Quyền implementation | PASS baseline; **NO-GO PGM-02** | §8/§10/§14 tách authority cũ khỏi exact-revision pin Candidate |
-| Trace hai chiều | PASS ở lớp Candidate | 82 baseline nối 44 scenario; bảy PGM-02 requirement nối `VS-PROG-U13..U15`, mọi implementation/test/evidence giữ `N/NOT_RUN`. |
+| Không lẫn solution chưa duyệt | PASS | 89 requirement được quyết định; PGM-02 Target được phê duyệt cho implementation nhưng chưa ghi thành As-Built |
+| Quyền implementation | PASS toàn phạm vi PGM-02 | §8/§10/§14 ghi `AUTH-PROG-2026-08-24-05`, exact Candidate và thứ tự dependency |
+| Trace hai chiều | PASS ở lớp thiết kế | 82 baseline nối 44 scenario; bảy PGM-02 requirement nối `VS-PROG-U13..U15`, mọi implementation/test/evidence giữ `N/NOT_RUN`. |
 | Link nội bộ sạch | PASS | harness: local link missing `0`, anchor missing `0` |
 
-Maturity M4/M5 chưa được nâng vì không giả chữ ký/evidence. Baseline 82
-requirement tiếp tục theo waiver cũ; bảy requirement PGM-02 Candidate **không**
-kế thừa waiver và chỉ được implement sau exact pin. Requirement chỉ verified khi
-`VS-PROG-*` tương ứng có Test Result đúng lớp.
+Maturity M4/M5 không được nâng vì không giả consumer signature/evidence. Bảy
+requirement PGM-02 được `AUTHORIZED FOR IMPLEMENTATION` theo chỉ thị điều hành;
+discipline/Verification review còn thiếu là `WAIVED FOR IMPLEMENTATION`, không
+phải PASS. Requirement chỉ verified khi `VS-PROG-*` tương ứng có Test Result
+đúng lớp.

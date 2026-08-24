@@ -3,17 +3,17 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROD-PROG-001` |
-| Phiên bản | 3.1-candidate (baseline hiệu lực: 3.0) |
-| Trạng thái | **Active baseline v3.0 + PGM-02 v2.2 TARGET CANDIDATE; Architect exact-revision pin PENDING** |
+| Phiên bản | 3.2 |
+| Trạng thái | **Active; PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION, chưa phải As-Built** |
 | Ngày hiệu lực | 2026-08-20 |
-| Ngày Candidate | 2026-08-24 |
+| Ngày phê duyệt PGM-02 | 2026-08-24 |
 | Chủ quản / phê duyệt baseline | Product Owner/CTO — Phạm Đình Chương |
-| Disposition PGM-02 v2.2 | `CR-PROG-PGM02-V22-001`: Owner approved **WP-00 only**; System Architect exact revision/hash pin **PENDING** |
-| Quyết định nguồn | `AUTH-PROG-2026-08-20-04` trong [Decision Log](../00_governance/DECISIONS.md); [`CR-PROG-PGM02-V22-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) |
+| Disposition PGM-02 v2.2 | `AUTH-PROG-2026-08-24-05`: Product Owner/CTO + System Architect duyệt exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` cho implementation |
+| Quyết định nguồn | `AUTH-PROG-2026-08-20-04` và `AUTH-PROG-2026-08-24-05` trong [Decision Log](../00_governance/DECISIONS.md); [`CR-PROG-PGM02-V22-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) |
 | Supersedes | Nội dung Programming “Rev A/Rev B” trước đây và candidate `PROGRAMMING_PRODUCT_SPEC_V2.2_HYBRID.md` |
 | As-Built tham chiếu | Source/contract tại baseline `49a2ad1`; giới hạn hiện tại không làm giảm phạm vi Product Target |
-| Nguồn Target Candidate | [`DDD-SW-PGM02-WORKSPACE-001`](../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) và [`PGM02-WORKSPACE-V1`](../../contracts/programming/pgm02_workspace_v1.json) |
-| Gate PGM-02 | `T59-801`/`PGM02-V22-WP-00` đang REVIEW; `T59-802..817` chỉ là Candidate không có execution authority; `PLAN_READY[PGM02-V22]=PENDING`; code R1/R2/R3 và release đều NO-GO |
+| Nguồn Target đã pin | [`DDD-SW-PGM02-WORKSPACE-001`](../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md), [`PGM02-WORKSPACE-V1`](../../contracts/programming/pgm02_workspace_v1.json) và exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` |
+| Gate PGM-02 | `T59-801=DONE`; `T59-802=READY`; `T59-803..817=ORDERED` theo dependency; `PLAN_READY[PGM02-V22]=PASS`; `IMPLEMENT_READY[PGM02-R1|PGM02-R2|PGM02-R3]=GO`; thực thi bắt buộc `R1→R2→R3`; `RELEASE_READY=NO-GO` |
 
 ## 0. Đọc nhanh
 
@@ -38,10 +38,11 @@ Giới hạn source hiện tại `1 Task / 1 Program`, thiếu user-defined `FUN
 `FUNCTION_BLOCK`, thiếu Control Library và Published Signal là **As-Built cần
 migration**, không phải phạm vi sản phẩm được phép bỏ.
 
-PGM-02 v2.2 dưới đây là **Target Candidate** theo thứ tự `R1 EDIT → R2 LIVE →
-R3 SIMULATE`. Owner đã duyệt change request để thực hiện WP-00 reconciliation;
-điều đó không phải exact-revision approval của Architect và không mở production
-code, deploy hoặc release cho ba increment.
+PGM-02 v2.2 dưới đây là **Target đã được phê duyệt cho implementation** theo thứ
+tự bắt buộc `R1 EDIT → R2 LIVE → R3 SIMULATE`. `AUTH-PROG-2026-08-24-05` đã
+pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` và mở quyền
+production code cho cả ba increment; task scheduler vẫn phải giữ dependency và
+không được dùng quyền đó để suy ra deploy site hoặc release.
 
 ## 1. Mục tiêu và đối tượng dùng
 
@@ -255,7 +256,7 @@ identity, capability và failure state phải theo contract Candidate; khi chưa
 | `PR-PROG-023` | Release phải có target/HIL physical-output, power/restart, rollback và provenance evidence. |
 | `PR-PROG-024` | Không được claim IEC 61131-3 certification, safety PLC hoặc release readiness khi chưa có authority/evidence. |
 | `PR-PROG-025` | PGM-02 phải có route canonical `/eng/programming/programs`, resolver Project/deep-link fail-closed, ba mode `EDIT/LIVE/SIMULATE` và identity tách `objectId`, `programId`, document tuple, value tuple. |
-| `PR-PROG-026` | R1 EDIT phải sửa Saved Draft bằng contract typed/ETag/read-back; Quick Library phải dùng signature SYSTEM/PROJECT authoritative; insert/refactor/reference/diagnostic phải atomic, chính xác và zero mutation khi phân tích lỗi. |
+| `PR-PROG-026` | R1 EDIT phải sửa Saved Draft bằng contract typed/ETag/read-back; Quick Library phải dùng signature SYSTEM/PROJECT authoritative; insert/refactor/reference/diagnostic phải atomic, chính xác và zero mutation khi phân tích lỗi. Draft được chứa PROGRAM POU chưa xếp lịch, nhưng Check/Package phải fail closed bằng `PRG-ERR-CHECK-001` + `ST-POU-005`; cấm tự loại POU hoặc tự sinh chu kỳ `1000 ms`. |
 | `PR-PROG-027` | R2 LIVE phải luôn read-only, lấy source từ immutable Active Revision rồi chỉ ghép value khi revision/artifact/observation tuple coherent; mismatch, stale, offline hoặc thiếu dữ liệu phải fail closed và không thành zero. |
 | `PR-PROG-028` | R3 SIMULATE phải chạy immutable Saved-Draft snapshot trong worker ephemeral tách khỏi Core/Web production, không có production SHM/device/socket/output writer/RETAIN handle và không có physical output authority. |
 | `PR-PROG-029` | Simulation v1 phải cho viewer/operator/admin đọc theo object scope nhưng chỉ admin được mutation có audit; virtual time/`STEP_CYCLE` phải deterministic và virtual input chỉ nhận allowlist typed/unit/range từ artifact manifest. |
@@ -284,6 +285,9 @@ identity, capability và failure state phải theo contract Candidate; khi chưa
 1. `R1 EDIT`: route resolver đúng 0/1/nhiều/invalid Project; typed Draft v1/v2,
    Quick Library signature, semantic rename/delete/reference và diagnostic
    SOURCE/FBD/POU/GLOBAL có read-back; mọi lỗi concurrency/analysis zero mutation.
+   PROGRAM POU chưa xếp lịch vẫn lưu được trong Draft, nhưng Check/Package phải
+   trả `PRG-ERR-CHECK-001` với detail `ST-POU-005`, không loại im lặng và không
+   tự tạo chu kỳ `1000 ms`.
 2. `R2 LIVE`: source/value tuple khớp đúng Active Revision và artifact; cutover,
    sequence gap, stale/offline/missing làm clear/rejoin hoặc `UNAVAILABLE`; workspace
    không có mutation action ở mọi role.
@@ -292,9 +296,9 @@ identity, capability và failure state phải theo contract Candidate; khi chưa
    cleanup; Test Result target/HIL chứng minh Active/LKG và physical AO/DO/relay
    không đổi trong toàn bộ create/run/step/input/reset/stop/fault path.
 
-Ba tiêu chí này hiện **chưa chạy** và không phải evidence. Chúng chỉ trở thành
-entry cho implementation sau khi Product Owner + System Architect pin exact
-revision/hash của Candidate reconciled theo `T59-801`.
+Ba tiêu chí này hiện **chưa chạy** và không phải evidence. Quyền implementation
+đã được mở bằng `AUTH-PROG-2026-08-24-05`; chỉ được đổi trạng thái nghiệm thu
+sau khi có Test Result đúng increment và đúng lớp bằng chứng.
 
 ## 8. Ranh giới release
 
@@ -304,10 +308,10 @@ evidence. Product chỉ được gọi là release khi [Plan 59](../03_implement
 có verdict có thẩm quyền. CI billing, credential hoặc hardware thiếu không được
 biến thành lý do chặn code; chúng vẫn là điều kiện thật của `RELEASE_READY`.
 
-Ngoại lệ có phạm vi: với PGM-02 v2.2, chính quyền viết code R1/R2/R3 cũng chưa
-được mở. Chỉ WP-00 được phép reconcile Candidate; câu “document/contract/host
-test cho phép implement” ở trên chỉ áp dụng baseline đã được pin hoặc lát cắt có
-`IMPLEMENT_READY=PASS` riêng.
+Với PGM-02 v2.2, `PLAN_READY` và ba `IMPLEMENT_READY` đã mở theo
+`AUTH-PROG-2026-08-24-05`, nhưng execution order vẫn là `R1→R2→R3`. Chỉ thị này
+không biến document/contract/host test thành target/HIL/Test Result hoặc quyền
+release.
 
 ## 9. Lịch sử
 
@@ -317,3 +321,4 @@ test cho phép implement” ở trên chỉ áp dụng baseline đã được pi
 | 2.2 candidate | 2026-08-14 | Candidate Program-centric; nội dung phù hợp đã hợp nhất, file candidate được loại. |
 | 3.0 | 2026-08-20 | Owner chốt một Product Programming thống nhất; thêm multi-Program, FUNCTION/FUNCTION_BLOCK, Control Library, Published Signal, Enable/Disable và sáu workspace; bỏ phân chia Rev A/Rev B. |
 | 3.1-candidate | 2026-08-24 | Thêm `PC-PROG-013`, `PR-PROG-025..030` cho Target Candidate PGM-02 v2.2 theo R1 EDIT → R2 LIVE → R3 SIMULATE; ghi Owner approved WP-00 only, Architect exact revision/hash pin PENDING và code/release NO-GO; baseline 3.0 giữ nguyên hiệu lực. |
+| 3.2 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`, mở `PLAN_READY` và ba `IMPLEMENT_READY` nhưng giữ thứ tự R1→R2→R3 cùng `RELEASE_READY=NO-GO`; chốt PROGRAM POU chưa xếp lịch chỉ hợp lệ trong Draft, Check/Package fail closed `PRG-ERR-CHECK-001` + `ST-POU-005`. |

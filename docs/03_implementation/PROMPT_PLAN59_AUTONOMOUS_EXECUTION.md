@@ -3,15 +3,16 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROMPT-PLAN59-AUTONOMOUS` |
-| Phiên bản | 2.0 |
+| Phiên bản | 2.1 |
 | Trạng thái | **Active — dùng để thi hành Plan59** |
-| Ngày | 2026-08-20 |
+| Ngày | 2026-08-24 |
 | Chủ quản | Dev Lead + System Architect |
-| Authority | `AUTH-PROG-2026-08-20-04`; ADR-050; `PLAN-PROG-059` |
+| Authority | `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; ADR-050; ADR-053; `PLAN-PROG-059` |
 
 > Dùng nguyên khối prompt bên dưới trong phiên implementation. Authority là
-> Product v3.0 + ADR-050 + Unified DDD + Plan 59. Không hỏi lại các quyết định đã
-> khóa và không chia công việc thành Rev A/Rev B.
+> Product v3.0 + ADR-050 + Unified DDD + formal PGM-02 DDD/contract + ADR-053 +
+> Plan 59. Không hỏi lại các quyết định đã khóa, không chia công việc thành Rev
+> A/Rev B và không bỏ scheduler `R1 EDIT → R2 LIVE → R3 SIMULATE`.
 
 ```text
 Bạn là Tech Lead chịu trách nhiệm triển khai trọn Plan 59 của MK-DDC-24 tại:
@@ -37,21 +38,27 @@ AUTHORITY BẮT BUỘC ĐỌC TRƯỚC KHI SỬA CODE
 1. AGENTS.md
 2. docs/00_governance/CONTROL.md
 3. docs/00_governance/DOC_GOVERNANCE.md
-4. docs/00_governance/DECISIONS.md — ADR-050
-5. docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md
-6. docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md
-7. docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md
-8. docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md
-9. docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md
-10. docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md
-11. docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md
-12. docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md
-13. docs/07_records/PROGRAMMING_RISK_REGISTER.md
+4. docs/00_governance/DECISIONS.md — ADR-050, ADR-053 và AUTH-PROG-2026-08-24-05
+5. docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md
+6. docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md
+7. docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md
+8. docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md
+9. docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md
+10. contracts/programming/pgm02_workspace_v1.json + schema cùng tên
+11. docs/adr/ADR-053-programming-simulation-worker-cach-ly.md
+12. docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md
+13. docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md
+14. docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md
+15. docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md
+16. docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md
+17. docs/07_records/PROGRAMMING_RISK_REGISTER.md
 
 QUYỀN QUYẾT ĐỊNH ĐÃ CẤP
 ========================
 
-Product Owner/CTO + System Architect đã ký AUTH-PROG-2026-08-20-04:
+Product Owner/CTO + System Architect đã ban hành
+`AUTH-PROG-2026-08-20-04` cho baseline thống nhất và
+`AUTH-PROG-2026-08-24-05` cho PGM-02 v2.2:
 
 - không có Rev A/Rev B cho Product Programming;
 - mọi decision kỹ thuật trong Unified DDD đã khóa;
@@ -60,8 +67,19 @@ Product Owner/CTO + System Architect đã ký AUTH-PROG-2026-08-20-04:
 - finding thuộc task phải sửa trước merge task đó;
 - release evidence target/HIL không được waive hoặc giả.
 
+AUTH-PROG-2026-08-24-05 pin exact Candidate commit
+`413a043748dce3b44d2c5076412de761760ba17a`:
+
+- `PLAN_READY[PGM02-V22]=PASS`;
+- `IMPLEMENT_READY[PGM02-R1|R2|R3]=GO`;
+- `T59-801=DONE`, `T59-802=READY`, `T59-803..817=ORDERED` theo predecessor;
+- consumer/discipline/Verification/Document Control review là
+  `WAIVED FOR IMPLEMENTATION`, không phải M4/M5/Test Result/CI/target/HIL PASS;
+- `RELEASE_READY=NO-GO` tới khi evidence và release authority thật đạt.
+
 Không được hỏi lại capacity, POU semantics, library model, signal model, output
-owner, Disable policy, scheduler semantics, six-workspace IA, trace hay migration.
+owner, Disable policy, scheduler semantics, six-workspace IA, trace, migration,
+Simulation boundary/admin-only mutation hay ghost PROGRAM policy.
 Nếu implementation detail nhỏ chưa ghi mà không đổi boundary/acceptance, tự chọn
 phương án bounded/fail-closed/deterministic, ghi rationale vào task/DDD và làm tiếp.
 
@@ -76,6 +94,10 @@ Plan 59 §3 là tracker duy nhất. Mỗi vòng:
 4. implement trọn task tới DoD, không chỉ viết report;
 5. cập nhật chính dòng task với status, commit/PR, số đo và evidence;
 6. chọn task tiếp theo, không dừng để xin phép.
+
+Với W8, luôn bắt đầu ở `T59-802`. Chỉ promote đúng task kế tiếp khi predecessor
+`DONE`; việc cả R1/R2/R3 đều có `IMPLEMENT_READY=GO` không cho phép chạy LIVE
+trước closeout EDIT hoặc chạy SIMULATE trước closeout LIVE.
 
 Không dùng BLOCKED cho task code. Nếu một evidence lane cần board/CI account/
 credential/instrument nhưng chưa khả dụng:
@@ -95,7 +117,11 @@ W0 contracts/migration
 → W4 runtime/scheduler/signal/enable/output/retain/trace
 → W5 package lifecycle + six-workspace FE/BE/Core E2E
 → W6 hardening/security/package/RC
-→ W7 CI/target/HIL/V&V/release.
+→ W7 CI/target/HIL/V&V/release;
+
+W8 PGM-02 v2.2:
+`T59-801 DONE → R1 EDIT (T59-802..809) → R2 LIVE (T59-810..813)
+→ R3 SIMULATE (T59-814..817)`.
 
 Không nhảy thẳng vào UI khi contract/store chưa khóa. Không trì hoãn FUNCTION,
 FUNCTION_BLOCK, Control Library, multi-Program, Published Signal hoặc Enable/
@@ -118,6 +144,13 @@ QUY TẮC IMPLEMENTATION
 - RT path không heap/filesystem/DB/HTTP/DNS/blocking network/compiler/parser.
 - Active/LKG và data người dùng không bị xóa bởi migration/rollback.
 - PID giữ REVIEW_REQUIRED tới Controls/Safety target evidence.
+- Draft được giữ POU kind `PROGRAM` chưa có entry `programs[]`; Check và Package
+  bắt buộc fail-closed bằng `PRG-ERR-CHECK-001`, detail `ST-POU-005`. Cấm loại
+  im lặng khỏi package và cấm synthesize chu kỳ 1000 ms; lỗi giữ Active/LKG
+  nguyên vẹn.
+- Simulation v1 dùng worker ephemeral theo ADR-053, không có edge tới production
+  SHM/device/iobus/output/RETAIN. Viewer/operator chỉ đọc; chỉ admin được create/
+  run/pause/step/reset/stop/set-input, và server phải cưỡng chế/audit quyền này.
 
 MỖI TASK PHẢI CÓ
 ================
@@ -140,6 +173,8 @@ TEST TỐI THIỂU TRƯỚC MỖI MERGE
 - FE vitest jsdom + lint + build;
 - Playwright cho mọi flow UI/API bị đổi, ưu tiên real backend;
 - contract/profile/error/FBD/library generator --check;
+- `verify_programming_pgm02_contract.py --self-test` và W8 requirement/trace/pin
+  guard cho mọi task PGM-02;
 - docs_iso_harness.py --expect, candidate/baseline pin, git diff --check;
 - Chrome DevTools desktop/mobile/Console/Network khi UI/runtime behavior đổi.
 
@@ -202,5 +237,6 @@ mở lane; không gọi Product là release-ready.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.1 | 2026-08-24 | Thêm `AUTH-PROG-2026-08-24-05`, formal PGM-02 DDD/contract/ADR-053 vào authority đọc bắt buộc; mở W8 có scheduler R1 EDIT→R2 LIVE→R3 SIMULATE và khóa ghost PROGRAM fail-closed `PRG-ERR-CHECK-001`/`ST-POU-005`; giữ maturity/evidence/release trung thực. |
 | 1.0 | 2026-08-20 | Prompt bản nháp yêu cầu chọn Rev A/Rev B và có decision blocker; superseded. |
 | 2.0 | 2026-08-20 | Khóa Product thống nhất/ADR-050, task selection tự động, no implementation blocker, đầy đủ POU/library/multi-Program/signal/output/release truthfulness. |

@@ -1,20 +1,21 @@
 # PGM-02 — Quick Library, SIMULATE và LIVE — đặc tả Target v2.2
 
 **Document ID:** KX-DDC24-FE-SPEC-PGM02-QL-SIM-LIVE-002<br>
-**Phiên bản:** 2.2<br>
+**Phiên bản:** 2.3<br>
 **Ngày:** 2026-08-24<br>
-**Trạng thái:** TARGET — PGM02-V22-WP-00 reconciliation; KHÔNG PHẢI AS-BUILT<br>
+**Trạng thái:** TARGET APPROVED FOR IMPLEMENTATION — KHÔNG PHẢI AS-BUILT<br>
 **Evidence class:** đặc tả thiết kế; không phải bằng chứng runtime, target/HIL hay physical I/O<br>
 **Baseline nguồn đã đối soát:** 1bc3d19e96989c1309f838c0acd01d14d8536d5e<br>
 **Phạm vi:** PGM-02A ST, PGM-02B FBD, Quick Library, EDIT, LIVE và SIMULATE<br>
-**Quyền nội dung:** Product Owner đã duyệt change request và mở PGM02-V22-WP-00; System Architect PENDING review/pin exact baseline; FE/BE/Core chưa được mở downstream production work<br>
+**Quyền nội dung:** `AUTH-PROG-2026-08-24-05` exact-pin Candidate `413a043748dce3b44d2c5076412de761760ba17a`; R1/R2/R3 được mở theo dependency bắt buộc<br>
 **Detailed Design authority:** [PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md](../../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md)<br>
 **Machine-readable Target contract:** [pgm02_workspace_v1.json](../../../contracts/programming/pgm02_workspace_v1.json)
 
 > Hồ sơ này là phần bổ sung triển khai FE cho PGM-02 v2.2. Khi có khác biệt,
 > Detailed Design chính thức và contract đã được pin có quyền cao hơn. Liên kết
-> Detailed Design được khai báo trước trong PGM02-V22-WP-00; chỉ khi Owner + System
-> Architect pin đủ hồ sơ mới được coi là baseline triển khai.
+> Detailed Design và contract đã được Owner + System Architect pin để triển
+> khai. Việc pin không biến Target thành As-Built và không thay Test Result,
+> target/HIL hoặc release evidence.
 
 ## 1. Kết luận và ranh giới bằng chứng
 
@@ -153,14 +154,20 @@ không tương thích, preference dangling được bỏ khi đọc và không l
 | name | string 1..80 | tên hiển thị/canonical call |
 | kind | FUNCTION hoặc FUNCTION_BLOCK | quyết định insertion command; Project là scope/category, không phải kind mới |
 | version | semver/string đã pin | không tự lấy latest trong transaction |
+| libraryVersion | alias deprecated | phải bằng `version` trong một compatibility major; mismatch fail closed |
 | scope | SYSTEM hoặc PROJECT | badge bắt buộc |
 | category | enum | Common, HVAC, Logic, Math, Timer, Counter, Signal, Project |
 | descriptionKey | i18n key | FE không hardcode mô tả theo entry |
+| labelVi / labelEn | string 1..120 | nhãn producer-declared, không suy đoán từ name |
 | aliases | string[] | phục vụ search, không dùng làm identity |
-| signature | typed ports/arguments | authority cho ST template và FBD ports |
+| signatureAuthority | SYSTEM_REGISTRY hoặc PROJECT_INTERFACE | producer authority, không phải FE |
+| signatureState | VERIFIED, DECLARED hoặc UNAVAILABLE | trust của signature; tách khỏi feature readiness |
+| ports | typed ports/arguments với `order` explicit | authority cho ST template và FBD ports; order immutable |
 | stateful | boolean | true cần instance ở ST |
+| stateLayout | object/null | bắt buộc khi stateful publish; version/size/hash exact |
 | supportedLanguages | ST[], FBD[] | entry không phù hợp phải ẩn hoặc giải thích |
 | featureState | READY, REVIEW_REQUIRED, UNSUPPORTED, DEPRECATED | fail-closed |
+| warningCode | stable string/null | lý do unavailable/review, không lộ chi tiết nội bộ |
 | contentSha256 | SHA-256 | pin nội dung |
 
 Search chuẩn hóa Unicode, bỏ khoảng trắng biên và match name trước aliases,
@@ -176,7 +183,7 @@ trigger R_TRIG/F_TRIG, conversion và PID ở trạng thái REVIEW_REQUIRED. Tar
 không được quảng bá TP, CTU, CTD, PI, SCALE, Deadband hay Hysteresis cho tới khi
 registry, compile/runtime semantics và tests cùng tồn tại.
 
-- READY + language phù hợp: cho phép insert.
+- READY + language phù hợp + `signatureState!=UNAVAILABLE`: cho phép insert.
 - REVIEW_REQUIRED: hiển thị lý do, không insert ở production profile.
 - UNSUPPORTED: ẩn mặc định; search exact có thể hiện hàng disabled và lý do.
 - DEPRECATED: cho đọc source cũ, không khuyến nghị mới; cần replacementId nếu có.
@@ -425,7 +432,7 @@ TTL vẫn bảo đảm cleanup.
 
 | Code | HTTP gợi ý | FE behavior |
 |---|---:|---|
-| PRG-SIM-UNSUPPORTED | 409/422 | disable mode, giải thích capability/profile |
+| PRG-SIM-UNSUPPORTED | 409 khi capability/profile không hỗ trợ; 503 khi supervisor không khả dụng | disable mode, giải thích capability/profile |
 | PRG-SIM-SAVE-REQUIRED | 409 | về EDIT, yêu cầu Save Draft |
 | PRG-SIM-FORBIDDEN | 403 | read-only, không retry mutation |
 | PRG-SIM-INPUT-NOT-ALLOWED | 422 | đánh dấu input, giữ session |
@@ -527,7 +534,7 @@ Lệnh kiểm tra dự kiến sau triển khai:
 
 | Gap | Owner | Ảnh hưởng | Gate | Điều kiện mở |
 |---|---|---|---|---|
-| Formal DDD và Target contract chưa cùng pin | Owner + Architect | mọi increment | PGM02-V22-WP-00 | hash/authority/revision được ký |
+| Formal DDD và Target contract | Owner + Architect | mọi increment | **CLOSED — `AUTH-PROG-2026-08-24-05`** | exact Candidate `413a043`; thay đổi sau pin đi qua change control |
 | Route/project resolver chưa có | FE + BE | R1 | PGM02-V22-WP-01 | zero/one/many/invalid tests pass |
 | objectId/programId còn projection lẫn | FE + BE | R1/R2 | PGM02-V22-WP-02 | contract + migration tests pass |
 | Quick Library normalized service/các block thiếu | BE + FE + Core | R1 | PGM02-V22-WP-03 | registry parity + insert atomic tests |
@@ -539,12 +546,19 @@ Lệnh kiểm tra dự kiến sau triển khai:
 
 | Vai trò | Trạng thái |
 |---|---|
-| Product Owner | đã duyệt change request/mở PGM02-V22-WP-00; chưa phải exact baseline pin |
-| System Architect | chờ review/pin formal DDD và machine contract |
-| FE Lead | chờ R1 dependency/gate |
-| Backend/Core Lead | chờ R2/R3 contract và evidence |
-| QA/Verification | chờ test fixtures và target evidence plan |
+| Product Owner/CTO | **APPROVED FOR IMPLEMENTATION** — `AUTH-PROG-2026-08-24-05` |
+| System Architect | **APPROVED EXACT REVISION** — Candidate `413a043` |
+| FE Lead | `WAIVED FOR IMPLEMENTATION`; finding sửa trong task R1/R2/R3 |
+| Backend/Core Lead | `WAIVED FOR IMPLEMENTATION`; contract/evidence hoàn thiện theo dependency |
+| QA/Verification | `WAIVED FOR IMPLEMENTATION`; U13–U15 vẫn NOT_RUN và review release không bị waive |
 
 Không được đổi trạng thái tài liệu này thành As-Built chỉ vì UI đã render. Chỉ
 đổi sau khi source mapping, generated contract, migration, tests và runtime
 read-back tương ứng đã tồn tại và được kiểm chứng.
+
+## 18. Lịch sử
+
+| Phiên bản | Ngày | Nội dung |
+|---|---|---|
+| 2.3 | 2026-08-24 | Ghi AUTH-05/exact pin; tách `featureState` khỏi `signatureState`, bổ sung producer authority/typed ports và giữ release evidence trung thực. |
+| 2.2 | 2026-08-24 | Candidate Target cho Quick Library, LIVE và Simulation; chưa có execution authority. |

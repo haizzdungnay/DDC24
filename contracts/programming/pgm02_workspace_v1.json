@@ -3,21 +3,23 @@
   "contractId": "PGM02-WORKSPACE-V1",
   "version": {
     "major": 1,
-    "minor": 0
+    "minor": 1
   },
-  "status": "TARGET_CANDIDATE",
+  "status": "TARGET_APPROVED_FOR_IMPLEMENTATION",
   "sourceBaselineCommit": "1bc3d19e96989c1309f838c0acd01d14d8536d5e",
+  "approvedCandidateCommit": "413a043748dce3b44d2c5076412de761760ba17a",
   "authority": {
+    "authorization": "AUTH-PROG-2026-08-24-05",
     "changeRequest": "CR-PROG-PGM02-V22-001",
     "workPackage": "PGM02-V22-WP-00",
     "task": "T59-801",
-    "ownerDisposition": "APPROVED_WP00_ONLY",
-    "architectDisposition": "PENDING_EXACT_REVISION_PIN",
-    "planReady": "PENDING",
+    "ownerDisposition": "APPROVED_FULL_PLAN",
+    "architectDisposition": "APPROVED_EXACT_REVISION_PIN",
+    "planReady": "PASS",
     "implementReady": {
-      "R1_EDIT": "NO_GO",
-      "R2_LIVE": "NO_GO",
-      "R3_SIMULATE": "NO_GO"
+      "R1_EDIT": "GO",
+      "R2_LIVE": "GO",
+      "R3_SIMULATE": "GO"
     },
     "releaseReady": "NO_GO"
   },
@@ -117,14 +119,21 @@
       "name",
       "kind",
       "version",
+      "libraryVersion",
       "scope",
       "category",
       "descriptionKey",
+      "labelVi",
+      "labelEn",
       "aliases",
-      "signature",
-      "stateful",
-      "supportedLanguages",
+      "signatureAuthority",
+      "signatureState",
       "featureState",
+      "warningCode",
+      "ports",
+      "stateful",
+      "stateLayout",
+      "supportedLanguages",
       "contentSha256"
     ],
     "unsupportedPolicy": "HIDE_OR_EXPLAIN_NOT_SUPPORTED",
@@ -132,16 +141,34 @@
     "recentLimit": 12,
     "favoritesLimit": 64,
     "insertionTransaction": "ONE_UNDO_STEP",
-    "signatureStates": [
+    "featureStates": [
       "READY",
       "REVIEW_REQUIRED",
+      "UNSUPPORTED",
+      "DEPRECATED"
+    ],
+    "signatureStates": [
+      "VERIFIED",
+      "DECLARED",
       "UNAVAILABLE"
+    ],
+    "signatureAuthorities": [
+      "SYSTEM_REGISTRY",
+      "PROJECT_INTERFACE"
     ],
     "systemSignatureProjection": "CANONICAL_REGISTRY_EXACT",
     "projectSignatureSource": "PROJECT_INTERFACE_JSON",
+    "deprecatedLibraryVersionAlias": "MUST_EQUAL_VERSION",
+    "insertPolicy": "FEATURE_READY_AND_SIGNATURE_AVAILABLE",
     "unavailableFallback": false
   },
   "edit": {
+    "check": {
+      "unscheduledProgramPouPolicy": "DRAFT_ALLOWED_CHECK_PACKAGE_FAIL_CLOSED",
+      "publicError": "PRG-ERR-CHECK-001",
+      "detailCode": "ST-POU-005",
+      "synthesizedPeriodMs": false
+    },
     "draft": {
       "method": "PATCH",
       "path": "/api/v1/programming/projects/{projectId}/draft",
@@ -158,6 +185,18 @@
         "ProgrammingPouObjectV2",
         "ProgrammingProgramConfigV2"
       ],
+      "sourceRepresentation": {
+        "ST": "STRING",
+        "FBD": "CANONICAL_OBJECT"
+      },
+      "programConfigFields": [
+        "objectId",
+        "programId",
+        "periodMs"
+      ],
+      "runtimeEnableIntentSeparate": true,
+      "replaceProgramSourceIdentity": "objectId",
+      "deprecatedReplaceProgramSourceAlias": "programId_FOR_ONE_COMPATIBILITY_MAJOR",
       "operationDiscriminator": "op",
       "operations": [
         "setFunctionalTags",
@@ -177,7 +216,11 @@
         "removeBinding"
       ],
       "responseContentSchema": "ProgrammingDraftDocumentV2",
-      "conflictError": "PRG-ERR-CONFLICT-001"
+      "conflictError": "PRG-ERR-CONFLICT-001",
+      "malformedRequestStatus": 400,
+      "semanticValidationStatus": 422,
+      "idempotencyReplay": "FULL_TYPED_READ_BACK",
+      "idempotencyStorage": "DEDICATED_BOUNDED_DRAFT_SNAPSHOT_MIGRATION_0013"
     },
     "pouRefactor": {
       "renameMode": "ATOMIC_SEMANTIC_REFACTOR",
@@ -208,6 +251,9 @@
       "path": "/api/v1/programming/projects/{projectId}/draft/references",
       "queryFields": [
         "targetObjectId",
+        "targetEntryId",
+        "targetVersion",
+        "targetSignalId",
         "cursor",
         "limit"
       ],
@@ -224,7 +270,13 @@
         "UNAVAILABLE"
       ],
       "sourceIdentity": "sourcePouObjectId",
-      "targetIdentity": "objectId_OR_entryId",
+      "targetIdentities": [
+        "targetObjectId",
+        "targetEntryId+targetVersion",
+        "targetSignalId"
+      ],
+      "targetIdentityRule": "EXACTLY_ONE_TARGET_IDENTITY",
+      "cursorBinding": "draftRevisionId+etag+contentSha256+targetFilter",
       "mutationEndpoint": false
     },
     "diagnostics": {

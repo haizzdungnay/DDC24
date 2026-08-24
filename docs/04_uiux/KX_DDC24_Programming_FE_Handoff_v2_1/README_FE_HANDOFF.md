@@ -1,6 +1,6 @@
 # KX-DDC24 Programming — FE Handoff Package v2.2
 
-**Status:** TARGET FE HANDOFF — PGM02-V22-WP-00 reconciliation; NOT AS-BUILT / NOT RUNTIME EVIDENCE<br>
+**Status:** TARGET FE HANDOFF — AUTHORIZED FOR IMPLEMENTATION BY `AUTH-PROG-2026-08-24-05`; NOT AS-BUILT / NOT RUNTIME EVIDENCE<br>
 **Formal PGM-02 Detailed Design authority:** [PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md](../../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md)<br>
 **Product:** MK-DDC-24 Generic DDC/BACS Controller  
 **Programming languages Rev A:** ST + FBD  
@@ -10,9 +10,10 @@
 
 ## 1. Source baseline
 
-Package này ghi nhận hướng thiết kế Target; riêng PGM-02 chỉ được dùng làm
-baseline triển khai sau khi Owner + System Architect pin cùng Detailed Design
-và machine-readable contract. Nó không tự chứng minh năng lực As-Built/runtime.
+Package này ghi nhận hướng thiết kế Target và đã được Owner + System Architect
+exact-pin tại Candidate `413a043748dce3b44d2c5076412de761760ba17a` để triển
+khai tuần tự `R1 EDIT → R2 LIVE → R3 SIMULATE`. Nó không tự chứng minh năng lực
+As-Built/runtime, Test Result, target/HIL hoặc release.
 
 - A Program is a user-facing independent control unit.
 - Normal users do not manage CPU core/thread/task directly.
@@ -128,8 +129,7 @@ Each page is DONE only when:
 - [Rà soát kiến trúc và khoảng trống PGM-02 ST/FBD](reviews/PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md)
 - [Kế hoạch triển khai đề xuất PGM-02 ST/FBD](reviews/PGM02_ST_FBD_IMPLEMENTATION_PLAN.md)
 
-Ngày 2026-08-24, Product Owner/CTO đã chấp thuận change request để mở
-`PGM02-V22-WP-00`,
-khóa ba increment `R1 EDIT → R2 LIVE → R3 SIMULATE` và Simulation v1 admin-only.
-Baseline reconciled vẫn phải được Owner + System Architect review/pin trước khi
-sửa mã redesign. Hai hồ sơ không thay Plan59 và không đổi `RELEASE_READY`.
+Ngày 2026-08-24, Product Owner/CTO + System Architect ban hành
+`AUTH-PROG-2026-08-24-05`, hoàn tất `PGM02-V22-WP-00`, mở quyền implementation
+cho cả ba increment và giữ Simulation v1 admin-only. Plan59 vẫn là scheduler duy
+nhất: chỉ `T59-802` READY, task sau đợi predecessor. `RELEASE_READY` giữ NO-GO.

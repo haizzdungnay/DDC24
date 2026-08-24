@@ -3,28 +3,27 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-SW-PGM02-WORKSPACE-001` |
-| Phiên bản | 0.2-candidate |
-| Trạng thái | **`M2 — DRAFT CONTENT / TARGET CANDIDATE`** |
+| Phiên bản | 0.3 |
+| Trạng thái | **`M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`; chưa phải M4/M5 hoặc As-Built** |
 | Ngày | 2026-08-24 |
 | Chủ quản đề xuất | System Architecture + Programming Cross-functional Team |
 | Người review bắt buộc | Product, System Architect, FE, BE, Compiler, Core/Runtime, Security, QA/V&V, UX, Document Control |
 | Người phê duyệt | Product Owner/CTO + System Architect |
 | Authority work package | `CR-PROG-PGM02-V22-001`; `T59-801` / `PGM02-V22-WP-00` |
-| Disposition authority | Product Owner chỉ duyệt mở `PGM02-V22-WP-00`; System Architect exact-revision/hash pin **PENDING** |
+| Disposition authority | `AUTH-PROG-2026-08-24-05`: Product Owner/CTO + System Architect pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` và mở implementation |
 | Nguồn baseline hiện hành | `PROD-PROG-001` v3.0; `ADR-050`; `SRS-PROG-001`; `ARCH-PROG-001`; `DDD-SW-PROG-UNIFIED-001`; `UX-WEB-PROG-001`; `PLAN-PROG-059` |
-| Requirement canonical liên quan | Candidate chính: `SYS-REQ-PROG-116`, `SWR-REQ-PROG-FE-119`, `SWR-REQ-PROG-BE-116..117`, `SWR-REQ-PROG-CORE-117..118`, `NFR-REQ-PROG-112`; requirement baseline hỗ trợ: `SYS-REQ-PROG-102/104/106/109/110/113`, `SWR-REQ-PROG-FE-101..104/109..111/116`, `SWR-REQ-PROG-BE-101..104/107/109..112/114/115`, `SWR-REQ-PROG-CORE-101/103/110/111` |
-| Design obligation nội bộ | `DDO-PGM02-001..015` — Candidate trong hồ sơ này, không phải canonical SRS requirement |
-| Phạm vi | Target cho PGM-02 ST/FBD theo thứ tự `R1 EDIT → R2 LIVE → R3 SIMULATE`; không trao quyền code, deploy hoặc release |
+| Requirement canonical liên quan | Target: `SYS-REQ-PROG-116`, `SWR-REQ-PROG-FE-119`, `SWR-REQ-PROG-BE-116..117`, `SWR-REQ-PROG-CORE-117..118`, `NFR-REQ-PROG-112`; requirement baseline hỗ trợ: `SYS-REQ-PROG-102/104/106/109/110/113`, `SWR-REQ-PROG-FE-101..104/109..111/116`, `SWR-REQ-PROG-BE-101..104/107/109..112/114/115`, `SWR-REQ-PROG-CORE-101/103/110/111` |
+| Design obligation nội bộ | `DDO-PGM02-001..015` — Target trong hồ sơ này, không phải canonical SRS requirement |
+| Phạm vi | Target cho PGM-02 ST/FBD theo thứ tự `R1 EDIT → R2 LIVE → R3 SIMULATE`; trao quyền code theo dependency, không trao quyền deploy site hoặc release |
 | Baseline inventory | Git `1bc3d19e96989c1309f838c0acd01d14d8536d5e` dùng để đối soát source; **không** phải exact-hash pin của Architect |
-| Evidence class | Thiết kế Candidate và source inspection; không phải bằng chứng runtime, target/HIL, physical I/O hoặc Test Result |
-| Gate hiện hành | `PLAN_READY[PGM02-V22]=PENDING`; `IMPLEMENT_READY[PGM02-R1|PGM02-R2|PGM02-R3]=NO-GO`; `RELEASE_READY=NO-GO` |
+| Evidence class | Thiết kế M3 và source inspection; không phải bằng chứng runtime, target/HIL, physical I/O hoặc Test Result |
+| Gate hiện hành | `PLAN_READY[PGM02-V22]=PASS`; `IMPLEMENT_READY[PGM02-R1|PGM02-R2|PGM02-R3]=GO`; execution bắt buộc R1→R2→R3; `RELEASE_READY=NO-GO` |
 
-> Hồ sơ này là đầu ra thiết kế Candidate của `T59-801` /
-> `PGM02-V22-WP-00`. Mọi từ “Target”, “phải”
-> hoặc “sẽ” dưới đây mô tả hợp đồng cần được review/pin, không mô tả chức năng đã
-> triển khai. Trạng thái `DONE` của task tiền nhiệm không chứng minh redesign này
-> đã có. Hồ sơ không thay chữ ký Product Owner, System Architect, Test Authority
-> hoặc Release Authority.
+> Hồ sơ này là đầu ra thiết kế đã được pin của `T59-801` /
+> `PGM02-V22-WP-00`. Mọi từ “Target”, “phải” hoặc “sẽ” dưới đây mô tả hợp đồng
+> được phép implement, không mô tả chức năng đã triển khai. `AUTHORIZED FOR
+> IMPLEMENTATION` không thay consumer review, Test Authority hoặc Release
+> Authority và không được dùng để nâng giả M4/M5 hay Test Result.
 
 Tài liệu chỉ dùng work-package ID canonical `PGM02-V22-WP-00..13`; không dùng
 alias ngắn `WP-00..13` làm authority.
@@ -33,18 +32,18 @@ alias ngắn `WP-00..13` làm authority.
 
 | Câu hỏi | Trả lời |
 |---|---|
-| 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt Candidate chi tiết cho một PGM-02 workspace có ba increment độc lập: R1 soạn ST/FBD trên Saved Draft, R2 xem LIVE read-only theo đúng Active Revision, R3 chạy SIMULATE trong worker cách ly không có đường ra physical output. |
-| 2. Ai phải đọc file này? | Product/System Architect để pin authority; FE/BE/Compiler/Core/Security để review boundary; QA/V&V để tạo test; UX để hoàn tất asset; Document Control để pin revision/hash. |
+| 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt Target chi tiết đã được phép implement cho một PGM-02 workspace có ba increment độc lập: R1 soạn ST/FBD trên Saved Draft, R2 xem LIVE read-only theo đúng Active Revision, R3 chạy SIMULATE trong worker cách ly không có đường ra physical output. |
+| 2. Ai phải đọc file này? | FE/BE/Compiler/Core/Security để implement và hậu kiểm boundary; QA/V&V để tạo/chạy test; UX để đối chiếu asset; Document Control để giữ revision/hash. |
 | 3. Hệ thống hiện tại đang có gì? | Draft v2 nội bộ và PATCH Draft; SYSTEM/PROJECT Library; compiler ST/FBD; runtime/monitor/trace; FE POU tree, ST editor và FBD structured renderer. OpenAPI vẫn dùng Draft/diagnostic generic, Library chưa chiếu signature chuẩn, rename chưa semantic, chưa có references API, coherent LIVE join hoặc Simulation session/worker. Chi tiết §2. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm identity typed, route resolver, typed Draft/OpenAPI, signature projection, semantic refactor/reference index, diagnostic anchors; sau đó coherent LIVE join; cuối cùng Simulation session cách ly, admin-only mutation, virtual time deterministic. |
 | 5. Team phải sửa module hoặc contract nào? | `contracts/openapi/openapi.yaml`, contract/generator Programming, Go domain/application/store/HTTP, Core compiler/runtime và worker mới, React Programming workspace, systemd isolation, test/evidence. File map cụ thể ở §9. |
-| 6. Điều gì còn bị chặn? | Exact revision/hash pin của System Architect; baseline Active cũ chưa được supersede/pin theo route/mobile Target đã được Owner khóa; OpenAPI/contract chưa Active; bộ asset v2.2 mới chỉ là Candidate chưa được consumer ký/pin; R2 lifecycle/Trace coherence và R3 worker/isolation chưa có. Mỗi blocker có owner/gate/unlock ở §12. |
+| 6. Điều gì còn bị chặn? | Không còn blocker authority để viết code. R1 contract/source, R2 lifecycle/Trace coherence và R3 worker/isolation chưa được implement/verify; U13–U15, target/HIL và residual risk còn chặn verdict/release. Owner/gate/evidence ở §12. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `TC-PGM02-*` và `V-PGM02-*` ở §10, tách Host/Browser/Target/HIL/physical-I/O. Không increment nào được bật chỉ bằng docs hoặc host tests. |
 
 ### 0.1 Quy tắc đọc trạng thái
 
 - **As-Built**: chỉ điều đã xác minh trực tiếp trong source/contract tại inventory.
-- **Target Candidate**: thiết kế đề xuất, chưa phải authority để code.
+- **Target approved for implementation**: thiết kế được phép dùng để code nhưng chưa phải As-Built, M4/M5 hoặc evidence.
 - **TBD/BLOCKED**: chỉ hợp lệ khi có owner, ảnh hưởng, gate và điều kiện mở.
 - **R1/R2/R3** có capability, feature flag, verification và verdict riêng; R1
   hoàn tất không làm R2/R3 thành available.
@@ -155,7 +154,7 @@ thành As-Built runtime.
 
 | Nội dung | As-Built 2026-08-24 | Gap so với Target |
 |---|---|---|
-| Route PGM-02 | [`ProgrammingRoutes.tsx`](../../../apps/web-ui/src/features/programming/ProgrammingRoutes.tsx), `PROGRAMMING_WORKSPACE_PATHS.programs = projects/:projectId/programs`; Unified DDD/UX Active cùng dùng route theo project | Target handoff/contract dùng `/eng/programming/programs?project=...`; chưa có resolver/redirect/pin để xử lý conflict authority |
+| Route PGM-02 | [`ProgrammingRoutes.tsx`](../../../apps/web-ui/src/features/programming/ProgrammingRoutes.tsx), `PROGRAMMING_WORKSPACE_PATHS.programs = projects/:projectId/programs`; Unified DDD/UX Active cùng dùng route theo project | Target đã pin dùng `/eng/programming/programs?project=...`; resolver/redirect và tests chưa được implement |
 | Workspace shell | [`DesignWorkspacePage.tsx`](../../../apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx), `DesignWorkspacePage` mount POU tree/editor; diagnostics hiện truyền `EMPTY_DIAGNOSTICS` | Chưa có state machine EDIT/LIVE/SIMULATE và coherent data controller |
 | Typed POU tree | [`PouTree.tsx`](../../../apps/web-ui/src/features/programming/design/PouTree.tsx), Draft v2 model và nhóm PROGRAM/FUNCTION/FUNCTION_BLOCK | Deep-link/selection target phải khóa `objectId`; duplicate/navigation/refactor chưa có cross-reference contract đầy đủ |
 | Draft mutation | [`draft.go`](../../../apps/web-api/internal/programming/application/draft.go), `applyDraftOperations` migrate v1→v2 rồi validate; [`draft_v2.go`](../../../apps/web-api/internal/programming/application/draft_v2.go), `applyDraftOperationV2` hỗ trợ upsert/remove/rename/duplicate object/program/signal/binding/variable/task | OpenAPI vẫn là `ProgrammingResource` và operation generic; chưa có discriminated typed schemas/read-back v2 |
@@ -175,7 +174,7 @@ thành As-Built runtime.
 | Simulation | [`programming_core_sim_main.cpp`](../../../apps/core/application/programming/programming_core_sim_main.cpp) là host integration harness | Không phải product session; chưa có capability/API/store/worker/sandbox/RBAC/audit/quota/expiry/zero-output proof |
 | Capability | `GET /programming/capabilities` trả profile/language/type/limits/taskPeriods | Chưa có workspace increment/capability version, LIVE coherence state hoặc Simulation support flag |
 | API/client pin | HTTP router hiện có 33 Programming operations; FE generator và G1 join pin số này | R1 references route làm operation count thành 34; mọi pin/generator/consumer phải đổi atomic, không chỉnh tay FE |
-| Visual authority | Ba Candidate SVG combined/ST/FBD và manifest v2.2 hiện có trong worktree đồng thời; asset baseline desktop/mobile cũng hiện có | Candidate asset chưa được consumer review hoặc exact-hash pin; sự hiện diện file không phải approval/runtime evidence |
+| Visual authority | Ba SVG combined/ST/FBD và manifest v2.2 hiện có trong exact Candidate; asset baseline desktop/mobile cũng hiện có | Asset đã được pin cho implementation; consumer review được waive cho entry nhưng browser/a11y/runtime evidence chưa có |
 
 ### 2.1 Phân loại capability, không trộn FE với BE/Core
 
@@ -193,24 +192,25 @@ thành As-Built runtime.
 ### 3.1 Increment và dependency
 
 ```text
-CR-PROG-PGM02-V22-001
-  └─ T59-801 / PGM02-V22-WP-00: reconcile + exact-hash Candidate
-       └─ R1 EDIT Candidate: T59-802..809
+AUTH-PROG-2026-08-24-05
+  └─ T59-801 / PGM02-V22-WP-00: DONE — exact Candidate pinned
+       └─ R1 EDIT: T59-802 READY; T59-803..809 ORDERED
           / PGM02-V22-WP-01..06 + WP-10..13 (phần R1)
-            └─ R2 LIVE Candidate: T59-810..813
+            └─ R2 LIVE: T59-810..813 ORDERED after R1
                / PGM02-V22-WP-09 + PGM02-V22-WP-06
                + PGM02-V22-WP-10 + PGM02-V22-WP-11
                + PGM02-V22-WP-12 + PGM02-V22-WP-13 (phần LIVE)
-                 └─ R3 SIMULATE Candidate: T59-814..817
+                 └─ R3 SIMULATE: T59-814..817 ORDERED after R2
                     / PGM02-V22-WP-07 + PGM02-V22-WP-08
                     + PGM02-V22-WP-06 + PGM02-V22-WP-10
                     + PGM02-V22-WP-11 + PGM02-V22-WP-12
                     + PGM02-V22-WP-13 (phần SIM)
 ```
 
-`T59-802..817` chỉ là card Candidate; không card nào được coi `READY`/`ORDERED`
-trước khi `T59-801` hoàn tất và Product Owner + System Architect pin exact
-revision/hash. Sau pin chỉ promote lát R1 trước, không promote đồng thời R2/R3.
+`T59-801` đã `DONE`; `T59-802` là task `READY`. `T59-803..817` đã có execution
+authority nhưng giữ `ORDERED` theo prerequisite; scheduler không được bắt đầu
+R2 trước closeout R1 hoặc R3 trước closeout R2. Việc ba `IMPLEMENT_READY=GO`
+không đồng nghĩa chạy đồng thời ba increment.
 
 ### 3.2 Ownership theo boundary
 
@@ -322,11 +322,20 @@ Revision manifest và phải unique. FUNCTION/FUNCTION_BLOCK không được c�
 | `language` | enum | — | có | ST | ST/FBD | không null | — | profile supports | POU lifetime | v2 |
 | `source` | string/object | byte | có theo language | valid template | ST ≤65.536 byte hoặc canonical FBD | không null; empty invalid | thuộc objectId | parser/model/limits | Draft mutable, Revision immutable | typed union target |
 | `programId` | UUID | — | có cho Program config | generated | UUID v4 | null/absent cho FUNCTION/FB | runtime PK + FK objectId | unique; only PROGRAM | giữ qua rename | v2 |
-| `periodMs` | integer | ms | có cho enabled Program | policy | 1000/5000/30000 | không đoán khi unknown | scheduler config | profile enum | Draft→sealed manifest | existing profile |
-| `enabled` | boolean | — | có cho Program config | false cho Program mới | true/false | không null | — | only PROGRAM | Draft→Revision | v2 |
+| `periodMs` | integer | ms | có cho scheduled Program | policy | 1000/5000/30000 | không đoán khi unknown | scheduler config | profile enum | Draft→sealed manifest | existing profile |
 
-Quyết định `F-P59-GHOST-POU-001` về PROGRAM POU không có `programs[]` còn
-OPEN; hồ sơ này không tự chọn fail Check hay giữ Draft/exclude runtime.
+`ProgrammingProgramConfigV2` chỉ có `objectId`, `programId`, `periodMs` và các
+field scheduling đã pin; nó **không** chứa `enabled`. Enable/Disable là runtime
+intent riêng theo `SYS-REQ-PROG-113`, có RBAC/audit/Core read-back và không được
+trộn vào Draft hoặc Commission. `replaceProgramSource` resolve bằng `objectId`;
+field legacy tên `programId` chỉ là alias compatibility trong một major và phải
+map sang POU identity, không map sang runtime Program identity.
+
+`F-P59-GHOST-POU-001` đã được quyết định bởi `AUTH-PROG-2026-08-24-05`: Draft
+được phép chứa PROGRAM POU chưa có mục trong `programs[]`; Check/Package phải
+fail closed bằng `PRG-ERR-CHECK-001` với detail `ST-POU-005`, giữ Draft và
+Active/LKG, không tạo package. Cấm loại im lặng POU và cấm tổng hợp period
+`1000 ms`. Corrective source/test vẫn `PENDING` và là exit condition R1.
 
 ### 4.2 Normalized Library signature
 
@@ -340,6 +349,7 @@ OPEN; hồ sơ này không tự chọn fail Check hay giữ Draft/exclude runtim
 | `name` | IEC identifier | có | 1..64 | canonical registry name | immutable version |
 | `signatureAuthority` | enum | có | SYSTEM_REGISTRY/PROJECT_INTERFACE | producer-declared, không từ FE | target additive |
 | `signatureState` | enum | có | VERIFIED/DECLARED/UNAVAILABLE | SYSTEM hash exact→VERIFIED; normalized PROJECT→DECLARED | mismatch→UNAVAILABLE |
+| `featureState` | enum | có | READY/REVIEW_REQUIRED/UNSUPPORTED/DEPRECATED | capability/product readiness, tách khỏi signature trust | response projection |
 | `category` | string | có | bounded/i18n key | registry taxonomy | additive |
 | `labelVi`/`labelEn` | string | có | 1..120 | registry/project metadata | additive |
 | `ports[].name` | IEC identifier | có | unique | canonical signature | order immutable per version |
@@ -353,6 +363,10 @@ OPEN; hồ sơ này không tự chọn fail Check hay giữ Draft/exclude runtim
 | `stateful` | boolean | có | — | FUNCTION phải false; FB theo layout | immutable |
 | `stateLayout` | object/null | không | version/size/hash | required khi stateful publish | immutable |
 | `warningCode` | string/null | có | stable code khi unavailable/review | không chứa nội bộ | response-only |
+
+Alias compatibility `libraryVersion` được giữ một major và bắt buộc bằng
+`version`; mismatch làm response fail closed. Chỉ entry có
+`featureState=READY` và `signatureState!=UNAVAILABLE` mới được insert.
 
 SYSTEM response phải là phép chiếu chính xác của canonical `SignatureJSON` và
 registry hash. PROJECT entry cũ không normalize được trả
@@ -369,6 +383,7 @@ registry hash. PROJECT entry cũ không normalize được trả
 | `sourcePouObjectId` | UUID | mỗi item | — | FK POU | stable through rename |
 | `targetObjectId` | UUID/null | conditional | target POU | exactly one target identity | response |
 | `targetEntryId` + `targetVersion` | string/null | conditional | library target | exactly one target identity | response |
+| `targetSignalId` | UUID/null | conditional | Published Signal target | exactly one target identity | response |
 | `referenceKind` | enum | có | ST_CALL/FBD_TYPE_REF/PROGRAM_CONFIG/LIBRARY_USE/SIGNAL_BINDING | parser-resolved, không regex guess | response |
 | `location.kind` | discriminator | có | SOURCE/FBD/POU/GLOBAL | typed union | v1 target |
 | SOURCE.`pouObjectId` | UUID | có | — | FK POU | stable |
@@ -450,20 +465,19 @@ value/sequence intact.
 ### 4.7 Migration và retention
 
 - R1 minimal tính references exact trên current Draft snapshot theo request và
-  **không** tạo persisted reference index, nên không chiếm migration ordinal.
-  Nếu Architect đổi quyết định sang persisted index, file Candidate đầu tiên là
-  `0013_programming_draft_reference_index.sql`; migration phải rebuild/verify
-  content hash và không trộn vào R2.
+  **không** tạo persisted reference index.
 - Draft v1 được đọc; first successful write migrate v1→v2 trong cùng transaction.
-- Nếu R1 vẫn on-demand như thiết kế này, R3 dùng migration Target
-  `0013_programming_simulation_sessions.sql` chỉ lưu metadata/reconciliation
-  state, không lưu process image/RETAIN/source plaintext. Nếu R1 lấy `0013` cho
-  persisted reference index, R3 phải dùng
-  `0014_programming_simulation_sessions.sql`.
+- R1 dùng `0013_programming_draft_mutation_readback.sql` cho dedicated bounded
+  response snapshot để replay cùng Idempotency-Key/request hash trả **đúng full
+  typed read-back** sau restart. Không nhét Draft tối đa 2 MiB vào
+  `mutation_receipts.result_json` 4 KiB; snapshot content-addressed, có TTL và
+  cleanup toàn cục, được persist cùng Draft/receipt/audit trong một transaction.
+- R3 dùng `0014_programming_simulation_sessions.sql` chỉ lưu metadata/
+  reconciliation state, không lưu process image/RETAIN/source plaintext.
 - Migration head đã đối soát tại inventory là
   `0012_library_revision_deprecate_receipt.sql`; vì vậy `0013` là ordinal
   Candidate kế tiếp ở snapshot này. Trước khi tạo bất kỳ migration R1/R3, BE
-  phải đọc lại migration head; nếu ordinal Candidate đã bị changeset khác chiếm
+  phải đọc lại migration head; nếu ordinal đã bị changeset khác chiếm
   thì dùng ordinal trống kế tiếp và cập nhật DDD/contract/test pin, không ghi đè.
 - Session/process image/trace là ephemeral: idle 900 s, hard 3.600 s, trace tối
   đa 10.000 samples; terminal metadata/audit retention theo policy Programming
@@ -478,7 +492,7 @@ value/sequence intact.
 | `GET /api/v1/programming/projects/{projectId}` existing | BE→FE | viewer+ object scope | `draft` oneOf `ProgrammingDraftDocumentV1/V2`; typed POU/Program | Read; bounded; standard GET retry | none |
 | `PATCH /api/v1/programming/projects/{projectId}/draft` existing | FE→BE | admin | `ProgrammingDraftMutationRequest` với `operations.oneOf` discriminator `op`; response typed v2 + ETag/content hash | `If-Match` + baseRevisionId; Idempotency-Key; atomic; conflict 409 | Draft mutation + audit; no Active side effect |
 | `GET /api/v1/programming/libraries` existing | BE registry/store→FE | viewer+ | Extend `ProgrammingLibraryEntry` với normalized `signature`/authority/state | Pagination/cursor; cache by hash/version | none; mismatch→UNAVAILABLE |
-| `GET /api/v1/programming/projects/{projectId}/draft/references?targetObjectId=&cursor=&limit=` new | BE analyzer→FE/refactor | viewer+ | `ProgrammingDraftReferencesPage`: revision/etag/hash/state/items/nextCursor | Snapshot-bound; limit default 100, max 500; safe GET retry | no mutation; analysis failure state UNAVAILABLE |
+| `GET /api/v1/programming/projects/{projectId}/draft/references` new; đúng một filter `targetObjectId` hoặc `targetEntryId+targetVersion` hoặc `targetSignalId` | BE analyzer→FE/refactor | viewer+ | `ProgrammingDraftReferencesPage`: revision/etag/hash/state/items/nextCursor | Cursor bind draftRevisionId+ETag+hash+filter; limit default 100, max 500; safe GET retry | no mutation; unknown/multiple target 400; analysis failure state UNAVAILABLE |
 | Rename/remove op qua PATCH | FE→BE refactor | admin | Same Draft operation; response full typed read-back | Same ETag/idempotency; semantic plan+rewrite+validate+commit một transaction | Audit before/after identity/hash; errors below |
 | Check existing | BE/compiler→FE | admin start; viewer+ read | Diagnostic location typed union | Existing idempotency/timeout policy; compiler isolated | No Active mutation; exact anchors |
 
@@ -500,7 +514,8 @@ Schemas bắt buộc thêm vào OpenAPI:
 - `ProgrammingDiagnosticLocation` union SOURCE/FBD/POU/GLOBAL.
 
 R1 thêm một route public nên baseline 33 operations thành 34. Router, OpenAPI,
-`g1_contract_join_v1.json`, impact manifest, Go/TS generated client và tests
+`g1_contract_join_v1.json`, impact manifest, typed Go DTO + OpenAPI contract-sync
+tests và generated TS client
 phải đổi trong cùng changeset; không chấp nhận chỉnh magic count đơn lẻ.
 
 ### 5.2 R1 semantic rename/delete
@@ -512,7 +527,8 @@ Stable errors:
 | `PRG-ERR-CONFLICT-001` | 409 | ETag/baseRevision đổi | zero mutation | GET read-back, rebase, user retry |
 | `PRG-ERR-POU-REFERENCED-001` | 409 | Delete target còn semantic reference | zero mutation; trả bounded reference summary/link | mở References, remove refs, retry |
 | `PRG-ERR-POU-REFACTOR-UNAVAILABLE-001` | 422 | Parser/source-map/graph không chứng minh rewrite an toàn | zero mutation | sửa Draft/Check hoặc refresh; không regex fallback |
-| Existing validation code | 422 | New name/kind/source invalid/duplicate | zero mutation | sửa input |
+| Request malformed/type/envelope | 400 | JSON sai, thiếu field/discriminator, sai primitive type | zero mutation | sửa request |
+| Existing semantic validation code | 422 | New name/kind/source invalid/duplicate sau khi request parse được | zero mutation | sửa input |
 
 Rename phải rewrite cùng transaction: declaration name, resolved ST call,
 FBD root/typeRef và metadata; giữ `objectId`, `programId`, `nodeId`, `portId`,
@@ -542,9 +558,9 @@ Không bắt buộc thêm “Active source endpoint” nếu chuỗi hiện có 
 LIVE luôn read-only trong PGM-02, kể cả admin; không expose force/override/
 commission action trong mode này.
 
-### 5.4 R3 Simulation API Target Candidate
+### 5.4 R3 Simulation API Target
 
-Các path dưới đây chưa tồn tại và chỉ được thêm ở R3 sau pin:
+Các path dưới đây chưa tồn tại và chỉ được thêm ở R3 sau khi dependency R1/R2 đóng:
 
 | Method/path | RBAC | Payload/response | Concurrency/idempotency | Timeout/retry | Side effect/audit |
 |---|---|---|---|---|---|
@@ -641,7 +657,7 @@ Mode switch không tự Save, Commission, Restore hoặc copy data giữa các a
 ```text
 applyDraftMutation(projectId, ifMatch, baseRevisionId, operations, idempotencyKey):
   authenticate admin; authorize project scope
-  lookup idempotency receipt; same requestHash => return same read-back
+  lookup idempotency receipt; same requestHash => return same full typed read-back snapshot
   begin database transaction
   load Draft bytes + current ETag; mismatch => rollback CONFLICT
   migrate v1 -> v2 in memory if required
@@ -661,7 +677,7 @@ applyDraftMutation(projectId, ifMatch, baseRevisionId, operations, idempotencyKe
           apply typed operation
   validate complete Draft v2 + references + limits
   canonicalize; compute contentSha256 and new ETag
-  persist Draft + idempotency receipt + audit in one transaction
+  persist Draft + bounded read-back snapshot + idempotency receipt + audit in one transaction
   commit
   return typed document v2 + ETag + auditId + correlationId
 ```
@@ -676,6 +692,7 @@ state; security reject vẫn có security audit riêng.
 insertLibraryEntry(entryIdentity, selectedPouObjectId, editorSelection):
   require mode=EDIT and effectivePermission.canMutateDraft
   load exact signature(scope, entryId, version, contentSha256)
+  require featureState == READY
   require signatureState != UNAVAILABLE and language/kind supported
   resolve polymorphic type; cancellation => zero mutation
   build one editor transaction:
@@ -951,8 +968,8 @@ ProgrammingLayout
 | <768 px | Read-only source/status/diagnostics; không authoring/session mutation | Không |
 
 Baseline Active hiện cho phép một số short edit trên mobile, trong khi Target
-Candidate khóa read-only dưới 768 px. Đây là blocker authority
-`OD-PGM02-V22-003`, không được quyết bằng code trước pin.
+Target đã pin khóa read-only dưới 768 px. Implementation phải bám đúng quyết
+định này; không được mở mutation control bằng lựa chọn cục bộ ở FE.
 
 ### 7.6 Accessibility, token và i18n
 
@@ -1044,6 +1061,7 @@ Hiện chưa có Test Result này; `V-PGM02-SIM-ISO-01` là kế hoạch, không
 | Sửa | `apps/web-api/internal/programming/application/draft_v2.go` | semantic refactor entrypoint | parser/analyzer exact | regex rename |
 | Tạo | `apps/web-api/internal/programming/application/references.go` | snapshot reference service | compiler source graph | FE-computed refs |
 | Tạo | `apps/web-api/internal/programming/application/refactor.go` | plan/validate/apply atomic | Draft transaction | partial writes |
+| Tạo | `apps/web-api/internal/programming/store/migrations/0013_programming_draft_mutation_readback.sql` | bounded full typed replay snapshot + TTL index | SQLite transaction/content hash | nhét Draft 2 MiB vào receipt 4 KiB |
 | Sửa | `apps/web-api/internal/programming/application/library.go` | signature projection | domain SignatureJSON | FE registry fallback |
 | Tạo | `apps/web-api/internal/programming/transport/http/references.go` | GET references | auth/router patterns | mutation qua GET |
 | Sửa | `apps/web-api/internal/programming/transport/http/{router,library,checks}.go` | new route/typed response | existing middleware | bypass RBAC/audit |
@@ -1074,7 +1092,7 @@ Hiện chưa có Test Result này; `V-PGM02-SIM-ISO-01` là kế hoạch, không
 | Tạo | `apps/web-api/internal/programming/domain/simulation.go` | session/action/input/errors | domain primitives | HTTP/process handles |
 | Tạo | `apps/web-api/internal/programming/application/simulation.go` | supervisor use cases/state | compiler + private worker client | Core mutation client |
 | Tạo | `apps/web-api/internal/programming/transport/http/simulation.go` | Candidate endpoints/RBAC | existing auth/audit | FE role authority |
-| Tạo khi R1 on-demand | `apps/web-api/internal/programming/store/migrations/0013_programming_simulation_sessions.sql` | reconciliation metadata; dùng `0014...` nếu persisted reference index đã chiếm `0013` | SQLite transaction | process image/secret/source blob |
+| Tạo | `apps/web-api/internal/programming/store/migrations/0014_programming_simulation_sessions.sql` | reconciliation metadata sau migration R1 read-back `0013` | SQLite transaction | process image/secret/source blob |
 | Tạo | `apps/web-api/internal/programming/simworker/*` | private protocol/supervisor | Unix socket/pipe, peer creds | production Core/iobus socket |
 | Tạo | `apps/core/application/programming/programming_sim_worker_main.cpp` | `mkddc-programming-sim-worker` | compiler/artifact executor interfaces | OutputWriter/device/production SHM |
 | Tạo | `apps/core/application/programming/simulation/*` | private scheduler/clock/images | deterministic runtime primitives | singleton production state |
@@ -1192,7 +1210,8 @@ available. Rollback R2/R3 không tắt Core control hoặc đổi Active/LKG.
 2. Merge OpenAPI schemas + generators + compatibility tests.
 3. Deploy BE typed response/reference/refactor/signature với capability false.
 4. Deploy FE consumer/route resolver/assets với flag false.
-5. Chạy migration-free R1 tests, real-BE browser/read-back.
+5. Chạy migration/restart/expiry R1 tests và real-BE browser/read-back; replay
+   cùng key/hash phải trả cùng full typed resource content.
 6. Bật canary capability/flag; quan sát; sau approval mới mở rộng.
 
 **R2**
@@ -1250,32 +1269,32 @@ available. Rollback R2/R3 không tắt Core control hoặc đổi Active/LKG.
 
 ## 12. Blocker, risk, lịch sử và phê duyệt — `DD-13`
 
-### 12.1 Open decision/blocker
+### 12.1 Disposition thiết kế và evidence còn mở
 
-| ID / Blocker | Owner | Ảnh hưởng | Gate | Điều kiện mở khóa |
+| ID / trạng thái | Owner | Ảnh hưởng | Gate | Điều kiện đóng implementation/evidence |
 |---|---|---|---|---|
-| `OD-PGM02-V22-001` — exact revision/hash baseline chưa được Architect pin | Product Owner + System Architect; Document Control hỗ trợ | Toàn bộ Candidate; không authority code | `T59-801`, `PLAN_READY[PGM02-V22]` | Review không còn P0 conflict; pin manifest 17 hồ sơ Markdown và ghi candidate Git commit SHA bao trùm Product/SRS/Architecture/DDD/UX/assets/contracts/ADR/handoff/Risk/Trace/VVP/Plan59; harness/pin PASS |
-| `OD-PGM02-V22-002` — route Active `projects/:id/programs` lệch Target Owner đã khóa `/eng/programming/programs?project=...` | System Architect + FE Lead | R1 resolver/deep links | `T59-801`/R1 | Architect review/supersede baseline cũ và pin đúng canonical route, redirect/query behavior cùng tests; không mở lại lựa chọn Product |
-| `OD-PGM02-V22-003` — mobile short-edit Active lệch Target Owner đã khóa read-only `<768` | System Architect + UX Lead | DD-08/R1 responsive/safety | `T59-801`/R1 | Architect pin disposition đã khóa, asset desktop/mobile và a11y tests; không cho mutation control dưới 768 px |
-| `OD-PGM02-V22-004` — bộ asset/manifest v2.2 đã có ở worktree nhưng chưa consumer-review/exact-hash pin | UX Lead + Document Control | FBD/ST visual implementation authority | `T59-801`, `M3`, R1 | Review ba SVG gồm states/ports/wires/responsive/focus; pin manifest/revision/hash; link/harness PASS; UX/FE reviewer ký |
-| `OD-PGM02-V22-005` — R1 OpenAPI/typed schemas/reference/signature/refactor chưa Active | BE Lead + Compiler Lead; System Architect review | R1 code NO-GO | `IMPLEMENT_READY[PGM02-R1]` | Contract/generated clients/stable errors/operation pin + positive/negative/fault tests được review/pin |
-| `OD-PGM02-V22-006` — LIVE lifecycle/Trace coherence chưa chứng minh | Core/Runtime + BE Lead | R2 source/value truth | `IMPLEMENT_READY[PGM02-R2]` | Safe-boundary atomic lifecycle, active/artifact pin, monotonic observation, Trace termination, TSAN/fault và target read-back evidence |
-| `OD-PGM02-V22-007` — Simulation là scope Target mới; SRS/Architecture/OpenAPI/worker/policy chưa Active | Product + System Architect + Security + Runtime | Toàn R3 | `IMPLEMENT_READY[PGM02-R3]` | Disposition `DDO-PGM02-010..014` vào SRS/Architecture; pin API/worker/isolation/RBAC/audit/limits; security review |
-| `OD-PGM02-V22-008` — target/HIL/physical isolation/release evidence chưa có | QA/V&V + Test Authority + Controls/Safety + Release Authority | Không được claim R2/R3/release PASS | R2/R3 acceptance; `RELEASE_READY` | Chạy signed Test Results trên exact binaries/config/hash; risk residual disposition; release approval |
-| `F-P59-GHOST-POU-001` — PROGRAM POU thiếu `programs[]` chưa có product decision | Product Owner/CTO + Architect/Compiler/BE/Core | Draft→Check→package semantics R1 | `IMPLEMENTATION_CLOSE` và affected R1 contract | Owner chọn policy; đồng bộ SRS/DDD/contract/packager/tests |
+| `OD-PGM02-V22-001 — RESOLVED` | Product Owner/CTO + System Architect | Exact authority revision | `T59-801=DONE`; `PLAN_READY=PASS` | Candidate review input ở `413a043`; revision post-authorization được khóa bởi manifest v1.49 + SHA-256 ngoài manifest trong `DEC-PROG-REGISTER-001` §1.2; thay đổi tiếp theo đi qua change control |
+| `OD-PGM02-V22-002 — RESOLVED` | System Architect + FE Lead | R1 resolver/deep links | R1 | Implement canonical route `/eng/programming/programs?project=...`, redirect/query behavior và tests; không mở lại lựa chọn Product |
+| `OD-PGM02-V22-003 — RESOLVED` | System Architect + UX Lead | DD-08/R1 responsive/safety | R1 | Implement asset desktop/mobile cùng a11y tests; dưới 768 px có 0 mutation control |
+| `OD-PGM02-V22-004 — AUTHORIZED` | UX Lead + Document Control | FBD/ST visual authority | M3/R1 | Consumer review được `WAIVED FOR IMPLEMENTATION`; vẫn phải test states/ports/wires/responsive/focus trước verdict R1 |
+| `OD-PGM02-V22-005 — IMPLEMENTATION PENDING` | BE Lead + Compiler Lead | R1 contract/source | R1 closeout | Contract/generated clients/stable errors/operation pin + positive/negative/fault tests |
+| `OD-PGM02-V22-006 — IMPLEMENTATION/EVIDENCE PENDING` | Core/Runtime + BE Lead | R2 source/value truth | R2 closeout | Safe-boundary atomic lifecycle, active/artifact pin, monotonic observation, Trace termination, TSan/fault và target read-back evidence |
+| `OD-PGM02-V22-007 — DESIGN RESOLVED / IMPLEMENTATION PENDING` | Product + System Architect + Security + Runtime | Toàn R3 | R3 closeout | `ADR-053` Accepted; implement API/worker/isolation/RBAC/audit/limits và hậu kiểm security |
+| `OD-PGM02-V22-008 — EVIDENCE PENDING` | QA/V&V + Test Authority + Controls/Safety + Release Authority | Không được claim R2/R3/release PASS | R2/R3 acceptance; `RELEASE_READY` | Chạy signed Test Results trên exact binaries/config/hash; risk residual disposition; release approval |
+| `F-P59-GHOST-POU-001 — DECISION RESOLVED / IMPLEMENTATION PENDING` | Product Owner/CTO + Architect/Compiler/BE/Core | Draft→Check→package semantics R1 | `IMPLEMENTATION_CLOSE` và R1 closeout | Draft cho phép POU chưa schedule; Check/Package fail closed `PRG-ERR-CHECK-001` + `ST-POU-005`; implement packager/tests, cấm exclude/synthesize 1000 ms |
 
-`candidate_pin_check.py` chỉ xác minh bytes của 17 hồ sơ Markdown trong manifest
-authority. Nó **không** ghim contract/schema, `ADR-053`, handoff manifest hoặc ba
-SVG. Vì commit không thể tự ghi SHA của chính nó, record phê duyệt sau review
-phải ghi candidate Git commit SHA được bàn giao; SHA đó là pin bao trùm các file
-ngoài manifest. Thiếu một trong hai lớp pin này thì `PLAN_READY[PGM02-V22]` vẫn
-`PENDING`, dù kết quả 17/17 đang PASS.
+`candidate_pin_check.py` xác minh bytes của 17 hồ sơ Markdown trong manifest;
+exact Candidate Git `413a043748dce3b44d2c5076412de761760ba17a` là pin bao
+trùm contract/schema, `ADR-053`, handoff manifest và ba SVG theo
+`AUTH-PROG-2026-08-24-05`. Hai lớp pin đã mở `PLAN_READY`; mọi revision tiếp theo
+phải cập nhật manifest/change record nhưng không được tự suy Test Result hay
+release PASS.
 
 ### 12.2 Risk register Candidate
 
 | Risk | Xác suất / mức độ | Control thiết kế | Residual hiện tại | Owner / gate / evidence |
 |---|---|---|---|---|
-| Authority drift route/mobile/simulation | Cao / P0 | exact-hash baseline, scoped flags | Cao, open | Architect + Product / T59-801 / pin report |
+| Authority drift route/mobile/simulation | Cao / P0 | exact-hash baseline, scoped flags | Cao, open | Architect + Product / AUTH-05 + từng increment / implementation và regression evidence |
 | objectId/programId join nhầm | Trung bình / P0 | typed identity + sealed mapping + tuple | Cao tới khi R2 test | BE+Core / R1/R2 / ID+LIVE tests |
 | Rename làm source không compile hoặc sai reference | Cao / P0 | exact graph, atomic plan, fail closed | Cao tới R1 | Compiler+BE / R1 / REF tests |
 | SYSTEM signature lệch FE/BE/compiler | Trung bình / P0 | registry projection/hash, no fallback | Trung bình | Compiler+BE / R1 / QL-01 |
@@ -1295,10 +1314,11 @@ Không residual nào được hạ chỉ vì hồ sơ Candidate được tạo.
 
 ```text
 CR-PROG-PGM02-V22-001
-  → T59-801 / PGM02-V22-WP-00
+  → AUTH-PROG-2026-08-24-05 / exact Candidate 413a043... / T59-801 DONE
   → 7 canonical SRS requirement PGM-02 + DDO-PGM02-001..015 nội bộ
-  → PGM02-WORKSPACE-V1 Candidate + OpenAPI Target
-  → T59-802..809 R1 → T59-810..813 R2 → T59-814..817 R3 (Candidate)
+  → PGM02-WORKSPACE-V1 Target + OpenAPI Target
+  → T59-802 READY; T59-803..809 R1 ORDERED
+  → T59-810..813 R2 ORDERED → T59-814..817 R3 ORDERED
   → TC-PGM02-* / V-PGM02-* 10
   → Host | Browser | Target | HIL | Physical-I/O Test Results
   → Risk residual disposition
@@ -1310,6 +1330,7 @@ CR-PROG-PGM02-V22-001
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 0.3 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; nâng đúng `M3 REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`, mở R1/R2/R3 theo dependency; chốt `F-P59-GHOST-POU-001` fail closed `ST-POU-005`; giữ consumer review waived, U13–U15 NOT_RUN và release NO-GO. |
 | 0.2-candidate | 2026-08-24 | Khóa quy tắc exact pin hai lớp: manifest cho 17 hồ sơ Markdown và candidate Git commit SHA cho contract/schema/ADR/handoff/SVG; cấm dùng pin check 17/17 một mình để mở `PLAN_READY` hoặc code |
 | 0.1 | 2026-08-24 | Tạo Detailed Design Target Candidate cho `PGM02-V22-WP-00`; source-map As-Built; contract/state/test/rollback R1 EDIT → R2 LIVE → R3 SIMULATE; giữ exact-hash pin và downstream gates PENDING/NO-GO |
 
@@ -1317,38 +1338,37 @@ CR-PROG-PGM02-V22-001
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|
-| Người soạn `PGM02-V22-WP-00` | SELF-REVIEWED Candidate | DD-01..13 tự kiểm; link/source/harness report đính kèm change-set |
-| Product Owner/CTO | **PENDING cho revision hồ sơ này** | Xác nhận requirement/scope/route/mobile/Simulation derived; approval CR chỉ mở `PGM02-V22-WP-00`, không thay chữ ký này |
-| System Architect | **PENDING/BLOCKED** | Review và pin exact revision/hash của toàn reconciled baseline |
-| FE/UX Lead | PENDING | Component/route/responsive/a11y + đủ asset renderable/hash |
-| BE/Compiler/Core/Security | PENDING | Contract/ownership/isolation/error/forbidden dependency review |
-| QA/V&V/Test Authority | PENDING | Test matrix/evidence class/target-HIL plan được duyệt |
+| Người soạn `PGM02-V22-WP-00` | SELF-REVIEWED M3 | DD-01..13 tự kiểm; link/source/harness report đính kèm change-set |
+| Product Owner/CTO + System Architect | **AUTHORIZED FOR IMPLEMENTATION — Phạm Đình Chương, 2026-08-24** | `AUTH-PROG-2026-08-24-05`; exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; không phải chữ ký M4/M5/Test Result |
+| FE/UX Lead | **WAIVED FOR IMPLEMENTATION** | Hậu kiểm component/route/responsive/a11y/asset trong R1; không chặn code |
+| BE/Compiler/Core/Security | **WAIVED FOR IMPLEMENTATION** | Hậu kiểm contract/ownership/isolation/error/forbidden dependency theo increment |
+| QA/V&V/Test Authority | **WAIVED FOR IMPLEMENTATION; EVIDENCE PENDING** | U13–U15 giữ NOT_RUN; chỉ Test Authority được ký kết quả |
 | Release Authority | NO-GO | Các increment qua gate, signed Test Results, risk residual và release package |
 
 ## 13. Tự kiểm `DD-01..DD-13`
 
 | Mã | Kết quả | Mục trong file / lý do |
 |---|---|---|
-| `DD-01` Metadata | PASS | Metadata, authority/disposition, evidence class, gate, revision history và sign-off đều có; trạng thái chỉ M2 Target Candidate |
+| `DD-01` Metadata | PASS | Metadata, exact Candidate, authority/disposition, evidence class, gate, revision history và sign-off đều có; trạng thái đúng M3, không nâng M4/M5 |
 | `DD-02` Mục tiêu/phạm vi | PASS | `1` có outcome, actor/use case, in/out scope, constraints và success theo increment |
 | `DD-03` As-Built | PASS | `2` dẫn file/symbol/route/schema có thật và tách Candidate/runtime gap |
 | `DD-04` Target ownership | PASS | `3` khóa owner/input/output/consumer/process/thread/deployment/failure boundary |
 | `DD-05` Data từng field | PASS | `4` định nghĩa Draft, Library, reference/anchor, LIVE tuple, session/input/observation, null/lifecycle/migration |
 | `DD-06` Interface | PASS | `5` có path/payload/RBAC/timeout/retry/idempotency/concurrency/error/side effect/audit/compatibility |
 | `DD-07` State/algorithm/timing | PASS | `6` có mode/session, transaction, LIVE join, GCD/Step, atomicity, resource, crash/restart/power path |
-| `DD-08` UX hoặc operation flow | PASS | `7` có route, cây component, field/API/state/action/RBAC/copy, ba SVG Candidate renderable, responsive/a11y và luồng lỗi; approval/pin asset cùng conflict mobile được theo dõi ở `OD-PGM02-V22-003/004`, không bị nhầm thành As-Built |
+| `DD-08` UX hoặc operation flow | PASS | `7` có route, cây component, field/API/state/action/RBAC/copy, ba SVG Target renderable, responsive/a11y và luồng lỗi; asset đã được pin cho implementation, consumer review/test còn theo R1 và không bị nhầm thành As-Built |
 | `DD-09` Error/safety/security | PASS | `8` có detect/code/held state/recovery/audit, malicious inputs, zero-output evidence plan |
 | `DD-10` Repository mapping | PASS | `9` nêu file/symbol cần tạo/sửa, dependency được phép/bị cấm và test map |
 | `DD-11` Verification | PASS | `10` có derived requirement→fixture/negative/fault/định lượng/evidence/pass authority; đây là kế hoạch, chưa claim result |
 | `DD-12` Compatibility/deploy/rollback | PASS | `11` có flags/default, order, partial deploy, backup/restart/rollback trigger và dữ liệu giữ |
-| `DD-13` Trace/risk/decision/sign-off | **BLOCKED** | Owner: Product Owner + System Architect; ảnh hưởng: authority toàn Candidate và mọi downstream task; gate: `T59-801/PLAN_READY[PGM02-V22]`; mở khóa: resolve P0 authority conflicts, review/pin exact revision/hash toàn baseline, harness/candidate pin PASS và các consumer ký |
+| `DD-13` Trace/risk/decision/sign-off | PASS ở lớp M3/authority | `12` ghi exact pin, risk, decision, waiver và sign-off; consumer review/Test Result/residual vẫn pending đúng lớp và không chặn implementation theo `AUTH-PROG-2026-08-24-05` |
 
 ### 13.1 Verdict của hồ sơ
 
-- Maturity tự đánh giá: **`M2 — DRAFT CONTENT / TARGET CANDIDATE`**.
-- Không claim `M3 REVIEW READY` vì `DD-13` còn BLOCKED và baseline Candidate
-  đang chờ review/pin exact revision/hash.
-- Không claim As-Built cho R1/R2/R3, không claim Architect approval,
-  `PLAN_READY`, `IMPLEMENT_READY`, target/HIL, physical I/O hoặc release PASS.
-- Hành động hợp lệ tiếp theo thuộc `T59-801` là review/reconcile/pin tài liệu và
-  contract Candidate; production code vẫn NO-GO.
+- Maturity tự đánh giá: **`M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`**.
+- Không claim `M4 REVIEW CLOSED` hoặc `M5 APPROVED`; consumer/discipline review
+  còn `WAIVED FOR IMPLEMENTATION`, không được điền giả chữ ký.
+- Không claim As-Built, Test Result, CI, target/HIL, physical I/O hoặc release
+  PASS cho R1/R2/R3; `RELEASE_READY=NO-GO`.
+- `T59-801=DONE`, `T59-802=READY`; các task sau `ORDERED` và chỉ được thực thi
+  khi dependency R1→R2→R3 thỏa.

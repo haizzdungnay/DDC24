@@ -3,18 +3,18 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-PGM02-ST-FBD-REDESIGN-REVIEW-001` |
-| Phiên bản | 1.3 |
-| Trạng thái | **Supporting record — Owner approved change request; `T59-801`/`PGM02-V22-WP-00` REVIEW; Architect exact pin PENDING** |
+| Phiên bản | 1.4 |
+| Trạng thái | **Supporting record — exact-pinned by `AUTH-PROG-2026-08-24-05`; `T59-801` DONE, `T59-802` READY** |
 | Ngày rà soát | 2026-08-24 |
 | Phạm vi | PGM-02 Programs, ST Editor, FBD Editor, Quick Library, EDIT/SIMULATE/LIVE |
 | Mốc mã nguồn | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` (`main`) |
 | Người rà soát | Agent Leader — đối chiếu FE, BE, Core/runtime và browser host |
-| Người duyệt | Product Owner/CTO — đã duyệt hướng thay đổi; System Architect — `PENDING` review/pin baseline |
+| Người duyệt | Phạm Đình Chương — Product Owner/CTO + System Architect, electronic authorization `AUTH-PROG-2026-08-24-05` |
 | Tài liệu triển khai kèm theo | [PGM02_ST_FBD_IMPLEMENTATION_PLAN.md](PGM02_ST_FBD_IMPLEMENTATION_PLAN.md) |
 | Change request chủ quản | [`CR-PROG-PGM02-V22-001`](../../../00_governance/PROGRAMMING_OPEN_DECISIONS.md) |
-| Task thực thi duy nhất đang mở | [`T59-801`](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) — reconciliation only |
-| Quyền thực thi | Plan59 vẫn là tracker duy nhất; `T59-801` đang `REVIEW` gói Candidate đã tạo, chưa mở task downstream hay code production |
-| Gate hiện hành | Owner disposition: **APPROVED**; Architect baseline review/pin: **PENDING**; `T59-801`: **REVIEW**; R1/R2/R3 code: **NO-GO**; `RELEASE_READY`: **NO-GO** |
+| Task thực thi hiện hành | [`T59-802`](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) — R1 shell/route/mobile |
+| Quyền thực thi | Plan59 là tracker/scheduler duy nhất; R1/R2/R3 đều có entry authority nhưng chỉ task đủ predecessor được READY |
+| Gate hiện hành | `PLAN_READY=PASS`; `IMPLEMENT_READY[R1|R2|R3]=GO`; `T59-801=DONE`; `T59-802=READY`; `RELEASE_READY=NO-GO` |
 
 > Phân loại bằng chứng: kết quả browser/build/test trong hồ sơ này là **HOST**.
 > Không có bằng chứng board/HIL/physical I/O/timing/power-loss mới và không được
@@ -778,16 +778,15 @@ test; breaking change cần version/migration riêng.
 S/L dùng thang 1–5; residual chỉ được hạ sau evidence tương ứng, không hạ bằng
 kế hoạch này.
 
-## 15. Hồ sơ quyết định của Owner
+## 15. Hồ sơ quyết định Owner + System Architect
 
-Ngày 2026-08-24, Product Owner/CTO chấp thuận trực tiếp cả ba đề xuất dưới đây và
-yêu cầu team tiến hành triển khai. Quyết định này mở WP-00; nó không giả chữ ký
-System Architect và không thay bước review/pin baseline reconciled tại
-`G-PGM02-00`:
+Ngày 2026-08-24, Phạm Đình Chương trong vai trò Product Owner/CTO + System
+Architect chấp thuận trực tiếp cả ba đề xuất dưới đây, exact-pin Candidate
+`413a043748dce3b44d2c5076412de761760ba17a` và yêu cầu team triển khai:
 
-1. **Chấp thuận target/change request v2.2 để mở WP-00 reconciliation.** Đây chỉ
-   là quyền lập baseline; sau WP-00, Owner + Architect phải review/pin hash của
-   Product/SRS/DDD/UX/asset/manifest/Plan59 đã đồng bộ rồi mới cho phép code.
+1. **Chấp thuận target/change request v2.2 và hoàn tất WP-00 reconciliation.**
+   Product/SRS/DDD/UX/asset/manifest/Plan59 ở Candidate đã được exact-pin; R1 có
+   thể bắt đầu bằng `T59-802`.
 2. **Phê duyệt packaging theo ba release increment có gate độc lập:**
    `R1 EDIT workspace` → `R2 coherent LIVE` → `R3 isolated SIMULATE`.
    Việc R1/R2 hoàn tất không được làm UI giả rằng R3 đã có; release site thật
@@ -801,16 +800,17 @@ giữ FBD domain/reducer, coherent revision join, trace mailbox, process sandbox
 compiler-generated virtual-input allowlist, multi-task Step semantics,
 CodeMirror/canvas adapter spike, keying/throttling và test strategy.
 
-Authority chuẩn của quyết định này là `CR-PROG-PGM02-V22-001`; task duy nhất được
-mở là `T59-801`/`PGM02-V22-WP-00`. Record này không thay chữ ký Architect và
-không cấp quyền triển khai R1/R2/R3.
+Authority chuẩn của quyết định này là `AUTH-PROG-2026-08-24-05` gắn với
+`CR-PROG-PGM02-V22-001`. R1/R2/R3 có entry authority nhưng thực thi tuần tự theo
+Plan59; `RELEASE_READY` không được suy ra từ record supporting này.
 
-**OWNER APPROVED — T59-801 REVIEW; ARCHITECT EXACT BASELINE PIN PENDING**
+**OWNER + ARCHITECT APPROVED — EXACT CANDIDATE `413a043`; T59-802 READY**
 
 ### Revision history
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.4 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: exact pin Candidate `413a043`, hoàn tất `T59-801`, mở R1/R2/R3 theo dependency và chuyển `T59-802` READY; release vẫn NO-GO. |
 | 1.3 | 2026-08-24 | Đồng bộ output WP-00: gói Candidate đã được tạo và `T59-801` chuyển `REVIEW`; Architect exact pin cùng toàn bộ quyền code downstream vẫn `PENDING/NO-GO` |
 | 1.2 | 2026-08-24 | Nối record vào `CR-PROG-PGM02-V22-001` và `T59-801`, chuẩn hóa namespace `PGM02-V22-WP-*`, tách rõ Owner approved khỏi Architect `PENDING`; chỉ mở reconciliation, không mở code R1/R2/R3 |
 | 1.1 | 2026-08-24 | Ghi nhận Owner chấp thuận target/change request, ba increment `R1 EDIT → R2 LIVE → R3 SIMULATE` và Simulation v1 admin-only; mở WP-00 nhưng chưa pin baseline reconciled hoặc mở release gate |

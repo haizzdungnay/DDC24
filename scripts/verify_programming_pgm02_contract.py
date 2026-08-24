@@ -22,6 +22,8 @@ PIN_PATHS = {
     "openapiSha256": ROOT / "contracts/openapi/openapi.yaml",
     "programmingIpcSha256": ROOT / "contracts/ipc/programming_v1/schema.json",
 }
+APPROVED_CANDIDATE_COMMIT = "413a043748dce3b44d2c5076412de761760ba17a"
+APPROVED_AUTHORITY = "AUTH-PROG-2026-08-24-05"
 
 
 def digest(path: pathlib.Path) -> str:
@@ -43,16 +45,42 @@ def validate_semantics(contract: dict[str, Any], *, check_pins: bool = True) -> 
     simulation = contract["simulation"]
     nfr = contract["nfr"]
 
-    if authority["architectDisposition"] != "PENDING_EXACT_REVISION_PIN":
-        errors.append("WP-00 candidate không được tự nhận Architect đã pin")
-    if set(authority["implementReady"].values()) != {"NO_GO"}:
-        errors.append("R1/R2/R3 phải giữ NO-GO trước exact revision pin")
+    if contract["approvedCandidateCommit"] != APPROVED_CANDIDATE_COMMIT:
+        errors.append("contract không ghim đúng candidate commit đã được AUTH phê duyệt")
+    if authority["authorization"] != APPROVED_AUTHORITY:
+        errors.append("contract không trỏ đúng authority record đã mở implementation")
+    if authority["architectDisposition"] != "APPROVED_EXACT_REVISION_PIN":
+        errors.append("System Architect disposition phải khớp AUTH exact pin")
+    if authority["planReady"] != "PASS":
+        errors.append("PLAN_READY phải PASS sau AUTH toàn plan")
+    if set(authority["implementReady"].values()) != {"GO"}:
+        errors.append("AUTH toàn plan phải mở R1/R2/R3; runner vẫn kiểm dependency tuần tự")
     if set(modes["allowed"]) != {"EDIT", "LIVE", "SIMULATE"}:
         errors.append("mode set phải đúng EDIT/LIVE/SIMULATE")
-    if set(quick_library["signatureStates"]) != {"READY", "REVIEW_REQUIRED", "UNAVAILABLE"}:
-        errors.append("Quick Library phải phân biệt READY/REVIEW_REQUIRED/UNAVAILABLE")
+    if set(quick_library["featureStates"]) != {"READY", "REVIEW_REQUIRED", "UNSUPPORTED", "DEPRECATED"}:
+        errors.append("Quick Library phải phân biệt feature state với signature authority")
+    if set(quick_library["signatureStates"]) != {"VERIFIED", "DECLARED", "UNAVAILABLE"}:
+        errors.append("Quick Library signature phải phân biệt VERIFIED/DECLARED/UNAVAILABLE")
+    if set(quick_library["signatureAuthorities"]) != {"SYSTEM_REGISTRY", "PROJECT_INTERFACE"}:
+        errors.append("Quick Library signature thiếu producer authority")
+    required_library_fields = {
+        "entryId", "name", "kind", "version", "libraryVersion", "scope",
+        "category", "descriptionKey", "labelVi", "labelEn", "aliases",
+        "signatureAuthority", "signatureState", "featureState", "warningCode",
+        "ports", "stateful", "stateLayout", "supportedLanguages", "contentSha256",
+    }
+    if set(quick_library["publicFields"]) != required_library_fields:
+        errors.append("Quick Library public projection thiếu normalized signature hoặc compatibility alias")
     if quick_library["unavailableFallback"]:
         errors.append("Quick Library không được suy đoán signature khi authority UNAVAILABLE")
+    expected_unscheduled = {
+        "unscheduledProgramPouPolicy": "DRAFT_ALLOWED_CHECK_PACKAGE_FAIL_CLOSED",
+        "publicError": "PRG-ERR-CHECK-001",
+        "detailCode": "ST-POU-005",
+        "synthesizedPeriodMs": False,
+    }
+    if edit["check"] != expected_unscheduled:
+        errors.append("PROGRAM POU chưa schedule phải được giữ ở Draft nhưng Check/Package fail-closed, không tự đặt chu kỳ")
     expected_operations = {
         "setFunctionalTags", "replaceProgramSource", "upsertObject", "removeObject",
         "renameObject", "duplicateObject", "upsertProgram", "removeProgram",
@@ -69,12 +97,35 @@ def validate_semantics(contract: dict[str, Any], *, check_pins: bool = True) -> 
     }
     if set(edit["draft"]["typedSchemas"]) != required_typed_schemas:
         errors.append("OpenAPI Draft thiếu typed schema bắt buộc")
+    if edit["draft"]["sourceRepresentation"] != {"ST": "STRING", "FBD": "CANONICAL_OBJECT"}:
+        errors.append("Draft source phải là typed union ST string/FBD canonical object")
+    if set(edit["draft"]["programConfigFields"]) != {"objectId", "programId", "periodMs"}:
+        errors.append("Program config không được trộn runtime enable intent vào Draft")
+    if not edit["draft"]["runtimeEnableIntentSeparate"]:
+        errors.append("Enable/Disable phải là runtime intent riêng")
+    if edit["draft"]["replaceProgramSourceIdentity"] != "objectId":
+        errors.append("replaceProgramSource phải resolve POU bằng objectId")
+    if (edit["draft"]["malformedRequestStatus"], edit["draft"]["semanticValidationStatus"]) != (400, 422):
+        errors.append("malformed request 400 và semantic validation 422 phải tách biệt")
+    if edit["draft"]["idempotencyReplay"] != "FULL_TYPED_READ_BACK":
+        errors.append("idempotency replay phải trả lại full typed read-back")
     if set(edit["pouRefactor"]["stableErrors"]) != {
         "PRG-ERR-POU-REFERENCED-001", "PRG-ERR-POU-REFACTOR-UNAVAILABLE-001",
     }:
         errors.append("semantic refactor thiếu mã lỗi ổn định")
     if set(edit["references"]["states"]) != {"READY", "UNAVAILABLE"}:
         errors.append("reference query phải fail-closed READY/UNAVAILABLE")
+    expected_reference_queries = {
+        "targetObjectId", "targetEntryId", "targetVersion", "targetSignalId", "cursor", "limit",
+    }
+    if set(edit["references"]["queryFields"]) != expected_reference_queries:
+        errors.append("reference query thiếu identity POU/library/signal")
+    if set(edit["references"]["targetIdentities"]) != {
+        "targetObjectId", "targetEntryId+targetVersion", "targetSignalId",
+    }:
+        errors.append("reference response thiếu target identity POU/library/signal")
+    if edit["references"]["targetIdentityRule"] != "EXACTLY_ONE_TARGET_IDENTITY":
+        errors.append("reference item phải có đúng một target identity")
     if edit["references"]["mutationEndpoint"]:
         errors.append("reference preflight không được tạo mutation endpoint thứ hai")
     if set(edit["diagnostics"]["locationKinds"]) != {"SOURCE", "FBD", "POU", "GLOBAL"}:
@@ -143,12 +194,19 @@ def validate(contract: dict[str, Any], schema: dict[str, Any], *, check_pins: bo
 def self_test(contract: dict[str, Any], schema: dict[str, Any]) -> int:
     mutations: list[tuple[str, Callable[[dict[str, Any]], None]]] = [
         ("route", lambda item: item["route"].__setitem__("primary", "/eng/programming/design")),
-        ("authority", lambda item: item["authority"].__setitem__("architectDisposition", "APPROVED")),
+        ("authority", lambda item: item["authority"].__setitem__("architectDisposition", "PENDING_EXACT_REVISION_PIN")),
+        ("authority-id", lambda item: item["authority"].__setitem__("authorization", "AUTH-PROG-INVALID")),
+        ("candidate-commit", lambda item: item.__setitem__("approvedCandidateCommit", "0" * 40)),
         ("live-write", lambda item: item["modes"]["LIVE"]["mutableRoles"].append("admin")),
         ("library-fallback", lambda item: item["quickLibrary"].__setitem__("unavailableFallback", True)),
+        ("signature-state", lambda item: item["quickLibrary"]["signatureStates"].append("READY")),
+        ("ghost-pou", lambda item: item["edit"]["check"].__setitem__("synthesizedPeriodMs", 1000)),
         ("draft-op", lambda item: item["edit"]["draft"]["operations"].remove("renameObject")),
+        ("draft-source", lambda item: item["edit"]["draft"]["sourceRepresentation"].__setitem__("FBD", "STRING")),
+        ("draft-replay", lambda item: item["edit"]["draft"].__setitem__("idempotencyReplay", "IDS_ONLY")),
         ("refactor-error", lambda item: item["edit"]["pouRefactor"]["stableErrors"].remove("PRG-ERR-POU-REFERENCED-001")),
         ("reference-mutation", lambda item: item["edit"]["references"].__setitem__("mutationEndpoint", True)),
+        ("reference-identity", lambda item: item["edit"]["references"]["queryFields"].remove("targetSignalId")),
         ("diagnostic-kind", lambda item: item["edit"]["diagnostics"]["locationKinds"].remove("FBD")),
         ("sim-operator", lambda item: item["simulation"]["mutationRoles"].append("operator")),
         ("physical-output", lambda item: item["modes"]["SIMULATE"].__setitem__("physicalOutputAuthority", True)),

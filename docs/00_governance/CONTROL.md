@@ -1,10 +1,10 @@
 # Document Control
 
 **ID:** DOC-CTRL-001
-**Phiên bản:** 1.5-candidate
+**Phiên bản:** 1.6
 **Trạng thái:** Active
 **Chủ quản:** Project Engineering
-**Cập nhật:** 2026-08-24 (baseline ADR-050 giữ quyền implementation; PGM-02 v2.2 có review package 17 file, 89 requirement/47 scenario và 16 card downstream Candidate; `T59-801=REVIEW`, `T59-802..817=NO EXECUTION AUTHORITY`, `PLAN_READY[PGM02-V22]=PENDING`, `IMPLEMENTATION_CLOSE=PENDING`, `TARGET_FAKE_MCU_DEPLOY=PARTIAL`, `TARGET_FAKE_MCU_SOAK=NOT_RUN`, `RELEASE_READY=NO-GO`)
+**Cập nhật:** 2026-08-24 (`AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; `T59-801=DONE`, `T59-802=READY`, R1/R2/R3 được mở nhưng bắt buộc chạy tuần tự; `IMPLEMENTATION_CLOSE=PENDING`, `TARGET_FAKE_MCU_DEPLOY=PARTIAL`, `TARGET_FAKE_MCU_SOAK=NOT_RUN`, `RELEASE_READY=NO-GO`)
 
 ## Mục tiêu
 
@@ -56,25 +56,25 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 
 | Hồ sơ | Lớp/trách nhiệm |
 |---|---|
-| [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | `PROD-PROG-001` baseline v3.0 Active; v3.1-candidate thêm PGM-02 R1/R2/R3, chưa pin |
+| [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | `PROD-PROG-001` v3.2 Active; PGM-02 R1/R2/R3 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05` |
 | [Quy tắc kiểm soát tài liệu](DOC_GOVERNANCE.md) | `DOC-GOV-001` Active — ISO-aligned, `DD-01..DD-13`, thang `M0..M5`, ba cổng quyền hạn, harness và bảy quy tắc trung thực |
-| [Programming Decision Register](PROGRAMMING_OPEN_DECISIONS.md) | `DEC-PROG-REGISTER-001` v1.2-candidate — 12 quyết định unified CLOSED; 2 scoped record OPEN; `ADR-053` Proposed là child decision; WP-00 REVIEW |
-| [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | `SRS-PROG-001` baseline 82 + 7 PGM-02 Candidate = 89 requirement |
-| [Programming Unified Product Detailed Design](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | `DDD-SW-PROG-UNIFIED-001` baseline v1.1 Active; v1.2-candidate overlay PGM-02 |
-| [PGM-02 Workspace ST/FBD Detailed Design](../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) | `DDD-SW-PGM02-WORKSPACE-001` M2 Target Candidate — route/identity/EDIT/LIVE/SIMULATE/NFR/test/rollback; exact pin pending |
+| [Programming Decision Register](PROGRAMMING_OPEN_DECISIONS.md) | `DEC-PROG-REGISTER-001` v1.4 — 12 quyết định unified CLOSED; change request/exact pin CLOSED; ghost-POU policy RESOLVED nhưng corrective implementation còn PENDING; `ADR-053` Accepted |
+| [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | `SRS-PROG-001` v1.2 Active cho implementation: 82 baseline + 7 PGM-02 = 89 requirement; evidence vẫn theo VVP |
+| [Programming Unified Product Detailed Design](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | `DDD-SW-PROG-UNIFIED-001` v1.3 — overlay PGM-02 exact-pinned cho implementation; maturity M3, không giả M4/M5 |
+| [PGM-02 Workspace ST/FBD Detailed Design](../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) | `DDD-SW-PGM02-WORKSPACE-001` v0.3 `M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`; route/identity/EDIT/LIVE/SIMULATE/NFR/test/rollback |
 | [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | `PROG-DOCSET-001` v4.4-candidate — register và thứ tự đọc authority hiện hành/Candidate |
-| [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | baseline Active; v1.1-candidate overlay worker isolation/failure boundary PGM-02 |
-| [Programming Document Readiness Matrix](PROGRAMMING_DOCUMENT_READINESS_MATRIX.md) | v2.4-candidate — 17-file review package; R1/R2/R3 NO-GO |
-| [Programming Plan 59](../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | `PLAN-PROG-059` v2.6-candidate — 53 authority + 16 Candidate card/9 Wave; `T59-801` REVIEW, downstream NO EXECUTION |
+| [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | v1.2 Active; worker isolation/failure boundary PGM-02 exact-pinned cho implementation |
+| [Programming Document Readiness Matrix](PROGRAMMING_DOCUMENT_READINESS_MATRIX.md) | v2.5 — exact-pinned cho implementation; `T59-802=READY`, task sau theo dependency; release NO-GO |
+| [Programming Plan 59](../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | `PLAN-PROG-059` v2.7 — 69 authority card/9 Wave; `T59-801` DONE, `T59-802` READY; dependency R1 → R2 → R3 |
 | [Prompt tự động Plan59](../03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | Prompt thi hành task Ready/Ordered, kiểm chứng và cập nhật Plan59; không tự nâng evidence host thành release |
 | [Prompt CTO Plan59 W6+W7](../03_implementation/PROMPT_PLAN59_CTO_W6_W7_EXECUTION.md) | `PROMPT-PLAN59-CTO-W6W7` v1.0 — quyền quyết định cho hardening/packaging/RC và target/HIL/V&V; Must physical/soak/RETAIN/install/SIGNED/provenance không được waive |
 | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | `RSK-PROG-001` v4.22-candidate — 23/23 Open; `RSK-PROG-023` nối DDD/ADR/U15 nhưng residual chưa hạ |
-| [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | `TRACE-PROG-001` v6.8-candidate — baseline 82/44 + PGM-02 Candidate 7/3 = 89/47; dòng mới `I/T/P/R=N` |
+| [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | `TRACE-PROG-001` v6.9 — 89 requirement/47 scenario authorized for implementation; PGM-02 giữ `I/T/P/R=N` tới khi có source/evidence |
 | [Programming Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | baseline v2.0 + v2.1-candidate; 47 scenario, `U13..U15` NOT_RUN |
 | [Programming Release Record 2026-08-23](../07_records/PROGRAMMING_RELEASE_RECORD_2026-08-23.md) | `PROG-RELEASE-RECORD-2026-08-23` Active — verdict **NO-GO** đã ký; bảng 14 cổng W7, 12 scenario Product và bảy điều kiện mở `GO` |
-| [Programming Unified Baseline Manifest](../07_records/reviews/PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md) | Baseline 16 file Active; v1.46-candidate ghim 17-file PGM-02 review set, Architect chưa pin |
+| [Programming Unified Baseline Manifest](../07_records/reviews/PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md) | v1.49 ghim 17-file authority set sau `AUTH-PROG-2026-08-24-05`; exact Candidate ngoài bảng được khóa bằng commit `413a043` |
 | [ADR-050](DECISIONS.md) | Quyết định hợp nhất một Product và supersede mô hình phạm vi Rev cũ |
-| [ADR-053](../adr/ADR-053-programming-simulation-worker-cach-ly.md) | `Proposed` — worker Simulation ephemeral cách ly; chỉ Accepted sau exact pin |
+| [ADR-053](../adr/ADR-053-programming-simulation-worker-cach-ly.md) | `Accepted` bởi `AUTH-PROG-2026-08-24-05` — worker Simulation ephemeral cách ly; thi hành R3 vẫn đợi dependency R2 |
 | [Plan 53/54/56 và WP tracker](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | `Superseded` — chỉ dùng truy nguyên As-Built/task/commit cũ; Plan59 sở hữu công việc tương lai |
 | [DDC-24 Baseline Source Fix Report](../07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | record tổng hợp thay đổi source, test và readiness |
 | [Modbus RTU Point As-Built Report](../07_records/reviews/MODBUS_RTU_POINT_AS_BUILT_REPORT.md) | record implementation/test host và blocker RS485 thật |
@@ -140,6 +140,7 @@ contract, risk/trace, test result và bằng chứng target/HIL không bị lo�
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.6 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: pin exact Candidate `413a043`, mở PLAN/IMPLEMENT_READY cho PGM-02 nhưng bắt buộc R1→R2→R3; giữ maturity/evidence/release trung thực và `IMPLEMENTATION_CLOSE=PENDING` cho corrective ghost-POU. |
 | 1.5-candidate | 2026-08-24 | Đăng ký 17-file review package PGM-02, formal DDD/contract/ADR-053, 89 requirement/47 scenario và 16 card Candidate; `T59-801` REVIEW, downstream code/PLAN_READY/IMPLEMENT_READY vẫn PENDING/NO-GO. |
 | 1.4 | 2026-08-24 | Ghi controlled change request PGM-02 v2.2: Owner mở duy nhất `T59-801`/WP-00, Architect pin và code R1/R2/R3 còn NO-GO. Đồng bộ Decision Register 2 record OPEN, Plan59 53 task/9 Wave, Risk 23/23 Open, Trace v6.7 và `TARGET_FAKE_MCU_DEPLOY=PARTIAL`; không đổi Product/SRS/DDD/VVP hoặc `RELEASE_READY=NO-GO`. |
 | 1.3 | 2026-08-24 | Đồng bộ Plan59 52 task và tách bốn lớp trạng thái: quyền implementation đã PASS; corrective implementation, deploy/soak MCU FAKE còn chờ evidence mới; CI được owner defer cho đóng implementation và physical MCU/HIL được defer nhưng `RELEASE_READY` giữ `NO-GO`. |

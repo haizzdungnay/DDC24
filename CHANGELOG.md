@@ -94,6 +94,28 @@
   change-set chỉ gồm tài liệu, contract, script gate và asset tham chiếu, không
   đổi hành vi React/Vite.
 
+- **Changed — ban hành `AUTH-PROG-2026-08-24-05` và mở triển khai PGM-02 v2.2.**
+  Ghi nhận chỉ thị điện tử của Phạm Đình Chương trong hai vai trò Product
+  Owner/CTO + System Architect; exact-pin Candidate
+  `413a043748dce3b44d2c5076412de761760ba17a`, hoàn tất `T59-801`, chuyển
+  `T59-802` READY và `T59-803..817` ORDERED theo predecessor. Cả ba
+  `IMPLEMENT_READY[R1 EDIT|R2 LIVE|R3 SIMULATE]` được mở, nhưng Plan59 vẫn bắt
+  buộc chạy tuần tự. `ADR-053` chuyển Accepted cho implementation; Detailed
+  Design giữ `M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`, không giả
+  M4/M5, Test Result, CI, target hoặc HIL. Chốt `F-P59-GHOST-POU-001`: Draft
+  được giữ PROGRAM POU chưa schedule, còn Check/Package phải fail-closed bằng
+  `PRG-ERR-CHECK-001`/`ST-POU-005`, cấm tự loại hoặc synthesize 1000 ms;
+  corrective source/test và `IMPLEMENTATION_CLOSE` vẫn PENDING. Trước commit,
+  reconcile thêm năm lệch P0 giữa DDD và machine contract: tách feature/signature
+  state, phủ identity POU/library/signal, khóa ST-string/FBD-object và runtime
+  enable intent riêng, tách HTTP 400/422, cùng full typed idempotent replay qua
+  migration `0013`. Manifest v1.49 re-pin **17/17**; contract v1.1 self-test
+  **23/23**, docs harness, trace
+  **89/89 requirement + 47/47 scenario**, wave self-test **10/10** và diff-check
+  PASS. Fresh host gate: CMake Release bật Modbus/BACnet/HMI, build + CTest
+  **1293/1293**; Go vet/test `-count=1`; FE **136 file/1496 test**, lint/build
+  PASS, chunk Programming **97,13 KiB gzip**. `RELEASE_READY` tiếp tục `NO-GO`.
+
 ### Sửa lỗi xóa Program/POU trả `PRG-ERR-REQ-001` (2026-08-24)
 
 - **Fixed — FE: không xóa được "chương trình ma".** *Triệu chứng:* sau vòng sửa

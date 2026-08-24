@@ -2,7 +2,11 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-24 (`ADR-053` được cấp ở trạng thái **Proposed** cho worker Simulation PGM-02 cách ly; Owner đã duyệt scope/admin-only mutation, System Architect exact-revision decision còn PENDING; `ADR-054` là số trống kế tiếp. Trước đó: `ADR-052` là ADR Accepted mới nhất. Trước nữa: 2026-08-20 phê duyệt Product Owner/CTO — bốn quyết định phạm vi: hoãn STM32 BSP nhưng gỡ firmware provenance giả, OTA → Rev B, gỡ `expose_bacnet` khỏi Rev A, chốt vòng đời lệnh ghi Modbus RTU; không cấp ADR mới. Trước đó: 2026-08-19 `AUTH-WEBUX-2026-08-19-02` — bốn quyết định người: `T57-3.8` **hoãn sang Rev B**, chủ sở hữu ba task C++, uỷ quyền truy cập board Foxlinx, và **mốc hết hiệu lực của `WAIVED FOR IMPLEMENTATION`**; không cấp ADR mới; trước đó: `ADR-042`…`ADR-049` `Accepted` — chín quyết định theo từng task để mở Wave 3 của Plan 57, ban hành cùng `AUTH-WEBUX-2026-08-19-01`; trước đó: `ADR-034`…`ADR-039` `Accepted` — sáu câu hỏi chặn còn lại của Plan 57 §12: annunciation, chủ sở hữu ngữ nghĩa mô phỏng cảnh báo, kho chỉ số ISA-18.2, chính sách mật khẩu, chủ sở hữu "hiệu lực thực tế" của lịch, và **an toàn quét bus Modbus**; `ADR-033`/`ADR-032` `Accepted` — cách ly route và điều hướng web 4 nhóm.)
+**Cập nhật:** 2026-08-24 (`ADR-053` **Accepted** theo exact Candidate pin
+`413a043748dce3b44d2c5076412de761760ba17a` và
+`AUTH-PROG-2026-08-24-05`; R3 vẫn phải chờ predecessor `T59-813 DONE` trước khi
+`T59-814` tự chuyển READY; `ADR-054` là số trống kế tiếp. Trước đó: `ADR-052` là
+ADR Accepted gần nhất.)
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa; **bản 2026-08-19 sửa lại lần chuẩn hoá
 2026-07-22**: EasySet parity thành **`ADR-040`** (không phải `ADR-013`) và raw SHM thành **`ADR-041`**
@@ -19,8 +23,8 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 > `ADR-033` (cách ly route khỏi điều hướng) và `ADR-034`…`ADR-039` (sáu quyết
 > định Plan 57 §12, mục nội tuyến bên dưới). Vì vậy `ls docs/adr/` **không** cho
 > biết số nào còn trống. Trước khi đặt số mới, lấy số lớn nhất trong bảng hoặc
-> hồ sơ ADR hiện hành rồi cộng một. Số cao nhất đã cấp phát: **`ADR-053`**
-> (2026-08-24, Proposed); ADR Accepted mới nhất vẫn là `ADR-052`.
+> hồ sơ ADR hiện hành rồi cộng một. Số cao nhất đã cấp phát và Accepted mới
+> nhất: **`ADR-053`** (2026-08-24).
 
 | ID | Quyết định hiện hành | Trạng thái |
 |---|---|---|
@@ -73,7 +77,7 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 | ADR-047 | **Buộc đổi mật khẩu mặc định: cờ `mustChangePassword` trên tài khoản, cưỡng chế ở BACKEND chứ không ở giao diện.** Phiên có cờ này chỉ gọi được `GET /api/v1/me` và `POST /api/v1/me/change-password`; mọi endpoint khác trả `403` với `reasonCode: password_change_required`. Cưỡng chế bằng cách ẩn màn hình ở FE là không cưỡng chế gì cả — `curl` vẫn đi thẳng. Cờ bật khi `admin` đặt lại mật khẩu và cho tài khoản khởi tạo lần đầu; tự tắt sau lần đổi thành công. Phục vụ `T57-3.17`; **không** đụng tới độ dài mật khẩu đã chốt ở `ADR-037`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-048 | **Mô phỏng luật cảnh báo đi qua `POST /api/v1/alarm-settings/simulate`, là VỎ gọi `mkddc-alarm-sim`.** Thi hành `ADR-035`: nhận một `AlarmSetting` bản nháp + chuỗi mẫu `(t, value)`, trả các lần bật/tắt kèm mốc thời gian và mức nghiêm trọng. Thiếu binary ⇒ `503` nói rõ thiếu gì; **cấm** bản tính xấp xỉ ở Go hay FE, kể cả "gần đúng". Mô phỏng **không** chạm cấu hình đang lưu và không ghi audit thay đổi. Phục vụ `T57-2.13`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-049 | **Code-splitting theo route dùng `React.lazy` cho các nhánh NẶNG và HIẾM, không chia nhỏ toàn bộ.** Chia theo lô nghiệp vụ: Programming, Xu hướng/biểu đồ, Lịch vận hành, Modbus RTU. Bốn màn hình mở đầu ca trực (Landing, Giám sát, Cảnh báo, Chẩn đoán) **ở lại chunk chính** — chia chúng ra chỉ đổi một lần tải thành hai lần chờ. Mỗi ranh giới `lazy` phải có `Suspense` với khối trạng thái thật, không màn hình trắng. Số đo bắt buộc là **thời gian mở trang đầu trên board thật**, không phải kích thước tệp. Phục vụ `T57-4.2`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
-| ADR-053 | **PGM-02 Simulation dùng `mkddc-programming-sim-worker` ephemeral theo session, tách production Core/SHM/device/iobus/output/RETAIN; Web chỉ supervisor/RBAC/audit/quota, mutation admin-only.** [Hồ sơ](../adr/ADR-053-programming-simulation-worker-cach-ly.md). | **Proposed 2026-08-24** — Owner duyệt scope R3/admin-only; System Architect exact pin PENDING; code R3 NO-GO |
+| ADR-053 | **PGM-02 Simulation dùng `mkddc-programming-sim-worker` ephemeral theo session, tách production Core/SHM/device/iobus/output/RETAIN; Web chỉ supervisor/RBAC/audit/quota, mutation admin-only.** [Hồ sơ](../adr/ADR-053-programming-simulation-worker-cach-ly.md). | **Accepted 2026-08-24** — `AUTH-PROG-2026-08-24-05`, exact Candidate pin `413a043748dce3b44d2c5076412de761760ba17a`; consumer/discipline/Verification/Document Control `WAIVED FOR IMPLEMENTATION`; R3 vẫn ORDERED sau `T59-813`, release NO-GO |
 
 > [!IMPORTANT]
 > **Mọi dòng ghi `chữ ký người: WAIVED FOR IMPLEMENTATION` trong bảng trên đều có
@@ -83,6 +87,32 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 > baseline `M5 — APPROVED` (`DOC_GOVERNANCE` §6 quy tắc 4). Tới mốc mà chưa có
 > chữ ký người thật thì **cổng `RELEASE_READY` không được mở** — không có đường
 > waive lần hai.
+
+## AUTH-PROG-2026-08-24-05 — exact pin PGM-02 v2.2 và mở implementation
+
+- **Ngày:** 2026-08-24.
+- **Người quyết định:** Phạm Đình Chương — Product Owner/CTO + System Architect,
+  ghi nhận từ chỉ thị điện tử hiện hành; không thay thế bằng chữ ký tay hoặc
+  chứng thư giả.
+- **Candidate review input:**
+  `413a043748dce3b44d2c5076412de761760ba17a`; đây là bytes trước authorization,
+  không bị mô tả sai là chứa revision post-authorization.
+- **Exact authority revision:** manifest v1.49 khóa 17 hồ sơ Markdown; artifact
+  ngoài manifest được khóa tại `DEC-PROG-REGISTER-001` §1.2 bằng SHA-256:
+  contract `2c2900661d75c97b2432c2c60e4b37cd48ee1b4272a64f2eb04eb2fed128fa63`,
+  schema `83236187e537f37884d16773cb45b377ef088116979dd676b8eca5f4469d5beb`,
+  Accepted ADR-053 `d6f88c64e1e8db52c08e3f54255d658021d106ffe715c7508e1ecd96b72c4930`;
+  handoff/visual hashes nằm cùng record để tránh self-hash vòng.
+- **Disposition:** `PLAN_READY[PGM02-V22]=PASS` và
+  `IMPLEMENT_READY[PGM02-R1|R2|R3]=GO`; scheduler Plan59 vẫn bắt buộc
+  `R1 EDIT → R2 LIVE → R3 SIMULATE`, nên R3 không được chạy trước
+  `T59-813 DONE`.
+- **Review:** consumer/discipline/Verification/Document Control là
+  `WAIVED FOR IMPLEMENTATION`. Disposition này cho phép bắt đầu task, không tạo
+  maturity M4/M5 và không thay Test Result, CI, target, HIL, physical-I/O hoặc
+  residual-risk evidence.
+- **Release:** `RELEASE_READY=NO-GO`; chỉ authority release sau VVP/risk/evidence
+  hiện hành mới được đổi verdict.
 
 ## ADR-025 — Process-first + bounded modules cho repository
 
@@ -1505,6 +1535,12 @@ profile nên profile đổi sẽ gãy build, không gãy ngoài hiện trường
   đặt hẹn giờ an toàn ở đó sẽ biến mỗi lần chỉnh thành sự kiện tương thích
   artifact trong khi không artifact nào phụ thuộc nó.
 
-ADR Accepted mới nhất: [`ADR-052`](../adr/ADR-052-programming-ky-artifact-bang-khoa-thiet-bi.md).
-ADR được cấp mới nhất: [`ADR-053`](../adr/ADR-053-programming-simulation-worker-cach-ly.md)
-ở trạng thái **Proposed**. Số ADR tiếp theo còn trống: **`ADR-054`**.
+ADR được cấp và Accepted mới nhất:
+[`ADR-053`](../adr/ADR-053-programming-simulation-worker-cach-ly.md), theo
+`AUTH-PROG-2026-08-24-05`. Số ADR tiếp theo còn trống: **`ADR-054`**.
+
+## Lịch sử cập nhật gần nhất
+
+| Ngày | Nội dung |
+|---|---|
+| 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`, pin exact Candidate commit `413a043748dce3b44d2c5076412de761760ba17a` và chuyển `ADR-053` từ Proposed sang Accepted cho implementation; giữ dependency R1→R2→R3, maturity/evidence trung thực và `RELEASE_READY=NO-GO`. |

@@ -3,18 +3,18 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 4.23-candidate |
-| Trạng thái | **Baseline Active; 23/23 Open; PGM-02 Simulation Target Candidate đã có DDD/ADR/scenario nhưng chưa pin hoặc có evidence** |
+| Phiên bản | 4.24 |
+| Trạng thái | **Active; 23/23 Open; PGM-02 Target đã pin cho implementation nhưng chưa có evidence hoặc residual acceptance** |
 | Ngày | 2026-08-24 |
 | Chủ quản | Product + Architecture + QA |
 | Người review | Risk owners, Safety, Security, Operations Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
 | Review kế tiếp | Sau mỗi Wave Plan 59 và trước `RELEASE_READY` |
 
-> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-20-04` cho baseline
-> ADR-050.** Waiver này không mở code PGM-02 v2.2. `RSK-PROG-023` thuộc
-> `CR-PROG-PGM02-V22-001`: `T59-801` đang REVIEW, Architect pin pending và mọi
-> card `T59-802..817` giữ `CANDIDATE — NO EXECUTION AUTHORITY`.
+> **APPROVED FOR IMPLEMENTATION** — baseline theo `AUTH-PROG-2026-08-20-04`,
+> PGM-02 v2.2 theo `AUTH-PROG-2026-08-24-05` và exact Candidate
+> `413a043748dce3b44d2c5076412de761760ba17a`. `T59-801=DONE`, `T59-802=READY`,
+> task sau `ORDERED` theo R1→R2→R3. Waiver không hạ risk hoặc mở release.
 
 ## 0. Đọc nhanh
 
@@ -22,9 +22,9 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **23 rủi ro** gồm 16 baseline, 6 rủi ro unified Product và 1 rủi ro PGM-02 Simulation Target Candidate, kèm control/task/evidence để hạ mức. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 23/23 Open. Baseline đã có source/host và một phần TARGET MCU FAKE; chưa có formal Test Result/residual acceptance. PGM-02 v2.2 đã có formal DDD, `ADR-053` Proposed, contract Candidate và `VS-PROG-U15`, nhưng chưa có Simulation production implementation/evidence. |
-| 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Candidate cụ thể hóa `RSK-PROG-023` bằng process isolation, no-device/SHM/output boundary, admin-only mutation, quota/cleanup và scenario zero-output; exact pin vẫn pending. |
-| 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản. Riêng treatment `RSK-PROG-023`/Simulation nằm ở `T59-814..817` sau khi được promote; R1/R2 nằm ở `T59-802..813`. Hiện toàn bộ các card `T59-802..817` đều không có execution authority. |
+| 3. Hệ thống hiện tại đang có gì? | 23/23 Open. Baseline đã có source/host và một phần TARGET MCU FAKE; chưa có formal Test Result/residual acceptance. PGM-02 đã có formal DDD, `ADR-053` Accepted, contract Target và `VS-PROG-U15`, nhưng chưa có Simulation production implementation/evidence. |
+| 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Target đã pin cụ thể hóa `RSK-PROG-023` bằng process isolation, no-device/SHM/output boundary, admin-only mutation, quota/cleanup và scenario zero-output. |
+| 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản. R1 nằm ở `T59-802..809`, R2 ở `T59-810..813`, treatment `RSK-PROG-023`/Simulation ở `T59-814..817`; thực thi đúng dependency. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Cột “Scenario/evidence authority” ở §3 gắn risk với `VS-PROG-*`; PGM-02 dùng `VS-PROG-U15`. Hiện 2/47 record, 0/47 PASS, nên **không rủi ro nào được hạ mức**. |
 
@@ -58,7 +58,7 @@ Thang: Severity/Likelihood `1..5`, Risk = S×L. Residual chỉ giảm sau eviden
 | `RSK-PROG-020` | Library version/supply-chain drift khiến cùng source chạy khác hoặc nạp payload độc hại | 5×3=15 | immutable lock, source-only import, signed artifact/library, hostile corpus | Compiler/BE/Security | U03; T59-201..205/602/603 | 15 Open |
 | `RSK-PROG-021` | Hai Program tranh cùng output hoặc Disable giữ candidate bí mật | 5×4=20 | single owner Check guard, safe-boundary withdrawal, resolver/interlock/safe-state HIL | Core/Controls | U07/U09; T59-304/406/703 | 20 Open |
 | `RSK-PROG-022` | Package multi-Program active một phần hoặc intent/RETAIN/LKG lệch sau power loss | 5×4=20 | first-cycle package barrier, journal/checkpoint/dual-reader, power matrix | Core/BE/Ops | U08; T59-501/704/705 | 20 Open |
-| `RSK-PROG-023` | Simulation worker/session chạm production SHM/device/IOP/output hoặc virtual input thoát allowlist, gây tác động điều khiển thật/cross-project | 5×3=15 | `DDD-SW-PGM02-WORKSPACE-001` + `ADR-053` Proposed: process sandbox không device/SHM/output; virtual image + compiler allowlist; object scope; mutation admin-only; quota/audit/fault cleanup | Architect/Runtime/Security/BE/QA | `VS-PROG-U15`; `T59-814..817` Candidate; exact pin + target/HIL zero-output trước R3 verdict | 15 Open |
+| `RSK-PROG-023` | Simulation worker/session chạm production SHM/device/IOP/output hoặc virtual input thoát allowlist, gây tác động điều khiển thật/cross-project | 5×3=15 | `DDD-SW-PGM02-WORKSPACE-001` + `ADR-053` Accepted: process sandbox không device/SHM/output; virtual image + compiler allowlist; object scope; mutation admin-only; quota/audit/fault cleanup | Architect/Runtime/Security/BE/QA | `VS-PROG-U15`; `T59-814..817` ORDERED sau R2; target/HIL zero-output trước R3 verdict | 15 Open |
 
 ## Quy tắc xử lý
 
@@ -103,7 +103,7 @@ risk owner đề xuất và Product/Architect/QA chấp thuận bằng record.
 | `014` | spec cũ/component/public error lệch → FE retry/recover sai → duplicate/hidden fault | IFSPEC; all DDD error maps | public `PRG-ERR` authority + detail map + generated contract negative tests | VS-019/024; OpenAPI/Go/TS/IPC | 3×1=3 | BE/Core/FE; contract change |
 | `015` | dùng từ compliant/certified khi chỉ aligned → sai cam kết/audit | SRS claim guardrail; Index/VVP/Trace | controlled copy, document review, evidence-bound release claim | G0/G6 + VS-025 inspection; signed release | 3×1=3 | Product/QA; marketing/release/doc change |
 | `016` | gộp IA và bỏ danh sách xác nhận cố định → FE hiểu nhầm “ít ô hơn” thành “ít bước an toàn hơn”, hoặc coi impact chưa tính được là không có ảnh hưởng → Commission đi qua một ảnh hưởng chưa được đánh giá | FE-113/114; `IFSPEC` §6.1 | ba nhánh `NONE/PRESENT/UNAVAILABLE` fail-closed; re-auth, read-back và rollback không phụ thuộc số ô xác nhận; vùng thao tác nguy hiểm tách khỏi vùng chỉ đọc | VS-031 usability + VS-011/019 fault; contract test cho ba nhánh impact | 5×1=5 | UX/FE/BE/QA; mọi thay đổi màn hình Commission |
-| `023` | Simulation worker/session được cấp production SHM/device/IOP/output hoặc virtual input ngoài allowlist → thoát sandbox/cross-project → tác động điều khiển thật | `SYS-REQ-PROG-116`, `SWR-REQ-PROG-BE-117`, `SWR-REQ-PROG-CORE-118`, `NFR-REQ-PROG-112`; PGM-02 DDD; `ADR-053` Proposed | process riêng/ephemeral không device/SHM/output; virtual point image + allowlist sinh từ compiler; object-scope; mutation admin-only; quota/timeout/cleanup/audit | `VS-PROG-U15`; `T59-814..817` Candidate; negative target/HIL observation phải chứng minh zero physical output | 5×1=5 | Architect/Runtime/Security/BE/QA; ảnh hưởng: chặn R3; mở khi exact pin, card được promote, evidence PASS và residual được ký |
+| `023` | Simulation worker/session được cấp production SHM/device/IOP/output hoặc virtual input ngoài allowlist → thoát sandbox/cross-project → tác động điều khiển thật | `SYS-REQ-PROG-116`, `SWR-REQ-PROG-BE-117`, `SWR-REQ-PROG-CORE-118`, `NFR-REQ-PROG-112`; PGM-02 DDD; `ADR-053` Accepted | process riêng/ephemeral không device/SHM/output; virtual point image + allowlist sinh từ compiler; object-scope; mutation admin-only; quota/timeout/cleanup/audit | `VS-PROG-U15`; `T59-814..817` ORDERED; negative target/HIL observation phải chứng minh zero physical output | 5×1=5 | Architect/Runtime/Security/BE/QA; ảnh hưởng: chặn R3 verdict/release; mở khi treatment implement, evidence PASS và residual được ký |
 
 Tên rút gọn `DDD-*` trong bảng trỏ tới ID đầy đủ ở Design Index; Traceability
 phải giữ link section hiện hành. Target residual đề xuất chưa được acceptance.
@@ -128,7 +128,7 @@ OPEN → TREATMENT_IMPLEMENTED → EVIDENCE_REVIEW → ACCEPTED | REOPENED
 |---|---:|
 | Risk Open | 23/23 |
 | Critical ≥15 | 18/23 |
-| Treatment có thiết kế | 22/23 đã duyệt + 1 control Target Candidate chờ exact pin |
+| Treatment có thiết kế | 23/23 đã duyệt cho implementation; chưa treatment nào được evidence acceptance |
 | Treatment implemented end-to-end | 0/23 cho Product Target |
 | Treatment source/target partial | 11/23 ở baseline cũ; sáu risk unified ở trạng thái design control; một risk PGM-02 có design Candidate nhưng chưa implement/pin |
 | Evidence accepted | 0/23 |
@@ -777,7 +777,7 @@ Open**, S×L và residual không đổi; chưa claim target/HIL, Test Result hay
 |---|---|---|---|
 | `RSK-PROG-009` | Lệnh Enable/Disable của người vận hành không còn ghi `state`/`enabled` từ IPC worker thread. Non-RT chỉ ARM ý định; RT áp dụng tại safe boundary rồi ack bằng generation, nên một lệnh Disable không thể bị chính scan ghi đè giữa tick và Program đã tắt không chạy thêm chu kỳ nào với quyền ghi đầu ra | Fault/restart/power matrix trên target và Test Result `VS-PROG-U05/U08`; host TSan 0 cảnh báo đã có | `OPEN — SOURCE HOST PASS` |
 | `RSK-PROG-010` | Trần 16 Program chạy đồng thời được kiểm **trước** khi chạm bất kỳ trường nào; lệnh bị từ chối không còn để lại `STOPPED`/`enabled=true` nửa vời. `TIMED_OUT` tách khỏi `REJECTED` nên BE không hiểu "chưa biết" thành "đã từ chối" | Đo trần 16 trên target với 10 Program fixture (`T59-702`) | `OPEN — SOURCE HOST PASS` |
-| `RSK-PROG-011` | Xóa Program/POU đi đúng batch theo cấu hình chạy thật (`removeProgram` chỉ khi POU có mục trong `programs[]`, luôn kèm `removeObject`), nên POU bị xóa không còn ở lại Draft; lỗi batch Draft nay chỉ đúng thao tác qua `field` | **Chưa sửa `F-P59-GHOST-POU-001`**: POU kind PROGRAM không có cấu hình chạy vẫn được đóng gói với chu kỳ tự đặt 1000 ms; cần owner chốt fail-closed ở Check hay loại khỏi package | `OPEN — SOURCE HOST PASS, TARGET PASS cho phần xóa` |
+| `RSK-PROG-011` | Xóa Program/POU đi đúng batch theo cấu hình chạy thật (`removeProgram` chỉ khi POU có mục trong `programs[]`, luôn kèm `removeObject`), nên POU bị xóa không còn ở lại Draft; lỗi batch Draft nay chỉ đúng thao tác qua `field` | `F-P59-GHOST-POU-001` đã chốt: Draft cho phép PROGRAM POU chưa schedule; Check/Package fail closed `PRG-ERR-CHECK-001` + `ST-POU-005`, cấm exclude/synthesize 1000 ms. Corrective source/test còn PENDING | `OPEN — SOURCE HOST PASS, DECISION RESOLVED` |
 | `RSK-PROG-022` | `install.sh` chụp và `rollback.sh` khôi phục store Programming cùng binary; rollback chỉ-binary sau một bản có migration không còn để `mkddc-web` chết câm | Diễn tập rollback ĐẦY ĐỦ (binary+DB) trên bo — thao tác file DB trên bo bị chặn ở phiên này | `OPEN — SOURCE HOST PASS, TARGET PARTIAL` |
 | `RSK-PROG-018` | Runtime Monitor tra biến theo `locals` của Draft v2 (không chỉ object `VARIABLE` v1) và giữ `snapshot.Points` của Core khi PLC SHM chưa attach, nên màn Theo dõi không còn báo "chưa có biến ánh xạ" cho một Revision đang chạy có Binding hợp lệ | Đo trên target với point vật lý và Test Result `VS-PROG-U06/U07`; lane E2E host nay `HTTP>=500=0`, `console.error=0` | `OPEN — SOURCE HOST PASS` |
 | `RSK-PROG-017` | Read-back Published Signal cho reader non-RT (`inspect_all` dùng cho STATUS/Runtime Monitor) kiểm `generation` trước/sau khi chép theo đúng khuôn seqlock của SHM, nên Monitor không còn trả `value` của chu kỳ N ghép với `published_at_ns` của chu kỳ N+1 | Đo trên target với producer/consumer thật và Test Result `VS-PROG-U06`; host guard hiện là xác suất + TSan | `OPEN — SOURCE HOST PASS` |
@@ -811,11 +811,9 @@ chứng MCU/HIL vật lý, và deploy không thay soak 24 h hay release approval
 
 ### 5.56 Mở `RSK-PROG-023` cho Simulation PGM-02 v2.2
 
-`CR-PROG-PGM02-V22-001` ghi nhận Product Owner đã duyệt hướng thay đổi, nhưng
-System Architect chưa duyệt baseline kỹ thuật. `T59-801` đã tạo Candidate formal
-DDD, `ADR-053`, contract, requirement và `VS-PROG-U15`, rồi chuyển sang REVIEW.
-Các card `T59-814..817` chỉ để review dependency/acceptance, không mở code
-production. Risk giữ nguyên 5×3=15 và chặn R3 cho tới khi exact pin, process
+`AUTH-PROG-2026-08-24-05` đã pin exact Candidate, chấp nhận `ADR-053` và mở
+implementation. `T59-801=DONE`; `T59-814..817=ORDERED` sau R2. Risk giữ nguyên
+5×3=15 và chặn R3 verdict/release cho tới khi process
 isolation không device/SHM/output, allowlist virtual point, object-scope, RBAC
 mutation admin-only, quota/cleanup/audit được implement và scenario âm trên
 target/HIL chứng minh zero physical output. Không có bằng chứng hay residual nào
@@ -842,6 +840,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 4.23-candidate | 2026-08-24 | Làm rõ `T59-814..817` chỉ là treatment của `RSK-PROG-023`/Simulation; R1/R2 thuộc `T59-802..813`. Không đổi risk count, S×L, residual, evidence hoặc execution authority. |
+| 4.24 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`, exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`, `ADR-053` Accepted và execution order R1→R2→R3; chốt `F-P59-GHOST-POU-001` ở lớp quyết định. Giữ 23/23 Open, 18 Critical, 0/23 evidence/residual accepted và release NO-GO. |
 | 4.22-candidate | 2026-08-24 | Nối `RSK-PROG-023` tới bảy requirement PGM-02, formal DDD, `ADR-053` Proposed, `VS-PROG-U15` và card `T59-814..817`; giữ 23/23 Open, 18 Critical, 0/47 PASS và không hạ residual hoặc mở code. |
 | 4.21 | 2026-08-24 | Mở `RSK-PROG-023` cho ranh giới Simulation PGM-02 v2.2 và khóa treatment/evidence vào `T59-801`; giữ 23/23 Open, 18 Critical, 0 evidence/residual accepted; không mở code production khi Architect còn `PENDING` |
 | 4.20 | 2026-08-24 | Ghi §5.55 cho ba finding của vòng self-review: Enable/Disable ghi trạng thái từ IPC worker thread (3 data race đo bằng TSan), read-back Published Signal ghép chéo chu kỳ cho reader non-RT, và Runtime Monitor luôn trả `items: []` vì chỉ tra biến kiểu Revision v1. Cả hai đã có bản sửa + test hồi quy; `ctest` 1293/1293, TSan toàn core 0 cảnh báo, Go 18/18, FE sạch. Giữ 22/22 Open; không đổi S×L/residual và không claim target/HIL/Test Result |
@@ -912,7 +911,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
 | Risk owners + Safety/Security/Ops | Chờ review | — |
-| Product + Architect + Verification | **WAIVED FOR BASELINE IMPLEMENTATION; PGM-02 ARCHITECT PENDING; RESIDUAL NOT ACCEPTED** | 0/23 evidence/residual accepted; `T59-801` REVIEW và `T59-802..817` không có execution authority, vẫn chặn PGM-02 code/release/cutover |
+| Product + Architect + Verification | **AUTHORIZED/WAIVED FOR IMPLEMENTATION; RESIDUAL NOT ACCEPTED** | `AUTH-PROG-2026-08-24-05`; 0/23 evidence/residual accepted; code được mở theo dependency nhưng release/cutover vẫn bị chặn |
 
 ## 8. Phụ lục — Tự kiểm cổng M3 (loại: Risk)
 
@@ -926,7 +925,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | Residual | PASS | Bảng chính giữ nguyên `S×L` gốc; §2 nêu rõ residual **chỉ giảm sau khi có bằng chứng** |
 | Thẩm quyền chấp nhận | PASS | §6 schema bản ghi treatment/acceptance đủ trường; thiếu một trường thì giữ `OPEN` |
 | Ngày review lại | PASS | Metadata đầu file và §6 bảng trigger |
-| Evidence queue có owner/gate | **OPEN FOR RELEASE** | 0/23 evidence và 0/23 residual được chấp nhận. Owner: Product Owner + System Architect + Verification Lead, cùng từng risk owner. Ảnh hưởng: 18 rủi ro `Critical` chặn cutover production; `RSK-PROG-023` còn chặn PGM-02 R3. Gate: Plan59 W7 + exact pin `T59-801` + `T59-817`. Điều kiện mở: chạy `VS-PROG-U15` cùng các scenario liên quan, risk owner đề xuất residual, reviewer độc lập xác nhận, rồi ba vai trò trên ký |
+| Evidence queue có owner/gate | **OPEN FOR RELEASE** | 0/23 evidence và 0/23 residual được chấp nhận. Owner: Product Owner + System Architect + Verification Lead, cùng từng risk owner. Ảnh hưởng: 18 rủi ro `Critical` chặn cutover production; `RSK-PROG-023` chặn R3 verdict/release. Gate: Plan59 W7 + `T59-817`. Điều kiện mở: chạy `VS-PROG-U15` cùng các scenario liên quan, risk owner đề xuất residual, reviewer độc lập xác nhận, rồi ba vai trò trên ký |
 
 Vòng chi tiết này làm rõ biện pháp kiểm soát nhưng **không giảm rủi ro nào**.
 Gate production vẫn `RED`.
