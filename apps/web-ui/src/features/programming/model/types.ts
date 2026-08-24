@@ -202,6 +202,11 @@ export interface ProgrammingTrace {
  * khi `language==='FBD'`. */
 export interface ProgrammingProgram {
   programId: string
+  /** Draft v2 — `objectId` của POU trong `objects[]`. Với POU do FE tạo, nó
+   *  trùng `programId`, nhưng hai trục định danh này KHÁC nhau về nghĩa
+   *  (`objectId` sở hữu mã nguồn, `programId` là identity runtime — DDD §4.2/§4.3)
+   *  và có thể khác giá trị. Xoá một POU phải nhắm đúng `objectId`. */
+  objectId?: string
   name: string
   kind: 'PROGRAM' | 'FUNCTION' | 'FUNCTION_BLOCK'
   language: 'ST' | 'FBD'
@@ -352,6 +357,12 @@ export type ProgrammingDraftOperation =
   | { op: 'replaceProgramSource'; programId: string; language: 'ST' | 'FBD'; source: string }
   | { op: 'upsertProgram'; program: ProgrammingProgramDraftInput }
   | { op: 'removeProgram'; programId: string }
+  /** Draft v2 — xoá chính POU khỏi `objects[]`. `removeProgram` chỉ gỡ CẤU HÌNH
+   *  CHẠY; thiếu thao tác này thì mã nguồn POU vẫn nằm trong Draft, vẫn hiện
+   *  trên giao diện (danh sách dựng từ `objects`) và vẫn có thể đi vào package ở
+   *  lần Commission sau. Backend từ chối `removeObject` khi còn Program tham
+   *  chiếu, nên thứ tự bắt buộc là `removeProgram` rồi mới `removeObject`. */
+  | { op: 'removeObject'; objectId: string }
   | { op: 'upsertVariable'; variable: ProgrammingVariable }
   | { op: 'removeVariable'; variableId: string }
   | { op: 'upsertBinding'; binding: ProgrammingBinding }

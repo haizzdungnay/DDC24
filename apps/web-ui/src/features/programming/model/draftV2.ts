@@ -27,6 +27,7 @@ export function toWorkspaceDocument(draft: ProgrammingDraftDocument): Programmin
     const config = configByObject.get(objectId)
     programs.push({
       programId: String(config?.programId ?? objectId),
+      objectId,
       name: String(object.name ?? ''),
       kind: (object.kind as ProgrammingProgram['kind']) ?? 'PROGRAM',
       language: (object.language as ProgrammingProgram['language']) ?? 'ST',
@@ -40,6 +41,14 @@ export function toWorkspaceDocument(draft: ProgrammingDraftDocument): Programmin
   // v2 không expose thứ tự Task (DDD §4.1). Tab Thực thi chỉ cần chu kỳ; thứ tự
   // hiển thị lấy theo danh sách Program để giao diện không tự bịa một thứ tự
   // mà runtime không thực hiện.
+  //
+  // `programOrder` CHỈ gồm POU có cấu hình chạy thật (`programs[]` của document).
+  // Bản trước lấy toàn bộ `objects`, nên mọi Project có user FUNCTION/
+  // FUNCTION_BLOCK gửi lên một id không nằm trong `programs` — backend từ chối
+  // CẢ batch (`setTaskCompat`: "programOrder trỏ tới Program không tồn tại là
+  // lỗi người gọi") và người dùng thấy `PRG-ERR-REQ-001` khi Xoá Program, Thêm
+  // Program hoặc đổi chu kỳ ở tab Thực thi, không kèm lý do nào đọc được.
+  // Ràng buộc fail-closed đó của backend là ĐÚNG; chỗ sai là danh sách gửi lên.
   // Chu kỳ là enum đóng ở contract; giá trị lạ rơi về 1000 thay vì ép kiểu, để
   // giao diện không hiển thị một chu kỳ mà profile không cho phép.
   const rawPeriod = Number(configs[0]?.periodMs ?? 1000)
@@ -55,7 +64,9 @@ export function toWorkspaceDocument(draft: ProgrammingDraftDocument): Programmin
     task: {
       taskId: String(library.projectLibraryRevisionId ?? draft.project.projectId),
       periodMs,
-      programOrder: programs.map((program) => program.programId)
+      programOrder: programs
+        .filter((program) => configByObject.has(String(program.objectId ?? program.programId)))
+        .map((program) => program.programId)
     },
     library: {
       profile: String(library.systemProfile ?? ''),
