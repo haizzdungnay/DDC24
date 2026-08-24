@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-24 (Plan59 v2.5 có 53 task/9 Wave; chỉ `T59-801`/`PGM02-V22-WP-00` `READY` để đối soát baseline; PGM-02 code và `RELEASE_READY` vẫn `NO-GO`)
+**Cập nhật:** 2026-08-24 (PGM-02 v2.2 có review package 17 file; `T59-801` REVIEW, 16 card `T59-802..817` Candidate không có execution authority; PGM-02 code và `RELEASE_READY` vẫn `NO-GO`)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -23,12 +23,13 @@
 | [Traceability](07_records/TRACEABILITY.md) | ánh xạ yêu cầu → thiết kế → code → bằng chứng |
 | [Chỉ mục hồ sơ rà soát](07_records/reviews/README.md) | trạng thái từng record rà soát/phê duyệt/triển khai, đã đối chiếu mã nguồn; kèm bảng ánh xạ đường dẫn trước/sau tái cấu trúc |
 | [Programming Traceability Matrix](07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
-| [Programming Decision Register](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 12 quyết định unified đã khóa; `CR-PROG-PGM02-V22-001` Owner approved/Architect `PENDING` và `F-P59-GHOST-POU-001` còn `OPEN`; chỉ mở `T59-801` |
+| [Programming Decision Register](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 12 quyết định unified đã khóa; `CR-PROG-PGM02-V22-001` Owner approved/Architect `PENDING`, `ADR-053` Proposed và `F-P59-GHOST-POU-001` còn `OPEN`; `T59-801` REVIEW |
 | [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào Product/SRS/Unified DDD/UX/VVP/Trace/Risk/Plan authority |
 | [Programming Unified Detailed Design](02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | data/contract/state/algorithm/error/source/test/deploy/rollback đủ DD-01..DD-13 |
-| [Programming Plan 59](03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | execution/tracker authority: 53 task, 9 Wave; chỉ `T59-801` `READY`, không mở task downstream/code production; tách implementation close, target MCU FAKE và release NO-GO |
+| [PGM-02 Workspace ST/FBD Detailed Design](02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) | Target Candidate chi tiết route/identity/EDIT/LIVE/SIMULATE/worker/NFR/test/rollback; exact pin pending |
+| [Programming Plan 59](03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | 53 authority + 16 Candidate card/9 Wave; `T59-801` REVIEW, downstream NO EXECUTION; tách implementation close, target MCU FAKE và release NO-GO |
 | [Prompt tự động Plan59](03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | hướng dẫn agent chọn task, implement, test, cập nhật tracker và commit/PR sạch |
-| [Programming Risk Register](07_records/PROGRAMMING_RISK_REGISTER.md) | 23 rủi ro Open, gồm `RSK-PROG-023` cho ranh giới Simulation; design control, owner, evidence gate và residual |
+| [Programming Risk Register](07_records/PROGRAMMING_RISK_REGISTER.md) | 23 rủi ro Open, gồm `RSK-PROG-023` nối PGM-02 DDD/ADR/U15; design control, owner, evidence gate và residual |
 | [Programming Docs Sync Report](07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record đồng bộ docs theo ADR-023 ngày 2026-08-03 |
 | [Programming — Báo cáo As-Built/gap PM-CTO 2026-08-14](07_records/reviews/PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md) | hiện trạng source đa lớp, 15 finding (Rev 1.3: đóng 5 finding UC-PROG-03 + D-01/02/04; D-07 Binding Manifest đã triển khai + kiểm chứng target cho `LOCAL`; còn mở `F-005/006/008/009`, VP/UI-dry); quyết định cần PM/CTO và NO-GO release |
 | [DDC-24 Baseline Source Fix Report](07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | kết quả CI, Point Model, Config Apply, health/recovery và readiness trước Programming Design |
@@ -82,8 +83,9 @@ Register → SRS → Design Index → Unified Detailed Design → UI/UX/Verifica
 Risk/Traceability → Plan59 → Prompt thi hành. Authority set được ghim trong
 manifest 2026-08-20 và kiểm bằng `candidate_pin_check.py`; các kết quả
 `PLAN_READY`/`IMPLEMENT_READY` đó chỉ áp dụng baseline unified đã ký. PGM-02 v2.2
-là thay đổi pre-baseline: Product Owner đã duyệt hướng, Architect còn `PENDING`,
-chỉ `T59-801` được `READY` để đối soát và chưa được sửa code production. Plan53/
+giờ là Candidate review set: Product Owner đã duyệt hướng, Architect exact pin
+còn `PENDING`, `T59-801` đang `REVIEW` và `T59-802..817` không có execution
+authority nên chưa được sửa code production. Plan53/
 54/56, tracker WP và manifest P0 cũ chỉ dùng truy nguyên. Release evidence được
 tạo ở W7 và không được suy từ host test, browser mock hoặc trạng thái tài liệu.
 Với chủ đề khác, luồng đọc là

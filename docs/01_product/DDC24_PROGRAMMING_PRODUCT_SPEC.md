@@ -3,13 +3,17 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROD-PROG-001` |
-| Phiên bản | 3.0 |
-| Trạng thái | **Active — authority sản phẩm thống nhất** |
+| Phiên bản | 3.1-candidate (baseline hiệu lực: 3.0) |
+| Trạng thái | **Active baseline v3.0 + PGM-02 v2.2 TARGET CANDIDATE; Architect exact-revision pin PENDING** |
 | Ngày hiệu lực | 2026-08-20 |
-| Chủ quản / phê duyệt | Product Owner/CTO — Phạm Đình Chương |
-| Quyết định nguồn | `AUTH-PROG-2026-08-20-04` trong [Decision Log](../00_governance/DECISIONS.md) |
+| Ngày Candidate | 2026-08-24 |
+| Chủ quản / phê duyệt baseline | Product Owner/CTO — Phạm Đình Chương |
+| Disposition PGM-02 v2.2 | `CR-PROG-PGM02-V22-001`: Owner approved **WP-00 only**; System Architect exact revision/hash pin **PENDING** |
+| Quyết định nguồn | `AUTH-PROG-2026-08-20-04` trong [Decision Log](../00_governance/DECISIONS.md); [`CR-PROG-PGM02-V22-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) |
 | Supersedes | Nội dung Programming “Rev A/Rev B” trước đây và candidate `PROGRAMMING_PRODUCT_SPEC_V2.2_HYBRID.md` |
 | As-Built tham chiếu | Source/contract tại baseline `49a2ad1`; giới hạn hiện tại không làm giảm phạm vi Product Target |
+| Nguồn Target Candidate | [`DDD-SW-PGM02-WORKSPACE-001`](../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) và [`PGM02-WORKSPACE-V1`](../../contracts/programming/pgm02_workspace_v1.json) |
+| Gate PGM-02 | `T59-801`/`PGM02-V22-WP-00` đang REVIEW; `T59-802..817` chỉ là Candidate không có execution authority; `PLAN_READY[PGM02-V22]=PENDING`; code R1/R2/R3 và release đều NO-GO |
 
 ## 0. Đọc nhanh
 
@@ -33,6 +37,11 @@ Tạo Project
 Giới hạn source hiện tại `1 Task / 1 Program`, thiếu user-defined `FUNCTION` /
 `FUNCTION_BLOCK`, thiếu Control Library và Published Signal là **As-Built cần
 migration**, không phải phạm vi sản phẩm được phép bỏ.
+
+PGM-02 v2.2 dưới đây là **Target Candidate** theo thứ tự `R1 EDIT → R2 LIVE →
+R3 SIMULATE`. Owner đã duyệt change request để thực hiện WP-00 reconciliation;
+điều đó không phải exact-revision approval của Architect và không mở production
+code, deploy hoặc release cho ba increment.
 
 ## 1. Mục tiêu và đối tượng dùng
 
@@ -195,6 +204,12 @@ Mobile hỗ trợ đọc trạng thái, Enable/Disable và incident action có x
 authoring ST/FBD đầy đủ ưu tiên desktop/tablet. Mọi state loading/empty/error/
 permission/stale/offline/unknown phải có copy và không chỉ dùng màu.
 
+Target Candidate PGM-02 v2.2 hợp nhất ST/FBD thành một workspace theo mode:
+`EDIT` chỉ sửa Saved Draft, `LIVE` chỉ đọc immutable Active Revision và
+`SIMULATE` chạy immutable Saved-Draft snapshot trong worker cách ly. Route,
+identity, capability và failure state phải theo contract Candidate; khi chưa
+được pin hoặc chưa hỗ trợ, UI phải fail closed thay vì suy diễn fallback.
+
 ## 6. Product Capability và Requirement
 
 | ID | Capability / requirement bắt buộc |
@@ -211,6 +226,7 @@ permission/stale/offline/unknown phải có copy và không chỉ dùng màu.
 | `PC-PROG-010` | Output Candidate/ownership/arbitration/interlock/safe-state tới I/O. |
 | `PC-PROG-011` | RETAIN theo Program/FB instance, restart và integrity rõ. |
 | `PC-PROG-012` | Monitor/trace/diagnostic/revision/audit có authority và freshness. |
+| `PC-PROG-013` | PGM-02 ST/FBD workspace theo ba increment độc lập `R1 EDIT → R2 LIVE → R3 SIMULATE`, có route/identity/capability rõ và không có đường tắt tới physical output. |
 
 | ID | Product Requirement |
 |---|---|
@@ -238,6 +254,12 @@ permission/stale/offline/unknown phải có copy và không chỉ dùng màu.
 | `PR-PROG-022` | Graph và Programming phải có ownership loại trừ; dual output owner fail closed. |
 | `PR-PROG-023` | Release phải có target/HIL physical-output, power/restart, rollback và provenance evidence. |
 | `PR-PROG-024` | Không được claim IEC 61131-3 certification, safety PLC hoặc release readiness khi chưa có authority/evidence. |
+| `PR-PROG-025` | PGM-02 phải có route canonical `/eng/programming/programs`, resolver Project/deep-link fail-closed, ba mode `EDIT/LIVE/SIMULATE` và identity tách `objectId`, `programId`, document tuple, value tuple. |
+| `PR-PROG-026` | R1 EDIT phải sửa Saved Draft bằng contract typed/ETag/read-back; Quick Library phải dùng signature SYSTEM/PROJECT authoritative; insert/refactor/reference/diagnostic phải atomic, chính xác và zero mutation khi phân tích lỗi. |
+| `PR-PROG-027` | R2 LIVE phải luôn read-only, lấy source từ immutable Active Revision rồi chỉ ghép value khi revision/artifact/observation tuple coherent; mismatch, stale, offline hoặc thiếu dữ liệu phải fail closed và không thành zero. |
+| `PR-PROG-028` | R3 SIMULATE phải chạy immutable Saved-Draft snapshot trong worker ephemeral tách khỏi Core/Web production, không có production SHM/device/socket/output writer/RETAIN handle và không có physical output authority. |
+| `PR-PROG-029` | Simulation v1 phải cho viewer/operator/admin đọc theo object scope nhưng chỉ admin được mutation có audit; virtual time/`STEP_CYCLE` phải deterministic và virtual input chỉ nhận allowlist typed/unit/range từ artifact manifest. |
+| `PR-PROG-030` | Mỗi increment PGM-02 phải có capability/feature flag/rollback và budget định lượng riêng cho responsive, accessibility, latency, memory, quota, timeout, expiry; hoàn tất increment trước không được làm increment sau hiện available. |
 
 ## 7. Tiêu chí nghiệm thu sản phẩm
 
@@ -257,6 +279,23 @@ permission/stale/offline/unknown phải có copy và không chỉ dùng màu.
 7. Không mở `RELEASE_READY` nếu chưa có Test Result target/HIL, physical I/O,
    rollback, soak và provenance theo Verification Plan.
 
+### 7.1 Tiêu chí Target Candidate PGM-02 v2.2
+
+1. `R1 EDIT`: route resolver đúng 0/1/nhiều/invalid Project; typed Draft v1/v2,
+   Quick Library signature, semantic rename/delete/reference và diagnostic
+   SOURCE/FBD/POU/GLOBAL có read-back; mọi lỗi concurrency/analysis zero mutation.
+2. `R2 LIVE`: source/value tuple khớp đúng Active Revision và artifact; cutover,
+   sequence gap, stale/offline/missing làm clear/rejoin hoặc `UNAVAILABLE`; workspace
+   không có mutation action ở mọi role.
+3. `R3 SIMULATE`: viewer/operator mutation bị server từ chối, admin action được
+   audit; cùng snapshot/input cho output hash deterministic; quota/expiry/crash
+   cleanup; Test Result target/HIL chứng minh Active/LKG và physical AO/DO/relay
+   không đổi trong toàn bộ create/run/step/input/reset/stop/fault path.
+
+Ba tiêu chí này hiện **chưa chạy** và không phải evidence. Chúng chỉ trở thành
+entry cho implementation sau khi Product Owner + System Architect pin exact
+revision/hash của Candidate reconciled theo `T59-801`.
+
 ## 8. Ranh giới release
 
 Document/contract/host test cho phép implement và merge nhưng không phải release
@@ -265,6 +304,11 @@ evidence. Product chỉ được gọi là release khi [Plan 59](../03_implement
 có verdict có thẩm quyền. CI billing, credential hoặc hardware thiếu không được
 biến thành lý do chặn code; chúng vẫn là điều kiện thật của `RELEASE_READY`.
 
+Ngoại lệ có phạm vi: với PGM-02 v2.2, chính quyền viết code R1/R2/R3 cũng chưa
+được mở. Chỉ WP-00 được phép reconcile Candidate; câu “document/contract/host
+test cho phép implement” ở trên chỉ áp dụng baseline đã được pin hoặc lát cắt có
+`IMPLEMENT_READY=PASS` riêng.
+
 ## 9. Lịch sử
 
 | Phiên bản | Ngày | Nội dung |
@@ -272,3 +316,4 @@ biến thành lý do chặn code; chúng vẫn là điều kiện thật của `
 | A | 2026-08-03 | Product Spec hẹp theo profile một Program; nay superseded. |
 | 2.2 candidate | 2026-08-14 | Candidate Program-centric; nội dung phù hợp đã hợp nhất, file candidate được loại. |
 | 3.0 | 2026-08-20 | Owner chốt một Product Programming thống nhất; thêm multi-Program, FUNCTION/FUNCTION_BLOCK, Control Library, Published Signal, Enable/Disable và sáu workspace; bỏ phân chia Rev A/Rev B. |
+| 3.1-candidate | 2026-08-24 | Thêm `PC-PROG-013`, `PR-PROG-025..030` cho Target Candidate PGM-02 v2.2 theo R1 EDIT → R2 LIVE → R3 SIMULATE; ghi Owner approved WP-00 only, Architect exact revision/hash pin PENDING và code/release NO-GO; baseline 3.0 giữ nguyên hiệu lực. |

@@ -1,0 +1,405 @@
+{
+  "$schema": "./pgm02_workspace_v1.schema.json",
+  "contractId": "PGM02-WORKSPACE-V1",
+  "version": {
+    "major": 1,
+    "minor": 0
+  },
+  "status": "TARGET_CANDIDATE",
+  "sourceBaselineCommit": "1bc3d19e96989c1309f838c0acd01d14d8536d5e",
+  "authority": {
+    "changeRequest": "CR-PROG-PGM02-V22-001",
+    "workPackage": "PGM02-V22-WP-00",
+    "task": "T59-801",
+    "ownerDisposition": "APPROVED_WP00_ONLY",
+    "architectDisposition": "PENDING_EXACT_REVISION_PIN",
+    "planReady": "PENDING",
+    "implementReady": {
+      "R1_EDIT": "NO_GO",
+      "R2_LIVE": "NO_GO",
+      "R3_SIMULATE": "NO_GO"
+    },
+    "releaseReady": "NO_GO"
+  },
+  "pins": {
+    "productProfileSha256": "e4f235a8f994f552a5f76d7678d404f671b648ae47de450f0094c33e87f69bad",
+    "libraryRegistrySha256": "55c152d6a1456faf130a05a68788c9e15be918be359d9e642c8c215068540885",
+    "openapiSha256": "1edd5c4c3054c7ff6c97fb88ceb5df351a11306d8f47d5582cbfe626cad16a0b",
+    "programmingIpcSha256": "2284771450c531485b1acd5fedbaf85c9640b2795dbe9b7fc106302f17f48917"
+  },
+  "route": {
+    "primary": "/eng/programming/programs",
+    "projectQuery": "project",
+    "pouQuery": "pou",
+    "modeQuery": "mode",
+    "legacy": [
+      "/eng/programming/projects/:projectId/programs",
+      "/eng/programming/projects/:projectId/design"
+    ],
+    "preserveQuery": [
+      "program",
+      "pou",
+      "mode",
+      "line",
+      "column",
+      "length",
+      "node",
+      "port",
+      "edge",
+      "returnTo"
+    ],
+    "projectResolution": {
+      "zeroProjects": "EMPTY_CREATE_OR_READ_ONLY",
+      "oneProject": "CANONICALIZE_QUERY",
+      "manyProjects": "REQUIRE_EXPLICIT_SELECTION",
+      "invalidProject": "NOT_FOUND_NO_FALLBACK"
+    }
+  },
+  "identity": {
+    "selectedPou": "objectId",
+    "runtimeProgram": "programId",
+    "documentTuple": [
+      "projectId",
+      "revisionId",
+      "objectId",
+      "contentHash"
+    ],
+    "valueTuple": [
+      "controllerId",
+      "activeRevisionId",
+      "programId",
+      "observationId",
+      "snapshotSequence",
+      "observedAt",
+      "quality"
+    ],
+    "mismatchResult": "UNAVAILABLE"
+  },
+  "modes": {
+    "default": "EDIT",
+    "allowed": [
+      "EDIT",
+      "LIVE",
+      "SIMULATE"
+    ],
+    "EDIT": {
+      "source": "SAVED_DRAFT",
+      "mutableRoles": [
+        "admin"
+      ],
+      "quickLibrary": true,
+      "physicalOutputAuthority": false
+    },
+    "LIVE": {
+      "source": "SEALED_ACTIVE_REVISION",
+      "mutableRoles": [],
+      "quickLibrary": false,
+      "physicalOutputAuthority": false,
+      "joinFailure": "UNAVAILABLE"
+    },
+    "SIMULATE": {
+      "source": "IMMUTABLE_SAVED_DRAFT_SNAPSHOT",
+      "mutableRoles": [
+        "admin"
+      ],
+      "quickLibrary": false,
+      "physicalOutputAuthority": false,
+      "dirtyDraftResult": "SAVE_REQUIRED"
+    }
+  },
+  "quickLibrary": {
+    "authorities": [
+      "SYSTEM_REGISTRY",
+      "PROJECT_LIBRARY"
+    ],
+    "publicFields": [
+      "entryId",
+      "name",
+      "kind",
+      "version",
+      "scope",
+      "category",
+      "descriptionKey",
+      "aliases",
+      "signature",
+      "stateful",
+      "supportedLanguages",
+      "featureState",
+      "contentSha256"
+    ],
+    "unsupportedPolicy": "HIDE_OR_EXPLAIN_NOT_SUPPORTED",
+    "favoritesPersistence": "LOCAL_USER_PREFERENCE",
+    "recentLimit": 12,
+    "favoritesLimit": 64,
+    "insertionTransaction": "ONE_UNDO_STEP",
+    "signatureStates": [
+      "READY",
+      "REVIEW_REQUIRED",
+      "UNAVAILABLE"
+    ],
+    "systemSignatureProjection": "CANONICAL_REGISTRY_EXACT",
+    "projectSignatureSource": "PROJECT_INTERFACE_JSON",
+    "unavailableFallback": false
+  },
+  "edit": {
+    "draft": {
+      "method": "PATCH",
+      "path": "/api/v1/programming/projects/{projectId}/draft",
+      "ifMatchRequired": true,
+      "requestEnvelopeSchemaVersion": "1.0",
+      "contentSchemaVersions": [
+        1,
+        2
+      ],
+      "firstWriteMigration": "V1_TO_V2_DETERMINISTIC",
+      "typedSchemas": [
+        "ProgrammingDraftDocumentV1",
+        "ProgrammingDraftDocumentV2",
+        "ProgrammingPouObjectV2",
+        "ProgrammingProgramConfigV2"
+      ],
+      "operationDiscriminator": "op",
+      "operations": [
+        "setFunctionalTags",
+        "replaceProgramSource",
+        "upsertObject",
+        "removeObject",
+        "renameObject",
+        "duplicateObject",
+        "upsertProgram",
+        "removeProgram",
+        "upsertSignal",
+        "removeSignal",
+        "upsertBinding",
+        "upsertVariable",
+        "removeVariable",
+        "setTask",
+        "removeBinding"
+      ],
+      "responseContentSchema": "ProgrammingDraftDocumentV2",
+      "conflictError": "PRG-ERR-CONFLICT-001"
+    },
+    "pouRefactor": {
+      "renameMode": "ATOMIC_SEMANTIC_REFACTOR",
+      "rewriteTargets": [
+        "DECLARATION",
+        "RESOLVED_ST_CALL",
+        "FBD_ROOT",
+        "FBD_TYPE_REF"
+      ],
+      "preserveIdentity": [
+        "objectId",
+        "programId",
+        "nodeId",
+        "portId",
+        "wireId",
+        "layout",
+        "portOrder"
+      ],
+      "deletePolicy": "BLOCK_ANY_SEMANTIC_REFERENCE",
+      "analysisFailure": "NO_MUTATION",
+      "stableErrors": [
+        "PRG-ERR-POU-REFERENCED-001",
+        "PRG-ERR-POU-REFACTOR-UNAVAILABLE-001"
+      ]
+    },
+    "references": {
+      "method": "GET",
+      "path": "/api/v1/programming/projects/{projectId}/draft/references",
+      "queryFields": [
+        "targetObjectId",
+        "cursor",
+        "limit"
+      ],
+      "responseFields": [
+        "draftRevisionId",
+        "etag",
+        "contentSha256",
+        "state",
+        "items",
+        "nextCursor"
+      ],
+      "states": [
+        "READY",
+        "UNAVAILABLE"
+      ],
+      "sourceIdentity": "sourcePouObjectId",
+      "targetIdentity": "objectId_OR_entryId",
+      "mutationEndpoint": false
+    },
+    "diagnostics": {
+      "locationDiscriminator": "kind",
+      "locationKinds": [
+        "SOURCE",
+        "FBD",
+        "POU",
+        "GLOBAL"
+      ],
+      "sourceAnchor": [
+        "pouObjectId",
+        "line",
+        "column",
+        "length"
+      ],
+      "fbdAnchor": [
+        "pouObjectId",
+        "networkId",
+        "nodeId",
+        "portId",
+        "wireId"
+      ],
+      "deprecatedProgramIdAliasMajors": 1,
+      "malformedAnchorPolicy": "FAIL_CLOSED"
+    }
+  },
+  "live": {
+    "readOnly": true,
+    "activeSourceRetrieval": "RUNTIME_THEN_IMMUTABLE_REVISION",
+    "overlayMaxHz": 10,
+    "missingValue": null,
+    "qualityStates": [
+      "GOOD",
+      "UNCERTAIN",
+      "BAD",
+      "STALE",
+      "OFFLINE",
+      "UNKNOWN",
+      "UNAVAILABLE"
+    ],
+    "transitionStates": [
+      "CONNECTING",
+      "LIVE",
+      "STALE",
+      "OFFLINE",
+      "RECONCILING",
+      "UNAVAILABLE",
+      "ERROR"
+    ]
+  },
+  "simulation": {
+    "capabilityDefault": false,
+    "workerExecutable": "mkddc-programming-sim-worker",
+    "workerLifetime": "EPHEMERAL_PER_SESSION",
+    "processBoundary": "NO_PRODUCTION_SHM_DEVICE_SOCKET_OUTPUT_WRITER",
+    "readRoles": [
+      "viewer",
+      "operator",
+      "admin"
+    ],
+    "mutationRoles": [
+      "admin"
+    ],
+    "actions": [
+      "RUN",
+      "PAUSE",
+      "STEP_CYCLE",
+      "RESET",
+      "SET_SPEED",
+      "SET_INPUT",
+      "STOP"
+    ],
+    "states": [
+      "PREPARING",
+      "PAUSED",
+      "RUNNING",
+      "COMPLETED",
+      "FAILED",
+      "EXPIRED",
+      "STOPPED"
+    ],
+    "virtualTime": {
+      "baseTick": "GCD_ALLOWED_PROGRAM_PERIODS",
+      "initialTimeMs": 0,
+      "initialNextReleaseMs": 0,
+      "step": "SNAPSHOT_INPUT_RUN_ALL_DUE_COMMIT_INCREMENT_PAUSE",
+      "stepProgram": false,
+      "speeds": [
+        1,
+        10,
+        60
+      ]
+    },
+    "inputs": {
+      "manifestField": "simulationInputs",
+      "allowedSources": [
+        "VAR_INPUT",
+        "READ_BINDING"
+      ],
+      "deniedSources": [
+        "OUTPUT",
+        "IN_OUT",
+        "RETAIN",
+        "INTERNAL",
+        "COMMAND",
+        "OVERRIDE",
+        "PRODUCTION_WRITER"
+      ],
+      "identity": "observationId",
+      "validateTypeUnitRange": true
+    },
+    "limits": {
+      "maxConcurrentSessionsPerController": 1,
+      "idleTtlSeconds": 900,
+      "hardTtlSeconds": 3600,
+      "maxRssMiB": 64,
+      "maxCpuPercentOneCore": 25,
+      "maxActionsPerSecond": 10,
+      "maxTraceSamples": 10000,
+      "maxVirtualInputs": 256,
+      "workerCommandTimeoutMs": 2000
+    },
+    "stableErrors": [
+      "PRG-SIM-UNSUPPORTED",
+      "PRG-SIM-SAVE-REQUIRED",
+      "PRG-SIM-FORBIDDEN",
+      "PRG-SIM-INPUT-NOT-ALLOWED",
+      "PRG-SIM-STALE-SESSION",
+      "PRG-SIM-QUOTA",
+      "PRG-SIM-WORKER-FAILED",
+      "PRG-SIM-EXPIRED"
+    ]
+  },
+  "nfr": {
+    "viewport": {
+      "fullShellMinWidthPx": 1280,
+      "compactDockMinWidthPx": 1024,
+      "drawerMinWidthPx": 768,
+      "authoringMinWidthPx": 768,
+      "mobileReadOnlyBelowPx": 768
+    },
+    "frontend": {
+      "baselineProgrammingChunkGzipKiB": 98,
+      "r1ProgrammingChunkGzipBudgetKiB": 125,
+      "r2ProgrammingChunkGzipBudgetKiB": 145,
+      "r3ProgrammingChunkGzipBudgetKiB": 165,
+      "pointerToPaintP95Ms": 32,
+      "typingResponseP95Ms": 50,
+      "openPouP95Ms": 250,
+      "steadyJsHeapMiB": 96,
+      "modeSwitchHeapGrowthMiB": 5,
+      "fbdMaxNodes": 256,
+      "fbdMaxEdges": 512
+    },
+    "accessibility": {
+      "focusRingMinPx": 2,
+      "textContrastMin": 4.5,
+      "keyboardParity": true,
+      "reducedMotion": true
+    }
+  },
+  "evidence": {
+    "host": [
+      "UNIT",
+      "CONTRACT",
+      "INTEGRATION",
+      "BROWSER"
+    ],
+    "external": [
+      "TARGET",
+      "HIL",
+      "PHYSICAL_IO",
+      "FORMAL_TEST_RESULT"
+    ],
+    "releaseReadyDefault": "NO_GO"
+  }
+}

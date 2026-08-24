@@ -2,9 +2,12 @@
 
 **Document ID:** `KX-DDC24-FE-HANDOFF-PGM02-002`  
 **Status:** `APPROVED TARGET FOR FE REFACTOR/REDESIGN`  
+**Evidence class:** `TARGET DESIGN — NOT AS-BUILT / NOT RUNTIME EVIDENCE`<br>
 **Route:** `/eng/programming/programs`  
 **Editor variants:** `PGM-02A ST` + `PGM-02B FBD`  
-**Visual reference:** `assets/PGM-02_ST_FBD_combined_reference.png`
+**Visual reference:** [PGM-02 ST/FBD combined Target](assets/PGM-02_ST_FBD_combined_reference.svg)<br>
+**Target contract supplement:** [PGM-02 Quick Library / SIMULATE / LIVE v2.2](PGM-02_QUICK_LIBRARY_SIM_LIVE_SPEC_v2_2.md)<br>
+**Formal Detailed Design authority:** [PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md](../../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md)
 
 ## 1. Purpose
 

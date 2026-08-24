@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DEC-PROG-REGISTER-001` |
-| Phiên bản | 1.1 |
-| Trạng thái | **Active — 12 quyết định unified CLOSED; 2 record OPEN; chỉ `T59-801` READY** |
+| Phiên bản | 1.3-candidate |
+| Trạng thái | **Baseline Active — 12 quyết định unified CLOSED; 2 scoped record OPEN; `T59-801` REVIEW; 16 card downstream Candidate không có execution authority** |
 | Ngày | 2026-08-24 |
 | Chủ quản | Product + System Architecture |
 | Authority | `ADR-050`; `AUTH-PROG-2026-08-20-04`; `CR-PROG-PGM02-V22-001` |
@@ -13,14 +13,20 @@
 
 Mười hai quyết định unified theo ADR-050 vẫn `CLOSED` và tiếp tục làm authority
 cho baseline hiện hành. Hai record mới đang `OPEN`: change request PGM-02 v2.2
-đã được Owner duyệt để **chỉ mở công việc reconciliation `T59-801`**, còn baseline
-reconciled chờ System Architect review/pin; `F-P59-GHOST-POU-001` chờ Owner chọn
-semantics package. Không record nào trong hai mục này mở quyền viết production
-code cho redesign PGM-02 hoặc thay chữ ký Architect.
+đã được Owner duyệt để **chỉ mở công việc reconciliation `T59-801`**. Candidate
+reconciled đã được tạo và đang REVIEW, còn baseline chờ System Architect
+review/pin; `F-P59-GHOST-POU-001` chờ Owner chọn semantics package. Mười sáu
+card `T59-802..817` chỉ là output lập kế hoạch Candidate, không mở quyền viết
+production code hoặc thay chữ ký Architect.
+
+`ADR-053` đang `Proposed` là hồ sơ quyết định kiến trúc con của
+`CR-PROG-PGM02-V22-001`, không phải scoped record thứ ba trong bảng này. Nó chỉ
+được đổi thành `Accepted` khi System Architect ký đúng exact revision/hash.
 
 Các review Compiler/Core/BE/FE/Controls/Security/QA của baseline ADR-050 tiếp tục
 được thực hiện như hậu kiểm trong từng task. Riêng phạm vi PGM-02 v2.2 phải qua
-`T59-801` và scoped gate ở `PROG-DRM-001` trước khi tạo task code downstream.
+`T59-801` và scoped gate ở `PROG-DRM-001` trước khi promote bất kỳ card
+downstream nào thành task được phép chạy.
 
 Việc chưa có target/HIL/physical I/O/soak không phải Open Decision và không chặn
 viết code; đó là **evidence bắt buộc để mở `RELEASE_READY`**.
@@ -54,9 +60,10 @@ mới hoặc revision ADR-050 do Product Owner phê duyệt.
 |---|---|
 | Nguồn đề xuất | [`REC-PGM02-ST-FBD-REDESIGN-REVIEW-001`](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/reviews/PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md) và [`PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001`](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/reviews/PGM02_ST_FBD_IMPLEMENTATION_PLAN.md) |
 | Owner disposition | **APPROVED — Product Owner/CTO, 2026-08-24** |
-| System Architect disposition | **PENDING** — review/pin exact revision và hash của baseline reconciled sau `T59-801`; không ký thay tại đây |
+| System Architect disposition | **PENDING** — review/pin exact revision và hash của baseline reconciled sau `T59-801`; record phê duyệt phải ghi candidate Git commit SHA bao trùm cả contract/schema/ADR/handoff/SVG, không ký thay tại đây |
 | Phạm vi được mở | Chỉ `T59-801` / `PGM02-V22-WP-00`: inventory, reconcile và lập controlled baseline/task downstream |
-| Phạm vi chưa được mở | Mọi production code, contract runtime đã Active, route cutover và task R1/R2/R3 downstream |
+| Candidate output để review | Formal `DDD-SW-PGM02-WORKSPACE-001`; `PGM02-WORKSPACE-V1`; `ADR-053` Proposed; 89 requirement/47 scenario; 17-file Markdown pin set; contract/schema/handoff/SVG được khóa bằng candidate Git commit SHA khi duyệt; `T59-802..817` Candidate |
+| Phạm vi chưa được mở | Mọi production code, contract runtime đã Active, route cutover và việc promote/chạy task R1/R2/R3 downstream |
 
 Owner đã chốt ba đầu vào sản phẩm sau:
 
@@ -76,8 +83,8 @@ Scoped gate hiện hành:
 | Gate | Trạng thái | Điều kiện mở tiếp |
 |---|---|---|
 | `CHANGE_REQUEST[PGM02-V22]` | **OWNER_APPROVED / ARCHITECT_PENDING** | System Architect review output `T59-801` |
-| `PGM02-V22-WP-00` | **READY qua `T59-801`** | Thực hiện đúng acceptance task; không code production |
-| `PLAN_READY[PGM02-V22]` | **PENDING** | không còn conflict authority; revision/hash và task downstream được Owner + Architect pin |
+| `PGM02-V22-WP-00` | **REVIEW qua `T59-801`** | Candidate/harness/pin evidence + Owner/System Architect exact pin gồm candidate Git commit SHA; không code production |
+| `PLAN_READY[PGM02-V22]` | **PENDING** | không còn conflict authority; 17-file manifest, candidate Git commit SHA và task downstream được Owner + Architect pin |
 | `IMPLEMENT_READY[PGM02-R1|R2|R3]` | **NO-GO** | đúng lát cắt có requirement/design/contract máy đọc được và approval theo governance |
 | `RELEASE_READY` | **NO-GO** | VVP/Test Result/risk/target/HIL/release authority hiện hành |
 
@@ -121,6 +128,8 @@ resource, audit và target/HIL truthfulness—được giữ trong Product v3.0/
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.3-candidate | 2026-08-24 | Làm rõ exact pin hai lớp: manifest ghim 17 hồ sơ Markdown authority; record Owner + Architect phải ghi candidate Git commit SHA để khóa contract/schema/ADR/handoff/SVG. Pin check 17/17 một mình không mở `PLAN_READY` hoặc code. |
+| 1.2-candidate | 2026-08-24 | Ghi output `T59-801`: formal DDD/contract/ADR-053/89 requirement/47 scenario/17-file Candidate pin và 16 card `T59-802..817`; chuyển WP-00 sang REVIEW, giữ Architect exact pin và mọi execution R1/R2/R3 NO-GO. |
 | 1.1 | 2026-08-24 | Ghi `CR-PROG-PGM02-V22-001`: Owner mở duy nhất `T59-801`, khóa thứ tự R1 EDIT → R2 LIVE → R3 SIMULATE và Simulation v1 admin-only; System Architect/baseline pin giữ PENDING, code downstream NO-GO. Đăng ký riêng `F-P59-GHOST-POU-001` OPEN thay cho tuyên bố sai 0 Open Decision. |
 | 0.1..0.9 | 2026-08-03..11 | Decision package `OD-PROG-001..017` cho baseline cũ; phục hồi qua Git. |
 | 1.0 | 2026-08-20 | `ADR-050` supersede phạm vi xung đột; đóng 12 quyết định unified; 0 Open Decision/implementation blocker. |

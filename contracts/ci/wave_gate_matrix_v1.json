@@ -22,6 +22,8 @@
      "description": "Harness hồ sơ ISO: requirement/scenario/risk/decision/link"},
     {"id": "candidate-pin", "evidenceLevel": "HOST", "command": ["python3", "scripts/candidate_pin_check.py"],
      "description": "Authority baseline khớp manifest đã ghim"},
+    {"id": "pgm02-contract", "evidenceLevel": "HOST", "command": ["python3", "scripts/verify_programming_pgm02_contract.py", "--self-test"],
+     "description": "Target PGM-02 route/identity/mode/library/LIVE/Simulation/NFR khớp schema và authority pins"},
     {"id": "e2e", "evidenceLevel": "HOST", "command": ["scripts/verify-project.sh", "--component", "e2e"],
      "description": "Playwright e2e dùng mock (trừ spec bị cách ly và spec real-backend)"},
     {"id": "e2e-real", "evidenceLevel": "HOST", "command": ["scripts/verify-project.sh", "--component", "e2e-real"],
@@ -41,7 +43,13 @@
      "description": "Ghi I/O vật lý cho cả ST và FBD, đo bằng instrument"},
     {"id": "power-retain", "evidenceLevel": "TARGET", "requiresResource": "board + nguồn cắt được",
      "runbook": "docs/03_implementation/47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md", "owner": "T59-704",
-     "description": ">=10 lần cắt điện; RETAIN/LKG/enable-intent phục hồi đúng"}
+     "description": ">=10 lần cắt điện; RETAIN/LKG/enable-intent phục hồi đúng"},
+    {"id": "pgm02-target-browser", "evidenceLevel": "TARGET", "requiresResource": "board Forlinx/Foxlinx + browser kiểm thử",
+     "runbook": "docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md", "owner": "T59-813",
+     "description": "Gate Candidate do WP-00 định nghĩa; T59-813 hiện không có execution authority. R1/R2 bundle đúng hash; desktop/mobile route, Console/Network và producer-to-UI read-back trên target"},
+    {"id": "pgm02-simulation-zero-output", "evidenceLevel": "HIL", "requiresResource": "board + instrument đo AO/DO khi chạy Simulation",
+     "runbook": "docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md", "owner": "T59-817",
+     "description": "Gate Candidate do WP-00 định nghĩa; T59-817 hiện không có execution authority. Simulation worker không đổi SHM/candidate/Point/output vật lý trong run/step/reset/crash"}
   ],
   "waves": [
     {"wave": "W0", "title": "Contract và migration foundation", "gates": ["layout", "go", "docs", "candidate-pin"]},
@@ -51,6 +59,7 @@
     {"wave": "W4", "title": "Runtime, scheduler, signal, enable và output", "gates": ["layout", "cpp", "go", "docs", "candidate-pin"]},
     {"wave": "W5", "title": "Lifecycle atomic và sản phẩm FE-BE-Core", "gates": ["layout", "cpp", "go", "frontend", "e2e", "e2e-real", "docs", "candidate-pin"]},
     {"wave": "W6", "title": "Hardening, packaging và Release Candidate", "gates": ["layout", "cpp", "go", "frontend", "e2e", "e2e-real", "firmware", "release-package", "docs", "candidate-pin"]},
-    {"wave": "W7", "title": "Target/HIL/V&V và quyết định phát hành", "gates": ["layout", "cpp", "go", "frontend", "e2e", "e2e-real", "firmware", "release-package", "docs", "candidate-pin", "github-ci", "target-soak", "physical-io", "power-retain"]}
+    {"wave": "W7", "title": "Target/HIL/V&V và quyết định phát hành", "gates": ["layout", "cpp", "go", "frontend", "e2e", "e2e-real", "firmware", "release-package", "docs", "candidate-pin", "github-ci", "target-soak", "physical-io", "power-retain"]},
+    {"wave": "W8", "title": "PGM-02 EDIT, coherent LIVE và isolated SIMULATE", "gates": ["layout", "pgm02-contract", "cpp", "go", "frontend", "e2e", "e2e-real", "docs", "candidate-pin", "pgm02-target-browser", "pgm02-simulation-zero-output"]}
   ]
 }

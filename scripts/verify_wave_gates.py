@@ -181,7 +181,7 @@ def run_self_test(matrix: dict[str, Any]) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--wave", help="W0..W7")
+    parser.add_argument("--wave", help="W0..W8")
     parser.add_argument("--list", action="store_true", help="In ma trận rồi thoát")
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument(

@@ -3,15 +3,15 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 2.0 |
-| Trạng thái | **M3 AS-BUILT CẬP NHẬT** — OpenAPI v1.28.0/33 operation, Draft v2 POU/Signal, Library lifecycle và whole-set Core IPC ở cây làm việc; target/formal VVP chưa chạy |
+| Phiên bản | 2.1-candidate |
+| Trạng thái | **Baseline 2.0 M3 AS-BUILT; PGM-02 v2.2 CONTRACT OVERLAY TARGET CANDIDATE — NO EXECUTION AUTHORITY** |
 | Ngày | 2026-08-24 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
-| Nguồn thẩm quyền | `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001` |
-| Phạm vi phiên bản | Target Rev A; 33 OpenAPI operation; v1.28.0; Programming IPC v1 + canonical CBOR; SHM magic v5 với telemetry `max_iop_poll_gap_us` |
-| Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001` |
+| Nguồn thẩm quyền | Baseline: `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001`; Candidate: `CR-PROG-PGM02-V22-001`, `DDD-SW-PGM02-WORKSPACE-001`, `ADR-053` Proposed |
+| Phạm vi phiên bản | Baseline: 33 OpenAPI operation, v1.28.0, Programming IPC v1 + canonical CBOR, SHM magic v5; Candidate: R1 EDIT → R2 LIVE → R3 SIMULATE |
+| Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001`, `DDD-SW-PGM02-WORKSPACE-001` |
 
 ## 0. Đọc nhanh
 
@@ -20,9 +20,9 @@
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **hợp đồng** giữa các bên: REST và WebSocket giữa trình duyệt và BE, IPC giữa BE và Core. Định nghĩa đường dẫn, payload, mã lỗi, timeout, retry, idempotency và thứ tự sự kiện. Đây cũng là **nguồn chuẩn duy nhất của mã lỗi** `PRG-ERR-*`. |
 | 2. Ai phải đọc file này? | FE và BE bắt buộc đọc cùng nhau — hai bên phải review **một** hợp đồng, không phải hai bản mô tả. Core đọc §8 và §12 (hợp đồng BE↔Core). Security đọc §15. QA dựng contract test từ §14 và §18. |
 | 3. Hệ thống hiện tại đang có gì? | OpenAPI `1.28.0` và generated FE client có 33 operation, gồm Library search/upsert/delete/deprecate, Program intent/list, Runtime Signals và recovery reset. BE↔Core dùng frame bounded/canonical CBOR; Web đọc SHM qua mmap+seqlock, không dùng `os.ReadFile`. Source Plan 59 chưa có evidence target mới. |
-| 4. Thiết kế mới thay đổi điều gì? | Draft v2 đóng gói POU/program config/library lock/signal manifest; Commission impact mở rộng thành tám nhóm. `STAGE` dựng whole-set + signal bank nhưng không đổi live state; safe-boundary activation/read-back mới có quyền đổi Active. `HTTP 2xx` không tự kết luận Revision đang chạy. |
+| 4. Thiết kế mới thay đổi điều gì? | Baseline 2.0: Draft v2, whole-set atomic lifecycle. PGM-02 Candidate: R1 typed Draft/signature/reference/refactor/diagnostic; R2 coherent LIVE tuple; R3 Simulation session qua worker riêng cách ly và admin-only mutation. |
 | 5. Team phải sửa module/contract nào? | `contracts/openapi/openapi.yaml`, generated FE client, BE application/store/HTTP/compiler packager, Core Programming IPC/runtime coordinator, `contracts/shm/mkddc_shm.h` và Web `shm_reader.go`. §3.2/§8/§12 khóa giới hạn và authority. |
-| 6. Điều gì còn bị chặn? | Exact merged commit, deploy/read-back Forlinx MCU FAKE, soak 24 giờ và formal VVP chưa có. CI `SKIPPED_BY_OWNER`; HIL/MCU vật lý `DEFERRED_NO_HARDWARE`; TLS/release evidence vẫn độc lập. |
+| 6. Điều gì còn bị chặn? | Baseline còn thiếu exact merged/deployed evidence, soak/VVP/HIL. PGM-02 Candidate còn chờ Owner + System Architect exact revision/hash pin; OpenAPI/IPC production chưa được phép đổi; R1/R2/R3 đều `NO-GO`. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Contract/router/generated-client/CBOR/SHM tests chứng minh host; target phải lưu exact OpenAPI/artifact/service checksum, API/IPC/SHM read-back và raw soak. Evidence 2026-08-13 không chứng minh binary Plan 59 mới. |
 
 Vì sao mã lỗi phải tập trung ở đây: nếu mỗi component tự đặt mã, FE sẽ retry sai
@@ -163,6 +163,25 @@ signal definitions trong một transaction. Check sinh ba manifest compiler
 `--pou-manifest`, `--library-lock`, `--signal-manifest`; packager nhận POU table
 và library lock, sau đó verify package read-back. Không có manifest hợp lệ thì
 không tạo Artifact Ready.
+
+### 3.3 PGM-02 v2.2 contract overlay Target Candidate
+
+Overlay này chỉ mô tả contract cần pin trong `PGM02-V22-WP-00`; nó **không**
+sửa hoặc kích hoạt `contracts/openapi/openapi.yaml`. Field, endpoint và private
+protocol đầy đủ nằm tại
+[`DDD-SW-PGM02-WORKSPACE-001` §4–§6](../software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md)
+và machine-readable Candidate
+[`pgm02_workspace_v1.json`](../../../contracts/programming/pgm02_workspace_v1.json).
+
+| Increment | Boundary contract Candidate | Bất biến/failure semantics | Gate |
+|---|---|---|---|
+| R1 EDIT | Typed `ProgrammingDraftDocumentV1/V2` và discriminated Draft operation; Library chiếu normalized signature + authority/state; `GET .../draft/references`; semantic rename/remove; diagnostic anchor có stable object/node/port/span identity | `objectId` không suy từ `programId`/name; ETag + baseRevision + idempotency; analysis/signature không xác minh được thì zero mutation/`UNAVAILABLE`; Active không đổi | `IMPLEMENT_READY[PGM02-R1]=NO-GO` |
+| R2 LIVE | Document tuple `{controllerId,projectId,activeRevisionId,objectId,contentSha256,language}` ghép value tuple `{activeRevisionId,runtimeGeneration,observationId,sequence,observedAt,quality,value}` | Chỉ accept khi identity/revision/generation exact; sequence không tăng, stale/offline hoặc revision switch thì clear projection và full rejoin; PGM-02 LIVE read-only mọi role | `IMPLEMENT_READY[PGM02-R2]=NO-GO` |
+| R3 SIMULATE | Session create/read/action/input/observation/trace/stop; private supervisor↔worker protocol có protocol/worker version, session token, command ID, source hash, monotonic sequence và virtual time | Mutation chỉ `admin`; viewer/operator chỉ read theo object scope; worker ephemeral không nhận production SHM/device/socket/output writer/RETAIN handle; timeout thành `UNKNOWN_RECONCILING`, không blind retry | `IMPLEMENT_READY[PGM02-R3]=NO-GO`; `ADR-053` Proposed |
+
+R1 chỉ được pin trước R2; R2 chỉ được pin trước R3. Consumer cũ phải bỏ qua
+field additive lạ; consumer mới gặp server chưa quảng bá capability phải hiển
+thị `UNAVAILABLE`, không dựng dữ liệu hoặc chạy simulator trong browser.
 
 ## 4. Payload mutation Draft
 
@@ -682,6 +701,9 @@ không được báo optimistic success.
 | `IF-T-013` | lỗi ở mỗi phase stage/activate POU+Signal | trước `PREPARED` zero-mutation; signal-swap fail restore scheduler cùng boundary |
 | `IF-T-014` | Library deprecate same/different key, stale ETag, restart | một transition/receipt/audit; đúng revision read-back; Active/LKG pin vẫn load |
 | `IF-T-015` | SHM concurrent writer/restart/missing tail | không snapshot xé; inode reattach; invalid trả null/UNAVAILABLE; gap `0` không thành 0 ms |
+| `IF-T-016` | PGM-02 R1 typed Draft/signature/reference/refactor/anchor | generated Go/TS/schema cùng discriminator; ETag stale, referenced delete và analyzer unavailable đều zero mutation; read-back exact |
+| `IF-T-017` | PGM-02 R2 LIVE tuple mismatch/stale/revision switch | UI không ghép source/value khác revision/generation, clear value và full rejoin; không hiện zero giả |
+| `IF-T-018` | PGM-02 R3 RBAC/private worker/fault | operator mutation `403` trước worker; replay idempotent; timeout reconcile; sandbox không mở production handle/output |
 
 ## 17. Envelope và ordering mẫu mức triển khai
 
@@ -736,11 +758,13 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | TLS production chưa có | Security + Platform | **READY TO IMPLEMENT** | TLS/session/CSRF test theo Security DoD |
 | Operation worker/lifecycle target | BE + Core + QA | **SUPPORTING TARGET PASS** | `EV-PROG-P5-507` chứng minh happy path; fault/power/restart Test Result độc lập theo Plan 53 P6 |
 | Plan 59 OpenAPI v1.28/POU/Signal/Library/atomic IPC | Core + BE + FE + QA | **IMPLEMENTATION_CLOSE PENDING** | affected gates + exact merged commit; không kế thừa target evidence cũ |
+| PGM-02 v2.2 contract overlay | Product + Architect + FE/BE/Core/Security/QA | **TARGET CANDIDATE — NO EXECUTION AUTHORITY** | Owner + Architect pin exact revision/hash; sau đó chỉ mở R1 trước |
 | Forlinx MCU FAKE deploy/soak | Ops + Runtime + QA | **DEPLOY NOT_RUN / SOAK NOT_RUN** | manifest/checksum/API/IPC/SHM/browser read-back; raw samples đủ 24 giờ |
 | Formal VVP/CI/HIL vật lý | Verification + Owner + HW | **NOT_RUN / SKIPPED_BY_OWNER / DEFERRED_NO_HARDWARE** | không hạng mục nào được ghi PASS; `RELEASE_READY` NO-GO |
 
 | Phiên bản | Ngày | Nội dung | Tác giả |
 |---|---|---|---|
+| 2.1-candidate | 2026-08-24 | Thêm contract overlay PGM-02 cho typed EDIT, coherent LIVE và Simulation worker cách ly; bổ sung `IF-T-016..018`; giữ OpenAPI v1.28.0 Active không đổi và R1/R2/R3 `NO-GO` chờ exact pin. | System Architecture + Programming Team |
 | 0.1 | 2026-08-09 | Draft REST/event/internal contract | System Engineering |
 | 0.2 | 2026-08-09 | Bổ sung field, timeout, idempotency, state, error map, deploy/rollback và test để đạt M3 | System Engineering |
 | 0.3 | 2026-08-09 | Bổ sung response/event envelope, ordering/freshness, timeout/retry/idempotency table và contract-freeze checklist; chuyển Detailed Draft chờ review | System Engineering |
@@ -768,6 +792,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | Runtime Architect | **WAIVED FOR IMPLEMENTATION** | review hậu kiểm trong task P1–P3 |
 | Security + FE + QA | **WAIVED FOR IMPLEMENTATION** | contract/security test theo DoD; không chặn code |
 | System Architect + Product Owner | **ACCEPT FOR IMPLEMENTATION; RELEASE NO-GO** | `AUTH-PROG-2026-08-11-03`; target/soak/VVP còn mở |
+| PGM-02 v2.2 Candidate | **Owner APPROVE SCOPE/WP-00; Architect PENDING EXACT PIN** | `CR-PROG-PGM02-V22-001`; không phê duyệt đổi OpenAPI/IPC production |
 
 ### 19.1 Kết quả checklist vòng chi tiết
 
@@ -787,9 +812,12 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §16: handler BE, sinh type FE, và yêu cầu đưa spec vào `contracts/openapi/openapi.yaml` |
 | `DD-11` Verification | PASS | §16 `IF-T-001..015`; §18 checklist đóng băng contract; current target/formal results giữ NOT_RUN |
 | `DD-12` Compatibility/deploy/rollback | PASS | §10 contract gate; §15 thứ tự triển khai và tương thích |
-| `DD-13` Trace/risk/decision/sign-off | **PASS FOR IMPLEMENTATION DESIGN; RELEASE NO-GO** | Plan 59 `IMPLEMENTATION_CLOSE` pending; target MCU FAKE/soak/VVP chưa chạy; CI skipped, HIL physical deferred |
+| `DD-13` Trace/risk/decision/sign-off | **Baseline PASS FOR IMPLEMENTATION DESIGN; PGM-02 Candidate PENDING; RELEASE NO-GO** | Baseline Plan 59 `IMPLEMENTATION_CLOSE` pending; PGM-02 chờ exact pin/ADR-053; target MCU FAKE/soak/VVP chưa chạy; CI skipped, HIL physical deferred |
 
-Không còn blocker thiết kế để tiếp tục implementation. Tuy nhiên source Plan 59
-chưa có exact merged/deployed commit, Forlinx MCU FAKE deploy/soak và formal VVP
-đều `NOT_RUN`; vì vậy không được dùng supporting evidence cũ để kết luận
-`TARGET_FAKE_MCU_DEPLOY`, `TARGET_FAKE_MCU_SOAK` hay `RELEASE_READY`.
+Baseline 2.0 không còn blocker thiết kế để tiếp tục implementation theo authority
+đã ký. Nhận định đó không áp dụng cho PGM-02 v2.2 Candidate: exact revision/hash
+pin và `ADR-053` vẫn mở, nên chưa được đổi OpenAPI/IPC production hoặc bắt đầu
+R1/R2/R3. Source Plan 59 cũng chưa có exact merged/deployed commit, Forlinx MCU
+FAKE deploy/soak và formal VVP đều `NOT_RUN`; vì vậy không được dùng supporting
+evidence cũ để kết luận `TARGET_FAKE_MCU_DEPLOY`, `TARGET_FAKE_MCU_SOAK` hay
+`RELEASE_READY`.

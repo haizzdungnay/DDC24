@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-DRM-001` |
-| Phiên bản | 2.3 |
-| Trạng thái | **Active — baseline ADR-050 `PLAN/IMPLEMENT_READY=PASS`; PGM-02 v2.2 chỉ `T59-801=READY`, code NO-GO; `RELEASE_READY=NO-GO`** |
+| Phiên bản | 2.4-candidate |
+| Trạng thái | **Baseline ADR-050 Active `PLAN/IMPLEMENT_READY=PASS`; PGM-02 v2.2 Candidate 17-file set đang REVIEW, R1/R2/R3 NO-GO; `RELEASE_READY=NO-GO`** |
 | Ngày | 2026-08-24 |
 | Chủ quản | System Engineering + Document Control |
 | Product authority | [`PROD-PROG-001` v3.0](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) |
@@ -22,6 +22,11 @@ cổng phát hành.
 - Mười hai quyết định unified của baseline vẫn CLOSED. Hai record hiện OPEN:
   `CR-PROG-PGM02-V22-001` chờ Architect pin baseline sau `T59-801`, và
   `F-P59-GHOST-POU-001` chờ Owner chọn semantics package.
+- `T59-801` đã tạo formal DDD, machine-readable contract, `ADR-053` Proposed,
+  89 requirement/47 scenario, asset và 17-file Candidate pin set. Đây là
+  **review package**, chưa phải exact pin hoặc quyền code.
+- `T59-802..817` là 16 card downstream Candidate được tách theo R1/R2/R3; không
+  card nào có execution authority hoặc tự chuyển `READY`/`ORDERED`.
 - Task phụ thuộc code dùng `ORDERED`, tự chuyển `READY` khi dependency hoàn tất.
 - CI được Product Owner cho phép `WAIVED/DEFERRED BY OWNER` trong phạm vi đóng
   implementation; đây không phải CI PASS và không mở release.
@@ -38,26 +43,26 @@ cổng phát hành.
 | Lớp | Authority hiện hành | Nội dung đã khóa | Gate |
 |---|---|---|---|
 | Product | `PROD-PROG-001` v3.0 | Một Product; capacity 32/16; POU; library; signal; lifecycle; six-workspace IA | PASS |
-| Decision | `ADR-050`, `DEC-PROG-REGISTER-001` v1.1 | 12 unified CLOSED; 2 record OPEN; chỉ Owner disposition cho WP-00 đã có | PASS cho baseline; PGM-02 code PENDING |
-| Requirement | `SRS-PROG-001` v1.0 | 82 requirement: 60 legacy migration + 22 unified target | PASS |
-| Detailed Design | `DDD-SW-PROG-UNIFIED-001` | DD-01..DD-13; model, contract, state, algorithm, error, security, source mapping, rollback | PASS |
-| UX | `UX-WEB-PROG-001` v2.0 + asset PGM-02/PGM-04 desktop/mobile | Sáu workspace, POU tree, Control Library, lifecycle states và safe actions | PASS |
+| Decision | Baseline `ADR-050`; Candidate `DEC-PROG-REGISTER-001` v1.2 + `ADR-053` Proposed | 12 unified CLOSED; 2 scoped record OPEN; Simulation isolation decision chờ exact pin | PASS cho baseline; PGM-02 PENDING |
+| Requirement | `SRS-PROG-001` v1.1-candidate | 82 baseline + 7 PGM-02 Candidate = 89 requirement | PASS baseline; Candidate review pending |
+| Detailed Design | Baseline `DDD-SW-PROG-UNIFIED-001` v1.1; overlays v1.2-candidate + `DDD-SW-PGM02-WORKSPACE-001` | Formal model/contract/state/algorithm/error/security/source/test/rollback PGM-02 đã có; `DD-13` exact pin pending | PASS baseline; Candidate M2/REVIEW |
+| UX | `UX-WEB-PROG-001` v2.1-candidate + ba SVG/handoff v2.2 | Route/mode/POU/Quick Library/ST/FBD/LIVE/SIMULATE/mobile state Target | PASS baseline; Candidate asset review/pin pending |
 | Compiler | `DDD-LANG-PROG-001` v1.0 | User Function/FB, purity, instance state, call graph và artifact v2 | PASS |
-| Verification | `VVP-PROG-001` v2.0 | 32 scenario migration + 12 scenario unified; target/HIL authority tách khỏi host | PASS cho implementation; release evidence chờ chạy |
-| Traceability | `TRACE-PROG-001` v6.7 | 82/82 requirement và 44/44 scenario baseline có join máy; PGM-02 v2.2 mới là pre-baseline crosswalk, không đổi D/I/T/P/R | PASS baseline; scoped plan pending |
-| Risk | `RSK-PROG-001` v4.21 | 23/23 risk Open, gồm risk Simulation pre-baseline; không residual nào được hạ bằng approval | PASS baseline; PGM-02 code/release NO-GO |
-| Execution | `PLAN-PROG-059` v2.5 | 53 task, 9 Wave, một tracker duy nhất; chỉ `T59-801` READY trong W8 | baseline theo task hiện hành; PGM-02 downstream NO-GO |
+| Verification | `VVP-PROG-001` v2.1-candidate | 32 legacy + 12 unified + 3 PGM-02 Candidate = 47 scenario; `U13..U15` NOT_RUN | PASS baseline; Candidate review/evidence pending |
+| Traceability | `TRACE-PROG-001` v6.8-candidate | 89/89 requirement và 47/47 scenario join máy; bảy dòng PGM-02 chỉ `D=Y`, `I/T/P/R=N` | PASS consistency; PGM-02 implementation pending |
+| Risk | `RSK-PROG-001` v4.22-candidate | 23/23 risk Open; `RSK-PROG-023` nối DDD/ADR/U15/card R3; không residual nào được hạ | PASS register; PGM-02 code/release NO-GO |
+| Execution | `PLAN-PROG-059` v2.6-candidate | 69 card/9 Wave = 53 authority + 16 downstream Candidate; `T59-801` REVIEW | baseline theo task hiện hành; `T59-802..817` NO EXECUTION |
 | Autonomous prompt | `PROMPT-PLAN59-AUTONOMOUS` v2.0 | Chọn task, thực thi, kiểm chứng, commit/PR và cập nhật tracker | READY |
 
 ### 1.1 Scoped gate PGM-02 v2.2
 
 | Scope | Change request | Work package được mở | `PLAN_READY` | `IMPLEMENT_READY` | `RELEASE_READY` |
 |---|---|---|---|---|---|
-| `PGM02-V22` | **OWNER_APPROVED / ARCHITECT_PENDING** | Chỉ `PGM02-V22-WP-00` qua `T59-801=READY` | **PENDING** | **R1/R2/R3 NO-GO** | **NO-GO** |
+| `PGM02-V22` | **OWNER_APPROVED / ARCHITECT_PENDING** | Chỉ `PGM02-V22-WP-00` qua `T59-801=REVIEW`; `T59-802..817` chỉ Candidate | **PENDING** | **R1/R2/R3 NO-GO** | **NO-GO** |
 
-`T59-801` chỉ được inventory/reconcile và lập baseline/task downstream. Nó không
-cho phép viết production code, đổi route Active, đưa Simulation vào runtime hoặc
-tự gắn `ORDERED` cho R1/R2/R3. Điều kiện mở là exact revision/hash của
+`T59-801` chỉ được inventory/reconcile và lập baseline/card downstream. Việc tạo
+Candidate không cho phép viết production code, đổi route Active, đưa Simulation
+vào runtime hoặc tự gắn `READY`/`ORDERED` cho R1/R2/R3. Điều kiện mở là exact revision/hash của
 Product/SRS/Architecture/DDD/UX/contracts/Risk/Trace/VVP/Plan59 được Product
 Owner + System Architect review/pin và không còn conflict P0.
 
@@ -106,6 +111,7 @@ scenario unified `NOT_RUN` cho tới khi có Test Result đúng thẩm quyền.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.4-candidate | 2026-08-24 | Ghi review package PGM-02 gồm 17 authority file Candidate, 89 requirement/47 scenario, formal DDD/contract/ADR-053 và 16 card `T59-802..817`; chuyển `T59-801` sang REVIEW, giữ exact pin/PLAN_READY/IMPLEMENT_READY PENDING/NO-GO. |
 | 2.3 | 2026-08-24 | Tách scoped gate PGM-02 v2.2: Owner approved change request và chỉ `T59-801` READY; Architect pin, `PLAN_READY[PGM02-V22]` và mọi `IMPLEMENT_READY[R1/R2/R3]` giữ PENDING/NO-GO. Đồng bộ Plan59 53 task/9 Wave, Risk 23/23 Open, Trace v6.7 và mở lại `IMPLEMENTATION_CLOSE=PENDING` vì `F-P59-GHOST-POU-001`; deploy MCU FAKE giữ PARTIAL, release NO-GO. |
 | 2.2 | 2026-08-24 | Đồng bộ Plan59 52 task; thêm bốn lớp trạng thái implementation close/deploy MCU FAKE/soak/release; ghi CI owner-deferred, physical MCU/HIL deferred và soak 24 h chưa PASS. |
 | 1.0..1.2 | 2026-08-15 | Ma trận theo Plan 56, có ba hồ sơ thiếu và Product authority treo; superseded. |

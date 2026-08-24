@@ -1,6 +1,7 @@
-# KX-DDC24 Programming — FE Handoff Package v2.1
+# KX-DDC24 Programming — FE Handoff Package v2.2
 
-**Status:** FE HANDOFF — implementation specification  
+**Status:** TARGET FE HANDOFF — PGM02-V22-WP-00 reconciliation; NOT AS-BUILT / NOT RUNTIME EVIDENCE<br>
+**Formal PGM-02 Detailed Design authority:** [PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md](../../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md)<br>
 **Product:** MK-DDC-24 Generic DDC/BACS Controller  
 **Programming languages Rev A:** ST + FBD  
 **Primary pages:** PGM-01..PGM-06  
@@ -9,7 +10,9 @@
 
 ## 1. Source baseline
 
-This handoff package implements the latest approved product direction:
+Package này ghi nhận hướng thiết kế Target; riêng PGM-02 chỉ được dùng làm
+baseline triển khai sau khi Owner + System Architect pin cùng Detailed Design
+và machine-readable contract. Nó không tự chứng minh năng lực As-Built/runtime.
 
 - A Program is a user-facing independent control unit.
 - Normal users do not manage CPU core/thread/task directly.
@@ -115,10 +118,18 @@ Each page is DONE only when:
 
 ## 7. PGM-02 leadership review package
 
+- [PGM-02 Programs Workspace v2.2](PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md)
+- [PGM-02A ST Editor v2.2](PGM-02A_ST_EDITOR_FE_HANDOFF_v2_2.md)
+- [PGM-02B FBD Editor v2.2](PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md)
+- [Quick Library / SIMULATE / LIVE Target contract v2.2](PGM-02_QUICK_LIBRARY_SIM_LIVE_SPEC_v2_2.md)
+- [Visual combined desktop + mobile read-only](assets/PGM-02_ST_FBD_combined_reference.svg)
+- [Visual ST Editor và required states](assets/PGM-02A_ST_editor_reference.svg)
+- [Visual FBD Editor và required states](assets/PGM-02B_FBD_editor_reference.svg)
 - [Rà soát kiến trúc và khoảng trống PGM-02 ST/FBD](reviews/PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md)
 - [Kế hoạch triển khai đề xuất PGM-02 ST/FBD](reviews/PGM02_ST_FBD_IMPLEMENTATION_PLAN.md)
 
-Ngày 2026-08-24, Product Owner/CTO đã chấp thuận change request để mở WP-00,
+Ngày 2026-08-24, Product Owner/CTO đã chấp thuận change request để mở
+`PGM02-V22-WP-00`,
 khóa ba increment `R1 EDIT → R2 LIVE → R3 SIMULATE` và Simulation v1 admin-only.
 Baseline reconciled vẫn phải được Owner + System Architect review/pin trước khi
 sửa mã redesign. Hai hồ sơ không thay Plan59 và không đổi `RELEASE_READY`.

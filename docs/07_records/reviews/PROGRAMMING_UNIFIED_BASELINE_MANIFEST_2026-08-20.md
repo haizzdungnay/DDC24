@@ -3,46 +3,53 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.45 |
-| Trạng thái | Active |
+| Phiên bản | 1.48-candidate |
+| Trạng thái | **Baseline 1.45 Active; PGM-02 v2.2 Candidate pin set — System Architect exact pin PENDING** |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| Authority | `AUTH-PROG-2026-08-20-04`, ADR-050 |
+| Authority | Baseline: `AUTH-PROG-2026-08-20-04`, ADR-050; Candidate: `CR-PROG-PGM02-V22-001`, `ADR-053` Proposed |
 | Kiểm tra | `python3 scripts/candidate_pin_check.py` |
 
 ## 1. Phạm vi và quy tắc
 
-Manifest ghim đúng authority set dùng để bắt đầu Plan59. SHA-256 là hash nội dung
-file trong change-set Product thống nhất; cột cuối ghi source baseline được dùng
-để lập và review, không tuyên bố file đã tồn tại ở commit đó. Sau khi một file
-trong bảng đổi, cùng change-set phải cập nhật manifest, chạy lại pin check, đánh
-giá impact SRS/DDD/VVP/Trace/Risk/Plan và ghi Changelog.
+Manifest ghim đúng authority set dùng để bắt đầu Plan59. Baseline 1.45/16 file
+tiếp tục Active; revision này thêm formal PGM-02 DDD thành file thứ 17 và re-pin
+toàn bộ file chịu ảnh hưởng để tạo **Candidate review set**, không tự thay
+System Architect approval. SHA-256 là hash nội dung file trong change-set; cột
+cuối ghi source baseline dùng để lập/review, không tuyên bố file đã tồn tại ở
+commit đó. Sau khi một file trong bảng đổi, cùng change-set phải cập nhật
+manifest, chạy lại pin check, đánh giá impact SRS/DDD/VVP/Trace/Risk/Plan và ghi
+Changelog.
 
-Manifest không ghim source code sản phẩm, generated contract hoặc Test Result.
-Các artifact đó có manifest/golden/provenance riêng trong task Plan59. Pin PASS
-chỉ chứng minh reviewer đang đọc đúng revision tài liệu, không chứng minh code,
-target, HIL hoặc release.
+Manifest không ghim source code sản phẩm, contract/schema PGM-02, `ADR-053`,
+handoff manifest/SVG hoặc Test Result. Các artifact runtime sau này có manifest/
+golden/provenance riêng trong task Plan59; riêng review package WP-00 phải được
+khóa thêm bằng **candidate Git commit SHA** ghi trong record Owner + System
+Architect. Pin PASS 17/17 chỉ chứng minh reviewer đang đọc đúng revision của 17
+hồ sơ Markdown, không chứng minh các file ngoài bảng không drift, cũng không
+chứng minh code, target, HIL hoặc release.
 
 ## 2. Manifest authority baseline
 
 | # | Đường dẫn | SHA-256 nội dung | Source baseline |
 |---:|---|---|---|
-| 1 | `docs/00_governance/CONTROL.md` | `d7ea1d652630fb1752ac2ab4b2130b57d14ce78be082722e602584d79579fd9c` | `1bc3d19e96989c1309f838c0acd01d14d8536d5e` |
-| 2 | `docs/00_governance/DECISIONS.md` | `5b09168acc7cd0e518edd614251842b7223c0c3864019347e01dbe7c046a3eba` | `1bc3d19e96989c1309f838c0acd01d14d8536d5e` |
-| 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `885ffc2fda32eed6a35e0057e6e658fc5517c42324a2c6b3a5e567b12a1914ab` | `1bc3d19e96989c1309f838c0acd01d14d8536d5e` |
-| 4 | `docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` | `7d69f43efdbfe40bc549cf3e32b8af671272a40669d4c673bebc5fbc9568b74a` | `1bc3d19e96989c1309f838c0acd01d14d8536d5e` |
-| 5 | `docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md` | `14de631caed70f20d47a4d11825a5ec1f8bc9a25135f9020e13f2cb655355c3e` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 6 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `1d7132580ad15325810324bb9b7908f61ba223a63313f7995b71d41f285de41b` | `1bc3d19e96989c1309f838c0acd01d14d8536d5e` |
-| 7 | `docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md` | `ec57e4b0a9f855977ecd7743faea2152f518d1f7330a683fd1e8606a9eafd97a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 8 | `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | `08821231afc68cb1badc773b2d4ced17a9e5363562285f4d5f98cb90a7ebcb19` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 9 | `docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md` | `e24d6db84d8c0da982708c3ac94a5cda95e36d8ca66aee3ebba8a6c3d2a519dc` | `a64ebb54bdba026cd07984215eb0da5a642cc673` |
+| 1 | `docs/00_governance/CONTROL.md` | `2bcb4c4db03abe9c7e3b475eeb5fa8274d64f7f8e0cb88fa16bfb4ac7019bf00` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 2 | `docs/00_governance/DECISIONS.md` | `c6bfc4748d3ab511667f5434e71fb1bbeb683e024593aedd7a9ca48625b7635c` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `e6895b7c121f8925f6bd9e33b47652d61562d076d5fb8a1f4c1cffb682d14af2` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 4 | `docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` | `640b50546a547a2b2c8429386eb0c76658d517a0b020828c739c2083a74902e2` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 5 | `docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md` | `90160da7b570f7363eac302205c8767739818e6ec73bbdda2d202b542b7ecdb7` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 6 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `6ca9693953def5a80f67a0a1bdf1f92dda5d2d864e6131b6342e1a1b2fe70a28` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 7 | `docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md` | `b51f2c4344490ef36de27c04b977816565c3a9e765a87af0dfcde285fc0ebdb9` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 8 | `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | `9f5d6f2ac93afab709a3386ac9b78b2c9364a3c42feefbba7d040cb688ec0cc1` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 9 | `docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md` | `1a491fc67d7f29b2ab603c476ce611e4d88c49a7c3f1e4ca5d45591c4654af12` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
 | 10 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `1517f02ab79be2618929472e5e3a34e8bd58d70cac757c456c4a72b674ecd59a` | `44448eaa3ead251e0aa6cbe4953b93c1ed5d3658` |
-| 11 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `716344cd9d21e3b32765cc1126418a0013518e86bdf3460f7ed8713d443d2a62` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `2d26255dda3f9431c79a2553e11f37de5641f04d377a8de0075af3a9cb672968` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
-| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `e4b6717e11204e74725d096d46f5d460b28b7c0e47b2d9c6e5ac3ad891e33176` | `1bc3d19e96989c1309f838c0acd01d14d8536d5e` |
-| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `d5ccf3ef8a1801284950e1d1960a2a8792f55f8ae292085a10ff507fa1bf37b1` | `1bc3d19e96989c1309f838c0acd01d14d8536d5e` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `ecbc56467d6d19bf82e024d2f785280756283130667e70615f644fb635d3becc` | `1bc3d19e96989c1309f838c0acd01d14d8536d5e` |
+| 11 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `8633aca6932c52b44ad2a564b8a0da895596915c4b519bda360a47e28e79a9d6` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `bc07558a87dad37a6d5f1aafefd35f5402c35b14e1b4731e4b057d5ee003f1df` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `dc074f66f4437355f52fa8d1c5984b09ee93cd84d238089fb6526095cac42d58` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `99f051b0d64c72564e1ec6a7c732b6beae1c2f70ab898c38aac771318a9b94ff` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `78456338de2578c53cc57838b5c39c57122b7ad10ed012967f02b73196495d96` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `8dd7bd227861ded3a1da3478aec522826dc60716280bdd40b79fa23f7f1ef29a` | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
+| 17 | `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` | `c072c8cd4187bffff2bc655b2c0455ed486dcfc814c1463415056b6c1d27de2b` | `74cad45fae6e7e7b627f4d369554a45d1bc01c31` |
 
 ## 3. Disposition baseline cũ
 
@@ -55,10 +62,10 @@ hạ Product Target hoặc mở release gate. Candidate Product Hybrid và task 
 
 | Kiểm tra | Kết quả |
 |---|---|
-| Số authority file | 16 |
+| Số authority file | 17 |
 | Thiếu file | 0 |
 | Hash drift tại thời điểm ghim | 0 |
-| Open record | 2; chỉ `T59-801` reconciliation được mở, code downstream NO-GO |
+| Open record | 2 scoped record + `ADR-053` Proposed child decision; `T59-801` REVIEW, `T59-802..817` NO EXECUTION AUTHORITY |
 | Release evidence | Chưa đánh giá; theo Plan59 W7 |
 
 ## 5. Nhịp re-pin của Plan59
@@ -66,8 +73,8 @@ hạ Product Target hoặc mở release gate. Candidate Product Hybrid và task 
 Dòng 15 là **tracker đang chạy**, không phải hồ sơ đóng băng: Plan59 §7 buộc cập
 nhật bảng §3 sau mỗi task. Vì vậy hash dòng 15 sẽ đổi nhiều lần trong vòng đời
 manifest này, và mỗi change-set sửa Plan59 phải re-pin dòng 15 ngay trong cùng
-change-set theo §1. Hash 15 dòng còn lại chỉ đổi khi authority thật sự đổi; nếu
-một trong 15 dòng đó drift thì phải đánh giá impact SRS/DDD/VVP/Trace/Risk trước
+change-set theo §1. Hash 16 dòng còn lại chỉ đổi khi authority thật sự đổi; nếu
+một trong 16 dòng đó drift thì phải đánh giá impact SRS/DDD/VVP/Trace/Risk trước
 khi re-pin, không được re-pin phản xạ.
 
 Re-pin dòng 15 **không** nâng bất kỳ trạng thái nào của Product và không phải
@@ -77,6 +84,9 @@ evidence release.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.48-candidate | 2026-08-24 | Re-pin dòng 3/17 sau khi khóa exact pin hai lớp. **Impact:** pin 17 hồ sơ Markdown vẫn do manifest; contract/schema/ADR/handoff/SVG phải được khóa bằng candidate Git commit SHA trong record Owner + Architect. Không đổi requirement/scenario/risk/execution authority; `PLAN_READY` vẫn PENDING. |
+| 1.47-candidate | 2026-08-24 | Re-pin dòng 13 sau khi làm rõ phạm vi task: `T59-814..817` chỉ xử lý treatment `RSK-PROG-023`/Simulation, còn R1/R2 thuộc `T59-802..813`. **Impact:** chỉ sửa diễn đạt; 23/23 risk Open, S×L/residual/evidence và toàn bộ execution authority không đổi. |
+| 1.46-candidate | 2026-08-24 | Re-pin 17-file review set sau `T59-801`: thêm formal PGM-02 DDD, Candidate Product/SRS/Architecture/Unified DDD/UX/VVP/Trace/Risk/Plan và governance overlays. **Impact:** 82/44 baseline giữ Active; thêm 7 requirement/3 scenario với `I/T/P/R=N`; 23/23 risk Open; ADR-053 Proposed; 16 card downstream không có execution authority. Pin PASS chỉ chứng minh đúng bytes Candidate, chưa phải Owner/System Architect exact approval hoặc code/release evidence. |
 | 1.45 | 2026-08-24 | Re-pin dòng 1/2/3/4/6/13/14/15 khi đăng ký `CR-PROG-PGM02-V22-001` và mở duy nhất `T59-801`/`PGM02-V22-WP-00`. **Đánh giá impact:** Decision Register có 12 quyết định unified CLOSED và 2 record OPEN; Plan59 53 task/9 Wave; Risk 23/23 Open; Trace giữ nguyên baseline 82 requirement/44 scenario và không nâng `D/I/T/P/R`. Sửa drift số ADR kế tiếp thành 053 và version register. Product/SRS/Architecture/Unified DDD/UX/VVP **không đổi** trong lát authority này; System Architect pin, mọi code R1/R2/R3 và `RELEASE_READY` giữ PENDING/NO-GO. |
 | 1.0 | 2026-08-20 | Phát hành manifest baseline 16 hồ sơ tại `49a2ad1`. |
 | 1.1 | 2026-08-20 | Re-pin dòng 13/14/15 sau `T59-001`. **Đánh giá impact trước khi re-pin:** dòng 15 là status W0 + ghi chú thực thi §3.1; dòng 13 thêm treatment record §5.16 và lịch sử 2.0, **không** đổi S×L, không đổi lifecycle, không thêm residual accepted (16/16 Open, 11 Critical giữ nguyên); dòng 14 chỉ nối evidence vào ô `BE-110`, cột `D/I/T/P/R` giữ `Y/Y/N/N/N`. Không phát sinh thay đổi SRS/DDD/VVP nên 13 dòng authority còn lại không đổi. Thêm §5 nêu rõ nhịp re-pin của tracker. |

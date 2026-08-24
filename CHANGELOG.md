@@ -69,6 +69,31 @@
   thời `cmake --fresh` gặp đúng race tool build đang bị thay; chạy lại sau C++
   hoàn tất PASS, không sửa test hoặc contract để che lỗi.
 
+- **Added — hoàn tất gói Candidate để Owner + System Architect review/pin
+  chính xác output WP-00.** Bổ sung Detailed Design PGM-02 đủ `DD-01..DD-13`,
+  `ADR-053` Proposed về Simulation worker cách ly, hợp đồng máy đọc được kèm
+  schema/verifier, Quick Library spec và ba SVG desktop/mobile render được.
+  Đồng bộ Candidate overlay qua Product/SRS/Architecture/Unified DDD/FE Design/
+  Interface/UI-UX/VVP/Trace/Risk/Plan59/governance: tổng **89 requirement / 47
+  scenario**, 23/23 risk vẫn Open, manifest v1.48 **17/17** file và 16 card
+  `T59-802..817` đều **NO EXECUTION AUTHORITY**. `T59-801` chuyển sang `REVIEW`;
+  R1/R2/R3 tiếp tục `NO-GO` tới khi Owner + Architect pin đúng revision/hash.
+  Quy tắc exact pin nay tách hai lớp: manifest ghim 17 hồ sơ Markdown; record
+  duyệt phải ghi candidate Git commit SHA để khóa contract/schema/ADR/handoff/
+  SVG — riêng kết quả 17/17 không mở `PLAN_READY`.
+  Gate Candidate đo tại change-set: contract self-test **16/16 mutation bị từ
+  chối đúng**, wave-gate self-test **10/10**, docs ISO harness, bidirectional
+  trace, candidate pin và `git diff --check` đều PASS. Không đổi source runtime
+  hoặc OpenAPI Active; SVG đã render/kiểm tra trực quan tại 1800×1100 và
+  1680×1080. Full gate đo mới: CMake Release bật Modbus/BACnet/HMI, build và
+  CTest **1293/1293 PASS**; Go vet/test không cache tại `apps/web-api` PASS; FE
+  **136 file/1496 test**, lint và build PASS, chunk Programming **97,13 KiB
+  gzip**; `verify-project --component layout` PASS. Sửa luôn hướng dẫn Go trong
+  `AGENTS.md`: lệnh cũ chạy ở repo root thất bại vì không có root Go module,
+  lệnh authority nay chạy trong `apps/web-api`. Không chạy Chrome DevTools vì
+  change-set chỉ gồm tài liệu, contract, script gate và asset tham chiếu, không
+  đổi hành vi React/Vite.
+
 ### Sửa lỗi xóa Program/POU trả `PRG-ERR-REQ-001` (2026-08-24)
 
 - **Fixed — FE: không xóa được "chương trình ma".** *Triệu chứng:* sau vòng sửa

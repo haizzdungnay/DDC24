@@ -107,7 +107,10 @@ Khi user chỉ nói ngắn gọn **"commit"**, **"merge"**, **"commit đi"**, **
 
 1. **Kiểm chứng trước khi commit**, ghi số đo thật (không dẫn lại số cũ):
    - C++: `cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON`, `cmake --build build/fw --parallel` rồi `ctest --test-dir build/fw --output-on-failure` (**bật cả 3 option**, mặc định HMI là OFF nên dễ bỏ sót gate). Root CMake là authority sau `PLAN-ARCH-RESTRUCT-002`; không dùng lại path `services/` đã xóa.
-   - Go: `go vet ./...` + `go test ./... -count=1` (dùng `-count=1`, kết quả cache che được hồi quy).
+   - Go: chạy trong module authority `apps/web-api`:
+     `(cd apps/web-api && go vet ./... && go test ./... -count=1)` (dùng
+     `-count=1`, kết quả cache che được hồi quy). Không chạy từ root vì repo
+     không có `go.work`/`go.mod` ở root.
    - FE: `npx vitest --run --environment jsdom src` + `npm run lint` + `npm run build`. Lưu ý `npm test` chỉ quét `src/`, **không** chạy `e2e/`.
    - E2E khi có đổi trang mạng: `npx playwright test e2e/network-qa.spec.ts`.
 2. **Cập nhật `CHANGELOG.md`** dưới `[Unreleased]`.

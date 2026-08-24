@@ -3,18 +3,19 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `ARCH-PROG-001` |
-| Phiên bản | 1.0 |
-| Trạng thái | **Active — APPROVED FOR IMPLEMENTATION** |
-| Ngày | 2026-08-20 |
+| Phiên bản | 1.1-candidate (baseline hiệu lực: 1.0) |
+| Trạng thái | **Baseline Active + PGM-02 v2.2 TARGET CANDIDATE; Architect exact pin PENDING** |
+| Ngày | 2026-08-24 |
 | Chủ quản | Software/Runtime Architect |
 | Người phê duyệt | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` |
-| Requirement | `SRS-PROG-001` v1.0 |
-| Detailed Design | `DDD-SW-PROG-UNIFIED-001` |
+| Requirement | `SRS-PROG-001` v1.0 Active + v1.1 Candidate |
+| Detailed Design | `DDD-SW-PROG-UNIFIED-001`; Candidate `DDD-SW-PGM02-WORKSPACE-001` |
+| Authority Candidate | `CR-PROG-PGM02-V22-001`: Owner mở WP-00; `ADR-053` Proposed; code R1/R2/R3 NO-GO |
 | As-Built baseline | `49a2ad1`; one-Program path chỉ dùng để migration |
 
 ## 0. Quyết định kiến trúc
 
-Programming là module trong ba process hiện hữu, không thêm daemon:
+Baseline Programming là module trong ba process hiện hữu, không thêm daemon:
 
 - `mkddc-web`: Product store, compiler orchestration, REST, RBAC/audit và UI.
 - `mkddc-core`: active package, scheduler, POU instance state, Published Signal,
@@ -25,6 +26,12 @@ Programming là module trong ba process hiện hữu, không thêm daemon:
 Product hỗ trợ nhiều Program độc lập; Function/Function Block là reusable POU,
 không phải schedulable application. Mọi output vẫn đi qua một đường an toàn.
 Không còn decision blocker implementation; release vẫn cần target/HIL evidence.
+
+PGM-02 v2.2 là ngoại lệ Target có kiểm soát: R3 đề xuất một executable worker
+**ephemeral theo session**, không phải daemon control production và không thuộc
+ba-process control path. Quyết định này nằm ở `ADR-053` trạng thái Proposed;
+Architect chưa pin nên không trao quyền code. R1 EDIT và R2 LIVE vẫn dùng process
+hiện hữu; LIVE hoàn toàn read-only.
 
 ## 1. Context và trust boundary
 
@@ -50,6 +57,16 @@ Web UI ── generated client ──► mkddc-web
 Web/HMI không nằm trong control path. Compiler không chạy RT priority. Core không
 truy cập DB/HTTP trong scan. Iobus/MCU không nhận artifact hay source.
 
+Target Candidate R3 thêm nhánh ngoài control path:
+
+```text
+mkddc-web Simulation supervisor
+  └── spawn per session → mkddc-programming-sim-worker
+        ├── immutable Saved-Draft artifact
+        ├── virtual point/process image + virtual clock
+        └── NO production Core/iobus/SHM/device/output/RETAIN handle
+```
+
 ## 2. Ownership
 
 | Mutable state | Writer duy nhất | Reader | Persistence |
@@ -64,6 +81,8 @@ truy cập DB/HTTP trong scan. Iobus/MCU không nhận artifact hay source.
 | Output candidate/owner | Core registry | resolver/Monitor | runtime; rebuilt from Active |
 | Physical Point actual/quality | iobus/driver authority | Core/BE/FE | canonical Point image |
 | RETAIN record | Core mailbox/worker | Core/Ops | atomic file + CRC/identity |
+| Simulation session metadata (Candidate) | `mkddc-web` supervisor | FE/Ops/audit | bounded reconciliation metadata; process image ephemeral |
+| Simulation virtual state (Candidate) | isolated per-session worker | BE/FE read model | volatile; discarded on stop/expiry/reboot |
 
 Không có shared writable state giữa Program. Published Signal là snapshot typed,
 không là pointer hay Point mới.
@@ -202,6 +221,26 @@ Migration dùng dual-reader v1/v2 trong một compatibility window:
 Rollback package không xóa Draft/Revision/audit/LKG/RETAIN. Core cũ phải reject
 artifact mới bằng stable error, không parse một phần.
 
+### 10.1 PGM-02 Target Candidate theo increment
+
+| Increment | Process/ownership | Data/contract boundary | Failure boundary |
+|---|---|---|---|
+| R1 EDIT | FE + `mkddc-web` Draft/compiler | typed Draft v1/v2, Library signature, atomic reference/refactor, typed diagnostic; `objectId` selection tách `programId` | parse/analysis/ETag lỗi = zero mutation; Save/Check không đổi Active |
+| R2 LIVE | Core producer → IPC → BE read model → FE | sealed Active document tuple + runtime observation tuple; monotonic sequence; ≤10 Hz UI | mismatch/cutover/gap = clear/rejoin/UNAVAILABLE; LIVE không có mutation route/action |
+| R3 SIMULATE | Web supervisor + isolated ephemeral worker | immutable Saved-Draft snapshot, virtual image/time, server RBAC/audit; viewer/operator/admin read, admin-only mutation | sandbox/quota/timeout/crash/expiry fail closed; không production handle hoặc physical output authority |
+
+Worker R3 được phép link pure compiler/artifact validation/executor primitives,
+nhưng bị cấm link `OutputWriter`, device driver, production SHM/UDS clients,
+singleton coordinator, RETAIN writer hoặc iobus. Cùng snapshot/input phải cho
+kết quả deterministic ở mọi tốc độ; `STEP_CYCLE` snapshot input, chạy toàn bộ
+Program due theo stable order, commit một lần, tăng virtual time theo GCD rồi
+quay lại PAUSED. Process reboot không phục hồi session cũ.
+
+Capability của từng increment mặc định false và versioned. Partial deploy hoặc
+version mismatch trả `UNAVAILABLE/UNSUPPORTED`; không để FE fake producer. R3
+chỉ được bật sau Test Result target/HIL chứng minh Active/LKG/runtime counters và
+AO/DO/relay vật lý không đổi qua create/run/step/input/reset/stop/fault/expiry.
+
 ## 11. Source mapping
 
 | Boundary | Source/contract phải sửa | Plan59 |
@@ -214,6 +253,9 @@ artifact mới bằng stable error, không parse một phần.
 | Runtime/lifecycle | Core programming/scheduler/scan + IPC | T59-401..408/501/502 |
 | UI six workspace | FE routes/pages/generated client | T59-503..506 |
 | Trust/package/release | compiler/loader/platform/CI | T59-601..707 |
+| PGM-02 R1 EDIT | FE programs shell/editor/FBD/library + BE Draft/library/reference/check contract | Candidate task sau `T59-801` |
+| PGM-02 R2 LIVE | Core active/observation pin + IPC/BE join + FE keyed overlay | Candidate task sau R1 + exact pin |
+| PGM-02 R3 SIMULATE | BE supervisor/session + isolated worker + FE simulation surface + sandbox policy | Candidate task sau R2 + `ADR-053` Accepted |
 
 Dependency cấm: FE làm runtime authority; BE transaction chờ Core; compiler trong
 HTTP handler không giới hạn; Core scan gọi DB/network; Program direct IOP; shared
@@ -231,8 +273,9 @@ mutable cross-Program; manual registry duplicate; action IPC không handler.
 | HIL | ST+FBD AO/DO, Disable/fault/safe-state/rollback, power-cut RETAIN/LKG |
 | Release | signed provenance, fresh install/upgrade/replacement/rollback, CI and Test Result |
 
-Host/browser evidence không thay target/HIL. `PLAN_READY`/`IMPLEMENT_READY` PASS;
-`RELEASE_READY` chỉ GO theo Plan59 W7.
+Host/browser evidence không thay target/HIL. Baseline ADR-050 giữ gate hiện hành;
+riêng PGM-02 `PLAN_READY=PENDING`, `IMPLEMENT_READY[R1|R2|R3]=NO-GO` tới exact
+pin. `RELEASE_READY` chỉ GO theo Plan59/VVP có authority.
 
 ## 13. Risk và sign-off
 
@@ -245,6 +288,8 @@ Control/owner/scenario nằm ở `RSK-PROG-001` v3.0 và `TRACE-PROG-001` v4.0.
 | Product Owner/CTO + System Architect | **ACCEPT — `AUTH-PROG-2026-08-20-04`** |
 | Discipline leads | Review/fix trong task Plan59; không chặn entry implementation |
 | Verification/Release | Chờ evidence W7; residual chưa accept nên production NO-GO |
+| Product Owner — PGM-02 Candidate | **APPROVED CHANGE REQUEST / WP-00 ONLY** |
+| System Architect — PGM-02 Candidate và `ADR-053` | **PENDING exact revision/hash pin; production code NO-GO** |
 
 ## 14. Lịch sử
 
@@ -252,3 +297,4 @@ Control/owner/scenario nằm ở `RSK-PROG-001` v3.0 và `TRACE-PROG-001` v4.0.
 |---|---|---|
 | 0.1..0.9 | 2026-08-09..13 | Kiến trúc baseline một Program và source/host operation; superseded về Product Target. |
 | 1.0 | 2026-08-20 | Viết lại kiến trúc thống nhất cho POU/package/multi-Program/signal/enable/scheduler/output/migration/release; loại contradiction phạm vi cũ khỏi nội dung Active. |
+| 1.1-candidate | 2026-08-24 | Thêm boundary PGM-02 R1/R2/R3, coherent LIVE và ephemeral Simulation worker không production handle; đăng `ADR-053` Proposed, giữ Architect exact pin/code/release PENDING/NO-GO. |

@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-PGM02-ST-FBD-REDESIGN-REVIEW-001` |
-| Phiên bản | 1.2 |
-| Trạng thái | **Supporting record — Owner approved change request; `T59-801`/`PGM02-V22-WP-00` READY; Architect PENDING** |
+| Phiên bản | 1.3 |
+| Trạng thái | **Supporting record — Owner approved change request; `T59-801`/`PGM02-V22-WP-00` REVIEW; Architect exact pin PENDING** |
 | Ngày rà soát | 2026-08-24 |
 | Phạm vi | PGM-02 Programs, ST Editor, FBD Editor, Quick Library, EDIT/SIMULATE/LIVE |
 | Mốc mã nguồn | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` (`main`) |
@@ -13,8 +13,8 @@
 | Tài liệu triển khai kèm theo | [PGM02_ST_FBD_IMPLEMENTATION_PLAN.md](PGM02_ST_FBD_IMPLEMENTATION_PLAN.md) |
 | Change request chủ quản | [`CR-PROG-PGM02-V22-001`](../../../00_governance/PROGRAMMING_OPEN_DECISIONS.md) |
 | Task thực thi duy nhất đang mở | [`T59-801`](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) — reconciliation only |
-| Quyền thực thi | Plan59 vẫn là tracker duy nhất; chỉ `T59-801` được `READY`, chưa mở task downstream hay code production |
-| Gate hiện hành | Owner disposition: **APPROVED**; Architect baseline review/pin: **PENDING**; `T59-801`: **READY**; R1/R2/R3 code: **NO-GO**; `RELEASE_READY`: **NO-GO** |
+| Quyền thực thi | Plan59 vẫn là tracker duy nhất; `T59-801` đang `REVIEW` gói Candidate đã tạo, chưa mở task downstream hay code production |
+| Gate hiện hành | Owner disposition: **APPROVED**; Architect baseline review/pin: **PENDING**; `T59-801`: **REVIEW**; R1/R2/R3 code: **NO-GO**; `RELEASE_READY`: **NO-GO** |
 
 > Phân loại bằng chứng: kết quả browser/build/test trong hồ sơ này là **HOST**.
 > Không có bằng chứng board/HIL/physical I/O/timing/power-loss mới và không được
@@ -805,12 +805,13 @@ Authority chuẩn của quyết định này là `CR-PROG-PGM02-V22-001`; task d
 mở là `T59-801`/`PGM02-V22-WP-00`. Record này không thay chữ ký Architect và
 không cấp quyền triển khai R1/R2/R3.
 
-**OWNER APPROVED — T59-801 READY; ARCHITECT BASELINE PIN PENDING**
+**OWNER APPROVED — T59-801 REVIEW; ARCHITECT EXACT BASELINE PIN PENDING**
 
 ### Revision history
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.3 | 2026-08-24 | Đồng bộ output WP-00: gói Candidate đã được tạo và `T59-801` chuyển `REVIEW`; Architect exact pin cùng toàn bộ quyền code downstream vẫn `PENDING/NO-GO` |
 | 1.2 | 2026-08-24 | Nối record vào `CR-PROG-PGM02-V22-001` và `T59-801`, chuẩn hóa namespace `PGM02-V22-WP-*`, tách rõ Owner approved khỏi Architect `PENDING`; chỉ mở reconciliation, không mở code R1/R2/R3 |
 | 1.1 | 2026-08-24 | Ghi nhận Owner chấp thuận target/change request, ba increment `R1 EDIT → R2 LIVE → R3 SIMULATE` và Simulation v1 admin-only; mở WP-00 nhưng chưa pin baseline reconciled hoặc mở release gate |
 | 1.0 | 2026-08-24 | Rà source FE/BE/Core/runtime và browser host đủ 5 viewport; lập ma trận 15 câu FE, 21 BE, 19 runtime, UC-01..08, classification, 17 gap, dependency, 14 WP, migration/risk/3 Owner decisions; không triển khai code |

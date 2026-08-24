@@ -2,7 +2,7 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-24 (đồng bộ bộ đếm: `ADR-052` là ADR hiện hành mới nhất, `ADR-053` là số trống kế tiếp; không cấp ADR mới trong lần sửa này. Trước đó: 2026-08-20 phê duyệt Product Owner/CTO — bốn quyết định phạm vi: hoãn STM32 BSP nhưng gỡ firmware provenance giả, OTA → Rev B, gỡ `expose_bacnet` khỏi Rev A, chốt vòng đời lệnh ghi Modbus RTU; không cấp ADR mới. Trước đó: 2026-08-19 `AUTH-WEBUX-2026-08-19-02` — bốn quyết định người: `T57-3.8` **hoãn sang Rev B**, chủ sở hữu ba task C++, uỷ quyền truy cập board Foxlinx, và **mốc hết hiệu lực của `WAIVED FOR IMPLEMENTATION`**; không cấp ADR mới; trước đó: `ADR-042`…`ADR-049` `Accepted` — chín quyết định theo từng task để mở Wave 3 của Plan 57, ban hành cùng `AUTH-WEBUX-2026-08-19-01`; trước đó: `ADR-034`…`ADR-039` `Accepted` — sáu câu hỏi chặn còn lại của Plan 57 §12: annunciation, chủ sở hữu ngữ nghĩa mô phỏng cảnh báo, kho chỉ số ISA-18.2, chính sách mật khẩu, chủ sở hữu "hiệu lực thực tế" của lịch, và **an toàn quét bus Modbus**; `ADR-033`/`ADR-032` `Accepted` — cách ly route và điều hướng web 4 nhóm)
+**Cập nhật:** 2026-08-24 (`ADR-053` được cấp ở trạng thái **Proposed** cho worker Simulation PGM-02 cách ly; Owner đã duyệt scope/admin-only mutation, System Architect exact-revision decision còn PENDING; `ADR-054` là số trống kế tiếp. Trước đó: `ADR-052` là ADR Accepted mới nhất. Trước nữa: 2026-08-20 phê duyệt Product Owner/CTO — bốn quyết định phạm vi: hoãn STM32 BSP nhưng gỡ firmware provenance giả, OTA → Rev B, gỡ `expose_bacnet` khỏi Rev A, chốt vòng đời lệnh ghi Modbus RTU; không cấp ADR mới. Trước đó: 2026-08-19 `AUTH-WEBUX-2026-08-19-02` — bốn quyết định người: `T57-3.8` **hoãn sang Rev B**, chủ sở hữu ba task C++, uỷ quyền truy cập board Foxlinx, và **mốc hết hiệu lực của `WAIVED FOR IMPLEMENTATION`**; không cấp ADR mới; trước đó: `ADR-042`…`ADR-049` `Accepted` — chín quyết định theo từng task để mở Wave 3 của Plan 57, ban hành cùng `AUTH-WEBUX-2026-08-19-01`; trước đó: `ADR-034`…`ADR-039` `Accepted` — sáu câu hỏi chặn còn lại của Plan 57 §12: annunciation, chủ sở hữu ngữ nghĩa mô phỏng cảnh báo, kho chỉ số ISA-18.2, chính sách mật khẩu, chủ sở hữu "hiệu lực thực tế" của lịch, và **an toàn quét bus Modbus**; `ADR-033`/`ADR-032` `Accepted` — cách ly route và điều hướng web 4 nhóm.)
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa; **bản 2026-08-19 sửa lại lần chuẩn hoá
 2026-07-22**: EasySet parity thành **`ADR-040`** (không phải `ADR-013`) và raw SHM thành **`ADR-041`**
@@ -19,8 +19,8 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 > `ADR-033` (cách ly route khỏi điều hướng) và `ADR-034`…`ADR-039` (sáu quyết
 > định Plan 57 §12, mục nội tuyến bên dưới). Vì vậy `ls docs/adr/` **không** cho
 > biết số nào còn trống. Trước khi đặt số mới, lấy số lớn nhất trong bảng hoặc
-> hồ sơ ADR hiện hành rồi cộng một. Số cao nhất đã cấp phát: **`ADR-052`**
-> (2026-08-22).
+> hồ sơ ADR hiện hành rồi cộng một. Số cao nhất đã cấp phát: **`ADR-053`**
+> (2026-08-24, Proposed); ADR Accepted mới nhất vẫn là `ADR-052`.
 
 | ID | Quyết định hiện hành | Trạng thái |
 |---|---|---|
@@ -73,6 +73,7 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 | ADR-047 | **Buộc đổi mật khẩu mặc định: cờ `mustChangePassword` trên tài khoản, cưỡng chế ở BACKEND chứ không ở giao diện.** Phiên có cờ này chỉ gọi được `GET /api/v1/me` và `POST /api/v1/me/change-password`; mọi endpoint khác trả `403` với `reasonCode: password_change_required`. Cưỡng chế bằng cách ẩn màn hình ở FE là không cưỡng chế gì cả — `curl` vẫn đi thẳng. Cờ bật khi `admin` đặt lại mật khẩu và cho tài khoản khởi tạo lần đầu; tự tắt sau lần đổi thành công. Phục vụ `T57-3.17`; **không** đụng tới độ dài mật khẩu đã chốt ở `ADR-037`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-048 | **Mô phỏng luật cảnh báo đi qua `POST /api/v1/alarm-settings/simulate`, là VỎ gọi `mkddc-alarm-sim`.** Thi hành `ADR-035`: nhận một `AlarmSetting` bản nháp + chuỗi mẫu `(t, value)`, trả các lần bật/tắt kèm mốc thời gian và mức nghiêm trọng. Thiếu binary ⇒ `503` nói rõ thiếu gì; **cấm** bản tính xấp xỉ ở Go hay FE, kể cả "gần đúng". Mô phỏng **không** chạm cấu hình đang lưu và không ghi audit thay đổi. Phục vụ `T57-2.13`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-049 | **Code-splitting theo route dùng `React.lazy` cho các nhánh NẶNG và HIẾM, không chia nhỏ toàn bộ.** Chia theo lô nghiệp vụ: Programming, Xu hướng/biểu đồ, Lịch vận hành, Modbus RTU. Bốn màn hình mở đầu ca trực (Landing, Giám sát, Cảnh báo, Chẩn đoán) **ở lại chunk chính** — chia chúng ra chỉ đổi một lần tải thành hai lần chờ. Mỗi ranh giới `lazy` phải có `Suspense` với khối trạng thái thật, không màn hình trắng. Số đo bắt buộc là **thời gian mở trang đầu trên board thật**, không phải kích thước tệp. Phục vụ `T57-4.2`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
+| ADR-053 | **PGM-02 Simulation dùng `mkddc-programming-sim-worker` ephemeral theo session, tách production Core/SHM/device/iobus/output/RETAIN; Web chỉ supervisor/RBAC/audit/quota, mutation admin-only.** [Hồ sơ](../adr/ADR-053-programming-simulation-worker-cach-ly.md). | **Proposed 2026-08-24** — Owner duyệt scope R3/admin-only; System Architect exact pin PENDING; code R3 NO-GO |
 
 > [!IMPORTANT]
 > **Mọi dòng ghi `chữ ký người: WAIVED FOR IMPLEMENTATION` trong bảng trên đều có
@@ -1504,5 +1505,6 @@ profile nên profile đổi sẽ gãy build, không gãy ngoài hiện trường
   đặt hẹn giờ an toàn ở đó sẽ biến mỗi lần chỉnh thành sự kiện tương thích
   artifact trong khi không artifact nào phụ thuộc nó.
 
-ADR hiện hành mới nhất: [`ADR-052`](../adr/ADR-052-programming-ky-artifact-bang-khoa-thiet-bi.md).
-Số ADR tiếp theo còn trống: **`ADR-053`**.
+ADR Accepted mới nhất: [`ADR-052`](../adr/ADR-052-programming-ky-artifact-bang-khoa-thiet-bi.md).
+ADR được cấp mới nhất: [`ADR-053`](../adr/ADR-053-programming-simulation-worker-cach-ly.md)
+ở trạng thái **Proposed**. Số ADR tiếp theo còn trống: **`ADR-054`**.

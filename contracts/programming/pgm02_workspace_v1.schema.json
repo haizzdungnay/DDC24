@@ -1,0 +1,323 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mekong-hcm.local/contracts/programming/pgm02_workspace_v1.schema.json",
+  "title": "Hợp đồng target PGM-02 workspace v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractId",
+    "version",
+    "status",
+    "sourceBaselineCommit",
+    "authority",
+    "pins",
+    "route",
+    "identity",
+    "modes",
+    "quickLibrary",
+    "edit",
+    "live",
+    "simulation",
+    "nfr",
+    "evidence"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "contractId": { "const": "PGM02-WORKSPACE-V1" },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["major", "minor"],
+      "properties": {
+        "major": { "const": 1 },
+        "minor": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "status": { "const": "TARGET_CANDIDATE" },
+    "sourceBaselineCommit": { "$ref": "#/$defs/sha1" },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changeRequest", "workPackage", "task", "ownerDisposition", "architectDisposition", "planReady", "implementReady", "releaseReady"],
+      "properties": {
+        "changeRequest": { "const": "CR-PROG-PGM02-V22-001" },
+        "workPackage": { "const": "PGM02-V22-WP-00" },
+        "task": { "const": "T59-801" },
+        "ownerDisposition": { "const": "APPROVED_WP00_ONLY" },
+        "architectDisposition": { "const": "PENDING_EXACT_REVISION_PIN" },
+        "planReady": { "const": "PENDING" },
+        "implementReady": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["R1_EDIT", "R2_LIVE", "R3_SIMULATE"],
+          "properties": {
+            "R1_EDIT": { "const": "NO_GO" },
+            "R2_LIVE": { "const": "NO_GO" },
+            "R3_SIMULATE": { "const": "NO_GO" }
+          }
+        },
+        "releaseReady": { "const": "NO_GO" }
+      }
+    },
+    "pins": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["productProfileSha256", "libraryRegistrySha256", "openapiSha256", "programmingIpcSha256"],
+      "properties": {
+        "productProfileSha256": { "$ref": "#/$defs/sha256" },
+        "libraryRegistrySha256": { "$ref": "#/$defs/sha256" },
+        "openapiSha256": { "$ref": "#/$defs/sha256" },
+        "programmingIpcSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "route": { "$ref": "#/$defs/route" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "modes": { "$ref": "#/$defs/modes" },
+    "quickLibrary": { "$ref": "#/$defs/quickLibrary" },
+    "edit": { "$ref": "#/$defs/edit" },
+    "live": { "$ref": "#/$defs/live" },
+    "simulation": { "$ref": "#/$defs/simulation" },
+    "nfr": { "$ref": "#/$defs/nfr" },
+    "evidence": { "$ref": "#/$defs/evidence" }
+  },
+  "$defs": {
+    "sha1": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "nonEmptyStrings": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "projectQuery", "pouQuery", "modeQuery", "legacy", "preserveQuery", "projectResolution"],
+      "properties": {
+        "primary": { "const": "/eng/programming/programs" },
+        "projectQuery": { "const": "project" },
+        "pouQuery": { "const": "pou" },
+        "modeQuery": { "const": "mode" },
+        "legacy": { "$ref": "#/$defs/nonEmptyStrings" },
+        "preserveQuery": { "$ref": "#/$defs/nonEmptyStrings" },
+        "projectResolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["zeroProjects", "oneProject", "manyProjects", "invalidProject"],
+          "properties": {
+            "zeroProjects": { "const": "EMPTY_CREATE_OR_READ_ONLY" },
+            "oneProject": { "const": "CANONICALIZE_QUERY" },
+            "manyProjects": { "const": "REQUIRE_EXPLICIT_SELECTION" },
+            "invalidProject": { "const": "NOT_FOUND_NO_FALLBACK" }
+          }
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selectedPou", "runtimeProgram", "documentTuple", "valueTuple", "mismatchResult"],
+      "properties": {
+        "selectedPou": { "const": "objectId" },
+        "runtimeProgram": { "const": "programId" },
+        "documentTuple": { "$ref": "#/$defs/nonEmptyStrings" },
+        "valueTuple": { "$ref": "#/$defs/nonEmptyStrings" },
+        "mismatchResult": { "const": "UNAVAILABLE" }
+      }
+    },
+    "mode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "mutableRoles", "quickLibrary", "physicalOutputAuthority"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "mutableRoles": { "type": "array", "uniqueItems": true, "items": { "enum": ["viewer", "operator", "admin"] } },
+        "quickLibrary": { "type": "boolean" },
+        "physicalOutputAuthority": { "const": false },
+        "joinFailure": { "const": "UNAVAILABLE" },
+        "dirtyDraftResult": { "const": "SAVE_REQUIRED" }
+      }
+    },
+    "modes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default", "allowed", "EDIT", "LIVE", "SIMULATE"],
+      "properties": {
+        "default": { "const": "EDIT" },
+        "allowed": { "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["EDIT", "LIVE", "SIMULATE"] } },
+        "EDIT": { "$ref": "#/$defs/mode" },
+        "LIVE": { "$ref": "#/$defs/mode" },
+        "SIMULATE": { "$ref": "#/$defs/mode" }
+      }
+    },
+    "quickLibrary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorities", "publicFields", "unsupportedPolicy", "favoritesPersistence", "recentLimit", "favoritesLimit", "insertionTransaction", "signatureStates", "systemSignatureProjection", "projectSignatureSource", "unavailableFallback"],
+      "properties": {
+        "authorities": { "$ref": "#/$defs/nonEmptyStrings" },
+        "publicFields": { "$ref": "#/$defs/nonEmptyStrings" },
+        "unsupportedPolicy": { "const": "HIDE_OR_EXPLAIN_NOT_SUPPORTED" },
+        "favoritesPersistence": { "const": "LOCAL_USER_PREFERENCE" },
+        "recentLimit": { "type": "integer", "minimum": 1, "maximum": 50 },
+        "favoritesLimit": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "insertionTransaction": { "const": "ONE_UNDO_STEP" },
+        "signatureStates": { "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["READY", "REVIEW_REQUIRED", "UNAVAILABLE"] } },
+        "systemSignatureProjection": { "const": "CANONICAL_REGISTRY_EXACT" },
+        "projectSignatureSource": { "const": "PROJECT_INTERFACE_JSON" },
+        "unavailableFallback": { "const": false }
+      }
+    },
+    "edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["draft", "pouRefactor", "references", "diagnostics"],
+      "properties": {
+        "draft": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "path", "ifMatchRequired", "requestEnvelopeSchemaVersion", "contentSchemaVersions", "firstWriteMigration", "typedSchemas", "operationDiscriminator", "operations", "responseContentSchema", "conflictError"],
+          "properties": {
+            "method": { "const": "PATCH" },
+            "path": { "const": "/api/v1/programming/projects/{projectId}/draft" },
+            "ifMatchRequired": { "const": true },
+            "requestEnvelopeSchemaVersion": { "const": "1.0" },
+            "contentSchemaVersions": { "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": { "enum": [1, 2] } },
+            "firstWriteMigration": { "const": "V1_TO_V2_DETERMINISTIC" },
+            "typedSchemas": { "$ref": "#/$defs/nonEmptyStrings" },
+            "operationDiscriminator": { "const": "op" },
+            "operations": { "type": "array", "minItems": 15, "maxItems": 15, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+            "responseContentSchema": { "const": "ProgrammingDraftDocumentV2" },
+            "conflictError": { "const": "PRG-ERR-CONFLICT-001" }
+          }
+        },
+        "pouRefactor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["renameMode", "rewriteTargets", "preserveIdentity", "deletePolicy", "analysisFailure", "stableErrors"],
+          "properties": {
+            "renameMode": { "const": "ATOMIC_SEMANTIC_REFACTOR" },
+            "rewriteTargets": { "$ref": "#/$defs/nonEmptyStrings" },
+            "preserveIdentity": { "$ref": "#/$defs/nonEmptyStrings" },
+            "deletePolicy": { "const": "BLOCK_ANY_SEMANTIC_REFERENCE" },
+            "analysisFailure": { "const": "NO_MUTATION" },
+            "stableErrors": { "$ref": "#/$defs/nonEmptyStrings" }
+          }
+        },
+        "references": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "path", "queryFields", "responseFields", "states", "sourceIdentity", "targetIdentity", "mutationEndpoint"],
+          "properties": {
+            "method": { "const": "GET" },
+            "path": { "const": "/api/v1/programming/projects/{projectId}/draft/references" },
+            "queryFields": { "$ref": "#/$defs/nonEmptyStrings" },
+            "responseFields": { "$ref": "#/$defs/nonEmptyStrings" },
+            "states": { "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": { "enum": ["READY", "UNAVAILABLE"] } },
+            "sourceIdentity": { "const": "sourcePouObjectId" },
+            "targetIdentity": { "const": "objectId_OR_entryId" },
+            "mutationEndpoint": { "const": false }
+          }
+        },
+        "diagnostics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["locationDiscriminator", "locationKinds", "sourceAnchor", "fbdAnchor", "deprecatedProgramIdAliasMajors", "malformedAnchorPolicy"],
+          "properties": {
+            "locationDiscriminator": { "const": "kind" },
+            "locationKinds": { "type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true, "items": { "enum": ["SOURCE", "FBD", "POU", "GLOBAL"] } },
+            "sourceAnchor": { "$ref": "#/$defs/nonEmptyStrings" },
+            "fbdAnchor": { "$ref": "#/$defs/nonEmptyStrings" },
+            "deprecatedProgramIdAliasMajors": { "const": 1 },
+            "malformedAnchorPolicy": { "const": "FAIL_CLOSED" }
+          }
+        }
+      }
+    },
+    "live": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["readOnly", "activeSourceRetrieval", "overlayMaxHz", "missingValue", "qualityStates", "transitionStates"],
+      "properties": {
+        "readOnly": { "const": true },
+        "activeSourceRetrieval": { "const": "RUNTIME_THEN_IMMUTABLE_REVISION" },
+        "overlayMaxHz": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "missingValue": { "type": "null" },
+        "qualityStates": { "$ref": "#/$defs/nonEmptyStrings" },
+        "transitionStates": { "$ref": "#/$defs/nonEmptyStrings" }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityDefault", "workerExecutable", "workerLifetime", "processBoundary", "readRoles", "mutationRoles", "actions", "states", "virtualTime", "inputs", "limits", "stableErrors"],
+      "properties": {
+        "capabilityDefault": { "const": false },
+        "workerExecutable": { "const": "mkddc-programming-sim-worker" },
+        "workerLifetime": { "const": "EPHEMERAL_PER_SESSION" },
+        "processBoundary": { "const": "NO_PRODUCTION_SHM_DEVICE_SOCKET_OUTPUT_WRITER" },
+        "readRoles": { "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["viewer", "operator", "admin"] } },
+        "mutationRoles": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "const": "admin" } },
+        "actions": { "$ref": "#/$defs/nonEmptyStrings" },
+        "states": { "$ref": "#/$defs/nonEmptyStrings" },
+        "virtualTime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["baseTick", "initialTimeMs", "initialNextReleaseMs", "step", "stepProgram", "speeds"],
+          "properties": {
+            "baseTick": { "const": "GCD_ALLOWED_PROGRAM_PERIODS" },
+            "initialTimeMs": { "const": 0 },
+            "initialNextReleaseMs": { "const": 0 },
+            "step": { "const": "SNAPSHOT_INPUT_RUN_ALL_DUE_COMMIT_INCREMENT_PAUSE" },
+            "stepProgram": { "const": false },
+            "speeds": { "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "enum": [1, 10, 60] } }
+          }
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["manifestField", "allowedSources", "deniedSources", "identity", "validateTypeUnitRange"],
+          "properties": {
+            "manifestField": { "const": "simulationInputs" },
+            "allowedSources": { "$ref": "#/$defs/nonEmptyStrings" },
+            "deniedSources": { "$ref": "#/$defs/nonEmptyStrings" },
+            "identity": { "const": "observationId" },
+            "validateTypeUnitRange": { "const": true }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maxConcurrentSessionsPerController", "idleTtlSeconds", "hardTtlSeconds", "maxRssMiB", "maxCpuPercentOneCore", "maxActionsPerSecond", "maxTraceSamples", "maxVirtualInputs", "workerCommandTimeoutMs"],
+          "properties": {
+            "maxConcurrentSessionsPerController": { "const": 1 },
+            "idleTtlSeconds": { "type": "integer", "minimum": 60, "maximum": 3600 },
+            "hardTtlSeconds": { "type": "integer", "minimum": 300, "maximum": 14400 },
+            "maxRssMiB": { "type": "integer", "minimum": 16, "maximum": 256 },
+            "maxCpuPercentOneCore": { "type": "integer", "minimum": 1, "maximum": 50 },
+            "maxActionsPerSecond": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "maxTraceSamples": { "type": "integer", "minimum": 1, "maximum": 10000 },
+            "maxVirtualInputs": { "type": "integer", "minimum": 1, "maximum": 512 },
+            "workerCommandTimeoutMs": { "type": "integer", "minimum": 100, "maximum": 10000 }
+          }
+        },
+        "stableErrors": { "$ref": "#/$defs/nonEmptyStrings" }
+      }
+    },
+    "nfr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["viewport", "frontend", "accessibility"],
+      "properties": {
+        "viewport": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 320, "maximum": 4096 } },
+        "frontend": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } },
+        "accessibility": { "type": "object", "additionalProperties": { "type": ["number", "boolean"] } }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "external", "releaseReadyDefault"],
+      "properties": {
+        "host": { "$ref": "#/$defs/nonEmptyStrings" },
+        "external": { "$ref": "#/$defs/nonEmptyStrings" },
+        "releaseReadyDefault": { "const": "NO_GO" }
+      }
+    }
+  }
+}
