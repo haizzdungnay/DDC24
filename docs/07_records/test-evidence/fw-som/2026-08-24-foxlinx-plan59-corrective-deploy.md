@@ -148,6 +148,26 @@ trình đã sửa chạy đúng trên target" còn thiếu. Cần: quyền chạ
   Commission trong cùng Project. Cần chốt: đây là ràng buộc sản phẩm (một
   controller một Project) hay là thiếu một thông điệp lỗi nói rõ lý do.
 
+## 6b. Deploy bổ sung `d6234b8` — sửa lỗi xóa Program (`F-P59-DELETE-PROGRAM-001`)
+
+Sau khi người dùng báo `PRG-ERR-REQ-001` khi bấm Xóa Program, bản sửa được
+deploy tiếp lên bo (chỉ tầng web: `mkddc-web` + `dist`; backup hậu tố
+`.prev-delfix-*`). `mkddc-web --version` → `git_commit=d6234b8…`, bundle FE trên
+bo `assets/index-BNZ1Qu8s.js` trùng bản dựng cục bộ, health đủ mục `ok`.
+
+Kiểm chứng chạy thật trên bo với một Project có **1 PROGRAM + 1 FUNCTION** —
+đúng hình dạng làm lỗi nổ ra:
+
+| Batch | Kết quả trên bo |
+|---|---|
+| Kiểu CŨ (`removeProgram` + `setTask` với `programOrder` chứa id FUNCTION) | `400` — và nay lỗi chỉ đúng thao tác: `"field": "operations[1].setTask"` |
+| Xóa PROGRAM sau bản sửa (`removeProgram` + `removeObject`) | **200** |
+| Xóa user FUNCTION sau bản sửa (`removeObject`) | **200** |
+| Draft sau cùng | `objects = 0`, `programs = 0` — POU thật sự biến mất, không còn bóng ma |
+
+Trường `field` là phần thêm ở BE: trước đó một batch 4–5 thao tác chỉ trả đúng
+một mã cho cả mảng, nên không có gì để lần ra thao tác nào sai.
+
 ## 7. Rollback (cập nhật theo bản sửa)
 
 ```bash
