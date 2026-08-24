@@ -263,12 +263,22 @@ describe('RuntimeServicePage — S5-D (TASK-PROG-505)', () => {
     expect(screen.queryByText(/giữ Commission\/Restore bị khóa/)).not.toBeInTheDocument()
   })
 
+  /* SELECTOR ĐỔI VÌ BỐ CỤC ĐỔI (`T60-208`, handoff v2.1 §7 "max 4 bottom-nav
+   * destinations"), khẳng định giữ nguyên: shell Programming trên màn hẹp vẫn
+   * đưa tới **đủ sáu workspace** bằng tên truy cập đầy đủ. Khác biệt duy nhất
+   * là ba bề mặt soạn thảo nay nằm trong ngăn `Thêm` thay vì chen vào một hàng
+   * sáu ô ở 390 px. */
   it('có bottom navigation đủ sáu workspace trên shell Programming', async () => {
     stubDefaultEndpoints()
     renderPage()
     const nav = await screen.findByRole('navigation', { name: 'Điều hướng sáu workspace Lập trình' })
-    for (const name of ['Tổng quan', 'Chương trình', 'Điểm & Ánh xạ', 'Thư viện điều khiển', 'Kiểm tra & Vận hành', 'Runtime & Bảo trì']) {
+    for (const name of ['Tổng quan', 'Kiểm tra & Vận hành', 'Runtime & Bảo trì']) {
       expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
+    }
+    fireEvent.click(within(nav).getByRole('button', { name: 'Thêm đích Lập trình' }))
+    const more = within(screen.getByTestId('programming-mobile-more'))
+    for (const name of ['Chương trình', 'Điểm & Ánh xạ', 'Thư viện điều khiển']) {
+      expect(more.getByRole('link', { name })).toBeInTheDocument()
     }
   })
 

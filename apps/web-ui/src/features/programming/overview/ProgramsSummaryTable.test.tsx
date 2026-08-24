@@ -246,3 +246,64 @@ describe('ProgramsSummaryTable — D-06 một ngôn ngữ tại một thời đi
     expect(table().textContent ?? '').not.toMatch(/[àáảãạăâđêôơư]/i)
   })
 })
+
+/* ------------------------------------------------------------------ *
+ * `T60-208` — dưới 768 px: thẻ gọn thay bảng cuộn ngang               *
+ * ------------------------------------------------------------------ */
+
+describe('ProgramsSummaryTable — biến thể thẻ gọn cho màn hẹp (T60-208)', () => {
+  it('mỗi Program là một thẻ mang ĐỦ sáu dữ kiện, mỗi giá trị có nhãn đi kèm', () => {
+    renderTable()
+    const cards = screen.getByTestId('programs-summary-cards')
+    // Nhãn phải nằm cạnh giá trị: thẻ không có hàng header nên một ô không nhãn
+    // là một con số không ai đọc được là số gì.
+    for (const label of ['Ngôn ngữ', 'Chu kỳ', 'Trạng thái', 'Chạy gần nhất', 'Sức khoẻ']) {
+      expect(within(cards).getAllByText(label).length).toBeGreaterThan(0)
+    }
+    expect(within(cards).queryByText(/tác vụ|task/i)).not.toBeInTheDocument()
+  })
+
+  it('bảng và thẻ KHÔNG cùng hiển thị — trình đọc màn hình không đọc trùng', () => {
+    renderTable()
+    // jsdom không áp media query của Tailwind, nên kiểm bằng chính lớp điều
+    // khiển hiển thị: thẻ `md:hidden`, bảng `hidden md:block`. Nếu ai gỡ một
+    // trong hai lớp đó, nội dung sẽ nhân đôi ở mọi khổ màn hình.
+    expect(screen.getByTestId('programs-summary-cards').className).toContain('md:hidden')
+    const tableWrapper = table().parentElement
+    expect(tableWrapper?.className).toContain('hidden')
+    expect(tableWrapper?.className).toContain('md:block')
+  })
+
+  it('thẻ bấm được mở đúng PGM-02 kèm POU đã chọn, y như hàng bảng', () => {
+    renderTable()
+    const cards = screen.getByTestId('programs-summary-cards')
+    const first = cards.querySelector('[data-program-card]')
+    expect(first).not.toBeNull()
+    fireEvent.click(first as Element)
+    expect(screen.getByTestId('pgm02')).toHaveTextContent(`${PROJECT_ID}?program=${OBJECT_A}`)
+  })
+
+  it('thẻ mở được bằng BÀN PHÍM, không chỉ bằng chuột', () => {
+    renderTable()
+    const first = screen.getByTestId('programs-summary-cards').querySelector('[data-program-card]')
+    fireEvent.keyDown(first as Element, { key: 'Enter' })
+    expect(screen.getByTestId('pgm02')).toHaveTextContent(`${PROJECT_ID}?program=${OBJECT_A}`)
+  })
+
+  it('tên Program trong thẻ KHÔNG là nút riêng — cả thẻ mới là vùng bấm', () => {
+    renderTable()
+    // Hai điều khiển chồng nhau làm cùng một việc khiến trình đọc màn hình đọc
+    // ra hai đích cho một mục. Bản bảng giữ nút; bản thẻ thì không.
+    const cards = screen.getByTestId('programs-summary-cards')
+    expect(within(cards).queryByRole('button', { name: 'AHU_Control' })).not.toBeInTheDocument()
+    expect(within(cards).getByRole('button', { name: /Mở chương trình AHU_Control/ })).toBeInTheDocument()
+  })
+
+  it('không có Project thì thẻ không điều hướng đi đâu cả', () => {
+    renderTable({}, 'vi', null)
+    const cards = screen.getByTestId('programs-summary-cards')
+    const first = cards.querySelector('[data-program-card]')
+    fireEvent.click(first as Element)
+    expect(screen.queryByTestId('pgm02')).not.toBeInTheDocument()
+  })
+})

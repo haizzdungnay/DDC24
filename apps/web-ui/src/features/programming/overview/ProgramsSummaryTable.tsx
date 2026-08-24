@@ -1,3 +1,4 @@
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
 import { Panel } from '../../../shared/components/Panel'
@@ -66,9 +67,81 @@ export function ProgramsSummaryTable({ model, projectId }: { model: ProgramsSumm
   return (
     <Panel title={title}>
       <ProgramsSourceNote model={model} />
+      {/* T60-208 — DƯỚI 768 px: THẺ GỌN, KHÔNG PHẢI BẢNG CUỘN NGANG.
+       *
+       * `overflow-x-auto` ở dưới đã đủ để bảng không đẩy cả trang tràn ngang,
+       * nhưng nó vẫn bắt người dùng 390 px cuộn ngang để đọc hết sáu cột — và
+       * cuộn ngang trong một ô lồng giữa trang cuộn dọc là thao tác dễ trượt
+       * nhất trên cảm ứng. Ở khổ hẹp mỗi Program thành một thẻ xếp dọc, nhãn
+       * đi kèm giá trị nên không cần header để hiểu ô nào là gì.
+       *
+       * Bảng vẫn là bản duy nhất ở >= 768 px; hai bản KHÔNG cùng hiển thị nên
+       * trình đọc màn hình không đọc trùng nội dung. */}
+      <ul className="mt-2 space-y-2 md:hidden" data-testid="programs-summary-cards">
+        {model.rows.map((row) => {
+          const openable = Boolean(projectId && row.objectId)
+          return (
+            <li
+              key={row.key}
+              data-program-card={row.origin}
+              /* CẢ THẺ là vùng bấm, nên tên bên trong KHÔNG được là một nút
+               * riêng: hai điều khiển chồng nhau làm cùng một việc vừa thừa
+               * vừa khiến trình đọc màn hình đọc ra hai đích cho một mục.
+               * `aria-label` mô tả hành động (không phải chỉ tên Program) nên
+               * danh sách nút của trình đọc màn hình không có hai mục trùng
+               * tên giữa bản thẻ và bản bảng. */
+              {...(openable
+                ? {
+                    role: 'button' as const,
+                    tabIndex: 0,
+                    'aria-label': pick(`Mở chương trình ${row.name ?? ''}`, `Open program ${row.name ?? ''}`),
+                    onClick: () => openProgram(row),
+                    onKeyDown: (event: ReactKeyboardEvent<HTMLLIElement>) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        openProgram(row)
+                      }
+                    }
+                  }
+                : {})}
+              className={openable
+                ? 'cursor-pointer rounded-[var(--radius)] border border-[var(--c-border)] p-3 transition hover:bg-[var(--c-accent-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]'
+                : 'rounded-[var(--radius)] border border-[var(--c-border)] p-3'}
+            >
+              <div className="min-w-0 text-xs font-semibold">
+                {row.name === null
+                  ? <ProgramNameCell row={row} projectId={projectId} onOpen={openProgram} />
+                  : <span className="text-[var(--c-text)]">{row.name}</span>}
+              </div>
+              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                <div className="min-w-0">
+                  <dt className="text-[10px] uppercase text-[var(--c-text-dim)]">{pick('Ngôn ngữ', 'Language')}</dt>
+                  <dd className="min-w-0"><LanguageCell row={row} /></dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[10px] uppercase text-[var(--c-text-dim)]">{pick('Chu kỳ', 'Cycle')}</dt>
+                  <dd className="min-w-0"><CycleCell row={row} /></dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[10px] uppercase text-[var(--c-text-dim)]">{pick('Trạng thái', 'State')}</dt>
+                  <dd className="min-w-0"><StateCell row={row} /></dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[10px] uppercase text-[var(--c-text-dim)]">{pick('Sức khoẻ', 'Health')}</dt>
+                  <dd className="min-w-0"><HealthCell row={row} /></dd>
+                </div>
+                <div className="col-span-2 min-w-0">
+                  <dt className="text-[10px] uppercase text-[var(--c-text-dim)]">{pick('Chạy gần nhất', 'Last Exec')}</dt>
+                  <dd className="min-w-0"><LastRunCell row={row} /></dd>
+                </div>
+              </dl>
+            </li>
+          )
+        })}
+      </ul>
       {/* `overflow-x-auto`: bảng sáu cột phải tự cuộn TRONG ô của nó, không
           được đẩy cả trang tràn ngang ở 390 px (handoff §7). */}
-      <div className="mt-2 overflow-x-auto rounded-[var(--radius)] border border-[var(--c-border)]">
+      <div className="mt-2 hidden overflow-x-auto rounded-[var(--radius)] border border-[var(--c-border)] md:block">
         <table className="w-full border-collapse text-left text-xs">
           <caption className="sr-only">
             {pick('Chương trình của gói đang vận hành: ngôn ngữ, chu kỳ, trạng thái, lần chạy gần nhất và sức khoẻ.',
