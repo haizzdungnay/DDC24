@@ -120,6 +120,38 @@ for meta in provenance.json checksums.sha256; do
     [ -e "$SNAP/$meta" ] && inst -m 0644 "$SNAP/$meta" "$SHAREDIR/$meta"
 done
 
+# F-P59-ROLLBACK-DB-001 — KHÔI PHỤC STORE PROGRAMMING CÙNG BINARY.
+#
+# BE chạy migration khi khởi động và **từ chối chạy** khi schema mới hơn binary
+# ("schema Programming mới hơn binary: version N"). Rollback chỉ-binary sau một
+# bản có migration vì thế không trả bo về trạng thái chạy được: đo thật trên bo
+# Foxlinx 2026-08-24, hạ mkddc-web về bản trước migration `0012` làm service
+# crash-loop 7 lần và `/api/v1/health` từ chối kết nối. Bản chụp DB nằm trong
+# cùng snapshot với binary nên hai thứ luôn khớp phiên bản.
+PROGRAMMING_DB="$DATADIR/config/programming/programming-v1.sqlite"
+if [ -e "$SNAP/programming-v1.sqlite" ]; then
+    sysctl_do stop mkddc-web-pi >/dev/null 2>&1 || true
+    # Giữ lại DB hiện tại: nó là dữ liệu vận hành, không phải file tạm. Không có
+    # bản này thì một lần rollback nhầm là mất toàn bộ Project/Revision mới.
+    if [ -e "$PROGRAMMING_DB" ]; then
+        cp -a "$PROGRAMMING_DB" "$PRE/programming-v1.sqlite.pre-rollback" 2>/dev/null || true
+    fi
+    rm -f "$PROGRAMMING_DB" "$PROGRAMMING_DB-wal" "$PROGRAMMING_DB-shm"
+    inst -m 0600 "$SNAP/programming-v1.sqlite" "$PROGRAMMING_DB"
+    for extra in wal shm; do
+        [ -e "$SNAP/programming-v1.sqlite-$extra" ] && \
+            inst -m 0600 "$SNAP/programming-v1.sqlite-$extra" "$PROGRAMMING_DB-$extra"
+    done
+    chown mkddc:mkddc "$PROGRAMMING_DB" "$PROGRAMMING_DB-wal" "$PROGRAMMING_DB-shm" 2>/dev/null || true
+    echo "  khôi phục $PROGRAMMING_DB (kèm -wal/-shm nếu có)"
+elif [ -e "$PROGRAMMING_DB" ]; then
+    echo "CẢNH BÁO: snapshot không có bản chụp store Programming." >&2
+    echo "          Nếu bản đang chạy đã áp migration mới hơn binary được khôi phục," >&2
+    echo "          mkddc-web sẽ TỪ CHỐI khởi động ('schema Programming mới hơn binary')." >&2
+    echo "          Khôi phục thủ công từ $DATADIR/config/programming/programming-backups" >&2
+    echo "          trước khi coi rollback là xong." >&2
+fi
+
 # Thứ tự như install.sh: nguồn dữ liệu trước, tiêu thụ sau. iobus và core dùng
 # chung SHM nên phải restart cùng nhau.
 sysctl_do is-enabled mkddc-pty     >/dev/null 2>&1 && sysctl_do restart mkddc-pty     || true
