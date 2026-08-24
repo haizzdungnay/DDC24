@@ -207,6 +207,15 @@ export interface ProgrammingProgram {
    *  (`objectId` sở hữu mã nguồn, `programId` là identity runtime — DDD §4.2/§4.3)
    *  và có thể khác giá trị. Xoá một POU phải nhắm đúng `objectId`. */
   objectId?: string
+  /** Draft v2 — POU này CÓ một mục trong `programs[]` (cấu hình chạy) hay không.
+   *
+   *  Kind không trả lời được câu đó: một POU kind `PROGRAM` hoàn toàn có thể
+   *  KHÔNG có cấu hình chạy — hoặc vì mới được `upsertObject` tạo mà chưa xếp
+   *  lịch, hoặc vì là di chứng của lỗi xoá cũ (gỡ cấu hình nhưng để lại POU).
+   *  Gửi `removeProgram` cho một POU như vậy làm backend trả
+   *  `operations[i].removeProgram` — đúng lỗi người dùng gặp khi cố xoá một
+   *  chương trình "ma". `undefined` = document v1 đi qua nguyên trạng. */
+  hasRuntimeConfig?: boolean
   name: string
   kind: 'PROGRAM' | 'FUNCTION' | 'FUNCTION_BLOCK'
   language: 'ST' | 'FBD'

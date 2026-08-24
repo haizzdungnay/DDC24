@@ -1868,6 +1868,25 @@ Revision. Lane E2E trước đây che đúng lỗi này bằng một kỳ vọng
 ngoại tuyến" cộng một ngoại lệ `503` được coi là hợp lệ; nay lane đọc thật hàng
 `SupplyTemp → UI-01 → 21.5 → GOOD` và ngân sách 5xx/console hạ về **0**.
 
+**`F-P59-GHOST-POU-001` — chưa sửa, cần owner chốt.** Trong khi chữa lỗi xóa
+Program (`F-P59-DELETE-PROGRAM-001`) phát hiện: `packageTopology` dựng một mục
+Program cho **mọi** POU kind `PROGRAM`, và khi POU không có cấu hình chạy thì nó
+**tự đặt chu kỳ 1000 ms** (`period == 0 → AllowedPeriodMs[0]`). Đo thật trên bo
+2026-08-24 bằng một Project scratch: gỡ cấu hình chạy của `GHOST_ONE` rồi Seal →
+Check **PASSED**, và `impact.programSet` đếm **2** Program — POU không được xếp
+lịch vẫn đi vào package như một Program thật với chu kỳ do hệ tự bịa.
+
+Hai đường sinh ra hình dạng này: (a) POU tạo bằng `upsertObject` mà chưa xếp
+lịch — hợp lệ trong mô hình v2; (b) di chứng của lỗi xóa cũ. Ba Project trên bo
+đang mang nó.
+
+Không tự sửa trong vòng này vì đây là quyết định sản phẩm, không phải lỗi hiển
+nhiên: chọn **fail-closed ở Check** (khuyến nghị — cần một detail code riêng,
+tái dùng `ST-LIM-009` sẽ nói sai thành "vượt trần Program") hay chọn **bỏ POU
+chưa xếp lịch khỏi package** (im lặng bỏ sót, rủi ro khác). Điều chắc chắn sai là
+đường hiện tại: tự đặt một chu kỳ mà không ai khai, trên đúng trục quyết định
+lập lịch.
+
 Số đo: `ctest` **1293/1293**; TSan toàn core **0 cảnh báo** (2 test
 `StCompileCli` không chạy được dưới TSan vì `RLIMIT_AS 256 MB` của sandbox
 compiler, cả hai PASS ở build thường — không hạ trần sandbox để làm xanh TSan).
@@ -2249,6 +2268,7 @@ Các finding này thuộc lại task hiện hữu, không tạo tracker/task aut
 | `F-P59-EVIDENCE-001` | `T59-701..707` | trace 82/82, pin hiện hành, risk treatment, deploy/soak record đúng commit và phân lớp evidence |
 | `F-P59-ENABLE-BOUNDARY-001` | `T59-402/405/406` | `SET_PROGRAM_ENABLED` không ghi `state`/`enabled` từ IPC worker thread; ARM + áp dụng tại safe boundary, ack có generation; trần 16 kiểm TRƯỚC khi chạm trường; TSan 0 cảnh báo trên đường này |
 | `F-P59-SIGNAL-READBACK-001` | `T59-404/504` | reader non-RT (`inspect_all` cho STATUS/Monitor) không trả `value` ghép với `published_at_ns` của chu kỳ khác; seqlock `generation` + retry |
+| `F-P59-GHOST-POU-001` | `T59-301/302/305` | **Cần quyết định của owner.** Một POU kind `PROGRAM` không có mục trong `programs[]` vẫn được `packageTopology` đóng gói như một Program với chu kỳ **tự đặt 1000 ms**; Check PASS và `impact.programSet` đếm nó. Đo thật trên bo 2026-08-24 |
 | `F-P59-ROLLBACK-DB-001` | `T59-605/606/705` | `install.sh` chụp và `rollback.sh` khôi phục store Programming cùng binary; rollback chỉ-binary sau một bản có migration làm `mkddc-web` từ chối khởi động |
 | `F-P59-MONITOR-VARS-001` | `T59-504/505` | Runtime Monitor tra biến theo `locals` của Draft v2 (không chỉ object `VARIABLE` v1) và giữ `snapshot.Points` của Core khi PLC SHM chưa attach; lane E2E thật đạt `HTTP>=500=0`/`console.error=0`, không còn ngoại lệ `503` |
 

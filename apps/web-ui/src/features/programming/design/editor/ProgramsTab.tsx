@@ -285,8 +285,16 @@ export function ProgramsTab({
     const operations: ProgrammingDraftOperation[] = [
       ...bindingIds.map((bindingId): ProgrammingDraftOperation => ({ op: 'removeBinding', bindingId })),
       ...variableIds.map((variableId): ProgrammingDraftOperation => ({ op: 'removeVariable', variableId })),
-      // Chỉ POU kind PROGRAM mới có cấu hình chạy để gỡ.
-      ...(target?.kind === 'PROGRAM' || target === undefined
+      // Chỉ gỡ cấu hình chạy khi POU THẬT SỰ có một mục trong `programs[]`.
+      //
+      // Kind không đủ để quyết định: một POU kind PROGRAM vẫn có thể không có
+      // cấu hình chạy — POU vừa tạo bằng `upsertObject` chưa xếp lịch, hoặc di
+      // chứng của chính lỗi xoá cũ (gỡ cấu hình nhưng để lại POU). Gửi
+      // `removeProgram` cho nó làm backend trả `operations[0].removeProgram` và
+      // người dùng KHÔNG xoá được đúng cái chương trình ma đó — vòng lặp chết.
+      // `undefined` là document v1 đi qua nguyên trạng: ở đó mọi Program đều có
+      // cấu hình, nên giữ hành vi cũ theo kind.
+      ...(target?.hasRuntimeConfig ?? (target?.kind ?? 'PROGRAM') === 'PROGRAM'
         ? [{ op: 'removeProgram', programId } as ProgrammingDraftOperation]
         : []),
       { op: 'removeObject', objectId: target?.objectId ?? programId }

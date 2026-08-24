@@ -28,6 +28,7 @@ export function toWorkspaceDocument(draft: ProgrammingDraftDocument): Programmin
     programs.push({
       programId: String(config?.programId ?? objectId),
       objectId,
+      hasRuntimeConfig: config !== undefined,
       name: String(object.name ?? ''),
       kind: (object.kind as ProgrammingProgram['kind']) ?? 'PROGRAM',
       language: (object.language as ProgrammingProgram['language']) ?? 'ST',
