@@ -32,7 +32,8 @@ PURE_FUNCTIONS = {
 }
 # `T59-804` thêm TP/CTU/CTD (`DDD-CTRL-PROG-001` §7A). `PI` giữ lại vì đây là
 # danh sách "kiểu nào ĐƯỢC PHÉP có state", không phải danh sách entry đang có.
-STATEFUL_FUNCTIONS = {"TON", "TOF", "TP", "R_TRIG", "F_TRIG", "CTU", "CTD", "PI", "PID"}
+STATEFUL_FUNCTIONS = {"TON", "TOF", "TP", "R_TRIG", "F_TRIG", "CTU", "CTD",
+                      "HYSTERESIS", "PI", "PID"}
 EXPLICIT_CONVERSIONS = {
     "INT_TO_REAL", "REAL_TO_INT", "TIME_TO_REAL", "REAL_TO_TIME",
     "INT_TO_DINT", "INT_TO_UINT", "DINT_TO_INT", "DINT_TO_UINT",
@@ -250,7 +251,10 @@ def validate_equivalence(equivalence: dict[str, Any]) -> list[str]:
         }:
             errors.append("equivalence pair field drift")
             continue
-        if item["typeRef"] not in PURE_FUNCTIONS - {"SCALE", "DEADBAND"} | EXPLICIT_CONVERSIONS:
+        # `SCALE`/`DEADBAND` từng bị loại vì chúng CHƯA TỒN TẠI trong compiler;
+        # `T59-804` cho chúng compiler thật (khai triển, `DDD-CTRL-PROG-001`
+        # §7A.6) nên chúng phải nằm trong mẫu số phủ như mọi hàm thuần khác.
+        if item["typeRef"] not in PURE_FUNCTIONS | EXPLICIT_CONVERSIONS:
             errors.append(f"equivalence typeRef không thuộc common IR: {item['typeRef']}")
         if not isinstance(item["inputs"], list) or not item["inputs"]:
             errors.append(f"equivalence inputs rỗng: {item['id']}")

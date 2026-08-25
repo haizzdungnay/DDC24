@@ -690,6 +690,15 @@ private:
             break;
         }
 
+        case StFunc::SCALE:
+        case StFunc::DEADBAND:
+            /* Cả hai làm việc trên dải analog nên khoá REAL: cho INT đi qua sẽ
+             * sinh một phép chia nguyên âm thầm ở giữa công thức quy đổi. */
+            for (std::size_t i = 0; i < ts.size(); i++)
+                if (!require(i, StType::REAL)) return false;
+            e.result_type = StType::REAL;
+            break;
+
         case StFunc::SEL:
             if (!require(0, StType::BOOL)) return false;
             if (!unify(*e.args[1], &ts[1], *e.args[2], &ts[2])) return false;

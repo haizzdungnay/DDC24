@@ -86,11 +86,12 @@ enum class StFbType : uint16_t {
      * DDD-CTRL-PROG-001 §7. Giá trị wire mới 5, artifact cũ (1..4) vẫn
      * byte-compatible. */
     PID    = 5,
-    /* `T59-804`/`DDD-CTRL-PROG-001` §7A. Ba block chuẩn IEC thêm sau PID; giá
-     * trị 1..5 giữ nguyên nên artifact cũ vẫn byte-compatible. */
+    /* `T59-804`/`DDD-CTRL-PROG-001` §7A. Bốn block thêm sau PID; giá trị 1..5
+     * giữ nguyên nên artifact cũ vẫn byte-compatible. */
     TP     = 6,
     CTU    = 7,
     CTD    = 8,
+    HYSTERESIS = 9,
 };
 
 StFbType st_fb_type_from_name(const std::string& name);
@@ -151,6 +152,10 @@ enum class StUnOp : uint8_t { NEG, NOT };
  * semantic và codegen không lệch nhau khi đổi tên hiển thị. */
 enum class StFunc : uint8_t {
     ABS, MIN, MAX, LIMIT, SEL, SQRT,
+    /* `T59-804`/`DDD-CTRL-PROG-001` §7A.6 — hai hàm KHAI TRIỂN: compiler dựng
+     * chúng bằng chuỗi lệnh đã có, không có opcode IR riêng (một lệnh IR mang
+     * tối đa ba toán hạng nguồn, còn SCALE cần năm). */
+    SCALE, DEADBAND,
     INT_TO_REAL, REAL_TO_INT, TIME_TO_REAL, REAL_TO_TIME,
     INT_TO_DINT, INT_TO_UINT, DINT_TO_INT, DINT_TO_UINT,
     UINT_TO_INT, UINT_TO_DINT, DINT_TO_REAL, UINT_TO_REAL,

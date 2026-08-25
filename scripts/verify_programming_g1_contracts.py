@@ -540,13 +540,13 @@ def validate(join: dict[str, Any]) -> list[str]:
         )
         require(review == registry_item["reviewRequired"], "danh sách REVIEW_REQUIRED lệch pin")
         require("PID" in review, "PID phải giữ REVIEW_REQUIRED tới khi có evidence Controls/Safety")
-        # `CTU` rời danh sách ma ở `T59-804`: nó có compiler/runtime thật, layout
-        # RETAIN pinned (`DDD-CTRL-PROG-001` §7A) và vector conformance chạy
-        # cycle-by-cycle ở cả ST lẫn FBD. Ba tên còn lại vẫn là ma cho tới khi có
-        # cùng bộ evidence — đây là chỗ chặn "chào trước, làm sau".
+        # `CTU`, rồi `SCALE`/`DEADBAND` lần lượt rời danh sách ma ở `T59-804`:
+        # mỗi tên chỉ rời khi đã có compiler/runtime thật, ngữ nghĩa pin ở
+        # `DDD-CTRL-PROG-001` §7A và vector conformance chạy ở cả ST lẫn FBD.
+        # `PI` vẫn là ma — đây là chỗ chặn "chào trước, làm sau".
         ghosts = sorted(
             item["id"] for item in entries
-            if item["id"] in {"SCALE", "DEADBAND", "PI"}
+            if item["id"] in {"PI"}
         )
         require(not ghosts, f"entry ma quay lại registry: {ghosts}")
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:

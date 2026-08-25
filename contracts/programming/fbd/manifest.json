@@ -6,12 +6,12 @@
   "schemaSha256": "fcdd01c7f0a1c283d550fa48aea4c1bf8575e67d16ed39d619f7b183a46ca58c",
   "keyboardSha256": "9bce7f03c3d874790ecad18aa797ef20959090bccd8cc9d0c5f049904e69b64c",
   "goldenSha256": "133798a65bb9bb638d8e1a1103ac892415eb740d33e990715191ba0887f40f51",
-  "equivalenceSha256": "cdfca90b1762007334fab82c370f7d98e546b1fee12de34b479ca71fa58ca947",
-  "profileSha256": "2ffb6c8fc7b0c117a4916aded12d43d7b484b80590001b0078a6d72a776ebe69",
+  "equivalenceSha256": "0e504c8c6b70ec6a9b915ea22d878972dc0bc64810696581871128afb5c3e8b1",
+  "profileSha256": "8623adb865bc6367fcc655f26dfc1d2fd2385971c3bc5738ad7e74c831d83204",
   "goldenNetworkCount": 1,
   "goldenNodeCount": 4,
   "goldenWireCount": 3,
   "keyboardCommandCount": 11,
-  "equivalencePairCount": 35,
-  "equivalenceStateTraceCount": 8
+  "equivalencePairCount": 37,
+  "equivalenceStateTraceCount": 9
 }

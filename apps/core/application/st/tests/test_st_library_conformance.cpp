@@ -59,6 +59,11 @@ std::set<std::string> registry_entries()
         names.emplace(item);
     for (std::string_view item : st_library_registry_generated::kFuncTable)
         names.emplace(item);
+    /* Hàm KHAI TRIỂN (`EXPANSION`) cũng là entry người dùng gọi được, nên nó
+     * phải nằm trong mẫu số phủ conformance — bỏ qua chúng sẽ làm "100% phủ"
+     * nói dối đúng bằng số entry bị bỏ qua. */
+    for (std::string_view item : st_library_registry_generated::kExpansionFunctions)
+        names.emplace(item);
     for (std::string_view item : st_library_registry_generated::kFbTypes)
         names.emplace(item);
     return names;

@@ -2,7 +2,7 @@
   "$schema": "./pou_library_registry_v1.schema.json",
   "registryId": "PROGRAMMING-POU-LIBRARY-REGISTRY-V1",
   "schemaVersion": 1,
-  "libraryVersion": "rev-a.2",
+  "libraryVersion": "rev-a.3",
   "scope": "SYSTEM",
   "categoryOrder": [
     {
@@ -817,6 +817,86 @@
       "featureState": "AVAILABLE"
     },
     {
+      "id": "SCALE",
+      "kind": "FUNCTION",
+      "dispatch": "EXPANSION",
+      "category": "math",
+      "labelVi": "Quy đổi tuyến tính (SCALE)",
+      "labelEn": "Linear scale (SCALE)",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "REAL",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "IN",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "IN_MIN",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "IN_MAX",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "OUT_MIN",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "OUT_MAX",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "OUT",
+          "direction": "OUTPUT",
+          "dataType": "REAL"
+        }
+      ],
+      "featureState": "AVAILABLE"
+    },
+    {
+      "id": "DEADBAND",
+      "kind": "FUNCTION",
+      "dispatch": "EXPANSION",
+      "category": "math",
+      "labelVi": "Vùng chết (DEADBAND)",
+      "labelEn": "Deadband",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "REAL",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "IN",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "DB",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "REF",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "OUT",
+          "direction": "OUTPUT",
+          "dataType": "REAL"
+        }
+      ],
+      "featureState": "AVAILABLE"
+    },
+    {
       "id": "SQRT",
       "kind": "FUNCTION",
       "dispatch": "FUNC_TABLE",
@@ -1522,6 +1602,41 @@
       "featureState": "REVIEW_REQUIRED",
       "warningVi": "Chưa Controls+Safety review — không dùng cho logic sản xuất (xem ST_SUBSET_SPEC §6.2)",
       "warningEn": "Not yet Controls+Safety reviewed — do not use for production logic (see ST_SUBSET_SPEC §6.2)"
+    },
+    {
+      "id": "HYSTERESIS",
+      "kind": "FUNCTION_BLOCK",
+      "dispatch": "FB_TYPE",
+      "category": "control",
+      "labelVi": "So sánh có trễ (HYSTERESIS)",
+      "labelEn": "Hysteresis comparator",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "BOOL",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "IN",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "HIGH",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "LOW",
+          "direction": "INPUT",
+          "dataType": "REAL"
+        },
+        {
+          "name": "Q",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        }
+      ],
+      "featureState": "AVAILABLE"
     }
   ]
 }

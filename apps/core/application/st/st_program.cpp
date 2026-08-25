@@ -97,6 +97,10 @@ const FbPort kTpOut[] = {{"Q", StType::BOOL},  {"ET", StType::TIME}};
 const FbPort kCtuIn[]  = {{"CU", StType::BOOL}, {"RESET", StType::BOOL}, {"PV", StType::INT}};
 const FbPort kCtdIn[]  = {{"CD", StType::BOOL}, {"LOAD", StType::BOOL}, {"PV", StType::INT}};
 const FbPort kCtOut[]  = {{"Q", StType::BOOL},  {"CV", StType::INT}};
+/* HYSTERESIS (§7A.7) — so sánh CÓ NHỚ: trong dải giữa LOW..HIGH thì giữ nguyên
+ * chu kỳ trước, nên nó là FB chứ không phải hàm thuần. */
+const FbPort kHystIn[]  = {{"IN", StType::REAL}, {"HIGH", StType::REAL}, {"LOW", StType::REAL}};
+const FbPort kHystOut[] = {{"Q", StType::BOOL}};
 
 struct FbSpec {
     const FbPort* in;  int n_in;
@@ -120,6 +124,8 @@ FbSpec fb_spec(StFbType t)
         return {kCtuIn, 3, kCtOut, 2};
     case StFbType::CTD:
         return {kCtdIn, 3, kCtOut, 2};
+    case StFbType::HYSTERESIS:
+        return {kHystIn, 3, kHystOut, 1};
     case StFbType::NONE:
         break;
     }
@@ -138,6 +144,7 @@ StFbType st_fb_type_from_name(const std::string& name)
     if (name == "TP") return StFbType::TP;
     if (name == "CTU") return StFbType::CTU;
     if (name == "CTD") return StFbType::CTD;
+    if (name == "HYSTERESIS") return StFbType::HYSTERESIS;
     return StFbType::NONE;
 }
 
@@ -152,6 +159,7 @@ const char* st_fb_type_name(StFbType t)
     case StFbType::TP:     return "TP";
     case StFbType::CTU:    return "CTU";
     case StFbType::CTD:    return "CTD";
+    case StFbType::HYSTERESIS: return "HYSTERESIS";
     case StFbType::NONE:   break;
     }
     return "?";
@@ -183,6 +191,8 @@ std::size_t st_fb_retain_state_size(StFbType t)
     case StFbType::CTU:
     case StFbType::CTD:
         return 3; /* prev_clk:u8 + cv:i16 */
+    case StFbType::HYSTERESIS:
+        return 1; /* q:u8 — trạng thái duy nhất là "đang bật hay chưa" */
     case StFbType::NONE:
         return 0;
     }
@@ -244,6 +254,8 @@ const FuncSpec kFuncs[] = {
     {"LIMIT",        StFunc::LIMIT,        3},
     {"SEL",          StFunc::SEL,          3},
     {"SQRT",         StFunc::SQRT,         1},
+    {"SCALE",        StFunc::SCALE,        5},
+    {"DEADBAND",     StFunc::DEADBAND,     3},
     {"INT_TO_REAL",  StFunc::INT_TO_REAL,  1},
     {"REAL_TO_INT",  StFunc::REAL_TO_INT,  1},
     {"TIME_TO_REAL", StFunc::TIME_TO_REAL, 1},

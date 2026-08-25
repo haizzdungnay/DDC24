@@ -63,7 +63,7 @@
       "properties": {
         "id": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,31}$" },
         "kind": { "enum": ["FUNCTION", "FUNCTION_BLOCK", "CONVERSION"] },
-        "dispatch": { "enum": ["OPERATOR", "FUNC_TABLE", "FB_TYPE"] },
+        "dispatch": { "enum": ["OPERATOR", "FUNC_TABLE", "FB_TYPE", "EXPANSION"] },
         "category": { "$ref": "#/$defs/category" },
         "labelVi": { "type": "string", "minLength": 1 },
         "labelEn": { "type": "string", "minLength": 1 },

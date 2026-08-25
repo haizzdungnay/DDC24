@@ -302,6 +302,58 @@ lựa chọn có chủ ý: cho một biến trùng tên với type FB chuẩn ng
 hai nghĩa cho một token, và đó là nguồn lỗi tệ hơn nhiều so với một lần đổi tên
 biến. Rev A chưa release nên phạm vi ảnh hưởng là Draft trong phòng lab.
 
+### 7A.6 `SCALE` và `DEADBAND` — hàm thuần, biên dịch bằng KHAI TRIỂN
+
+Hai hàm này KHÔNG có opcode IR riêng. Lý do là ràng buộc thật của định dạng chứ
+không phải sở thích: một lệnh IR mang tối đa ba toán hạng nguồn, còn `SCALE` cần
+năm. Chọn nới định dạng IR để nhét vừa một hàm là đổi thứ đắt nhất (artifact
+format) để mua thứ rẻ nhất (một phép tính tuyến tính).
+
+Vì vậy compiler **khai triển** chúng thành chuỗi lệnh đã có, và `dispatch` trong
+registry mang giá trị `EXPANSION` để nói đúng điều đó — không giả vờ là
+`FUNC_TABLE` rồi để người đọc IR đi tìm một opcode không tồn tại.
+
+```text
+SCALE(IN, IN_MIN, IN_MAX, OUT_MIN, OUT_MAX) : REAL
+  = OUT_MIN + (IN - IN_MIN) * (OUT_MAX - OUT_MIN) / (IN_MAX - IN_MIN)
+
+DEADBAND(IN, DB, REF) : REAL
+  = SEL(ABS(IN - REF) > DB, REF, IN)
+```
+
+Ba quyết định:
+
+1. **`SCALE` KHÔNG tự kẹp dải ra.** Người dùng muốn kẹp thì gọi `LIMIT` — một
+   phép kẹp ngầm sẽ biến cảm biến ngoài dải thành giá trị biên trông hợp lệ, và
+   đó chính là thứ che mất lỗi hiện trường. `SCALE` là ánh xạ tuyến tính, không
+   phải bộ bảo vệ.
+2. **`IN_MAX == IN_MIN` là FAULT, không phải giá trị mặc định.** Khai triển đi
+   qua `DIV`, nên nó dùng lại đúng `ST-RT-002` (div-by-zero) đã có thay vì đẻ thêm một mã lỗi
+   thứ hai cho cùng một tình huống.
+3. **`DEADBAND` trả `REF` khi trong dải**, không phải trả giá trị cũ. Trả giá trị
+   cũ là hành vi CÓ TRẠNG THÁI và sẽ biến một hàm thuần thành một FB — nếu cần
+   hành vi đó, dùng `HYSTERESIS`.
+
+### 7A.7 `HYSTERESIS` — so sánh có nhớ
+
+| Block | Wire `StFbType` | Vào | Ra | State RETAIN |
+|---|---:|---|---|---|
+| `HYSTERESIS` | 9 | `IN:REAL`, `HIGH:REAL`, `LOW:REAL` | `Q:BOOL` | `q:u8` = 1 B |
+
+```text
+if IN >= HIGH:      Q = true
+elif IN <= LOW:     Q = false
+else:               Q = giữ nguyên chu kỳ trước
+```
+
+1. **`HIGH <= LOW` là FAULT** (`ST-RT-006`, dùng lại mã dải min/max của PID): một
+   dải trễ đảo ngược không có nghĩa vật lý, và đoán ý người khai sẽ tạo ra một
+   bộ điều khiển bật/tắt liên tục ở đúng ngưỡng.
+2. **Trạng thái ban đầu là `false`.** Khởi động ở giữa dải phải là "chưa kích
+   hoạt", không phải một giá trị phụ thuộc thứ tự nạp.
+3. `Q` là RETAIN được: sau mất điện, một quạt đang chạy trong vùng trễ phải trở
+   lại đúng trạng thái nó đang có, không phải nhảy theo ngưỡng gần nhất.
+
 ## 8. State machine Task
 
 | State | Entry | Event/guard | Next/action |

@@ -60,11 +60,11 @@ func TestSystemLibraryGeneratedFromRegistryWithoutDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// `T59-804` thêm TP/CTU/CTD (43). Con số ghim ở đây là CỐ Ý: nó bắt một
-	// lần thêm entry phải đi kèm người sửa test đọc lại danh sách, thay vì để
-	// registry lớn dần mà không ai đối chiếu.
-	if len(entries) != len(contract.Entries) || len(entries) != 43 {
-		t.Fatalf("số entry Go/JSON = %d/%d, cần 43", len(entries), len(contract.Entries))
+	// `T59-804` thêm TP/CTU/CTD rồi SCALE/DEADBAND/HYSTERESIS (46). Con số ghim
+	// ở đây là CỐ Ý: nó bắt một lần thêm entry phải đi kèm người sửa test đọc
+	// lại danh sách, thay vì để registry lớn dần mà không ai đối chiếu.
+	if len(entries) != len(contract.Entries) || len(entries) != 46 {
+		t.Fatalf("số entry Go/JSON = %d/%d, cần 46", len(entries), len(contract.Entries))
 	}
 	for index, rawEntry := range contract.Entries {
 		var want libraryRegistryEntryContract
@@ -124,8 +124,8 @@ func TestSystemLibraryStateSizeOnlyClaimsAuthoritativeFacts(t *testing.T) {
 			}
 		}
 	}
-	if functions != 35 || blocks != 8 {
-		t.Fatalf("phân loại FUNCTION/FB = %d/%d, cần 35/8", functions, blocks)
+	if functions != 37 || blocks != 9 {
+		t.Fatalf("phân loại FUNCTION/FB = %d/%d, cần 37/9", functions, blocks)
 	}
 }
 

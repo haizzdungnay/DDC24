@@ -160,6 +160,7 @@ def render_cpp(registry: dict[str, Any], registry_hash: str) -> str:
     operators = [item["id"] for item in by_dispatch(registry, "OPERATOR")]
     func_table = [item["id"] for item in by_dispatch(registry, "FUNC_TABLE")]
     fb_types = [item["id"] for item in by_dispatch(registry, "FB_TYPE")]
+    expansions = [item["id"] for item in by_dispatch(registry, "EXPANSION")]
     pure = [item["id"] for item in registry["entries"] if item["kind"] == "FUNCTION"]
     conversions = [item["id"] for item in by_kind(registry, "CONVERSION")]
     review = [
@@ -184,6 +185,10 @@ inline constexpr std::array<std::string_view, {len(operators)}> kOperators = {cp
 
 /* Entry compiler nhận diện qua kFuncs[] (st_func_from_name). */
 inline constexpr std::array<std::string_view, {len(func_table)}> kFuncTable = {cpp_list(func_table)};
+
+/* Entry compiler KHAI TRIỂN thành chuỗi lệnh đã có (không có opcode riêng);
+ * `st_func_from_name` vẫn nhận diện chúng — xem `DDD-CTRL-PROG-001` §7A.6. */
+inline constexpr std::array<std::string_view, {len(expansions)}> kExpansionFunctions = {cpp_list(expansions)};
 
 /* Entry compiler nhận diện qua st_fb_type_from_name. */
 inline constexpr std::array<std::string_view, {len(fb_types)}> kFbTypes = {cpp_list(fb_types)};
@@ -245,7 +250,7 @@ export const PROGRAMMING_LIBRARY_REGISTRY_SHA256 = {q(registry_hash)} as const;
 export const PROGRAMMING_LIBRARY_VERSION = {q(registry['libraryVersion'])} as const;
 
 export type LibraryEntryKind = "FUNCTION" | "FUNCTION_BLOCK" | "CONVERSION";
-export type LibraryDispatch = "OPERATOR" | "FUNC_TABLE" | "FB_TYPE";
+export type LibraryDispatch = "OPERATOR" | "FUNC_TABLE" | "FB_TYPE" | "EXPANSION";
 export type LibraryFeatureState = "AVAILABLE" | "REVIEW_REQUIRED";
 export type LibraryCategory =
 {category_union};
