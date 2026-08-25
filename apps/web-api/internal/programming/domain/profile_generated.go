@@ -9,8 +9,8 @@ const (
 	ProfileTargetABI      = 3841
 	ProfileMajor          = 2
 	ProfileMinor          = 1
-	ProfileSHA256         = "2ffb6c8fc7b0c117a4916aded12d43d7b484b80590001b0078a6d72a776ebe69"
-	ProfileLibraryVersion = "rev-a.2"
+	ProfileSHA256         = "8623adb865bc6367fcc655f26dfc1d2fd2385971c3bc5738ad7e74c831d83204"
+	ProfileLibraryVersion = "rev-a.3"
 	ProfileIntegrityMode  = "SIGNATURE_REQUIRED"
 )
 
