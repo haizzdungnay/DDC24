@@ -11,6 +11,7 @@ import {
   defaultConstantLiteral,
   fbdPaletteEntry,
   isValidConstantLiteral,
+  paletteEntriesCompatibleWith,
 } from './palette'
 
 /* Đối chiếu trực tiếp apps/core/application/st/st_program.cpp (kFuncs[]) và
@@ -175,5 +176,32 @@ describe('isValidConstantLiteral / defaultConstantLiteral', () => {
     expect(isValidConstantLiteral('REAL', Number.NaN)).toBe(false)
     expect(isValidConstantLiteral('TIME', 'not-a-time')).toBe(false)
     expect(isValidConstantLiteral('TIME', 'T#1m30s')).toBe(true)
+  })
+})
+
+describe('T59-804 — lọc palette theo cổng đang chọn', () => {
+  it('không có cổng nào đang chọn thì KHÔNG lọc', () => {
+    expect(paletteEntriesCompatibleWith(FBD_PALETTE, null)).toHaveLength(FBD_PALETTE.length)
+  })
+
+  it('giữ block đa hình nhận kiểu đó và block có cổng kiểu cố định đó', () => {
+    const forTime = paletteEntriesCompatibleWith(FBD_PALETTE, 'TIME').map((entry) => entry.id)
+    // TON/TOF có cổng `PT:TIME` cố định — phải còn lại dù không đa hình.
+    expect(forTime).toContain('TON')
+    expect(forTime).toContain('TOF')
+    // AND chỉ có cổng BOOL: không khớp cổng TIME.
+    expect(forTime).not.toContain('AND')
+  })
+
+  it('so sánh vẫn khớp cổng BOOL nhờ OUT:BOOL cố định', () => {
+    const forBool = paletteEntriesCompatibleWith(FBD_PALETTE, 'BOOL').map((entry) => entry.id)
+    expect(forBool).toContain('GT')
+    expect(forBool).toContain('AND')
+  })
+
+  it('lọc không bao giờ rỗng hoá palette một cách im lặng — kiểu lạ trả rỗng có thể quan sát', () => {
+    const filtered = paletteEntriesCompatibleWith(FBD_PALETTE, 'REAL')
+    expect(filtered.length).toBeGreaterThan(0)
+    expect(filtered.length).toBeLessThan(FBD_PALETTE.length)
   })
 })

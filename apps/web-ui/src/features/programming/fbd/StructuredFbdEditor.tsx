@@ -31,6 +31,7 @@ import {
   defaultConstantLiteral,
   fbdPaletteEntry,
   isValidConstantLiteral,
+  paletteEntriesCompatibleWith,
   type FbdPaletteEntry,
 } from './palette'
 import { userPouPaletteEntry, type UserPouInterface } from './userPou'
@@ -322,6 +323,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
   const [constantType, setConstantType] = useState<FbdDataType>('BOOL')
   const [constantValue, setConstantValue] = useState('false')
   const [createError, setCreateError] = useState<string | null>(null)
+  const [compatibleFilterOn, setCompatibleFilterOn] = useState(true)
   const userPouPalette = useMemo(() => {
     const entries: FbdPaletteEntry[] = []
     const issues: string[] = []
@@ -390,6 +392,24 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
 
   const selectedNetworkId = state.selection?.networkId ?? state.document.networks[0]?.id
   const selectedPaletteEntry = paletteEntries.find((entry) => entry.id === paletteTypeRef)
+  /* `T59-804`: kiểu của cổng đang chọn — cơ sở để lọc palette theo tương thích.
+   * `null` khi không đứng ở cổng nào; khi đó không lọc gì cả. */
+  const selectedPortType = useMemo<FbdDataType | null>(() => {
+    const selection = state.selection
+    if (selection?.kind !== 'port') return null
+    for (const network of state.document.networks) {
+      for (const node of network.nodes) {
+        const port = node.ports.find((item) => item.id === selection.portId)
+        if (port) return port.dataType
+      }
+    }
+    return null
+  }, [state.selection, state.document])
+  const compatibleOnly = compatibleFilterOn && selectedPortType !== null
+  const visiblePaletteEntries = useMemo(
+    () => (compatibleOnly ? paletteEntriesCompatibleWith(paletteEntries, selectedPortType) : paletteEntries),
+    [compatibleOnly, paletteEntries, selectedPortType]
+  )
 
   function dispatchCommand(command: FbdKeyboardCommand) {
     let action: FbdEditorAction | null = null
@@ -522,14 +542,14 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
           >
             {FBD_PALETTE_CATEGORY_ORDER.filter((category) => category.id !== 'interface' && category.id !== 'constants').map((category) => (
               <optgroup key={category.id} label={pick(category.labelVi, category.labelEn)}>
-                {FBD_PALETTE.filter((item) => item.category === category.id).map((item) => (
+                {visiblePaletteEntries.filter((item) => item.category === category.id && !item.id.startsWith('__user__')).map((item) => (
                   <option key={item.id} value={item.id}>{pick(item.labelVi, item.labelEn)}</option>
                 ))}
               </optgroup>
             ))}
             {userPouPalette.entries.length > 0 && (
               <optgroup label={pick('POU dự án / thư viện', 'Project / library POUs')}>
-                {userPouPalette.entries.map((entry) => (
+                {userPouPalette.entries.filter((entry) => visiblePaletteEntries.includes(entry)).map((entry) => (
                   <option key={`pou-${entry.id}`} value={entry.id}>
                     {pick(entry.labelVi, entry.labelEn)} · {entry.kind}
                   </option>
@@ -538,6 +558,22 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
             )}
           </select>
         </label>
+        {/* `T59-804`: bộ lọc là LỰA CHỌN, không phải cắt bớt vĩnh viễn — "không
+            khớp cổng này" khác hẳn "không tồn tại". Chỉ hiện khi đang đứng ở
+            một cổng, và nói rõ còn lại bao nhiêu mục. */}
+        {selectedPortType !== null && (
+          <label className="flex items-center gap-1.5 text-xs text-[var(--c-text-dim)]">
+            <input
+              type="checkbox"
+              checked={compatibleFilterOn}
+              onChange={(event) => setCompatibleFilterOn(event.target.checked)}
+            />
+            {pick(
+              `Chỉ khối khớp cổng ${selectedPortType} (${visiblePaletteEntries.length})`,
+              `Only blocks matching the ${selectedPortType} port (${visiblePaletteEntries.length})`
+            )}
+          </label>
+        )}
         <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit || !selectedNetworkId || !selectedPaletteEntry} onClick={addPaletteNode}>
           {pick('Thêm khối', 'Add block')}
         </Button>

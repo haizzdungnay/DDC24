@@ -33,6 +33,13 @@
   `programmingLibrary` (trần 24 Yêu thích / 12 Gần đây, chỉ lưu `entryId`,
   không chép chữ ký). Recent chỉ ghi SAU khi chèn thành công.
 
+- **Added — lọc palette FBD theo cổng đang chọn.** `paletteEntriesCompatibleWith`
+  hỏi chính bộ cổng mà entry dựng ra ở kiểu mặc định, không chỉ `allowedTypes`:
+  block không đa hình vẫn khớp qua cổng kiểu cố định (`PT:TIME` của TON,
+  `OUT:BOOL` của phép so sánh). Bộ lọc là lựa chọn bật/tắt và nói rõ còn lại bao
+  nhiêu mục. Kèm test khoá AC "ambiguous port không auto-connect": `ADD_NODE`
+  không bao giờ tự nối dây, kể cả khi chỉ có đúng một cổng khớp.
+
 - **Changed — roadmap proposal.** `WP-03` ghi **PARTIAL** kèm bốn phần chưa
   giao: chèn vào canvas FBD từ dock dùng chung, compatible filter theo port đang
   chọn, typed metadata public trong OpenAPI, và bổ sung block
