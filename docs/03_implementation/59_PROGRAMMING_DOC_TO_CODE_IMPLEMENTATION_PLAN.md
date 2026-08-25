@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.8 |
-| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; `T59-801`/`T59-802` DONE, `T59-803` READY, `T59-804..817` ORDERED theo predecessor; RELEASE_READY NO-GO** |
+| Phiên bản | 2.9 |
+| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; `T59-801..803` DONE, `T59-804` READY, `T59-805..817` ORDERED theo predecessor; RELEASE_READY NO-GO** |
 | Ngày | 2026-08-25 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
@@ -2720,8 +2720,8 @@ Consumer/discipline/Verification/Document Control review là
 | Task | Increment / work package | Việc làm và source chính | Dependency | Trạng thái | Acceptance |
 |---|---|---|---|---|---|
 | `T59-802` | R1 / `PGM02-V22-WP-01` | Shared shell, canonical route/resolver/legacy redirect và mobile `<768` read-only trong FE route/workspace | `T59-801 DONE` + `IMPLEMENT_READY[PGM02-R1]=GO` | **DONE (HOST/LOCAL)** | Route `/eng/programming/programs?project&pou&mode` sau cờ rollback `VITE_PROGRAMS_WORKSPACE_V2` (mặc định TẮT); resolver 0/1/nhiều/không-tồn-tại/mode-lạ đều fail-closed, không mượn Project khác; `<768 px` read-only bằng policy runtime; FE **139 file/1531 test**, lint/build PASS; E2E mock cut-over **29 PASS/3 skip**, real-backend **1/1**. Chi tiết §3.9 |
-| `T59-803` | R1 / `PGM02-V22-WP-02` | Một POU Explorer typed theo `objectId`; selection/navigation/create/duplicate/rename/delete guard | `T59-802 DONE` | **READY** | `objectId`/`programId` không lẫn; refresh/reorder/rename giữ selection đúng; negative identity tests |
-| `T59-804` | R1 / `PGM02-V22-WP-03` | OpenAPI/generated clients + BE typed Draft, normalized Quick Library signature, reference query và atomic semantic refactor | `T59-803 DONE`; contract được promote Active trong task | **ORDERED — dependency** | schema/Go/TS exact; ETag/idempotency; analyzer/signature unavailable zero mutation; audit/read-back đúng |
+| `T59-803` | R1 / `PGM02-V22-WP-02` | Một POU Explorer typed theo `objectId`; selection/navigation/create/duplicate/rename/delete guard | `T59-802 DONE` | **DONE (HOST/LOCAL)** | DOM còn đúng MỘT navigation POU; view model một nguồn (`pouItems`); `objectId`/`programId` không thay nhau được (tra nhầm trục cho `undefined`); tạo/đổi tên/nhân bản/xoá đi qua op typed `upsertObject`/`renameObject`/`duplicateObject`/`removeObject`; FUNCTION/FB không bao giờ được xếp lịch; xoá có preflight người gọi. FE **141 file/1551 test**, E2E mock **30 PASS/4 skip**, real-backend **1/1**. Chi tiết §3.9 |
+| `T59-804` | R1 / `PGM02-V22-WP-03` | OpenAPI/generated clients + BE typed Draft, normalized Quick Library signature, reference query và atomic semantic refactor | `T59-803 DONE`; contract được promote Active trong task | **READY** | schema/Go/TS exact; ETag/idempotency; analyzer/signature unavailable zero mutation; audit/read-back đúng |
 | `T59-805` | R1 / `PGM02-V22-WP-04` | ST editor hoàn chỉnh: Saved Draft, exact diagnostic anchor, history/cursor/read-back | `T59-804 DONE` | **ORDERED — dependency** | ST positive/boundary/conflict/diagnostic/reference flows PASS; Active không đổi |
 | `T59-806` | R1 / `PGM02-V22-WP-05` | FBD true canvas: typed port/order, wire validation, pan/zoom/select/undo và exact FBD anchor | `T59-804 DONE` | **ORDERED — dependency** | Canonical node/port/wire/layout giữ nguyên semantics; ST↔FBD equivalence và accessibility PASS |
 | `T59-807` | R1 / `PGM02-V22-WP-06-R1` | Hợp nhất workbench EDIT, context strip, state/error/copy và full save→Check→read-back | `T59-802..806 DONE` | **ORDERED — dependency** | Real-backend E2E R1, stale ETag/refactor fault/permission/offline; không mock authority |
@@ -2750,8 +2750,8 @@ thái `DONE` của chúng **không** chứng minh redesign mới đã implement:
 |---|---|---|
 | `PGM02-V22-WP-00` | — | `T59-801 DONE`; exact pin theo `AUTH-PROG-2026-08-24-05` |
 | `PGM02-V22-WP-01` | `T59-306/503` | `T59-802` DONE R1 (HOST/LOCAL) |
-| `PGM02-V22-WP-02` | `T59-301/306/506` | `T59-803` READY R1 |
-| `PGM02-V22-WP-03` | `T59-003/201..205` | `T59-804` ORDERED R1 |
+| `PGM02-V22-WP-02` | `T59-301/306/506` | `T59-803` DONE R1 (HOST/LOCAL) |
+| `PGM02-V22-WP-03` | `T59-003/201..205` | `T59-804` READY R1 |
 | `PGM02-V22-WP-04` | `T59-302/408/506` | `T59-805` ORDERED R1 |
 | `PGM02-V22-WP-05` | `T59-105/306/506/601` | `T59-806` ORDERED R1 |
 | `PGM02-V22-WP-06` | `T59-302/408/504/506` | `T59-807` R1 + `T59-811` R2 + `T59-816` R3 ORDERED |
@@ -2788,10 +2788,43 @@ không đổi theo nhân sự.
 - Task ID/owner/source target/acceptance/dependency rõ trong §3.
 - Với 52 task baseline: Product/SRS/DDD/ADR đã Active. Với PGM-02 v2.2:
   `AUTH-PROG-2026-08-24-05` đã pin exact Candidate commit
-  `413a043748dce3b44d2c5076412de761760ba17a`; `T59-801 DONE`, `T59-802 READY`
-  và `T59-803..817 ORDERED` theo predecessor.
+  `413a043748dce3b44d2c5076412de761760ba17a`; `T59-801..803 DONE`,
+  `T59-804 READY` và `T59-805..817 ORDERED` theo predecessor.
 - Contract change có producer/consumer/migration/rollback/test list.
 - Fixture và lệnh test nhỏ nhất đã xác định.
+
+#### Ghi chú thực thi `T59-803` — một POU Explorer
+
+Trước lát này DOM có **hai** navigation POU cùng lúc: "Cây POU" đọc `objects[]`
+(ba kind, chỉ đọc) và "Cây ứng dụng" bên trong tab Chương trình đọc `programs[]`
+(chỉ PROGRAM, có tạo/xoá). Hai cây đọc hai nguồn nên chúng có thể nói khác nhau
+về cùng một Project, và người dùng bàn phím phải đi qua cả hai để tới cùng một
+POU. Nay còn đúng một cây, dựng từ một view model (`pouItems`).
+
+Mô hình định danh theo DDD §3.5: `objectId` sở hữu tài liệu, `programId` chỉ tồn
+tại khi POU thật sự có cấu hình chạy. `runtimeProgramIdOf`/
+`objectIdOfRuntimeProgram` từ chối tra nhầm trục thay vì trả về POU gần đúng —
+một POU chưa xếp lịch KHÔNG mượn `objectId` làm `programId`, vì Core không có
+identity runtime nào như vậy.
+
+Vòng đời POU dùng đúng hợp đồng typed đã có sẵn ở BE (`upsertObject`,
+`renameObject`, `duplicateObject`, `removeObject` trong `applyDraftOperationV2`)
+thay cho đường compat `upsertProgram`; **không thêm endpoint nào**. FUNCTION/
+FUNCTION_BLOCK chỉ sinh `upsertObject`: cấp cho chúng một mục trong `programs[]`
+chính là dựng ra thứ mà `ST-POU-005` phải chặn ở Check. Nhân bản một Program
+đang chạy KHÔNG mang theo cấu hình chạy, nếu không một cú nhấn "Nhân bản" sẽ
+thêm một Program vào chu kỳ điều khiển thật.
+
+Lỗi thật lát này phát hiện: sau cut-over `T59-802`, deep-link chẩn đoán từ PGM-03
+ngừng hoạt động vì `selectedPouId` chỉ đọc `?pou=` một lần lúc mount — khi mỗi
+Project còn route riêng thì đi tới đó là remount, còn nay chỉ đổi query trên
+cùng route. Đã sửa: URL là nguồn chân lý của POU đang mở, chọn POU ghi ngược
+`?pou=` bằng `replace` nên reload cũng giữ đúng POU.
+
+Chưa làm (ghi rõ, thuộc `WP-02` nhưng cần contract mới): capability-gate POU
+kind/ngôn ngữ mà compiler chưa hỗ trợ — `GET /capabilities` hiện chỉ khai
+`languages`, không khai `pouKinds`. LIVE tree đọc sealed Active objects thuộc
+`WP-09`/R2.
 
 Các task baseline đạt DoR theo authority tương ứng. PGM-02 đã có decision/design/
 contract exact-pinned nên dùng `READY`/`ORDERED`; task scheduler không được đổi

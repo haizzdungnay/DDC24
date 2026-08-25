@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — một POU Explorer và mô hình định danh `T59-803` (2026-08-25)
+
+- **Changed — chỉ còn MỘT cây POU trong DOM (`WP-02`).** Trước lát này có hai
+  navigation cùng lúc: "Cây POU" đọc `objects[]` (ba kind, chỉ đọc) và "Cây ứng
+  dụng" trong tab Chương trình đọc `programs[]` (chỉ PROGRAM, có tạo/xoá). Hai
+  cây đọc hai nguồn nên có thể nói khác nhau về cùng một Project, và người dùng
+  bàn phím phải đi qua cả hai để tới cùng một POU. Nay là `PouExplorer` dựng từ
+  một view model (`pouItems`), có tìm kiếm, gom ba nhóm, và là nơi duy nhất phát
+  ra thao tác vòng đời POU.
+
+- **Added — mô hình định danh tách hai trục (DDD §3.5).** `objectId` sở hữu tài
+  liệu (chọn, deep-link, đổi tên, xoá); `programId` chỉ tồn tại khi POU thật sự
+  có cấu hình chạy. `runtimeProgramIdOf`/`objectIdOfRuntimeProgram` từ chối tra
+  nhầm trục thay vì trả POU gần đúng, và POU chưa xếp lịch KHÔNG mượn `objectId`
+  làm `programId` — Core không có identity runtime nào như vậy.
+
+- **Added — vòng đời POU typed cho đủ ba kind.** Tạo/đổi tên/nhân bản/xoá đi qua
+  đúng hợp đồng đã có ở BE (`upsertObject`, `renameObject`, `duplicateObject`,
+  `removeObject`), **không thêm endpoint nào**. FUNCTION/FUNCTION_BLOCK chỉ sinh
+  `upsertObject`: cấp cho chúng một mục trong `programs[]` chính là dựng ra thứ
+  mà `ST-POU-005` phải chặn ở Check. Nhân bản một Program đang chạy không mang
+  theo cấu hình chạy. Xoá có preflight người gọi: POU còn POU khác gọi thì nút
+  Xóa bị vô hiệu kèm tên người gọi, thay vì để Check hỏng ở lần sau.
+
+- **Fixed — deep-link chẩn đoán ngừng hoạt động sau cut-over `T59-802`.**
+  `selectedPouId` chỉ đọc `?pou=` một lần lúc mount. Điều đó còn chạy được khi
+  mỗi Project có route riêng (đi tới đó là remount), nhưng sau cut-over một cú
+  nhảy từ PGM-03 chỉ đổi QUERY trên cùng route nên workspace giữ nguyên POU cũ:
+  người dùng bấm vào lỗi mà không có gì mở ra. Nay URL là nguồn chân lý của POU
+  đang mở, chọn POU ghi ngược `?pou=` bằng `replace` nên reload giữ đúng POU.
+
+- **Changed — hồ sơ.** Plan59 v2.9 (`T59-803 DONE (HOST/LOCAL)`, `T59-804
+  READY`) kèm ghi chú thực thi; proposal PGM-02 v1.5 có **§0 Roadmap** cập nhật
+  theo từng lát. Ghi rõ phần `WP-02` chưa làm: capability-gate POU kind/ngôn ngữ
+  (`GET /capabilities` chưa khai `pouKinds`) và LIVE tree đọc sealed Active
+  objects (thuộc `WP-09`/R2). `RELEASE_READY` vẫn **NO-GO**.
+
+- **Verification (đo mới trong cùng phiên).** FE **141 file / 1551 test PASS**,
+  lint và build PASS, chunk Programming **101,14 KiB gzip**. E2E mock nhánh
+  cut-over **30 PASS / 4 skip / 0 fail**; E2E real-backend **1/1 PASS** với
+  `HTTP>=500=0`, `requestfailed=0`, `console.error=0`. `go vet` + `go test
+  ./... -count=1` PASS; CTest **1297/1297**. Chi tiết:
+  [`2026-08-25-pgm02-t59-803-pou-explorer.md`](docs/07_records/test-evidence/programming/2026-08-25-pgm02-t59-803-pou-explorer.md).
+
+
 ### PGM-02 R1 — vỏ/route canonical `T59-802` và corrective ghost POU (2026-08-25)
 
 - **Added — vỏ chung và route canonical PGM-02 (`T59-802`).** Workspace Chương

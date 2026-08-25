@@ -3,15 +3,15 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001` |
-| Phiên bản | 1.4 |
-| Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; `T59-801` DONE, `T59-802` READY** |
-| Ngày | 2026-08-24 |
+| Phiên bản | 1.5 |
+| Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; `WP-00/01/02` DONE (`T59-801/802/803`), `WP-03` READY** |
+| Ngày | 2026-08-25 |
 | Mốc mã nguồn lập kế hoạch | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` |
 | Review nguồn | [REC-PGM02-ST-FBD-REDESIGN-REVIEW-001](PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md) |
 | Chủ quản đề xuất | Programming Product + Software/Runtime Architecture |
 | Người phê duyệt | Phạm Đình Chương — Product Owner/CTO + System Architect, electronic authorization `AUTH-PROG-2026-08-24-05` |
 | Change request chủ quản | [`CR-PROG-PGM02-V22-001`](../../../00_governance/PROGRAMMING_OPEN_DECISIONS.md) |
-| Execution authority | [Plan59](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) là tracker/scheduler duy nhất; `T59-802` READY, task sau tự mở theo predecessor |
+| Execution authority | [Plan59](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) là tracker/scheduler duy nhất; `T59-804` READY, task sau tự mở theo predecessor |
 | Release gate | `RELEASE_READY = NO-GO` cho tới khi WP-12/13 và evidence target áp dụng hoàn tất |
 
 Kế hoạch không ước lượng thời gian khi chưa có velocity/resource evidence. Độ
@@ -19,9 +19,43 @@ phức tạp dùng `S/M/L/XL`, phản ánh số boundary và rủi ro, không ph
 
 Tên `WP-00..WP-13` trong proposal này là alias đọc ngắn. Mọi record kiểm soát,
 trace, risk, task và evidence phải dùng namespace canonical
-`PGM02-V22-WP-00..PGM02-V22-WP-13`; `PGM02-V22-WP-00`/`T59-801` đã DONE.
-Các task R1/R2/R3 đều có entry authority, nhưng chỉ `T59-802` đang READY; task
-sau giữ ORDERED tới khi dependency trước hoàn tất.
+`PGM02-V22-WP-00..PGM02-V22-WP-13`; `WP-00`/`WP-01`/`WP-02` đã DONE. Các task
+R1/R2/R3 đều có entry authority, nhưng chỉ `T59-804` đang READY; task sau giữ
+ORDERED tới khi dependency trước hoàn tất. Trạng thái từng WP nằm ở §0.
+
+## 0. Roadmap triển khai — cập nhật theo từng lát
+
+Bảng này là **trạng thái thi hành** của proposal, cập nhật ngay khi một lát đóng.
+Nó KHÔNG thay Plan59 (tracker/scheduler duy nhất) và không tự mở gate nào: một
+dòng `DONE` ở đây chỉ nói "work package đã có source + test + evidence HOST",
+không nói CI, target, HIL hay release.
+
+| WP | Task canonical | Trạng thái | Lát đã giao | Bằng chứng |
+|---|---|---|---|---|
+| `WP-00` | `T59-801` | **DONE** 2026-08-24 | Reconcile authority, formal DDD/contract/ADR-053, exact pin `413a043` | `AUTH-PROG-2026-08-24-05`; manifest 17/17 |
+| `WP-01` | `T59-802` | **DONE (một phần scope)** 2026-08-25 | Route canonical + resolver + legacy redirect + mobile `<768` read-only, sau cờ `programsWorkspaceV2` | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-802-shell-route.md) |
+| `WP-02` | `T59-803` | **DONE** 2026-08-25 | Một POU Explorer, identity `objectId`↔`programId`, vòng đời POU typed cho ba kind | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-803-pou-explorer.md) |
+| `WP-03` | `T59-804` | READY | — | — |
+| `WP-04` | `T59-805` | ORDERED | — | — |
+| `WP-05` | `T59-806` | ORDERED | — | — |
+| `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | ORDERED | — | — |
+| `WP-07` | `T59-814` | ORDERED | — | — |
+| `WP-08` | `T59-815` | ORDERED | — | — |
+| `WP-09` | `T59-810` | ORDERED | — | — |
+| `WP-10` | `T59-808` / `T59-812` / `T59-816` | ORDERED | — | — |
+| `WP-11` | `T59-808` / `T59-812` / `T59-816` | ORDERED | — | — |
+| `WP-12` | `T59-809` / `T59-813` / `T59-817` | ORDERED | — | — |
+| `WP-13` | `T59-809` / `T59-813` / `T59-817` | ORDERED | — | — |
+
+**Phần của `WP-01` chưa giao** (đi cùng `WP-06`/`T59-807` vì cùng chạm một cây
+component): CSS grid slot resizable/collapsible, context strip đầy đủ theo mode,
+state machine `EDIT/SIMULATE/LIVE` tách buffer theo mode và dirty guard khi đổi
+mode. `T59-802` chỉ đóng phần route/resolver/responsive; ghi rõ ở đây để không
+ai đọc `DONE` thành "toàn bộ WP-01 đã xong".
+
+Gate đang mở: `G-PGM02-01 EDIT_FOUNDATION` đã có **một route** (`WP-01`) và
+**một POU tree** (`WP-02`); còn thiếu **một catalog authority** (`WP-03`) trước
+khi gate này PASS.
 
 ## 1. Mục tiêu, phạm vi và invariant
 

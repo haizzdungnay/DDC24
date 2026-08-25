@@ -226,6 +226,41 @@ async function installProgrammingMocks(page: Page, state: MockState) {
           const target = nextDraft.programs.find((program) => program.programId === operation.programId)
           if (target) target.document = operation.source
         }
+        /* `T59-803` — bốn thao tác POU typed của Draft v2. Mock phản chiếu đúng
+           ngữ nghĩa backend: `upsertObject` KHÔNG tạo cấu hình chạy,
+           `removeProgram` chỉ gỡ cấu hình, `removeObject` mới xoá POU. */
+        if (operation.op === 'upsertObject') {
+          const incoming = operation.object as { objectId: string; kind: MockProgram['kind']; name: string; language: MockProgram['language']; source: string }
+          const index = nextDraft.programs.findIndex((program) => (program.objectId ?? program.programId) === incoming.objectId)
+          const created: MockProgram = {
+            objectId: incoming.objectId, programId: incoming.objectId, name: incoming.name,
+            kind: incoming.kind, language: incoming.language, document: incoming.source,
+            executionOrder: nextDraft.programs.length, functionalTags: []
+          }
+          if (index >= 0) nextDraft.programs[index] = created
+          else nextDraft.programs.push(created)
+        }
+        if (operation.op === 'renameObject') {
+          const target = nextDraft.programs.find((program) => (program.objectId ?? program.programId) === operation.objectId)
+          if (target) target.name = operation.name as string
+        }
+        if (operation.op === 'duplicateObject') {
+          const source = nextDraft.programs.find((program) => (program.objectId ?? program.programId) === operation.objectId)
+          if (source) {
+            nextDraft.programs.push({
+              ...structuredClone(source),
+              objectId: operation.newObjectId as string,
+              programId: operation.newObjectId as string,
+              name: operation.name as string
+            })
+          }
+        }
+        if (operation.op === 'removeObject') {
+          nextDraft.programs = nextDraft.programs.filter((program) => (program.objectId ?? program.programId) !== operation.objectId)
+        }
+        if (operation.op === 'removeProgram') {
+          nextDraft.task.programOrder = nextDraft.task.programOrder.filter((programId) => programId !== operation.programId)
+        }
         if (operation.op === 'setTask') nextDraft.task = operation.task as typeof nextDraft.task
         if (operation.op === 'upsertVariable') nextDraft.variables.push(operation.variable)
         if (operation.op === 'upsertBinding') nextDraft.bindings.push(operation.binding)
@@ -1000,6 +1035,51 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     expectNoBrowserFailures(failures, 'mobile read-only')
   })
 
+  test('MỘT cây POU: ba kind, deep-link theo objectId và reload giữ đúng POU', async ({ page }, testInfo) => {
+    test.skip(
+      (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      'tạo/xóa POU là mutation; màn hẹp read-only có case riêng'
+    )
+    const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    const failures = observeBrowserFailures(page)
+    await login(page)
+
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`)
+
+    // `T59-803`: đúng MỘT navigation POU trong DOM. Trước lát này có hai cây
+    // đọc hai nguồn khác nhau, nên hai bề mặt có thể nói khác nhau về cùng một
+    // Project và người dùng bàn phím phải đi qua cả hai.
+    await expect(page.getByRole('navigation', { name: 'Cây POU' })).toHaveCount(1)
+    await expect(page.getByRole('navigation', { name: 'Cây ứng dụng' })).toHaveCount(0)
+
+    // Ba kind cùng có mặt, và FUNCTION/FUNCTION_BLOCK KHÔNG có chu kỳ.
+    await page.getByTitle('Thêm FUNCTION', { exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Mở NewFunction', exact: true })).toBeVisible()
+    await page.getByTitle('Thêm FUNCTION_BLOCK').click()
+    await expect(page.getByRole('button', { name: 'Mở NewFunctionBlock' })).toBeVisible()
+    await page.getByRole('button', { name: 'Mở NewFunction', exact: true }).click()
+    await expect(page.getByText(/chỉ chạy khi được Program gọi/)).toBeVisible()
+
+    // Lọc chỉ đổi thứ được vẽ, không đổi POU đang chọn.
+    await page.getByLabel('Tìm POU').fill('NewFunctionBlock')
+    await expect(page.getByRole('button', { name: 'Mở NewFunction', exact: true })).toHaveCount(0)
+    await page.getByLabel('Tìm POU').fill('')
+
+    // Deep-link dùng objectId của POU, không dùng identity runtime.
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
+    await expect(page.getByRole('heading', { name: 'Điều khiển AHU' })).toBeVisible()
+    /* Reload trong lane này rơi về màn đăng nhập (phiên chưa persist — đó là
+       một finding riêng, không phải của lát này). Sau khi đăng nhập lại,
+       deep-link phải mở đúng POU cũ: đó mới là điều `T59-803` khẳng định. */
+    await page.reload()
+    await login(page)
+    await expect(page.getByRole('heading', { name: 'Điều khiển AHU' })).toBeVisible()
+    expect(new URL(page.url()).searchParams.get('pou')).toBe(POU_OBJECT_ID)
+
+    expectNoBrowserFailures(failures, 'một cây POU')
+  })
+
   test('bàn phím đi hết vỏ mới: Tab tới cây POU và Enter chọn đúng POU', async ({ page }, testInfo) => {
     test.skip(
       (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
@@ -1011,7 +1091,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     await login(page)
 
     await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`)
-    const pou = page.getByRole('button', { name: /Điều khiển AHU/ }).first()
+    const pou = page.getByRole('button', { name: 'Mở Điều khiển AHU' })
     await pou.focus()
     await expect(pou).toBeFocused()
     await page.keyboard.press('Enter')

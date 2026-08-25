@@ -25,6 +25,13 @@ export function toWorkspaceDocument(draft: ProgrammingDraftDocument): Programmin
   for (const object of objects) {
     const objectId = String(object.objectId)
     const config = configByObject.get(objectId)
+    /* Chu kỳ đi theo TỪNG POU, không lấy từ `task.periodMs`: trong Project
+     * nhiều chu kỳ, giá trị của Task chỉ là chu kỳ của Program đầu tiên, và
+     * dùng nó cho POU thứ hai là nói sai về lịch chạy thật. */
+    const periodMs = config?.periodMs === undefined ? undefined : Number(config.periodMs)
+    const dependencies = Array.isArray(object.dependencies)
+      ? (object.dependencies as unknown[]).map((id) => String(id))
+      : undefined
     programs.push({
       programId: String(config?.programId ?? objectId),
       objectId,
@@ -32,7 +39,9 @@ export function toWorkspaceDocument(draft: ProgrammingDraftDocument): Programmin
       name: String(object.name ?? ''),
       kind: (object.kind as ProgrammingProgram['kind']) ?? 'PROGRAM',
       language: (object.language as ProgrammingProgram['language']) ?? 'ST',
-      document: typeof object.source === 'string' ? object.source : ''
+      document: typeof object.source === 'string' ? object.source : '',
+      ...(periodMs === undefined || Number.isNaN(periodMs) ? {} : { periodMs }),
+      ...(dependencies === undefined ? {} : { dependencies })
     })
     for (const local of (Array.isArray(object.locals) ? object.locals : []) as Record<string, unknown>[]) {
       variables.push({ ...(local as unknown as ProgrammingVariable), programId: String(local.programId ?? objectId) })
