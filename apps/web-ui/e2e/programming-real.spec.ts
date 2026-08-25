@@ -520,8 +520,11 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   // query canonical. Khẳng định giữ nguyên phần có giá trị: đúng Project trên URL
   // (không mượn Project khác) và chế độ EDIT tường minh.
   await expect(page).toHaveURL(new RegExp(`/eng/programming/programs\\?project=${projectID}&mode=EDIT$`))
+  // `T59-803`: DOM chỉ còn ĐÚNG MỘT cây POU, và nút mở POU có nhãn tường minh
+  // vì ba nút thao tác bên cạnh cũng mang tên POU.
   const pouTree = page.getByRole('navigation', { name: 'Cây POU' })
-  await pouTree.getByRole('button', { name: /AHU_MAINST/ }).click()
+  await expect(page.getByRole('navigation', { name: 'Cây ứng dụng' })).toHaveCount(0)
+  await pouTree.getByRole('button', { name: 'Mở AHU_MAIN' }).click()
   await expect(page.getByLabel('Mã nguồn ST của AHU_MAIN')).toHaveValue(SOURCE_R2)
 
   // Hồi quy bắt trên Chrome DevTools: ST+ từng serialize cả view model
