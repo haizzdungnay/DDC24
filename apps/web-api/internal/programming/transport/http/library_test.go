@@ -439,3 +439,48 @@ func TestSaveDraftBaoDungThaoTacBiTuChoiTrongBatch(t *testing.T) {
 		t.Fatalf("field = %q, mong đợi trỏ đúng thao tác thứ hai trong batch", response.Error.Field)
 	}
 }
+
+// `T59-804` — chữ ký typed công khai. Ba khẳng định: SYSTEM entry phân giải
+// được, PROJECT entry hình dạng lạ KHÔNG bị bịa thành chữ ký rỗng, và chữ ký
+// thô vẫn đi kèm để consumer cũ không hỏng.
+func TestLibrarySignatureIsPublishedOnlyWhenItParses(t *testing.T) {
+	canonical := []byte(`{"category":"timer","labelVi":"Trễ bật","labelEn":"On delay",` +
+		`"dispatch":"FB_TYPE","polymorphic":false,"allowedTypes":[],"defaultType":"BOOL",` +
+		`"typedPortNames":[],"ports":[{"name":"IN","direction":"INPUT","dataType":"BOOL"},` +
+		`{"name":"Q","direction":"OUTPUT","dataType":"BOOL"}]}`)
+	parsed := parseLibrarySignature(canonical)
+	if parsed == nil {
+		t.Fatal("chữ ký canonical phải phân giải được")
+	}
+	if parsed.Dispatch != "FB_TYPE" || len(parsed.Ports) != 2 || parsed.Ports[1].Direction != "OUTPUT" {
+		t.Fatalf("chữ ký phân giải sai: %+v", parsed)
+	}
+
+	for name, raw := range map[string]string{
+		"không phải JSON":  `không-phải-json`,
+		"thiếu category":   `{"dispatch":"FB_TYPE","ports":[{"name":"IN","direction":"INPUT","dataType":"BOOL"}]}`,
+		"dispatch lạ":      `{"category":"x","dispatch":"MAGIC","ports":[{"name":"IN","direction":"INPUT","dataType":"BOOL"}]}`,
+		"cổng thiếu kiểu":  `{"category":"x","dispatch":"FB_TYPE","ports":[{"name":"IN","direction":"INPUT"}]}`,
+		"hướng cổng lạ":    `{"category":"x","dispatch":"FB_TYPE","ports":[{"name":"IN","direction":"SIDEWAYS","dataType":"BOOL"}]}`,
+		"không có cổng":    `{"category":"x","dispatch":"FB_TYPE","ports":[]}`,
+		"kiểu ngoài hồ sơ": `{"category":"x","dispatch":"FB_TYPE","ports":[{"name":"IN","direction":"INPUT","dataType":"STRING"}]}`,
+	} {
+		if got := parseLibrarySignature([]byte(raw)); got != nil {
+			t.Fatalf("%s: phải trả nil thay vì bịa chữ ký: %+v", name, got)
+		}
+	}
+
+	// Chữ ký thô vẫn có mặt: consumer cũ đọc `interface` không được hỏng vì
+	// backend thêm một field mới.
+	view := programmingapplication.LibraryEntryView{
+		Scope: "SYSTEM", EntryID: "TON", Kind: "FUNCTION_BLOCK", Name: "TON",
+		FeatureState: "AVAILABLE", InterfaceJSON: canonical,
+	}
+	response := toLibraryEntryResponse(view)
+	if len(response.Interface) == 0 {
+		t.Fatal("chữ ký thô phải đi kèm để consumer cũ không hỏng")
+	}
+	if response.Signature == nil || response.Signature.Category != "timer" {
+		t.Fatalf("chữ ký typed thiếu: %+v", response.Signature)
+	}
+}

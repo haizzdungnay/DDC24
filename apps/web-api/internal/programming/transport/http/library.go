@@ -1,6 +1,7 @@
 package programminghttp
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -10,20 +11,125 @@ import (
 )
 
 type libraryEntryResponse struct {
-	Scope             string                      `json:"scope"`
-	LibraryRevisionID string                      `json:"libraryRevisionId"`
-	LibraryVersion    string                      `json:"libraryVersion"`
-	LibraryState      string                      `json:"libraryState"`
-	EntryID           string                      `json:"entryId"`
-	Kind              string                      `json:"kind"`
-	Name              string                      `json:"name"`
-	Language          string                      `json:"language,omitempty"`
-	FeatureState      string                      `json:"featureState"`
-	ContentSHA256     string                      `json:"contentSha256"`
-	Interface         json.RawMessage             `json:"interface,omitempty"`
-	Dependencies      []libraryDependencyResponse `json:"dependencies"`
-	StateLayoutKnown  bool                        `json:"stateLayoutKnown"`
-	StateSizeBytes    uint32                      `json:"stateSizeBytes"`
+	Scope             string          `json:"scope"`
+	LibraryRevisionID string          `json:"libraryRevisionId"`
+	LibraryVersion    string          `json:"libraryVersion"`
+	LibraryState      string          `json:"libraryState"`
+	EntryID           string          `json:"entryId"`
+	Kind              string          `json:"kind"`
+	Name              string          `json:"name"`
+	Language          string          `json:"language,omitempty"`
+	FeatureState      string          `json:"featureState"`
+	ContentSHA256     string          `json:"contentSha256"`
+	Interface         json.RawMessage `json:"interface,omitempty"`
+	/* `T59-804`: chữ ký ĐÃ PHÂN GIẢI. Vắng field nghĩa là chữ ký thô không khớp
+	 * hình dạng canonical — một câu trả lời rõ ràng, khác hẳn để mỗi client tự
+	 * parse rồi mỗi nơi kết luận một kiểu. */
+	Signature        *librarySignatureResponse   `json:"signature,omitempty"`
+	Dependencies     []libraryDependencyResponse `json:"dependencies"`
+	StateLayoutKnown bool                        `json:"stateLayoutKnown"`
+	StateSizeBytes   uint32                      `json:"stateSizeBytes"`
+}
+
+type librarySignaturePortResponse struct {
+	Name      string `json:"name"`
+	Direction string `json:"direction"`
+	DataType  string `json:"dataType"`
+}
+
+type librarySignatureResponse struct {
+	Category       string                         `json:"category"`
+	LabelVi        string                         `json:"labelVi,omitempty"`
+	LabelEn        string                         `json:"labelEn,omitempty"`
+	Dispatch       string                         `json:"dispatch"`
+	Polymorphic    bool                           `json:"polymorphic"`
+	AllowedTypes   []string                       `json:"allowedTypes"`
+	DefaultType    string                         `json:"defaultType,omitempty"`
+	TypedPortNames []string                       `json:"typedPortNames"`
+	Ports          []librarySignaturePortResponse `json:"ports"`
+}
+
+/* Hình dạng canonical của chữ ký SYSTEM (sinh từ
+ * `contracts/programming/pou_library_registry_v1.json`). PROJECT entry do người
+ * dùng nạp nên chữ ký của chúng có thể KHÁC; khi đó parse thất bại và `signature`
+ * vắng mặt thay vì bịa ra một chữ ký rỗng trông như thật. */
+type librarySignatureDocument struct {
+	Category       string   `json:"category"`
+	LabelVi        string   `json:"labelVi"`
+	LabelEn        string   `json:"labelEn"`
+	Dispatch       string   `json:"dispatch"`
+	Polymorphic    bool     `json:"polymorphic"`
+	AllowedTypes   []string `json:"allowedTypes"`
+	DefaultType    string   `json:"defaultType"`
+	TypedPortNames []string `json:"typedPortNames"`
+	Ports          []struct {
+		Name      string `json:"name"`
+		Direction string `json:"direction"`
+		DataType  string `json:"dataType"`
+	} `json:"ports"`
+}
+
+var librarySignatureDispatches = map[string]struct{}{
+	"OPERATOR": {}, "FUNC_TABLE": {}, "FB_TYPE": {}, "EXPANSION": {},
+}
+
+var librarySignatureDataTypes = map[string]struct{}{
+	"BOOL": {}, "INT": {}, "DINT": {}, "UINT": {}, "REAL": {}, "TIME": {},
+}
+
+// parseLibrarySignature trả `nil` khi chữ ký thô không khớp hình dạng canonical.
+// KHÔNG sửa chữa dữ liệu: một cổng thiếu kiểu hay dispatch lạ nghĩa là chữ ký
+// này chưa dùng được, và nói "chưa đọc được" đúng hơn là đoán phần còn thiếu.
+func parseLibrarySignature(raw []byte) *librarySignatureResponse {
+	if len(raw) == 0 {
+		return nil
+	}
+	var document librarySignatureDocument
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	if err := decoder.Decode(&document); err != nil {
+		return nil
+	}
+	if document.Category == "" || len(document.Ports) == 0 {
+		return nil
+	}
+	if _, ok := librarySignatureDispatches[document.Dispatch]; !ok {
+		return nil
+	}
+	ports := make([]librarySignaturePortResponse, 0, len(document.Ports))
+	for _, port := range document.Ports {
+		if port.Name == "" || (port.Direction != "INPUT" && port.Direction != "OUTPUT") {
+			return nil
+		}
+		if _, ok := librarySignatureDataTypes[port.DataType]; !ok {
+			return nil
+		}
+		ports = append(ports, librarySignaturePortResponse{
+			Name: port.Name, Direction: port.Direction, DataType: port.DataType})
+	}
+	for _, dataType := range document.AllowedTypes {
+		if _, ok := librarySignatureDataTypes[dataType]; !ok {
+			return nil
+		}
+	}
+	if document.DefaultType != "" {
+		if _, ok := librarySignatureDataTypes[document.DefaultType]; !ok {
+			return nil
+		}
+	}
+	allowed := document.AllowedTypes
+	if allowed == nil {
+		allowed = []string{}
+	}
+	typed := document.TypedPortNames
+	if typed == nil {
+		typed = []string{}
+	}
+	return &librarySignatureResponse{
+		Category: document.Category, LabelVi: document.LabelVi, LabelEn: document.LabelEn,
+		Dispatch: document.Dispatch, Polymorphic: document.Polymorphic,
+		AllowedTypes: allowed, DefaultType: document.DefaultType,
+		TypedPortNames: typed, Ports: ports,
+	}
 }
 
 type libraryDependencyResponse struct {
@@ -168,6 +274,7 @@ func toLibraryEntryResponse(item programmingapplication.LibraryEntryView) librar
 	}
 	if len(item.InterfaceJSON) > 0 {
 		response.Interface = json.RawMessage(item.InterfaceJSON)
+		response.Signature = parseLibrarySignature(item.InterfaceJSON)
 	}
 	return response
 }
