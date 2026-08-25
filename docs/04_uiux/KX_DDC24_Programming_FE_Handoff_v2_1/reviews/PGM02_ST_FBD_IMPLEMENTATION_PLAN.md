@@ -36,7 +36,7 @@ không nói CI, target, HIL hay release.
 | `WP-01` | `T59-802` | **DONE (một phần scope)** 2026-08-25 | Route canonical + resolver + legacy redirect + mobile `<768` read-only, sau cờ `programsWorkspaceV2` | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-802-shell-route.md) |
 | `WP-02` | `T59-803` | **DONE** 2026-08-25 | Một POU Explorer, identity `objectId`↔`programId`, vòng đời POU typed cho ba kind | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-803-pou-explorer.md) |
 | `WP-03` | `T59-804` | **DONE** 2026-08-26 | Catalog dùng chung (BE authority) + Quick Library ST + Recent/Favorites + parity BE↔registry trên backend thật + lọc palette FBD theo cổng đang chọn + khoá luật không tự nối + sáu block `TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS` (compiler+runtime+conformance) + typed metadata public trong OpenAPI + dock dùng chung ST↔FBD | [evidence 2026-08-26](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md) |
-| `WP-04` | `T59-805` | READY | — | — |
+| `WP-04` | `T59-805` | **IN PROGRESS** 2026-08-26 | Guard read-only runtime cho editor ST (mọi đường mutation) | [cổng phụ thuộc](../../../00_governance/PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) — đổi surface sang CodeMirror 6 CHỜ quyết định |
 | `WP-05` | `T59-806` | ORDERED | — | — |
 | `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | ORDERED | — | — |
 | `WP-07` | `T59-814` | ORDERED | — | — |
@@ -71,6 +71,15 @@ component): CSS grid slot resizable/collapsible, context strip đầy đủ theo
 state machine `EDIT/SIMULATE/LIVE` tách buffer theo mode và dirty guard khi đổi
 mode. `T59-802` chỉ đóng phần route/resolver/responsive; ghi rõ ở đây để không
 ai đọc `DONE` thành "toàn bộ WP-01 đã xong".
+
+**`WP-04` gặp một cổng thật.** Plan đặt CodeMirror 6 làm surface mới và ràng
+buộc "sau dependency/license gate". Đo ngày 2026-08-26: chunk Programming đang
+**104,77 KiB gzip**, ngân sách R1 pin trong `pgm02_workspace_v1.json` là **125
+KiB**, tức dư địa còn **≈20 KiB** cho cả năm work package R1 còn lại — trong khi
+một bộ CodeMirror tối thiểu ước lượng 90–150 KiB gzip. Hồ sơ cổng
+[`GATE-PROG-ST-EDITOR-DEP-001`](../../../00_governance/PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md)
+nêu ba lựa chọn, năm phép đo bắt buộc và khuyến nghị; quyết định thuộc
+Owner/Architect. `T59-805` tiếp tục phần KHÔNG phụ thuộc cổng đó.
 
 Gate: `G-PGM02-01 EDIT_FOUNDATION` đã đủ **một route** (`WP-01`), **một POU
 tree** (`WP-02`) và **một catalog authority** (`WP-03` — parity BE↔registry đo

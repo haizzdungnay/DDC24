@@ -8,6 +8,32 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — guard read-only runtime cho editor ST và cổng phụ thuộc `WP-04` (2026-08-26)
+
+- **Fixed — chỉ đọc là policy runtime, không chỉ một thuộc tính.** AC của
+  `WP-04` đòi "LIVE và mobile không sửa được qua gõ/dán/thả/IME/lệnh".
+  `readOnly` của textarea chặn được người dùng thật, nhưng nó là một THUỘC
+  TÍNH — một lần refactor quên nó là mọi đường mutation mở lại cùng lúc. Nay có
+  guard ở đúng hai chốt: `applyEditRange` (chèn, định dạng, tìm-thay,
+  autocomplete, auto-indent) và handler `onChange` của textarea (gõ tay, dán,
+  thả). Ba test khoá cả hai chiều.
+
+- **Added — cổng phụ thuộc/license cho editor ST (`GATE-PROG-ST-EDITOR-DEP-001`).**
+  Plan đặt CodeMirror 6 làm surface mới **sau** một cổng dependency/license; hồ
+  sơ này là cổng đó và **không tự phê duyệt**. Số đo quyết định: chunk
+  Programming đang **104,77 KiB gzip**, ngân sách R1 pin trong hợp đồng là **125
+  KiB**, dư địa còn **≈20 KiB** cho cả năm work package R1 còn lại — trong khi
+  một bộ CodeMirror tối thiểu ước lượng **90–150 KiB gzip**, tức vượt ngân sách
+  R1 gấp 4–7 lần và một mình cũng vượt luôn ngân sách R3. Hồ sơ nêu ba lựa chọn
+  (giữ editor hiện tại / nạp trễ thành chunk riêng / nâng ngân sách), năm phép
+  đo bắt buộc trước khi quyết (delta gzip thật, `openPouP95Ms` và
+  `typingResponseP95Ms` TRÊN BO, heap sau 30 phút, license + dependency bắc cầu,
+  khả năng build offline) và khuyến nghị giữ editor hiện tại cho R1. Quyết định
+  thuộc Owner/Architect.
+
+- **Verification.** FE **143 file / 1574 test PASS**, lint và build PASS.
+
+
 ### PGM-02 R1 — dock Quick Library dùng chung ST↔FBD, đóng `WP-03` (2026-08-26)
 
 - **Changed — một dock, hai bề mặt.** `QuickLibraryPanel` nay nhận **mục
