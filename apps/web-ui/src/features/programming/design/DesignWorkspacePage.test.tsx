@@ -197,7 +197,9 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(setTaskOp.op).toBe('setTask')
     expect(setTaskOp.task.programOrder).toEqual([upsertOp.program.programId])
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /NewProgram/ })).toBeInTheDocument())
+    // `getAllBy` vì mỗi POU nay có thêm nút Đổi tên/Nhân bản/Xóa mang chính
+    // tên POU trong nhãn — chọn đúng nút MỞ POU thay vì khẳng định "duy nhất".
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /NewProgram/ }).length).toBeGreaterThan(0))
   })
 
   it('ghi thuộc tính Program bằng payload v2 hẹp và chặn tên POU backend sẽ từ chối', async () => {
@@ -258,7 +260,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
 
     // Chưa chọn chương trình nào: cột Inspector vẫn tồn tại, hiện trạng thái trống.
-    const tree = screen.getByRole('navigation', { name: 'Cây ứng dụng' })
+    const tree = screen.getByRole('navigation', { name: 'Cây POU' })
     const inspectorEmpty = screen.getByRole('complementary', { name: 'Thuộc tính' })
     expect(within(inspectorEmpty).getByText('Chọn một chương trình để xem thuộc tính.')).toBeInTheDocument()
 
@@ -478,8 +480,8 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
     expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByTitle('Xóa chương trình'))
-    const dialog = screen.getByRole('dialog', { name: 'Xóa chương trình?' })
+    fireEvent.click(screen.getByTitle(/^Xóa /))
+    const dialog = screen.getByRole('dialog', { name: 'Xóa POU?' })
     expect(within(dialog).getByText(/Điều khiển AHU/)).toHaveTextContent('Không thể hoàn tác sau khi lưu.')
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xóa' }))
@@ -525,8 +527,8 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('SCALE_LIN')).toBeInTheDocument())
-    fireEvent.click(screen.getByTitle('Xóa chương trình'))
-    const dialog = screen.getByRole('dialog', { name: 'Xóa chương trình?' })
+    fireEvent.click(screen.getByTitle(/^Xóa /))
+    const dialog = screen.getByRole('dialog', { name: 'Xóa POU?' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xóa' }))
 
     await waitFor(() => {
@@ -562,8 +564,8 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('AHU_MasterSequence')).toBeInTheDocument())
-    fireEvent.click(screen.getByTitle('Xóa chương trình'))
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Xóa chương trình?' })).getByRole('button', { name: 'Xóa' }))
+    fireEvent.click(screen.getByTitle(/^Xóa /))
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Xóa POU?' })).getByRole('button', { name: 'Xóa' }))
 
     await waitFor(() => {
       expect(client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')).toBeTruthy()

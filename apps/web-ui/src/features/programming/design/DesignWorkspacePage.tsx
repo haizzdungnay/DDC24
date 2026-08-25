@@ -13,7 +13,7 @@ import { Modal } from '../../../shared/components/Modal'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
 import { toWorkspaceDocument } from '../model/draftV2'
-import { PouTree } from './PouTree'
+import { PouExplorer } from './pou/PouExplorer'
 import { useProgrammingRuntimeMonitor } from '../api/queries'
 import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 import { programsWorkspacePath } from '../shared/programsRoute'
@@ -84,6 +84,19 @@ export function DesignWorkspacePage({
   // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-03
   // (Check) chọn sẵn đúng Program bị lỗi khi mở workspace Thiết kế.
   const [selectedPouId, setSelectedPouId] = useState<string | undefined>(() => searchParams.get('pou') ?? searchParams.get('program') ?? undefined)
+  const queryPouId = searchParams.get('pou') ?? undefined
+  /* URL là nguồn chân lý của POU đang mở, không chỉ ở lần mount đầu.
+   *
+   * Trước `T59-803`, `selectedPouId` chỉ đọc query MỘT LẦN lúc mount. Điều đó
+   * còn chạy được khi mỗi Project có route riêng — đi tới đó là remount. Sau
+   * cut-over PGM-02, một cú nhảy chẩn đoán từ PGM-03 chỉ đổi QUERY trên cùng
+   * route, nên workspace giữ nguyên POU cũ và người dùng bấm vào lỗi mà không
+   * có gì mở ra. Effect này nhận thay đổi query; chọn POU trong ứng dụng thì
+   * ghi ngược lại query (bằng `replace`) để reload giữ đúng POU đang mở. */
+  useEffect(() => {
+    if (queryPouId === undefined || queryPouId === selectedPouId) return
+    setSelectedPouId(queryPouId)
+  }, [queryPouId, selectedPouId])
   /* D-01/F-PROG-ASBUILT-003: PGM-03 giờ sở hữu Check/Problems (không phải ở
    * đây nữa) — khi người dùng bấm một diagnostic ở đó, nó điều hướng sang đây
    * kèm `line/column/length` trong query string thay vì state cùng trang.
@@ -218,13 +231,30 @@ export function DesignWorkspacePage({
     ?? (searchParams.has('program') ? document.programs.find((program) => program.programId === searchParams.get('program')) : undefined)
   const selectedProgramId = selectedProgram?.programId
   const selectedObjectId = selectedProgram ? (selectedProgram.objectId ?? selectedProgram.programId) : selectedPouId
+  const selectPou = (objectId: string | undefined) => {
+    setSelectedPouId(objectId)
+    /* Chỉ ghi vào URL khi route canonical đang sở hữu địa chỉ; trên route cũ,
+     * `?pou=` không phải là hợp đồng và ghi vào đó là tạo một URL thứ hai cho
+     * cùng một trang. */
+    if (!PROGRAMS_WORKSPACE_V2_ENABLED) return
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (objectId) next.set('pou', objectId)
+        else next.delete('pou')
+        return next
+      },
+      { replace: true }
+    )
+  }
+
   const selectProgram = (programId: string | undefined) => {
     if (!programId) {
-      setSelectedPouId(undefined)
+      selectPou(undefined)
       return
     }
     const program = document.programs.find((item) => item.programId === programId)
-    setSelectedPouId(program?.objectId ?? programId)
+    selectPou(program?.objectId ?? programId)
   }
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
@@ -332,11 +362,17 @@ export function DesignWorkspacePage({
             Blocks và inspector kind-aware. Nó đọc document v2 TRỰC TIẾP, không
             qua adapter — đây là phần IA mới, còn `ProgramsTab` bên dưới vẫn là
             editor cũ cho tới khi lane editor chuyển sang v2. */}
+        {/* MỘT POU Explorer duy nhất (T59-803): trước đây cây này và cây
+            "Cây ứng dụng" bên trong ProgramsTab cùng nằm trong DOM, đọc hai
+            nguồn khác nhau và có thể nói khác nhau về cùng một Project. */}
         <div className="mb-3 rounded border border-[var(--c-border)] p-3">
-          <PouTree
-            draft={workspace.project.draft}
+          <PouExplorer
+            document={document}
+            canEdit={canEdit}
+            saving={workspace.saving}
             selectedObjectId={selectedObjectId}
-            onSelect={setSelectedPouId}
+            onSelect={selectPou}
+            onSave={workspace.save}
           />
         </div>
         <ProgramsTab

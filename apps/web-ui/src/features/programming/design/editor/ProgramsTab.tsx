@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AlignLeft, Command, FilePlus, PlusSquare, Redo2, Save, Search, Trash2, Undo2, X } from 'lucide-react'
+import { AlignLeft, Command, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
-import { createUuid } from '../../../../shared/crypto'
 import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
-import { Modal } from '../../../../shared/components/Modal'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
-import { canonicalFbdJson, FBD_PROFILE_ID, FBD_SCHEMA_VERSION, type FbdDocument } from '../../fbd/model'
+import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
+import { emptyFbdDocument } from '../pou/pouTemplates'
 import type { UserPouInterface } from '../../fbd/userPou'
 import { useLazyProgrammingPointCatalog } from '../../api/queries'
 import type {
@@ -38,13 +37,6 @@ import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { SelectionQuickActions } from './SelectionQuickActions'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
 
-/** F-PROG-ASBUILT-001/D-02: Program ST mới không được bắt đầu ở `document: ''`
- * — compiler luôn Check FAILED ngay khi tạo. Tên hiển thị nay cũng là định danh
- * POU hợp lệ, nên template dùng cùng tên để Program thứ hai không lặp lại khai
- * báo `NewProgram` của Program đầu. */
-function stProgramTemplate(name: string): string {
-  return `PROGRAM ${name}\nEND_PROGRAM\n`
-}
 
 /** Nguồn chân lý DUY NHẤT cho số đo ST editor — gutter số dòng, overlay tô
  *  cú pháp, textarea, dải highlight active-line và điểm neo dropdown gợi ý
@@ -93,17 +85,6 @@ const EDITOR_TEXT_METRICS: CSSProperties = {
   paddingTop: `${EDITOR_PAD_TOP_PX}px`,
   paddingBottom: `${EDITOR_PAD_TOP_PX}px`,
   tabSize: EDITOR_TAB_SIZE,
-}
-
-function emptyFbdDocument(name: string): FbdDocument {
-  return {
-    $schema: '../../fbd_v1.schema.json',
-    schemaVersion: FBD_SCHEMA_VERSION,
-    profileId: FBD_PROFILE_ID,
-    graphId: createUuid(),
-    name,
-    networks: [{ id: createUuid(), name: 'network_1', order: 0, nodes: [], wires: [] }]
-  }
 }
 
 /**
@@ -160,8 +141,6 @@ export function ProgramsTab({
   const [buffers, setBuffers] = useState<Record<string, string>>({})
   const [projectTagsDraft, setProjectTagsDraft] = useState(() => document.project.functionalTags.join(', '))
   const [metadataDrafts, setMetadataDrafts] = useState<Record<string, ProgramMetadataDraft>>({})
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
-  const pendingDeleteProgram = document.programs.find((program) => program.programId === pendingDeleteId)
 
   /* ST Editor Quick Control (đã duyệt) — quyết định #02: hook LAZY, không
    * fetch `GET /point-catalog` khi mở tab Chương trình; sống ở đây (cha của
@@ -243,76 +222,6 @@ export function ProgramsTab({
     setMetadataDrafts(Object.fromEntries(document.programs.map((program) => [program.programId, metadataOf(program)])))
   }, [discardVersion])
 
-  function addProgram(language: 'ST' | 'FBD') {
-    const programId = createUuid()
-    /* Tên POU là token hợp đồng, không phải copy được dịch. Tên có dấu/khoảng
-     * trắng từng làm ST+ luôn nhận 400 từ `validPouName` của backend. */
-    const baseName = language === 'FBD' ? 'NewFbdProgram' : 'NewProgram'
-    const name = uniqueProgramName(document.programs, baseName)
-    const newProgram: ProgrammingProgramDraftInput = {
-      programId,
-      name,
-      kind: 'PROGRAM',
-      language,
-      document: language === 'FBD' ? canonicalFbdJson(emptyFbdDocument(name)) : stProgramTemplate(name),
-    }
-    void onSave([
-      { op: 'upsertProgram', program: newProgram },
-      { op: 'setTask', task: { ...document.task, programOrder: [...document.task.programOrder, programId] } }
-    ]).then((ok) => {
-      if (ok) onSelectProgram(programId)
-    })
-  }
-
-  /** Xóa một POU kéo theo Variable/Binding của nó. Backend fail-closed nếu
-   *  Variable còn `programId` trỏ tới Program không tồn tại, nên thứ tự trong
-   *  batch là bắt buộc: binding → biến → cấu hình chạy → chính POU.
-   *
-   *  Hai điều đã sai ở bản trước và cùng trả `PRG-ERR-REQ-001` không kèm lý do:
-   *
-   *  1. Batch gửi `setTask` với `programOrder`. Trong Draft v2 KHÔNG còn object
-   *     `task`: chu kỳ nằm theo từng Program trong `programs[]` và
-   *     `upsertProgram` đã tự gán. Gửi `setTask` ở đây vừa thừa vừa có hại —
-   *     `setTaskCompat` ghi đè chu kỳ của MỌI Program trong danh sách, nên xoá
-   *     Program A trong Project nhiều chu kỳ sẽ âm thầm đổi chu kỳ của B.
-   *  2. Batch luôn gửi `removeProgram`, kể cả khi POU là FUNCTION/FUNCTION_BLOCK
-   *     — những POU không hề có cấu hình chạy — và backend trả lỗi vì không tìm
-   *     thấy id trong `programs[]`. Nói cách khác: xoá một user FUNCTION KHÔNG
-   *     BAO GIỜ thành công.
-   *
-   *  Và thiếu `removeObject` thì mã nguồn POU vẫn ở lại Draft: người dùng bấm
-   *  Xoá, nhận 200, mà POU vẫn hiện nguyên trên danh sách. */
-  function removeProgram(programId: string) {
-    const target = document.programs.find((program) => program.programId === programId)
-    const variableIds = document.variables.filter((variable) => variable.programId === programId).map((variable) => variable.variableId)
-    const bindingIds = document.bindings.filter((binding) => variableIds.includes(binding.variableId)).map((binding) => binding.bindingId)
-    const operations: ProgrammingDraftOperation[] = [
-      ...bindingIds.map((bindingId): ProgrammingDraftOperation => ({ op: 'removeBinding', bindingId })),
-      ...variableIds.map((variableId): ProgrammingDraftOperation => ({ op: 'removeVariable', variableId })),
-      // Chỉ gỡ cấu hình chạy khi POU THẬT SỰ có một mục trong `programs[]`.
-      //
-      // Kind không đủ để quyết định: một POU kind PROGRAM vẫn có thể không có
-      // cấu hình chạy — POU vừa tạo bằng `upsertObject` chưa xếp lịch, hoặc di
-      // chứng của chính lỗi xoá cũ (gỡ cấu hình nhưng để lại POU). Gửi
-      // `removeProgram` cho nó làm backend trả `operations[0].removeProgram` và
-      // người dùng KHÔNG xoá được đúng cái chương trình ma đó — vòng lặp chết.
-      // `undefined` là document v1 đi qua nguyên trạng: ở đó mọi Program đều có
-      // cấu hình, nên giữ hành vi cũ theo kind.
-      ...(target?.hasRuntimeConfig ?? (target?.kind ?? 'PROGRAM') === 'PROGRAM'
-        ? [{ op: 'removeProgram', programId } as ProgrammingDraftOperation]
-        : []),
-      { op: 'removeObject', objectId: target?.objectId ?? programId }
-    ]
-    void onSave(operations).then((ok) => {
-      setPendingDeleteId(null)
-      if (!ok) return
-      if (selectedProgramId === programId) {
-        const remaining = document.programs.find((program) => program.programId !== programId)
-        onSelectProgram(remaining?.programId)
-      }
-    })
-  }
-
   /** Chỉ transform TEXT buffer local qua `setBuffers` — không tự Lưu, không
    *  tự Kiểm tra (đúng ranh giới ST Editor Quick Control đã duyệt). */
   function handlePaletteSelect(entry: PaletteEntry) {
@@ -361,7 +270,10 @@ export function ProgramsTab({
           `<h3>`. Ẩn thị giác vì thanh tab đã hiện tên. */}
       <h3 className="sr-only">{pick('Chương trình', 'Programs')}</h3>
       <CommandPalette open={paletteOpen} entries={paletteEntries} onClose={() => setPaletteOpen(false)} onSelect={handlePaletteSelect} />
-      <nav aria-label={pick('Cây ứng dụng', 'Application tree')} className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
+      {/* `T59-803`: cây POU nay do `PouExplorer` sở hữu (đúng MỘT navigation
+          trong DOM). Ở đây chỉ còn thứ thuộc về Project chứ không thuộc về cây:
+          nhãn chức năng và lối vào Bảng lệnh nhanh. */}
+      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
         <ProjectTagsEditor
           canEdit={canEdit}
           value={projectTagsDraft}
@@ -369,94 +281,18 @@ export function ProgramsTab({
           onChange={setProjectTagsDraft}
           onSave={() => onSave([{ op: 'setFunctionalTags', tags: parseTags(projectTagsDraft) }])}
         />
-        <div className="mb-2 flex items-center justify-between px-1">
-          <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Chương trình', 'Programs')}</h3>
-          <span className="flex gap-1">
-            <button
-              type="button"
-              className="rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-              title={pick('Bảng lệnh nhanh (Ctrl+P)', 'Command palette (Ctrl+P)')}
-              onClick={() => setPaletteOpen(true)}
-            >
-              <Command className="h-4 w-4" aria-hidden="true" />
-              <span className="sr-only">{pick('Bảng lệnh nhanh', 'Command palette')}</span>
-            </button>
-            {canEdit && (
-              <>
-                <button
-                  type="button"
-                  className="rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-                  title={pick('Thêm chương trình FBD', 'Add FBD program')}
-                  onClick={() => addProgram('FBD')}
-                >
-                  <FilePlus className="h-4 w-4" aria-hidden="true" />
-                  <span className="sr-only">{pick('FBD', 'FBD')}</span>
-                </button>
-                <button
-                  type="button"
-                  className="rounded p-1 text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-                  title={pick('Thêm chương trình ST', 'Add ST program')}
-                  onClick={() => addProgram('ST')}
-                >
-                  ST+
-                </button>
-              </>
-            )}
-          </span>
+        <div className="mt-2 flex justify-end px-1">
+          <button
+            type="button"
+            className="rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+            title={pick('Bảng lệnh nhanh (Ctrl+P)', 'Command palette (Ctrl+P)')}
+            onClick={() => setPaletteOpen(true)}
+          >
+            <Command className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only">{pick('Bảng lệnh nhanh', 'Command palette')}</span>
+          </button>
         </div>
-        {document.programs.length === 0 ? (
-          <p className="px-1 text-sm text-[var(--c-text-dim)]">
-            {canEdit
-              ? pick('Chưa có chương trình. Bấm + để tạo.', 'No programs yet. Click + to create one.')
-              : pick('Chưa có chương trình.', 'No programs yet.')}
-          </p>
-        ) : (
-          <ul className="space-y-0.5">
-            {document.programs.map((program) => (
-              <li key={program.programId} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-current={program.programId === selectedProgramId ? 'true' : undefined}
-                  className={`w-full rounded px-2 py-1.5 text-left text-sm ${
-                    program.programId === selectedProgramId ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent)]' : 'text-[var(--c-text)] hover:bg-[var(--c-surface-2)]'
-                  }`}
-                  onClick={() => onSelectProgram(program.programId)}
-                >
-                  {program.name} <span className="text-[var(--c-text-dim)]">· {program.language}</span>
-                </button>
-                {canEdit && (
-                  <button
-                    type="button"
-                    className="shrink-0 rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-fault-fg)]"
-                    title={pick('Xóa chương trình', 'Delete program')}
-                    onClick={() => setPendingDeleteId(program.programId)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </nav>
-      <Modal
-        open={canEdit && pendingDeleteId !== null}
-        title={pick('Xóa chương trình?', 'Delete program?')}
-        danger
-        confirmLabel={pick('Xóa', 'Delete')}
-        confirmLoading={saving}
-        onConfirm={() => {
-          if (pendingDeleteId) removeProgram(pendingDeleteId)
-        }}
-        onClose={() => setPendingDeleteId(null)}
-      >
-        <p>
-          {pick(
-            `Xóa "${pendingDeleteProgram?.name ?? ''}" sẽ xóa cả mã nguồn, biến và ánh xạ liên quan tới Program này. Không thể hoàn tác sau khi lưu.`,
-            `Deleting "${pendingDeleteProgram?.name ?? ''}" also removes its source code, variables, and mappings. This cannot be undone after saving.`
-          )}
-        </p>
-      </Modal>
+      </div>
       <div>
         {!selected ? (
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Chọn một chương trình ở cây bên trái.', 'Select a program from the tree on the left.')}</p>
