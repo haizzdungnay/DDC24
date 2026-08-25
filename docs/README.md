@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-24 (PGM-02 v2.2 có review package 17 file; `T59-801` REVIEW, 16 card `T59-802..817` Candidate không có execution authority; PGM-02 code và `RELEASE_READY` vẫn `NO-GO`)
+**Cập nhật:** 2026-08-25 (PGM-02 v2.2 exact-pinned tại `413a043`; `T59-801`/`T59-802` DONE, `T59-803` READY, `T59-804..817` ORDERED; `F-P59-GHOST-POU-001` đã đóng cả quyết định lẫn implementation; `RELEASE_READY` vẫn `NO-GO`)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -23,7 +23,7 @@
 | [Traceability](07_records/TRACEABILITY.md) | ánh xạ yêu cầu → thiết kế → code → bằng chứng |
 | [Chỉ mục hồ sơ rà soát](07_records/reviews/README.md) | trạng thái từng record rà soát/phê duyệt/triển khai, đã đối chiếu mã nguồn; kèm bảng ánh xạ đường dẫn trước/sau tái cấu trúc |
 | [Programming Traceability Matrix](07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
-| [Programming Decision Register](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 12 quyết định unified đã khóa; `CR-PROG-PGM02-V22-001` Owner approved/Architect `PENDING`, `ADR-053` Proposed và `F-P59-GHOST-POU-001` còn `OPEN`; `T59-801` REVIEW |
+| [Programming Decision Register](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 12 quyết định unified đã khóa; `CR-PROG-PGM02-V22-001` Owner + Architect approved (`AUTH-PROG-2026-08-24-05`), `ADR-053` Accepted và `F-P59-GHOST-POU-001` `CLOSED` (quyết định + implementation); `T59-801`/`T59-802` DONE, `T59-803` READY |
 | [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào Product/SRS/Unified DDD/UX/VVP/Trace/Risk/Plan authority |
 | [Programming Unified Detailed Design](02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | data/contract/state/algorithm/error/source/test/deploy/rollback đủ DD-01..DD-13 |
 | [PGM-02 Workspace ST/FBD Detailed Design](02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) | Target Candidate chi tiết route/identity/EDIT/LIVE/SIMULATE/worker/NFR/test/rollback; exact pin pending |
@@ -83,9 +83,10 @@ Register → SRS → Design Index → Unified Detailed Design → UI/UX/Verifica
 Risk/Traceability → Plan59 → Prompt thi hành. Authority set được ghim trong
 manifest 2026-08-20 và kiểm bằng `candidate_pin_check.py`; các kết quả
 `PLAN_READY`/`IMPLEMENT_READY` đó chỉ áp dụng baseline unified đã ký. PGM-02 v2.2
-giờ là Candidate review set: Product Owner đã duyệt hướng, Architect exact pin
-còn `PENDING`, `T59-801` đang `REVIEW` và `T59-802..817` không có execution
-authority nên chưa được sửa code production. Plan53/
+đã được Product Owner/CTO + System Architect exact-pin tại Candidate `413a043`
+(`AUTH-PROG-2026-08-24-05`): `T59-801`/`T59-802` `DONE`, `T59-803` `READY`,
+`T59-804..817` `ORDERED` theo predecessor. Quyền implementation không phải
+evidence: mọi `I/T/P/R` của requirement PGM-02 vẫn `N`. Plan53/
 54/56, tracker WP và manifest P0 cũ chỉ dùng truy nguyên. Release evidence được
 tạo ở W7 và không được suy từ host test, browser mock hoặc trạng thái tài liệu.
 Với chủ đề khác, luồng đọc là

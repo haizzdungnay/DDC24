@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DEC-PROG-REGISTER-001` |
-| Phiên bản | 1.4 |
-| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` RESOLVED; `T59-801` DONE, `T59-802` READY và `T59-803..817` ORDERED theo dependency** |
-| Ngày | 2026-08-24 |
+| Phiên bản | 1.5 |
+| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` CLOSED (decision + implementation); `T59-801`/`T59-802` DONE, `T59-803` READY và `T59-804..817` ORDERED theo dependency** |
+| Ngày | 2026-08-25 |
 | Chủ quản | Product + System Architecture |
 | Authority | `ADR-050`; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
 
@@ -22,7 +22,11 @@ ba gate `IMPLEMENT_READY[PGM02-R1|R2|R3]=GO`, `T59-801=DONE` và mười sáu ta
 
 `F-P59-GHOST-POU-001` đã `RESOLVED` bằng policy fail-closed và `ADR-053` đã
 `Accepted` dưới cùng AUTH. Hai disposition này khóa thiết kế để implementation
-tiếp tục; chúng không phải bằng chứng source/test/CI/target/HIL đã PASS.
+tiếp tục; chúng không phải bằng chứng source/test/CI/target/HIL đã PASS. Riêng
+`F-P59-GHOST-POU-001` nay đã có cả **implementation**: corrective 2026-08-25 đưa
+catalog/checker/packager/writer về đúng semantics fail-closed và đạt affected
+gate HOST. Điều đó đóng finding, **không** mở `IMPLEMENTATION_CLOSE` cho PGM-02
+v2.2 và không suy ra bất kỳ evidence target/HIL nào.
 
 Các review Compiler/Core/BE/FE/Controls/Security/QA của baseline ADR-050 tiếp tục
 được thực hiện như hậu kiểm trong từng task. Riêng phạm vi PGM-02 v2.2 phải chạy
@@ -111,20 +115,21 @@ Plan56.
 | Maturity/evidence | Không giả chữ ký tay/chứng thư; không nâng Candidate design thành M4/M5; không suy Test Result, CI, target, HIL, physical I/O hoặc release PASS |
 | Release | `RELEASE_READY=NO-GO` tới khi VVP/risk/target/HIL/release authority thật đạt |
 
-### 1.3 `F-P59-GHOST-POU-001` — đã chốt semantics, chờ sửa source/test
+### 1.3 `F-P59-GHOST-POU-001` — đã chốt semantics và đã sửa source/test
 
 | Thuộc tính | Giá trị |
 |---|---|
 | Câu hỏi | POU kind `PROGRAM` không có entry trong `programs[]` phải có semantics Draft→Check→package nào? |
-| Trạng thái | **RESOLVED — `AUTH-PROG-2026-08-24-05`** |
+| Trạng thái | **CLOSED — quyết định `AUTH-PROG-2026-08-24-05`; implementation 2026-08-25** |
 | Quyết định | Draft được phép giữ PROGRAM POU chưa schedule; Check và Package phải fail-closed bằng public `PRG-ERR-CHECK-001`, detail `ST-POU-005` |
 | Bất biến | Tuyệt đối không âm thầm loại khỏi package/runtime và không synthesize chu kỳ 1000 ms |
 | Ảnh hưởng | Đồng bộ SRS/DDD/contract/compiler-packager/test của `T59-301/302/305` và corrective task liên quan |
-| Gate | `IMPLEMENTATION_CLOSE` vẫn **PENDING** tới khi source đã sửa và affected positive/negative/fault/regression gate PASS |
-| Điều kiện đóng implementation | Error catalog/mapping, checker/packager và test chứng minh ghost PROGRAM bị từ chối toàn phần, zero Active/LKG mutation |
+| Gate | Finding đã đóng; `IMPLEMENTATION_CLOSE` của PGM-02 v2.2 vẫn **PENDING** vì R1 mới đóng `T59-802` |
+| Điều kiện đóng implementation | ĐÃ ĐẠT: catalog `1.7.2` map `ST-POU-005 → PRG-ERR-CHECK-001`; `packageTopology` phân nhánh theo `documentSchemaVersion` (v1 đọc chu kỳ TASK lịch sử, v2 giữ 0 để chặn); `packageArtifact` chặn ở biên và chỉ passthrough artifact v1 cho schema v1; writer Go/C++ từ chối `periodMs == 0` còn reader v2 vẫn đọc được package legacy; `TestCheckNeverTouchesActiveState` giữ zero Active/LKG mutation |
+| Số đo (HOST, 2026-08-25) | `ctest` **1297/1297**; `go vet` + `go test ./... -count=1` PASS; pytest catalog **9/9**; `verify_programming_g1_contracts.py` **10/10** |
 
-Resolution đóng câu hỏi thiết kế, không tự đóng finding implementation và không
-biến hành vi packager hiện tại thành PASS.
+Resolution đóng câu hỏi thiết kế; corrective 2026-08-25 đóng nốt phần
+implementation. Cả hai không phải bằng chứng target/HIL và không mở release.
 
 ## 2. Quyết định lịch sử bị supersede
 
@@ -148,6 +153,7 @@ resource, audit và target/HIL truthfulness—được giữ trong Product v3.0/
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.5 | 2026-08-25 | Đóng `F-P59-GHOST-POU-001` ở lớp implementation: catalog `1.7.2`, checker/packager/writer fail-closed theo `documentSchemaVersion`, reader giữ tương thích package legacy; affected gate HOST PASS. Ghi `T59-802 DONE (HOST/LOCAL)` và `T59-803 READY`. Không đổi 12 quyết định unified; `RELEASE_READY` giữ NO-GO. |
 | 1.4 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: Product Owner/CTO + System Architect pin exact Candidate commit `413a043748dce3b44d2c5076412de761760ba17a`, mở PLAN_READY và ba IMPLEMENT_READY nhưng giữ scheduler R1→R2→R3, review ngoài owner/architect `WAIVED FOR IMPLEMENTATION` và RELEASE_READY NO-GO. Chuyển T59-801 DONE, T59-802 READY, T59-803..817 ORDERED. Chốt ghost PROGRAM fail-closed bằng `PRG-ERR-CHECK-001`/`ST-POU-005`; implementation closure vẫn PENDING tới khi source/test đạt. |
 | 1.3-candidate | 2026-08-24 | Làm rõ exact pin hai lớp: manifest ghim 17 hồ sơ Markdown authority; record Owner + Architect phải ghi candidate Git commit SHA để khóa contract/schema/ADR/handoff/SVG. Pin check 17/17 một mình không mở `PLAN_READY` hoặc code. |
 | 1.2-candidate | 2026-08-24 | Ghi output `T59-801`: formal DDD/contract/ADR-053/89 requirement/47 scenario/17-file Candidate pin và 16 card `T59-802..817`; chuyển WP-00 sang REVIEW, giữ Architect exact pin và mọi execution R1/R2/R3 NO-GO. |

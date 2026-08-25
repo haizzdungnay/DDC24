@@ -8,6 +8,88 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — vỏ/route canonical `T59-802` và corrective ghost POU (2026-08-25)
+
+- **Added — vỏ chung và route canonical PGM-02 (`T59-802`).** Workspace Chương
+  trình có một địa chỉ duy nhất `/eng/programming/programs?project&pou&mode`
+  (DDD `§3.4`) sau cờ rollback build-time `VITE_PROGRAMS_WORKSPACE_V2`, **mặc
+  định TẮT**: `npm run build` không nhận biến này nên sản phẩm vẫn chạy route cũ
+  cho tới khi có authority cut-over riêng. Resolver fail-closed cho đủ sáu tình
+  huống — 0 Project (empty/CTA theo quyền), đúng 1 (canonicalize bằng
+  `replace`), nhiều (bắt chọn tường minh), Project không tồn tại (not-found,
+  **không** mượn Project khác), `mode` lạ (báo lỗi, không âm thầm hạ về EDIT) và
+  `mode=LIVE/SIMULATE` (nói rõ chưa khả dụng ở R1, không fallback về Draft).
+  Chọn POU trên URL dùng `objectId`; `program` cũ chỉ là alias khi `pou` VẮNG
+  hẳn, `pou=` rỗng vẫn đi tiếp tới resolver để fail closed. Dưới **768 px**,
+  read-only là policy runtime chứ không phải CSS: `canEdit=false` truyền tới
+  editor/reducer/shortcut nên textarea `readonly` thật và không có mutation nào
+  rời trình duyệt.
+
+- **Fixed — ba lỗi thật do chính cổng của lát này phát hiện.** (a) Bản đầu cho
+  cả `/design` vào redirect Programs nên `?tab=mapping` bị nuốt sang workspace
+  Chương trình; nay `LegacyDesignRedirect` phân nhánh theo `?tab=` TRƯỚC, chỉ
+  nhánh `programs` mới hỏi cờ cut-over. (b) Trên route canonical, tab Ánh xạ
+  điều hướng sang `/projects/:id/mapping` làm unmount workspace và **mất nội
+  dung ST đang gõ**; nay khi cut-over BẬT cả ba tab ở lại canonical và chỉ đổi
+  query, `tab` được giữ qua redirect như tham số quá độ của R1. (c) Shell vẫn
+  gọi read-model `listProgrammingProgramIntents` cho `?project=` không tồn tại,
+  để lại 503 trong Console dù resolver đã trả not-found; nay chờ danh sách
+  Project `ready` trên route canonical và bỏ probe khi id chắc chắn không có.
+
+- **Fixed — `F-P59-GHOST-POU-001`: ghost PROGRAM không còn được tự đặt chu kỳ.**
+  Triệu chứng: một POU kind `PROGRAM` chưa xếp lịch vẫn vào package như Program
+  thật, Check báo `PASSED` và `impact.programSet` đếm dư. Nguyên nhân gốc:
+  `packageTopology` gặp `period == 0` thì gán `AllowedPeriodMs[0]` (1000 ms) —
+  hệ tự bịa một lớp lập lịch không ai khai. Cách sửa fail-closed đủ bốn lớp:
+  catalog `error_catalog_v1` **1.7.2** đăng ký `ST-POU-005 → PRG-ERR-CHECK-001`
+  (135 component detail, G1 join re-pin cùng lượt); `packageTopology` phân nhánh
+  theo `documentSchemaVersion` đã seal (schema v1 đọc chu kỳ TASK lịch sử,
+  schema v2 đọc `programConfig` và giữ `0` để diagnostic chặn);
+  `packageArtifact` chặn ngay tại biên cho caller nội bộ bỏ qua Check, đồng thời
+  chỉ passthrough artifact v1 cho Revision schema v1 — schema v2 một Program
+  trước đây **rơi chu kỳ 5 s/30 s** khi trả artifact v1; `ProcessPackager.
+  Package` và `WritePackageV2` từ chối `periodMs == 0` ở writer, còn reader v2
+  vẫn đọc được package legacy để không tự làm hỏng gói đã nằm trên bo. Draft
+  tiếp tục được phép giữ PROGRAM chưa xếp lịch, đúng policy đã chốt.
+
+- **Fixed — vùng cuộn ngang của Mapping không có lối vào bàn phím.** Bảng
+  Published Signal và bảng ánh xạ nằm trong `div.overflow-x-auto` không nhận
+  được tiêu điểm (`scrollable-region-focusable`, impact `serious`). Lỗi chỉ lộ ở
+  lane real-backend vì lane mock có Point Catalog rỗng nên bảng không tràn —
+  cổng xanh vì thiếu dữ liệu chứ không vì đúng. Nay cả hai vùng có
+  `tabIndex={0}` + `role="group"` + nhãn + focus ring.
+
+- **Changed — lane E2E và điều kiện tiên quyết.** Hai config Playwright build
+  với `VITE_PROGRAMS_WORKSPACE_V2=1` để kiểm đúng nhánh cut-over; bảng redirect
+  `VS-PROG-032` đi theo đích canonical; journey soạn thảo skip ở project
+  `mobile-chrome` (412 px) vì DDD `§7.5` khoá read-only dưới 768 px, và có case
+  mobile read-only riêng thay thế. Quan sát Console/Network được thu về ĐÚNG bề
+  mặt Programming (kèm URL trong log) thay vì đếm cả 502/503 của các endpoint vỏ
+  ứng dụng mà lane này không dựng backend. `scripts/run_programming_real_e2e_
+  stack.sh` cảnh báo khi thiếu `/dev/shm/mkddc_plc_shm`: Point Catalog đọc PLC
+  SHM do `mkddc-core` thật ghi, thiếu nó thì `GET /point-catalog` trả **503 tất
+  định** (đo trực tiếp 10/10 request, `dur_ms=0`) và spec đỏ ở một khẳng định xa
+  nguyên nhân.
+
+- **Changed — hồ sơ authority.** Plan59 v2.8 (`T59-802 DONE (HOST/LOCAL)`,
+  `T59-803 READY`), Decision Register v1.5 (`F-P59-GHOST-POU-001` CLOSED cả
+  quyết định lẫn implementation), Risk v4.25 (`RSK-PROG-011` ghi corrective, còn
+  chờ đo trên bo), Trace v6.10 và Readiness v2.6. **Không** nâng `I/T/P/R` của
+  `SYS-REQ-PROG-116`/`SWR-REQ-PROG-FE-119` vì requirement còn phủ POU Explorer/
+  editor/LIVE/Simulation chưa làm; `VS-PROG-U13..U15` vẫn NOT_RUN,
+  `IMPLEMENTATION_CLOSE` PENDING và `RELEASE_READY` **NO-GO**.
+
+- **Verification (đo mới trong cùng phiên).** CMake Release bật Modbus/BACnet/
+  HMI: configure + build exit 0, CTest **1297/1297 PASS**. `go vet ./...` +
+  `go test ./... -count=1` PASS. FE **139 file / 1531 test PASS**, lint và build
+  PASS, chunk Programming **99,79 KiB gzip**. E2E mock nhánh cut-over **29 PASS
+  / 3 skip / 0 fail**; E2E real-backend **1/1 PASS** với `HTTP>=500=0`,
+  `requestfailed=0`, `console.error=0`. Hợp đồng: G1 **10/10**, PGM-02 pin,
+  artifact manifest và FBD đều PASS; pytest catalog **9/9**. Chi tiết:
+  [`2026-08-25-pgm02-t59-802-shell-route.md`](docs/07_records/test-evidence/programming/2026-08-25-pgm02-t59-802-shell-route.md).
+  Đây là bằng chứng HOST/LOCAL, không phải Test Result và không phải target/HIL.
+
+
 ### Review và implementation plan PGM-02 ST/FBD redesign (2026-08-24)
 
 - **Added — leadership review PGM-02 ST/FBD.** Đối chiếu handoff v2.2 với

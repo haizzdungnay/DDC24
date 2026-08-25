@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.7 |
-| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; `T59-801` DONE, `T59-802` READY, `T59-803..817` ORDERED theo predecessor; RELEASE_READY NO-GO** |
-| Ngày | 2026-08-24 |
+| Phiên bản | 2.8 |
+| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; `T59-801`/`T59-802` DONE, `T59-803` READY, `T59-804..817` ORDERED theo predecessor; RELEASE_READY NO-GO** |
+| Ngày | 2026-08-25 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
 | Detailed Design | Baseline: [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md); PGM-02 exact-pinned để implement: [`DDD-SW-PGM02-WORKSPACE-001`](../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) |
@@ -48,7 +48,7 @@ code còn làm được. `RELEASE_READY` vẫn `NO-GO` tới khi evidence thật
 
 | Lớp | Trạng thái hiện tại | Acceptance |
 |---|---|---|
-| `IMPLEMENTATION_CLOSE` | **PENDING** | `F-P59-GHOST-POU-001` đã được Owner/Architect chốt fail-closed, nhưng source/error catalog/checker/packager/test chưa có affected PASS theo semantics đó |
+| `IMPLEMENTATION_CLOSE` | **PENDING** | Corrective `F-P59-GHOST-POU-001` đã có source/catalog/checker/packager/test PASS (2026-08-25). Cổng vẫn PENDING vì R1 mới đóng `T59-802`; closure cần đủ `T59-803..809` |
 | `TARGET_FAKE_MCU_DEPLOY` | **PARTIAL (2026-08-24)** | Build đúng commit `fa1f5f4`, backup/install/service/API/UI/read-back **đã có trên Forlinx** với `MCU_MODE=FAKE` ([evidence](../07_records/test-evidence/fw-som/2026-08-24-foxlinx-plan59-corrective-deploy.md)); còn **rollback đầy đủ binary+DB** chưa diễn tập được trên bo |
 | `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** | 10 Program/3 period chạy đủ 24 h; raw JSONL/hash/provenance, fault/signal/restart, `max_iop_poll_gap <200 ms` |
 | `RELEASE_READY` | **NO-GO** | Formal Test Result, residual risk acceptance và mọi Must theo VVP/release authority |
@@ -1879,7 +1879,7 @@ Revision. Lane E2E trước đây che đúng lỗi này bằng một kỳ vọng
 ngoại tuyến" cộng một ngoại lệ `503` được coi là hợp lệ; nay lane đọc thật hàng
 `SupplyTemp → UI-01 → 21.5 → GOOD` và ngân sách 5xx/console hạ về **0**.
 
-**`F-P59-GHOST-POU-001` — semantics đã chốt, source/test chưa sửa.** Trong khi chữa lỗi xóa
+**`F-P59-GHOST-POU-001` — đã sửa source/test (2026-08-25).** Trong khi chữa lỗi xóa
 Program (`F-P59-DELETE-PROGRAM-001`) phát hiện: `packageTopology` dựng một mục
 Program cho **mọi** POU kind `PROGRAM`, và khi POU không có cấu hình chạy thì nó
 **tự đặt chu kỳ 1000 ms** (`period == 0 → AllowedPeriodMs[0]`). Đo thật trên bo
@@ -1894,8 +1894,21 @@ lịch — hợp lệ trong mô hình v2; (b) di chứng của lỗi xóa cũ. B
 `AUTH-PROG-2026-08-24-05` đã chọn policy: Draft được giữ PROGRAM POU chưa
 schedule, nhưng Check và Package phải fail-closed bằng public
 `PRG-ERR-CHECK-001`, detail mới `ST-POU-005`; cấm bỏ im lặng và cấm synthesize
-1000 ms. Resolution đóng câu hỏi sản phẩm nhưng `IMPLEMENTATION_CLOSE` vẫn
-PENDING tới khi error catalog/mapping, checker/packager và test được sửa.
+1000 ms.
+
+**Corrective đã thực hiện (2026-08-25).** Bốn lớp cùng fail-closed trên một
+semantics: catalog `error_catalog_v1` 1.7.2 đăng ký `ST-POU-005 →
+PRG-ERR-CHECK-001` (135 component detail, G1 re-pin cùng lượt);
+`packageTopology` phân nhánh theo `documentSchemaVersion` đã seal — schema v1 đọc
+chu kỳ TASK lịch sử, schema v2 đọc `programConfig` và giữ `0` để diagnostic chặn,
+không còn `period == 0 → AllowedPeriodMs[0]`; `packageArtifact` chặn ngay tại
+biên đóng gói cho caller nội bộ bỏ qua Check, đồng thời chỉ cho artifact v1 đi
+qua với Revision schema v1 (schema v2 một Program trước đây rơi chu kỳ 5 s/30 s
+khi trả artifact v1); `ProcessPackager.Package` và `WritePackageV2` từ chối
+`periodMs == 0` ở writer, còn reader v2 vẫn đọc được package legacy để không tự
+làm hỏng gói đã nằm trên bo. Số đo: `ctest` **1297/1297**; `go vet` + `go test
+./... -count=1` PASS (thêm 9 test chuyên đề gồm cả nhánh schema v1); pytest
+catalog **9/9**; verify G1 **10/10** và ba script hợp đồng còn lại PASS.
 
 Số đo: `ctest` **1293/1293**; TSan toàn core **0 cảnh báo** (2 test
 `StCompileCli` không chạy được dưới TSan vì `RLIMIT_AS 256 MB` của sandbox
@@ -2278,7 +2291,7 @@ Các finding này thuộc lại task hiện hữu, không tạo tracker/task aut
 | `F-P59-EVIDENCE-001` | `T59-701..707` | trace 82/82, pin hiện hành, risk treatment, deploy/soak record đúng commit và phân lớp evidence |
 | `F-P59-ENABLE-BOUNDARY-001` | `T59-402/405/406` | `SET_PROGRAM_ENABLED` không ghi `state`/`enabled` từ IPC worker thread; ARM + áp dụng tại safe boundary, ack có generation; trần 16 kiểm TRƯỚC khi chạm trường; TSan 0 cảnh báo trên đường này |
 | `F-P59-SIGNAL-READBACK-001` | `T59-404/504` | reader non-RT (`inspect_all` cho STATUS/Monitor) không trả `value` ghép với `published_at_ns` của chu kỳ khác; seqlock `generation` + retry |
-| `F-P59-GHOST-POU-001` | `T59-301/302/305` | **Semantics đã RESOLVED, implementation còn PENDING.** Draft giữ được PROGRAM chưa schedule; Check/Package phải fail-closed `PRG-ERR-CHECK-001`/`ST-POU-005`, cấm exclude và synthesize 1000 ms; affected test phải chứng minh zero Active/LKG mutation |
+| `F-P59-GHOST-POU-001` | `T59-301/302/305` | **CLOSED (source+test, 2026-08-25).** Draft giữ được PROGRAM chưa schedule; Check/Package fail-closed `PRG-ERR-CHECK-001`/`ST-POU-005`; không exclude, không synthesize 1000 ms; writer Go/C++ từ chối `periodMs == 0` còn reader vẫn đọc được package legacy; `TestCheckNeverTouchesActiveState` giữ zero Active/LKG mutation |
 | `F-P59-ROLLBACK-DB-001` | `T59-605/606/705` | `install.sh` chụp và `rollback.sh` khôi phục store Programming cùng binary; rollback chỉ-binary sau một bản có migration làm `mkddc-web` từ chối khởi động |
 | `F-P59-MONITOR-VARS-001` | `T59-504/505` | Runtime Monitor tra biến theo `locals` của Draft v2 (không chỉ object `VARIABLE` v1) và giữ `snapshot.Points` của Core khi PLC SHM chưa attach; lane E2E thật đạt `HTTP>=500=0`/`console.error=0`, không còn ngoại lệ `503` |
 
@@ -2706,8 +2719,8 @@ Consumer/discipline/Verification/Document Control review là
 
 | Task | Increment / work package | Việc làm và source chính | Dependency | Trạng thái | Acceptance |
 |---|---|---|---|---|---|
-| `T59-802` | R1 / `PGM02-V22-WP-01` | Shared shell, canonical route/resolver/legacy redirect và mobile `<768` read-only trong FE route/workspace | `T59-801 DONE` + `IMPLEMENT_READY[PGM02-R1]=GO` | **READY** | Deep-link/project resolution không fallback nhầm; desktop/mobile/keyboard route tests và browser Console/Network sạch |
-| `T59-803` | R1 / `PGM02-V22-WP-02` | Một POU Explorer typed theo `objectId`; selection/navigation/create/duplicate/rename/delete guard | `T59-802 DONE` | **ORDERED — dependency** | `objectId`/`programId` không lẫn; refresh/reorder/rename giữ selection đúng; negative identity tests |
+| `T59-802` | R1 / `PGM02-V22-WP-01` | Shared shell, canonical route/resolver/legacy redirect và mobile `<768` read-only trong FE route/workspace | `T59-801 DONE` + `IMPLEMENT_READY[PGM02-R1]=GO` | **DONE (HOST/LOCAL)** | Route `/eng/programming/programs?project&pou&mode` sau cờ rollback `VITE_PROGRAMS_WORKSPACE_V2` (mặc định TẮT); resolver 0/1/nhiều/không-tồn-tại/mode-lạ đều fail-closed, không mượn Project khác; `<768 px` read-only bằng policy runtime; FE **139 file/1531 test**, lint/build PASS; E2E mock cut-over **29 PASS/3 skip**, real-backend **1/1**. Chi tiết §3.9 |
+| `T59-803` | R1 / `PGM02-V22-WP-02` | Một POU Explorer typed theo `objectId`; selection/navigation/create/duplicate/rename/delete guard | `T59-802 DONE` | **READY** | `objectId`/`programId` không lẫn; refresh/reorder/rename giữ selection đúng; negative identity tests |
 | `T59-804` | R1 / `PGM02-V22-WP-03` | OpenAPI/generated clients + BE typed Draft, normalized Quick Library signature, reference query và atomic semantic refactor | `T59-803 DONE`; contract được promote Active trong task | **ORDERED — dependency** | schema/Go/TS exact; ETag/idempotency; analyzer/signature unavailable zero mutation; audit/read-back đúng |
 | `T59-805` | R1 / `PGM02-V22-WP-04` | ST editor hoàn chỉnh: Saved Draft, exact diagnostic anchor, history/cursor/read-back | `T59-804 DONE` | **ORDERED — dependency** | ST positive/boundary/conflict/diagnostic/reference flows PASS; Active không đổi |
 | `T59-806` | R1 / `PGM02-V22-WP-05` | FBD true canvas: typed port/order, wire validation, pan/zoom/select/undo và exact FBD anchor | `T59-804 DONE` | **ORDERED — dependency** | Canonical node/port/wire/layout giữ nguyên semantics; ST↔FBD equivalence và accessibility PASS |
@@ -2736,8 +2749,8 @@ thái `DONE` của chúng **không** chứng minh redesign mới đã implement:
 | Work package canonical | Predecessor evidence Plan59 | Disposition sau `T59-801` |
 |---|---|---|
 | `PGM02-V22-WP-00` | — | `T59-801 DONE`; exact pin theo `AUTH-PROG-2026-08-24-05` |
-| `PGM02-V22-WP-01` | `T59-306/503` | `T59-802` READY R1 |
-| `PGM02-V22-WP-02` | `T59-301/306/506` | `T59-803` ORDERED R1 |
+| `PGM02-V22-WP-01` | `T59-306/503` | `T59-802` DONE R1 (HOST/LOCAL) |
+| `PGM02-V22-WP-02` | `T59-301/306/506` | `T59-803` READY R1 |
 | `PGM02-V22-WP-03` | `T59-003/201..205` | `T59-804` ORDERED R1 |
 | `PGM02-V22-WP-04` | `T59-302/408/506` | `T59-805` ORDERED R1 |
 | `PGM02-V22-WP-05` | `T59-105/306/506/601` | `T59-806` ORDERED R1 |
@@ -2815,7 +2828,7 @@ các evidence task còn khả thi.
 
 | Cổng | Trạng thái |
 |---|---|
-| `IMPLEMENTATION_CLOSE` | **PENDING** — `main@fa1f5f4` từng PASS full gate (`ctest` 1293/1293, TSan 0 cảnh báo, Go 18/18, FE 1492 test, E2E mock 92 + real-backend 1/1, trace 82/82 + 44/44, pin 16/16), nhưng `F-P59-GHOST-POU-001` đã lộ hành vi packager synthesize 1000 ms. Owner/Architect đã chốt Draft cho phép PROGRAM chưa schedule còn Check/Package phải fail-closed `PRG-ERR-CHECK-001`/`ST-POU-005`; closure chỉ PASS lại sau khi source/error catalog/checker/packager/test sửa xong và affected gate đạt |
+| `IMPLEMENTATION_CLOSE` | **PENDING** — corrective `F-P59-GHOST-POU-001` đã sửa xong source/catalog/checker/packager/test và đạt affected gate 2026-08-25 (`ctest` 1297/1297, Go vet/test PASS, pytest catalog 9/9, G1 10/10). Cổng vẫn PENDING vì R1 mới đóng `T59-802`: `T59-803..809` chưa chạy, nên chưa có closure cho PGM-02 v2.2 |
 | `TARGET_FAKE_MCU_DEPLOY` | **PARTIAL (2026-08-24)** — deploy `fa1f5f4` trên Forlinx `MCU_MODE=FAKE`: 5/5 service active, health đủ 6 mục `ok`, Commission 10 Program `SUCCEEDED`, Programs `CORE_LIVE`, Enable/Disable 6/6 ~0,95 s, Monitor đọc `UI-01` GOOD/LIVE, signal producer→consumer FRESH. **Còn thiếu**: diễn tập rollback đầy đủ binary+DB trên bo (`F-P59-ROLLBACK-DB-001`) |
 | `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** — yêu cầu đủ 24 h, không rút ngắn |
 | `RELEASE_READY` | **NO-GO** |
