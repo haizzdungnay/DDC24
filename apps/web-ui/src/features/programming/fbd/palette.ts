@@ -104,3 +104,29 @@ export function isValidConstantLiteral(type: FbdDataType, value: FbdParameterVal
     case 'TIME': return typeof value === 'string' && TIME_LITERAL.test(value)
   }
 }
+
+/**
+ * `T59-804` (`PGM02-V22-WP-03`) — lọc palette theo cổng ĐANG CHỌN.
+ *
+ * Plan đòi "compatible filters theo ... selected port": khi người dùng đang
+ * đứng ở một cổng `REAL`, danh sách 40+ block khiến họ phải tự đối chiếu kiểu
+ * trong đầu, và nối nhầm kiểu chỉ lộ ra ở Check.
+ *
+ * Hai điều KHÔNG làm ở đây: không tự nối (ambiguity phải do người dùng giải),
+ * và không xoá vĩnh viễn mục không khớp khỏi palette — bộ lọc là một lựa chọn
+ * bật/tắt, vì "không khớp cổng này" khác hẳn "không tồn tại".
+ */
+export function paletteEntryAcceptsType(entry: FbdPaletteEntry, dataType: FbdDataType): boolean {
+  if (entry.allowedTypes.includes(dataType)) return true
+  /* Block không đa hình vẫn có thể khớp qua một cổng kiểu cố định (vd `OUT:BOOL`
+   * của phép so sánh), nên phải hỏi CHÍNH bộ cổng nó dựng ra ở kiểu mặc định. */
+  return entry.buildPorts(entry.defaultType).some((port) => port.dataType === dataType)
+}
+
+export function paletteEntriesCompatibleWith(
+  entries: readonly FbdPaletteEntry[],
+  dataType: FbdDataType | null
+): readonly FbdPaletteEntry[] {
+  if (dataType === null) return entries
+  return entries.filter((entry) => paletteEntryAcceptsType(entry, dataType))
+}

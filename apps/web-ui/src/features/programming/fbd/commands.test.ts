@@ -47,6 +47,34 @@ describe('command reducer FBD', () => {
     expect(state.announcement.code).toBe('no-edit-permission')
   })
 
+  /* `T59-804` AC: "Ambiguous FBD port không auto-connect". Khoá bằng test vì
+   * đây là loại tiện ích rất dễ bị thêm vào sau: thêm node xong tự nối vào cổng
+   * "hợp lý nhất" sẽ tạo ra một dây mà người dùng không hề vẽ, và trong đồ hoạ
+   * điều khiển một dây thừa là một lệnh chạy thật. */
+  it('ADD_NODE không bao giờ tự nối dây, kể cả khi chỉ có đúng một cổng khớp', () => {
+    const document = golden()
+    const wiresBefore = document.networks[0].wires.length
+    let state = createFbdEditorState(document)
+    const node = {
+      id: uuid(0x70000000, 1),
+      kind: 'FUNCTION' as const,
+      typeRef: 'AND',
+      operandType: 'BOOL' as const,
+      executionOrder: 0,
+      parameters: {},
+      ports: [
+        { id: uuid(0x71000000, 1), name: 'IN1', direction: 'INPUT' as const, dataType: 'BOOL' as const, unit: null, order: 0 },
+        { id: uuid(0x71000000, 2), name: 'IN2', direction: 'INPUT' as const, dataType: 'BOOL' as const, unit: null, order: 1 },
+        { id: uuid(0x71000000, 3), name: 'OUT', direction: 'OUTPUT' as const, dataType: 'BOOL' as const, unit: null, order: 2 }
+      ]
+    }
+    state = fbdEditorReducer(state, { type: 'ADD_NODE', networkId: document.networks[0].id, node })
+    const nodes = state.document.networks[0].nodes
+    expect(nodes[nodes.length - 1].typeRef).toBe('AND')
+    expect(state.document.networks[0].wires).toHaveLength(wiresBefore)
+    expect(state.connectionFromPortId).toBeNull()
+  })
+
   it('nối output→input tương thích và từ chối input đã có driver', () => {
     const document = golden()
     document.networks[0].wires = document.networks[0].wires.slice(1)
