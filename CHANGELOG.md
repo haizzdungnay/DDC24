@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — đóng danh sách block: `SCALE`/`DEADBAND`/`HYSTERESIS` (2026-08-26)
+
+- **Added — `SCALE` và `DEADBAND` biên dịch bằng KHAI TRIỂN, không thêm opcode.**
+  Một lệnh IR mang tối đa ba toán hạng nguồn còn `SCALE` cần năm; nới định dạng
+  artifact để nhét vừa một phép tuyến tính là đổi thứ đắt nhất lấy thứ rẻ nhất.
+  Compiler dựng chúng bằng chuỗi lệnh đã có, và `dispatch` trong registry mang
+  giá trị mới `EXPANSION` để nói đúng điều đang xảy ra thay vì khai `FUNC_TABLE`
+  rồi để người đọc IR đi tìm một opcode không tồn tại. `SCALE` **không tự kẹp
+  dải ra** (kẹp ngầm biến cảm biến ngoài dải thành giá trị biên trông hợp lệ —
+  cần kẹp thì gọi `LIMIT`); `IN_MAX == IN_MIN` rơi vào `ST-RT-002` đã có.
+
+- **Added — `HYSTERESIS` là FB thật (wire 9).** Trong dải `LOW..HIGH` nó GIỮ
+  trạng thái chu kỳ trước — đó là trạng thái, nên nó không thể là hàm thuần.
+  `HIGH <= LOW` là fault `ST-RT-006`: dải trễ đảo ngược không có nghĩa vật lý.
+  `Q` RETAIN được, nên sau mất điện một quạt đang chạy trong vùng trễ trở lại
+  đúng trạng thái nó đang có thay vì nhảy theo ngưỡng gần nhất.
+
+- **Changed — chỉ `HYSTERESIS` thành từ khoá, `SCALE`/`DEADBAND` thì không.**
+  Bản đầu reserve cả ba và hai bộ test của chính dự án đỏ ngay: một
+  FUNCTION_BLOCK người dùng tên `Hysteresis`, một FUNCTION người dùng tên
+  `Scale`. Đó là dữ liệu chứ không phải phiền toái —
+  `TON`/`TOF`/`TP`/`CTU`/`CTD`/`R_TRIG`/`F_TRIG`/`PID` là định danh CHUẨN IEC
+  nên reserve là điều người dùng đã kỳ vọng, còn `SCALE`/`DEADBAND` là phần mở
+  rộng của chúng ta và là từ tiếng Anh thông dụng. Tiền lệ trong chính compiler:
+  `ABS`/`MIN`/`MAX`/`LIMIT`/`SEL`/`SQRT` chưa bao giờ là từ khoá.
+
+- **Changed — mẫu số phủ conformance gồm cả hàm khai triển.** `kExpansionFunctions`
+  được sinh ra và đưa vào phép kiểm hai chiều registry↔compiler; bỏ qua chúng sẽ
+  làm "100% phủ" nói dối đúng bằng số entry bị bỏ qua. Registry lên **rev-a.3**
+  (46 entry) qua đúng đường bump có kiểm soát.
+
+- **Verification (đo mới).** CTest **1297/1297**; conformance **37 pair + 9
+  stateTrace** phủ 46/46 entry; `go vet` + `go test ./... -count=1` PASS; FE
+  **143 file / 1568 test**, lint và build PASS (chunk Programming **104,12 KiB
+  gzip**); E2E mock **31 PASS / 5 skip**; E2E real-backend **1/1 PASS** với
+  parity catalog khớp ở 46 entry; bốn script hợp đồng và
+  `verify-project.sh --component layout` PASS. Chi tiết:
+  [`2026-08-26-pgm02-t59-804-scale-deadband-hysteresis.md`](docs/07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-scale-deadband-hysteresis.md).
+
+
 ### PGM-02 R1 — ba block chuẩn `TP`/`CTU`/`CTD` (2026-08-26)
 
 - **Added — `TP`, `CTU`, `CTD` chạy thật từ compiler tới runtime.** Ngữ nghĩa

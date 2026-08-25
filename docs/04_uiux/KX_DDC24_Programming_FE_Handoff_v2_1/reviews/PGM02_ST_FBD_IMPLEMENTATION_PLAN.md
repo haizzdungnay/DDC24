@@ -35,7 +35,7 @@ không nói CI, target, HIL hay release.
 | `WP-00` | `T59-801` | **DONE** 2026-08-24 | Reconcile authority, formal DDD/contract/ADR-053, exact pin `413a043` | `AUTH-PROG-2026-08-24-05`; manifest 17/17 |
 | `WP-01` | `T59-802` | **DONE (một phần scope)** 2026-08-25 | Route canonical + resolver + legacy redirect + mobile `<768` read-only, sau cờ `programsWorkspaceV2` | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-802-shell-route.md) |
 | `WP-02` | `T59-803` | **DONE** 2026-08-25 | Một POU Explorer, identity `objectId`↔`programId`, vòng đời POU typed cho ba kind | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-803-pou-explorer.md) |
-| `WP-03` | `T59-804` | **PARTIAL** 2026-08-26 | Catalog dùng chung (BE authority) + Quick Library ST + Recent/Favorites + parity BE↔registry trên backend thật + lọc palette FBD theo cổng đang chọn + khoá luật không tự nối + ba block chuẩn `TP`/`CTU`/`CTD` (compiler+runtime+conformance) | [evidence 2026-08-26](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md) |
+| `WP-03` | `T59-804` | **PARTIAL** 2026-08-26 | Catalog dùng chung (BE authority) + Quick Library ST + Recent/Favorites + parity BE↔registry trên backend thật + lọc palette FBD theo cổng đang chọn + khoá luật không tự nối + sáu block `TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS` (compiler+runtime+conformance) | [evidence 2026-08-26](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md) |
 | `WP-04` | `T59-805` | ORDERED | — | — |
 | `WP-05` | `T59-806` | ORDERED | — | — |
 | `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | ORDERED | — | — |
@@ -51,13 +51,11 @@ không nói CI, target, HIL hay release.
 có, không phải chỉ thiếu thời gian): **một dock dùng chung** cho cả ST và FBD
 (palette FBD đã đọc cùng registry và đã có lọc theo cổng đang chọn, nhưng nó vẫn
 là một bề mặt riêng); **typed metadata public trong OpenAPI** (`interface` vẫn
-generic nên FE phải tự parse chữ ký); và **ba block còn lại**
-`SCALE`/`Deadband`/`Hysteresis`. `TP`/`CTU`/`CTD` đã giao 2026-08-26: ngữ nghĩa
-pin ở `DDD-CTRL-PROG-001` §7A trước khi code, compiler+runtime+RETAIN thật, và
-vector conformance chạy cycle-by-cycle ở cả ST lẫn FBD. Ba block còn lại cần
-opcode IR mới (`SCALE`/`DEADBAND`) hoặc ngữ nghĩa chưa được Controls chốt
-(`Hysteresis`), nên chúng vẫn nằm trong danh sách ma mà verify script chặn —
-đúng luật "không publish capability trước khi có equivalence tests".
+generic nên FE phải tự parse chữ ký); **Danh sách block của plan đã ĐÓNG** 2026-08-26: cả sáu
+(`TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS`) có ngữ nghĩa pin ở
+`DDD-CTRL-PROG-001` §7A trước khi code, compiler+runtime+RETAIN thật và vector
+conformance chạy ở cả ST lẫn FBD. `PI` vẫn là entry ma bị verify script chặn,
+`PID` vẫn `REVIEW_REQUIRED`.
 
 **Phần của `WP-01` chưa giao** (đi cùng `WP-06`/`T59-807` vì cùng chạm một cây
 component): CSS grid slot resizable/collapsible, context strip đầy đủ theo mode,
