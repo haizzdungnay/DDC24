@@ -70,6 +70,29 @@ function page(): ProgrammingLibraryPage {
 }
 
 describe('PGM-02 catalog thư viện dùng chung', () => {
+  it('dùng chữ ký ĐÃ PHÂN GIẢI của backend khi có, không tự parse lại', () => {
+    const [entry] = catalogEntries({
+      items: [{
+        scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.3', libraryState: 'PUBLISHED',
+        entryId: 'TON', kind: 'FUNCTION_BLOCK', name: 'TON', featureState: 'AVAILABLE',
+        contentSha256: 'a'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 10,
+        // Chữ ký THÔ cố ý hỏng: nếu FE vẫn tự parse thì test này đỏ.
+        interface: 'không-phải-json',
+        signature: {
+          category: 'timer', labelVi: 'Trễ bật', labelEn: 'On delay', dispatch: 'FB_TYPE',
+          polymorphic: false, allowedTypes: [], typedPortNames: [],
+          ports: [
+            { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
+            { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' }
+          ]
+        }
+      }]
+    })
+    expect(entry.usability).toEqual({ kind: 'AVAILABLE' })
+    expect(entry.category).toBe('timer')
+    expect(entry.ports.map((port) => port.name)).toEqual(['IN', 'Q'])
+  })
+
   it('chuẩn hoá SYSTEM và PROJECT trong cùng một danh sách', () => {
     const entries = catalogEntries(page())
     expect(entries.map((entry) => entry.entryId)).toEqual(['LIMIT', 'TON', 'PID', 'AHU_HELPER'])
