@@ -218,6 +218,21 @@ bool build_snapshot_payload(const StLoadedProgram& program, uint64_t now_ns,
             std::memcpy(dst + 8, &state.pid_prev_output, 4);
             dst[12] = state.pid_first ? 1 : 0;
             break;
+        case StFbType::TP:
+            dst[0] = state.timing ? 1 : 0;
+            put_u64(dst + 1, static_cast<uint64_t>(
+                                 state.timing ? elapsed_since(now, state.start_ns) : 0));
+            dst[9] = state.q ? 1 : 0;
+            dst[10] = state.prev_in ? 1 : 0;
+            break;
+        case StFbType::CTU:
+        case StFbType::CTD:
+            dst[0] = state.prev_clk ? 1 : 0;
+            /* Giá trị đếm là dữ liệu của QUY TRÌNH (số lần khởi động bơm, số
+             * lần lọc bẩn), nên nó đi qua restart nguyên vẹn — khác hẳn mốc
+             * monotonic của TP phải rebase. */
+            put_u16(dst + 1, static_cast<uint16_t>(static_cast<int16_t>(state.counter)));
+            break;
         case StFbType::NONE:
             return false;
         }
@@ -274,6 +289,18 @@ bool validate_payload(const StLoadedProgram& program, const uint8_t* payload,
                 return false;
             break;
         }
+        case StFbType::TP:
+            if (src[0] > 1 || src[9] > 1 || src[10] > 1 ||
+                rd_u64(src + 1) > static_cast<uint64_t>(INT64_MAX))
+                return false;
+            break;
+        case StFbType::CTU:
+        case StFbType::CTD:
+            /* `cv` là i16 nên MỌI mẫu bit đều hợp lệ; chỉ cờ sườn mới có dải
+             * hẹp. Kẹp một giá trị đếm "ngoài dải" sẽ là bịa dữ liệu quy trình,
+             * nên payload hỏng phải bị từ chối chứ không sửa. */
+            if (src[0] > 1) return false;
+            break;
         case StFbType::NONE:
             return false;
         }
@@ -328,6 +355,19 @@ void apply_payload(StLoadedProgram* program, const uint8_t* payload, uint64_t no
              * integral/feedback, nhưng ép chu kỳ đầu re-seed dt/derivative. */
             state.pid_prev_call_ns = now;
             state.pid_first = true;
+            break;
+        case StFbType::TP:
+            state.timing = src[0] != 0;
+            state.start_ns = state.timing
+                                 ? rebase_start(now, static_cast<int64_t>(rd_u64(src + 1)))
+                                 : 0;
+            state.q = src[9] != 0;
+            state.prev_in = src[10] != 0;
+            break;
+        case StFbType::CTU:
+        case StFbType::CTD:
+            state.prev_clk = src[0] != 0;
+            state.counter = static_cast<int16_t>(rd_u16(src + 1));
             break;
         case StFbType::NONE:
             break;

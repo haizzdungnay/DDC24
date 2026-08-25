@@ -2,7 +2,7 @@
   "$schema": "./pou_library_registry_v1.schema.json",
   "registryId": "PROGRAMMING-POU-LIBRARY-REGISTRY-V1",
   "schemaVersion": 1,
-  "libraryVersion": "rev-a.1",
+  "libraryVersion": "rev-a.2",
   "scope": "SYSTEM",
   "categoryOrder": [
     {
@@ -39,6 +39,11 @@
       "id": "timer",
       "labelVi": "Timer",
       "labelEn": "Timer"
+    },
+    {
+      "id": "counter",
+      "labelVi": "Bộ đếm",
+      "labelEn": "Counters"
     },
     {
       "id": "trigger",
@@ -1287,6 +1292,41 @@
       "featureState": "AVAILABLE"
     },
     {
+      "id": "TP",
+      "kind": "FUNCTION_BLOCK",
+      "dispatch": "FB_TYPE",
+      "category": "timer",
+      "labelVi": "Xung cố định (TP)",
+      "labelEn": "Pulse timer (TP)",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "BOOL",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "IN",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "PT",
+          "direction": "INPUT",
+          "dataType": "TIME"
+        },
+        {
+          "name": "Q",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "ET",
+          "direction": "OUTPUT",
+          "dataType": "TIME"
+        }
+      ],
+      "featureState": "AVAILABLE"
+    },
+    {
       "id": "R_TRIG",
       "kind": "FUNCTION_BLOCK",
       "dispatch": "FB_TYPE",
@@ -1332,6 +1372,86 @@
           "name": "Q",
           "direction": "OUTPUT",
           "dataType": "BOOL"
+        }
+      ],
+      "featureState": "AVAILABLE"
+    },
+    {
+      "id": "CTU",
+      "kind": "FUNCTION_BLOCK",
+      "dispatch": "FB_TYPE",
+      "category": "counter",
+      "labelVi": "Đếm lên (CTU)",
+      "labelEn": "Up counter (CTU)",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "INT",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "CU",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "RESET",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "PV",
+          "direction": "INPUT",
+          "dataType": "INT"
+        },
+        {
+          "name": "Q",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "CV",
+          "direction": "OUTPUT",
+          "dataType": "INT"
+        }
+      ],
+      "featureState": "AVAILABLE"
+    },
+    {
+      "id": "CTD",
+      "kind": "FUNCTION_BLOCK",
+      "dispatch": "FB_TYPE",
+      "category": "counter",
+      "labelVi": "Đếm xuống (CTD)",
+      "labelEn": "Down counter (CTD)",
+      "polymorphic": false,
+      "allowedTypes": [],
+      "defaultType": "INT",
+      "typedPortNames": [],
+      "ports": [
+        {
+          "name": "CD",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "LOAD",
+          "direction": "INPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "PV",
+          "direction": "INPUT",
+          "dataType": "INT"
+        },
+        {
+          "name": "Q",
+          "direction": "OUTPUT",
+          "dataType": "BOOL"
+        },
+        {
+          "name": "CV",
+          "direction": "OUTPUT",
+          "dataType": "INT"
         }
       ],
       "featureState": "AVAILABLE"

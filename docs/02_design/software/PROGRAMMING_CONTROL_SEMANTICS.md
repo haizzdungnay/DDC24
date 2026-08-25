@@ -219,6 +219,89 @@ này CHƯA qua Controls/Safety review**, giữ nguyên là TARGET-PENDING đúng
 khi có quyết định field. Hold-last TTL-based withdraw khi Task FAULT kéo dài
 (`holdTtl`) CHƯA làm ở đây — thuộc phạm vi `TASK-PROG-304` (overrun/fault Task).
 
+## 7A. Timer xung và counter — `TP`, `CTU`, `CTD`
+
+`T59-804` (`PGM02-V22-WP-03`) mở ba Function Block chuẩn IEC 61131-3 mà thư
+viện đã cần nhưng compiler chưa có. Ngữ nghĩa chốt ở đây TRƯỚC khi code, vì mỗi
+block thêm một giá trị wire mới vào `PROGRAM_TABLE`/IR và một layout RETAIN mới
+— hai thứ không sửa lại được sau khi có artifact chạy trên bo.
+
+### 7A.1 Chữ ký và giá trị wire
+
+| Block | Wire `StFbType` | Vào | Ra | State RETAIN |
+|---|---:|---|---|---|
+| `TP` | 6 | `IN:BOOL`, `PT:TIME` | `Q:BOOL`, `ET:TIME` | `pulsing:u8`, `elapsed:u64`, `q:u8`, `prev_in:u8` = 11 B |
+| `CTU` | 7 | `CU:BOOL`, `RESET:BOOL`, `PV:INT` | `Q:BOOL`, `CV:INT` | `prev_clk:u8`, `cv:i16` = 3 B |
+| `CTD` | 8 | `CD:BOOL`, `LOAD:BOOL`, `PV:INT` | `Q:BOOL`, `CV:INT` | `prev_clk:u8`, `cv:i16` = 3 B |
+
+Giá trị 1..5 (`TON`/`TOF`/`R_TRIG`/`F_TRIG`/`PID`) giữ nguyên, nên artifact cũ
+vẫn byte-compatible — cùng luật đã áp khi thêm `PID = 5`.
+
+### 7A.2 `TP` — xung có độ dài cố định
+
+```text
+if not pulsing and rising_edge(IN):   pulsing = true; start = now
+if pulsing:
+    elapsed = clamp(now - start, 0, PT)
+    ET = elapsed
+    Q  = elapsed < PT
+    if elapsed >= PT: pulsing = false
+else:
+    Q = false
+    ET = (IN ? PT : 0)
+```
+
+Ba quyết định phải đọc đúng:
+
+1. **Không retrigger giữa xung.** Sườn lên trong lúc `pulsing` bị bỏ qua — đó là
+   toàn bộ lý do tồn tại của `TP` so với `TON`: người dùng cần một xung có độ
+   dài BIẾT TRƯỚC để đá một thiết bị, không phải một xung dài ra theo tín hiệu.
+2. **`ET` bão hoà tại `PT`**, không vượt — cùng luật với `TON`/`TOF` §6.2 của
+   `ST_SUBSET_SPEC`.
+3. **Sau xung, `ET` giữ `PT` chừng nào `IN` còn TRUE** rồi mới về 0. Cho `ET`
+   nhảy về 0 ngay khi hết xung sẽ khiến logic đọc `ET` không phân biệt được
+   "chưa chạy" với "vừa chạy xong".
+
+### 7A.3 `CTU` / `CTD` — đếm sườn, bão hoà, không quấn vòng
+
+```text
+CTU:  if RESET: CV = 0
+      elif rising_edge(CU) and CV < INT_MAX: CV = CV + 1
+      Q = (CV >= PV)
+
+CTD:  if LOAD: CV = PV
+      elif rising_edge(CD) and CV > INT_MIN: CV = CV - 1
+      Q = (CV <= 0)
+```
+
+1. **`RESET`/`LOAD` thắng sườn đếm trong cùng một cycle.** Một lệnh reset bị một
+   xung đếm ghi đè là kiểu hỏng người vận hành không truy được.
+2. **Bão hoà, KHÔNG quấn vòng.** `CV` chạm `INT_MAX`/`INT_MIN` thì dừng. Quấn
+   vòng biến một bộ đếm giờ chạy thành số âm sau 32767 lần và không ai thấy.
+3. **`CV` kiểu `INT`** theo profile Rev A; muốn đếm lớn hơn thì dùng `DINT` ở
+   tầng chương trình, không nới ngầm kiểu của block chuẩn.
+4. `Q` tính SAU khi cập nhật `CV` trong cùng cycle, nên `Q` luôn nhất quán với
+   `CV` mà chương trình đọc được ở cycle đó.
+
+### 7A.4 RETAIN và khôi phục
+
+Layout nối tiếp sau vùng biến RETAIN, theo đúng thứ tự `fb_instances` như các
+block hiện có. `TP` khôi phục `elapsed` rồi rebase `start` theo đồng hồ
+monotonic hiện tại (giống `TON`/`TOF`) vì timestamp monotonic không có nghĩa qua
+lần khởi động khác; `CTU`/`CTD` khôi phục thẳng `CV` — giá trị đếm là dữ liệu
+của quy trình, không phải của tiến trình.
+
+Validator từ chối payload có `pulsing`/`q`/`prev_*` khác 0/1 và `elapsed` vượt
+`INT64_MAX`; `CV` ngoài dải `INT` là payload hỏng, không phải giá trị cần kẹp.
+
+### 7A.5 Tương thích nguồn — điều SẼ hỏng
+
+`TP`, `CTU`, `CTD` trở thành **từ khoá** như `TON`/`TOF`/`PID`, nên một Draft
+đang dùng chính ba tên đó làm TÊN BIẾN sẽ báo lỗi Check sau khi nâng cấp. Đây là
+lựa chọn có chủ ý: cho một biến trùng tên với type FB chuẩn nghĩa là chấp nhận
+hai nghĩa cho một token, và đó là nguồn lỗi tệ hơn nhiều so với một lần đổi tên
+biến. Rev A chưa release nên phạm vi ảnh hưởng là Draft trong phòng lab.
+
 ## 8. State machine Task
 
 | State | Entry | Event/guard | Next/action |

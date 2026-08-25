@@ -490,6 +490,13 @@ def validate(join: dict[str, Any]) -> list[str]:
             len(history_versions) == len(set(history_versions)),
             "library registry versionHistory trùng version",
         )
+        # Append-only: version đang dùng phải là hàng CUỐI. Không ràng buộc thứ
+        # tự thì một lần "sắp xếp lại cho gọn" đủ để làm mờ dấu vết version nào
+        # đến sau version nào — trong khi đây chính là sổ truy nguyên artifact cũ.
+        require(
+            history[-1]["libraryVersion"] == registry["libraryVersion"],
+            "library registry versionHistory không append-only",
+        )
         current_history = next(
             (item for item in history
              if item["libraryVersion"] == registry["libraryVersion"]),
@@ -533,9 +540,13 @@ def validate(join: dict[str, Any]) -> list[str]:
         )
         require(review == registry_item["reviewRequired"], "danh sách REVIEW_REQUIRED lệch pin")
         require("PID" in review, "PID phải giữ REVIEW_REQUIRED tới khi có evidence Controls/Safety")
+        # `CTU` rời danh sách ma ở `T59-804`: nó có compiler/runtime thật, layout
+        # RETAIN pinned (`DDD-CTRL-PROG-001` §7A) và vector conformance chạy
+        # cycle-by-cycle ở cả ST lẫn FBD. Ba tên còn lại vẫn là ma cho tới khi có
+        # cùng bộ evidence — đây là chỗ chặn "chào trước, làm sau".
         ghosts = sorted(
             item["id"] for item in entries
-            if item["id"] in {"SCALE", "DEADBAND", "CTU", "PI"}
+            if item["id"] in {"SCALE", "DEADBAND", "PI"}
         )
         require(not ghosts, f"entry ma quay lại registry: {ghosts}")
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
@@ -709,7 +720,13 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
         contract_by_name(candidate, "library-registry")["schemaSha256"] = "0" * 64
 
     def break_registry_version_history(candidate: dict[str, Any]) -> None:
-        contract_by_name(candidate, "library-registry")["versionHistory"][0]["sha256"] = "0" * 64
+        # Sửa hàng của version ĐANG DÙNG. Trước đây self-test sửa hàng [0], và
+        # điều đó chỉ tình cờ trùng nhau khi lịch sử có đúng một hàng — thêm
+        # `rev-a.2` là self-test xanh mà không còn kiểm gì nữa.
+        contract_by_name(candidate, "library-registry")["versionHistory"][-1]["sha256"] = "0" * 64
+
+    def reorder_registry_version_history(candidate: dict[str, Any]) -> None:
+        contract_by_name(candidate, "library-registry")["versionHistory"].reverse()
 
     add("registry-entry-count-drift", "số entry registry lệch pin", break_registry_entry_count)
     add("registry-fb-count-drift", "số entry FB_TYPE lệch pin", break_registry_fb_count)
@@ -717,6 +734,8 @@ def build_mutations(join: dict[str, Any]) -> list[tuple[str, dict[str, Any], str
     add("registry-review-required-cleared", "REVIEW_REQUIRED lệch pin", clear_review_required)
     add("registry-schema-hash-drift", "library registry schema SHA-256 drift", break_registry_schema_hash)
     add("registry-version-history-drift", "tái sử dụng version", break_registry_version_history)
+    add("registry-version-history-reordered", "không append-only",
+        reorder_registry_version_history)
 
     def drop_v1_readable(candidate: dict[str, Any]) -> None:
         contract_by_name(candidate, "dual-reader")["readableSchemaVersions"] = [2]

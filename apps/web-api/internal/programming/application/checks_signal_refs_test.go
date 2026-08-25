@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	programmingcompiler "mkddc-web/internal/programming/compiler"
+	"mkddc-web/internal/programming/domain"
 	programmingstore "mkddc-web/internal/programming/store"
 )
 
@@ -23,7 +24,7 @@ func (r *signalEvidenceRunner) Compile(_ context.Context,
 	return programmingcompiler.Result{OK: true, Artifact: artifact,
 		ArtifactSHA256: sha256.Sum256(artifact), Manifest: json.RawMessage(`{"manifestVersion":1}`),
 		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1,
-		ProfileID: "revA-1t-1-5-30", LibraryVersion: "rev-a.1", IntegrityMode: "HASH_ONLY",
+		ProfileID: "revA-1t-1-5-30", LibraryVersion: domain.SystemLibraryVersion, IntegrityMode: "HASH_ONLY",
 		TargetABI: 3841, SignalRefs: append([]programmingcompiler.SignalRef(nil), r.refs[input.SourceID]...)}, nil
 }
 

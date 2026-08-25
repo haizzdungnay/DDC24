@@ -1,1 +1,234 @@
-{"$schema":"https://mekong-hcm.local/contracts/programming/artifact_build_manifest_v1.schema.json","artifact":{"bytes":1760,"fileSha256":"4caa01e6b6e7c3575f775b32ca2df9728d0a2233c9e248c1fa08cd026fe2d538","integrityMode":"HASH_ONLY","integritySha256":"cd35fb1dedee2f6a4cf6c40959ef76ccdacba31017358f12d4e07e4c8de0de89","magic":"MKDDCIR1","schemaVersion":1,"signaturePresent":false},"buildKeySha256":"f69eb014a619bad1dadd87411257a17bf7bcf6046b66aa70221e7df929e57cfb","compiler":{"id":"mkddc-programming-compiler","lowererVersion":null,"version":"fwsom-st-1.2.0"},"manifestVersion":1,"profile":{"code":1,"id":"revA-1t-1-5-30","libraryVersion":"rev-a.1","sha256":"e4f235a8f994f552a5f76d7678d404f671b648ae47de450f0094c33e87f69bad"},"source":{"canonicalBytes":1446,"canonicalSha256":"c26d679829d59de65b2c94ed643d459fd8ee7dfd6b20491d273aa13d093fc6ae","language":"ST","sourceId":"golden-st"},"sourceMap":{"entries":[{"encodedColumn":29,"encodedLine":28,"fbdLocation":null,"pc":0,"sourceId":"golden-st","textLocation":{"column":29,"length":1,"line":28},"unit":null},{"encodedColumn":5,"encodedLine":28,"fbdLocation":null,"pc":1,"sourceId":"golden-st","textLocation":{"column":5,"length":1,"line":28},"unit":null},{"encodedColumn":46,"encodedLine":32,"fbdLocation":null,"pc":2,"sourceId":"golden-st","textLocation":{"column":46,"length":1,"line":32},"unit":null},{"encodedColumn":31,"encodedLine":32,"fbdLocation":null,"pc":3,"sourceId":"golden-st","textLocation":{"column":31,"length":1,"line":32},"unit":null},{"encodedColumn":5,"encodedLine":32,"fbdLocation":null,"pc":6,"sourceId":"golden-st","textLocation":{"column":5,"length":1,"line":32},"unit":null},{"encodedColumn":5,"encodedLine":33,"fbdLocation":null,"pc":7,"sourceId":"golden-st","textLocation":{"column":5,"length":1,"line":33},"unit":null},{"encodedColumn":38,"encodedLine":36,"fbdLocation":null,"pc":8,"sourceId":"golden-st","textLocation":{"column":38,"length":1,"line":36},"unit":null},{"encodedColumn":17,"encodedLine":36,"fbdLocation":null,"pc":9,"sourceId":"golden-st","textLocation":{"column":17,"length":1,"line":36},"unit":null},{"encodedColumn":5,"encodedLine":36,"fbdLocation":null,"pc":10,"sourceId":"golden-st","textLocation":{"column":5,"length":1,"line":36},"unit":null},{"encodedColumn":28,"encodedLine":38,"fbdLocation":null,"pc":11,"sourceId":"golden-st","textLocation":{"column":28,"length":1,"line":38},"unit":null},{"encodedColumn":5,"encodedLine":38,"fbdLocation":null,"pc":12,"sourceId":"golden-st","textLocation":{"column":5,"length":1,"line":38},"unit":null},{"encodedColumn":5,"encodedLine":41,"fbdLocation":null,"pc":14,"sourceId":"golden-st","textLocation":{"column":5,"length":1,"line":41},"unit":null},{"encodedColumn":8,"encodedLine":42,"fbdLocation":null,"pc":15,"sourceId":"golden-st","textLocation":{"column":8,"length":1,"line":42},"unit":null},{"encodedColumn":34,"encodedLine":43,"fbdLocation":null,"pc":16,"sourceId":"golden-st","textLocation":{"column":34,"length":1,"line":43},"unit":null},{"encodedColumn":9,"encodedLine":43,"fbdLocation":null,"pc":17,"sourceId":"golden-st","textLocation":{"column":9,"length":1,"line":43},"unit":null}],"version":1},"target":{"abi":3841}}
+{
+  "$schema": "https://mekong-hcm.local/contracts/programming/artifact_build_manifest_v1.schema.json",
+  "artifact": {
+    "bytes": 1760,
+    "fileSha256": "4caa01e6b6e7c3575f775b32ca2df9728d0a2233c9e248c1fa08cd026fe2d538",
+    "integrityMode": "HASH_ONLY",
+    "integritySha256": "cd35fb1dedee2f6a4cf6c40959ef76ccdacba31017358f12d4e07e4c8de0de89",
+    "magic": "MKDDCIR1",
+    "schemaVersion": 1,
+    "signaturePresent": false
+  },
+  "buildKeySha256": "079da4e29e11dba0380545774c1f99283abe517f04ccc78abd5edbc522086903",
+  "compiler": {
+    "id": "mkddc-programming-compiler",
+    "lowererVersion": null,
+    "version": "fwsom-st-1.2.0"
+  },
+  "manifestVersion": 1,
+  "profile": {
+    "code": 1,
+    "id": "revA-1t-1-5-30",
+    "libraryVersion": "rev-a.1",
+    "sha256": "2ffb6c8fc7b0c117a4916aded12d43d7b484b80590001b0078a6d72a776ebe69"
+  },
+  "source": {
+    "canonicalBytes": 1446,
+    "canonicalSha256": "c26d679829d59de65b2c94ed643d459fd8ee7dfd6b20491d273aa13d093fc6ae",
+    "language": "ST",
+    "sourceId": "golden-st"
+  },
+  "sourceMap": {
+    "entries": [
+      {
+        "encodedColumn": 29,
+        "encodedLine": 28,
+        "fbdLocation": null,
+        "pc": 0,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 29,
+          "length": 1,
+          "line": 28
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 5,
+        "encodedLine": 28,
+        "fbdLocation": null,
+        "pc": 1,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 5,
+          "length": 1,
+          "line": 28
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 46,
+        "encodedLine": 32,
+        "fbdLocation": null,
+        "pc": 2,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 46,
+          "length": 1,
+          "line": 32
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 31,
+        "encodedLine": 32,
+        "fbdLocation": null,
+        "pc": 3,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 31,
+          "length": 1,
+          "line": 32
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 5,
+        "encodedLine": 32,
+        "fbdLocation": null,
+        "pc": 6,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 5,
+          "length": 1,
+          "line": 32
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 5,
+        "encodedLine": 33,
+        "fbdLocation": null,
+        "pc": 7,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 5,
+          "length": 1,
+          "line": 33
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 38,
+        "encodedLine": 36,
+        "fbdLocation": null,
+        "pc": 8,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 38,
+          "length": 1,
+          "line": 36
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 17,
+        "encodedLine": 36,
+        "fbdLocation": null,
+        "pc": 9,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 17,
+          "length": 1,
+          "line": 36
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 5,
+        "encodedLine": 36,
+        "fbdLocation": null,
+        "pc": 10,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 5,
+          "length": 1,
+          "line": 36
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 28,
+        "encodedLine": 38,
+        "fbdLocation": null,
+        "pc": 11,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 28,
+          "length": 1,
+          "line": 38
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 5,
+        "encodedLine": 38,
+        "fbdLocation": null,
+        "pc": 12,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 5,
+          "length": 1,
+          "line": 38
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 5,
+        "encodedLine": 41,
+        "fbdLocation": null,
+        "pc": 14,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 5,
+          "length": 1,
+          "line": 41
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 8,
+        "encodedLine": 42,
+        "fbdLocation": null,
+        "pc": 15,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 8,
+          "length": 1,
+          "line": 42
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 34,
+        "encodedLine": 43,
+        "fbdLocation": null,
+        "pc": 16,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 34,
+          "length": 1,
+          "line": 43
+        },
+        "unit": null
+      },
+      {
+        "encodedColumn": 9,
+        "encodedLine": 43,
+        "fbdLocation": null,
+        "pc": 17,
+        "sourceId": "golden-st",
+        "textLocation": {
+          "column": 9,
+          "length": 1,
+          "line": 43
+        },
+        "unit": null
+      }
+    ],
+    "version": 1
+  },
+  "target": {
+    "abi": 3841
+  }
+}

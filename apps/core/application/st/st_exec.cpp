@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "st/st_diagnostic.hpp"
 #include "st/st_signal_bus.hpp"
@@ -446,6 +447,72 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
                 const bool clk = ins[0].b;
                 outs[0].b = !clk && st.prev_clk;
                 st.prev_clk = clk;
+                break;
+            }
+            case StFbType::TP: {
+                /* Xung có độ dài BIẾT TRƯỚC (§7A.2): sườn lên khởi động, và
+                 * sườn lên giữa xung bị BỎ QUA — đó là toàn bộ khác biệt so với
+                 * TON. Cho retrigger nghĩa là xung dài ra theo tín hiệu, tức là
+                 * đúng thứ người dùng chọn TP để tránh. */
+                const bool input = ins[0].b;
+                const int64_t pt = ins[1].t;
+                if (!st.timing && input && !st.prev_in) {
+                    st.timing = true;
+                    st.start_ns = now_ns;
+                }
+                if (st.timing) {
+                    int64_t elapsed = now_ns - st.start_ns;
+                    if (elapsed < 0) elapsed = 0;
+                    if (elapsed >= pt) {
+                        st.timing = false;
+                        outs[0].b = false;
+                        /* ET giữ PT chừng nào IN còn TRUE rồi mới về 0: nhảy về
+                         * 0 ngay khi hết xung làm logic đọc ET không phân biệt
+                         * được "chưa chạy" với "vừa chạy xong". */
+                        outs[1].t = input ? pt : 0;
+                    } else {
+                        outs[0].b = true;
+                        outs[1].t = elapsed;
+                    }
+                } else {
+                    outs[0].b = false;
+                    outs[1].t = input ? pt : 0;
+                }
+                st.prev_in = input;
+                st.q = outs[0].b;
+                break;
+            }
+            case StFbType::CTU: {
+                /* §7A.3 — RESET thắng sườn đếm trong cùng cycle, và CV BÃO HOÀ
+                 * chứ không quấn vòng: quấn vòng biến một bộ đếm giờ chạy thành
+                 * số âm sau 32767 lần mà không ai thấy. */
+                const bool clk = ins[0].b;
+                const bool reset = ins[1].b;
+                const int32_t preset = ins[2].i;
+                if (reset) {
+                    st.counter = 0;
+                } else if (clk && !st.prev_clk && st.counter < INT16_MAX) {
+                    st.counter += 1;
+                }
+                st.prev_clk = clk;
+                outs[1].i = st.counter;
+                outs[0].b = st.counter >= preset;
+                st.q = outs[0].b;
+                break;
+            }
+            case StFbType::CTD: {
+                const bool clk = ins[0].b;
+                const bool load = ins[1].b;
+                const int32_t preset = ins[2].i;
+                if (load) {
+                    st.counter = preset;
+                } else if (clk && !st.prev_clk && st.counter > INT16_MIN) {
+                    st.counter -= 1;
+                }
+                st.prev_clk = clk;
+                outs[1].i = st.counter;
+                outs[0].b = st.counter <= 0;
+                st.q = outs[0].b;
                 break;
             }
             case StFbType::PID: {

@@ -8,8 +8,8 @@
 
 namespace core::st_library_registry_generated {
 
-inline constexpr std::string_view kRegistrySha256 = "55c152d6a1456faf130a05a68788c9e15be918be359d9e642c8c215068540885";
-inline constexpr std::string_view kLibraryVersion = "rev-a.1";
+inline constexpr std::string_view kRegistrySha256 = "9e7536157e4ac0d2aaa04da2e82b13fd280f49179f6cd209bb9c73017440d7fc";
+inline constexpr std::string_view kLibraryVersion = "rev-a.2";
 
 /* Entry compiler nhận diện qua binop/unop trong st_fbd_compile.cpp. */
 inline constexpr std::array<std::string_view, 15> kOperators = {
@@ -55,11 +55,14 @@ inline constexpr std::array<std::string_view, 20> kFuncTable = {
 };
 
 /* Entry compiler nhận diện qua st_fb_type_from_name. */
-inline constexpr std::array<std::string_view, 5> kFbTypes = {
+inline constexpr std::array<std::string_view, 8> kFbTypes = {
     "TON",
     "TOF",
+    "TP",
     "R_TRIG",
     "F_TRIG",
+    "CTU",
+    "CTD",
     "PID",
 };
 

@@ -10,6 +10,7 @@ import (
 
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	programmingcompiler "mkddc-web/internal/programming/compiler"
+	"mkddc-web/internal/programming/domain"
 )
 
 type fakeCheckRunner struct {
@@ -55,7 +56,7 @@ func TestCheckServiceCompilesImmutableRevisionAndPersistsArtifact(t *testing.T) 
 	artifactBytes := []byte("verified-artifact")
 	digest := sha256.Sum256(artifactBytes)
 	runner := &fakeCheckRunner{result: programmingcompiler.Result{OK: true, Artifact: artifactBytes, ArtifactSHA256: digest, Manifest: json.RawMessage(`{"manifestVersion":1}`),
-		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30", LibraryVersion: "rev-a.1", IntegrityMode: "HASH_ONLY", TargetABI: 3841}}
+		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30", LibraryVersion: domain.SystemLibraryVersion, IntegrityMode: "HASH_ONLY", TargetABI: 3841}}
 	artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +144,7 @@ func TestCheckServiceResolvesIoMapFromVariablesAndBindings(t *testing.T) {
 	artifactBytes := []byte("verified-artifact")
 	digest := sha256.Sum256(artifactBytes)
 	runner := &fakeCheckRunner{result: programmingcompiler.Result{OK: true, Artifact: artifactBytes, ArtifactSHA256: digest, Manifest: json.RawMessage(`{"manifestVersion":1}`),
-		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30", LibraryVersion: "rev-a.1", IntegrityMode: "HASH_ONLY", TargetABI: 3841}}
+		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30", LibraryVersion: domain.SystemLibraryVersion, IntegrityMode: "HASH_ONLY", TargetABI: 3841}}
 	artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
 	if err != nil {
 		t.Fatal(err)

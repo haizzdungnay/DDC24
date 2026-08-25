@@ -419,11 +419,17 @@ func (s *LibraryService) decodeLibraryCursor(encoded string) (libraryCursor, err
 	if len(parts) != 2 || len(encoded) > 1024 {
 		return libraryCursor{}, ErrInvalidCursor
 	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[0])
+	/* `Strict()` chứ không phải decoder mặc định: base64 raw cho phép ký tự
+	 * cuối mang những bit KHÔNG được dùng, nên đổi ký tự cuối của chữ ký vẫn
+	 * có thể decode ra đúng 32 byte cũ và HMAC vẫn khớp. Nghĩa là một cursor đã
+	 * bị sửa vẫn đi qua được — phát hiện khi một thay đổi dữ liệu không liên
+	 * quan (bump library registry) làm ký tự cuối rơi vào đúng trường hợp đó,
+	 * và test chống giả mạo đang xanh chỉ vì may. */
+	payload, err := base64.RawURLEncoding.Strict().DecodeString(parts[0])
 	if err != nil {
 		return libraryCursor{}, ErrInvalidCursor
 	}
-	signature, err := base64.RawURLEncoding.DecodeString(parts[1])
+	signature, err := base64.RawURLEncoding.Strict().DecodeString(parts[1])
 	if err != nil {
 		return libraryCursor{}, ErrInvalidCursor
 	}

@@ -63,10 +63,15 @@ describe('tokenizeStSource (WP-10 P0, đối chiếu ST_SUBSET_SPEC §10)', () =
     for (const token of tokens) expect(token.kind).not.toBe('keyword')
   })
 
-  it('20 hàm chuẩn + 5 FB type khớp đúng số lượng kFuncs[]/st_fb_type đã xác nhận ở WP-05', () => {
+  it('20 hàm chuẩn + 8 FB type khớp đúng số lượng kFuncs[]/st_fb_type', () => {
     expect(ST_FUNCTION_NAMES).toHaveLength(20)
-    expect(ST_FB_TYPE_NAMES).toHaveLength(5)
-    expect([...ST_FB_TYPE_NAMES].sort()).toEqual(['F_TRIG', 'PID', 'R_TRIG', 'TOF', 'TON'].sort())
+    // `T59-804` thêm TP/CTU/CTD (`DDD-CTRL-PROG-001` §7A). Con số ghim ở đây là
+    // cố ý: tô màu cú pháp phải đi cùng compiler, và một FB type mới mà editor
+    // không tô sẽ trông như một định danh người dùng tự đặt.
+    expect(ST_FB_TYPE_NAMES).toHaveLength(8)
+    expect([...ST_FB_TYPE_NAMES].sort()).toEqual(
+      ['CTD', 'CTU', 'F_TRIG', 'PID', 'R_TRIG', 'TOF', 'TON', 'TP'].sort()
+    )
   })
 })
 

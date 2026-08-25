@@ -397,7 +397,12 @@ private:
             StIrFbInstance f;
             f.name = rd_fixed_string(p, 64);
             const uint16_t ft = rd_u16(p + 64);
-            if (ft < 1 || ft > 5) return fail(st_ir_error::kBadTable, "invalid FB type");
+            /* Dải hợp lệ đi theo `StFbType` (`T59-804` thêm TP/CTU/CTD = 6..8).
+             * Giữ NGƯỠNG TRÊN là một hằng đọc được thay vì số trần: loader phải
+             * từ chối một fb_type mà chính binary này chưa biết cách chạy, chứ
+             * không im lặng nhận rồi rơi vào nhánh `default`. */
+            if (ft < 1 || ft > static_cast<uint16_t>(StFbType::CTD))
+                return fail(st_ir_error::kBadTable, "invalid FB type");
             f.fb_type = static_cast<StFbType>(ft);
             f.input_slot_base = rd_u16(p + 66);
             f.output_slot_base = rd_u16(p + 68);

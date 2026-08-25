@@ -39,7 +39,7 @@
     "category": {
       "enum": [
         "interface", "constants", "logic", "compare", "math",
-        "conversion", "timer", "trigger", "control"
+        "conversion", "timer", "counter", "trigger", "control"
       ]
     },
     "port": {

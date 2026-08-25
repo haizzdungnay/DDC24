@@ -452,12 +452,36 @@ func TestSearchLibrariesCursorBindsFiltersAndRejectsTampering(t *testing.T) {
 		Scope: "SYSTEM", Limit: 5, Cursor: *first.NextCursor}); !errors.Is(err, ErrInvalidCursor) {
 		t.Fatalf("cursor không ràng buộc filter: %v", err)
 	}
-	// Sửa một ký tự chữ ký cũng phải hỏng.
+	// Sửa một ký tự chữ ký cũng phải hỏng — kiểm CẢ HAI đường: một ký tự đổi
+	// giá trị byte đã decode, và một ký tự chỉ đổi những bit thừa ở cuối. Đường
+	// thứ hai từng lọt: base64 raw không strict decode chúng về cùng 32 byte,
+	// nên HMAC vẫn khớp và cursor giả mạo vẫn dùng được.
 	tampered := *first.NextCursor
-	tampered = tampered[:len(tampered)-1] + "A"
+	last := tampered[len(tampered)-1]
+	replacement := byte('A')
+	if last == 'A' {
+		replacement = 'B'
+	}
+	tampered = tampered[:len(tampered)-1] + string(replacement)
 	if _, err := library.SearchLibraries(ctx, SearchLibrariesCommand{ProjectID: libraryProjectID, Limit: 5, Cursor: tampered}); !errors.Is(err, ErrInvalidCursor) {
 		t.Fatalf("cursor bị sửa vẫn dùng được: %v", err)
 	}
+	// Bit thừa ở ký tự cuối: `Q` và `R` decode ra cùng byte trong base64 raw,
+	// nên chỉ decoder strict mới chặn được.
+	for _, pair := range [][2]byte{{'Q', 'R'}, {'A', 'B'}, {'g', 'h'}} {
+		if first.NextCursor == nil {
+			break
+		}
+		candidate := *first.NextCursor
+		if candidate[len(candidate)-1] != pair[0] {
+			continue
+		}
+		candidate = candidate[:len(candidate)-1] + string(pair[1])
+		if _, err := library.SearchLibraries(ctx, SearchLibrariesCommand{ProjectID: libraryProjectID, Limit: 5, Cursor: candidate}); !errors.Is(err, ErrInvalidCursor) {
+			t.Fatalf("cursor đổi bit thừa vẫn dùng được: %v", err)
+		}
+	}
+
 	// Cursor hết hạn đúng tại mốc 15 phút, không có cửa sổ thêm một mili giây.
 	issuedAt := library.now()
 	library.now = func() time.Time { return issuedAt.Add(15 * time.Minute) }
