@@ -55,12 +55,13 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "d5757655b0d84ec1d836d7742ad7ee6c9e15d486873169ac2f8586e289d7a11b",
+      "sha256": "2bc29a935b1a259ed2595ea6ae808fba12b6ee7bd9587a179af79c5a5306dde6",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "7025e4aeb64576e00958c9d87376fd00fff853a8dcb8720f786167ec2ebc9e85",
+      "manifestSha256": "430c038e5024dec7791dba0aa5691c2fac04d12c1c2291cfe0c1408cf38b797c",
       "major": 1,
+      "version": "1.7.2",
       "publicErrorCount": 30,
-      "componentDetailCount": 134
+      "componentDetailCount": 135
     },
     {
       "name": "store",

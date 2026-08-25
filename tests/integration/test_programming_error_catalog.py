@@ -63,6 +63,11 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # biến một gate thành cảnh báo giả, và lần sau người đọc sẽ sửa số cho
         # xanh mà không đọc xem thứ gì vừa được thêm.
         #
+        # F-P59-GHOST-POU-001 (2026-08-24): 134→135 detail, catalog 1.7.2.
+        # `ST-POU-005` ánh xạ về `PRG-ERR-CHECK-001` để Check/Package từ chối
+        # PROGRAM POU chưa schedule thay vì tự gán chu kỳ 1000 ms. Public code
+        # vẫn là 30 vì dùng đúng miền Check hiện hữu.
+        #
         # Cập nhật `T59-405`: 120→122 detail. Hai mã core-ipc mới cho intent
         # Enable/Disable: `IPC-UNKNOWN-INSTANCE` (Program không có trong package
         # đang chạy → NOT_FOUND, vì người gọi và thiết bị đang nói về hai gói
@@ -82,8 +87,9 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # `generate_programming_errors.py --check` canh, chạy ngay phía trên
         # trong cùng gate.
         catalog, raw, schema_raw = GENERATOR.load_and_validate()
+        self.assertEqual(catalog["catalogVersion"], "1.7.2")
         self.assertEqual(len(catalog["publicErrors"]), 30)
-        self.assertEqual(len(catalog["componentDetails"]), 134)
+        self.assertEqual(len(catalog["componentDetails"]), 135)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
 

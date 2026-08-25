@@ -3,10 +3,10 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN59-CONTRACT-LOCK-2026-08-24` |
-| Phiên bản | 1.0 |
-| Trạng thái | Active — khoá trước khi code |
+| Phiên bản | 1.1 |
+| Trạng thái | Active — đã reconcile mã lỗi theo `AUTH-PROG-2026-08-24-05` |
 | Base commit | `44448ea` (main, clean) |
-| Authority | `ADR-050`; `DDD-SW-PROG-UNIFIED-001` §4.2/§4.4/§4.5/§5.3/§6/§7 |
+| Authority | `ADR-050`; `DDD-SW-PROG-UNIFIED-001` §4.2/§4.4/§4.5/§5.3/§6/§7; `AUTH-PROG-2026-08-24-05` |
 | Lý do | Ba finding P0 chạm cùng một tập file IR/package/scheduler. Không khoá một
   hợp đồng duy nhất thì mỗi lane sẽ tự chế một hợp đồng và ba bản sẽ trôi khỏi nhau. |
 
@@ -60,9 +60,15 @@ trần là lỗi Check (`ST-POU-004`), không phải hành vi lúc chạy.
 | `ST-POU-002` | `FUNCTION` không thuần (đã có) |
 | `ST-POU-003` | đệ quy trực tiếp/gián tiếp (đã có) |
 | `ST-POU-004` | **mới** — mở inline vượt trần lệnh/slot của profile |
-| `ST-POU-005` | **mới** — kiểu đối số/kiểu trả về không khớp chữ ký |
+| `ST-POU-005` | PROGRAM POU chưa có cấu hình/chu kỳ chạy; Draft được giữ nhưng Check/Package phải fail-closed, không synthesize `1000 ms` |
 | `ST-LIB-001` | gọi tên không phân giải được (đã có) |
 | `ST-LIB-002` | lệch version library đã pin (đã có) |
+
+Reservation ban đầu của revision 1.0 cho “kiểu đối số/kiểu trả về không khớp”
+chưa từng trở thành emitter và đã bị supersede bởi
+`AUTH-PROG-2026-08-24-05`. Nhóm lỗi type/call hiện hành dùng
+`ST-SEM-002`/`ST-SEM-007`/`ST-SEM-013`; không được tái sử dụng
+`ST-POU-005` cho một nghĩa thứ hai.
 
 ### 1.4 `CT-1a` — Hợp đồng CLI compiler (biên Go ↔ C++)
 
@@ -245,4 +251,5 @@ void adopt(StSignalBus&& prepared);   // hoán đổi nguyên khối tại bound
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.1 | 2026-08-25 | Reconcile xung đột mã ổn định theo `AUTH-PROG-2026-08-24-05`: khóa `ST-POU-005` cho PROGRAM POU chưa xếp lịch; type/call mismatch tiếp tục dùng họ `ST-SEM-*`. Không đổi CT-1/CT-2/CT-3 hoặc bằng chứng runtime. |
 | 1.0 | 2026-08-24 | Khoá `CT-1`/`CT-2`/`CT-3` trước khi sửa code. |

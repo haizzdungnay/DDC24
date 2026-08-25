@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.7.1",
+  "catalogVersion": "1.7.2",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     {
@@ -782,6 +782,11 @@
       "component": "compiler",
       "detailCode": "ST-POU-004",
       "publicCode": "PRG-ERR-PROGRAM-LIMIT-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-POU-005",
+      "publicCode": "PRG-ERR-CHECK-001"
     },
     {
       "component": "compiler",
