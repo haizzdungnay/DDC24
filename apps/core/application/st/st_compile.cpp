@@ -898,6 +898,42 @@ private:
             pc = emit(StOp::SEL, type_raw(e.result_type), dst, argv[0], argv[1], argv[2]); break;
         case StFunc::SQRT:
             pc = emit(StOp::SQRT, type_raw(StType::REAL), dst, argv[0]); break;
+        case StFunc::SCALE: {
+            /* §7A.6 — KHÔNG có opcode SCALE: một lệnh IR mang tối đa ba toán
+             * hạng nguồn còn SCALE cần năm, và nới định dạng artifact để nhét
+             * vừa một phép tính tuyến tính là đổi thứ đắt nhất lấy thứ rẻ nhất.
+             * OUT = OUT_MIN + (IN - IN_MIN) * (OUT_MAX - OUT_MIN) / (IN_MAX - IN_MIN).
+             * Chia cho 0 (IN_MAX == IN_MIN) rơi vào đúng `ST-RT-002` đã có. */
+            const uint8_t real = type_raw(StType::REAL);
+            const uint16_t span_in = push_temp();
+            emit(StOp::SUB, real, span_in, argv[0], argv[1]);
+            const uint16_t span_out = push_temp();
+            emit(StOp::SUB, real, span_out, argv[4], argv[3]);
+            const uint16_t scaled = push_temp();
+            emit(StOp::MUL, real, scaled, span_in, span_out);
+            const uint16_t divisor = push_temp();
+            emit(StOp::SUB, real, divisor, argv[2], argv[1]);
+            const uint16_t ratio = push_temp();
+            emit(StOp::DIV, real, ratio, scaled, divisor);
+            pc = emit(StOp::ADD, real, dst, argv[3], ratio);
+            pop_temp(5);
+            break;
+        }
+        case StFunc::DEADBAND: {
+            /* OUT = SEL(ABS(IN - REF) > DB, REF, IN). Trong dải trả REF chứ
+             * KHÔNG trả giá trị cũ: trả giá trị cũ là hành vi có trạng thái và
+             * sẽ biến một hàm thuần thành FB (dùng HYSTERESIS khi cần điều đó). */
+            const uint8_t real = type_raw(StType::REAL);
+            const uint16_t delta = push_temp();
+            emit(StOp::SUB, real, delta, argv[0], argv[2]);
+            const uint16_t magnitude = push_temp();
+            emit(StOp::ABS, real, magnitude, delta);
+            const uint16_t outside = push_temp();
+            emit(StOp::GT, real, outside, magnitude, argv[1]);
+            pc = emit(StOp::SEL, real, dst, outside, argv[2], argv[0]);
+            pop_temp(3);
+            break;
+        }
         case StFunc::INT_TO_REAL:
             pc = emit(StOp::CVT_I2R, 0, dst, argv[0]); break;
         case StFunc::REAL_TO_INT:

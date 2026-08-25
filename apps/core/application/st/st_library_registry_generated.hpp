@@ -8,8 +8,8 @@
 
 namespace core::st_library_registry_generated {
 
-inline constexpr std::string_view kRegistrySha256 = "9e7536157e4ac0d2aaa04da2e82b13fd280f49179f6cd209bb9c73017440d7fc";
-inline constexpr std::string_view kLibraryVersion = "rev-a.2";
+inline constexpr std::string_view kRegistrySha256 = "a59c6db561f6550ab010f3a84118363b76f8e3d4103dd759cbb8200c26dd4660";
+inline constexpr std::string_view kLibraryVersion = "rev-a.3";
 
 /* Entry compiler nhận diện qua binop/unop trong st_fbd_compile.cpp. */
 inline constexpr std::array<std::string_view, 15> kOperators = {
@@ -54,8 +54,15 @@ inline constexpr std::array<std::string_view, 20> kFuncTable = {
     "REAL_TO_UINT",
 };
 
+/* Entry compiler KHAI TRIỂN thành chuỗi lệnh đã có (không có opcode riêng);
+ * `st_func_from_name` vẫn nhận diện chúng — xem `DDD-CTRL-PROG-001` §7A.6. */
+inline constexpr std::array<std::string_view, 2> kExpansionFunctions = {
+    "SCALE",
+    "DEADBAND",
+};
+
 /* Entry compiler nhận diện qua st_fb_type_from_name. */
-inline constexpr std::array<std::string_view, 8> kFbTypes = {
+inline constexpr std::array<std::string_view, 9> kFbTypes = {
     "TON",
     "TOF",
     "TP",
@@ -64,10 +71,11 @@ inline constexpr std::array<std::string_view, 8> kFbTypes = {
     "CTU",
     "CTD",
     "PID",
+    "HYSTERESIS",
 };
 
 /* Allowlist FBD theo node kind. */
-inline constexpr std::array<std::string_view, 21> kPureFunctions = {
+inline constexpr std::array<std::string_view, 23> kPureFunctions = {
     "AND",
     "OR",
     "XOR",
@@ -88,6 +96,8 @@ inline constexpr std::array<std::string_view, 21> kPureFunctions = {
     "MIN",
     "MAX",
     "LIMIT",
+    "SCALE",
+    "DEADBAND",
     "SQRT",
 };
 inline constexpr std::array<std::string_view, 14> kExplicitConversions = {

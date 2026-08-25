@@ -401,7 +401,7 @@ private:
              * Giữ NGƯỠNG TRÊN là một hằng đọc được thay vì số trần: loader phải
              * từ chối một fb_type mà chính binary này chưa biết cách chạy, chứ
              * không im lặng nhận rồi rơi vào nhánh `default`. */
-            if (ft < 1 || ft > static_cast<uint16_t>(StFbType::CTD))
+            if (ft < 1 || ft > static_cast<uint16_t>(StFbType::HYSTERESIS))
                 return fail(st_ir_error::kBadTable, "invalid FB type");
             f.fb_type = static_cast<StFbType>(ft);
             f.input_slot_base = rd_u16(p + 66);

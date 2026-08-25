@@ -61,10 +61,16 @@ TEST(StLibraryRegistry, EveryFbTypeEntryResolvesInCompiler)
  * tức compiler hỗ trợ thứ mà palette/allowlist không bao giờ chào. */
 TEST(StLibraryRegistry, EveryCompilerFunctionAppearsInRegistry)
 {
+    /* `kFuncs[]` của compiler gồm CẢ hai cách hiện thực: hàm có opcode riêng
+     * (`FUNC_TABLE`) và hàm được khai triển thành chuỗi lệnh (`EXPANSION`,
+     * `DDD-CTRL-PROG-001` §7A.6). Chỉ so với `kFuncTable` sẽ báo nhầm rằng
+     * SCALE/DEADBAND là "hàm ma của compiler". */
     std::set<std::string> declared;
     for (std::string_view name : registry::kFuncTable) declared.emplace(name);
+    for (std::string_view name : registry::kExpansionFunctions) declared.emplace(name);
+    const std::size_t total = registry::kFuncTable.size() + registry::kExpansionFunctions.size();
 
-    for (std::size_t index = 0; index < registry::kFuncTable.size(); ++index) {
+    for (std::size_t index = 0; index < total; ++index) {
         const char* name = st_func_name(static_cast<StFunc>(index));
         ASSERT_STRNE(name, "?")
             << "kFuncs[] ít hơn registry tại index " << index;
@@ -72,7 +78,7 @@ TEST(StLibraryRegistry, EveryCompilerFunctionAppearsInRegistry)
             << name << " có trong compiler nhưng thiếu trong registry";
     }
     /* Một-trên-trần: kFuncs[] không được nhiều hơn registry. */
-    EXPECT_STREQ(st_func_name(static_cast<StFunc>(registry::kFuncTable.size())), "?")
+    EXPECT_STREQ(st_func_name(static_cast<StFunc>(total)), "?")
         << "kFuncs[] nhiều hơn registry — có hàm compiler chưa khai trong registry";
 }
 
@@ -101,7 +107,7 @@ TEST(StLibraryRegistry, EveryCompilerFbTypeAppearsInRegistry)
  * palette. `SCALE`/`DEADBAND`/`PI` vẫn là ma cho tới khi có cùng bộ evidence. */
 TEST(StLibraryRegistry, RemovedGhostEntriesStayRemoved)
 {
-    for (const char* ghost : {"SCALE", "DEADBAND", "PI"}) {
+    for (const char* ghost : {"PI"}) {
         StFunc resolved{};
         EXPECT_FALSE(st_func_from_name(ghost, &resolved)) << ghost;
         EXPECT_EQ(st_fb_type_from_name(ghost), StFbType::NONE) << ghost;

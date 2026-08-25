@@ -42,7 +42,7 @@ std::string function_source(const std::string& header = "FUNCTION Clamp : REAL",
 
 std::string function_block_source(const std::string& extra_vars = "")
 {
-    return "FUNCTION_BLOCK Hysteresis\n"
+    return "FUNCTION_BLOCK BandGuard\n"
            "VAR_INPUT pv : REAL; END_VAR\n"
            "VAR_OUTPUT q : BOOL; END_VAR\n" + extra_vars +
            "q := pv > 10.0;\n"
@@ -72,7 +72,7 @@ TEST(StPouParser, ParsesFunctionBlockWithInputAndOutput)
     const ParseResult result = parse(function_block_source());
     ASSERT_TRUE(result.ok) << result.diag.code << ": " << result.diag.message;
     EXPECT_EQ(result.pou.kind, StPouKind::FUNCTION_BLOCK);
-    EXPECT_EQ(result.pou.name, "Hysteresis");
+    EXPECT_EQ(result.pou.name, "BandGuard");
     /* FUNCTION_BLOCK KHÔNG có kiểu trả về — nó trả qua VAR_OUTPUT. */
     EXPECT_FALSE(result.pou.has_return_type);
     EXPECT_EQ(result.pou.by_storage(StStorage::VAR_INPUT).size(), 1U);

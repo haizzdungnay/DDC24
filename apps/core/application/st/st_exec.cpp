@@ -515,6 +515,22 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
                 st.q = outs[0].b;
                 break;
             }
+            case StFbType::HYSTERESIS: {
+                /* §7A.7 — trong dải LOW..HIGH thì GIỮ NGUYÊN chu kỳ trước; đó
+                 * là toàn bộ lý do nó là FB chứ không phải hàm thuần. */
+                const float value = ins[0].r;
+                const float high = ins[1].r;
+                const float low = ins[2].r;
+                if (!std::isfinite(value) || !std::isfinite(high) || !std::isfinite(low))
+                    ST_FAULT(st_diag_code::kRtNonFiniteReal);
+                /* Dải trễ đảo ngược không có nghĩa vật lý; đoán ý người khai sẽ
+                 * tạo ra một bộ điều khiển bật/tắt liên tục ở đúng ngưỡng. */
+                if (!(low < high)) ST_FAULT(st_diag_code::kRtLimitMinMax);
+                if (value >= high) st.q = true;
+                else if (value <= low) st.q = false;
+                outs[0].b = st.q;
+                break;
+            }
             case StFbType::PID: {
                 /* DDD-CTRL-PROG-001 §7. ins[]: SP,PV,KP,KI,KD,OUT_MIN,
                  * OUT_MAX,ACTUAL. Không publish (fault huỷ cả cycle) nếu

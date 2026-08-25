@@ -269,14 +269,14 @@ TEST(StFbdUserPou, ArgumentOrderFollowsPortOrderNotWireOrder)
 TEST(StFbdUserPou, UserFunctionBlockNodeBecomesUserTypedInstance)
 {
     const FbdLowerResult fbd = lower_fbd_source_to_program(
-        make_user_pou_graph("Hysteresis", "FUNCTION_BLOCK",
+        make_user_pou_graph("BandGuard", "FUNCTION_BLOCK",
                             json{{"instance", "hyst"}})
             .dump());
     ASSERT_TRUE(fbd.ok) << (fbd.issues.empty() ? "" : fbd.issues.front().code);
     ASSERT_EQ(fbd.program.fbs.size(), 1U);
     const StFbDecl& decl = fbd.program.fbs.front();
     EXPECT_TRUE(decl.is_user_type);
-    EXPECT_EQ(decl.user_type_name, "Hysteresis");
+    EXPECT_EQ(decl.user_type_name, "BandGuard");
     /* `fb_type` phải giữ NONE: không có đường nào nhầm nó với FB dựng sẵn. */
     EXPECT_EQ(decl.fb_type, StFbType::NONE);
     EXPECT_EQ(decl.name, "hyst");

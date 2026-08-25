@@ -225,6 +225,9 @@ bool build_snapshot_payload(const StLoadedProgram& program, uint64_t now_ns,
             dst[9] = state.q ? 1 : 0;
             dst[10] = state.prev_in ? 1 : 0;
             break;
+        case StFbType::HYSTERESIS:
+            dst[0] = state.q ? 1 : 0;
+            break;
         case StFbType::CTU:
         case StFbType::CTD:
             dst[0] = state.prev_clk ? 1 : 0;
@@ -293,6 +296,9 @@ bool validate_payload(const StLoadedProgram& program, const uint8_t* payload,
             if (src[0] > 1 || src[9] > 1 || src[10] > 1 ||
                 rd_u64(src + 1) > static_cast<uint64_t>(INT64_MAX))
                 return false;
+            break;
+        case StFbType::HYSTERESIS:
+            if (src[0] > 1) return false;
             break;
         case StFbType::CTU:
         case StFbType::CTD:
@@ -363,6 +369,11 @@ void apply_payload(StLoadedProgram* program, const uint8_t* payload, uint64_t no
                                  : 0;
             state.q = src[9] != 0;
             state.prev_in = src[10] != 0;
+            break;
+        case StFbType::HYSTERESIS:
+            /* Sau mất điện, một quạt đang chạy trong vùng trễ phải trở lại đúng
+             * trạng thái nó đang có, không nhảy theo ngưỡng gần nhất. */
+            state.q = src[0] != 0;
             break;
         case StFbType::CTU:
         case StFbType::CTD:
