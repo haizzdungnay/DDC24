@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — dock Quick Library dùng chung ST↔FBD, đóng `WP-03` (2026-08-26)
+
+- **Changed — một dock, hai bề mặt.** `QuickLibraryPanel` nay nhận **mục
+  catalog** chứ không nhận đoạn mã, và KHÔNG biết cách chèn: ST dựng đoạn mã tại
+  con trỏ, FBD dispatch `ADD_NODE`. Nhờ đi qua đúng lệnh mà palette dùng, chèn
+  từ dock trên canvas vẫn là **một bước hoàn tác** và **không tự nối dây**.
+
+- **Added — bề mặt tự nói mục nào nó chưa nhận được.** Một mục dùng được ở ST
+  vẫn có thể chưa vẽ được trên canvas FBD (PROJECT entry chưa có entry palette).
+  Panel hỏi bề mặt qua `canInsert` và hiện lý do CỦA BỀ MẶT ĐÓ tại chỗ, thay vì
+  ẩn mục đi và để người dùng đi tìm nó. Lý do của catalog
+  (`REVIEW_REQUIRED`/`SIGNATURE_UNAVAILABLE`) vẫn thắng khi cả hai cùng chặn.
+
+- **Changed — roadmap: `WP-03` ĐÓNG.** Sáu block, catalog dùng chung có parity
+  đo trên backend thật, Recent/Favorites, lọc theo cổng, typed metadata và dock
+  dùng chung đều đã giao. `G-PGM02-01 EDIT_FOUNDATION` đủ ba điều kiện ở lớp
+  HOST/LOCAL; `WP-04` (`T59-805`) là task READY tiếp theo.
+
+- **Verification.** FE **143 file / 1571 test PASS**, lint/build PASS (chunk
+  Programming **104,77 KiB gzip**); E2E mock **31 PASS / 5 skip**; E2E
+  real-backend **1/1 PASS**; `verify-project.sh --component layout` PASS.
+
+
 ### PGM-02 R1 — chữ ký thư viện thành typed metadata công khai (2026-08-26)
 
 - **Added — `signature` đã PHÂN GIẢI trong `GET /programming/libraries`.**

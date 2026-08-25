@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.9 |
-| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; `T59-801..803` DONE, `T59-804` READY, `T59-805..817` ORDERED theo predecessor; RELEASE_READY NO-GO** |
+| Phiên bản | 2.10 |
+| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; `T59-801..804` DONE, `T59-805` READY, `T59-806..817` ORDERED theo predecessor; RELEASE_READY NO-GO** |
 | Ngày | 2026-08-25 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
@@ -2721,8 +2721,8 @@ Consumer/discipline/Verification/Document Control review là
 |---|---|---|---|---|---|
 | `T59-802` | R1 / `PGM02-V22-WP-01` | Shared shell, canonical route/resolver/legacy redirect và mobile `<768` read-only trong FE route/workspace | `T59-801 DONE` + `IMPLEMENT_READY[PGM02-R1]=GO` | **DONE (HOST/LOCAL)** | Route `/eng/programming/programs?project&pou&mode` sau cờ rollback `VITE_PROGRAMS_WORKSPACE_V2` (mặc định TẮT); resolver 0/1/nhiều/không-tồn-tại/mode-lạ đều fail-closed, không mượn Project khác; `<768 px` read-only bằng policy runtime; FE **139 file/1531 test**, lint/build PASS; E2E mock cut-over **29 PASS/3 skip**, real-backend **1/1**. Chi tiết §3.9 |
 | `T59-803` | R1 / `PGM02-V22-WP-02` | Một POU Explorer typed theo `objectId`; selection/navigation/create/duplicate/rename/delete guard | `T59-802 DONE` | **DONE (HOST/LOCAL)** | DOM còn đúng MỘT navigation POU; view model một nguồn (`pouItems`); `objectId`/`programId` không thay nhau được (tra nhầm trục cho `undefined`); tạo/đổi tên/nhân bản/xoá đi qua op typed `upsertObject`/`renameObject`/`duplicateObject`/`removeObject`; FUNCTION/FB không bao giờ được xếp lịch; xoá có preflight người gọi. FE **141 file/1551 test**, E2E mock **30 PASS/4 skip**, real-backend **1/1**. Chi tiết §3.9 |
-| `T59-804` | R1 / `PGM02-V22-WP-03` | OpenAPI/generated clients + BE typed Draft, normalized Quick Library signature, reference query và atomic semantic refactor | `T59-803 DONE`; contract được promote Active trong task | **READY** | schema/Go/TS exact; ETag/idempotency; analyzer/signature unavailable zero mutation; audit/read-back đúng |
-| `T59-805` | R1 / `PGM02-V22-WP-04` | ST editor hoàn chỉnh: Saved Draft, exact diagnostic anchor, history/cursor/read-back | `T59-804 DONE` | **ORDERED — dependency** | ST positive/boundary/conflict/diagnostic/reference flows PASS; Active không đổi |
+| `T59-804` | R1 / `PGM02-V22-WP-03` | OpenAPI/generated clients + BE typed Draft, normalized Quick Library signature, reference query và atomic semantic refactor | `T59-803 DONE`; contract được promote Active trong task | **DONE (HOST/LOCAL)** | schema/Go/TS exact; ETag/idempotency; analyzer/signature unavailable zero mutation; audit/read-back đúng |
+| `T59-805` | R1 / `PGM02-V22-WP-04` | ST editor hoàn chỉnh: Saved Draft, exact diagnostic anchor, history/cursor/read-back | `T59-804 DONE` | **READY** | ST positive/boundary/conflict/diagnostic/reference flows PASS; Active không đổi |
 | `T59-806` | R1 / `PGM02-V22-WP-05` | FBD true canvas: typed port/order, wire validation, pan/zoom/select/undo và exact FBD anchor | `T59-804 DONE` | **ORDERED — dependency** | Canonical node/port/wire/layout giữ nguyên semantics; ST↔FBD equivalence và accessibility PASS |
 | `T59-807` | R1 / `PGM02-V22-WP-06-R1` | Hợp nhất workbench EDIT, context strip, state/error/copy và full save→Check→read-back | `T59-802..806 DONE` | **ORDERED — dependency** | Real-backend E2E R1, stale ETag/refactor fault/permission/offline; không mock authority |
 | `T59-808` | R1 / `PGM02-V22-WP-10-R1` + `WP-11-R1` | Budget bundle/render, a11y/responsive/security hardening cho EDIT | `T59-807 DONE` | **ORDERED — dependency** | Budget NFR R1, no horizontal overflow, focus/contrast/keyboard, RBAC negative và hostile source PASS |
@@ -2751,8 +2751,8 @@ thái `DONE` của chúng **không** chứng minh redesign mới đã implement:
 | `PGM02-V22-WP-00` | — | `T59-801 DONE`; exact pin theo `AUTH-PROG-2026-08-24-05` |
 | `PGM02-V22-WP-01` | `T59-306/503` | `T59-802` DONE R1 (HOST/LOCAL) |
 | `PGM02-V22-WP-02` | `T59-301/306/506` | `T59-803` DONE R1 (HOST/LOCAL) |
-| `PGM02-V22-WP-03` | `T59-003/201..205` | `T59-804` READY R1 |
-| `PGM02-V22-WP-04` | `T59-302/408/506` | `T59-805` ORDERED R1 |
+| `PGM02-V22-WP-03` | `T59-003/201..205` | `T59-804` DONE R1 (HOST/LOCAL) |
+| `PGM02-V22-WP-04` | `T59-302/408/506` | `T59-805` READY R1 |
 | `PGM02-V22-WP-05` | `T59-105/306/506/601` | `T59-806` ORDERED R1 |
 | `PGM02-V22-WP-06` | `T59-302/408/504/506` | `T59-807` R1 + `T59-811` R2 + `T59-816` R3 ORDERED |
 | `PGM02-V22-WP-07` | `T59-106/302/402..407/602/603` | `T59-814` ORDERED R3 |

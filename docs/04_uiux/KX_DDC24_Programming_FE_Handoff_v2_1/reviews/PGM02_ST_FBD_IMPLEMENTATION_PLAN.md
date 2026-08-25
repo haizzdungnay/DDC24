@@ -4,7 +4,7 @@
 |---|---|
 | ID | `PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001` |
 | Phiên bản | 1.5 |
-| Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; `WP-00/01/02` DONE (`T59-801/802/803`), `WP-03` READY** |
+| Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; `WP-00..03` DONE (`T59-801..804`), `WP-04` READY** |
 | Ngày | 2026-08-25 |
 | Mốc mã nguồn lập kế hoạch | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` |
 | Review nguồn | [REC-PGM02-ST-FBD-REDESIGN-REVIEW-001](PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md) |
@@ -35,8 +35,8 @@ không nói CI, target, HIL hay release.
 | `WP-00` | `T59-801` | **DONE** 2026-08-24 | Reconcile authority, formal DDD/contract/ADR-053, exact pin `413a043` | `AUTH-PROG-2026-08-24-05`; manifest 17/17 |
 | `WP-01` | `T59-802` | **DONE (một phần scope)** 2026-08-25 | Route canonical + resolver + legacy redirect + mobile `<768` read-only, sau cờ `programsWorkspaceV2` | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-802-shell-route.md) |
 | `WP-02` | `T59-803` | **DONE** 2026-08-25 | Một POU Explorer, identity `objectId`↔`programId`, vòng đời POU typed cho ba kind | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-803-pou-explorer.md) |
-| `WP-03` | `T59-804` | **PARTIAL** 2026-08-26 | Catalog dùng chung (BE authority) + Quick Library ST + Recent/Favorites + parity BE↔registry trên backend thật + lọc palette FBD theo cổng đang chọn + khoá luật không tự nối + sáu block `TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS` (compiler+runtime+conformance) | [evidence 2026-08-26](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md) |
-| `WP-04` | `T59-805` | ORDERED | — | — |
+| `WP-03` | `T59-804` | **DONE** 2026-08-26 | Catalog dùng chung (BE authority) + Quick Library ST + Recent/Favorites + parity BE↔registry trên backend thật + lọc palette FBD theo cổng đang chọn + khoá luật không tự nối + sáu block `TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS` (compiler+runtime+conformance) + typed metadata public trong OpenAPI + dock dùng chung ST↔FBD | [evidence 2026-08-26](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md) |
+| `WP-04` | `T59-805` | READY | — | — |
 | `WP-05` | `T59-806` | ORDERED | — | — |
 | `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | ORDERED | — | — |
 | `WP-07` | `T59-814` | ORDERED | — | — |
@@ -56,9 +56,15 @@ conformance chạy ở cả ST lẫn FBD. `PI` vẫn là entry ma bị verify sc
 **Typed metadata public trong OpenAPI cũng đã giao** 2026-08-26: backend công bố
 `signature` đã phân giải, `interface` thô giữ nguyên cho consumer cũ.
 
-**Phần của `WP-03` còn lại**: **một dock dùng chung** cho cả ST và FBD. Palette
-FBD đã đọc cùng registry và đã có lọc theo cổng đang chọn, nhưng nó vẫn là một
-bề mặt riêng với Quick Library của ST.
+**`WP-03` đã ĐÓNG** 2026-08-26. Dock Quick Library nay phục vụ cả ST và FBD:
+panel không biết cách chèn, mỗi bề mặt tự dựng (ST sinh đoạn mã tại con trỏ, FBD
+dispatch `ADD_NODE` nên vẫn là MỘT bước hoàn tác và không tự nối dây). Mục mà
+một bề mặt chưa nhận được thì hiện ngay lý do CỦA BỀ MẶT ĐÓ thay vì biến mất
+khỏi danh sách.
+
+Còn lại của `WP-03` nằm ở lớp bằng chứng, không phải code: chưa đo trên bo cho
+sáu block mới, `PID` vẫn `REVIEW_REQUIRED` và `PI` vẫn là entry ma bị verify
+script chặn.
 
 **Phần của `WP-01` chưa giao** (đi cùng `WP-06`/`T59-807` vì cùng chạm một cây
 component): CSS grid slot resizable/collapsible, context strip đầy đủ theo mode,
@@ -66,10 +72,11 @@ state machine `EDIT/SIMULATE/LIVE` tách buffer theo mode và dirty guard khi đ
 mode. `T59-802` chỉ đóng phần route/resolver/responsive; ghi rõ ở đây để không
 ai đọc `DONE` thành "toàn bộ WP-01 đã xong".
 
-Gate đang mở: `G-PGM02-01 EDIT_FOUNDATION` đã có **một route** (`WP-01`),
-**một POU tree** (`WP-02`) và **một catalog authority** (`WP-03` — parity
-BE↔registry đo được trên backend thật). Ba điều kiện của gate đã đạt ở lớp
-HOST/LOCAL; `VS-PROG-U13` và evidence target vẫn chưa chạy.
+Gate: `G-PGM02-01 EDIT_FOUNDATION` đã đủ **một route** (`WP-01`), **một POU
+tree** (`WP-02`) và **một catalog authority** (`WP-03` — parity BE↔registry đo
+được trên backend thật) ở lớp HOST/LOCAL. `WP-04` (`T59-805`, ST redesign) là
+task READY tiếp theo. `VS-PROG-U13` và evidence target vẫn chưa chạy, nên gate
+chưa được tuyên PASS ở lớp release.
 
 ## 1. Mục tiêu, phạm vi và invariant
 

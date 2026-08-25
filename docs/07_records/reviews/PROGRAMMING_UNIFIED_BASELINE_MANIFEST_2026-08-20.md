@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.51 |
+| Phiên bản | 1.52 |
 | Trạng thái | **Active — PGM-02 v2.2 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; release NO-GO** |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -50,7 +50,7 @@ chứng minh code, target, HIL hoặc release.
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `0db9d63e43bf3199202be64ed022cc237495d4e60a6ac05fb8184da3508a2d91` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `40fcc8d098060f910a944373badcf9d2874d180ba9b08e37afe9e746fc9da03b` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `2da173c6b499f0cd01dd17d0e29272bf0fb0de93ebe67cfee5894050438b1d41` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `0ea2a61d0f1966cf7a3b30d5f52cbcbec4a50975d724ae32440bfce4ac5bd377` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `0f60bb69c11c08ff73ac6727c5aa2595771ee2e3303c74fcb5355333978b884b` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `9d9969a721db22cf4ac1c05fa6343e8e1ae1efd2164571ba82407496c80afb33` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 17 | `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` | `c7733ac4e6e5604cf3f6414fa78960e2a790e1cf4ef9ad573bdcae33a0664e45` | `413a043748dce3b44d2c5076412de761760ba17a` |
 
@@ -87,6 +87,7 @@ evidence release.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.52 | 2026-08-26 | Re-pin hồ sơ đổi trong đợt `T59-804`: Plan59 (`T59-804 DONE`, `T59-805 READY`) và tài liệu ngữ nghĩa điều khiển (`DDD-CTRL-PROG-001` §7A pin sáu block mới TRƯỚC khi code). **Đánh giá impact:** không đổi Product/SRS/UX/VVP/Trace/Risk; `libraryVersion` lên `rev-a.3` qua đường bump có kiểm soát với lịch sử version→hash append-only; `RELEASE_READY` giữ NO-GO. |
 | 1.51 | 2026-08-25 | Re-pin 4 hồ sơ (`#4`, `#14`, `#15`, `#17`) sau khi `T59-803` đóng một POU Explorer và mô hình định danh. **Đánh giá impact:** `#15` ghi task DONE/READY và ghi chú thực thi; `#14` giữ nguyên `I/T/P/R=N`; `#4` ghi gate `G-PGM02-01` còn thiếu catalog authority; `#17` cập nhật ĐÚNG một dòng As-Built (POU tree nay là `PouExplorer`), không đổi Target/§3.5. Product/SRS/Architecture/DDD/UX/VVP/Risk **không đổi**; `RELEASE_READY` NO-GO. |
 | 1.50 | 2026-08-25 | Re-pin 5 hồ sơ (`#3`, `#4`, `#13`, `#14`, `#15`) sau khi `T59-802` đóng vỏ/route canonical PGM-02 và corrective `F-P59-GHOST-POU-001` được sửa xong source/test. **Đánh giá impact:** `#15` ghi `T59-802 DONE (HOST/LOCAL)`/`T59-803 READY` và corrective; `#3`/`#4` chuyển finding sang CLOSED và giữ `IMPLEMENTATION_CLOSE=PENDING`; `#13` ghi control mới cho `RSK-PROG-011` (vẫn Open, chờ đo trên bo); `#14` giữ nguyên `I/T/P/R=N` cho PGM-02. Product/SRS/Architecture/DDD/UX/VVP **không đổi**. Maturity DDD giữ M3, U13..U15 NOT_RUN, 23/23 risk Open và `RELEASE_READY` NO-GO. |
 | 1.49 | 2026-08-24 | Re-pin 17-file authority set sau `AUTH-PROG-2026-08-24-05`: exact Candidate `413a043` được Owner + Architect duyệt, `T59-801=DONE`, `T59-802=READY`, ba IMPLEMENT_READY GO nhưng scheduler giữ R1→R2→R3. Maturity DDD giữ M3, U13..U15 NOT_RUN, PGM-02 I/T/P/R=N, 23/23 risk Open và release NO-GO. Ghost-POU chỉ RESOLVED ở mức quyết định; corrective source/test vẫn PENDING. |
