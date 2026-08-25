@@ -10,6 +10,8 @@
  */
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -38,7 +40,7 @@ StPackageInput minimal_input()
     StPackageInput input;
     input.compiler_profile = st_profile_generated::kProfileCode;
     input.target_abi = st_profile_generated::kTargetAbi;
-    input.programs.push_back({"Main", fake_ir_blob(0xA1)});
+    input.programs.push_back({"Main", fake_ir_blob(0xA1), 1000u, 0u});
     StPouSignature signature;
     signature.name = "Main";
     signature.kind = StPouKind::PROGRAM;
@@ -69,6 +71,8 @@ TEST(StPackageV2, WriterAndLoaderRoundTripMinimalPackage)
     EXPECT_EQ(view.header.layout_version, st_pkg::kLayoutVersion);
     ASSERT_EQ(view.program_names.size(), 1U);
     EXPECT_EQ(view.program_names[0], "Main");
+    ASSERT_EQ(view.program_periods_ms.size(), 1U);
+    EXPECT_EQ(view.program_periods_ms[0], 1000U);
     EXPECT_EQ(view.pou_names.size(), 1U);
 }
 
@@ -86,7 +90,7 @@ TEST(StPackageV2, ByteOutputIsStableForTheSameInput)
 TEST(StPackageV2, MultiProgramPackageKeepsProgramOrderAndFlags)
 {
     StPackageInput input = minimal_input();
-    input.programs.push_back({"Aux", fake_ir_blob(0xB2)});
+    input.programs.push_back({"Aux", fake_ir_blob(0xB2), 5000u, 0u});
     StPouSignature aux;
     aux.name = "Aux";
     aux.kind = StPouKind::PROGRAM;
@@ -215,7 +219,8 @@ TEST(StPackageV2, WriterRefusesInputBeyondProfileCaps)
 
     input = minimal_input();
     for (std::size_t index = 0; index < st_profile_generated::kMaxProgramsTotal; ++index)
-        input.programs.push_back({"P" + std::to_string(index), fake_ir_blob(0xC3)});
+        input.programs.push_back({"P" + std::to_string(index), fake_ir_blob(0xC3),
+                                  1000u, 0u});
     EXPECT_FALSE(WritePackageV2(input, &bytes, &error));
     EXPECT_NE(error.find("Program"), std::string::npos) << error;
 }
@@ -230,6 +235,68 @@ TEST(StPackageV2, WriterRefusesProgramWithoutIr)
     std::string error;
     EXPECT_FALSE(WritePackageV2(input, &bytes, &error));
     EXPECT_TRUE(bytes.empty());
+}
+
+TEST(StPackageV2, WriterRefusesProgramWithoutScheduleAndWritesNoOutput)
+{
+    StPackageInput input = minimal_input();
+    input.programs[0].period_ms = 0;
+    std::vector<uint8_t> bytes = {0xAAu, 0x55u};
+    std::string error;
+    EXPECT_FALSE(WritePackageV2(input, &bytes, &error));
+    EXPECT_TRUE(bytes.empty());
+    EXPECT_NE(error.find("chu kỳ"), std::string::npos) << error;
+}
+
+TEST(StPackageV2, WriterAndLoaderKeepSingleProgramSchedule)
+{
+    for (uint32_t period_ms : {5000u, 30000u}) {
+        StPackageInput input = minimal_input();
+        input.programs[0].period_ms = period_ms;
+        std::vector<uint8_t> bytes;
+        std::string error;
+        ASSERT_TRUE(WritePackageV2(input, &bytes, &error)) << error;
+        StPackageView view;
+        const char* code = nullptr;
+        ASSERT_TRUE(load(bytes, &view, &code)) << (code ? code : "");
+        EXPECT_EQ(view.header.schema_version, 2U);
+        ASSERT_EQ(view.program_periods_ms.size(), 1U);
+        EXPECT_EQ(view.program_periods_ms[0], period_ms);
+    }
+}
+
+TEST(StPackageV2, ReaderStillAcceptsLegacyZeroProgramSchedule)
+{
+    std::vector<uint8_t> bytes;
+    std::string error;
+    ASSERT_TRUE(WritePackageV2(minimal_input(), &bytes, &error)) << error;
+
+    /* Writer sắp section canonical nên PROGRAM_TABLE là entry thứ hai. Sửa đúng
+     * trường periodMs của record đầu, rồi băm lại để phép thử đi qua lớp hash và
+     * chứng minh reader tương thích package v2 legacy có period=0. */
+    const std::size_t entry = st_pkg::kHeaderSize + st_pkg::kSectionEntrySize;
+    ASSERT_LT(entry + st_pkg::kSectionEntrySize, bytes.size());
+    const uint16_t type = static_cast<uint16_t>(bytes[entry]) |
+                          (static_cast<uint16_t>(bytes[entry + 1]) << 8);
+    ASSERT_EQ(type, st_pkg::SEC_PROGRAM_TABLE);
+    const uint32_t payload = static_cast<uint32_t>(bytes[entry + 4]) |
+                             (static_cast<uint32_t>(bytes[entry + 5]) << 8) |
+                             (static_cast<uint32_t>(bytes[entry + 6]) << 16) |
+                             (static_cast<uint32_t>(bytes[entry + 7]) << 24);
+    ASSERT_LT(static_cast<std::size_t>(payload) + 2U, bytes.size());
+    const uint16_t name_bytes = static_cast<uint16_t>(bytes[payload]) |
+                                (static_cast<uint16_t>(bytes[payload + 1]) << 8);
+    const std::size_t period = static_cast<std::size_t>(payload) + 2U + name_bytes;
+    ASSERT_LE(period + 4U, bytes.size());
+    std::fill(bytes.begin() + static_cast<std::ptrdiff_t>(period),
+              bytes.begin() + static_cast<std::ptrdiff_t>(period + 4U), 0u);
+    rehash(&bytes);
+
+    StPackageView view;
+    const char* code = nullptr;
+    ASSERT_TRUE(load(bytes, &view, &code)) << (code ? code : "");
+    ASSERT_EQ(view.program_periods_ms.size(), 1U);
+    EXPECT_EQ(view.program_periods_ms[0], 0U);
 }
 
 /* ---- Ranh giới tin cậy: mọi trường trong file là dữ liệu bên ngoài ---- */
@@ -349,7 +416,7 @@ TEST(StPackageV2, RejectsDuplicateOutputOwnerAndDuplicatePublisher)
     /* Hai bất biến cấp package mà loader phải tự kiểm, vì artifact có thể tới từ
      * nơi khác chứ không chỉ từ writer trong repo này. */
     StPackageInput owner_conflict = minimal_input();
-    owner_conflict.programs.push_back({"Aux", fake_ir_blob(0xD4)});
+    owner_conflict.programs.push_back({"Aux", fake_ir_blob(0xD4), 5000u, 0u});
     owner_conflict.bindings.push_back({"Main", 1, "AO-1", true});
     owner_conflict.bindings.push_back({"Aux", 1, "AO-1", true});
     std::vector<uint8_t> bytes;
