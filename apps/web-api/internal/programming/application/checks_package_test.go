@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -87,7 +88,7 @@ func TestSingleProgramWithDistinctObjectAndRuntimeIdentityForcesV2(t *testing.T)
 	programID := "82222222-2222-4222-8222-222222222222"
 	artifactBytes := []byte("artifact-distinct-runtime-identity")
 	digest := sha256.Sum256(artifactBytes)
-	stored, packaged, err := service.packageArtifact(context.Background(), programmingstore.Check{},
+	stored, packaged, err := service.packageArtifact(context.Background(), programmingstore.Check{}, 2,
 		[]programmingcompiler.Input{{SourceID: objectID}},
 		[]programmingcompiler.Result{{Artifact: artifactBytes, ArtifactSHA256: digest}},
 		[]packageProgramArtifact{{ProgramID: programID}},
@@ -102,6 +103,140 @@ func TestSingleProgramWithDistinctObjectAndRuntimeIdentityForcesV2(t *testing.T)
 	}
 	if packager.programs[0].Name != programID || packager.programs[0].PeriodMs != 5000 {
 		t.Fatalf("runtime identity/topology sai: %+v", packager.programs[0])
+	}
+}
+
+func TestSchemaV2SingleProgramAlwaysPackagesSealedPeriod(t *testing.T) {
+	for _, periodMs := range []int64{5000, 30000} {
+		t.Run(fmt.Sprintf("period_%d_ms", periodMs), func(t *testing.T) {
+			artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			packager := &fakePackager{}
+			service := &CheckService{packager: packager, artifacts: artifacts,
+				newID: func() string { return "89999999-9999-4999-8999-999999999999" }}
+			programID := "81111111-1111-4111-8111-111111111111"
+			artifactBytes := []byte("artifact-v2-single-program")
+			digest := sha256.Sum256(artifactBytes)
+			stored, packaged, err := service.packageArtifact(context.Background(), programmingstore.Check{}, 2,
+				[]programmingcompiler.Input{{SourceID: programID}},
+				[]programmingcompiler.Result{{Artifact: artifactBytes, ArtifactSHA256: digest,
+					ArtifactSchemaVersion: 1}},
+				[]packageProgramArtifact{{ProgramID: programID}},
+				[]packageProgramTopology{{ObjectID: programID, ProgramID: programID, PeriodMs: periodMs,
+					BudgetUs: programBudgetUs(periodMs)}}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if packaged == nil || packaged.SchemaVersion != 2 || stored.SchemaVersion != 2 || packager.calls != 1 {
+				t.Fatalf("Revision v2 một Program không tạo container v2: stored=%+v packaged=%+v calls=%d",
+					stored, packaged, packager.calls)
+			}
+			if len(packager.programs) != 1 || packager.programs[0].PeriodMs != periodMs {
+				t.Fatalf("periodMs không tới writer v2: %+v", packager.programs)
+			}
+		})
+	}
+}
+
+func TestSchemaV1SingleProgramPreservesHistoricalArtifactV1(t *testing.T) {
+	packager := &fakePackager{}
+	service := &CheckService{packager: packager,
+		newID: func() string { return "89999999-9999-4999-8999-999999999999" }}
+	programID := "81111111-1111-4111-8111-111111111111"
+	artifactBytes := []byte("historical-artifact-v1")
+	digest := sha256.Sum256(artifactBytes)
+	stored, packaged, err := service.packageArtifact(context.Background(), programmingstore.Check{}, 1,
+		[]programmingcompiler.Input{{SourceID: programID}},
+		[]programmingcompiler.Result{{Artifact: artifactBytes, ArtifactSHA256: digest,
+			ArtifactSchemaVersion: 1}},
+		[]packageProgramArtifact{{ProgramID: programID, RelativePath: "legacy/artifact.mkir"}},
+		[]packageProgramTopology{{ObjectID: programID, ProgramID: programID, PeriodMs: 5000,
+			BudgetUs: programBudgetUs(5000)}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if packaged != nil || stored.SchemaVersion != 1 || stored.RelativePath != "legacy/artifact.mkir" || packager.calls != 0 {
+		t.Fatalf("artifact v1 lịch sử không được passthrough nguyên trạng: stored=%+v packaged=%+v calls=%d",
+			stored, packaged, packager.calls)
+	}
+}
+
+func createLegacySchemaV1CheckRevision(t *testing.T, projects *ProjectService,
+	store *programmingstore.Store) (string, string) {
+	t.Helper()
+	created, err := projects.CreateProject(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		CreateProjectCommand{SchemaVersion: "1.0", Name: "Legacy schema v1",
+			IdempotencyKey: "31100000-0000-4000-8000-000000000001", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectID := created.Resource["projectId"].(string)
+	draftID := created.Resource["draftRevisionId"].(string)
+	generation, err := ParseDraftETag(created.ETag, draftID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	programID := "86666666-6666-4666-8666-666666666666"
+	taskID := "85555555-5555-4555-8555-555555555555"
+	revisionID := "83333333-3333-4333-8333-333333333333"
+	programPayload, _ := json.Marshal(map[string]any{
+		"programId": programID, "name": "LEGACY", "kind": "PROGRAM", "language": "ST",
+		"document": "PROGRAM LEGACY\nEND_PROGRAM\n",
+	})
+	taskPayload, _ := json.Marshal(map[string]any{
+		"taskId": taskID, "periodMs": 5000, "programOrder": []string{programID},
+	})
+	_, err = store.CreateRevision(context.Background(), programmingstore.CreateRevisionParams{
+		RevisionID: revisionID, ProjectID: projectID, DraftID: draftID, ExpectedDraftETag: generation,
+		ManifestJSON: []byte(`{"schemaVersion":1}`), DocumentSchemaVersion: 1, ProgramCount: 1,
+		Objects: []programmingstore.RevisionObjectInput{
+			{ObjectID: programID, Kind: "PROGRAM", PayloadJSON: programPayload},
+			{ObjectID: taskID, Kind: "TASK", PayloadJSON: taskPayload},
+		},
+		ActorID: testActorID, Role: "admin", AuditID: "84444444-4444-4444-8444-444444444444",
+		CorrelationID: testCorrelationID, At: time.Date(2026, 8, 11, 9, 30, 0, 0, time.UTC),
+		IdempotencyKeySHA256: sha256.Sum256([]byte("legacy-schema-v1-revision-key")),
+		RequestSHA256:        sha256.Sum256([]byte("legacy-schema-v1-revision-request")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return revisionID, programID
+}
+
+func TestProcessNextPreservesLegacySchemaV1TaskPeriodAndArtifact(t *testing.T) {
+	projects, store := openProjectService(t)
+	revisionID, programID := createLegacySchemaV1CheckRevision(t, projects, store)
+	runner := &perProgramRunner{failed: map[string]bool{}}
+	checks := newCheckServiceForPackage(t, store, runner)
+	packager := &fakePackager{}
+	checks.packager = packager
+
+	view := runCheck(t, checks, revisionID, "31100000-0000-4000-8000-000000000002")
+	if view.State != "PASSED" || view.Artifact == nil {
+		t.Fatalf("Check lại Revision v1 thất bại: %+v", view)
+	}
+	stored, err := store.GetCheck(context.Background(), view.CheckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Artifact == nil || stored.Artifact.SchemaVersion != 1 || packager.calls != 0 {
+		t.Fatalf("Revision v1 không giữ artifact lịch sử: artifact=%+v packager=%d",
+			stored.Artifact, packager.calls)
+	}
+	var result struct {
+		Manifest struct {
+			Topology []packageProgramTopology `json:"topology"`
+		} `json:"manifest"`
+	}
+	if err := json.Unmarshal(stored.ResultJSON, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Manifest.Topology) != 1 || result.Manifest.Topology[0].ProgramID != programID ||
+		result.Manifest.Topology[0].PeriodMs != 5000 {
+		t.Fatalf("ProcessNext không giữ TASK.periodMs v1: %+v", result.Manifest.Topology)
 	}
 }
 
@@ -140,7 +275,7 @@ func TestSingleProgramPublishedSignalForcesV2AndKeepsProgramIdentity(t *testing.
 	programID := "81111111-1111-4111-8111-111111111111"
 	artifactBytes := []byte("artifact-single-with-signal")
 	digest := sha256.Sum256(artifactBytes)
-	stored, packaged, err := service.packageArtifact(context.Background(), programmingstore.Check{},
+	stored, packaged, err := service.packageArtifact(context.Background(), programmingstore.Check{}, 2,
 		[]programmingcompiler.Input{{SourceID: programID}},
 		[]programmingcompiler.Result{{Artifact: artifactBytes, ArtifactSHA256: digest}},
 		[]packageProgramArtifact{{ProgramID: programID}},
@@ -164,11 +299,11 @@ func TestSingleProgramPublishedSignalForcesV2AndKeepsProgramIdentity(t *testing.
 
 // packageRevisionFixture seal một Revision có `count` Program, đi qua đúng đường
 // sản phẩm (SaveDraft + SealRevision) chứ không dựng object bằng tay.
-func packageRevisionFixture(t *testing.T, projects *ProjectService, count int, brokenIndexes ...int) (string, []string) {
+func packageRevisionFixture(t *testing.T, projects *ProjectService, count int, unscheduledIndexes ...int) (string, []string) {
 	t.Helper()
-	broken := make(map[int]bool, len(brokenIndexes))
-	for _, index := range brokenIndexes {
-		broken[index] = true
+	unscheduled := make(map[int]bool, len(unscheduledIndexes))
+	for _, index := range unscheduledIndexes {
+		unscheduled[index] = true
 	}
 	created, err := projects.CreateProject(context.Background(), Actor{ID: testActorID, Role: "admin"},
 		CreateProjectCommand{SchemaVersion: "1.0", Name: "Package check", IdempotencyKey: "31000000-0000-4000-8000-000000000001",
@@ -192,9 +327,10 @@ func packageRevisionFixture(t *testing.T, projects *ProjectService, count int, b
 		operations = append(operations, op(map[string]any{"op": "upsertObject", "object": map[string]any{
 			"objectId": id, "kind": "PROGRAM", "name": fmt.Sprintf("PRG_%02d", index), "language": "ST",
 			"source": fmt.Sprintf("PROGRAM PRG_%02d\nEND_PROGRAM\n", index)}}))
-		operations = append(operations, op(map[string]any{"op": "upsertProgram", "program": map[string]any{
-			"programId": id, "objectId": id, "periodMs": 1000}}))
-		_ = broken
+		if !unscheduled[index] {
+			operations = append(operations, op(map[string]any{"op": "upsertProgram", "program": map[string]any{
+				"programId": id, "objectId": id, "periodMs": 1000}}))
+		}
 	}
 	saved, err := projects.SaveDraft(context.Background(), Actor{ID: testActorID, Role: "admin"},
 		SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID, Operations: operations,
@@ -374,6 +510,71 @@ func TestCheckNeverTouchesActiveState(t *testing.T) {
 		case "COMMISSION", "RESTORE", "PACKAGE_ACTIVATE", "RETAIN_RESET":
 			t.Fatalf("Check sinh hành động triển khai: %s", record.Action)
 		}
+	}
+}
+
+// F-P59-GHOST-POU-001: Draft/Revision được giữ PROGRAM POU chưa schedule, nhưng
+// Check phải dừng trước compiler/packager bằng mã ổn định và không sinh bất kỳ
+// hành động nào có thể đổi Active/LKG.
+func TestCheckRejectsUnscheduledProgramBeforeCompilerAndPackager(t *testing.T) {
+	projects, store := openProjectService(t)
+	revisionID, ids := packageRevisionFixture(t, projects, 2, 1)
+	revision, err := store.GetRevision(context.Background(), revisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.GetProject(context.Background(), revision.Revision.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &perProgramRunner{failed: map[string]bool{}}
+	checks := newCheckServiceForPackage(t, store, runner)
+	packager := &fakePackager{}
+	checks.packager = packager
+
+	view := runCheck(t, checks, revisionID, "32000000-0000-4000-8000-000000000105")
+	if view.State != "FAILED" || view.Artifact != nil || len(view.Diagnostics) != 1 {
+		t.Fatalf("Check ghost POU=%+v", view)
+	}
+	diagnostic := view.Diagnostics[0]
+	if diagnostic.Code != "PRG-ERR-CHECK-001" || diagnostic.DetailCode != "ST-POU-005" {
+		t.Fatalf("diagnostic=%+v", diagnostic)
+	}
+	if got, _ := diagnostic.Location["programId"].(string); got != ids[1] {
+		t.Fatalf("diagnostic trỏ %q; muốn %q", got, ids[1])
+	}
+	if len(runner.calls) != 0 || packager.calls != 0 {
+		t.Fatalf("đã gọi compiler/packager: compiler=%v packager=%d", runner.calls, packager.calls)
+	}
+	after, err := store.GetProject(context.Background(), revision.Revision.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Draft.ETag != before.Draft.ETag || after.Draft.ContentSHA256 != before.Draft.ContentSHA256 {
+		t.Fatalf("Check hỏng đã đổi Draft: etag %d -> %d", before.Draft.ETag, after.Draft.ETag)
+	}
+	records, err := store.ListAuditRecords(context.Background(), 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range records {
+		switch record.Action {
+		case "COMMISSION", "RESTORE", "PACKAGE_ACTIVATE", "RETAIN_RESET":
+			t.Fatalf("Check ghost POU sinh hành động triển khai: %s", record.Action)
+		}
+	}
+}
+
+func TestPackageArtifactRejectsUnscheduledTopology(t *testing.T) {
+	service := &CheckService{}
+	objectID := "84444444-4444-4444-8444-444444444444"
+	_, _, err := service.packageArtifact(context.Background(), programmingstore.Check{}, 2,
+		[]programmingcompiler.Input{{SourceID: objectID}},
+		[]programmingcompiler.Result{{Artifact: []byte("IR")}},
+		[]packageProgramArtifact{{ProgramID: objectID}},
+		[]packageProgramTopology{{ObjectID: objectID, ProgramID: objectID, PeriodMs: 0}}, nil)
+	if err == nil || !strings.Contains(err.Error(), "ST-POU-005") {
+		t.Fatalf("package không fail-closed bằng ST-POU-005: %v", err)
 	}
 }
 

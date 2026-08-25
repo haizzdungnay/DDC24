@@ -26,7 +26,7 @@ func validManifestInput(t *testing.T) packageManifestInput {
 		signalView(manifestSignalID, "SUPPLY_TEMP", "REAL", manifestProgramID,
 			"USE_FALLBACK", 5000, func() *float64 { value := 21.5; return &value }()),
 	}
-	topology, budget := packageTopology(objects)
+	topology, budget := packageTopology(2, objects)
 	return packageManifestInput{
 		Artifacts: []packageProgramArtifact{{
 			ProgramID: manifestProgramID, SHA256: strings.Repeat("1", 64), ByteSize: 128,
