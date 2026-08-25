@@ -35,7 +35,7 @@ không nói CI, target, HIL hay release.
 | `WP-00` | `T59-801` | **DONE** 2026-08-24 | Reconcile authority, formal DDD/contract/ADR-053, exact pin `413a043` | `AUTH-PROG-2026-08-24-05`; manifest 17/17 |
 | `WP-01` | `T59-802` | **DONE (một phần scope)** 2026-08-25 | Route canonical + resolver + legacy redirect + mobile `<768` read-only, sau cờ `programsWorkspaceV2` | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-802-shell-route.md) |
 | `WP-02` | `T59-803` | **DONE** 2026-08-25 | Một POU Explorer, identity `objectId`↔`programId`, vòng đời POU typed cho ba kind | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-803-pou-explorer.md) |
-| `WP-03` | `T59-804` | READY | — | — |
+| `WP-03` | `T59-804` | **PARTIAL** 2026-08-26 | Catalog dùng chung (BE authority) + Quick Library ST + Recent/Favorites + parity BE↔registry trên backend thật | [evidence 2026-08-26](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md) |
 | `WP-04` | `T59-805` | ORDERED | — | — |
 | `WP-05` | `T59-806` | ORDERED | — | — |
 | `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | ORDERED | — | — |
@@ -47,15 +47,25 @@ không nói CI, target, HIL hay release.
 | `WP-12` | `T59-809` / `T59-813` / `T59-817` | ORDERED | — | — |
 | `WP-13` | `T59-809` / `T59-813` / `T59-817` | ORDERED | — | — |
 
+**Phần của `WP-03` chưa giao** (mỗi phần cần một hợp đồng hoặc năng lực chưa
+có, không phải chỉ thiếu thời gian): chèn từ Quick Library vào **canvas FBD**
+(palette FBD hiện đã đọc cùng registry nên không có danh sách thứ hai, nhưng
+dock dùng chung thì chưa); **compatible filter theo port đang chọn** trong FBD;
+**typed metadata public trong OpenAPI** (`interface` vẫn generic); và **bổ sung
+block** `TP`/`CTU`/`CTD`/`SCALE`/`Deadband`/`Hysteresis` — compiler hiện chỉ có
+`TON`/`TOF`/`R_TRIG`/`F_TRIG`/`PID`, và plan đã cấm publish capability trước khi
+có compiler/runtime equivalence tests. Catalog vì vậy khai đúng thứ chạy được.
+
 **Phần của `WP-01` chưa giao** (đi cùng `WP-06`/`T59-807` vì cùng chạm một cây
 component): CSS grid slot resizable/collapsible, context strip đầy đủ theo mode,
 state machine `EDIT/SIMULATE/LIVE` tách buffer theo mode và dirty guard khi đổi
 mode. `T59-802` chỉ đóng phần route/resolver/responsive; ghi rõ ở đây để không
 ai đọc `DONE` thành "toàn bộ WP-01 đã xong".
 
-Gate đang mở: `G-PGM02-01 EDIT_FOUNDATION` đã có **một route** (`WP-01`) và
-**một POU tree** (`WP-02`); còn thiếu **một catalog authority** (`WP-03`) trước
-khi gate này PASS.
+Gate đang mở: `G-PGM02-01 EDIT_FOUNDATION` đã có **một route** (`WP-01`),
+**một POU tree** (`WP-02`) và **một catalog authority** (`WP-03` — parity
+BE↔registry đo được trên backend thật). Ba điều kiện của gate đã đạt ở lớp
+HOST/LOCAL; `VS-PROG-U13` và evidence target vẫn chưa chạy.
 
 ## 1. Mục tiêu, phạm vi và invariant
 

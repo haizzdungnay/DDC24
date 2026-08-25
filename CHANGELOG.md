@@ -8,6 +8,45 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — catalog dùng chung và Quick Library `T59-804` phần 1 (2026-08-26)
+
+- **Added — Quick Library cho ST đọc ĐÚNG catalog của PGM-04 (`WP-03`).** Panel
+  mới trong editor ST lấy toàn bộ mục từ `GET /programming/libraries` — cùng
+  authority mà Control Library dùng — chứ không có danh sách block riêng. Có tìm
+  kiếm, lọc theo nhóm, Yêu thích và Gần đây. Catalog được giữ **lazy**: mở tab
+  Chương trình không tạo request nào, chỉ khi mở panel mới fetch.
+
+- **Added — parity catalog đo được giữa hai bề mặt.** `catalogParity` so tập
+  `entryId` SYSTEM của backend với registry sinh sẵn ở FE; lane real-backend
+  khẳng định `onlyInBackend=[]`, `onlyInGenerated=[]`, `matched=40`. Đây là phép
+  kiểm liên tục cho đúng lớp lỗi đã từng xảy ra: palette FBD chào
+  SCALE/DEADBAND/CTU/PI mà compiler không hề hỗ trợ.
+
+- **Added — mục chưa dùng được nói thật thay vì biến mất.** `REVIEW_REQUIRED`
+  (PID) và `SIGNATURE_UNAVAILABLE` (backend trả mục nhưng chữ ký không đọc
+  được — không đoán port) đều hiện ra kèm lý do, nút chèn bị vô hiệu. Giấu
+  chúng đi sẽ biến "chưa hỗ trợ" thành "không tồn tại".
+
+- **Fixed — bấm một ngôi sao trong thư viện có thể xoá khung nhìn đã lưu.** Túi
+  `/me/preferences` dùng chung: `pushSavedViews` của Monitor/Trends `PUT` cả
+  túi. Quick Library vì vậy đọc túi hiện có rồi **merge** đúng namespace
+  `programmingLibrary` (trần 24 Yêu thích / 12 Gần đây, chỉ lưu `entryId`,
+  không chép chữ ký). Recent chỉ ghi SAU khi chèn thành công.
+
+- **Changed — roadmap proposal.** `WP-03` ghi **PARTIAL** kèm bốn phần chưa
+  giao: chèn vào canvas FBD từ dock dùng chung, compatible filter theo port đang
+  chọn, typed metadata public trong OpenAPI, và bổ sung block
+  `TP`/`CTU`/`CTD`/`SCALE`/`Deadband`/`Hysteresis` — compiler hiện chỉ có
+  `TON`/`TOF`/`R_TRIG`/`F_TRIG`/`PID` và plan cấm publish capability trước khi
+  có compiler/runtime equivalence tests.
+
+- **Verification (đo mới).** FE **143 file / 1563 test PASS**, lint và build
+  PASS, chunk Programming **103,54 KiB gzip**. E2E mock **31 PASS / 5 skip / 0
+  fail**; E2E real-backend **1/1 PASS** với `HTTP>=500=0`, `requestfailed=0`,
+  `console.error=0`. Chi tiết:
+  [`2026-08-26-pgm02-t59-804-quick-library.md`](docs/07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md).
+
+
 ### PGM-02 R1 — một POU Explorer và mô hình định danh `T59-803` (2026-08-25)
 
 - **Changed — chỉ còn MỘT cây POU trong DOM (`WP-02`).** Trước lát này có hai

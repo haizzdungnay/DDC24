@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AlignLeft, Command, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
+import { AlignLeft, Command, Library, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
@@ -34,6 +34,7 @@ import {
 import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeValueOverlay'
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
+import { QuickLibraryHost } from '../library/QuickLibraryPanel'
 import { SelectionQuickActions } from './SelectionQuickActions'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
 
@@ -316,6 +317,7 @@ export function ProgramsTab({
             onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
             runtimeOverlay={runtimeOverlayByProgramId?.[selected.programId]}
             formatRequest={formatRequest?.programId === selected.programId ? formatRequest : undefined}
+            projectId={document.project.projectId}
           />
         ) : (
           <FbdEditorPane
@@ -368,6 +370,7 @@ export function SourceEditor({
   onEnsurePointCatalogLoaded,
   runtimeOverlay,
   formatRequest,
+  projectId,
 }: {
   program: ProgrammingProgram
   source: string
@@ -377,6 +380,9 @@ export function SourceEditor({
   focusDiagnostic: ProgrammingDiagnostic | null
   onChange: (source: string) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
+  /** `T59-804`: Quick Library đọc catalog theo Project để thấy cả PROJECT entry,
+   *  không chỉ SYSTEM. `undefined` vẫn hợp lệ — khi đó chỉ có SYSTEM. */
+  projectId?: string
   /** ST Editor Quick Control đề xuất #3 (Panel chèn nhanh Point/Variable) —
    *  trạng thái/cache của `useLazyProgrammingPointCatalog`, sống ở
    *  `ProgramsTab` (cha) để không refetch khi đổi Program đang mở. */
@@ -417,6 +423,7 @@ export function SourceEditor({
    * hiện tại — `null` khi con trỏ chỉ là một điểm (không hiện thanh lệnh). */
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null)
   const [insertPanelOpen, setInsertPanelOpen] = useState(false)
+  const [libraryPanelOpen, setLibraryPanelOpen] = useState(false)
   /* T59-506: một lịch sử riêng cho MỖI POU đang mount. Ref cho phép mọi đường
    * edit (gõ thường/autocomplete/Format/Replace/quick action) ghi snapshot trước
    * khi callback cha echo lại prop `source`; state rỗng chỉ dùng để render lại
@@ -773,6 +780,16 @@ export function SourceEditor({
               </Button>
               <Button
                 size="sm"
+                variant="ghost"
+                icon={<Library className="h-4 w-4" aria-hidden="true" />}
+                aria-pressed={libraryPanelOpen}
+                title={pick('Thư viện nhanh — cùng catalog với PGM-04', 'Quick library — same catalog as PGM-04')}
+                onClick={() => setLibraryPanelOpen((open) => !open)}
+              >
+                {pick('Thư viện', 'Library')}
+              </Button>
+              <Button
+                size="sm"
                 variant="secondary"
                 icon={<AlignLeft className="h-4 w-4" aria-hidden="true" />}
                 title={pick('Định dạng lại thụt lề', 'Reformat indentation')}
@@ -1051,6 +1068,17 @@ export function SourceEditor({
             )
           })()}
         </div>
+        {libraryPanelOpen && canEdit && (
+          <QuickLibraryHost
+            projectId={projectId}
+            language="ST"
+            onInsert={(snippet) => {
+              handleInsertAtCursor(snippet)
+              return true
+            }}
+            onClose={() => setLibraryPanelOpen(false)}
+          />
+        )}
         {insertPanelOpen && canEdit && (
           <InsertPointVariablePanel
             variables={symbols}

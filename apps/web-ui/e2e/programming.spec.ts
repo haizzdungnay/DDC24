@@ -172,6 +172,40 @@ async function installProgrammingMocks(page: Page, state: MockState) {
         task: { taskId: 'Control_Main', periodMs: 1000, budgetMs: 200, state: 'RUNNING', runCount: 120, missedReleaseCount: 0, lastExecNs: 120000, maxExecNs: 310000, overrunCount: 1, consecutiveOverruns: 0 }
       })
     }
+    if (method === 'GET' && path === '/libraries') {
+      /* `T59-804`: shape đúng như `GET /programming/libraries` thật — chữ ký đi
+         trong `interface`, `featureState` nói thẳng mục nào chờ review. */
+      return json(route, {
+        items: [
+          {
+            scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
+            entryId: 'LIMIT', kind: 'FUNCTION', name: 'LIMIT', featureState: 'AVAILABLE',
+            contentSha256: 'a'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0,
+            interface: JSON.stringify({
+              category: 'math', labelVi: 'Giới hạn (LIMIT)', labelEn: 'Limit', allowedTypes: ['REAL'],
+              ports: [
+                { name: 'MN', direction: 'INPUT', dataType: 'REAL' },
+                { name: 'IN', direction: 'INPUT', dataType: 'REAL' },
+                { name: 'MX', direction: 'INPUT', dataType: 'REAL' },
+                { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }
+              ]
+            })
+          },
+          {
+            scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
+            entryId: 'PID', kind: 'FUNCTION_BLOCK', name: 'PID', featureState: 'REVIEW_REQUIRED',
+            contentSha256: 'b'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 64,
+            interface: JSON.stringify({
+              category: 'control', labelVi: 'PID', labelEn: 'PID', allowedTypes: [],
+              ports: [
+                { name: 'PV', direction: 'INPUT', dataType: 'REAL' },
+                { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }
+              ]
+            })
+          }
+        ]
+      })
+    }
     if (method === 'GET' && path === '/projects') {
       return json(route, { items: [{ projectId: PROJECT_ID, name: 'AHU-01', etag: draftETag(state), activeRevisionId: ACTIVE_REVISION_ID, draftRevisionId: state.draft.project.projectId, updatedAt: new Date().toISOString() }] })
     }
@@ -1078,6 +1112,47 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     expect(new URL(page.url()).searchParams.get('pou')).toBe(POU_OBJECT_ID)
 
     expectNoBrowserFailures(failures, 'một cây POU')
+  })
+
+  test('Thư viện nhanh dùng CHUNG catalog và nói thật về mục chưa dùng được', async ({ page }, testInfo) => {
+    test.skip(
+      (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      'chèn khối là mutation; màn hẹp read-only có case riêng'
+    )
+    const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    const failures = observeBrowserFailures(page)
+    const libraryRequests: string[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (url.pathname.endsWith('/programming/libraries')) libraryRequests.push(url.pathname)
+    })
+    await login(page)
+
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
+    await expect(page.getByLabel(/Mã nguồn ST/)).toBeVisible()
+    // Mở tab Chương trình KHÔNG được tạo traffic catalog; panel mới là thứ fetch.
+    expect(libraryRequests, 'catalog phải LAZY').toEqual([])
+
+    await page.getByRole('button', { name: /Thư viện/ }).click()
+    const panel = page.getByRole('dialog', { name: 'Thư viện nhanh' })
+    await expect(panel).toBeVisible()
+    await expect.poll(() => libraryRequests.length).toBeGreaterThan(0)
+
+    // Mục chờ review hiện ra kèm lý do và KHÔNG bấm được — giấu nó đi sẽ biến
+    // "chưa hỗ trợ" thành "không tồn tại".
+    await expect(panel.getByRole('button', { name: 'Chèn PID' })).toBeDisabled()
+    await expect(panel.getByText('Chờ review sản phẩm')).toBeVisible()
+
+    // Chèn một FUNCTION: đúng lời gọi của catalog, và là MỘT bước hoàn tác.
+    const source = page.getByLabel(/Mã nguồn ST/)
+    const before = await source.inputValue()
+    await panel.getByRole('button', { name: 'Chèn LIMIT' }).click()
+    await expect(source).toHaveValue(/OUT := LIMIT\(MN, IN, MX\);/)
+    await source.press('Control+z')
+    await expect(source).toHaveValue(before)
+
+    expectNoBrowserFailures(failures, 'thư viện nhanh')
   })
 
   test('bàn phím đi hết vỏ mới: Tab tới cây POU và Enter chọn đúng POU', async ({ page }, testInfo) => {
