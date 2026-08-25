@@ -105,7 +105,7 @@ std::vector<uint8_t> package_of(const std::vector<std::string>& names,
     int value = 1;
     for (std::size_t index = 0; index < names.size(); ++index) {
         const std::string& name = names[index];
-        const uint32_t period = index < periods_ms.size() ? periods_ms[index] : 0u;
+        const uint32_t period = index < periods_ms.size() ? periods_ms[index] : 1000u;
         input.programs.push_back({name, program_ir(name, value++), period, 0u});
         StPouSignature signature;
         signature.name = name;

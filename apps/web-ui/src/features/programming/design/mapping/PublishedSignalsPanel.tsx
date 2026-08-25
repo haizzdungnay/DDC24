@@ -48,15 +48,17 @@ import type {
 export function PublishedSignalsPanel({
   draft,
   saving,
-  onSave
+  onSave,
+  forceReadOnly = false
 }: {
   draft: ProgrammingDraftDocument
   saving: boolean
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
+  forceReadOnly?: boolean
 }) {
   const { pick } = useI18n()
   const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin')
+  const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
 
   const supported = isDraftV2(draft)
   const signals = useMemo(() => (supported ? draftSignals(draft) : []), [draft, supported])
@@ -266,7 +268,16 @@ function SignalTable({
     return <p className="text-sm text-[var(--c-text-dim)]">{pick('Chưa khai Published Signal nào.', 'No published signal declared yet.')}</p>
   }
   return (
-    <div className="overflow-x-auto">
+    /* Vùng cuộn ngang phải TỰ nhận tiêu điểm: người dùng bàn phím không có
+       cách nào khác để cuộn nó, và axe `scrollable-region-focusable` báo đúng
+       chỗ này ở lane real-backend — nơi Point Catalog có dữ liệu thật nên bảng
+       mới thực sự tràn. Lane mock xanh vì bảng rỗng, không vì bảng đúng. */
+    <div
+      className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--c-accent)]"
+      tabIndex={0}
+      role="group"
+      aria-label={pick('Bảng Published Signal của bản nháp', 'Published signals in the draft')}
+    >
       <table className="w-full text-left text-sm">
         <caption className="sr-only">{pick('Bảng Published Signal của bản nháp', 'Published signals in the draft')}</caption>
         <thead>

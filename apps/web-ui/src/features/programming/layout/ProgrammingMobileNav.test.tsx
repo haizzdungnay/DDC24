@@ -1,9 +1,14 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import { ProgrammingMobileNav } from './ProgrammingMobileNav'
+
+vi.mock('../../../shared/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../shared/config')>()),
+  PROGRAMS_WORKSPACE_V2_ENABLED: true
+}))
 
 function renderNav(projectId: string | null, initialPath = '/eng/programming') {
   return render(
@@ -46,7 +51,7 @@ describe('ProgrammingMobileNav — T59-503 / T60-208', () => {
 
     // Ba workspace còn lại nằm trong ngăn `More`, vẫn đúng đích.
     const more = openMore()
-    expect(more.getByRole('link', { name: 'Chương trình' })).toHaveAttribute('href', '/eng/programming/projects/project-1/programs')
+    expect(more.getByRole('link', { name: 'Chương trình' })).toHaveAttribute('href', '/eng/programming/programs?project=project-1&mode=EDIT')
     expect(more.getByRole('link', { name: 'Điểm & Ánh xạ' })).toHaveAttribute('href', '/eng/programming/projects/project-1/mapping')
     expect(more.getByRole('link', { name: 'Thư viện điều khiển' })).toHaveAttribute('href', '/eng/programming/projects/project-1/library')
   })
@@ -77,6 +82,16 @@ describe('ProgrammingMobileNav — T59-503 / T60-208', () => {
     const more = openMore()
     expect(more.getByRole('link', { name: 'Điểm & Ánh xạ' })).toHaveAttribute('aria-current', 'page')
     expect(more.getByRole('link', { name: 'Chương trình' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('route Programs v2 có query vẫn đánh dấu ngăn More là trang hiện tại', () => {
+    renderNav('project-1', '/eng/programming/programs?project=project-1&mode=EDIT')
+
+    const moreButton = screen.getByRole('button', { name: 'Thêm đích Lập trình' })
+    expect(moreButton).toHaveAttribute('aria-current', 'true')
+
+    const more = openMore()
+    expect(more.getByRole('link', { name: 'Chương trình' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('T60-208: hàng dưới đúng BỐN ô, không ô nào phải cắt nhãn thành sáu cột', () => {

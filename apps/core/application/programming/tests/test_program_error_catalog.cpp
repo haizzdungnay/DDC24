@@ -44,6 +44,7 @@ TEST(ProgramErrorCatalog, NewDomainDetailCodesMapToTheirOwnPublicCode)
      * được "sai quy tắc POU" với "thiếu thư viện" hay "trùng chủ sở hữu đầu ra". */
     EXPECT_EQ(MapComponentError("compiler", "ST-POU-002"), ProgramPublicError::PouKind);
     EXPECT_EQ(MapComponentError("compiler", "ST-POU-003"), ProgramPublicError::PouRecursion);
+    EXPECT_EQ(MapComponentError("compiler", "ST-POU-005"), ProgramPublicError::Check);
     /* Vòng phụ thuộc thư viện CHÍNH LÀ đệ quy, nên nó không có mã version riêng. */
     EXPECT_EQ(MapComponentError("compiler", "ST-LIB-003"), ProgramPublicError::PouRecursion);
     EXPECT_EQ(MapComponentError("compiler", "ST-LIB-002"), ProgramPublicError::LibVersion);

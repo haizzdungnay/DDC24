@@ -89,7 +89,7 @@ std::vector<uint8_t> package_of(const std::vector<std::pair<std::string, bool>>&
     input.compiler_profile = st_profile_generated::kProfileCode;
     input.target_abi = st_profile_generated::kTargetAbi;
     for (std::size_t index = 0; index < programs.size(); ++index) {
-        const uint32_t period = index < periods.size() ? periods[index] : 0u;
+        const uint32_t period = index < periods.size() ? periods[index] : 1000u;
         input.programs.push_back(
             {programs[index].first, program_ir(programs[index].first, programs[index].second),
              period, 0u});

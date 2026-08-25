@@ -19,17 +19,19 @@ export function ExecutionTab({
   saving,
   onSave,
   onPendingOperationsChange,
-  discardVersion
+  discardVersion,
+  forceReadOnly = false
 }: {
   document: ProgrammingDraftDocument
   saving: boolean
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   onPendingOperationsChange: (operations: ProgrammingDraftOperation[]) => void
   discardVersion: number
+  forceReadOnly?: boolean
 }) {
   const { pick } = useI18n()
   const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin')
+  const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
   const [period, setPeriod] = useState<number>(document.task.periodMs)
   const [order, setOrder] = useState<string[]>(document.task.programOrder)
   const previousCommittedTask = useRef(document.task)

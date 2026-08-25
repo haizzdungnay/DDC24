@@ -37,6 +37,18 @@ mkdir -p "${build_root}" "${runtime_root}/config" "${runtime_root}/core/staging"
   "${runtime_root}/programming/artifacts" "${runtime_root}/programming/scratch" \
   "${runtime_root}/programming/backups"
 
+# Điều kiện tiên quyết KHÔNG do lane này dựng: Point Catalog của Programming đọc
+# PLC SHM (`/dev/shm/mkddc_plc_shm`) — nơi `mkddc-core` thật ghi — chứ không đọc
+# simulator host-only ở dưới. Thiếu SHM thì `GET /api/v1/programming/point-catalog`
+# trả 503 tất định (`PRG-ERR-UNAVAILABLE-001`), và spec sẽ đỏ ở một khẳng định
+# xa tít (ngân sách 5xx, hoặc a11y của bảng ánh xạ rỗng) chứ không nói ra nguyên
+# nhân. Cảnh báo ngay từ đây rẻ hơn nhiều so với việc đọc ngược trace Playwright.
+if [[ ! -e /dev/shm/mkddc_plc_shm ]]; then
+  echo "CẢNH BÁO: thiếu /dev/shm/mkddc_plc_shm — Point Catalog sẽ trả 503." >&2
+  echo "         Dựng chuỗi no-board trước: ./tools/run_noboard_demo.sh" >&2
+  echo "         (dừng bằng ./tools/run_noboard_demo.sh stop)" >&2
+fi
+
 if [[ "${PROGRAMMING_REAL_SKIP_BUILD:-0}" != "1" ]]; then
   cmake --fresh -S "${repository_root}" -B "${build_root}/cpp" \
     -DCMAKE_BUILD_TYPE=Release \

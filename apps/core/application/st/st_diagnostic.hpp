@@ -111,6 +111,10 @@ constexpr const char* kPouSignatureInvalid   = "ST-POU-001";
 constexpr const char* kPouFunctionNotPure    = "ST-POU-002";
 constexpr const char* kPouRecursion          = "ST-POU-003";
 constexpr const char* kPouInstanceLayout     = "ST-POU-004";
+/* PROGRAM POU tồn tại trong Revision nhưng chưa có programConfig/chu kỳ chạy.
+ * Draft được phép giữ trạng thái này; Check/packager phải fail-closed, không tự
+ * gán chu kỳ 1000 ms hay âm thầm loại POU khỏi package. */
+constexpr const char* kPouScheduleMissing    = "ST-POU-005";
 
 /* Control Library: resolve/version/dependency (DDD §0, §6). */
 constexpr const char* kLibraryEntryMissing   = "ST-LIB-001";

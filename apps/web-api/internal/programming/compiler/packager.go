@@ -24,7 +24,8 @@ type PackageProgram struct {
 	// PeriodMs là chu kỳ release riêng của Program (DDD §7.1). Nó đi TRONG
 	// container chứ không để runtime tự chọn: hai controller nạp cùng một
 	// package phải chạy cùng một dãy release, và điều đó chỉ đúng khi chu kỳ là
-	// dữ liệu của package. 0 = theo chu kỳ Task.
+	// dữ liệu của package. Production packager từ chối 0: caller phải phân giải
+	// chu kỳ trước khi đóng gói, không được tự chọn một Task mặc định.
 	PeriodMs int64
 	// BudgetUs là ngân sách WCET của Program trong một lần release, đơn vị µs
 	// (DDD §4.3: `<=20% period`). Nó đi TRONG container vì cùng lý do với
@@ -125,6 +126,9 @@ func (p ProcessPackager) Package(ctx context.Context, programs []PackageProgram,
 		}
 		if len(program.Artifact) == 0 {
 			return PackageResult{}, fmt.Errorf("artifact rỗng cho Program %q", program.Name)
+		}
+		if program.PeriodMs <= 0 {
+			return PackageResult{}, fmt.Errorf("ST-POU-005: Program %q chưa có chu kỳ chạy", program.Name)
 		}
 		irPath := filepath.Join(jobRoot, fmt.Sprintf("program-%02d.mkir", index))
 		if err := writeExclusive(irPath, program.Artifact, 0o600); err != nil {

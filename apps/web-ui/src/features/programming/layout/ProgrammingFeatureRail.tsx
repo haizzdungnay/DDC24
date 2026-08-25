@@ -2,6 +2,7 @@ import { Activity, ArrowLeft, Cable, ClipboardCheck, Home, Library, PencilRuler,
 import { NavLink } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
 import { PRODUCT_INFO } from '../../../shared/productInfo'
+import { programsWorkspacePath } from '../shared/programsRoute'
 
 /**
  * Bề ngang chốt của rail theo README §3 (`Feature Rail 220`). Giữ ở dạng hằng
@@ -48,7 +49,7 @@ export function programmingRailItems(projectId: string | null): RailItem[] {
   const projectPath = (suffix: string) => (projectId ? `/eng/programming/projects/${projectId}/${suffix}` : null)
   return [
     { key: 'overview', label: ['Tổng quan', 'Overview'], to: '/eng/programming', icon: Home, end: true, disabledReason: null },
-    { key: 'programs', label: ['Chương trình', 'Programs'], to: projectPath('programs'), icon: PencilRuler, disabledReason: projectId ? null : needsProject },
+    { key: 'programs', label: ['Chương trình', 'Programs'], to: projectId ? programsWorkspacePath(projectId) : null, icon: PencilRuler, disabledReason: projectId ? null : needsProject },
     { key: 'mapping', label: ['Điểm & Ánh xạ', 'Points & Mapping'], to: projectPath('mapping'), icon: Cable, disabledReason: projectId ? null : needsProject },
     { key: 'library', label: ['Thư viện điều khiển', 'Control Library'], to: projectPath('library'), icon: Library, disabledReason: projectId ? null : needsProject },
     { key: 'commission', label: ['Kiểm tra & Vận hành', 'Check & Commission'], to: projectPath('commission'), icon: ClipboardCheck, disabledReason: projectId ? null : needsProject },

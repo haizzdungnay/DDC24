@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState } from 'react'
-import { Outlet, useParams } from 'react-router-dom'
+import { Outlet, useLocation, useParams } from 'react-router-dom'
 import { useProgrammingCapabilities, useProgrammingProgramIntents, useProgrammingProjects, useProgrammingRuntime } from '../api/queries'
 import type { ProgrammingCapabilities, ProgrammingProgramsPage, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
 import { roleAtLeast, useAuth } from '../../auth'
@@ -61,13 +61,20 @@ export function ProgrammingLayout() {
   const runtime = useProgrammingRuntime()
   const projects = useProgrammingProjects()
   const [editingContext, setEditingContext] = useState<ProgrammingEditingContext | null>(null)
-  const { projectId } = useParams<{ projectId?: string }>()
+  const { projectId: pathProjectId } = useParams<{ projectId?: string }>()
+  const location = useLocation()
+  const canonicalProgramsRoute = location.pathname === '/eng/programming/programs'
+  const queryProjectId = canonicalProgramsRoute ? new URLSearchParams(location.search).get('project') ?? undefined : undefined
+  const projectId = pathProjectId ?? queryProjectId
 
   const listedProject = useMemo(() => {
     if (projects.status !== 'ready' || !projects.data) return null
     if (projectId) return projects.data.items.find((item) => item.projectId === projectId) ?? null
+    // Resolver PGM-02 v2 tự xử lý 0/1/nhiều Project. Shell không được chọn
+    // item đầu tiên trước resolver vì context strip/rail sẽ nói sai Project.
+    if (canonicalProgramsRoute) return null
     return projects.data.items[0] ?? null
-  }, [projectId, projects.data, projects.status])
+  }, [canonicalProgramsRoute, projectId, projects.data, projects.status])
   const routeEditingContext = editingContext && (!projectId || editingContext.projectId === projectId) ? editingContext : null
   const visibleEditingContext = listedProject
     ? {
@@ -81,7 +88,22 @@ export function ProgrammingLayout() {
   // Khi API Project tạm lỗi, vẫn giữ nguyên định danh từ URL để điều hướng giữa
   // PGM-02..05 và thử read-model intent của đúng Project; không thay bằng
   // Project đầu tiên hoặc tự dựng định danh mới.
-  const scopedProjectId = visibleEditingContext?.projectId ?? projectId
+  //
+  // Ngoại lệ DUY NHẤT: danh sách Project đã `ready` mà id trong URL không nằm
+  // trong đó — đây là not-found chắc chắn, không phải lỗi tạm. Vẫn probe
+  // read-model của nó chỉ đổi được một dòng 503 trong Console của người dùng,
+  // trong khi resolver đã trả not-found. Danh sách đang loading/lỗi thì giữ
+  // nguyên hành vi cũ.
+  const projectKnownMissing =
+    projects.status === 'ready' && Boolean(projectId) && !listedProject && !routeEditingContext
+  // Trên route canonical, DDD §3.4 bắt resolver phân giải Project TRƯỚC khi mở
+  // workspace. Đọc read-model trong lúc danh sách còn đang bay là đi trước
+  // chính cái quyết định đó: nếu id sai, request đã bay đi rồi mới biết. Chờ
+  // list `ready` chỉ tốn đúng một nhịp của cùng shell.
+  const projectUnconfirmed = canonicalProgramsRoute && projects.status !== 'ready'
+  const scopedProjectId = projectKnownMissing || projectUnconfirmed
+    ? undefined
+    : (visibleEditingContext?.projectId ?? projectId)
   const programIntents = useProgrammingProgramIntents(scopedProjectId)
   const refreshing =
     capabilities.status === 'loading' ||

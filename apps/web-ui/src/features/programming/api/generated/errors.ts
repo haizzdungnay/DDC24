@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "d5757655b0d84ec1d836d7742ad7ee6c9e15d486873169ac2f8586e289d7a11b" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.7.1" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "2bc29a935b1a259ed2595ea6ae808fba12b6ee7bd9587a179af79c5a5306dde6" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.7.2" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
@@ -94,6 +94,7 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-POU-002": "PRG-ERR-POU-KIND-001",
   "compiler\u0000ST-POU-003": "PRG-ERR-POU-RECURSION-001",
   "compiler\u0000ST-POU-004": "PRG-ERR-PROGRAM-LIMIT-001",
+  "compiler\u0000ST-POU-005": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SEM-001": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SEM-002": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SEM-003": "PRG-ERR-CHECK-001",

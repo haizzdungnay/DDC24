@@ -346,6 +346,10 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
 
   useEffect(() => {
     dispatch({ type: 'SET_CAN_EDIT', canEdit })
+    if (!canEdit) {
+      setCreatingKind(null)
+      setCreateError(null)
+    }
   }, [canEdit])
 
   useEffect(() => {
@@ -572,7 +576,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
         )}
       </div>
 
-      {(creatingKind === 'INPUT' || creatingKind === 'OUTPUT') && (
+      {canEdit && (creatingKind === 'INPUT' || creatingKind === 'OUTPUT') && (
         <form
           className="flex flex-wrap items-end gap-2 rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] p-3"
           onSubmit={(event) => { event.preventDefault(); submitInterfaceNode(creatingKind) }}
@@ -596,7 +600,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
           {createError && <span className="text-xs text-[var(--c-danger-fg)]">{createError}</span>}
         </form>
       )}
-      {creatingKind === 'CONSTANT' && (
+      {canEdit && creatingKind === 'CONSTANT' && (
         <form
           className="flex flex-wrap items-end gap-2 rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] p-3"
           onSubmit={(event) => { event.preventDefault(); submitConstantNode() }}

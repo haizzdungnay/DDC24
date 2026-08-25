@@ -5,6 +5,7 @@ import type { ComponentType, SVGProps } from 'react'
 import { useI18n } from '../../../shared/i18n'
 import { Panel } from '../../../shared/components/Panel'
 import type { OverviewViewModel } from './overviewViewModel'
+import { programsWorkspacePath } from '../shared/programsRoute'
 
 /**
  * `T60-204` — danh sách **việc cần chú ý** của PGM-01 (handoff §2 mục *Needs
@@ -99,7 +100,8 @@ export function attentionOwnerLabel(pick: Pick, owner: AttentionOwner): string {
 export function attentionRoute(owner: AttentionOwner, projectId: string | null, query = ''): string | null {
   if (owner === 'runtime') return '/eng/programming/runtime'
   if (!projectId) return null
-  const suffix = owner === 'programs' ? 'programs' : owner === 'mapping' ? 'mapping' : 'commission'
+  if (owner === 'programs') return programsWorkspacePath(projectId, { search: query })
+  const suffix = owner === 'mapping' ? 'mapping' : 'commission'
   return `/eng/programming/projects/${projectId}/${suffix}${query}`
 }
 

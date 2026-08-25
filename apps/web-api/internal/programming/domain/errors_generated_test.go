@@ -40,8 +40,9 @@ func TestNewDomainDetailCodesMapToOwnPublicCode(t *testing.T) {
 		detail    string
 		want      ErrorCode
 	}{
-		"pou-kind":      {"compiler", "ST-POU-002", ErrPouKind},
-		"pou-recursion": {"compiler", "ST-POU-003", ErrPouRecursion},
+		"pou-kind":        {"compiler", "ST-POU-002", ErrPouKind},
+		"pou-recursion":   {"compiler", "ST-POU-003", ErrPouRecursion},
+		"pou-unscheduled": {"compiler", "ST-POU-005", ErrCheck},
 		// Vòng phụ thuộc thư viện CHÍNH LÀ đệ quy, không phải chuyện version.
 		"library-cycle": {"compiler", "ST-LIB-003", ErrPouRecursion},
 		"library-drift": {"compiler", "ST-LIB-002", ErrLibVersion},

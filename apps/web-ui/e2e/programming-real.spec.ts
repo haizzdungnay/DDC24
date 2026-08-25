@@ -516,7 +516,10 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   // lại đúng dữ liệu từ backend thật sau điều hướng client-side (giữ JWT thật),
   // không nhận dữ liệu từ state test hay lớp chặn request của trình duyệt.
   await navigation.getByRole('link', { name: 'Chương trình' }).click()
-  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/programs$`))
+  // `T59-802`: lane này build với cut-over PGM-02 BẬT, nên đích của rail là route
+  // query canonical. Khẳng định giữ nguyên phần có giá trị: đúng Project trên URL
+  // (không mượn Project khác) và chế độ EDIT tường minh.
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/programs\\?project=${projectID}&mode=EDIT$`))
   const pouTree = page.getByRole('navigation', { name: 'Cây POU' })
   await pouTree.getByRole('button', { name: /AHU_MAINST/ }).click()
   await expect(page.getByLabel('Mã nguồn ST của AHU_MAIN')).toHaveValue(SOURCE_R2)

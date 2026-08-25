@@ -110,7 +110,7 @@ std::vector<uint8_t> package_of(const std::vector<std::string>& names,
     input.target_abi = st_profile_generated::kTargetAbi;
     int value = 1;
     for (std::size_t index = 0; index < names.size(); ++index) {
-        const uint32_t period = index < periods_ms.size() ? periods_ms[index] : 0u;
+        const uint32_t period = index < periods_ms.size() ? periods_ms[index] : 1000u;
         std::vector<uint8_t> ir = program_ir(names[index], value++);
         if (static_cast<int>(index) == corrupt_program_index && ir.size() > 40) {
             /* Lật một byte GIỮA thân artifact: header còn hợp lệ nên gói vẫn đi

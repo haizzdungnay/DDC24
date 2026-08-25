@@ -35,6 +35,7 @@ import {
   type QuickActionBlockReason
 } from './QuickActions'
 import type { ProgrammingProgramHealth, ProgrammingProgramRuntimeState, RemoteState } from '../model/types'
+import { programsWorkspacePath } from '../shared/programsRoute'
 
 /**
  * `OverviewPage` (PGM-01) — `UJ-PROG-01`, ráp trang theo `T60-207`/`T60-208`.
@@ -373,7 +374,7 @@ function NoProjectCard({ canAdmin }: { canAdmin: boolean }) {
           onSubmit={(event) => {
             event.preventDefault()
             void createProject(nameDraft || pick('Ứng dụng điều khiển', 'Control application')).then((created) => {
-              if (created) navigate(`/eng/programming/projects/${created.projectId}/programs`)
+              if (created) navigate(programsWorkspacePath(created.projectId))
             })
           }}
         >
@@ -450,7 +451,7 @@ function ProgramsSection({
               variant="secondary"
               data-testid="create-program"
               icon={<PencilRuler className="h-4 w-4" aria-hidden="true" />}
-              onClick={() => navigate(`/eng/programming/projects/${projectId}/programs`)}
+              onClick={() => navigate(programsWorkspacePath(projectId))}
             >
               {pick('Tạo chương trình', 'Create Program')}
             </Button>
@@ -506,7 +507,7 @@ function ProgramsCompactList({ model, projectId }: { model: ProgramsSummaryModel
                 row={row}
                 onOpen={() => {
                   if (!projectId || !row.objectId) return
-                  navigate(`/eng/programming/projects/${projectId}/programs?program=${encodeURIComponent(row.objectId)}`)
+                  navigate(programsWorkspacePath(projectId, { pou: row.objectId }))
                 }}
               />
               <ProgramStateBadge row={row} />

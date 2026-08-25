@@ -76,7 +76,8 @@ export function MappingTab({
   draft,
   document,
   saving,
-  onSave
+  onSave,
+  forceReadOnly = false
 }: {
   /**
    * Draft nguyên bản do server trả về. Published Signal là collection v2 và
@@ -87,10 +88,11 @@ export function MappingTab({
   document: ProgrammingDraftDocument
   saving: boolean
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
+  forceReadOnly?: boolean
 }) {
   const { pick } = useI18n()
   const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin')
+  const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
   const catalog = useProgrammingPointCatalog()
   const [showPicker, setShowPicker] = useState(false)
 
@@ -108,7 +110,7 @@ export function MappingTab({
           `<h3>`. Ẩn thị giác vì thanh tab đã hiện tên. */}
       <h3 className="sr-only">{pick('Ánh xạ Biến ↔ Điểm', 'Variable ↔ point mapping')}</h3>
       <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
-        <PublishedSignalsPanel draft={draft} saving={saving} onSave={onSave} />
+        <PublishedSignalsPanel draft={draft} saving={saving} onSave={onSave} forceReadOnly={forceReadOnly} />
       </div>
 
       <div className="border-t border-[var(--c-border)] pt-3">
@@ -126,7 +128,12 @@ export function MappingTab({
       {document.bindings.length === 0 ? (
         <p className="text-sm text-[var(--c-text-dim)]">{pick('Chưa có ánh xạ nào.', 'No mappings yet.')}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div
+          className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--c-accent)]"
+          tabIndex={0}
+          role="group"
+          aria-label={pick('Bảng ánh xạ Biến ↔ Điểm', 'Variable ↔ point mapping table')}
+        >
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--c-border)] text-xs uppercase text-[var(--c-text-dim)]">
@@ -178,7 +185,7 @@ export function MappingTab({
         </div>
       )}
 
-      {showPicker && (
+      {showPicker && canEdit && (
         <PointPickerDialog
           document={document}
           catalogStatus={catalog.status}

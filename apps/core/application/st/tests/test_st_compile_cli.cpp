@@ -127,6 +127,7 @@ CliRun run_executable(const char* executable,
     if (pid == 0) {
         ::close(out_pipe[0]);
         ::dup2(out_pipe[1], STDOUT_FILENO);
+        ::dup2(out_pipe[1], STDERR_FILENO);
         ::close(out_pipe[1]);
         std::vector<char*> argv{const_cast<char*>(executable)};
         for (const std::string& argument : arguments)
@@ -322,6 +323,27 @@ TEST(StCompileCli, PackagerReportsMachineReadableProfileVersion)
     EXPECT_NE(run.stdout_text.find("target_abi=3841"), std::string::npos);
 }
 
+TEST(StCompileCli, PackagerRejectsProgramWithoutScheduleBeforeWritingOutput)
+{
+    const std::string artifact_path = temporary_path("/tmp/mkddc-cli-unscheduled-ir-XXXXXX");
+    const std::string package_path = temporary_path("/tmp/mkddc-cli-unscheduled-pkg-XXXXXX");
+    ASSERT_FALSE(artifact_path.empty());
+    ASSERT_FALSE(package_path.empty());
+    ASSERT_TRUE(write_text(artifact_path, "IR"));
+    ::unlink(package_path.c_str());
+
+    const CliRun run = run_executable(
+        ST_PACKAGE_CLI_PATH,
+        {"--out", package_path, "--program", "P_GHOST=" + artifact_path});
+    ::unlink(artifact_path.c_str());
+    EXPECT_EQ(run.exit_code, 1) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_FALSE(result.at("ok"));
+    EXPECT_EQ(result.at("code"), "ST-POU-005");
+    EXPECT_TRUE(read_bytes(package_path).empty());
+    ::unlink(package_path.c_str());
+}
+
 TEST(StCompileCli, ProjectLibraryCompilerOutputPackagesAndLoadsWithoutRebuildingSignature)
 {
     LinkedPouCliFiles files;
@@ -359,7 +381,8 @@ TEST(StCompileCli, ProjectLibraryCompilerOutputPackagesAndLoadsWithoutRebuilding
     const CliRun packaged = run_executable(
         ST_PACKAGE_CLI_PATH,
         {"--out", files.package_path, "--program",
-         "Main=" + files.artifact_path, "--pou-table", files.pou_table_path,
+         "Main=" + files.artifact_path, "--period", "Main=1000",
+         "--pou-table", files.pou_table_path,
          "--library-lock", files.lock_path});
     ASSERT_EQ(packaged.exit_code, 0) << packaged.stdout_text;
 

@@ -240,6 +240,15 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
             !program_names.insert(program.program_name).second)
             return fail(error, "PROGRAM_TABLE có identity rỗng hoặc trùng: '" +
                                    program.program_name + "'");
+        if (program.period_ms == 0)
+            return fail(error, "Program '" + program.program_name +
+                                   "' chưa có chu kỳ chạy");
+        if (std::find(st_profile_generated::kAllowedPeriodMs.begin(),
+                      st_profile_generated::kAllowedPeriodMs.end(),
+                      program.period_ms) == st_profile_generated::kAllowedPeriodMs.end())
+            return fail(error, "Program '" + program.program_name + "' có chu kỳ " +
+                                   std::to_string(program.period_ms) +
+                                   " ms ngoài ba lớp của profile");
     }
     std::set<std::string> signal_names;
     for (const StPackageSignal& signal : input.signals) {
@@ -348,13 +357,6 @@ bool WritePackageV2(const StPackageInput& input, std::vector<uint8_t>* out,
         plan.type = st_pkg::SEC_PROGRAM_TABLE;
         plan.item_count = static_cast<uint32_t>(input.programs.size());
         for (const StPackageProgram& program : input.programs) {
-            if (program.period_ms != 0 &&
-                std::find(st_profile_generated::kAllowedPeriodMs.begin(),
-                          st_profile_generated::kAllowedPeriodMs.end(),
-                          program.period_ms) == st_profile_generated::kAllowedPeriodMs.end())
-                return fail(error, "Program '" + program.program_name + "' có chu kỳ " +
-                                       std::to_string(program.period_ms) +
-                                       " ms ngoài ba lớp của profile");
             if (!append_string(&plan.payload, program.program_name, error)) return false;
             append_u32(&plan.payload, program.period_ms);
             append_u32(&plan.payload, program.budget_us);
@@ -752,7 +754,9 @@ bool parse_package_v2(const uint8_t* data, std::size_t size, uint16_t expected_p
                 const uint32_t budget_us = read_u32(payload, cursor + 4);
                 cursor += 8;
                 /* Chu kỳ lạ bị chặn ở LOADER, không chỉ ở writer: package tới đây
-                 * có thể do một writer khác phiên bản sinh ra. */
+                 * có thể do một writer khác phiên bản sinh ra. Riêng 0 vẫn được
+                 * đọc để giữ tương thích với package v2 legacy; writer hiện hành
+                 * không còn được phép sinh giá trị này. */
                 if (period_ms != 0 &&
                     std::find(st_profile_generated::kAllowedPeriodMs.begin(),
                               st_profile_generated::kAllowedPeriodMs.end(),

@@ -115,7 +115,7 @@ func newOperationFixture(t *testing.T) operationFixture {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 8, 11, 10, 0, 0, 0, time.UTC)
-	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner,
+	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Packager: &fakePackager{},
 		Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
 		Now: func() time.Time { return now }})
 	if err != nil {

@@ -22,6 +22,7 @@
 #include <sodium.h>
 
 #include "st/st_artifact.hpp"
+#include "st/st_diagnostic.hpp"
 #include "st/st_package_v2.hpp"
 #include "st/st_profile_generated.hpp"
 
@@ -307,6 +308,16 @@ int main(int argc, char** argv)
     }
     if (out_path.empty() || programs.empty())
         return fail("ST-CLI-ARGS", "can --out va it nhat mot --program");
+
+    /* CLI production chỉ đóng gói Program đã được schedule. Writer v2 cấp thấp
+     * vẫn đọc được `period_ms=0` của package lịch sử, nhưng đường tạo package mới
+     * phải fail-closed: thiếu `--period` không được hiểu thành Task mặc định hay
+     * tự gán 1000 ms. */
+    for (const core::StPackageProgram& program : programs) {
+        if (program.period_ms == 0)
+            return fail(core::st_diag_code::kPouScheduleMissing,
+                        "Program chua co chu ky chay: " + program.program_name);
+    }
 
     core::StPackageInput input;
     input.compiler_profile = core::st_profile_generated::kProfileCode;

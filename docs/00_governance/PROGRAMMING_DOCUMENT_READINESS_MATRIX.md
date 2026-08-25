@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-DRM-001` |
-| Phiên bản | 2.5 |
-| Trạng thái | **Baseline ADR-050 và PGM-02 v2.2 exact-pinned cho implementation; `T59-801=DONE`, `T59-802=READY`, R1→R2→R3; `RELEASE_READY=NO-GO`** |
-| Ngày | 2026-08-24 |
+| Phiên bản | 2.6 |
+| Trạng thái | **Baseline ADR-050 và PGM-02 v2.2 exact-pinned cho implementation; `T59-801`/`T59-802=DONE`, `T59-803=READY`, R1→R2→R3; `RELEASE_READY=NO-GO`** |
+| Ngày | 2026-08-25 |
 | Chủ quản | System Engineering + Document Control |
 | Product authority | [`PROD-PROG-001` v3.0](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) |
 | Design authority | [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
@@ -21,20 +21,24 @@ cổng phát hành.
 
 - Mười hai quyết định unified của baseline vẫn CLOSED. Change request và exact
   pin PGM-02 đã đóng bằng `AUTH-PROG-2026-08-24-05` tại Candidate `413a043`.
-  `F-P59-GHOST-POU-001` đã RESOLVED về policy; corrective source/test vẫn giữ
-  `IMPLEMENTATION_CLOSE=PENDING`.
+  `F-P59-GHOST-POU-001` đã RESOLVED về policy và **đã sửa xong corrective
+  source/test (2026-08-25)**; `IMPLEMENTATION_CLOSE` vẫn PENDING vì R1 mới đóng
+  `T59-802`.
 - `T59-801` đã hoàn tất formal DDD, machine-readable contract, `ADR-053`
   Accepted, 89 requirement/47 scenario, asset và 17-file pin set.
 - `T59-802..817` là 16 task authority tách theo R1/R2/R3; quyền implementation
   đã mở nhưng scheduler chỉ cho task có predecessor hoàn tất chuyển `READY`.
+  `T59-802` (vỏ/route/resolver/mobile read-only) đã `DONE (HOST/LOCAL)`;
+  `T59-803` chuyển `READY`.
 - Task phụ thuộc code dùng `ORDERED`, tự chuyển `READY` khi dependency hoàn tất.
 - CI được Product Owner cho phép `WAIVED/DEFERRED BY OWNER` trong phạm vi đóng
   implementation; đây không phải CI PASS và không mở release.
 - Lab Forlinx hiện dùng MCU FAKE vì chưa có MCU/FW/phần cứng; physical MCU/HIL
   được defer, không đổi scenario target/HIL thành PASS.
-- Corrective source tại `fa1f5f4` từng qua full host gate, nhưng
-  `IMPLEMENTATION_CLOSE` vẫn PENDING vì policy `F-P59-GHOST-POU-001` vừa được
-  quyết định, còn source/test fail-closed chưa được sửa và đo lại.
+- Corrective `F-P59-GHOST-POU-001` đã có source/test fail-closed và đo lại
+  2026-08-25 (`ctest` 1297/1297, Go vet/test PASS, pytest catalog 9/9, G1
+  10/10). `IMPLEMENTATION_CLOSE` vẫn PENDING vì phần còn lại của R1
+  (`T59-803..809`) chưa chạy.
 - As-Built một Program/bốn workspace được giữ làm migration fact, không phải
   Product Target.
 
@@ -111,6 +115,7 @@ scenario unified `NOT_RUN` cho tới khi có Test Result đúng thẩm quyền.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.6 | 2026-08-25 | Ghi `T59-802 DONE (HOST/LOCAL)` cho vỏ/route canonical/resolver/mobile read-only PGM-02 và `T59-803 READY`; đóng corrective `F-P59-GHOST-POU-001` ở lớp source/test. `IMPLEMENTATION_CLOSE` giữ PENDING (còn `T59-803..809`), MCU FAKE PARTIAL và `RELEASE_READY=NO-GO` không đổi. |
 | 2.5 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: exact pin Candidate `413a043`, `T59-801=DONE`, `T59-802=READY`, mở cả ba IMPLEMENT_READY nhưng giữ dependency R1→R2→R3; ghost-POU chỉ đóng quyết định, corrective/evidence/release vẫn PENDING/NO-GO. |
 | 2.4-candidate | 2026-08-24 | Ghi review package PGM-02 gồm 17 authority file Candidate, 89 requirement/47 scenario, formal DDD/contract/ADR-053 và 16 card `T59-802..817`; chuyển `T59-801` sang REVIEW, giữ exact pin/PLAN_READY/IMPLEMENT_READY PENDING/NO-GO. |
 | 2.3 | 2026-08-24 | Tách scoped gate PGM-02 v2.2: Owner approved change request và chỉ `T59-801` READY; Architect pin, `PLAN_READY[PGM02-V22]` và mọi `IMPLEMENT_READY[R1/R2/R3]` giữ PENDING/NO-GO. Đồng bộ Plan59 53 task/9 Wave, Risk 23/23 Open, Trace v6.7 và mở lại `IMPLEMENTATION_CLOSE=PENDING` vì `F-P59-GHOST-POU-001`; deploy MCU FAKE giữ PARTIAL, release NO-GO. |

@@ -72,6 +72,19 @@ function renderWorkspace(initialPath = '/eng/programming/projects/project-1/desi
   )
 }
 
+function stubMobileViewport() {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({
+    matches: true,
+    media: '(max-width: 767px)',
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn()
+  })))
+}
+
 beforeEach(() => {
   auth.role = 'admin'
   client.request.mockReset()
@@ -846,5 +859,72 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     await screen.findByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
     expect(screen.getByRole('option', { name: /OtherFn · FUNCTION/ })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /SelfBlock · FUNCTION_BLOCK/ })).not.toBeInTheDocument()
+  })
+
+  it('T59-802: dưới 768 px admin vẫn chỉ đọc ST, không có control/shortcut ghi', async () => {
+    stubMobileViewport()
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-1', objectId: 'object-1', name: 'MobileST', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM MobileST\nEND_PROGRAM\n'
+    })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1')
+
+    const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+    expect(screen.getByTestId('programming-mobile-read-only')).toBeInTheDocument()
+    expect(textarea).toHaveAttribute('readonly')
+    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Thêm chương trình FBD')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kiểm tra' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Lưu' })).not.toBeInTheDocument()
+
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+
+    fireEvent.click(screen.getByTitle('Bảng lệnh nhanh (Ctrl+P)'))
+    const palette = screen.getByRole('dialog', { name: 'Bảng lệnh nhanh' })
+    expect(within(palette).queryByRole('option', { name: /Lưu/ })).not.toBeInTheDocument()
+    expect(within(palette).queryByRole('option', { name: /Kiểm tra/ })).not.toBeInTheDocument()
+    expect(within(palette).queryByRole('option', { name: /Định dạng/ })).not.toBeInTheDocument()
+  })
+
+  it('T59-802: dưới 768 px FBD nhận canEdit=false và Insert không đổi graph', async () => {
+    stubMobileViewport()
+    const fbd = JSON.stringify({
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: 1,
+      profileId: 'revA-1t-1-5-30',
+      graphId: '10000000-0000-4000-8000-000000000001',
+      name: 'MobileFbd',
+      networks: [{ id: '20000000-0000-4000-8000-000000000001', name: 'Main', order: 0, nodes: [], wires: [] }]
+    })
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-fbd', objectId: 'object-fbd', name: 'MobileFbd', kind: 'PROGRAM', language: 'FBD', document: fbd
+    })
+    project.draft!.task.programOrder = ['program-fbd']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-fbd')
+
+    const editor = await screen.findByRole('region', { name: 'Bộ dựng FBD có cấu trúc' })
+    expect(within(editor).getByText('Chỉ đọc')).toBeInTheDocument()
+    expect(within(editor).getByRole('button', { name: 'Thêm khối' })).toBeDisabled()
+    expect(within(editor).getByText('0/256 block')).toBeInTheDocument()
+
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    expect(within(editor).getByText('0/256 block')).toBeInTheDocument()
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
   })
 })

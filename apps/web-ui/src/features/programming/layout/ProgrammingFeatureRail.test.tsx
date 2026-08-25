@@ -25,7 +25,8 @@ import {
  * kiểm một nhánh mà người dùng thật không bao giờ chạy vào. */
 vi.mock('../../../shared/config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../shared/config')>()),
-  PROGRAMMING_REV_A_ENABLED: true
+  PROGRAMMING_REV_A_ENABLED: true,
+  PROGRAMS_WORKSPACE_V2_ENABLED: true
 }))
 
 vi.mock('../../auth', async (importOriginal) => {
@@ -93,7 +94,7 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
 
   it('có projectId — cả sáu đích là link thật và trỏ đúng route PGM-01..06', () => {
     renderRail('project-1')
-    expect(screen.getByRole('link', { name: 'Chương trình' })).toHaveAttribute('href', '/eng/programming/projects/project-1/programs')
+    expect(screen.getByRole('link', { name: 'Chương trình' })).toHaveAttribute('href', '/eng/programming/programs?project=project-1&mode=EDIT')
     expect(screen.getByRole('link', { name: 'Điểm & Ánh xạ' })).toHaveAttribute('href', '/eng/programming/projects/project-1/mapping')
     expect(screen.getByRole('link', { name: 'Thư viện điều khiển' })).toHaveAttribute('href', '/eng/programming/projects/project-1/library')
     expect(screen.getByRole('link', { name: 'Kiểm tra & Vận hành' })).toHaveAttribute('href', '/eng/programming/projects/project-1/commission')
@@ -104,7 +105,7 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
   })
 
   it('mục đang mở đúng route được đánh dấu active (aria-current)', () => {
-    renderRail('project-1', '/eng/programming/projects/project-1/programs')
+    renderRail('project-1', '/eng/programming/programs?project=project-1&mode=EDIT')
     expect(screen.getByRole('link', { name: 'Chương trình' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Tổng quan' })).not.toHaveAttribute('aria-current')
   })
@@ -141,6 +142,7 @@ describe('D-01 — rail Programming THAY rail toàn cục, không xoá mục', (
     ['/eng/programming', true],
     ['/eng/programming/runtime', true],
     ['/eng/programming/projects/p1/programs', true],
+    ['/eng/programming/programs', true],
     ['/', false],
     ['/eng/inputs', false],
     // Không được ăn nhầm một route chỉ TRÙNG TIỀN TỐ chuỗi.

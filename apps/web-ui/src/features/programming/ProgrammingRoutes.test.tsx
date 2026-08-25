@@ -2,8 +2,8 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { PROGRAMMING_WORKSPACE_PATHS } from './ProgrammingRoutes'
-import { LegacyDesignRedirect, LegacyTabRedirect } from './shared/LegacyTabRedirect'
+import { PROGRAMMING_LEGACY_PROGRAMS_PATH, PROGRAMMING_WORKSPACE_PATHS } from './ProgrammingRoutes'
+import { LegacyDesignRedirect, LegacyProgramsRedirect, LegacyTabRedirect } from './shared/LegacyTabRedirect'
 
 function LocationProbe() {
   const location = useLocation()
@@ -23,6 +23,22 @@ function renderAt(path: string) {
   )
 }
 
+/**
+ * `LegacyProgramsRedirect` là thành phần KHÔNG phụ thuộc cờ: nó luôn dựng URL
+ * canonical. Nhánh phụ thuộc cờ (`/design`, `/task`) được kiểm ở
+ * `ProgrammingRoutes.v2flag.test.tsx`, nơi module config bị mock sang bật.
+ */
+function renderV2RedirectAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/eng/programming/projects/:projectId/programs" element={<LegacyProgramsRedirect />} />
+        <Route path="/eng/programming/programs" element={<LocationProbe />} />
+      </Routes>
+    </MemoryRouter>
+  )
+}
+
 beforeEach(() => localStorage.setItem('mkddc-lang', 'vi'))
 afterEach(cleanup)
 
@@ -32,12 +48,13 @@ describe('T59-503 — IA sáu workspace: route đích và lối vào cũ', () =>
   it('khai báo đúng sáu route canonical PGM-01..06', () => {
     expect(PROGRAMMING_WORKSPACE_PATHS).toEqual({
       overview: '',
-      programs: 'projects/:projectId/programs',
+      programs: 'programs',
       mapping: 'projects/:projectId/mapping',
       library: 'projects/:projectId/library',
       commission: 'projects/:projectId/commission',
       runtime: 'runtime'
     })
+    expect(PROGRAMMING_LEGACY_PROGRAMS_PATH).toBe('projects/:projectId/programs')
   })
 
   // `/design` không còn là route đích. Deep-link cũ phải mở ĐÚNG trang tương
@@ -82,5 +99,33 @@ describe('T59-503 — IA sáu workspace: route đích và lối vào cũ', () =>
     // `/task` chuyển sang `/design?tab=execution`, rồi lối vào cũ chuyển tiếp
     // sang `/programs?tab=execution` — chuỗi hai bước vẫn phải kết thúc đúng chỗ.
     expect(screen.getByTestId('location')).toHaveTextContent('/programs')
+  })
+})
+
+describe('T59-802 — legacy redirect sang canonical Programs v2', () => {
+  it('route cũ /programs dùng replace tới route query canonical', () => {
+    renderV2RedirectAt(`/eng/programming/projects/${PROJECT}/programs`)
+    expect(screen.getByTestId('location')).toHaveTextContent(`/eng/programming/programs?project=${PROJECT}&mode=EDIT`)
+  })
+
+  it('giữ đúng allowlist/hash, bỏ field lạ và alias program sang pou', () => {
+    renderV2RedirectAt(`/eng/programming/projects/${PROJECT}/programs?program=object-1&line=8&column=2&secret=drop#diagnostic`)
+    const location = screen.getByTestId('location').textContent ?? ''
+    expect(location).toContain(`/eng/programming/programs?project=${PROJECT}`)
+    expect(location).toContain('pou=object-1')
+    expect(location).toContain('mode=EDIT')
+    expect(location).toContain('program=object-1')
+    expect(location).toContain('line=8')
+    expect(location).toContain('column=2')
+    expect(location).toContain('#diagnostic')
+    expect(location).not.toContain('secret')
+  })
+
+  it('pou tường minh thắng program alias và mode invalid không bị sửa thành EDIT', () => {
+    renderV2RedirectAt(`/eng/programming/projects/${PROJECT}/programs?pou=object-new&program=object-old&mode=INVALID`)
+    const location = screen.getByTestId('location').textContent ?? ''
+    expect(location).toContain('pou=object-new')
+    expect(location).toContain('program=object-old')
+    expect(location).toContain('mode=INVALID')
   })
 })

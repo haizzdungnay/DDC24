@@ -84,10 +84,10 @@ struct StPackageProgram {
     std::string program_name;
     /* Blob v1 do `serialize_st_ir` sinh; container KHÔNG diễn giải lại nội dung. */
     std::vector<uint8_t> ir_blob;
-    /* Chu kỳ release riêng của Program (DDD §7.1). 0 = theo chu kỳ Task, giữ cho
-     * package một Program không phải khai gì thêm. Chu kỳ phải nằm trong ba lớp
-     * của profile: một lớp lập lịch không tồn tại chỉ biểu hiện thành deadline
-     * miss ở runtime chứ không thành một câu trả lời hiểu được. */
+    /* Chu kỳ release riêng của Program (DDD §7.1). Writer bắt buộc một trong ba
+     * lớp của profile và từ chối 0: chu kỳ phải được phân giải trước khi đóng
+     * gói, không được để runtime tự chọn. Reader vẫn có thể trả 0 khi đọc package
+     * v2 legacy đã sinh trước khi bất biến này được siết. */
     uint32_t period_ms = 0;
     /* Ngân sách WCET của Program trong một lần release, đơn vị µs. 0 = chưa đo.
      * Đi trong package chứ không suy ở runtime: đây là số Check đã tính trên
@@ -148,8 +148,9 @@ struct StPackageHeaderView {
 struct StPackageView {
     StPackageHeaderView header;
     std::vector<std::string> program_names;
-    /* Song song 1-1 với `program_names`. Giữ hai vector thay vì một struct để
-     * caller chỉ cần tên (đa số) không phải kéo theo phần còn lại. */
+    /* Song song 1-1 với `program_names`. Giá trị 0 chỉ có thể xuất hiện khi đọc
+     * package v2 legacy; writer hiện hành không sinh 0. Giữ hai vector thay vì
+     * một struct để caller chỉ cần tên (đa số) không phải kéo theo phần còn lại. */
     std::vector<uint32_t> program_periods_ms;
     std::vector<uint32_t> program_budget_us;
     std::vector<std::string> pou_names;

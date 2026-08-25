@@ -240,7 +240,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	// sạch hay không, và biên dịch 32 Program rồi mới báo là lãng phí đúng thứ
 	// người dùng đang chờ. Gộp cùng scope diagnostics để một lần Check nói hết.
 	objectViews := revisionObjectViews(revision)
-	topology, budget := packageTopology(objectViews)
+	topology, budget := packageTopology(revision.Revision.DocumentSchemaVersion, objectViews)
 	scopeDiagnostics = append(scopeDiagnostics, packageTopologyDiagnostics(topology)...)
 	scopeDiagnostics = append(scopeDiagnostics, packageInvariantDiagnostics(objectViews)...)
 	if len(scopeDiagnostics) > 0 {
@@ -350,7 +350,8 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	// artifact v1 của nó; nhiều Program phải được bọc thành container v2 bằng
 	// CHÍNH writer production — trỏ hàng này vào artifact của Program đầu tiên
 	// sẽ là nói dối rằng cả package đã sẵn sàng stage.
-	storeArtifact, packageInfo, err := s.packageArtifact(ctx, check, inputs, results, artifacts, topology,
+	storeArtifact, packageInfo, err := s.packageArtifact(ctx, check, revision.Revision.DocumentSchemaVersion,
+		inputs, results, artifacts, topology,
 		packageSignals(objectViews))
 	if err != nil {
 		return true, err
@@ -883,20 +884,28 @@ type packageProgramArtifact struct {
 	IntegrityMode   string `json:"integrityMode"`
 }
 
-// packageArtifact quyết định thứ Commission sẽ stage. Một Program
-// không Published Signal có thể giữ artifact v1. Chỉ cần có signal thì
-// BẮT BUỘC bọc v2, kể cả khi chỉ có một Program: artifact v1 không
-// có section SIGNAL, nên trả v1 ở đây sẽ làm Check PASSED nhưng Core
-// không bao giờ nhận được hợp đồng signal đã seal.
+// packageArtifact quyết định thứ Commission sẽ stage. Artifact v1 chỉ được
+// passthrough cho Revision schema v1 lịch sử. Revision schema v2 luôn phải bọc
+// container v2, kể cả chỉ có một Program và không có Published Signal, vì chỉ
+// container mới mang chu kỳ đã seal trong `programConfig` tới Core.
 func (s *CheckService) packageArtifact(ctx context.Context, check programmingstore.Check,
+	documentSchemaVersion int,
 	inputs []programmingcompiler.Input, results []programmingcompiler.Result,
 	artifacts []packageProgramArtifact, topology []packageProgramTopology,
 	signals []programmingcompiler.PackageSignal) (*programmingstore.Artifact, *programmingcompiler.PackageResult, error) {
-	// Chỉ giữ artifact v1 cho đúng đường tương thích cũ nơi objectId==programId.
-	// Document v2 được phép tách hai identity; artifact v1 không mang programId
-	// runtime nên phải bọc container v2 dù chỉ có một Program và không có signal.
+	for _, item := range topology {
+		if item.PeriodMs <= 0 {
+			// Lưới an toàn ngay tại biên package. ProcessNext đã chặn bằng
+			// diagnostic công khai ST-POU-005; guard này bảo đảm caller nội bộ
+			// không thể bỏ qua Check rồi tạo artifact với chu kỳ ngầm định.
+			return nil, nil, fmt.Errorf("ST-POU-005: Program %s chưa có chu kỳ chạy", item.ProgramID)
+		}
+	}
+	// Chỉ giữ artifact v1 cho đúng Revision schema v1 lịch sử nơi
+	// objectId==programId. Schema v2 phải đi qua writer v2 dù identity trùng,
+	// nếu không periodMs chỉ còn trong manifest và biến mất khỏi artifact stage.
 	legacySingleIdentity := len(topology) == 1 && topology[0].ObjectID == topology[0].ProgramID
-	if len(results) == 1 && len(signals) == 0 && legacySingleIdentity &&
+	if documentSchemaVersion == 1 && len(results) == 1 && len(signals) == 0 && legacySingleIdentity &&
 		len(results[0].LinkedPOUs) == 0 && inputs[0].LibraryLock.SystemVersion == "" {
 		result := results[0]
 		return &programmingstore.Artifact{ArtifactID: s.newID(), RevisionID: check.RevisionID, CheckID: check.CheckID,

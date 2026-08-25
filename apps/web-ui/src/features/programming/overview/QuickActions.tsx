@@ -8,6 +8,7 @@ import type { UserRole } from '../../../shared/types'
 import type { ProgrammingTargetState } from '../model/types'
 import type { PrimaryCtaKind } from './resolvePrimaryCta'
 import type { SafeStateFacts } from './SystemHealthHero'
+import { programsWorkspacePath } from '../shared/programsRoute'
 
 /**
  * `T60-206` — `QuickActions` của PGM-01 (handoff §1 mục 6, Plan 60 §6 P2).
@@ -164,7 +165,7 @@ export function quickActionItems(input: QuickActionsInput): QuickActionItem[] {
   })
 
   return [
-    item('edit', projectPath('programs'), projectScopedBlock()),
+    item('edit', input.projectId ? programsWorkspacePath(input.projectId) : null, projectScopedBlock()),
     item('check', projectPath('commission'), projectScopedBlock()),
     item('commission', projectPath('commission'), commissionBlock()),
     item('runtime', '/eng/programming/runtime', null)

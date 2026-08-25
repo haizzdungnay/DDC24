@@ -80,7 +80,11 @@ func programBudgetUs(periodMs int64) int64 {
 // Khoá sắp xếp là `objectId` chứ không phải `programId` vì `compilerInputs` sắp
 // theo `objectId`: hai khoá khác nhau nghĩa là hai thứ tự khác nhau, và khi đó
 // `order` mà manifest công bố không còn là thứ tự Program nằm trong container.
-func packageTopology(objects []revisionObjectView) ([]packageProgramTopology, packageBudget) {
+func packageTopology(documentSchemaVersion int, objects []revisionObjectView) ([]packageProgramTopology, packageBudget) {
+	legacyPeriodMs := int64(0)
+	if documentSchemaVersion == 1 {
+		legacyPeriodMs = legacyTaskPeriodMs(objects)
+	}
 	topology := make([]packageProgramTopology, 0, len(objects))
 	for _, object := range objects {
 		if object.Kind != "PROGRAM" {
@@ -101,9 +105,13 @@ func packageTopology(objects []revisionObjectView) ([]packageProgramTopology, pa
 		if programID == "" {
 			programID = object.ObjectID
 		}
-		period := int64(payload.Config.PeriodMs)
-		if period == 0 {
-			period = domain.AllowedPeriodMs[0]
+		// Revision schema v1 đặt chu kỳ ở TASK chung; schema v2 đặt chu kỳ ở
+		// `programConfig` của từng PROGRAM. Phân nhánh bằng schema đã seal, không
+		// suy đoán theo field đang có: nếu v2 thiếu config thì phải giữ 0 để
+		// ST-POU-005 chặn, không được nhặt TASK legacy rồi hợp thức hoá ghost POU.
+		period := legacyPeriodMs
+		if documentSchemaVersion == 2 {
+			period = int64(payload.Config.PeriodMs)
 		}
 		topology = append(topology, packageProgramTopology{
 			ObjectID: object.ObjectID, ProgramID: programID, Name: payload.Name,
@@ -133,6 +141,31 @@ func packageTopology(objects []revisionObjectView) ([]packageProgramTopology, pa
 	return topology, budget
 }
 
+// legacyTaskPeriodMs đọc đúng mô hình Revision schema v1: một TASK chung mang
+// chu kỳ của mọi PROGRAM. Thiếu, hỏng hoặc có nhiều TASK đều trả 0 để diagnostic
+// fail-closed; hàm không tạo chu kỳ mặc định và không được dùng cho schema v2.
+func legacyTaskPeriodMs(objects []revisionObjectView) int64 {
+	periodMs := int64(0)
+	found := false
+	for _, object := range objects {
+		if object.Kind != "TASK" {
+			continue
+		}
+		if found {
+			return 0
+		}
+		found = true
+		var payload struct {
+			PeriodMs int64 `json:"periodMs"`
+		}
+		if json.Unmarshal(object.Payload, &payload) != nil {
+			return 0
+		}
+		periodMs = payload.PeriodMs
+	}
+	return periodMs
+}
+
 // packageTopologyDiagnostics kiểm trần cấp package ở Check.
 //
 // Trần 32 đã được ép ở Draft (`T59-301`), nhưng một Revision có thể tới từ bundle
@@ -148,6 +181,11 @@ func packageTopologyDiagnostics(topology []packageProgramTopology) []DiagnosticV
 		allowed[period] = struct{}{}
 	}
 	for _, item := range topology {
+		if item.PeriodMs == 0 {
+			diagnostics = append(diagnostics, packageDiagnostic("ST-POU-005",
+				map[string]any{"programId": item.ProgramID}, nil))
+			continue
+		}
 		if _, ok := allowed[item.PeriodMs]; !ok {
 			// Chu kỳ ngoài ba lớp của profile nghĩa là một lớp lập lịch không tồn
 			// tại; chấp nhận nó ở đây sẽ đẩy lỗi xuống runtime.

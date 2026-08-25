@@ -16,6 +16,9 @@ import { toWorkspaceDocument } from '../model/draftV2'
 import { PouTree } from './PouTree'
 import { useProgrammingRuntimeMonitor } from '../api/queries'
 import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
+import { programsWorkspacePath } from '../shared/programsRoute'
+import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
+import { useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
@@ -54,13 +57,24 @@ const EMPTY_DIAGNOSTICS: ProgrammingDiagnostic[] = []
  *    thắng route CHỈ cho giá trị này, đúng nơi mà `/task` (lối vào cũ) và nút
  *    tab cùng trỏ tới.
  */
-export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
+export function DesignWorkspacePage({
+  route,
+  projectIdOverride,
+  mobileReadOnlyOverride
+}: {
+  route?: DesignTab
+  projectIdOverride?: string
+  mobileReadOnlyOverride?: boolean
+} = {}) {
   const { pick } = useI18n()
   const { session } = useAuth()
   const navigate = useNavigate()
   const { setEditingContext } = useProgrammingRuntimeContext()
-  const canEdit = roleAtLeast(session?.role, 'admin')
-  const { projectId } = useParams<{ projectId: string }>()
+  const detectedMobileReadOnly = useProgrammingMobileReadOnly()
+  const mobileReadOnly = mobileReadOnlyOverride ?? detectedMobileReadOnly
+  const canEdit = roleAtLeast(session?.role, 'admin') && !mobileReadOnly
+  const { projectId: routeProjectId } = useParams<{ projectId: string }>()
+  const projectId = projectIdOverride ?? routeProjectId
   const [searchParams, setSearchParams] = useSearchParams()
   const requested = searchParams.get('tab')
   const fromQuery: DesignTab = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as DesignTab) : 'programs'
@@ -69,7 +83,7 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
   const tab: DesignTab = requested === 'execution' ? 'execution' : (route ?? fromQuery)
   // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-03
   // (Check) chọn sẵn đúng Program bị lỗi khi mở workspace Thiết kế.
-  const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>(() => searchParams.get('program') ?? undefined)
+  const [selectedPouId, setSelectedPouId] = useState<string | undefined>(() => searchParams.get('pou') ?? searchParams.get('program') ?? undefined)
   /* D-01/F-PROG-ASBUILT-003: PGM-03 giờ sở hữu Check/Problems (không phải ở
    * đây nữa) — khi người dùng bấm một diagnostic ở đó, nó điều hướng sang đây
    * kèm `line/column/length` trong query string thay vì state cùng trang.
@@ -111,6 +125,11 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
       return
     }
     if (requested === tab) return
+    /* Trên route canonical PGM-02 v2, tab do query quyết định (không có prop
+     * `route`). Tab mặc định KHÔNG được ghi `?tab=programs`: canonical URL phải
+     * là một chuỗi ổn định, còn mỗi param thừa lại là một biến thể mà resolver
+     * phải so lại và có thể tự điều hướng vòng. */
+    if (!route && !requested && tab === 'programs') return
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current)
@@ -143,9 +162,9 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
    * nhanh (ST Editor Quick Control #2, đã duyệt) — cùng một "dirty guard"
    * D-01: không điều hướng sang Commission khi Draft còn thay đổi chưa lưu. */
   const goToCommission = useCallback(() => {
-    if (draftDirty) return
+    if (!canEdit || draftDirty || !projectId) return
     navigate(`/eng/programming/projects/${projectId}/commission`)
-  }, [draftDirty, navigate, projectId])
+  }, [canEdit, draftDirty, navigate, projectId])
 
   /* D-01: PGM-02 không còn tự chạy Check nên không có `checkState` thật để
    * báo — Check/Commission (PGM-03) là nơi duy nhất cập nhật giá trị này giờ
@@ -192,6 +211,21 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
   }
   // T59-301: BE trả document v2; adapter chiếu về view model của bốn tab.
   const document = workspaceDocument as NonNullable<typeof workspaceDocument>
+  /* Route v2 chọn POU bằng `objectId`; editor cũ vẫn nhận `programId`. Adapter
+   * hẹp này chỉ nối hai định danh khi cùng một record Draft khai cả hai, không
+   * suy theo tên/index và không dùng objectId làm mutation target sai. */
+  const selectedProgram = document.programs.find((program) => (program.objectId ?? program.programId) === selectedPouId)
+    ?? (searchParams.has('program') ? document.programs.find((program) => program.programId === searchParams.get('program')) : undefined)
+  const selectedProgramId = selectedProgram?.programId
+  const selectedObjectId = selectedProgram ? (selectedProgram.objectId ?? selectedProgram.programId) : selectedPouId
+  const selectProgram = (programId: string | undefined) => {
+    if (!programId) {
+      setSelectedPouId(undefined)
+      return
+    }
+    const program = document.programs.find((item) => item.programId === programId)
+    setSelectedPouId(program?.objectId ?? programId)
+  }
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
 
@@ -203,6 +237,11 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
           Ẩn thị giác vì thanh tab đã hiện tên — thứ còn thiếu là mốc điều
           hướng cho trình đọc màn hình, không phải thêm chữ lên màn hình. */}
       <h2 className="sr-only">{pick('Workspace Thiết kế', 'Design workspace')}</h2>
+      {mobileReadOnly && (
+        <p role="status" data-testid="programming-mobile-read-only" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
+          {pick('Dưới 768 px, workspace chỉ cho xem; hãy dùng màn hình rộng hơn để chỉnh sửa.', 'Below 768 px, the workspace is read-only; use a wider screen to edit.')}
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-2">
         <div role="tablist" aria-label={pick('Tab workspace Thiết kế', 'Design workspace tabs')} className="flex gap-1">
           {VALID_TABS.map((candidate) => (
@@ -220,13 +259,24 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
                  * query là bấm vào chỗ không có gì xảy ra. */
                 const query = new URLSearchParams(searchParams)
                 query.delete('tab')
+                if (PROGRAMS_WORKSPACE_V2_ENABLED) {
+                  /* Cut-over BẬT: cả ba tab ở LẠI route canonical và chỉ đổi
+                   * query. Cho tab Ánh xạ nhảy sang `/projects/:id/mapping` sẽ
+                   * unmount workspace — và cùng với nó là buffer ST chưa lưu
+                   * của người dùng. Trước khi siết chỗ này, journey "đổi tab
+                   * không mất nội dung đang gõ" mất trắng nội dung, vì hai địa
+                   * chỉ mount hai cây component khác nhau. */
+                  if (candidate !== 'programs') query.set('tab', candidate)
+                  navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
+                  return
+                }
                 if (candidate === 'execution') query.set('tab', 'execution')
                 const target = candidate === 'mapping' ? 'mapping' : 'programs'
                 const suffix = query.toString()
-                navigate(
-                  `/eng/programming/projects/${projectId}/${target}${suffix ? `?${suffix}` : ''}`,
-                  { replace: true }
-                )
+                const destination = target === 'programs'
+                  ? programsWorkspacePath(projectId ?? '', { search: suffix })
+                  : `/eng/programming/projects/${projectId}/${target}${suffix ? `?${suffix}` : ''}`
+                navigate(destination, { replace: true })
               }}
             >
               {pick(...TAB_LABEL[candidate])}
@@ -285,15 +335,15 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
         <div className="mb-3 rounded border border-[var(--c-border)] p-3">
           <PouTree
             draft={workspace.project.draft}
-            selectedObjectId={selectedProgramId}
-            onSelect={setSelectedProgramId}
+            selectedObjectId={selectedObjectId}
+            onSelect={setSelectedPouId}
           />
         </div>
         <ProgramsTab
           document={document}
           saving={workspace.saving}
           selectedProgramId={selectedProgramId}
-          onSelectProgram={setSelectedProgramId}
+          onSelectProgram={selectProgram}
           onSave={workspace.save}
           diagnostics={EMPTY_DIAGNOSTICS}
           focusDiagnostic={focusDiagnostic}
@@ -302,6 +352,7 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
           onRunCheck={goToCommission}
           runtimeOverlayByProgramId={runtimeOverlays}
           userPouInterfaces={userPouInterfaces}
+          forceReadOnly={mobileReadOnly}
         />
       </div>
       <div hidden={tab !== 'mapping'}>
@@ -310,13 +361,14 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
           document={document}
           saving={workspace.saving}
           onSave={workspace.save}
+          forceReadOnly={mobileReadOnly}
         />
       </div>
       <div hidden={tab !== 'execution'}>
-        <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} onPendingOperationsChange={updateExecutionOperations} discardVersion={discardVersion} />
+        <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} onPendingOperationsChange={updateExecutionOperations} discardVersion={discardVersion} forceReadOnly={mobileReadOnly} />
       </div>
 
-      <Modal
+      {canEdit && <Modal
         open={pendingNavigation !== null}
         title={pick('Draft có thay đổi chưa lưu', 'Draft has unsaved changes')}
         cancelLabel={pick('Ở lại', 'Stay')}
@@ -352,7 +404,7 @@ export function DesignWorkspacePage({ route }: { route?: DesignTab } = {}) {
         >
           {pick('Bỏ thay đổi cục bộ', 'Discard local changes')}
         </Button>
-      </Modal>
+      </Modal>}
     </div>
   )
 }
