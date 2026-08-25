@@ -14,6 +14,7 @@ import {
   type ProgramsSummaryModel
 } from './overviewViewModel'
 import type { ProgrammingProgramHealth, ProgrammingProgramRuntimeState } from '../model/types'
+import { programsWorkspacePath } from '../shared/programsRoute'
 
 /**
  * `T60-205` — bảng Programs của PGM-01.
@@ -61,7 +62,7 @@ export function ProgramsSummaryTable({ model, projectId }: { model: ProgramsSumm
     // Không có `objectId` thì không có POU nào để chọn ở PGM-02 — điều hướng
     // "chung chung" sẽ mở một cây rồi bỏ người dùng ở đó tự tìm.
     if (!projectId || !row.objectId) return
-    navigate(`/eng/programming/projects/${projectId}/programs?program=${encodeURIComponent(row.objectId)}`)
+    navigate(programsWorkspacePath(projectId, { pou: row.objectId }))
   }
 
   return (

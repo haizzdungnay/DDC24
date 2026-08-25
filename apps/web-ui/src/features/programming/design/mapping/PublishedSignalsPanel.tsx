@@ -48,15 +48,17 @@ import type {
 export function PublishedSignalsPanel({
   draft,
   saving,
-  onSave
+  onSave,
+  forceReadOnly = false
 }: {
   draft: ProgrammingDraftDocument
   saving: boolean
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
+  forceReadOnly?: boolean
 }) {
   const { pick } = useI18n()
   const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin')
+  const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
 
   const supported = isDraftV2(draft)
   const signals = useMemo(() => (supported ? draftSignals(draft) : []), [draft, supported])

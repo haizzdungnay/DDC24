@@ -12,6 +12,17 @@ export const LEGACY_GRAPH_DEMO_ENABLED = isLegacyGraphDemoEnabled(DDC_MODE, impo
 // quyền đó vẫn do server (`PROGRAMMING_REV_A` env của web-api) và RBAC quyết
 // định. Không bật ở production tới khi TLS + UX-T-001..006 PASS.
 export const PROGRAMMING_REV_A_ENABLED = import.meta.env.VITE_PROGRAMMING_REV_A === '1'
+/**
+ * PGM-02 R1 (`T59-802`) — cờ rollback riêng cho workspace Programs v2.
+ *
+ * Mặc định TẮT theo DDD-SW-PGM02-WORKSPACE-001 §11: triển khai FE mới không
+ * được tự cut-over route trước khi cùng phiên bản BE/contract được bật. Cờ này
+ * chỉ chọn surface/route; backend vẫn là authority cuối của mọi mutation.
+ */
+export function isProgramsWorkspaceV2Enabled(flag: string | undefined): boolean {
+  return flag === '1'
+}
+export const PROGRAMS_WORKSPACE_V2_ENABLED = isProgramsWorkspaceV2Enabled(import.meta.env.VITE_PROGRAMS_WORKSPACE_V2)
 export const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || ''
 export const WS_ORIGIN = import.meta.env.VITE_WS_ORIGIN || ''
 export const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || (IS_DEMO ? 'mock' : 'jwt')

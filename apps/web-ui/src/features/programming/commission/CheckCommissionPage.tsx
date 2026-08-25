@@ -9,6 +9,7 @@ import { Modal } from '../../../shared/components/Modal'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
+import { programsWorkspacePath } from '../shared/programsRoute'
 import { useProgrammingCheck, useProgrammingOverrides, useProgrammingRevisionChanges } from '../api/queries'
 import { useDraftWorkspace, useCheckWorkflow } from '../design/useDraftWorkspace'
 import { useCommissionWorkflow, type CommissionWorkflowState } from './useCommissionWorkflow'
@@ -188,7 +189,7 @@ export function CheckCommissionPage() {
         )}
         {projectId && (
           <div>
-            <Link className="text-sm font-medium text-[var(--c-accent)] underline" to={`/eng/programming/projects/${projectId}/programs`}>
+            <Link className="text-sm font-medium text-[var(--c-accent)] underline" to={programsWorkspacePath(projectId)}>
               {pick('Về workspace Chương trình', 'Back to the Programs workspace')}
             </Link>
           </div>
@@ -252,7 +253,7 @@ export function CheckCommissionPage() {
                   if (typeof diagnostic.location.line === 'number') params.set('line', String(diagnostic.location.line))
                   if (typeof diagnostic.location.column === 'number') params.set('column', String(diagnostic.location.column))
                   if (typeof diagnostic.location.length === 'number') params.set('length', String(diagnostic.location.length))
-                  navigate(`/eng/programming/projects/${projectId}/programs?${params.toString()}`)
+                  navigate(programsWorkspacePath(projectId, { pou: diagnostic.location.programId, search: params }))
                 }}
               />
             )}

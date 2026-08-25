@@ -1,4 +1,5 @@
 import type { ProgrammingCheckState, ProgrammingTargetState, RemoteState } from '../model/types'
+import { programsWorkspacePath } from '../shared/programsRoute'
 
 /**
  * `T60-201` — bộ giải **đúng một** hành động chính của PGM-01, theo bảng năm
@@ -112,7 +113,7 @@ export function resolvePrimaryCta(input: PrimaryCtaInput): PrimaryCtaDecision {
   if (input.projectStatus === 'error') return undecided('PROJECT_UNAVAILABLE')
   if (!projectId || !baseRevisionId) return undecided('NO_PROJECT')
 
-  const designRoute = `/eng/programming/projects/${projectId}/programs`
+  const designRoute = programsWorkspacePath(projectId)
   // `Fix Check Errors`, `Review Changes` và `Commission` cùng đích: PGM-05 là
   // trang chủ quản của chẩn đoán Check, bảng thay đổi và nút Đưa vào vận hành.
   // Ba CTA khác nhau ở CÂU CHỮ và ở việc chúng được phép xuất hiện lúc nào —

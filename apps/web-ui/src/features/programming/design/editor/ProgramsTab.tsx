@@ -129,6 +129,7 @@ export function ProgramsTab({
   onRunCheck,
   runtimeOverlayByProgramId,
   userPouInterfaces = EMPTY_USER_POU_INTERFACES,
+  forceReadOnly = false,
 }: {
   document: ProgrammingDraftDocument
   saving: boolean
@@ -149,10 +150,12 @@ export function ProgramsTab({
   runtimeOverlayByProgramId?: Readonly<Record<string, StRuntimeOverlayState | undefined>>
   /** Interface POU typed do Draft/API cung cấp; FBD không tự parse ST để đoán pin. */
   userPouInterfaces?: readonly UserPouInterface[]
+  /** Policy viewport từ route: dưới 768 px thắng cả quyền admin. */
+  forceReadOnly?: boolean
 }) {
   const { pick } = useI18n()
   const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin')
+  const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
   const selected = document.programs.find((program) => program.programId === selectedProgramId)
   const [buffers, setBuffers] = useState<Record<string, string>>({})
   const [projectTagsDraft, setProjectTagsDraft] = useState(() => document.project.functionalTags.join(', '))
@@ -185,8 +188,9 @@ export function ProgramsTab({
   }, [buffers, document.programs])
 
   const paletteEntries = useMemo<PaletteEntry[]>(
-    () => buildCommandPaletteEntries(document.programs, symbolsByProgramId, pick),
-    [document.programs, symbolsByProgramId, pick],
+    () => buildCommandPaletteEntries(document.programs, symbolsByProgramId, pick)
+      .filter((entry) => canEdit || entry.kind !== 'command'),
+    [canEdit, document.programs, symbolsByProgramId, pick],
   )
 
   useEffect(() => {
@@ -326,6 +330,7 @@ export function ProgramsTab({
       })
       return
     }
+    if (!canEdit) return
     if (entry.commandId === 'format') {
       if (!selectedProgramId) return
       /* Chuyển lệnh vào SourceEditor để đi qua cùng history/cursor pipeline
@@ -435,7 +440,7 @@ export function ProgramsTab({
         )}
       </nav>
       <Modal
-        open={pendingDeleteId !== null}
+        open={canEdit && pendingDeleteId !== null}
         title={pick('Xóa chương trình?', 'Delete program?')}
         danger
         confirmLabel={pick('Xóa', 'Delete')}

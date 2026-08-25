@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Activity, ArrowLeft, Cable, ClipboardCheck, Home, Library, MoreHorizontal, PencilRuler, SlidersHorizontal } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
+import { programsWorkspacePath } from '../shared/programsRoute'
 
 type IconComponent = typeof Home
 
@@ -51,7 +52,7 @@ export function programmingMobileNavItems(projectId: string | null): { primary: 
       { key: 'commission', label: ['Kiểm tra & Vận hành', 'Check & Commission'], shortLabel: ['Kiểm tra', 'Check'], to: projectPath('commission'), icon: ClipboardCheck, disabledReason: needsProject }
     ],
     more: [
-      { key: 'programs', label: ['Chương trình', 'Programs'], shortLabel: ['Chương trình', 'Programs'], to: projectPath('programs'), icon: PencilRuler, disabledReason: needsProject },
+      { key: 'programs', label: ['Chương trình', 'Programs'], shortLabel: ['Chương trình', 'Programs'], to: projectId ? programsWorkspacePath(projectId) : null, icon: PencilRuler, disabledReason: needsProject },
       { key: 'mapping', label: ['Điểm & Ánh xạ', 'Points & Mapping'], shortLabel: ['Ánh xạ', 'Mapping'], to: projectPath('mapping'), icon: Cable, disabledReason: needsProject },
       { key: 'library', label: ['Thư viện điều khiển', 'Control Library'], shortLabel: ['Thư viện', 'Library'], to: projectPath('library'), icon: Library, disabledReason: needsProject },
       {
@@ -112,7 +113,14 @@ export function ProgrammingMobileNav({ projectId }: { projectId: string | null }
   /* Trang hiện tại nằm trong ngăn `More` thì chính nút `More` phải được đánh
      dấu — nếu không, người dùng đang ở Điểm & Ánh xạ sẽ thấy một hàng nav
      không mục nào sáng và đọc thành "tôi không ở đâu cả". */
-  const currentInMore = more.some((item) => item.to !== null && item.to !== '/' && location.pathname.startsWith(item.to))
+  const currentInMore = more.some((item) => {
+    if (item.to === null || item.to === '/') return false
+    // Canonical PGM-02 mang Project/mode trong query. `location.pathname`
+    // không chứa query nên phải so theo pathname của đích, nếu không nút More
+    // mất trạng thái hiện tại riêng trên route Programs v2.
+    const itemPathname = item.to.split(/[?#]/, 1)[0]
+    return location.pathname.startsWith(itemPathname)
+  })
 
   return (
     <>
