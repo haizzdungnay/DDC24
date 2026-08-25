@@ -8,6 +8,52 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — ba block chuẩn `TP`/`CTU`/`CTD` (2026-08-26)
+
+- **Added — `TP`, `CTU`, `CTD` chạy thật từ compiler tới runtime.** Ngữ nghĩa
+  được pin ở `DDD-CTRL-PROG-001` §7A **trước khi code**: chữ ký, giá trị wire
+  (6/7/8 — 1..5 giữ nguyên nên artifact cũ vẫn byte-compatible), layout RETAIN,
+  và ba quyết định dễ sai — `TP` KHÔNG retrigger giữa xung (đó là toàn bộ khác
+  biệt với `TON`); `RESET`/`LOAD` thắng sườn đếm trong cùng cycle; `CV` **bão
+  hoà** chứ không quấn vòng (quấn vòng biến một bộ đếm giờ chạy thành số âm sau
+  32767 lần mà không ai thấy). Mỗi block có vector conformance chạy
+  cycle-by-cycle ở **cả ST lẫn FBD**, đúng điều kiện để một tên rời khỏi danh
+  sách "entry ma".
+
+- **Fixed — loader từ chối artifact hợp lệ mang FB mới.** `fb_type > 5` bị chặn
+  cứng bằng số trần; nay ngưỡng đi theo chính enum, giữ nguyên nguyên tắc loader
+  phải từ chối fb_type mà binary này chưa biết cách chạy.
+
+- **Fixed — cursor thư viện chấp nhận token đã bị sửa.** base64 raw **không
+  strict** decode một ký tự cuối đã đổi về đúng 32 byte cũ, nên HMAC vẫn khớp và
+  cursor giả mạo vẫn dùng được; test chống giả mạo xanh chỉ vì may. Nay decode
+  bằng `Strict()` và có thêm ca kiểm "đổi bit thừa ở ký tự cuối".
+
+- **Fixed — self-test `versionHistory` mất tác dụng khi lịch sử nhiều hàng.** Nó
+  sửa hàng `[0]`, vốn chỉ trùng version hiện hành khi lịch sử có đúng một hàng.
+  Nay sửa hàng cuối, thêm ràng buộc **append-only** (version đang dùng phải là
+  hàng cuối) và ca self-test đảo thứ tự lịch sử.
+
+- **Changed — union `LibraryCategory` của TS sinh TỪ hợp đồng.** Trước đây nó
+  được chép tay trong template generator, nên thêm một nhóm mới (`counter`) làm
+  TypeScript đỏ ở một file sinh tự động — đúng loại lỗi mà file sinh tự động
+  sinh ra để tránh.
+
+- **Compatibility — điều SẼ hỏng.** `TP`/`CTU`/`CTD` nay là **từ khoá**: Draft
+  đang dùng ba tên đó làm tên biến sẽ báo lỗi Check sau khi nâng cấp. Lựa chọn
+  có chủ ý — một token mang hai nghĩa là nguồn lỗi tệ hơn một lần đổi tên biến.
+  Artifact cũ không hỏng. `libraryVersion` lên **rev-a.2** với lịch sử
+  version→hash append-only.
+
+- **Verification (đo mới).** CTest **1297/1297**; conformance ST↔FBD **8/8
+  stateTrace**; `go vet` + `go test ./... -count=1` PASS; FE **143 file / 1568
+  test**, lint và build PASS (chunk Programming **103,93 KiB gzip**); E2E mock
+  **31 PASS / 5 skip**; E2E real-backend **1/1 PASS** với parity catalog
+  BE↔registry khớp ở 43 entry; G1 self-test **36/36**; ba script hợp đồng còn
+  lại và `verify-project.sh --component layout` PASS. Chi tiết:
+  [`2026-08-26-pgm02-t59-804-timer-counter-blocks.md`](docs/07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-timer-counter-blocks.md).
+
+
 ### PGM-02 R1 — catalog dùng chung và Quick Library `T59-804` phần 1 (2026-08-26)
 
 - **Added — Quick Library cho ST đọc ĐÚNG catalog của PGM-04 (`WP-03`).** Panel
