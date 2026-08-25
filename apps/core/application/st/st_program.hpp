@@ -86,6 +86,11 @@ enum class StFbType : uint16_t {
      * DDD-CTRL-PROG-001 §7. Giá trị wire mới 5, artifact cũ (1..4) vẫn
      * byte-compatible. */
     PID    = 5,
+    /* `T59-804`/`DDD-CTRL-PROG-001` §7A. Ba block chuẩn IEC thêm sau PID; giá
+     * trị 1..5 giữ nguyên nên artifact cũ vẫn byte-compatible. */
+    TP     = 6,
+    CTU    = 7,
+    CTD    = 8,
 };
 
 StFbType st_fb_type_from_name(const std::string& name);

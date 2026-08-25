@@ -66,6 +66,13 @@ struct StFbState {
     int64_t start_ns = 0;
     bool    q = false;
 
+    /* `T59-804` (§7A) — `TP` cần sườn riêng của IN (không dùng chung `prev_clk`
+     * để người đọc không phải suy xem trường nào đang mang nghĩa gì), còn
+     * `CTU`/`CTD` giữ giá trị đếm. `counter` là i32 trong bộ nhớ nhưng bão hoà
+     * theo dải INT khi ghi ra cổng `CV`. */
+    bool    prev_in = false;
+    int32_t counter = 0;
+
     /* PID (TASK-PROG-303, DDD-CTRL-PROG-001 §7). TASK-PROG-402 lưu state
      * bằng codec wire canonical; pid_prev_call_ns được rebase khi restore vì
      * timestamp monotonic không có nghĩa qua process restart. */

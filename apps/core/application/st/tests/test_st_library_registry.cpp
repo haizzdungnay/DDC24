@@ -92,10 +92,16 @@ TEST(StLibraryRegistry, EveryCompilerFbTypeAppearsInRegistry)
         << "FB type nhiều hơn registry";
 }
 
-/* Các entry ma cụ thể đã bị gỡ. */
+/* Các entry ma cụ thể đã bị gỡ.
+ *
+ * `CTU` RỜI danh sách này ở `T59-804`: nó không còn là entry ma mà đã có
+ * compiler/runtime thật, layout RETAIN pinned (`DDD-CTRL-PROG-001` §7A) và
+ * vector conformance chạy cycle-by-cycle ở cả ST lẫn FBD. Đó chính là điều kiện
+ * để một tên rời khỏi danh sách này — không phải vì ai đó muốn thấy nó trên
+ * palette. `SCALE`/`DEADBAND`/`PI` vẫn là ma cho tới khi có cùng bộ evidence. */
 TEST(StLibraryRegistry, RemovedGhostEntriesStayRemoved)
 {
-    for (const char* ghost : {"SCALE", "DEADBAND", "CTU", "PI"}) {
+    for (const char* ghost : {"SCALE", "DEADBAND", "PI"}) {
         StFunc resolved{};
         EXPECT_FALSE(st_func_from_name(ghost, &resolved)) << ghost;
         EXPECT_EQ(st_fb_type_from_name(ghost), StFbType::NONE) << ghost;
