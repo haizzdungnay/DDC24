@@ -220,6 +220,14 @@ export interface ProgrammingProgram {
   kind: 'PROGRAM' | 'FUNCTION' | 'FUNCTION_BLOCK'
   language: 'ST' | 'FBD'
   document: unknown
+  /** Draft v2 — chu kỳ chạy riêng của POU này, lấy từ đúng mục `programs[]` của
+   *  nó. `undefined` = POU chưa xếp lịch (hoặc document v1, nơi chu kỳ là của
+   *  Task chung). KHÔNG suy từ `task.periodMs`: trong Project nhiều chu kỳ,
+   *  giá trị đó chỉ là chu kỳ của Program ĐẦU TIÊN. */
+  periodMs?: number
+  /** Draft v2 — `objectId` của các POU mà POU này gọi. Dùng cho preflight xoá:
+   *  xoá một FUNCTION còn người gọi sẽ hỏng Check chứ không hỏng ở đây. */
+  dependencies?: readonly string[]
   executionOrder?: number
   functionalTags?: string[]
 }
@@ -232,6 +240,18 @@ export interface ProgrammingProgram {
  * v2 không có hai field đó; dùng một type hẹp tại biên ghi để không thể vô tình
  * serialize cả view model rồi nhận 400.
  */
+/** Payload typed của `upsertObject` (Draft v2 `objects[]`). */
+export interface ProgrammingPouObjectDraftInput {
+  objectId: string
+  kind: ProgrammingProgram['kind']
+  name: string
+  language: ProgrammingProgram['language']
+  source: string
+  interface?: unknown
+  locals?: unknown[]
+  dependencies?: string[]
+}
+
 export interface ProgrammingProgramDraftInput {
   programId: string
   name: string
@@ -365,6 +385,17 @@ export type ProgrammingDraftOperation =
   | { op: 'setFunctionalTags'; tags: string[] }
   | { op: 'replaceProgramSource'; programId: string; language: 'ST' | 'FBD'; source: string }
   | { op: 'upsertProgram'; program: ProgrammingProgramDraftInput }
+  /** Draft v2 typed — tạo/ghi đè chính POU trong `objects[]`. Khác
+   *  `upsertProgram` ở chỗ nó KHÔNG đụng tới `programs[]`: xếp lịch là một
+   *  quyết định riêng, và FUNCTION/FUNCTION_BLOCK không bao giờ có mục ở đó. */
+  | { op: 'upsertObject'; object: ProgrammingPouObjectDraftInput }
+  /** Đổi tên tại chỗ, giữ nguyên `objectId` và mã nguồn. Không dùng
+   *  `upsertObject` để đổi tên: gửi lại cả `source` sẽ ghi đè nội dung mà người
+   *  dùng vừa sửa ở buffer khác. */
+  | { op: 'renameObject'; objectId: string; name: string }
+  /** Nhân bản nội dung với identity MỚI do client cấp — retry cùng request phải
+   *  cho cùng một `newObjectId`, nếu không idempotency mất nghĩa. */
+  | { op: 'duplicateObject'; objectId: string; newObjectId: string; name: string }
   | { op: 'removeProgram'; programId: string }
   /** Draft v2 — xoá chính POU khỏi `objects[]`. `removeProgram` chỉ gỡ CẤU HÌNH
    *  CHẠY; thiếu thao tác này thì mã nguồn POU vẫn nằm trong Draft, vẫn hiện
