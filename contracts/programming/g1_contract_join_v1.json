@@ -25,12 +25,12 @@
     {
       "name": "profile",
       "path": "contracts/programming/product_profile_v2.json",
-      "sha256": "e4f235a8f994f552a5f76d7678d404f671b648ae47de450f0094c33e87f69bad",
+      "sha256": "2ffb6c8fc7b0c117a4916aded12d43d7b484b80590001b0078a6d72a776ebe69",
       "major": 1,
       "minor": 0,
       "profileCode": 1,
       "schemaPath": "contracts/programming/product_profile_v2.schema.json",
-      "schemaSha256": "f53a7192860391a2d1d42f26e200794f5ca13c1ec04c5bb83ea04ba917af2c5c",
+      "schemaSha256": "9a5ad458e4ef6bd7a314c745288df37cd19b6531d5d5c90a741fb9efb20f6f0f",
       "targetAbi": 3841,
       "integrityMode": "SIGNATURE_REQUIRED",
       "documentMajor": 2,
@@ -84,22 +84,26 @@
     {
       "name": "library-registry",
       "path": "contracts/programming/pou_library_registry_v1.json",
-      "sha256": "55c152d6a1456faf130a05a68788c9e15be918be359d9e642c8c215068540885",
+      "sha256": "9e7536157e4ac0d2aaa04da2e82b13fd280f49179f6cd209bb9c73017440d7fc",
       "schemaPath": "contracts/programming/pou_library_registry_v1.schema.json",
-      "schemaSha256": "17bdaf6bec8fc4f11162de6bbda4dade509fa01b528fd493cdbae2a06129bf0c",
+      "schemaSha256": "f040671217c9017333b0ee1b069cf53206533363a5d2e25a00d62ad476983fff",
       "major": 1,
       "schemaVersion": 1,
-      "libraryVersion": "rev-a.1",
+      "libraryVersion": "rev-a.2",
       "versionHistory": [
         {
           "libraryVersion": "rev-a.1",
           "sha256": "55c152d6a1456faf130a05a68788c9e15be918be359d9e642c8c215068540885"
+        },
+        {
+          "libraryVersion": "rev-a.2",
+          "sha256": "9e7536157e4ac0d2aaa04da2e82b13fd280f49179f6cd209bb9c73017440d7fc"
         }
       ],
-      "entryCount": 40,
+      "entryCount": 43,
       "operatorCount": 15,
       "funcTableCount": 20,
-      "fbTypeCount": 5,
+      "fbTypeCount": 8,
       "reviewRequired": [
         "PID"
       ]
@@ -112,7 +116,7 @@
       "schemaVersion": 2,
       "magic": "MKDDCIR2",
       "goldenPath": "contracts/programming/golden/package_v2_ahu.mkpkg",
-      "goldenSha256": "10709c2850cb3188e9d1a04e8b4d3a149bd46129f77f6e698304cae01f4e7f94",
+      "goldenSha256": "ec5cba18344ebb85c3136a05170123cec726fab4d121108f7e85c79f63638d13",
       "goldenManifestPath": "contracts/programming/golden/package_v2_manifest.json",
       "goldenManifestSha256": "2a7f8e65a4c51b052fc4d8a7c10e07196251b03e887a50518800bd25dd5fde88",
       "goldenArtifactBytes": 717,

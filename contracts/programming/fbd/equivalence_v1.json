@@ -1160,6 +1160,340 @@
         }
       ],
       "tolerance": 0.0001
+    },
+    {
+      "id": "FB-006",
+      "typeRef": "TP",
+      "instance": "PULSE",
+      "inputs": [
+        {
+          "port": "IN",
+          "variable": "TRIGGER",
+          "type": "BOOL"
+        },
+        {
+          "port": "PT",
+          "variable": "WIDTH",
+          "type": "TIME"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "OUT",
+          "type": "BOOL"
+        }
+      ],
+      "unusedOutputPorts": [
+        {
+          "port": "ET",
+          "type": "TIME"
+        }
+      ],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "TRIGGER": true,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 300000000,
+          "values": {
+            "TRIGGER": false,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 600000000,
+          "values": {
+            "TRIGGER": true,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "TRIGGER": true,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 1200000000,
+          "values": {
+            "TRIGGER": false,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 1400000000,
+          "values": {
+            "TRIGGER": true,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-007",
+      "typeRef": "CTU",
+      "instance": "COUNTER",
+      "inputs": [
+        {
+          "port": "CU",
+          "variable": "CLK",
+          "type": "BOOL"
+        },
+        {
+          "port": "RESET",
+          "variable": "CLEAR",
+          "type": "BOOL"
+        },
+        {
+          "port": "PV",
+          "variable": "PRESET",
+          "type": "INT"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "DONE",
+          "type": "BOOL"
+        },
+        {
+          "port": "CV",
+          "variable": "COUNT",
+          "type": "INT"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "CLK": false,
+            "CLEAR": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 0
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "CLK": true,
+            "CLEAR": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "CLK": true,
+            "CLEAR": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "CLK": false,
+            "CLEAR": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "CLK": true,
+            "CLEAR": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": true,
+            "COUNT": 2
+          }
+        },
+        {
+          "nowNs": 5000000000,
+          "values": {
+            "CLK": false,
+            "CLEAR": true,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 0
+          }
+        },
+        {
+          "nowNs": 6000000000,
+          "values": {
+            "CLK": true,
+            "CLEAR": true,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-008",
+      "typeRef": "CTD",
+      "instance": "COUNTER",
+      "inputs": [
+        {
+          "port": "CD",
+          "variable": "CLK",
+          "type": "BOOL"
+        },
+        {
+          "port": "LOAD",
+          "variable": "PRESET_LOAD",
+          "type": "BOOL"
+        },
+        {
+          "port": "PV",
+          "variable": "PRESET",
+          "type": "INT"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "DONE",
+          "type": "BOOL"
+        },
+        {
+          "port": "CV",
+          "variable": "COUNT",
+          "type": "INT"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "CLK": false,
+            "PRESET_LOAD": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": true,
+            "COUNT": 0
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "CLK": false,
+            "PRESET_LOAD": true,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 2
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "CLK": true,
+            "PRESET_LOAD": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "CLK": true,
+            "PRESET_LOAD": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "CLK": false,
+            "PRESET_LOAD": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 5000000000,
+          "values": {
+            "CLK": true,
+            "PRESET_LOAD": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": true,
+            "COUNT": 0
+          }
+        },
+        {
+          "nowNs": 6000000000,
+          "values": {
+            "CLK": true,
+            "PRESET_LOAD": true,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 2
+          }
+        }
+      ]
     }
   ]
 }
