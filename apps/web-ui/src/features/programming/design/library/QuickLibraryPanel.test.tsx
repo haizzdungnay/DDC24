@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { ProgrammingLibraryPage, RemoteState } from '../../model/types'
+import { stInsertionSnippet, type CatalogEntry } from './libraryCatalog'
 import { QuickLibraryPanel } from './QuickLibraryPanel'
 
 const preferences = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
@@ -50,7 +51,7 @@ function ready(): RemoteState<ProgrammingLibraryPage> {
 }
 
 function renderPanel(state: RemoteState<ProgrammingLibraryPage> = ready()) {
-  const onInsert = vi.fn<(snippet: string) => boolean>().mockReturnValue(true)
+  const onInsert = vi.fn<(entry: CatalogEntry) => boolean>().mockReturnValue(true)
   render(
     <I18nProvider>
       <QuickLibraryPanel library={state} language="ST" onInsert={onInsert} onClose={vi.fn()} />
@@ -71,7 +72,10 @@ describe('PGM-02 Quick Library (T59-804)', () => {
   it('chèn FUNCTION bằng đúng lời gọi có tham số của catalog', async () => {
     const { onInsert } = renderPanel()
     fireEvent.click(await screen.findByRole('button', { name: 'Chèn LIMIT' }))
-    expect(onInsert).toHaveBeenCalledWith('OUT := LIMIT(MN, IN, MX);')
+    // Panel trả về ĐÚNG mục catalog; dựng đoạn mã là việc của bề mặt ST.
+    const entry = onInsert.mock.calls[0][0]
+    expect(entry.entryId).toBe('LIMIT')
+    expect(stInsertionSnippet(entry)).toBe('OUT := LIMIT(MN, IN, MX);')
   })
 
   it('mục chờ review hiện ra nhưng không bấm được, kèm lý do', async () => {
@@ -84,7 +88,7 @@ describe('PGM-02 Quick Library (T59-804)', () => {
   })
 
   it('Recent chỉ ghi SAU khi chèn thành công', async () => {
-    const onInsert = vi.fn<(snippet: string) => boolean>().mockReturnValue(false)
+    const onInsert = vi.fn<(entry: CatalogEntry) => boolean>().mockReturnValue(false)
     render(
       <I18nProvider>
         <QuickLibraryPanel library={ready()} language="ST" onInsert={onInsert} onClose={vi.fn()} />
@@ -117,5 +121,52 @@ describe('PGM-02 Quick Library (T59-804)', () => {
   it('catalog lỗi thì báo lỗi, không hiện danh sách rỗng như thể không có block', async () => {
     renderPanel({ status: 'error', data: null, error: 'PRG-ERR-UNAVAILABLE-001', refresh: vi.fn() })
     expect(await screen.findByRole('alert')).toHaveTextContent('PRG-ERR-UNAVAILABLE-001')
+  })
+})
+
+describe('T59-804 — dock dùng chung: bề mặt tự nói mục nào chưa nhận được', () => {
+  it('mục bề mặt chưa vẽ được bị chặn kèm lý do CỦA BỀ MẶT, không phải của catalog', async () => {
+    const onInsert = vi.fn<(entry: CatalogEntry) => boolean>().mockReturnValue(true)
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="FBD"
+          onInsert={onInsert}
+          canInsert={(entry) =>
+            entry.entryId === 'LIMIT' ? { ok: true } : { ok: false, reason: 'Chưa vẽ được trên canvas' }
+          }
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+    // LIMIT: catalog cho phép và bề mặt nhận được.
+    fireEvent.click(await screen.findByRole('button', { name: 'Chèn LIMIT' }))
+    expect(onInsert).toHaveBeenCalledTimes(1)
+
+    // PID: catalog đã chặn (REVIEW_REQUIRED) nên lý do của catalog thắng.
+    const pid = await screen.findByRole('button', { name: 'Chèn PID' })
+    expect(pid).toBeDisabled()
+    expect(within(pid).getByText('Chờ review sản phẩm')).toBeInTheDocument()
+  })
+
+  it('mục catalog dùng được nhưng bề mặt chưa nhận thì hiện lý do của bề mặt', async () => {
+    const onInsert = vi.fn<(entry: CatalogEntry) => boolean>().mockReturnValue(true)
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="FBD"
+          onInsert={onInsert}
+          canInsert={() => ({ ok: false, reason: 'Chưa vẽ được trên canvas' })}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+    const limit = await screen.findByRole('button', { name: 'Chèn LIMIT' })
+    expect(limit).toBeDisabled()
+    expect(within(limit).getByText('Chưa vẽ được trên canvas')).toBeInTheDocument()
+    fireEvent.click(limit)
+    expect(onInsert).not.toHaveBeenCalled()
   })
 })

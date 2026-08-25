@@ -35,6 +35,7 @@ import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeVa
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { QuickLibraryHost } from '../library/QuickLibraryPanel'
+import { stInsertionSnippet } from '../library/libraryCatalog'
 import { SelectionQuickActions } from './SelectionQuickActions'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
 
@@ -328,6 +329,7 @@ export function ProgramsTab({
             onChange={(source) => setBuffers((current) => ({ ...current, [selected.programId]: source }))}
             onSave={onSave}
             userPouInterfaces={userPouInterfaces}
+            projectId={document.project.projectId}
           />
         )}
       </div>
@@ -1072,8 +1074,8 @@ export function SourceEditor({
           <QuickLibraryHost
             projectId={projectId}
             language="ST"
-            onInsert={(snippet) => {
-              handleInsertAtCursor(snippet)
+            onInsert={(entry) => {
+              handleInsertAtCursor(stInsertionSnippet(entry))
               return true
             }}
             onClose={() => setLibraryPanelOpen(false)}
@@ -1160,6 +1162,7 @@ function FbdEditorPane({
   onChange,
   onSave,
   userPouInterfaces,
+  projectId,
 }: {
   program: ProgrammingProgram
   source: string
@@ -1168,6 +1171,7 @@ function FbdEditorPane({
   onChange: (source: string) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   userPouInterfaces: readonly UserPouInterface[]
+  projectId?: string
 }) {
   const { pick } = useI18n()
   const committedJson = useMemo(() => canonicalFbdJson(parseFbdDocument(program.document, program.name)), [program.document, program.name])
@@ -1195,6 +1199,7 @@ function FbdEditorPane({
         document={local}
         canEdit={canEdit}
         userPouInterfaces={userPouInterfaces}
+        projectId={projectId}
         onChange={(next) => onChange(canonicalFbdJson(next))}
       />
       {dirty && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
