@@ -128,7 +128,12 @@ export function MappingTab({
       {document.bindings.length === 0 ? (
         <p className="text-sm text-[var(--c-text-dim)]">{pick('Chưa có ánh xạ nào.', 'No mappings yet.')}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div
+          className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--c-accent)]"
+          tabIndex={0}
+          role="group"
+          aria-label={pick('Bảng ánh xạ Biến ↔ Điểm', 'Variable ↔ point mapping table')}
+        >
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--c-border)] text-xs uppercase text-[var(--c-text-dim)]">
