@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 6.10 |
+| Phiên bản | 6.11 |
 | Trạng thái | **89 requirement/47 scenario Active cho implementation; PGM-02 Target đã pin nhưng mọi `I/T/P/R=N`, U13–U15 NOT_RUN** |
 | Cập nhật | 2026-08-25 |
 | Chủ quản | Verification Lead |
@@ -19,7 +19,7 @@
 | 3. Hệ thống hiện tại đang có gì? | 82/82 baseline + 44/44 scenario giữ nguyên; 22/82 baseline `I=Y`, formal PASS 0. PGM-02 có 7 requirement và 3 scenario Candidate với `D=Y`, mọi `I/T/P/R=N`; không claim runtime. |
 | 4. Thiết kế mới thay đổi điều gì? | Target route/identity/typed EDIT/Quick Library, coherent LIVE và isolated Simulation admin-only đã được pin cho implementation theo `R1 → R2 → R3`. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
-| 6. Điều gì còn bị chặn? | Không còn blocker authority cho code PGM-02: `T59-801`/`T59-802=DONE`, `T59-803=READY`, task sau `ORDERED` theo dependency. Corrective `ST-POU-005` đã implement xong (2026-08-25); phần còn lại của implementation R1, U13–U15, target/HIL/soak/CI/provenance tiếp tục chặn closeout/release. |
+| 6. Điều gì còn bị chặn? | Không còn blocker authority cho code PGM-02: `T59-801..803=DONE`, `T59-804=READY`, task sau `ORDERED` theo dependency. Corrective `ST-POU-005` đã implement xong (2026-08-25); phần còn lại của implementation R1, U13–U15, target/HIL/soak/CI/provenance tiếp tục chặn closeout/release. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Harness phải xác nhận 89 dòng, checker hai chiều 89/89 requirement và 47/47 scenario. Đây chỉ là tính nhất quán Candidate, không thay Test Result, target/HIL hay release approval. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
@@ -41,7 +41,7 @@ nghĩa code tồn tại, cũng không nghĩa test đã PASS.
 | `SWR-REQ-PROG-BE-112..115` | Unified DDD §4–§6 | T59-006/302/405/408/504/505 | U04/U07/U10 | `BE-112/115`: Check/package v2 đã có source host/local từ W3/W4. `BE-113`: Enable/Disable đã có RBAC/idempotency/audit/reconcile/read-back source. `BE-114`: `TRACE_READ` là nguồn mẫu chính; Monitor Point và `GET /runtime/signals` giữ unavailable explicit, không trộn hai nguồn trong một dãy. `T59-505` gọi đúng HTTP/worker/compiler/packager/IPC trong lane HOST/LOCAL đang được gate; chưa có Test Result/target. U04/U07/U10 NOT_RUN |
 | `SWR-REQ-PROG-CORE-111..116` | Unified DDD §5.3/§7 | T59-401..408/501/504/505 | U02/U05..U09/U11 | Baseline merged có package v2/dual-reader, per-Program scheduler, signal double-buffer, Enable/Disable safe-boundary, RETAIN cô lập và trace bounded. Corrective source current-worktree bổ sung `SIGNAL_READ=0x71`, `SIGNAL_PUBLISH=0x72`, section signal-ref `0x0009`, prepared whole-program-set và handoff sau `PREPARED` fsync; thêm `F-P59-MONITOR-VARS-001` (Monitor tra biến theo `locals` Draft v2 và giữ point Core khi SHM chưa attach) và `F-P59-ROLLBACK-DB-001` (snapshot/khôi phục store Programming khi rollback), thêm `F-P59-ENABLE-BOUNDARY-001` (Enable/Disable ARM ở non-RT, áp dụng tại safe boundary, ack theo generation; trần 16 kiểm trước khi chạm trường) và `F-P59-SIGNAL-READBACK-001` (read-back signal cho reader non-RT kiểm generation trước/sau khi chép) — bằng chứng TSan `docs/07_records/test-evidence/programming/2026-08-24-tsan-enable-boundary.md`; chưa merge nên chưa nâng `I`. Target timing/soak/power/HIL vẫn thiếu; U02/U05..U09/U11 NOT_RUN |
 | `NFR-REQ-PROG-111` | Unified DDD §11–§12 | T59-606/702/707 | U05/U11 | NOT_RUN |
-| `SYS-REQ-PROG-116`; `SWR-REQ-PROG-FE-119` | PGM-02 DDD §1/§3/§7/§9; UX §2/§3.2/§8–10; FE §16.1; workspace contract | `T59-801`/`T59-802=DONE`; `T59-803=READY`; task sau `ORDERED` | U13/U14/U15 | Target pinned/authorized. `T59-802` đã có source cho ĐÚNG phần vỏ/route/resolver/mobile (`shared/programsRoute.ts`, `design/ProgramsWorkspaceRoute.tsx`, `layout/useProgrammingViewport.ts`); phần POU Explorer/editor/LIVE/Simulation của cùng requirement CHƯA có, nên giữ `D=Y`, `I/T/P/R=N`; U13–U15 NOT_RUN |
+| `SYS-REQ-PROG-116`; `SWR-REQ-PROG-FE-119` | PGM-02 DDD §1/§3/§7/§9; UX §2/§3.2/§8–10; FE §16.1; workspace contract | `T59-801..803=DONE`; `T59-804=READY`; task sau `ORDERED` | U13/U14/U15 | Target pinned/authorized. Đã có source cho vỏ/route/resolver/mobile (`shared/programsRoute.ts`, `design/ProgramsWorkspaceRoute.tsx`, `layout/useProgrammingViewport.ts`) và cho một POU Explorer + mô hình định danh (`design/pou/{pouViewModel,pouCommands,PouExplorer}`); phần Quick Library/editor/LIVE/Simulation của cùng requirement CHƯA có, nên giữ `D=Y`, `I/T/P/R=N`; U13–U15 NOT_RUN |
 | `SWR-REQ-PROG-BE-116`; `SWR-REQ-PROG-CORE-117` | PGM-02 DDD R1/R2 contract, identity tuple, refactor/reference/diagnostic và LIVE join | `T59-804`, `T59-810..813` ORDERED | U13/U14 | Contract Target pinned; implementation/producer-chain/Test Result NOT_RUN |
 | `SWR-REQ-PROG-BE-117`; `SWR-REQ-PROG-CORE-118`; `NFR-REQ-PROG-112` | PGM-02 DDD R3 isolation/RBAC/virtual time/quota + NFR; `RSK-PROG-023` | `T59-814..817` ORDERED after R2 | U15 | Contract/design authorized; no worker, target/HIL or zero-output evidence; NOT_RUN |
 
@@ -331,6 +331,7 @@ tính nhất quán hồ sơ, không đổi trạng thái formal `T/P/R`.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 6.11 | 2026-08-25 | Ghi `T59-803 DONE (HOST/LOCAL)` cho một POU Explorer + mô hình định danh `objectId`/`programId`, `T59-804 READY`. **Không** đổi `I/T/P/R`: requirement còn phủ Quick Library/editor/LIVE/Simulation chưa làm. U13–U15 NOT_RUN, 0/47 PASS, release NO-GO. |
 | 6.10 | 2026-08-25 | Ghi `T59-802 DONE (HOST/LOCAL)` cho vỏ/route/resolver/mobile PGM-02 và `T59-803 READY`; đóng `F-P59-GHOST-POU-001` ở lớp implementation. **Không** đổi `I/T/P/R` của `SYS-REQ-PROG-116`/`FE-119` vì requirement còn phủ POU Explorer/editor/LIVE/Simulation chưa làm; U13–U15 vẫn NOT_RUN, 0/47 PASS, release NO-GO. |
 | 6.8-candidate | 2026-08-24 | Cấp canonical trace cho 7 requirement và 3 scenario PGM-02 v2.2, nâng tổng 89/47; ánh xạ 16 card `T59-802..817` theo từng increment nhưng mọi dòng mới giữ `Y/N/N/N/N`, U13..U15 NOT_RUN và toàn bộ card `NO EXECUTION AUTHORITY`; Architect exact pin/code/release vẫn PENDING/NO-GO. |
 | 6.9 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`, mở execution authority theo R1→R2→R3 và chốt `ST-POU-005`; giữ nguyên mọi PGM-02 `I/T/P/R=N`, U13–U15 NOT_RUN, 0/47 PASS và release NO-GO. |
@@ -444,7 +445,7 @@ qua journey hoặc qua kịch bản xuyên suốt tương ứng.
 | Quy tắc vô hiệu hóa | PASS | §7 và §8: đổi requirement/design/contract/source/board làm mất hiệu lực Test Result phía dưới; không giữ `P` cũ |
 | Kiểm tính nhất quán tự động | PASS khi rerun cùng change set | §8.1 khóa acceptance 89/89 requirement, 47/47 scenario và harness 89 trace rows; không thay Test Result |
 | Trạng thái bằng chứng trung thực | PASS | §5 và §7: 2/47 record `BLOCKED`, 45 `NOT_RUN`, 0/47 PASS, 0/89 released; release gate `RED / NO-GO` |
-| Quyền implementation | PASS toàn PGM-02 | §9: `AUTH-PROG-2026-08-24-05`, `T59-801`/`T59-802=DONE`, `T59-803=READY`, task sau `ORDERED`; mọi I/T/P/R vẫn cần evidence riêng |
+| Quyền implementation | PASS toàn PGM-02 | §9: `AUTH-PROG-2026-08-24-05`, `T59-801..803=DONE`, `T59-804=READY`, task sau `ORDERED`; mọi I/T/P/R vẫn cần evidence riêng |
 
 Ma trận này theo dõi trạng thái; nó **không** tạo ra bằng chứng.
 

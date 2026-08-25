@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-DRM-001` |
-| Phiên bản | 2.6 |
-| Trạng thái | **Baseline ADR-050 và PGM-02 v2.2 exact-pinned cho implementation; `T59-801`/`T59-802=DONE`, `T59-803=READY`, R1→R2→R3; `RELEASE_READY=NO-GO`** |
+| Phiên bản | 2.7 |
+| Trạng thái | **Baseline ADR-050 và PGM-02 v2.2 exact-pinned cho implementation; `T59-801..803=DONE`, `T59-804=READY`, R1→R2→R3; `RELEASE_READY=NO-GO`** |
 | Ngày | 2026-08-25 |
 | Chủ quản | System Engineering + Document Control |
 | Product authority | [`PROD-PROG-001` v3.0](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) |
@@ -28,8 +28,10 @@ cổng phát hành.
   Accepted, 89 requirement/47 scenario, asset và 17-file pin set.
 - `T59-802..817` là 16 task authority tách theo R1/R2/R3; quyền implementation
   đã mở nhưng scheduler chỉ cho task có predecessor hoàn tất chuyển `READY`.
-  `T59-802` (vỏ/route/resolver/mobile read-only) đã `DONE (HOST/LOCAL)`;
-  `T59-803` chuyển `READY`.
+  `T59-802` (vỏ/route/resolver/mobile read-only) và `T59-803` (một POU
+  Explorer + mô hình định danh) đã `DONE (HOST/LOCAL)`; `T59-804` chuyển
+  `READY`. Gate `G-PGM02-01 EDIT_FOUNDATION` đã có một route và một POU tree;
+  còn thiếu một catalog authority (`WP-03`).
 - Task phụ thuộc code dùng `ORDERED`, tự chuyển `READY` khi dependency hoàn tất.
 - CI được Product Owner cho phép `WAIVED/DEFERRED BY OWNER` trong phạm vi đóng
   implementation; đây không phải CI PASS và không mở release.
@@ -115,6 +117,7 @@ scenario unified `NOT_RUN` cho tới khi có Test Result đúng thẩm quyền.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.7 | 2026-08-25 | Ghi `T59-803 DONE (HOST/LOCAL)` và `T59-804 READY`; `G-PGM02-01` còn thiếu một catalog authority. Không đổi maturity, evidence hay `RELEASE_READY`. |
 | 2.6 | 2026-08-25 | Ghi `T59-802 DONE (HOST/LOCAL)` cho vỏ/route canonical/resolver/mobile read-only PGM-02 và `T59-803 READY`; đóng corrective `F-P59-GHOST-POU-001` ở lớp source/test. `IMPLEMENTATION_CLOSE` giữ PENDING (còn `T59-803..809`), MCU FAKE PARTIAL và `RELEASE_READY=NO-GO` không đổi. |
 | 2.5 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: exact pin Candidate `413a043`, `T59-801=DONE`, `T59-802=READY`, mở cả ba IMPLEMENT_READY nhưng giữ dependency R1→R2→R3; ghost-POU chỉ đóng quyết định, corrective/evidence/release vẫn PENDING/NO-GO. |
 | 2.4-candidate | 2026-08-24 | Ghi review package PGM-02 gồm 17 authority file Candidate, 89 requirement/47 scenario, formal DDD/contract/ADR-053 và 16 card `T59-802..817`; chuyển `T59-801` sang REVIEW, giữ exact pin/PLAN_READY/IMPLEMENT_READY PENDING/NO-GO. |

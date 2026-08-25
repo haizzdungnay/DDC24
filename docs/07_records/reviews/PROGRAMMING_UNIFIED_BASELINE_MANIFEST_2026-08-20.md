@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.50 |
+| Phiên bản | 1.51 |
 | Trạng thái | **Active — PGM-02 v2.2 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; release NO-GO** |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -12,7 +12,8 @@
 
 ## 1. Phạm vi và quy tắc
 
-Manifest ghim đúng authority set dùng để chạy Plan59. Revision 1.50 re-pin 5
+Manifest ghim đúng authority set dùng để chạy Plan59. Revision 1.51 re-pin 4
+hồ sơ (`#4`, `#14`, `#15`, `#17`) sau khi `T59-803` đóng. Revision 1.50 re-pin 5
 hồ sơ (`#3`, `#4`, `#13`, `#14`, `#15`) sau khi `T59-802` đóng và corrective
 `F-P59-GHOST-POU-001` được sửa xong source/test; 12 hồ sơ còn lại giữ nguyên
 hash. Revision 1.49 re-pin 17 hồ sơ sau khi Product Owner/CTO + System Architect exact-pin Candidate
@@ -38,7 +39,7 @@ chứng minh code, target, HIL hoặc release.
 | 1 | `docs/00_governance/CONTROL.md` | `fd932a62e62d1d870506ca59395ea7c52d0f741636ab0b1a2d007ebab405dd4c` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 2 | `docs/00_governance/DECISIONS.md` | `76d48ad1cce0a1fda2c17e8b5d5135562bf3f296d7eb630458dfd12db7d84041` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `19136f652c52f94d7aada4db4d12ff646f03cd097b815149d02938c3606ee772` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 4 | `docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` | `25a856e1299263e6dd5af2efdd2510050732f15708b2ccb84e807b00e7104ca4` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 4 | `docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` | `9e75880a1e5a5dd900c4cdb10f771e2602e79f048c354e0398b90d2cef13a356` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 5 | `docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md` | `f41e4b3d68beee81aeae87b62a9c08f5375adb3a0a9b054949d7a21c2d18b335` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 6 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `be230f495072a1ac306c0bb0622e58bd5ed0409d1a42605b38e6b0cc8e6e0be8` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 7 | `docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md` | `c774fe97dbe1850fcbd8fab36395b468eac3451edd312eba9a47d7182b0cc7c0` | `413a043748dce3b44d2c5076412de761760ba17a` |
@@ -48,10 +49,10 @@ chứng minh code, target, HIL hoặc release.
 | 11 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `16fc92031ebdd20e033ed4f8aa7a07573c4fc830a3711a54c608f3d21052b723` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `0db9d63e43bf3199202be64ed022cc237495d4e60a6ac05fb8184da3508a2d91` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `40fcc8d098060f910a944373badcf9d2874d180ba9b08e37afe9e746fc9da03b` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `7129463b8f2807c1f53bacd835be8be05cb245aa4484eb3f3c8214271454d61c` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `1159dfa9e60bee68db91dc91bedba963c7ddd5726329218b1aa44b4bd975af94` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `2da173c6b499f0cd01dd17d0e29272bf0fb0de93ebe67cfee5894050438b1d41` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `0ea2a61d0f1966cf7a3b30d5f52cbcbec4a50975d724ae32440bfce4ac5bd377` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `9d9969a721db22cf4ac1c05fa6343e8e1ae1efd2164571ba82407496c80afb33` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 17 | `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` | `14d8a915c1e9074ec0eaeb7d90e863234433bede0a34d42e976695136b109a57` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 17 | `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` | `c7733ac4e6e5604cf3f6414fa78960e2a790e1cf4ef9ad573bdcae33a0664e45` | `413a043748dce3b44d2c5076412de761760ba17a` |
 
 ## 3. Disposition baseline cũ
 
@@ -86,6 +87,7 @@ evidence release.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.51 | 2026-08-25 | Re-pin 4 hồ sơ (`#4`, `#14`, `#15`, `#17`) sau khi `T59-803` đóng một POU Explorer và mô hình định danh. **Đánh giá impact:** `#15` ghi task DONE/READY và ghi chú thực thi; `#14` giữ nguyên `I/T/P/R=N`; `#4` ghi gate `G-PGM02-01` còn thiếu catalog authority; `#17` cập nhật ĐÚNG một dòng As-Built (POU tree nay là `PouExplorer`), không đổi Target/§3.5. Product/SRS/Architecture/DDD/UX/VVP/Risk **không đổi**; `RELEASE_READY` NO-GO. |
 | 1.50 | 2026-08-25 | Re-pin 5 hồ sơ (`#3`, `#4`, `#13`, `#14`, `#15`) sau khi `T59-802` đóng vỏ/route canonical PGM-02 và corrective `F-P59-GHOST-POU-001` được sửa xong source/test. **Đánh giá impact:** `#15` ghi `T59-802 DONE (HOST/LOCAL)`/`T59-803 READY` và corrective; `#3`/`#4` chuyển finding sang CLOSED và giữ `IMPLEMENTATION_CLOSE=PENDING`; `#13` ghi control mới cho `RSK-PROG-011` (vẫn Open, chờ đo trên bo); `#14` giữ nguyên `I/T/P/R=N` cho PGM-02. Product/SRS/Architecture/DDD/UX/VVP **không đổi**. Maturity DDD giữ M3, U13..U15 NOT_RUN, 23/23 risk Open và `RELEASE_READY` NO-GO. |
 | 1.49 | 2026-08-24 | Re-pin 17-file authority set sau `AUTH-PROG-2026-08-24-05`: exact Candidate `413a043` được Owner + Architect duyệt, `T59-801=DONE`, `T59-802=READY`, ba IMPLEMENT_READY GO nhưng scheduler giữ R1→R2→R3. Maturity DDD giữ M3, U13..U15 NOT_RUN, PGM-02 I/T/P/R=N, 23/23 risk Open và release NO-GO. Ghost-POU chỉ RESOLVED ở mức quyết định; corrective source/test vẫn PENDING. |
 | 1.48-candidate | 2026-08-24 | Re-pin dòng 3/17 sau khi khóa exact pin hai lớp. **Impact:** pin 17 hồ sơ Markdown vẫn do manifest; contract/schema/ADR/handoff/SVG phải được khóa bằng candidate Git commit SHA trong record Owner + Architect. Không đổi requirement/scenario/risk/execution authority; `PLAN_READY` vẫn PENDING. |
