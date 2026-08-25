@@ -551,6 +551,13 @@ export function SourceEditor({
    *  dùng cho Enter/autocomplete/Find-Replace có sẵn) chỉ còn là trường hợp
    *  riêng của hàm này. */
   function applyEditRange(next: string, selectionStart: number, selectionEnd: number) {
+    /* `T59-805` AC: LIVE và màn <768 px KHÔNG được sửa nguồn qua BẤT KỲ đường
+     * nào — gõ, dán, thả tệp, IME hay lệnh. `readOnly` của textarea chặn được
+     * đường trình duyệt, nhưng nó là một THUỘC TÍNH: một lần refactor quên nó
+     * là mọi đường mutation mở lại cùng lúc. Đây là chốt duy nhất mà mọi đường
+     * sửa (onChange, chèn, định dạng, tìm-thay, autocomplete, auto-indent) đều
+     * đi qua, nên guard đặt ở đây là guard đúng chỗ. */
+    if (!canEdit) return
     replaceHistory(recordStEditorEdit(historyRef.current, { source: next, selectionStart, selectionEnd }))
     pendingCursorRef.current = { value: next, selectionStart, selectionEnd }
     onChange(next)
@@ -954,6 +961,12 @@ export function SourceEditor({
             readOnly={!canEdit}
             spellCheck={false}
             onChange={(event) => {
+              /* Đường GÕ TAY không đi qua `applyEditRange` (trình duyệt tự ghi
+               * `.value`), nên guard read-only phải lặp lại ở đây. `readOnly`
+               * chặn được người dùng thật; guard này chặn cả những đường mà
+               * `readOnly` không phủ — thao tác lập trình, và một lần refactor
+               * quên thuộc tính đó. */
+              if (!canEdit) return
               const next = event.target.value
               const selectionStart = event.target.selectionStart
               const selectionEnd = event.target.selectionEnd

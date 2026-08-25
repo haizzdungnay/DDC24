@@ -409,3 +409,35 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     })
   })
 })
+
+/* `T59-805` AC: "LIVE and mobile cannot mutate via typing/paste/drop/IME/
+ * commands". `readOnly` của textarea chặn được người dùng thật, nhưng nó là một
+ * THUỘC TÍNH — một lần refactor quên nó là mọi đường mutation mở lại cùng lúc.
+ * Bộ test này khoá GUARD RUNTIME, thứ vẫn đúng kể cả khi thuộc tính biến mất. */
+describe('SourceEditor — chỉ đọc là policy runtime, không chỉ thuộc tính', () => {
+  it('không phát onChange cho gõ tay, dán hay thả khi canEdit=false', () => {
+    const { textarea, onChange } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { canEdit: false })
+    expect(textarea).toHaveAttribute('readonly')
+
+    // Mô phỏng cả ba đường mà trình duyệt dùng để ghi vào textarea: gõ tay,
+    // dán, và thả. Trong jsdom, cả ba đều tới cùng một `change` event.
+    fireEvent.change(textarea, { target: { value: 'PROGRAM HACKED\nEND_PROGRAM\n' } })
+    fireEvent.paste(textarea, { clipboardData: { getData: () => 'X := 1;' } })
+    fireEvent.drop(textarea, { dataTransfer: { getData: () => 'X := 1;' } })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('không có nút Lưu/Hoàn tác/Định dạng nào để chạy lệnh sửa', () => {
+    renderEditor('PROGRAM P\nEND_PROGRAM\n', { canEdit: false })
+    expect(screen.queryByRole('button', { name: /Hoàn tác/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Định dạng/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Lưu' })).not.toBeInTheDocument()
+  })
+
+  it('vẫn phát onChange bình thường khi được phép sửa', () => {
+    const { textarea, onChange } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { canEdit: true })
+    expect(textarea).not.toHaveAttribute('readonly')
+    fireEvent.change(textarea, { target: { value: 'PROGRAM P\nX := 1;\nEND_PROGRAM\n' } })
+    expect(onChange).toHaveBeenCalledWith('PROGRAM P\nX := 1;\nEND_PROGRAM\n')
+  })
+})
