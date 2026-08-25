@@ -58,6 +58,12 @@ export default defineConfig({
     command: 'npm run build:e2e && npx vite preview --port 4174 --strictPort',
     url: 'http://127.0.0.1:4174/login',
     reuseExistingServer: false,
-    timeout: 300_000
+    timeout: 300_000,
+    // T59-802: cut-over route Programs v2 chỉ trong lane browser E2E. Lệnh
+    // production `npm run build` không nhận biến này nên rollback default vẫn
+    // là false; đặt ở preview thì quá muộn vì Vite đã đóng cờ lúc build.
+    env: {
+      VITE_PROGRAMS_WORKSPACE_V2: '1'
+    }
   }
 })

@@ -48,6 +48,9 @@ export default defineConfig({
         VITE_DDC_MODE: 'live',
         VITE_AUTH_MODE: 'jwt',
         VITE_PROGRAMMING_REV_A: '1',
+        // T59-802: chỉ lane host E2E dùng route tree mới; production default
+        // vẫn false cho tới khi authority cut-over riêng.
+        VITE_PROGRAMS_WORKSPACE_V2: '1',
         VITE_E2E_NO_WATCH: '1',
         VITE_PROXY_TARGET: 'http://127.0.0.1:4181'
       }
