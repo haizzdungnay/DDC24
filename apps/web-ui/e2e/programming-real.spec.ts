@@ -1,5 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type APIRequestContext, type APIResponse, type Page } from '@playwright/test'
+import { PROGRAMMING_LIBRARY_ENTRIES } from '../src/features/programming/api/generated/library_registry'
+import { catalogEntries, catalogParity } from '../src/features/programming/design/library/libraryCatalog'
 
 /**
  * T59-505 — nghiệm thu host/LOCAL qua đúng HTTP, compiler/packager và
@@ -293,6 +295,24 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
       libraryState: 'DRAFT'
     })
   ])
+
+  /* `T59-804` — parity catalog GIỮA HAI BỀ MẶT trên backend thật. PGM-02 Quick
+     Library và PGM-04 Control Library cùng đọc `GET /libraries`; registry sinh
+     sẵn ở FE (palette FBD) phải khai đúng tập SYSTEM đó. Lệch nghĩa là một bên
+     đang chào block mà bên kia không có — đúng lớp lỗi từng xảy ra khi palette
+     chào SCALE/DEADBAND/CTU/PI mà compiler không hề hỗ trợ. */
+  const systemCatalogResponse = await request.get(
+    '/api/v1/programming/libraries?scope=SYSTEM&limit=100',
+    { headers: readHeaders(token) }
+  )
+  const systemCatalog = await responseJSON(systemCatalogResponse, 200)
+  const parity = catalogParity(
+    catalogEntries(systemCatalog as never),
+    PROGRAMMING_LIBRARY_ENTRIES.map((entry) => entry.id)
+  )
+  expect(parity.onlyInBackend, 'block chỉ có ở backend').toEqual([])
+  expect(parity.onlyInGenerated, 'block chỉ có ở registry sinh sẵn').toEqual([])
+  expect(parity.matched).toBe(PROGRAMMING_LIBRARY_ENTRIES.length)
 
   const savedR1Response = await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
     headers: mutationHeaders(token, { 'if-match': libraryMutation.etag as string }),
