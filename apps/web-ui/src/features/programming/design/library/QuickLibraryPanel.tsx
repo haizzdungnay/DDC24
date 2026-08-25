@@ -8,7 +8,6 @@ import {
   catalogEntries,
   filterCatalog,
   isInsertable,
-  stInsertionSnippet,
   type CatalogEntry
 } from './libraryCatalog'
 import {
@@ -34,13 +33,24 @@ export function QuickLibraryPanel({
   library,
   language,
   onInsert,
+  canInsert,
   onClose
 }: {
   library: RemoteState<ProgrammingLibraryPage>
   /** Ngôn ngữ POU đang mở — mục ràng buộc ngôn ngữ khác bị loại. */
   language: 'ST' | 'FBD'
-  /** Chèn đoạn ST tại con trỏ. Trả `true` khi chèn thật sự xảy ra. */
-  onInsert: (snippet: string) => boolean
+  /**
+   * Chèn mục vào bề mặt đang mở. Panel KHÔNG biết cách chèn: ST dựng đoạn mã
+   * tại con trỏ, FBD thêm node vào canvas. Trả `true` khi chèn thật sự xảy ra —
+   * Recent chỉ ghi sau khi có `true`.
+   */
+  onInsert: (entry: CatalogEntry) => boolean
+  /**
+   * Bề mặt có nhận được mục này không, và nếu không thì vì sao. Một mục dùng
+   * được ở ST vẫn có thể chưa vẽ được trên canvas FBD; nói ra lý do đúng chỗ
+   * tốt hơn là ẩn mục đi và để người dùng đi tìm nó.
+   */
+  canInsert?: (entry: CatalogEntry) => { ok: true } | { ok: false; reason: string }
   onClose: () => void
 }) {
   const { pick } = useI18n()
@@ -73,9 +83,15 @@ export function QuickLibraryPanel({
   const favorites = preferences.favorites.flatMap((id) => byId.get(id) ?? [])
   const recent = preferences.recent.flatMap((id) => byId.get(id) ?? [])
 
+  function surfaceBlock(entry: CatalogEntry): string | null {
+    if (!canInsert) return null
+    const verdict = canInsert(entry)
+    return verdict.ok ? null : verdict.reason
+  }
+
   function insert(entry: CatalogEntry) {
-    if (!isInsertable(entry)) return
-    const inserted = onInsert(stInsertionSnippet(entry))
+    if (!isInsertable(entry) || surfaceBlock(entry) !== null) return
+    const inserted = onInsert(entry)
     /* Recent chỉ đổi SAU khi chèn thành công: ghi trước là dựng một lịch sử
      * thao tác chưa từng xảy ra. */
     if (!inserted) return
@@ -128,10 +144,10 @@ export function QuickLibraryPanel({
         )}
 
         {library.status === 'ready' && favorites.length > 0 && (
-          <Section title={pick('Yêu thích', 'Favorites')} entries={favorites} favorites={preferences.favorites} onInsert={insert} onStar={star} />
+          <Section title={pick('Yêu thích', 'Favorites')} entries={favorites} favorites={preferences.favorites} onInsert={insert} onStar={star} surfaceBlock={surfaceBlock} />
         )}
         {library.status === 'ready' && recent.length > 0 && (
-          <Section title={pick('Gần đây', 'Recent')} entries={recent} favorites={preferences.favorites} onInsert={insert} onStar={star} />
+          <Section title={pick('Gần đây', 'Recent')} entries={recent} favorites={preferences.favorites} onInsert={insert} onStar={star} surfaceBlock={surfaceBlock} />
         )}
         {library.status === 'ready' && (
           <Section
@@ -140,6 +156,7 @@ export function QuickLibraryPanel({
             favorites={preferences.favorites}
             onInsert={insert}
             onStar={star}
+            surfaceBlock={surfaceBlock}
             emptyLabel={pick('Không khớp mục nào.', 'No entry matches.')}
           />
         )}
@@ -178,6 +195,7 @@ function Section({
   favorites,
   onInsert,
   onStar,
+  surfaceBlock,
   emptyLabel
 }: {
   title: string
@@ -185,6 +203,7 @@ function Section({
   favorites: readonly string[]
   onInsert: (entry: CatalogEntry) => void
   onStar: (entry: CatalogEntry) => void
+  surfaceBlock: (entry: CatalogEntry) => string | null
   emptyLabel?: string
 }) {
   const { pick } = useI18n()
@@ -194,13 +213,14 @@ function Section({
       {entries.length === 0 && emptyLabel && <p className="px-3 pb-2 text-xs text-[var(--c-text-dim)]">{emptyLabel}</p>}
       <ul aria-label={title}>
         {entries.map((entry) => {
-          const insertable = isInsertable(entry)
+          const blocked = surfaceBlock(entry)
+          const insertable = isInsertable(entry) && blocked === null
           const reason =
             entry.usability.kind === 'REVIEW_REQUIRED'
               ? pick('Chờ review sản phẩm', 'Awaiting product review')
               : entry.usability.kind === 'SIGNATURE_UNAVAILABLE'
                 ? pick('Thiếu chữ ký từ thiết bị', 'Signature unavailable from the device')
-                : null
+                : blocked
           return (
             <li key={`${entry.scope}-${entry.entryId}`} className="flex items-center gap-1 px-1">
               <button
@@ -245,7 +265,8 @@ function Section({
 export function QuickLibraryHost(props: {
   projectId?: string
   language: 'ST' | 'FBD'
-  onInsert: (snippet: string) => boolean
+  onInsert: (entry: CatalogEntry) => boolean
+  canInsert?: (entry: CatalogEntry) => { ok: true } | { ok: false; reason: string }
   onClose: () => void
 }) {
   const library = useProgrammingLibrary({ projectId: props.projectId })
@@ -254,6 +275,7 @@ export function QuickLibraryHost(props: {
       library={library}
       language={props.language}
       onInsert={props.onInsert}
+      canInsert={props.canInsert}
       onClose={props.onClose}
     />
   )

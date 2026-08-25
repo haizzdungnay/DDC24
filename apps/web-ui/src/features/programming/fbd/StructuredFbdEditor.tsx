@@ -35,6 +35,7 @@ import {
   type FbdPaletteEntry,
 } from './palette'
 import { userPouPaletteEntry, type UserPouInterface } from './userPou'
+import { QuickLibraryHost } from '../design/library/QuickLibraryPanel'
 
 export interface StructuredFbdEditorProps {
   document: FbdDocument
@@ -42,6 +43,9 @@ export interface StructuredFbdEditorProps {
   onChange: (document: FbdDocument) => void
   /** Interface typed đến từ Draft/API. Editor không parse source ST để đoán pin. */
   userPouInterfaces?: readonly UserPouInterface[]
+  /** `T59-804`: Quick Library dùng chung đọc catalog theo Project. Vắng thì dock
+   *  vẫn mở được và chỉ thấy SYSTEM entry. */
+  projectId?: string
 }
 
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
@@ -308,7 +312,7 @@ function NodeInspector({
   )
 }
 
-export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterfaces = EMPTY_USER_POU_INTERFACES }: StructuredFbdEditorProps) {
+export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterfaces = EMPTY_USER_POU_INTERFACES, projectId }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
   const publishedDocument = useRef(canonicalFbdJson(state.document))
@@ -324,6 +328,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
   const [constantValue, setConstantValue] = useState('false')
   const [createError, setCreateError] = useState<string | null>(null)
   const [compatibleFilterOn, setCompatibleFilterOn] = useState(true)
+  const [libraryDockOpen, setLibraryDockOpen] = useState(false)
   const userPouPalette = useMemo(() => {
     const entries: FbdPaletteEntry[] = []
     const issues: string[] = []
@@ -561,6 +566,42 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
         {/* `T59-804`: bộ lọc là LỰA CHỌN, không phải cắt bớt vĩnh viễn — "không
             khớp cổng này" khác hẳn "không tồn tại". Chỉ hiện khi đang đứng ở
             một cổng, và nói rõ còn lại bao nhiêu mục. */}
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!canEdit || !selectedNetworkId}
+          aria-pressed={libraryDockOpen}
+          title={pick('Thư viện nhanh — cùng catalog với ST và PGM-04', 'Quick library — same catalog as ST and PGM-04')}
+          onClick={() => setLibraryDockOpen((open) => !open)}
+        >
+          {pick('Thư viện', 'Library')}
+        </Button>
+        {libraryDockOpen && canEdit && (
+          <div className="relative">
+            <QuickLibraryHost
+              projectId={projectId}
+              language="FBD"
+              /* Canvas chỉ vẽ được mục mà palette biết dựng port; mục PROJECT
+                 chưa có entry palette phải nói ra lý do tại chỗ thay vì biến
+                 mất khỏi danh sách và để người dùng đi tìm. */
+              canInsert={(entry) =>
+                paletteEntries.some((item) => item.id === entry.entryId)
+                  ? { ok: true }
+                  : { ok: false, reason: pick('Chưa vẽ được trên canvas', 'Not drawable on the canvas') }
+              }
+              onInsert={(entry) => {
+                const paletteEntry = paletteEntries.find((item) => item.id === entry.entryId)
+                const network = state.document.networks.find((item) => item.id === selectedNetworkId)
+                if (!paletteEntry || !network) return false
+                /* Cùng `ADD_NODE` mà palette dùng, nên chèn từ dock vẫn là ĐÚNG
+                   MỘT bước hoàn tác và không tự nối dây. */
+                dispatch({ type: 'ADD_NODE', networkId: network.id, node: buildPaletteNode(paletteEntry) })
+                return true
+              }}
+              onClose={() => setLibraryDockOpen(false)}
+            />
+          </div>
+        )}
         {selectedPortType !== null && (
           <label className="flex items-center gap-1.5 text-xs text-[var(--c-text-dim)]">
             <input
