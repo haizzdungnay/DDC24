@@ -584,6 +584,24 @@ export interface RemoteState<T> {
 
 /** T59-202/203 — entry Control Library. `scope` phân biệt SYSTEM (registry chỉ
  * đọc) với PROJECT (do người dùng định nghĩa). */
+export interface ProgrammingLibrarySignaturePort {
+  name: string
+  direction: 'INPUT' | 'OUTPUT'
+  dataType: string
+}
+
+export interface ProgrammingLibrarySignature {
+  category: string
+  labelVi?: string
+  labelEn?: string
+  dispatch: 'OPERATOR' | 'FUNC_TABLE' | 'FB_TYPE' | 'EXPANSION'
+  polymorphic: boolean
+  allowedTypes: string[]
+  defaultType?: string
+  typedPortNames: string[]
+  ports: ProgrammingLibrarySignaturePort[]
+}
+
 export interface ProgrammingLibraryEntry {
   scope: 'SYSTEM' | 'PROJECT'
   libraryRevisionId: string
@@ -596,6 +614,11 @@ export interface ProgrammingLibraryEntry {
   featureState: 'AVAILABLE' | 'REVIEW_REQUIRED'
   contentSha256: string
   interface?: unknown
+  /** `T59-804` — chữ ký ĐÃ PHÂN GIẢI do backend công bố. Vắng field nghĩa là
+   *  backend không đọc được chữ ký thô; FE không được coi đó là "không có port"
+   *  mà phải nói ra. Backend cũ chưa có field này, nên FE vẫn parse `interface`
+   *  làm đường lùi trong một chu kỳ nâng cấp. */
+  signature?: ProgrammingLibrarySignature
   dependencies: { entryId: string; version: string }[]
   /** `false` nghĩa là layout CHƯA BIẾT, không phải bằng 0. */
   stateLayoutKnown: boolean

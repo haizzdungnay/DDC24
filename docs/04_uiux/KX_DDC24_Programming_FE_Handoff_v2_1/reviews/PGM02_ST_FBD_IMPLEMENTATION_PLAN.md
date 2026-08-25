@@ -47,15 +47,18 @@ không nói CI, target, HIL hay release.
 | `WP-12` | `T59-809` / `T59-813` / `T59-817` | ORDERED | — | — |
 | `WP-13` | `T59-809` / `T59-813` / `T59-817` | ORDERED | — | — |
 
-**Phần của `WP-03` chưa giao** (mỗi phần cần một hợp đồng hoặc năng lực chưa
-có, không phải chỉ thiếu thời gian): **một dock dùng chung** cho cả ST và FBD
-(palette FBD đã đọc cùng registry và đã có lọc theo cổng đang chọn, nhưng nó vẫn
-là một bề mặt riêng); **typed metadata public trong OpenAPI** (`interface` vẫn
-generic nên FE phải tự parse chữ ký); **Danh sách block của plan đã ĐÓNG** 2026-08-26: cả sáu
+**Danh sách block của plan đã ĐÓNG** 2026-08-26: cả sáu
 (`TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS`) có ngữ nghĩa pin ở
 `DDD-CTRL-PROG-001` §7A trước khi code, compiler+runtime+RETAIN thật và vector
-conformance chạy ở cả ST lẫn FBD. `PI` vẫn là entry ma bị verify script chặn,
-`PID` vẫn `REVIEW_REQUIRED`.
+conformance chạy ở cả ST lẫn FBD. `PI` vẫn là entry ma bị verify script chặn và
+`PID` vẫn `REVIEW_REQUIRED` — đó là trạng thái đúng, không phải thiếu sót.
+
+**Typed metadata public trong OpenAPI cũng đã giao** 2026-08-26: backend công bố
+`signature` đã phân giải, `interface` thô giữ nguyên cho consumer cũ.
+
+**Phần của `WP-03` còn lại**: **một dock dùng chung** cho cả ST và FBD. Palette
+FBD đã đọc cùng registry và đã có lọc theo cổng đang chọn, nhưng nó vẫn là một
+bề mặt riêng với Quick Library của ST.
 
 **Phần của `WP-01` chưa giao** (đi cùng `WP-06`/`T59-807` vì cùng chạm một cây
 component): CSS grid slot resizable/collapsible, context strip đầy đủ theo mode,

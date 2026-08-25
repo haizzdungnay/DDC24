@@ -70,7 +70,14 @@ function parsePorts(raw: unknown): LibraryPort[] | null {
   return ports
 }
 
+/**
+ * Ưu tiên chữ ký ĐÃ PHÂN GIẢI của backend (`T59-804`). Chỉ khi backend chưa có
+ * field đó — một chu kỳ nâng cấp cũ — mới quay lại tự parse `interface`. Giữ cả
+ * hai đường vì rolling upgrade là chuyện có thật, nhưng thứ tự thì rõ: authority
+ * đọc chữ ký là backend, không phải từng client.
+ */
 function signatureOf(entry: ProgrammingLibraryEntry): SignatureShape | null {
+  if (entry.signature) return entry.signature as unknown as SignatureShape
   const raw = entry.interface
   if (raw === undefined || raw === null) return null
   if (typeof raw === 'string') {

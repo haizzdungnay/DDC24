@@ -8,6 +8,28 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — chữ ký thư viện thành typed metadata công khai (2026-08-26)
+
+- **Added — `signature` đã PHÂN GIẢI trong `GET /programming/libraries`.**
+  Trước đây `interface` là `type: object` generic, nên MỖI client phải tự parse
+  chữ ký và mỗi nơi có thể kết luận một kiểu về cùng một entry. Nay backend công
+  bố chữ ký typed (category/dispatch/polymorphic/allowedTypes/ports…) và
+  `dispatch` khai đủ bốn cách hiện thực, gồm `EXPANSION`.
+
+- **Changed — vắng `signature` là một câu trả lời, không phải thiếu dữ liệu.**
+  PROJECT entry do người dùng nạp và backend chỉ kiểm "JSON hợp lệ + hash khớp",
+  nên chữ ký của chúng có thể khác hình dạng canonical. Khi parse thất bại,
+  backend **không bịa** một chữ ký rỗng trông như thật mà bỏ hẳn field; giao
+  diện hiển thị `SIGNATURE_UNAVAILABLE` kèm lý do. `interface` thô vẫn đi kèm
+  nên consumer cũ không hỏng vì backend thêm field mới. FE ưu tiên `signature`
+  và chỉ tự parse khi backend chưa có field đó (rolling upgrade).
+
+- **Verification.** FE **143 file / 1569 test PASS**, lint/build PASS; Go
+  vet/test PASS (test mới phủ 7 hình dạng chữ ký hỏng — tất cả phải trả `nil`);
+  E2E real-backend **1/1 PASS**; bốn script hợp đồng và
+  `verify-project.sh --component layout` PASS sau khi re-pin `openapiSha256`.
+
+
 ### PGM-02 R1 — đóng danh sách block: `SCALE`/`DEADBAND`/`HYSTERESIS` (2026-08-26)
 
 - **Added — `SCALE` và `DEADBAND` biên dịch bằng KHAI TRIỂN, không thêm opcode.**

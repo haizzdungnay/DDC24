@@ -3479,7 +3479,15 @@ components:
         language: { type: string, enum: [ST, FBD] }
         featureState: { type: string, enum: [AVAILABLE, REVIEW_REQUIRED] }
         contentSha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        # `interface` giữ nguyên chữ ký THÔ như nơi lưu: PROJECT entry do người
+        # dùng nạp và backend chỉ kiểm "JSON hợp lệ + hash khớp", nên siết kiểu
+        # ở đây sẽ từ chối những entry đang chạy được.
         interface: { type: object }
+        # `signature` là chữ ký ĐÃ PHÂN GIẢI, chỉ có mặt khi chữ ký thô khớp
+        # hình dạng canonical. Vắng field này nghĩa là "chưa đọc được chữ ký" —
+        # một câu trả lời rõ ràng, khác hẳn việc mỗi client tự parse rồi mỗi nơi
+        # kết luận một kiểu (T59-804 / PGM02-V22-WP-03).
+        signature: { $ref: "#/components/schemas/ProgrammingLibrarySignature" }
         dependencies:
           type: array
           maxItems: 64
@@ -3488,6 +3496,39 @@ components:
         # Consumer không được coi `stateSizeBytes=0` là sự thật khi cờ này false.
         stateLayoutKnown: { type: boolean }
         stateSizeBytes: { type: integer, minimum: 0, maximum: 1048576 }
+    ProgrammingLibrarySignaturePort:
+      type: object
+      additionalProperties: false
+      required: [name, direction, dataType]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        direction: { type: string, enum: [INPUT, OUTPUT] }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+    ProgrammingLibrarySignature:
+      type: object
+      additionalProperties: false
+      required: [category, dispatch, polymorphic, allowedTypes, typedPortNames, ports]
+      properties:
+        category: { type: string, minLength: 1, maxLength: 32 }
+        labelVi: { type: string, maxLength: 128 }
+        labelEn: { type: string, maxLength: 128 }
+        # `dispatch` nói compiler hiện thực entry bằng cách nào: toán tử, bảng
+        # hàm, FB có state, hay KHAI TRIỂN thành chuỗi lệnh đã có (§7A.6).
+        dispatch: { type: string, enum: [OPERATOR, FUNC_TABLE, FB_TYPE, EXPANSION] }
+        polymorphic: { type: boolean }
+        allowedTypes:
+          type: array
+          maxItems: 8
+          items: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        defaultType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        typedPortNames:
+          type: array
+          maxItems: 16
+          items: { type: string, minLength: 1, maxLength: 64 }
+        ports:
+          type: array
+          maxItems: 16
+          items: { $ref: "#/components/schemas/ProgrammingLibrarySignaturePort" }
     ProgrammingLibraryPage:
       type: object
       additionalProperties: false
