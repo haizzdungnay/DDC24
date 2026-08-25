@@ -13,6 +13,7 @@ import (
 
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	programmingcompiler "mkddc-web/internal/programming/compiler"
+	"mkddc-web/internal/programming/domain"
 	programmingstore "mkddc-web/internal/programming/store"
 )
 
@@ -39,7 +40,7 @@ func (r *perProgramRunner) Compile(_ context.Context, input programmingcompiler.
 	return programmingcompiler.Result{OK: true, Artifact: artifact, ArtifactSHA256: sha256.Sum256(artifact),
 		Manifest: json.RawMessage(`{"manifestVersion":1}`), CompilerVersion: checkCompilerVersion,
 		ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30",
-		LibraryVersion: "rev-a.1", IntegrityMode: "HASH_ONLY", TargetABI: 3841}, nil
+		LibraryVersion: domain.SystemLibraryVersion, IntegrityMode: "HASH_ONLY", TargetABI: 3841}, nil
 }
 
 // fakePackager bọc các artifact thành một blob tất định. Nó KHÔNG mô phỏng định

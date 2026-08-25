@@ -15,6 +15,7 @@ import (
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	programmingcompiler "mkddc-web/internal/programming/compiler"
 	"mkddc-web/internal/programming/coreipc"
+	"mkddc-web/internal/programming/domain"
 	programmingstore "mkddc-web/internal/programming/store"
 )
 
@@ -107,7 +108,7 @@ func newOperationFixture(t *testing.T) operationFixture {
 	runner := &fakeCheckRunner{result: programmingcompiler.Result{OK: true,
 		Artifact: artifactBytes, ArtifactSHA256: digest, Manifest: []byte(`{"manifestVersion":1}`),
 		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1,
-		ProfileID: "revA-1t-1-5-30", LibraryVersion: "rev-a.1", IntegrityMode: "HASH_ONLY",
+		ProfileID: "revA-1t-1-5-30", LibraryVersion: domain.SystemLibraryVersion, IntegrityMode: "HASH_ONLY",
 		TargetABI: 3841}}
 	root := t.TempDir()
 	artifacts, err := programmingartifact.NewStore(filepath.Join(root, "artifacts"))
