@@ -1,13 +1,21 @@
 // Tệp sinh tự động bởi scripts/generate_programming_library_registry.py. Không sửa bằng tay.
-export const PROGRAMMING_LIBRARY_REGISTRY_SHA256 = "55c152d6a1456faf130a05a68788c9e15be918be359d9e642c8c215068540885" as const;
-export const PROGRAMMING_LIBRARY_VERSION = "rev-a.1" as const;
+export const PROGRAMMING_LIBRARY_REGISTRY_SHA256 = "9e7536157e4ac0d2aaa04da2e82b13fd280f49179f6cd209bb9c73017440d7fc" as const;
+export const PROGRAMMING_LIBRARY_VERSION = "rev-a.2" as const;
 
 export type LibraryEntryKind = "FUNCTION" | "FUNCTION_BLOCK" | "CONVERSION";
 export type LibraryDispatch = "OPERATOR" | "FUNC_TABLE" | "FB_TYPE";
 export type LibraryFeatureState = "AVAILABLE" | "REVIEW_REQUIRED";
 export type LibraryCategory =
-  | "interface" | "constants" | "logic" | "compare" | "math"
-  | "conversion" | "timer" | "trigger" | "control";
+  | "interface"
+  | "constants"
+  | "logic"
+  | "compare"
+  | "math"
+  | "conversion"
+  | "timer"
+  | "counter"
+  | "trigger"
+  | "control";
 
 export interface LibraryPort {
   readonly name: string;
@@ -43,6 +51,7 @@ export const PROGRAMMING_LIBRARY_CATEGORY_ORDER: readonly {
   { id: "math", labelVi: "Toán học", labelEn: "Math" },
   { id: "conversion", labelVi: "Chuyển đổi kiểu", labelEn: "Conversion" },
   { id: "timer", labelVi: "Timer", labelEn: "Timer" },
+  { id: "counter", labelVi: "Bộ đếm", labelEn: "Counters" },
   { id: "trigger", labelVi: "Trigger", labelEn: "Trigger" },
   { id: "control", labelVi: "Điều khiển", labelEn: "Control" },
 ];
@@ -85,7 +94,10 @@ export const PROGRAMMING_LIBRARY_ENTRIES: readonly LibraryEntry[] = [
   { id: "REAL_TO_UINT", kind: "CONVERSION", dispatch: "FUNC_TABLE", category: "conversion", labelVi: "REAL_TO_UINT", labelEn: "REAL_TO_UINT", polymorphic: false, allowedTypes: ["REAL"], defaultType: "REAL", typedPortNames: [], ports: [{ name: "IN1", direction: "INPUT", dataType: "REAL" }, { name: "OUT", direction: "OUTPUT", dataType: "UINT" }], featureState: "AVAILABLE" },
   { id: "TON", kind: "FUNCTION_BLOCK", dispatch: "FB_TYPE", category: "timer", labelVi: "Trễ lúc bật (TON)", labelEn: "On-delay timer (TON)", polymorphic: false, allowedTypes: [], defaultType: "BOOL", typedPortNames: [], ports: [{ name: "IN", direction: "INPUT", dataType: "BOOL" }, { name: "PT", direction: "INPUT", dataType: "TIME" }, { name: "Q", direction: "OUTPUT", dataType: "BOOL" }, { name: "ET", direction: "OUTPUT", dataType: "TIME" }], featureState: "AVAILABLE" },
   { id: "TOF", kind: "FUNCTION_BLOCK", dispatch: "FB_TYPE", category: "timer", labelVi: "Trễ lúc tắt (TOF)", labelEn: "Off-delay timer (TOF)", polymorphic: false, allowedTypes: [], defaultType: "BOOL", typedPortNames: [], ports: [{ name: "IN", direction: "INPUT", dataType: "BOOL" }, { name: "PT", direction: "INPUT", dataType: "TIME" }, { name: "Q", direction: "OUTPUT", dataType: "BOOL" }, { name: "ET", direction: "OUTPUT", dataType: "TIME" }], featureState: "AVAILABLE" },
+  { id: "TP", kind: "FUNCTION_BLOCK", dispatch: "FB_TYPE", category: "timer", labelVi: "Xung cố định (TP)", labelEn: "Pulse timer (TP)", polymorphic: false, allowedTypes: [], defaultType: "BOOL", typedPortNames: [], ports: [{ name: "IN", direction: "INPUT", dataType: "BOOL" }, { name: "PT", direction: "INPUT", dataType: "TIME" }, { name: "Q", direction: "OUTPUT", dataType: "BOOL" }, { name: "ET", direction: "OUTPUT", dataType: "TIME" }], featureState: "AVAILABLE" },
   { id: "R_TRIG", kind: "FUNCTION_BLOCK", dispatch: "FB_TYPE", category: "trigger", labelVi: "Cạnh lên (R_TRIG)", labelEn: "Rising edge (R_TRIG)", polymorphic: false, allowedTypes: [], defaultType: "BOOL", typedPortNames: [], ports: [{ name: "CLK", direction: "INPUT", dataType: "BOOL" }, { name: "Q", direction: "OUTPUT", dataType: "BOOL" }], featureState: "AVAILABLE" },
   { id: "F_TRIG", kind: "FUNCTION_BLOCK", dispatch: "FB_TYPE", category: "trigger", labelVi: "Cạnh xuống (F_TRIG)", labelEn: "Falling edge (F_TRIG)", polymorphic: false, allowedTypes: [], defaultType: "BOOL", typedPortNames: [], ports: [{ name: "CLK", direction: "INPUT", dataType: "BOOL" }, { name: "Q", direction: "OUTPUT", dataType: "BOOL" }], featureState: "AVAILABLE" },
+  { id: "CTU", kind: "FUNCTION_BLOCK", dispatch: "FB_TYPE", category: "counter", labelVi: "Đếm lên (CTU)", labelEn: "Up counter (CTU)", polymorphic: false, allowedTypes: [], defaultType: "INT", typedPortNames: [], ports: [{ name: "CU", direction: "INPUT", dataType: "BOOL" }, { name: "RESET", direction: "INPUT", dataType: "BOOL" }, { name: "PV", direction: "INPUT", dataType: "INT" }, { name: "Q", direction: "OUTPUT", dataType: "BOOL" }, { name: "CV", direction: "OUTPUT", dataType: "INT" }], featureState: "AVAILABLE" },
+  { id: "CTD", kind: "FUNCTION_BLOCK", dispatch: "FB_TYPE", category: "counter", labelVi: "Đếm xuống (CTD)", labelEn: "Down counter (CTD)", polymorphic: false, allowedTypes: [], defaultType: "INT", typedPortNames: [], ports: [{ name: "CD", direction: "INPUT", dataType: "BOOL" }, { name: "LOAD", direction: "INPUT", dataType: "BOOL" }, { name: "PV", direction: "INPUT", dataType: "INT" }, { name: "Q", direction: "OUTPUT", dataType: "BOOL" }, { name: "CV", direction: "OUTPUT", dataType: "INT" }], featureState: "AVAILABLE" },
   { id: "PID", kind: "FUNCTION_BLOCK", dispatch: "FB_TYPE", category: "control", labelVi: "Bộ điều khiển PID", labelEn: "PID controller", polymorphic: false, allowedTypes: [], defaultType: "REAL", typedPortNames: [], ports: [{ name: "SP", direction: "INPUT", dataType: "REAL" }, { name: "PV", direction: "INPUT", dataType: "REAL" }, { name: "KP", direction: "INPUT", dataType: "REAL" }, { name: "KI", direction: "INPUT", dataType: "REAL" }, { name: "KD", direction: "INPUT", dataType: "REAL" }, { name: "OUT_MIN", direction: "INPUT", dataType: "REAL" }, { name: "OUT_MAX", direction: "INPUT", dataType: "REAL" }, { name: "ACTUAL", direction: "INPUT", dataType: "REAL" }, { name: "OUT", direction: "OUTPUT", dataType: "REAL" }, { name: "TRACKING", direction: "OUTPUT", dataType: "BOOL" }], featureState: "REVIEW_REQUIRED", warning: { vi: "Chưa Controls+Safety review — không dùng cho logic sản xuất (xem ST_SUBSET_SPEC §6.2)", en: "Not yet Controls+Safety reviewed — do not use for production logic (see ST_SUBSET_SPEC §6.2)" } },
 ];

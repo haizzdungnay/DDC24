@@ -30,7 +30,9 @@ PURE_FUNCTIONS = {
     "ADD", "SUB", "MUL", "DIV", "MOD", "ABS", "MIN", "MAX", "LIMIT",
     "SEL", "SQRT", "SCALE", "DEADBAND",
 }
-STATEFUL_FUNCTIONS = {"TON", "TOF", "R_TRIG", "F_TRIG", "CTU", "PI", "PID"}
+# `T59-804` thêm TP/CTU/CTD (`DDD-CTRL-PROG-001` §7A). `PI` giữ lại vì đây là
+# danh sách "kiểu nào ĐƯỢC PHÉP có state", không phải danh sách entry đang có.
+STATEFUL_FUNCTIONS = {"TON", "TOF", "TP", "R_TRIG", "F_TRIG", "CTU", "CTD", "PI", "PID"}
 EXPLICIT_CONVERSIONS = {
     "INT_TO_REAL", "REAL_TO_INT", "TIME_TO_REAL", "REAL_TO_TIME",
     "INT_TO_DINT", "INT_TO_UINT", "DINT_TO_INT", "DINT_TO_UINT",

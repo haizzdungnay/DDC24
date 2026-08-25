@@ -234,6 +234,12 @@ def render_ts(registry: dict[str, Any], registry_hash: str) -> str:
         for item in registry["categoryOrder"]
     )
     entries = "\n".join(entry_line(item) for item in registry["entries"])
+    # Union category sinh TỪ hợp đồng, không viết tay trong template: chép tay
+    # danh sách này chính là kiểu lỗi mà file sinh tự động sinh ra để tránh —
+    # thêm một nhóm mới sẽ làm TS đỏ ở nơi không ai ngờ.
+    category_union = "\n".join(
+        f"  | {q(item['id'])}" for item in registry["categoryOrder"]
+    )
     return f"""// Tệp sinh tự động bởi scripts/generate_programming_library_registry.py. Không sửa bằng tay.
 export const PROGRAMMING_LIBRARY_REGISTRY_SHA256 = {q(registry_hash)} as const;
 export const PROGRAMMING_LIBRARY_VERSION = {q(registry['libraryVersion'])} as const;
@@ -242,8 +248,7 @@ export type LibraryEntryKind = "FUNCTION" | "FUNCTION_BLOCK" | "CONVERSION";
 export type LibraryDispatch = "OPERATOR" | "FUNC_TABLE" | "FB_TYPE";
 export type LibraryFeatureState = "AVAILABLE" | "REVIEW_REQUIRED";
 export type LibraryCategory =
-  | "interface" | "constants" | "logic" | "compare" | "math"
-  | "conversion" | "timer" | "trigger" | "control";
+{category_union};
 
 export interface LibraryPort {{
   readonly name: string;

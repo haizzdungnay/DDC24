@@ -27,10 +27,13 @@ const KFUNCS_ARITY: Record<string, number> = {
 const BINOP_TYPE_REFS = ['AND', 'OR', 'XOR', 'EQ', 'NE', 'LT', 'LE', 'GT', 'GE', 'ADD', 'SUB', 'MUL', 'DIV', 'MOD']
 
 describe('Palette sinh từ registry POU/Control Library (T59-003)', () => {
-  it('không còn entry ma SCALE/DEADBAND/CTU/PI', () => {
-    // Bốn entry này từng nằm trong allowlist FBD của Core mà compiler không hề
+  it('không còn entry ma SCALE/DEADBAND/PI', () => {
+    // Ba entry này từng nằm trong allowlist FBD của Core mà compiler không hề
     // có; nay registry là nguồn duy nhất nên chúng không thể quay lại một phía.
-    for (const ghost of ['SCALE', 'DEADBAND', 'CTU', 'PI']) {
+    // `CTU` đã RỜI danh sách ở `T59-804`: nó có compiler/runtime thật và vector
+    // conformance cycle-by-cycle — đó mới là điều kiện để một tên rời danh sách
+    // này, không phải vì ai đó muốn thấy nó trên palette.
+    for (const ghost of ['SCALE', 'DEADBAND', 'PI']) {
       expect(FBD_PALETTE.some((entry) => entry.id === ghost)).toBe(false)
       expect(PROGRAMMING_LIBRARY_ENTRIES.some((entry) => entry.id === ghost)).toBe(false)
     }
