@@ -24,8 +24,8 @@
     "releaseReady": "NO_GO"
   },
   "pins": {
-    "productProfileSha256": "2ffb6c8fc7b0c117a4916aded12d43d7b484b80590001b0078a6d72a776ebe69",
-    "libraryRegistrySha256": "9e7536157e4ac0d2aaa04da2e82b13fd280f49179f6cd209bb9c73017440d7fc",
+    "productProfileSha256": "8623adb865bc6367fcc655f26dfc1d2fd2385971c3bc5738ad7e74c831d83204",
+    "libraryRegistrySha256": "a59c6db561f6550ab010f3a84118363b76f8e3d4103dd759cbb8200c26dd4660",
     "openapiSha256": "1edd5c4c3054c7ff6c97fb88ceb5df351a11306d8f47d5582cbfe626cad16a0b",
     "programmingIpcSha256": "2284771450c531485b1acd5fedbaf85c9640b2795dbe9b7fc106302f17f48917"
   },

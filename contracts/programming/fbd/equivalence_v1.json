@@ -732,6 +732,72 @@
         ],
         "expected": 65535
       }
+    },
+    {
+      "id": "EQ-036",
+      "typeRef": "SCALE",
+      "inputs": [
+        {
+          "name": "IN",
+          "type": "REAL"
+        },
+        {
+          "name": "IN_MIN",
+          "type": "REAL"
+        },
+        {
+          "name": "IN_MAX",
+          "type": "REAL"
+        },
+        {
+          "name": "OUT_MIN",
+          "type": "REAL"
+        },
+        {
+          "name": "OUT_MAX",
+          "type": "REAL"
+        }
+      ],
+      "outputType": "REAL",
+      "stExpression": "SCALE(IN, IN_MIN, IN_MAX, OUT_MIN, OUT_MAX)",
+      "vector": {
+        "values": [
+          2.5,
+          0.0,
+          10.0,
+          0.0,
+          100.0
+        ],
+        "expected": 25.0
+      }
+    },
+    {
+      "id": "EQ-037",
+      "typeRef": "DEADBAND",
+      "inputs": [
+        {
+          "name": "IN",
+          "type": "REAL"
+        },
+        {
+          "name": "DB",
+          "type": "REAL"
+        },
+        {
+          "name": "REF",
+          "type": "REAL"
+        }
+      ],
+      "outputType": "REAL",
+      "stExpression": "DEADBAND(IN, DB, REF)",
+      "vector": {
+        "values": [
+          20.4,
+          0.5,
+          20.0
+        ],
+        "expected": 20.0
+      }
     }
   ],
   "stateTraces": [
@@ -1491,6 +1557,93 @@
           "expected": {
             "DONE": false,
             "COUNT": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-009",
+      "typeRef": "HYSTERESIS",
+      "instance": "BAND",
+      "inputs": [
+        {
+          "port": "IN",
+          "variable": "TEMP",
+          "type": "REAL"
+        },
+        {
+          "port": "HIGH",
+          "variable": "UPPER",
+          "type": "REAL"
+        },
+        {
+          "port": "LOW",
+          "variable": "LOWER",
+          "type": "REAL"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "ACTIVE",
+          "type": "BOOL"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "TEMP": 25.0,
+            "UPPER": 30.0,
+            "LOWER": 20.0
+          },
+          "expected": {
+            "ACTIVE": false
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "TEMP": 30.0,
+            "UPPER": 30.0,
+            "LOWER": 20.0
+          },
+          "expected": {
+            "ACTIVE": true
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "TEMP": 25.0,
+            "UPPER": 30.0,
+            "LOWER": 20.0
+          },
+          "expected": {
+            "ACTIVE": true
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "TEMP": 20.0,
+            "UPPER": 30.0,
+            "LOWER": 20.0
+          },
+          "expected": {
+            "ACTIVE": false
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "TEMP": 29.9,
+            "UPPER": 30.0,
+            "LOWER": 20.0
+          },
+          "expected": {
+            "ACTIVE": false
           }
         }
       ]

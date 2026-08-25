@@ -25,12 +25,12 @@
     {
       "name": "profile",
       "path": "contracts/programming/product_profile_v2.json",
-      "sha256": "2ffb6c8fc7b0c117a4916aded12d43d7b484b80590001b0078a6d72a776ebe69",
+      "sha256": "8623adb865bc6367fcc655f26dfc1d2fd2385971c3bc5738ad7e74c831d83204",
       "major": 1,
       "minor": 0,
       "profileCode": 1,
       "schemaPath": "contracts/programming/product_profile_v2.schema.json",
-      "schemaSha256": "9a5ad458e4ef6bd7a314c745288df37cd19b6531d5d5c90a741fb9efb20f6f0f",
+      "schemaSha256": "d7ebc6f6c777bbefb40250ee55b4b70f80fafde4c808de4b454a4bf54db139d3",
       "targetAbi": 3841,
       "integrityMode": "SIGNATURE_REQUIRED",
       "documentMajor": 2,
@@ -84,12 +84,12 @@
     {
       "name": "library-registry",
       "path": "contracts/programming/pou_library_registry_v1.json",
-      "sha256": "9e7536157e4ac0d2aaa04da2e82b13fd280f49179f6cd209bb9c73017440d7fc",
+      "sha256": "a59c6db561f6550ab010f3a84118363b76f8e3d4103dd759cbb8200c26dd4660",
       "schemaPath": "contracts/programming/pou_library_registry_v1.schema.json",
-      "schemaSha256": "f040671217c9017333b0ee1b069cf53206533363a5d2e25a00d62ad476983fff",
+      "schemaSha256": "0d30142d07aa968f4058d91fff97c3dd5a7b8f7fe7c16e9e7df46887a4c05d11",
       "major": 1,
       "schemaVersion": 1,
-      "libraryVersion": "rev-a.2",
+      "libraryVersion": "rev-a.3",
       "versionHistory": [
         {
           "libraryVersion": "rev-a.1",
@@ -98,15 +98,20 @@
         {
           "libraryVersion": "rev-a.2",
           "sha256": "9e7536157e4ac0d2aaa04da2e82b13fd280f49179f6cd209bb9c73017440d7fc"
+        },
+        {
+          "libraryVersion": "rev-a.3",
+          "sha256": "a59c6db561f6550ab010f3a84118363b76f8e3d4103dd759cbb8200c26dd4660"
         }
       ],
-      "entryCount": 43,
+      "entryCount": 46,
       "operatorCount": 15,
       "funcTableCount": 20,
-      "fbTypeCount": 8,
+      "fbTypeCount": 9,
       "reviewRequired": [
         "PID"
-      ]
+      ],
+      "expansionCount": 2
     },
     {
       "name": "artifact-v2",
@@ -116,7 +121,7 @@
       "schemaVersion": 2,
       "magic": "MKDDCIR2",
       "goldenPath": "contracts/programming/golden/package_v2_ahu.mkpkg",
-      "goldenSha256": "ec5cba18344ebb85c3136a05170123cec726fab4d121108f7e85c79f63638d13",
+      "goldenSha256": "ca85490164e5f297467d743b6444839a7fee192e4eddc0e9a884701b6dcd4173",
       "goldenManifestPath": "contracts/programming/golden/package_v2_manifest.json",
       "goldenManifestSha256": "2a7f8e65a4c51b052fc4d8a7c10e07196251b03e887a50518800bd25dd5fde88",
       "goldenArtifactBytes": 717,
