@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Governance — đóng `T59-808`, mở `T59-809` (2026-08-26)
+
+- **Changed — `T59-808` `DONE (HOST/LOCAL)`.** Cả năm mục acceptance có bằng
+  chứng: ngân sách chunk thành cổng chặn được chạy trong chính `npm run build`;
+  bốn khổ màn đã pin đều có case tràn ngang (và case 1024 px **bắt được lỗi
+  thật**); focus ring đo bằng `getComputedStyle` theo số đã pin; bàn phím đi hết
+  mode switcher và workbench; RBAC negative ở **cả hai tầng** backend và giao
+  diện; hostile source phủ cả nguồn ngoài subset lẫn HTML injection.
+
+- **`T59-809` chuyển `READY`** — task cuối của R1: chạy/record `VS-PROG-U13`,
+  trace/risk/manifest/rollback và closeout increment.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS.
+
+
 ### PGM-02 R1 — hardening EDIT: tràn ngang, focus, bàn phím, RBAC (`T59-808`) (2026-08-26)
 
 - **Fixed — lỗi thật do chính cổng mới bắt: tràn ngang 15 px ở 1024 px.** Ô lưới
@@ -33,7 +48,14 @@
   rồi mới biết mình không có quyền là bắt người dùng học luật bằng cách va vào
   nó, còn chặn ghi mà làm mù luôn thì lại là một lỗi khác.
 
-- **Verification.** FE **152 file / 1717 test PASS**; mock E2E **42 PASS / 8
+- **Added — hostile source ở tầng hiển thị.** Tên POU và mã nguồn là dữ liệu
+  người dùng nhập, và chúng được hiện lại ở cây POU, khay Vấn đề, khay tham
+  chiếu và thanh ngữ cảnh. React thoát HTML mặc định — nhưng "mặc định an toàn"
+  chỉ đúng tới lần đầu ai đó thêm một `dangerouslySetInnerHTML` cho tiện. Test
+  khoá: tên chứa `<img onerror>` và nguồn chứa `<script>` hiện thành **chữ**,
+  không tạo phần tử nào và không chạy gì.
+
+- **Verification.** FE **152 file / 1718 test PASS**; mock E2E **42 PASS / 8
   skip** (+11 case hardening); real-backend E2E **2/2 PASS**; `npm run build`
   PASS kèm cổng ngân sách (**111,32 KiB / 125 KiB**, dư 13,68 KiB).
 
