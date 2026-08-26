@@ -27,6 +27,10 @@ namespace {
 using json = nlohmann::json;
 
 constexpr std::size_t kMaxNetworks = 256;
+/* Trần hình học: đủ cho mọi node hợp lệ của một tài liệu (256 network ×
+ * 16 node) mà vẫn chặn được một map phình vô hạn gửi từ client. */
+constexpr std::size_t kMaxLayoutNodes = 4096;
+constexpr double      kMaxLayoutCoordinate = 100000.0;
 constexpr std::size_t kMaxPortsPerNode = 16;
 
 void add_issue(FbdValidationResult* result, const char* code, std::string path)
@@ -81,6 +85,40 @@ bool has_unsigned_in_range(const json& object, const char* key, uint64_t maximum
 {
     return object.contains(key) && object[key].is_number_unsigned() &&
            object[key].get<uint64_t>() <= maximum;
+}
+
+/* `T59-806` — hình học TRÌNH BÀY của đồ thị.
+ *
+ * Compiler kiểm nó rồi VỨT ĐI: không một trường nào của `layout` đi vào
+ * `FbdDocument`, nên "cùng topology, khác hình học ⇒ cùng IR" là bất biến CẤU
+ * TRÚC chứ không phải một lời hứa ai đó phải nhớ giữ. Vẫn phải kiểm vì tài
+ * liệu là dữ liệu người dùng gửi lên: toạ độ vô hạn/NaN hay khoá rác vẫn là
+ * thứ phải từ chối ở biên, không phải thứ để im lặng bỏ qua. */
+bool is_valid_layout(const json& layout)
+{
+    if (!layout.is_object()) return false;
+    if (!has_only_keys(layout, {"schemaVersion", "nodes"})) return false;
+    if (!layout.contains("schemaVersion") || !layout["schemaVersion"].is_number_unsigned() ||
+        layout["schemaVersion"].get<uint64_t>() != 1) {
+        return false;
+    }
+    if (!layout.contains("nodes") || !layout["nodes"].is_object()) return false;
+    const auto& nodes = layout["nodes"];
+    if (nodes.size() > kMaxLayoutNodes) return false;
+    for (auto item = nodes.cbegin(); item != nodes.cend(); ++item) {
+        if (!is_canonical_uuid(item.key())) return false;
+        const auto& point = item.value();
+        if (!point.is_object() || !has_only_keys(point, {"x", "y"})) return false;
+        for (const char* axis : {"x", "y"}) {
+            if (!point.contains(axis) || !point[axis].is_number()) return false;
+            const double value = point[axis].get<double>();
+            if (!std::isfinite(value) || value < -kMaxLayoutCoordinate ||
+                value > kMaxLayoutCoordinate) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool parse_type(const std::string& value, StType* out)
@@ -392,7 +430,7 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
         add_issue(&result, "FBD-SCHEMA-JSON-DUP-001", "$");
         return result;
     }
-    if (!has_only_keys(root, {"$schema", "schemaVersion", "profileId", "graphId", "name", "networks"}) ||
+    if (!has_only_keys(root, {"$schema", "schemaVersion", "profileId", "graphId", "name", "networks", "layout"}) ||
         !has_string(root, "$schema") || !has_unsigned_in_range(root, "schemaVersion", 1) ||
         root["schemaVersion"].get<uint64_t>() != 1 || !has_string(root, "profileId") ||
         root["profileId"] != st_profile_generated::kProfileId || !has_string(root, "graphId") ||
@@ -404,6 +442,10 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
         !is_canonical_uuid(root["graphId"].get<std::string>()) ||
         !is_identifier(root["name"].get<std::string>())) {
         add_issue(&result, "FBD-SCHEMA-ROOT-001", "$");
+    }
+
+    if (root.contains("layout") && !is_valid_layout(root["layout"])) {
+        add_issue(&result, "FBD-SCHEMA-LAYOUT-001", "$.layout");
     }
 
     const auto& networks_json = root["networks"];
@@ -583,6 +625,14 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
     }
 
     if (!result.issues.empty()) return result;
+    /* `T59-806` — hình học KHÔNG được vào dạng canonical.
+     *
+     * `canonical_json` là thứ đi vào hash artifact và pin bản dựng. Nếu
+     * `layout` còn nằm trong đó thì kéo một block sang phải 10 px sẽ đổi hash
+     * của một chương trình có ngữ nghĩa y hệt — commission lại, ký lại, mất
+     * luôn ý nghĩa của "cùng topology ⇒ cùng IR". Vứt nó ở đây, sau khi đã
+     * kiểm, là chỗ duy nhất đúng: kiểm ở biên, quên trước khi canonical hoá. */
+    root.erase("layout");
     sort_canonical(&root);
     sort_document(&document);
     result.canonical_json = root.dump();
