@@ -35,7 +35,9 @@ import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeVa
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { QuickLibraryHost } from '../library/QuickLibraryPanel'
-import { stInsertionSnippet } from '../library/libraryCatalog'
+import type { CatalogEntry } from '../library/libraryCatalog'
+import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
+import { FbInstancePicker } from './FbInstancePicker'
 import { SelectionQuickActions } from './SelectionQuickActions'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
 
@@ -621,6 +623,12 @@ export function SourceEditor({
     textarea?.focus()
   }
 
+  /** Mục thư viện đang chờ người dùng chọn instance (chỉ FB có trạng thái,
+   *  và chỉ khi nguồn ĐÃ có instance cùng kiểu — nếu chưa có thì không hỏi,
+   *  giữ đúng "≤2 thao tác" của `AC-ST-001`). */
+  const [pendingLibraryEntry, setPendingLibraryEntry] = useState<CatalogEntry | null>(null)
+  const [libraryInsertionNote, setLibraryInsertionNote] = useState<string | null>(null)
+
   const consumedFormatRequestRef = useRef<string | null>(null)
   useEffect(() => {
     if (!formatRequest || formatRequest.programId !== program.programId) return
@@ -715,6 +723,33 @@ export function SourceEditor({
     const next = source.slice(0, offset) + text + source.slice(offset)
     applyEdit(next, offset + text.length)
     setInsertPanelOpen(false)
+    textarea?.focus()
+  }
+
+  /** `AC-ST-002` — chèn một mục Quick Library vào nguồn ST.
+   *
+   *  Khác `handleInsertAtCursor` (chèn thô một chuỗi tại con trỏ) ở chỗ nó
+   *  tôn trọng CẤU TRÚC của POU: khai báo instance thuộc vùng khai báo, lời
+   *  gọi thuộc thân. Cả hai phần đi qua đúng MỘT `applyEditRange` nên vẫn là
+   *  một bước hoàn tác (`AC-ST-003`). */
+  function applyLibraryInsertion(entry: CatalogEntry, instanceName?: string) {
+    const textarea = textareaRef.current
+    const offset = textarea?.selectionStart ?? source.length
+    const plan = planLibraryInsertion(source, entry, offset, instanceName ? { instanceName } : {})
+    applyEditRange(plan.text, plan.selectionStart, plan.selectionEnd)
+    setPendingLibraryEntry(null)
+    /* Hai điều người dùng KHÔNG nhìn thấy nếu không nói: một dòng khai báo vừa
+     * được thêm ở chỗ khác trên màn hình, và lời gọi có thể đã bị dời khỏi con
+     * trỏ vì con trỏ đang ở vùng khai báo. Im lặng ở đây là để người dùng tự
+     * đoán tại sao nguồn đổi nhiều hơn họ nghĩ. */
+    const notes: string[] = []
+    if (plan.declarationAdded && plan.instanceName) {
+      notes.push(pick(`Đã khai ${plan.instanceName} : ${entry.name} trong khối VAR.`, `Declared ${plan.instanceName} : ${entry.name} in the VAR block.`))
+    }
+    if (plan.callRelocated) {
+      notes.push(pick('Lời gọi đặt ở đầu thân vì con trỏ đang ở vùng khai báo.', 'Call placed at the start of the body because the cursor was in the declaration section.'))
+    }
+    setLibraryInsertionNote(notes.length > 0 ? notes.join(' ') : null)
     textarea?.focus()
   }
 
@@ -1088,10 +1123,28 @@ export function SourceEditor({
             projectId={projectId}
             language="ST"
             onInsert={(entry) => {
-              handleInsertAtCursor(stInsertionSnippet(entry))
+              /* Đã có instance cùng kiểu thì hỏi: dùng lại hay tạo mới. Tự
+               * dùng lại là sai (hai lời gọi chung một timer là lỗi điều
+               * khiển thật), mà tự tạo mới cũng sai khi người dùng đang muốn
+               * gọi lại đúng instance đó. */
+              if (entry.stateful && collectDeclaredInstances(source, entry.name).length > 0) {
+                setPendingLibraryEntry(entry)
+                return true
+              }
+              applyLibraryInsertion(entry)
               return true
             }}
             onClose={() => setLibraryPanelOpen(false)}
+          />
+        )}
+        {pendingLibraryEntry && canEdit && (
+          <FbInstancePicker
+            entry={pendingLibraryEntry}
+            instances={collectDeclaredInstances(source, pendingLibraryEntry.name)}
+            suggestedName={nextInstanceName(source, pendingLibraryEntry.name)}
+            onPick={(instanceName) => applyLibraryInsertion(pendingLibraryEntry, instanceName)}
+            onCreate={() => applyLibraryInsertion(pendingLibraryEntry)}
+            onClose={() => setPendingLibraryEntry(null)}
           />
         )}
         {insertPanelOpen && canEdit && (
@@ -1110,6 +1163,9 @@ export function SourceEditor({
         <span>{pick('Dòng', 'Line')} {cursor.line}, {pick('cột', 'column')} {cursor.column}</span>
         <span>{source.length} {pick('ký tự', 'characters')}</span>
       </div>
+      {libraryInsertionNote && (
+        <p role="status" className="text-xs text-[var(--c-text-dim)]">{libraryInsertionNote}</p>
+      )}
       {runtimeOverlay && <StRuntimeValueOverlay state={runtimeOverlay} />}
       <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
         <h4 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Ký hiệu & kiểu', 'Symbols & types')}</h4>
