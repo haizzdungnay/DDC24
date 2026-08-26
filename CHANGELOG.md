@@ -8,6 +8,35 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — bốn lớp lỗi của `T59-807` chạy trên backend THẬT (2026-08-26)
+
+- **Added — ma trận fail-closed real-backend.** Acceptance của `T59-807` đòi E2E
+  real-backend cho ETag cũ, refactor hỏng, quyền và mất mạng. Nay có, chạy qua
+  đúng HTTP + compiler/packager + Programming IPC production, **không mock
+  authority**: cắt mạng bằng `context.setOffline` là bơm lỗi thật ở tầng trình
+  duyệt, không phải chế câu trả lời của backend.
+
+  | Lớp lỗi | Kỳ vọng |
+  |---|---|
+  | ETag cũ (hai phiên cùng sửa) | 409/412 và Draft **y nguyên** |
+  | Lô thao tác có op hỏng | ≥400 và Draft **y nguyên** — không mang một nửa |
+  | Viewer thật do backend cấp | 403 khi ghi, **200 khi đọc** |
+  | Mất mạng giữa lúc gõ | "Lưu thất bại — thử lại.", **buffer còn nguyên**, nối lại mạng thì lưu được và read-back khớp |
+
+- **Điều bộ test thật sự khoá là zero mutation.** Mỗi lần từ chối đều so lại
+  toàn bộ Draft với ảnh chụp trước đó. Một thao tác bị chặn nhưng kịp ghi một
+  nửa là lớp lỗi tệ nhất của lane này: người dùng thấy lỗi, tưởng không có gì
+  xảy ra, và mang theo một Draft đã lệch.
+
+- **Fixed — một phép so zero-mutation suýt luôn xanh.** `GET /projects/{id}` trả
+  thẳng `ProgrammingProject`, **không** bọc `resource` như các endpoint mutation.
+  Đọc nhầm lớp bọc khiến phép so "Draft không đổi" thành so `undefined` với
+  `undefined`. Nay có assert rằng đọc được Draft trước khi so.
+
+- **Verification.** Real-backend Playwright **2/2 PASS**; mock E2E **31 PASS /
+  5 skip**; FE **152 file / 1714 test PASS**.
+
+
 ### PGM-02 R1 — máy trạng thái mode và slot lưới thu gọn được (`T59-807`) (2026-08-26)
 
 - **Added — bộ chuyển chế độ, vì trước đó `?mode=` chỉ đổi được bằng cách GÕ TAY

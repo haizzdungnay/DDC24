@@ -785,3 +785,165 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
     `console.error=${consoleErrors.length} (expected 0)`
   )
 })
+
+/**
+ * `T59-807` / `PGM02-V22-WP-06-R1` — acceptance của task đòi E2E **real-backend**
+ * cho bốn lớp lỗi: ETag cũ, refactor hỏng, quyền, và mất mạng. "Không mock
+ * authority" nghĩa là không chế câu trả lời của backend; cắt mạng ở tầng trình
+ * duyệt (`context.setOffline`) là **bơm lỗi thật**, không phải chế câu trả lời.
+ *
+ * Điều bộ test này thật sự khoá là **zero mutation**: mỗi lần từ chối phải để
+ * lại Draft y nguyên. Một thao tác bị chặn nhưng vẫn kịp ghi một nửa là lớp lỗi
+ * tệ nhất của lane này — người dùng thấy lỗi, tưởng không có gì xảy ra, và mang
+ * theo một Draft đã lệch.
+ */
+test('T59-807: R1 fail-closed trên backend thật — ETag cũ, refactor hỏng, quyền, mất mạng', async ({ page, context, request }) => {
+  test.setTimeout(120_000)
+  const token = await loginAPI(request)
+
+  const createdResponse = await request.post('/api/v1/programming/projects', {
+    headers: mutationHeaders(token),
+    data: { schemaVersion: '1.0', name: 'AHU T59-807 faults', description: 'Playwright real-backend fault matrix' }
+  })
+  const created = await responseJSON(createdResponse, 201)
+  const createdResource = created.resource as JsonObject
+  const projectID = createdResource.projectId as string
+  const draftID = createdResource.draftRevisionId as string
+
+  const seededResponse = await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(token, { 'if-match': created.etag as string }),
+    data: {
+      schemaVersion: '1.0',
+      baseRevisionId: draftID,
+      operations: [{
+        op: 'upsertProgram',
+        program: { programId: PROGRAM_ID, name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST', document: SOURCE_R1 }
+      }]
+    }
+  })
+  const seeded = await responseJSON(seededResponse, 200)
+  const seededEtag = seeded.etag as string
+  expect(seededEtag).not.toBe(created.etag)
+
+  async function readDraftSource(): Promise<string> {
+    const response = await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) })
+    const project = await responseJSON(response, 200)
+    /* `GET /projects/{id}` trả thẳng `ProgrammingProject`, không bọc `resource`
+     * như các endpoint mutation — đọc nhầm lớp bọc là cách nhanh nhất để một
+     * phép so "Draft không đổi" trở thành so `undefined` với `undefined` và
+     * luôn xanh. */
+    const draft = (project.draft ?? (project.resource as JsonObject | undefined)?.draft) as JsonObject | undefined
+    expect(draft, 'không đọc được Draft để đối chiếu zero-mutation').toBeTruthy()
+    return JSON.stringify(draft)
+  }
+  const baselineDraft = await readDraftSource()
+
+  // ── 1. ETag cũ ────────────────────────────────────────────────────────────
+  // Hai phiên cùng sửa một Draft. Phiên thứ hai gửi `if-match` của bản TRƯỚC
+  // khi phiên thứ nhất ghi. Backend phải từ chối; ghi đè im lặng ở đây là mất
+  // trắng công của phiên thứ nhất.
+  const staleResponse = await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(token, { 'if-match': created.etag as string }),
+    data: {
+      schemaVersion: '1.0',
+      baseRevisionId: draftID,
+      operations: [{
+        op: 'upsertProgram',
+        program: { programId: PROGRAM_ID, name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST', document: SOURCE_R2 }
+      }]
+    }
+  })
+  expect([409, 412], `ETag cũ phải bị từ chối, nhận ${staleResponse.status()}`).toContain(staleResponse.status())
+  expect(await readDraftSource(), 'ETag cũ bị từ chối nhưng Draft vẫn đổi').toBe(baselineDraft)
+
+  // ── 2. Refactor hỏng phải là ZERO MUTATION ────────────────────────────────
+  // Một lô thao tác trong đó thao tác SAU không hợp lệ. Nếu backend áp thao tác
+  // đầu rồi mới hỏng ở thao tác sau thì Draft mang một nửa thay đổi — và người
+  // dùng chỉ thấy "lỗi", không thấy nửa đã ghi.
+  const faultyBatchResponse = await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(token, { 'if-match': seededEtag }),
+    data: {
+      schemaVersion: '1.0',
+      baseRevisionId: draftID,
+      operations: [
+        {
+          op: 'upsertProgram',
+          program: { programId: PROGRAM_ID, name: 'AHU_RENAMED', kind: 'PROGRAM', language: 'ST', document: SOURCE_R2 }
+        },
+        { op: 'upsertProgram', program: { programId: 'not-a-uuid', name: '1_INVALID', kind: 'PROGRAM', language: 'ST', document: SOURCE_R1 } }
+      ]
+    }
+  })
+  expect(faultyBatchResponse.status(), 'lô thao tác có op hỏng phải bị từ chối').toBeGreaterThanOrEqual(400)
+  expect(await readDraftSource(), 'lô hỏng bị từ chối nhưng Draft vẫn mang thay đổi của op đầu').toBe(baselineDraft)
+
+  // ── 3. Quyền ──────────────────────────────────────────────────────────────
+  // Viewer THẬT do backend cấp, không phải cờ giả ở FE.
+  const viewerName = `viewer${Date.now().toString(36)}`
+  const viewerCreated = await request.post('/api/v1/users', {
+    headers: mutationHeaders(token),
+    data: { username: viewerName, role: 'viewer', password: 'viewer123' }
+  })
+  expect(viewerCreated.status(), await viewerCreated.text()).toBe(201)
+
+  const viewerLogin = await request.post('/api/v1/auth/login', { data: { username: viewerName, password: 'viewer123' } })
+  const viewerBody = await responseJSON(viewerLogin, 200)
+  expect(viewerBody.role).toBe('viewer')
+  const viewerToken = viewerBody.token as string
+
+  const viewerMutation = await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(viewerToken, { 'if-match': seededEtag }),
+    data: {
+      schemaVersion: '1.0',
+      baseRevisionId: draftID,
+      operations: [{
+        op: 'upsertProgram',
+        program: { programId: PROGRAM_ID, name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST', document: SOURCE_R2 }
+      }]
+    }
+  })
+  expect(viewerMutation.status(), 'viewer không được sửa Draft').toBe(403)
+  expect(await readDraftSource(), 'viewer bị chặn nhưng Draft vẫn đổi').toBe(baselineDraft)
+
+  // Viewer vẫn ĐỌC được — chặn ghi không có nghĩa là làm mù.
+  const viewerRead = await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(viewerToken) })
+  expect(viewerRead.status()).toBe(200)
+
+  // ── 4. Mất mạng giữa lúc gõ ───────────────────────────────────────────────
+  const workspaceUrl = `/eng/programming/programs?project=${projectID}&pou=${PROGRAM_ID}&mode=EDIT`
+  await page.goto(workspaceUrl)
+  /* Có phiên hay chưa là chuyện của context, không phải điều test này khẳng
+     định — nên đăng nhập KHI được hỏi thay vì bắt buộc phải thấy màn login. */
+  const usernameField = page.getByLabel(/Tên đăng nhập|Username/i)
+  if (await usernameField.isVisible().catch(() => false)) {
+    await usernameField.fill('admin')
+    await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+    await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+    await page.waitForURL(/\/eng\/programming\/programs/, { timeout: 15_000 })
+  }
+
+  const source = page.getByLabel(/Mã nguồn ST/)
+  if (!(await source.isVisible().catch(() => false))) {
+    // POU chưa được chọn từ URL thì chọn bằng chính cây POU, không đi cửa sau.
+    await page.getByRole('button', { name: /AHU_MAIN/ }).first().click()
+  }
+  await expect(source).toBeVisible({ timeout: 15_000 })
+  const edited = `${SOURCE_R1.replace('Fan := TRUE;', 'Fan := FALSE; (* T59-807 offline *)')}`
+  await source.fill(edited)
+
+  await context.setOffline(true)
+  await page.getByRole('button', { name: 'Lưu', exact: true }).click()
+  // Lưu hỏng phải NÓI ra, và buffer đang gõ phải còn nguyên: mất mạng không
+  // phải lý do để nuốt công của người dùng.
+  await expect(page.getByText('Lưu thất bại — thử lại.')).toBeVisible({ timeout: 15_000 })
+  await expect(source).toHaveValue(edited)
+
+  await context.setOffline(false)
+  await page.getByRole('button', { name: 'Lưu', exact: true }).click()
+  await expect(page.getByText('Đã lưu.')).toBeVisible({ timeout: 15_000 })
+
+  // Read-back qua API: thứ backend thật đang giữ đúng bằng thứ người dùng gõ.
+  const afterSave = await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) })
+  const afterSaveBody = await responseJSON(afterSave, 200)
+  expect(JSON.stringify(afterSaveBody), 'Draft sau khi lưu lại phải mang đúng nội dung đã gõ').toContain('T59-807 offline')
+})
