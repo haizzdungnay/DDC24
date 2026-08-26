@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Governance — chạy spike của cổng editor ST, thay ước lượng bằng số đo (2026-08-26)
+
+- **Added — `GATE-PROG-ST-EDITOR-DEP-001` §4.1: hai trong năm phép đo bắt buộc
+  đã có kết quả thật.** Spike chạy **ngoài repo** (dự án tạm trong scratchpad)
+  đúng để không đụng `package.json`/lockfile trước khi cổng được duyệt.
+
+  | Phép đo | Kết quả |
+  |---|---:|
+  | Bộ CodeMirror 6 tối thiểu + mode ST, gzip | **110,07 KiB** (341,34 KiB thô) |
+  | Chunk Programming hiện tại | 110,78 KiB gzip |
+  | Tổng nếu nhúng thẳng | **≈220,85 KiB gzip** |
+  | Ngân sách R1 / R3 | 125 / 165 KiB gzip |
+
+  Nhúng thẳng **vượt ngân sách R1 ~77%** và vượt luôn ngân sách R3 — đúng như
+  §2 dự đoán, nay bằng số đo. License: **12/12 package MIT, 0 non-MIT** — mục
+  này **không** chặn.
+
+- **Còn phải đo, cần phần cứng:** `openPouP95Ms`/`typingResponseP95Ms` và
+  `steadyJsHeapMiB` phải chạy **trên bo Forlinx**; khả năng build
+  offline/air-gapped phải kiểm trên quy trình đóng gói thật.
+
+- **Ghi rõ vì sao `T59-805` còn `PARTIAL`.** Acceptance của task đã đạt hết.
+  Nhưng đóng task lúc cổng còn mở nghĩa là **ngầm chọn lựa chọn A** — quyết định
+  của Owner/Architect, không phải của người thi hành. Vì `T59-807` yêu cầu
+  `T59-802..806 DONE`, cổng này hiện là thứ **duy nhất** giữ chuỗi R1 lại.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only;
+  không thêm dependency nào vào repo.
+
+
 ### PGM-02 R1 — đóng `T59-806`, và một mục acceptance suýt bị nhận vơ (2026-08-26)
 
 - **Fixed — canvas FBD chưa từng lần nào bị bộ quét a11y soi thật.** Acceptance
