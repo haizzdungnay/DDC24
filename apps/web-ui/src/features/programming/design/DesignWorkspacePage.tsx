@@ -18,6 +18,7 @@ import { useProgrammingRuntimeMonitor } from '../api/queries'
 import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
+import { DesignWorkbench } from './workbench/DesignWorkbench'
 import { useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
@@ -100,9 +101,13 @@ export function DesignWorkspacePage({
   /* D-01/F-PROG-ASBUILT-003: PGM-03 giờ sở hữu Check/Problems (không phải ở
    * đây nữa) — khi người dùng bấm một diagnostic ở đó, nó điều hướng sang đây
    * kèm `line/column/length` trong query string thay vì state cùng trang.
-   * Đọc một lần lúc mount, đúng pattern `selectedProgramId` ở trên; không cần
-   * setter vì trang này không còn tự phát sinh diagnostic nào nữa. */
-  const [focusDiagnostic] = useState<ProgrammingDiagnostic | null>(() => {
+   * Đọc một lần lúc mount, đúng pattern `selectedProgramId` ở trên.
+   *
+   * `T59-807`: setter được mở lại — KHÔNG phải để trang tự chạy Check (D-01 vẫn
+   * giữ nguyên: PGM-03 sở hữu Check), mà để workbench nhảy tới một vị trí trong
+   * POU đang mở. Dùng lại đúng cơ chế neo `line/column/length` đã có thay vì
+   * dựng đường nhảy thứ hai. */
+  const [focusDiagnostic, setFocusDiagnostic] = useState<ProgrammingDiagnostic | null>(() => {
     const programId = searchParams.get('program')
     const line = searchParams.get('line')
     const column = searchParams.get('column')
@@ -256,6 +261,35 @@ export function DesignWorkspacePage({
     const program = document.programs.find((item) => item.programId === programId)
     selectPou(program?.objectId ?? programId)
   }
+  /* `T59-807` — dữ liệu cho workbench dùng chung.
+   *
+   * Nguồn văn bản chỉ có với POU ngôn ngữ ST; POU FBD trả `null` để tab Tìm
+   * kiếm nói thẳng "không phải mã nguồn văn bản" thay vì hiện một ô nhập vô
+   * nghĩa. */
+  const workbenchSource = selectedProgram?.language === 'ST' && typeof selectedProgram.document === 'string'
+    ? selectedProgram.document
+    : null
+  const workbenchSourceLabel = selectedProgram
+    ? `Draft · ${selectedProgram.name}`
+    : pick('Draft · chưa chọn POU', 'Draft · no POU selected')
+
+  /** Nhảy tới một offset trong POU đang mở, dùng lại đúng cơ chế neo
+   *  `line/column/length` mà PGM-03 đã dùng — không dựng đường nhảy thứ hai. */
+  const jumpToSourceOffset = (offset: number, length: number) => {
+    if (!selectedProgramId || workbenchSource === null) return
+    const before = workbenchSource.slice(0, offset)
+    const lines = before.split('\n')
+    setFocusDiagnostic({
+      code: '', severity: 'ERROR', messageKey: '',
+      location: {
+        programId: selectedProgramId,
+        line: lines.length,
+        column: lines[lines.length - 1].length + 1,
+        length: Math.max(1, length),
+      },
+    })
+  }
+
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
 
@@ -389,6 +423,19 @@ export function DesignWorkspacePage({
           runtimeOverlayByProgramId={runtimeOverlays}
           userPouInterfaces={userPouInterfaces}
           forceReadOnly={mobileReadOnly}
+        />
+        {/* `T59-807` / `WP-06-R1` — MỘT workbench dùng chung. Trước đây mỗi
+            loại thông tin sống ở một chỗ và theo một luật khác nhau: lỗi Draft
+            FBD nằm trong editor FBD, tham chiếu ST nằm trong editor ST, tìm
+            kiếm nằm trong thanh công cụ ST. Không có chỗ nào để hỏi "Draft này
+            đang có vấn đề gì" cho CẢ Project. */}
+        <DesignWorkbench
+          document={document}
+          source={workbenchSource}
+          sourceLabel={workbenchSourceLabel}
+          checkOwnerHref={`/eng/programming/projects/${projectId}/commission`}
+          onSelectProgram={selectProgram}
+          onJumpToOffset={jumpToSourceOffset}
         />
       </div>
       <div hidden={tab !== 'mapping'}>
