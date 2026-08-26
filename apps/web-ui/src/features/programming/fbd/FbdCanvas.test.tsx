@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_fan_enable.json'
@@ -134,5 +134,98 @@ describe('FbdCanvas — canvas node-edge thật (T59-806)', () => {
     const xs = rects.map((rect) => Number(rect.getAttribute('x')))
     // bốn block, ít nhất ba cột khác nhau ⇒ không phải một chồng đè lên nhau
     expect(new Set(xs).size).toBeGreaterThanOrEqual(3)
+  })
+})
+
+/*
+ * `AC-FBD-007` — "Problems jump to exact block/wire".
+ *
+ * Validator luôn biết CHÍNH XÁC lỗi nằm ở đâu (`$.networks[0].nodes[2].typeRef`),
+ * nhưng UI chỉ hiện một con số "3 lỗi Draft". Người dùng có toạ độ lỗi trong
+ * tay mà vẫn phải tự đi tìm.
+ */
+describe('FBD Problems — nhảy tới đúng block/dây (T59-806 / AC-FBD-007)', () => {
+  function brokenDocument(): FbdDocument {
+    const document = golden()
+    // typeRef không khớp kind ⇒ FBD-SEM-TYPE-REF-001 neo vào đúng node
+    document.networks[0].nodes[2].typeRef = 'BOOL'
+    return document
+  }
+
+  it('mỗi lỗi neo được là một nút nhảy tới đúng block', () => {
+    render(
+      <I18nProvider>
+        <StructuredFbdEditor document={brokenDocument()} canEdit onChange={vi.fn()} />
+      </I18nProvider>,
+    )
+    const problems = screen.getByRole('group', { name: 'Vấn đề FBD' })
+    const jump = within(problems).getByRole('button', { name: /FBD-SEM-TYPE-REF-001/ })
+    fireEvent.click(jump)
+
+    const block = screen.getByRole('button', { name: /#2 · BOOL/ })
+    expect(block).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('lỗi không neo được vào phần tử nào thì nói thẳng, không đưa tới block gần đúng', () => {
+    const document = golden()
+    document.profileId = 'attacker-profile' as FbdDocument['profileId']
+    render(
+      <I18nProvider>
+        <StructuredFbdEditor document={document} canEdit onChange={vi.fn()} />
+      </I18nProvider>,
+    )
+    const problems = screen.getByRole('group', { name: 'Vấn đề FBD' })
+    expect(within(problems).getByText(/không neo vào block nào/)).toBeInTheDocument()
+    expect(within(problems).queryByRole('button', { name: /FBD-SCHEMA-ROOT-001/ })).toBeNull()
+  })
+
+  it('tài liệu hợp lệ thì không có khay Vấn đề nào', () => {
+    renderEditor()
+    expect(screen.queryByRole('group', { name: 'Vấn đề FBD' })).toBeNull()
+  })
+})
+
+/* `AC-FBD-012` — "minimap is available for diagrams above configured size
+ * threshold". Dưới ngưỡng, cả sơ đồ nằm gọn trong khung nhìn nên minimap chỉ
+ * là thêm thứ để nhìn; trên ngưỡng, người dùng bắt đầu cuộn và cần biết mình
+ * đang ở đâu. */
+describe('FbdCanvas — minimap theo ngưỡng kích thước (AC-FBD-012)', () => {
+  function documentWithNodes(count: number): FbdDocument {
+    const document = golden()
+    const template = document.networks[0].nodes[0]
+    const nodes = []
+    for (let index = 0; index < count; index += 1) {
+      nodes.push({
+        ...JSON.parse(JSON.stringify(template)),
+        id: `30000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`,
+        executionOrder: index,
+        parameters: { variable: `VAR_${index}` },
+        ports: [{
+          id: `4000${index.toString(16).padStart(4, '0')}-0000-4000-8000-000000000001`,
+          name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL', unit: null, order: 0,
+        }],
+      })
+    }
+    document.networks[0].nodes = nodes
+    document.networks[0].wires = []
+    return document
+  }
+
+  it('sơ đồ nhỏ KHÔNG có minimap', () => {
+    renderEditor()
+    expect(screen.queryByRole('group', { name: 'Bản đồ thu nhỏ' })).toBeNull()
+  })
+
+  it('sơ đồ vượt ngưỡng thì có minimap, vẽ đủ mọi block', () => {
+    render(
+      <I18nProvider>
+        <StructuredFbdEditor document={documentWithNodes(30)} canEdit onChange={vi.fn()} />
+      </I18nProvider>,
+    )
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' })
+    expect(minimap.querySelectorAll('rect')).toHaveLength(30)
+    // minimap dùng CHUNG hệ toạ độ với canvas chính, không phải một phép xếp thứ hai
+    const surface = screen.getByRole('group', { name: /Sơ đồ ENABLE_LOGIC/ })
+    expect(minimap.getAttribute('viewBox')).toBe(surface.getAttribute('viewBox'))
   })
 })

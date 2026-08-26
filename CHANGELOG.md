@@ -8,6 +8,35 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — Vấn đề FBD nhảy tới đúng block, và minimap theo ngưỡng (2026-08-26)
+
+- **Fixed — người dùng có toạ độ lỗi trong tay mà vẫn phải tự đi tìm
+  (`AC-FBD-007`).** Validator luôn trả về vị trí chính xác dưới dạng đường dẫn
+  JSON (`$.networks[0].nodes[2].typeRef`), nhưng UI chỉ hiện một con số
+  "3 lỗi Draft". Nay có khay **Vấn đề**: mỗi lỗi neo được là một nút nhảy thẳng
+  tới đúng block hoặc đúng dây, và canvas tô sáng phần tử đó.
+
+- **Added — lỗi không neo được thì nói thẳng.** `fbdIssueTarget` trả `null` cho
+  đường dẫn không phân giải được (lỗi mức tài liệu, chỉ số ngoài phạm vi, đường
+  dẫn lạ) và khay hiện "không neo vào block nào" kèm đường dẫn gốc. Đưa người
+  dùng tới nhầm block tốn thời gian hơn là nói thẳng không biết.
+
+- **Added — minimap trên ngưỡng kích thước (`AC-FBD-012`).** Trên 24 block, sơ
+  đồ bắt đầu vượt khung nhìn nên có minimap: nhấp vào đó cuộn khung chính tới
+  đúng vùng. Minimap dùng **chung `viewBox`** với canvas chính — nó chỉ vẽ lại
+  cùng một hệ toạ độ, không phải một phép xếp thứ hai có thể nói khác.
+
+- **Added — fixture lớn nhất hợp đồng cho phép.** 256 block / 255 wire dựng
+  xong hình học **dưới 250 ms** và không có hai block nào trùng vị trí. Nếu
+  `buildFbdNetworkGeometry` là O(n²) thì canvas sẽ đứng đúng lúc sơ đồ trở nên
+  đáng vẽ nhất.
+
+- **Verification.** FE **149 file / 1680 test PASS** (+15); E2E Playwright
+  **31 PASS / 5 skip**; `tsc`/`eslint`/`check:ui-strings` và các check hợp đồng
+  Programming PASS; `vite build` PASS — chunk Programming **110,78 KiB gzip**
+  (ngân sách R1 125 KiB).
+
+
 ### PGM-02 R1 — FBD thành canvas node–edge thật (`T59-806` / `AC-FBD-001`) (2026-08-26)
 
 - **Fixed — dây bị giấu.** Bản trước vẽ block thành các thẻ xếp lưới và liệt kê

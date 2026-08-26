@@ -26,6 +26,7 @@ import {
   type FbdWire,
 } from './model'
 import { FbdCanvas } from './FbdCanvas'
+import { fbdIssueTargets } from './issueTargets'
 import {
   FBD_PALETTE,
   FBD_PALETTE_CATEGORY_ORDER,
@@ -727,6 +728,38 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
         </span>
         {!canEdit && <span className="rounded-full bg-[var(--c-surface-2)] px-2 py-1">{pick('Chỉ đọc', 'Read only')}</span>}
       </div>
+
+      {issues.length > 0 && (
+        /* `AC-FBD-007` — validator đã biết CHÍNH XÁC lỗi nằm ở block/dây nào
+         * (đường dẫn `$.networks[0].nodes[2].typeRef`). Trước đây UI chỉ hiện
+         * một con số, nên người dùng có toạ độ lỗi trong tay mà vẫn phải tự đi
+         * tìm. Mỗi dòng dưới đây nhảy thẳng tới đúng phần tử. */
+        <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2" role="group" aria-label={pick('Vấn đề FBD', 'FBD problems')}>
+          <h4 className="text-xs font-semibold uppercase text-[var(--c-warn-fg)]">{pick('Vấn đề', 'Problems')}</h4>
+          <ul className="mt-1 space-y-1">
+            {fbdIssueTargets(state.document, issues).map((target, index) => (
+              <li key={`${target.issue.code}-${target.issue.path}-${index}`}>
+                {target.selection ? (
+                  <button
+                    type="button"
+                    data-fbd-canvas-control="true"
+                    className="min-h-11 w-full rounded px-2 py-1 text-left text-xs text-[var(--c-warn-fg)] hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                    onClick={() => dispatch({ type: 'SELECT', selection: target.selection })}
+                  >
+                    <span className="font-mono">{target.issue.code}</span> · {target.label}
+                  </button>
+                ) : (
+                  /* Lỗi không neo được vào phần tử nào thì nói thẳng, thay vì
+                   * đưa người dùng tới một block gần đúng. */
+                  <p className="px-2 py-1 text-xs text-[var(--c-warn-fg)]">
+                    <span className="font-mono">{target.issue.code}</span> · {pick('không neo vào block nào', 'not anchored to a block')} (<span className="font-mono">{target.issue.path}</span>)
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="space-y-3">
         {state.document.networks.map((network) => (

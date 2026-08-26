@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_fan_enable.json'
-import type { FbdDocument } from './model'
+import type { FbdDocument, FbdNetwork } from './model'
 import {
   FBD_NODE_WIDTH,
   buildFbdNetworkGeometry,
@@ -119,5 +119,52 @@ describe('buildFbdNetworkGeometry', () => {
 
     // hai điểm sát nhau vẫn có độ phình tối thiểu, không thành đoạn thẳng
     expect(fbdWirePath({ x: 0, y: 0 }, { x: 10, y: 0 })).toBe('M 0 0 C 40 0, -30 0, 10 0')
+  })
+})
+
+/* `WP-05` AC: "256 block/512 wire fixture usable". Đồ thị lớn nhất mà hợp đồng
+ * cho phép phải dựng được hình học trong thời gian dùng được — nếu hàm này là
+ * O(n²) thì canvas sẽ đứng đúng lúc sơ đồ trở nên đáng vẽ nhất. */
+describe('buildFbdNetworkGeometry — fixture lớn nhất hợp đồng cho phép', () => {
+  function hugeNetwork(): FbdNetwork {
+    const nodes: FbdNetwork['nodes'] = []
+    const wires: FbdNetwork['wires'] = []
+    for (let index = 0; index < 256; index += 1) {
+      const nodeId = `30000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`
+      nodes.push({
+        id: nodeId,
+        kind: 'FUNCTION',
+        typeRef: 'AND',
+        executionOrder: index,
+        parameters: {},
+        ports: [
+          { id: `4000${index.toString(16).padStart(4, '0')}-0000-4000-8000-000000000001`, name: 'IN1', direction: 'INPUT', dataType: 'BOOL', unit: null, order: 0 },
+          { id: `4000${index.toString(16).padStart(4, '0')}-0000-4000-8000-000000000002`, name: 'IN2', direction: 'INPUT', dataType: 'BOOL', unit: null, order: 1 },
+          { id: `4000${index.toString(16).padStart(4, '0')}-0000-4000-8000-000000000003`, name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL', unit: null, order: 2 },
+        ],
+      })
+    }
+    for (let index = 0; index + 1 < 256 && wires.length < 512; index += 1) {
+      wires.push({
+        id: `50000000-0000-4000-8000-${wires.length.toString(16).padStart(12, '0')}`,
+        from: { nodeId: nodes[index].id, portId: nodes[index].ports[2].id },
+        to: { nodeId: nodes[index + 1].id, portId: nodes[index + 1].ports[0].id },
+      })
+    }
+    return { id: '20000000-0000-4000-8000-000000000001', name: 'HUGE', order: 0, nodes, wires }
+  }
+
+  it('256 block / 255 wire dựng xong dưới 250 ms và không chồng vị trí', () => {
+    const network = hugeNetwork()
+    const started = performance.now()
+    const geometry = buildFbdNetworkGeometry(network)
+    const elapsed = performance.now() - started
+
+    expect(geometry.nodes).toHaveLength(256)
+    expect(geometry.wires).toHaveLength(network.wires.length)
+    expect(elapsed).toBeLessThan(250)
+
+    const seen = new Set(geometry.nodes.map((node) => `${node.x}:${node.y}`))
+    expect(seen.size).toBe(geometry.nodes.length)
   })
 })
