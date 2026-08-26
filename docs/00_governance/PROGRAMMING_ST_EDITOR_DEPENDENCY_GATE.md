@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `GATE-PROG-ST-EDITOR-DEP-001` |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Trạng thái | **OPEN — chờ quyết định Product Owner/CTO + System Architect** |
 | Ngày | 2026-08-26 |
 | Người lập | Dev Lead (thi hành `T59-805`) |
@@ -74,13 +74,43 @@ Không quyết bằng ước lượng. Một spike có thời hạn phải trả
 5. Khả năng build **offline/air-gapped**: bo được cài từ artifact, không kéo
    package lúc cài.
 
+### 4.1 Kết quả spike — mục 1 và mục 4 đã ĐO THẬT (2026-08-26)
+
+Spike chạy **ngoài repo** (dự án tạm trong scratchpad) đúng để không đụng
+`package.json`/lockfile trước khi cổng được duyệt. Bộ package đúng danh sách §2,
+cộng một language mode ST tối giản, bundle bằng `esbuild --bundle --minify
+--format=esm`:
+
+| Phép đo | Kết quả |
+|---|---:|
+| Bundle CodeMirror tối thiểu + mode ST, **thô** | 341,34 KiB |
+| Bundle đó, **gzip** | **110,07 KiB** |
+| Chunk Programming hiện tại (2026-08-26) | 110,78 KiB gzip |
+| **Tổng nếu nhúng thẳng** | **≈ 220,85 KiB gzip** |
+| Ngân sách R1 / R2 / R3 | 125 / 145 / **165** KiB gzip |
+
+Nghĩa là nhúng thẳng **vượt ngân sách R1 khoảng 77%**, và vượt luôn ngân sách
+R3 — đúng như §2 dự đoán, nay bằng số đo chứ không phải ước lượng. Con số 110,07
+KiB rơi vào giữa dải ước lượng 90–150 KiB.
+
+**Mục 4 — license và dependency bắc cầu:** 12 package trong đồ thị
+(`@codemirror/*` ×6, `@lezer/*` ×3, `crelt`, `style-mod`, `w3c-keyname`),
+**toàn bộ MIT**, **0 package non-MIT**. Đây là mục **không** chặn: license sạch
+và đồ thị nhỏ.
+
+**Còn phải đo (cần phần cứng):** mục 2 và 3 phải chạy **trên bo Forlinx**; mục 5
+(build offline/air-gapped) phải kiểm trên quy trình đóng gói thật. Ba mục này
+không đo được từ máy phát triển.
+
 ## 5. Khuyến nghị của người lập
 
 **Lựa chọn A cho R1**, và mở lại cổng này ở R2 nếu người dùng thật sự cần
 go-to-definition/hover. Ba lý do:
 
-1. Dư địa 20 KiB không đủ cho bất kỳ ước lượng nào của CodeMirror, mà R1 còn năm
-   work package nữa cùng chia chunk đó.
+1. Dư địa còn **≈14 KiB** (cập nhật 2026-08-26) so với **110,07 KiB đo thật**
+   của bộ CodeMirror tối thiểu — thiếu gần **8 lần**. Và R1 vẫn còn work package
+   khác cùng chia chunk đó. Lựa chọn C (nâng ngân sách) sẽ phải nâng quá cả
+   ngân sách R3, tức bỏ hẳn cơ chế ngân sách chứ không phải nới nó.
 2. Editor hiện tại đã trả giá cho những thứ khó nhất và đã có test khoá: metric
    font inline (nguyên nhân gốc của lỗi lệch dòng 2026-08-17), history bounded 50
    snapshot, neo chẩn đoán theo `line/column/length`, và guard read-only runtime
@@ -105,9 +135,17 @@ Khuyến nghị này KHÔNG phải quyết định. Owner/Architect chọn A, B 
 | `AC-ST-004/010` khoá bằng 8 nguồn ngoài subset và kiểm phạm vi thao tác Lưu | đã giao |
 
 Mọi AC áp dụng cho R1 (`AC-ST-001..005`, `010`, `011`) đều có test. Số đo cập
-nhật 2026-08-26 sau bốn lát: chunk Programming **107,90 KiB gzip**, dư địa tới
-ngân sách R1 còn **≈17 KiB** — nhỏ hơn lúc lập cổng, nên §2 và §5 càng đúng chứ
-không nhẹ đi.
+nhật 2026-08-26 sau khi `T59-806` đóng: chunk Programming **110,78 KiB gzip**,
+dư địa tới ngân sách R1 còn **≈14 KiB** — nhỏ hơn lúc lập cổng, nên §2 và §5
+càng đúng chứ không nhẹ đi. Spike §4.1 đã thay ước lượng bằng số đo: bộ
+CodeMirror tối thiểu **110,07 KiB gzip**.
+
+**`T59-805` đang `PARTIAL` chỉ vì cổng này.** Acceptance của task
+(`ST positive/boundary/conflict/diagnostic/reference flows PASS; Active không
+đổi`) đã đạt hết. Nhưng đóng task lúc cổng còn mở nghĩa là **ngầm chọn lựa chọn
+A** — và đó là quyết định của Owner/Architect, không phải của người thi hành.
+Vì `T59-807` yêu cầu `T59-802..806 DONE`, cổng này hiện là thứ **duy nhất** giữ
+chuỗi R1 lại.
 
 Hai mục còn lại và cả hai đều **không phải việc tự quyết được**:
 
@@ -124,5 +162,6 @@ Hai mục còn lại và cả hai đều **không phải việc tự quyết đ�
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.2 | 2026-08-26 | Chạy spike §4 mục 1 và 4 NGOÀI repo: bộ CodeMirror tối thiểu + mode ST đo thật **110,07 KiB gzip** (341,34 KiB thô), tức nhúng thẳng vượt ngân sách R1 ~77% và vượt luôn R3; license 12/12 MIT, 0 non-MIT. Ghi rõ `T59-805` `PARTIAL` chỉ vì cổng này và nó đang giữ chuỗi R1. |
 | 1.1 | 2026-08-26 | Cập nhật §6 sau bốn lát của `T59-805`: mọi AC áp dụng cho R1 đã có test; đo lại chunk Programming 107,90 KiB gzip (dư địa còn ≈17 KiB); nêu đúng hai mục còn lại và vì sao cả hai đều cần quyết định hoặc cắt qua bốn boundary. |
 | 1.0 | 2026-08-26 | Lập cổng: đo dư địa ngân sách còn 20 KiB gzip, nêu ba lựa chọn kèm cái giá, liệt kê năm phép đo bắt buộc trước khi quyết, khuyến nghị A cho R1. |
