@@ -81,11 +81,11 @@ describe('runtimeOverlayByProgramId', () => {
       sample({ variableId: 'foreign', variableName: 'Foreign', programId: 'program-foreign' }),
     ] }), 'revision-active')
 
-    expect(overlays['program-a']).toEqual({ status: 'ready', items: [
+    expect(overlays['program-a']).toEqual({ status: 'ready', producerRestarted: false, items: [
       expect.objectContaining({ variableId: 'variable-null', value: null, valid: false }),
       expect.objectContaining({ variableId: 'variable-z', value: 0, valid: true }),
     ] })
-    expect(overlays['program-b']).toEqual({ status: 'ready', items: [
+    expect(overlays['program-b']).toEqual({ status: 'ready', producerRestarted: false, items: [
       expect.objectContaining({ variableId: 'variable-false', value: false, valid: true }),
     ] })
     expect(Object.values(overlays).flatMap((state) => state?.status === 'ready' ? state.items : [])

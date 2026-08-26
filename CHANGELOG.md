@@ -37,9 +37,15 @@
 - **Mất kết nối rồi nối lại thì quên mốc cũ** — có thể là một Core khác, nên so
   tiếp với mốc của mạch đã đứt sẽ kết luận sai cả "restart" lẫn "stale".
 
-- **Verification.** FE **153 file / 1734 test PASS**; `go vet`+`go test` PASS
+- **Added — và người vận hành THẤY được điều đó.** Khay giá trị runtime nói
+  thẳng "Core đã khởi động lại — giá trị bên dưới bắt đầu một mạch mới, không
+  nối tiếp số liệu trước đó", đồng thời **vẫn hiện** số liệu mới: mạch mới là số
+  liệu thật của mạch mới, giấu đi cũng sai. Một tín hiệu được tính mà không hiện
+  ra thì không bảo vệ được ai.
+
+- **Verification.** FE **153 file / 1736 test PASS**; `go vet`+`go test` PASS
   (2 test Go mới); E2E mock **42 PASS / 8 skip**; real-backend **2/2 PASS**;
-  build PASS — chunk **111,57 KiB / 125 KiB**.
+  build PASS — chunk **111,72 KiB / 125 KiB**.
 
 
 ### PGM-02 — ĐÓNG increment R1 (`T59-809`) (2026-08-26)
