@@ -374,7 +374,13 @@ export function ProgramsTab({
           </button>
         </div>
       )}
-      <div>
+      {/* `min-w-0` KHÔNG phải trang trí: ô lưới mặc định `min-width: auto`, nên
+          một con rộng bên trong (canvas FBD, thanh công cụ ST, khay workbench)
+          kéo track `1fr` phình ra thay vì tự cuộn — và cả trang tràn ngang.
+          Đo được ở 1024 px: document 1039 px trên viewport 1024 px. Tràn ngang
+          trên tủ điều khiển đẩy nút thao tác ra ngoài vùng chạm, mà người vận
+          hành không có chuột để cuộn ngang. */}
+      <div className="min-w-0">
         {!selected ? (
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Chọn một chương trình ở cây bên trái.', 'Select a program from the tree on the left.')}</p>
         ) : selected.language === 'ST' ? (
@@ -412,7 +418,7 @@ export function ProgramsTab({
           />
         )}
       </div>
-      <aside aria-label={pick('Thuộc tính', 'Inspector')}>
+      <aside className="min-w-0" aria-label={pick('Thuộc tính', 'Inspector')}>
         <div className="mb-2 flex justify-end">
           <button
             type="button"

@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — hardening EDIT: tràn ngang, focus, bàn phím, RBAC (`T59-808`) (2026-08-26)
+
+- **Fixed — lỗi thật do chính cổng mới bắt: tràn ngang 15 px ở 1024 px.** Ô lưới
+  mặc định `min-width: auto`, nên một con rộng bên trong (canvas FBD, thanh công
+  cụ ST, khay workbench) **kéo track `1fr` phình ra** thay vì tự cuộn — document
+  1039 px trên viewport 1024 px. Tràn ngang trên tủ điều khiển không chỉ xấu: nó
+  đẩy nút thao tác ra ngoài vùng chạm, mà người vận hành **không có chuột để
+  cuộn ngang**. Sửa bằng `min-w-0` ở cột giữa và cột Thuộc tính.
+
+- **Added — bốn khổ màn đã pin đều có phép kiểm.** `nfr.viewport` khai 1280 /
+  1024 / 768 / <768 nhưng trước lát này không phép kiểm nào đọc chúng, nên chúng
+  là số trang trí. Nay mỗi khổ có một case tràn ngang riêng.
+
+- **Added — focus ring và bàn phím đo theo hợp đồng.** `focusRingMinPx = 2`
+  kiểm bằng `getComputedStyle().outlineWidth` thật; bộ chuyển chế độ và
+  workbench đi hết bằng bàn phím, gồm cả tay kéo đổi chiều cao (`aria-valuenow`
+  đổi theo phím mũi tên). Bấm LIVE bằng `Enter` phải **giữ nguyên `mode=EDIT`
+  trên URL** và nói lý do — không tự hạ cấp.
+
+- **Added — RBAC negative ở tầng giao diện.** 403 của backend là nửa sau của câu
+  chuyện; nửa trước là giao diện. `viewer` và `operator` **đọc được nguồn**
+  nhưng không thấy nút Lưu/Hoàn tác/Định dạng và textarea là `readonly` — bấm
+  rồi mới biết mình không có quyền là bắt người dùng học luật bằng cách va vào
+  nó, còn chặn ghi mà làm mù luôn thì lại là một lỗi khác.
+
+- **Verification.** FE **152 file / 1717 test PASS**; mock E2E **42 PASS / 8
+  skip** (+11 case hardening); real-backend E2E **2/2 PASS**; `npm run build`
+  PASS kèm cổng ngân sách (**111,32 KiB / 125 KiB**, dư 13,68 KiB).
+
+
 ### PGM-02 R1 — ngân sách bundle thành cổng chặn được, và một bẫy đơn vị (`T59-808`) (2026-08-26)
 
 - **Added — `verify_programming_bundle_budget.py`: con số trong hợp đồng nay
