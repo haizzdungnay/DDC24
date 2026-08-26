@@ -8,6 +8,34 @@
 
 ## [Unreleased]
 
+### Governance — đồng bộ tracker Plan 59 với thực tế thi hành W8 (2026-08-26)
+
+- **Fixed — tracker nói `READY` trong khi task đã chạy được một nửa.** Plan 59 tự
+  khai là "tracker/scheduler duy nhất", nhưng sau ba lát đóng liên tiếp
+  (`T59-802`/`803`/`804`) vẫn còn sáu chỗ ghi trạng thái cũ: header, chuỗi
+  authority `AUTH-PROG-2026-08-24-05`, bảng Wave W8, đoạn mở đầu §3.9, crosswalk
+  work package và DoR §5.1 — chỗ thì `T59-802 READY`, chỗ thì `T59-804 READY`.
+  Ai đọc tracker để biết đang ở đâu sẽ nhận câu trả lời sai. Nay `T59-805` mang
+  đúng trạng thái **`PARTIAL`**: guard read-only runtime đã giao, phần đổi surface
+  editor dừng ở `GATE-PROG-ST-EDITOR-DEP-001`, phần reference index/hover phía BE
+  chưa giao — không phải `DONE`, cũng không phải `BLOCKED`.
+
+- **Fixed — ghi chú thực thi `T59-803` nằm sai chương.** Các dòng task trỏ người
+  đọc tới "Chi tiết §3.9", nhưng khối ghi chú lại nằm giữa §5.1 DoR, cắt đôi danh
+  sách bullet và đoạn kết của chính mục đó. Đã chuyển về cuối §3.9 và thêm ghi
+  chú thực thi cho `T59-805` tại cùng chỗ.
+
+- **Fixed — lịch sử phiên bản nhảy 2.7 → 2.11.** Ba lần bump (2.8 tại `60326c9`,
+  2.9 tại `ffdf324`, 2.10 tại `b87ad93`) không để lại dòng nào trong bảng lịch sử,
+  nên không truy được phiên bản nào chứa lát nào. Đã bổ sung đủ ba dòng theo đúng
+  commit, cộng dòng 2.11 cho lần đồng bộ này. Proposal PGM-02 cũng có drift tương
+  tự (header `1.5` nhưng lịch sử dừng ở `1.4`, và header vẫn ghi `WP-04 READY`
+  trong khi §0 đã ghi `IN PROGRESS`) — đã sửa và bổ sung dòng 1.5/1.6.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` **PASS** (0 đường dẫn
+  docs hỏng, 0 vi phạm D/I/T/P/R). Thay đổi chỉ chạm tài liệu, không chạm source.
+
+
 ### PGM-02 R1 — guard read-only runtime cho editor ST và cổng phụ thuộc `WP-04` (2026-08-26)
 
 - **Fixed — chỉ đọc là policy runtime, không chỉ một thuộc tính.** AC của
