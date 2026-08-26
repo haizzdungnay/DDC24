@@ -3,15 +3,15 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001` |
-| Phiên bản | 1.5 |
-| Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; `WP-00..03` DONE (`T59-801..804`), `WP-04` READY** |
+| Phiên bản | 1.6 |
+| Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; `WP-00..03` DONE (`T59-801..804`), `WP-04` IN PROGRESS (`T59-805`) — xem §0** |
 | Ngày | 2026-08-25 |
 | Mốc mã nguồn lập kế hoạch | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` |
 | Review nguồn | [REC-PGM02-ST-FBD-REDESIGN-REVIEW-001](PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md) |
 | Chủ quản đề xuất | Programming Product + Software/Runtime Architecture |
 | Người phê duyệt | Phạm Đình Chương — Product Owner/CTO + System Architect, electronic authorization `AUTH-PROG-2026-08-24-05` |
 | Change request chủ quản | [`CR-PROG-PGM02-V22-001`](../../../00_governance/PROGRAMMING_OPEN_DECISIONS.md) |
-| Execution authority | [Plan59](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) là tracker/scheduler duy nhất; `T59-804` READY, task sau tự mở theo predecessor |
+| Execution authority | [Plan59](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) là tracker/scheduler duy nhất; `T59-805` đang chạy (PARTIAL), task sau tự mở theo predecessor |
 | Release gate | `RELEASE_READY = NO-GO` cho tới khi WP-12/13 và evidence target áp dụng hoàn tất |
 
 Kế hoạch không ước lượng thời gian khi chưa có velocity/resource evidence. Độ
@@ -19,8 +19,8 @@ phức tạp dùng `S/M/L/XL`, phản ánh số boundary và rủi ro, không ph
 
 Tên `WP-00..WP-13` trong proposal này là alias đọc ngắn. Mọi record kiểm soát,
 trace, risk, task và evidence phải dùng namespace canonical
-`PGM02-V22-WP-00..PGM02-V22-WP-13`; `WP-00`/`WP-01`/`WP-02` đã DONE. Các task
-R1/R2/R3 đều có entry authority, nhưng chỉ `T59-804` đang READY; task sau giữ
+`PGM02-V22-WP-00..PGM02-V22-WP-13`; `WP-00`..`WP-03` đã DONE. Các task
+R1/R2/R3 đều có entry authority, nhưng chỉ `T59-805` đang chạy; task sau giữ
 ORDERED tới khi dependency trước hoàn tất. Trạng thái từng WP nằm ở §0.
 
 ## 0. Roadmap triển khai — cập nhật theo từng lát
@@ -1202,6 +1202,8 @@ discipline chỉ mở implementation, không chứng minh M4/M5, target/HIL ho�
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.6 | 2026-08-26 | Đồng bộ header với §0: `WP-03` đã đóng nên `WP-04`/`T59-805` là `IN PROGRESS`, không còn `READY`; sửa dòng Execution authority và đoạn alias vẫn trỏ `T59-804`. |
+| 1.5 | 2026-08-26 | Thêm §0 roadmap cập nhật theo từng lát; đóng `WP-01` (một phần scope), `WP-02` và `WP-03`; ghi cổng phụ thuộc/license của `WP-04`. |
 | 1.4 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: exact pin Candidate `413a043`, hoàn tất WP-00/T59-801, mở ba increment theo thứ tự bắt buộc và chuyển T59-802 READY; release vẫn NO-GO. |
 | 1.3 | 2026-08-24 | Đồng bộ output WP-00: gói Candidate đã được tạo và `T59-801` chuyển `REVIEW`; Architect exact pin cùng toàn bộ quyền code downstream vẫn `PENDING/NO-GO` |
 | 1.2 | 2026-08-24 | Nối proposal vào `CR-PROG-PGM02-V22-001` và Plan59 `T59-801`, chuẩn hóa namespace `PGM02-V22-WP-*`, ghi rõ Architect `PENDING` và không mở downstream/code production |
