@@ -8,6 +8,44 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — chèn FB có trạng thái đặt khai báo đúng chỗ (`T59-805` / `AC-ST-002`) (2026-08-26)
+
+- **Fixed — Quick Library từng sinh mã ST không compile được.** Chèn một
+  FUNCTION_BLOCK có trạng thái (TON/TOF/CTU…) trước đây đặt nguyên một khối
+  `VAR ... END_VAR` **ngay tại con trỏ**, tức giữa thân chương trình. Grammar ST
+  §10 là `PROGRAM identifier { var_block } statement_list END_PROGRAM`, và
+  parser thật (`st_parser.cpp`, `parse_pou()`) đọc **hết** var block rồi mới đọc
+  danh sách câu lệnh — nên mọi lần chèn như vậy là một lần Check chắc chắn đỏ.
+  UI chào một khả năng compiler không nhận, đúng lớp lỗi mà invariant "không
+  expose capability backend không hỗ trợ" tồn tại để chặn.
+
+- **Added — `planLibraryInsertion` đặt hai nửa của thao tác về đúng chỗ.** Khai
+  báo instance đi vào khối `VAR`/`VAR RETAIN` (parser chỉ nhận instance FB ở hai
+  khối đó), lời gọi đi vào thân. Chưa có khối nào nhận được thì dựng một khối
+  `VAR` mới ngay sau vùng khai báo; khối viết gọn trên một dòng thì giữ nguyên
+  kiểu viết một dòng thay vì bẻ nguồn của người khác. Con trỏ đang nằm trong
+  vùng khai báo thì lời gọi được dời xuống đầu thân — và **nói ra** điều đó,
+  vì thay đổi nằm ngoài tầm nhìn của con trỏ.
+
+- **Added — chọn hoặc tạo instance, không đoán hộ (`AC-ST-002`).** Nguồn đã có
+  instance cùng kiểu thì hiện một câu hỏi: dùng lại instance nào, hay tạo mới.
+  Tự dùng lại là sai (hai lời gọi chia nhau cùng một timer là lỗi điều khiển
+  thật); tự tạo mới cũng sai khi người dùng đang muốn gọi lại đúng instance đó.
+  Chưa có instance nào thì không hỏi — giữ đúng "≤2 thao tác" của `AC-ST-001`.
+  Tên sinh ra (`TON_1`, `TON_2`…) tránh mọi định danh đang có, so **không phân
+  biệt hoa thường**: chặt hơn grammar, vì `TON_1` cạnh `ton_1` là bẫy đọc.
+
+- **Changed — cả khai báo lẫn lời gọi vẫn là MỘT bước hoàn tác** (`AC-ST-003`):
+  hai phần đi qua đúng một `applyEditRange`. `stInsertionSnippet` bị xoá khỏi
+  `libraryCatalog.ts`, thay bằng `stCallStatement` chỉ sinh **lời gọi** — chỗ
+  đặt khai báo không còn là việc của một hàm sinh chuỗi.
+
+- **Verification.** FE **145 file / 1590 test PASS** (+2 file, +16 test);
+  `tsc --noEmit`, `eslint --max-warnings=0`, `check:ui-strings` và `vite build`
+  PASS; chunk Programming **106,37 KiB gzip** (ngân sách R1 125 KiB, dư địa còn
+  ≈18,6 KiB).
+
+
 ### Governance — đồng bộ tracker Plan 59 với thực tế thi hành W8 (2026-08-26)
 
 - **Fixed — tracker nói `READY` trong khi task đã chạy được một nửa.** Plan 59 tự

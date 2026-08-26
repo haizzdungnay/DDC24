@@ -6,8 +6,8 @@ import {
   catalogParity,
   filterCatalog,
   isInsertable,
-  stInsertionSnippet
 } from './libraryCatalog'
+import { stCallStatement } from '../editor/stInstanceInsertion'
 
 function signature(extra: Record<string, unknown> = {}): string {
   return JSON.stringify({
@@ -130,10 +130,13 @@ describe('PGM-02 catalog thư viện dùng chung', () => {
 
   it('đoạn ST cho FUNCTION là một lời gọi, cho FUNCTION_BLOCK có cả khai instance', () => {
     const entries = catalogEntries(page())
-    expect(stInsertionSnippet(entries[0])).toBe('OUT := LIMIT(MN, IN, MX);')
-    const ton = stInsertionSnippet(entries[1], 'TON_Fan')
-    expect(ton).toContain('TON_Fan : TON;')
-    expect(ton).toContain('TON_Fan(IN := IN, PT := PT);')
+    expect(stCallStatement(entries[0])).toBe('OUT := LIMIT(MN, IN, MX);')
+    /* Lời gọi KHÔNG còn kèm khối `VAR ... END_VAR`: khai báo thuộc vùng khai
+     * báo của POU, đặt nó giữa thân là lỗi cú pháp theo grammar ST §10 —
+     * `planLibraryInsertion` mới là chỗ đặt hai phần về đúng chỗ. */
+    const ton = stCallStatement(entries[1], 'TON_Fan')
+    expect(ton).toBe('TON_Fan(IN := IN, PT := PT);')
+    expect(ton).not.toContain('VAR')
   })
 
   it('parity SYSTEM giữa backend và registry sinh sẵn nói rõ lệch ở phía nào', () => {

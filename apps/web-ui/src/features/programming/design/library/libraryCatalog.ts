@@ -169,29 +169,6 @@ export function isInsertable(entry: CatalogEntry): boolean {
 }
 
 /**
- * Sinh đoạn ST cho một mục catalog.
- *
- * FUNCTION là biểu thức thuần nên chèn ngay tại con trỏ dưới dạng lời gọi có
- * đủ tham số giữ chỗ. FUNCTION_BLOCK có trạng thái nội tại: theo grammar IEC,
- * nó phải có INSTANCE khai trong `VAR ... END_VAR` rồi mới gọi được, nên đoạn
- * sinh ra gồm cả hai phần và người dùng thấy ngay điều đó thay vì nhận lỗi
- * Check "instance chưa khai".
- */
-export function stInsertionSnippet(entry: CatalogEntry, instanceName?: string): string {
-  const inputs = entry.ports.filter((port) => port.direction === 'INPUT')
-  const outputs = entry.ports.filter((port) => port.direction === 'OUTPUT')
-  if (!entry.stateful) {
-    const args = inputs.map((port) => port.name).join(', ')
-    const target = outputs[0]?.name ?? 'OUT'
-    return `${target} := ${entry.name}(${args});`
-  }
-  const instance = instanceName ?? `${entry.name}_1`
-  const assignments = inputs.map((port) => `${port.name} := ${port.name}`).join(', ')
-  const readback = outputs[0] ? `\n(* ${instance}.${outputs[0].name} *)` : ''
-  return `VAR\n  ${instance} : ${entry.name};\nEND_VAR\n${instance}(${assignments});${readback}`
-}
-
-/**
  * Parity giữa catalog của backend và registry sinh sẵn ở FE. Hai bề mặt cùng
  * đọc một hợp đồng, nên tập `entryId` SYSTEM phải trùng khít; lệch nghĩa là một
  * bên đang chào block mà bên kia không có — đúng lớp lỗi đã từng xảy ra
