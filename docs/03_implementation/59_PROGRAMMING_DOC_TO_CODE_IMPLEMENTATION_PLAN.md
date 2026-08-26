@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.12 |
-| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; `T59-801..804` DONE, `T59-805` và `T59-806` PARTIAL (mọi AC áp dụng cho R1 đã có test; phần còn lại chờ cổng phụ thuộc hoặc thuộc R2/R3), `T59-807..817` ORDERED theo predecessor; RELEASE_READY NO-GO** |
+| Phiên bản | 2.13 |
+| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; `T59-801..804` và `T59-806` DONE (HOST/LOCAL), `T59-805` PARTIAL — acceptance đã đạt nhưng scope `WP-04` còn chờ quyết định `GATE-PROG-ST-EDITOR-DEP-001`; `T59-807..817` ORDERED theo predecessor; RELEASE_READY NO-GO** |
 | Ngày | 2026-08-25 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
@@ -2724,7 +2724,7 @@ Consumer/discipline/Verification/Document Control review là
 | `T59-803` | R1 / `PGM02-V22-WP-02` | Một POU Explorer typed theo `objectId`; selection/navigation/create/duplicate/rename/delete guard | `T59-802 DONE` | **DONE (HOST/LOCAL)** | DOM còn đúng MỘT navigation POU; view model một nguồn (`pouItems`); `objectId`/`programId` không thay nhau được (tra nhầm trục cho `undefined`); tạo/đổi tên/nhân bản/xoá đi qua op typed `upsertObject`/`renameObject`/`duplicateObject`/`removeObject`; FUNCTION/FB không bao giờ được xếp lịch; xoá có preflight người gọi. FE **141 file/1551 test**, E2E mock **30 PASS/4 skip**, real-backend **1/1**. Chi tiết §3.9 |
 | `T59-804` | R1 / `PGM02-V22-WP-03` | OpenAPI/generated clients + BE typed Draft, normalized Quick Library signature, reference query và atomic semantic refactor | `T59-803 DONE`; contract được promote Active trong task | **DONE (HOST/LOCAL)** | schema/Go/TS exact; ETag/idempotency; analyzer/signature unavailable zero mutation; audit/read-back đúng |
 | `T59-805` | R1 / `PGM02-V22-WP-04` | ST editor hoàn chỉnh: Saved Draft, exact diagnostic anchor, history/cursor/read-back | `T59-804 DONE` | **PARTIAL (HOST/LOCAL)** | Đã giao 4 lát: (1) chỉ đọc là **policy runtime** — guard ở `applyEditRange` và handler `onChange`; (2) `AC-ST-002/003` chèn FB có trạng thái đặt khai báo vào khối `VAR` và lời gọi vào thân, chọn/tạo instance, một bước hoàn tác; (3) `AC-ST-005` chỉ mục tham chiếu + F12/Ctrl+Click tới khai báo + khay tham chiếu nói "không xác định được" khi không tra được; (4) `AC-ST-004/010` khoá bằng 8 nguồn ngoài subset và kiểm Lưu chỉ phát op Draft. AC áp dụng cho R1 (`AC-ST-001..005`, `010`, `011`) đều có test. FE **146 file/1626 test** PASS, lint/build PASS, chunk Programming **107,90 KiB gzip** (ngân sách R1 125 KiB). **Chưa giao, hai mục:** đổi surface sang CodeMirror 6 dừng tại [`GATE-PROG-ST-EDITOR-DEP-001`](../00_governance/PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) chờ Owner/Architect chọn A/B/C; và chỉ mục ký hiệu **do compiler sinh** (bullet BE của `WP-04`) — cần compiler worker xuất symbol table, runner Go đọc, OpenAPI công bố, FE tiêu thụ. Chi tiết §3.9 |
-| `T59-806` | R1 / `PGM02-V22-WP-05` | FBD true canvas: typed port/order, wire validation, pan/zoom/select/undo và exact FBD anchor | `T59-804 DONE` | **PARTIAL (HOST/LOCAL)** | Đã giao 3 lát: (1) hợp đồng `layout` có phiên bản riêng ở gốc tài liệu — compiler kiểm rồi `erase` trước khi canonical hoá nên hình học **không chạm** hash artifact; (2) canvas SVG node–edge thật (dây vẽ ra thay vì hàng nút UUID), tự xếp tất định INPUT→giữa→OUTPUT, kéo block = một bước hoàn tác, bàn phím giữ nguyên; (3) khay Vấn đề nhảy tới đúng block/dây (`AC-FBD-007`), minimap trên ngưỡng 24 block (`AC-FBD-012`), fixture 256 block/255 wire dựng dưới 250 ms. AC áp dụng cho R1 (`AC-FBD-001..007`, `012`) đều có test. `ctest` 1299/1299; FE **149 file/1684 test**; E2E **31 PASS/5 skip**; chunk Programming **110,78 KiB gzip** (ngân sách R1 125 KiB). **Chưa giao:** `AC-FBD-008` thuộc R3, `AC-FBD-009..011` thuộc R2 (overlay runtime LIVE). Chi tiết §3.9 |
+| `T59-806` | R1 / `PGM02-V22-WP-05` | FBD true canvas: typed port/order, wire validation, pan/zoom/select/undo và exact FBD anchor | `T59-804 DONE` | **DONE (HOST/LOCAL)** | Đã giao 3 lát: (1) hợp đồng `layout` có phiên bản riêng ở gốc tài liệu — compiler kiểm rồi `erase` trước khi canonical hoá nên hình học **không chạm** hash artifact; (2) canvas SVG node–edge thật (dây vẽ ra thay vì hàng nút UUID), tự xếp tất định INPUT→giữa→OUTPUT, kéo block = một bước hoàn tác, bàn phím giữ nguyên; (3) khay Vấn đề nhảy tới đúng block/dây (`AC-FBD-007`), minimap trên ngưỡng 24 block (`AC-FBD-012`), fixture 256 block/255 wire dựng dưới 250 ms. Ba điều kiện acceptance đều có bằng chứng: canonical/port `order` giữ nguyên (2 test C++ + round-trip FE), ST↔FBD equivalence PASS (`verify_programming_fbd_contract.py` + self-test 10/10), accessibility PASS (**axe wcag2a/2aa/21a/21aa/22aa quét THẲNG canvas FBD, 0 vi phạm** — trước lát này bộ quét chỉ chạy trên workspace ST nên FBD chưa từng bị soi). AC áp dụng cho R1 (`AC-FBD-001..007`, `012`) đều có test. `ctest` 1299/1299; FE **149 file/1684 test**; E2E **31 PASS/5 skip**; chunk Programming **110,78 KiB gzip** (ngân sách R1 125 KiB). `AC-FBD-008` thuộc R3 và `AC-FBD-009..011` thuộc R2 (overlay runtime LIVE) — ngoài phạm vi card R1 này. Chi tiết §3.9 |
 | `T59-807` | R1 / `PGM02-V22-WP-06-R1` | Hợp nhất workbench EDIT, context strip, state/error/copy và full save→Check→read-back | `T59-802..806 DONE` | **ORDERED — dependency** | Real-backend E2E R1, stale ETag/refactor fault/permission/offline; không mock authority |
 | `T59-808` | R1 / `PGM02-V22-WP-10-R1` + `WP-11-R1` | Budget bundle/render, a11y/responsive/security hardening cho EDIT | `T59-807 DONE` | **ORDERED — dependency** | Budget NFR R1, no horizontal overflow, focus/contrast/keyboard, RBAC negative và hostile source PASS |
 | `T59-809` | R1 / `PGM02-V22-WP-12-R1` + `WP-13-R1` | Chạy/record `VS-PROG-U13`, trace/risk/manifest/rollback và closeout R1 | `T59-808 DONE` | **ORDERED — dependency** | Contract/host/browser/real-backend evidence đúng exact hash; chỉ R1 có verdict, R2/R3 vẫn unavailable |
@@ -2754,7 +2754,7 @@ thái `DONE` của chúng **không** chứng minh redesign mới đã implement:
 | `PGM02-V22-WP-02` | `T59-301/306/506` | `T59-803` DONE R1 (HOST/LOCAL) |
 | `PGM02-V22-WP-03` | `T59-003/201..205` | `T59-804` DONE R1 (HOST/LOCAL) |
 | `PGM02-V22-WP-04` | `T59-302/408/506` | `T59-805` PARTIAL R1 — chờ `GATE-PROG-ST-EDITOR-DEP-001` cho phần đổi surface |
-| `PGM02-V22-WP-05` | `T59-105/306/506/601` | `T59-806` PARTIAL R1 — phần LIVE/SIMULATE của WP-05 thuộc R2/R3 |
+| `PGM02-V22-WP-05` | `T59-105/306/506/601` | `T59-806` DONE R1 (HOST/LOCAL); phần LIVE/SIMULATE của WP-05 thuộc R2/R3 |
 | `PGM02-V22-WP-06` | `T59-302/408/504/506` | `T59-807` R1 + `T59-811` R2 + `T59-816` R3 ORDERED |
 | `PGM02-V22-WP-07` | `T59-106/302/402..407/602/603` | `T59-814` ORDERED R3 |
 | `PGM02-V22-WP-08` | `T59-503/506/603` + WP-07 | `T59-815` ORDERED R3 |
@@ -2900,9 +2900,16 @@ Bàn phím không mất gì: mỗi block/port/dây là phần tử SVG nhận ti
 `role="button"`, nên journey Playwright `UJ-PROG-02` (chỉ dùng Insert/Arrow/
 Enter/Delete/Ctrl+Z, không click chuột) **không sửa một dòng nào** và vẫn xanh.
 
-Còn lại của `T59-806` không phải việc bị bỏ dở mà là phần thuộc increment khác:
+Còn lại của `WP-05` không phải việc bị bỏ dở mà là phần thuộc increment khác:
 `AC-FBD-008` (SIMULATE) thuộc R3, `AC-FBD-009..011` (LIVE overlay, giá trị
-runtime không được vẽ lên topology lệch) thuộc R2.
+runtime không được vẽ lên topology lệch) thuộc R2. Card R1 `T59-806` vì vậy
+`DONE (HOST/LOCAL)`.
+
+Một mục acceptance suýt được nhận vơ: **accessibility**. Bộ quét axe của dự án
+chạy trên workspace mặc định — và workspace mặc định mở chương trình **ST**, nên
+FBD editor **chưa từng lần nào** bị soi thật. Lát này đưa quét axe vào đúng lúc
+canvas đang mở (`wcag2a/2aa/21a/21aa/22aa`, 0 vi phạm). Không có bước đó thì
+"accessibility PASS" chỉ là một dòng chữ.
 
 ## 4. Bảng ownership
 
@@ -2996,6 +3003,7 @@ truy nguyên As-Built đến 2026-08-20.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.13 | 2026-08-26 | Đóng `T59-806` `DONE (HOST/LOCAL)` sau khi có bằng chứng thật cho cả ba điều kiện acceptance — riêng accessibility phải mở rộng bộ quét axe vào đúng lúc canvas FBD đang mở, vì bộ quét cũ chỉ chạy trên workspace ST. |
 | 2.12 | 2026-08-26 | Ghi tiến độ `T59-805` (4 lát, mọi AC R1 có test) và `T59-806` (3 lát: hợp đồng `layout`, canvas SVG node–edge, khay Vấn đề + minimap). Hai lỗi thật đáng ghi: hình học từng rò vào `canonical_json` nên đổi hash artifact, và canonical hoá FE ném lỗi khi gặp hình học rác. Cả hai task `PARTIAL` với phần còn lại nêu đích danh. |
 | 2.11 | 2026-08-26 | Đồng bộ tracker với thực tế thi hành W8: `T59-802..804` `DONE (HOST/LOCAL)` và `T59-805` `PARTIAL` (guard read-only runtime đã giao; đổi surface editor dừng ở `GATE-PROG-ST-EDITOR-DEP-001` vì dư địa ngân sách chunk R1 chỉ còn ≈20 KiB gzip). Sửa các dòng còn ghi `T59-802 READY`/`T59-804 READY` ở header, chuỗi authority, bảng Wave, §3.9, crosswalk và DoR §5.1; `IMPLEMENTATION_CLOSE` nêu đúng phần R1 còn thiếu. |
 | 2.10 | 2026-08-26 | Đóng `T59-804`/`PGM02-V22-WP-03` (`b87ad93`): catalog dùng chung có parity BE↔registry trên backend thật, Quick Library, sáu block `TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS`, typed metadata OpenAPI và dock dùng chung ST↔FBD; mở `T59-805`. |

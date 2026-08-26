@@ -621,6 +621,15 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await expect(page.getByText('0/512 wire')).toBeVisible()
     await page.keyboard.press('Control+z') // hoàn tác — wire khôi phục
     await expect(page.getByText('1/512 wire')).toBeVisible()
+    // `T59-806` — canvas node–edge mới phải qua chính bộ quét a11y của dự án.
+    // Bộ quét cũ chỉ chạy trên workspace mặc định (chương trình ST), nên trước
+    // lát này CHƯA lần nào FBD editor bị soi thật.
+    const fbdAxe = await new AxeBuilder({ page })
+      .include('main')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+    expect(fbdAxe.violations, 'Vi phạm a11y trên canvas FBD').toEqual([])
+
     await page.screenshot({ path: testInfo.outputPath('03-design-fbd.png'), fullPage: true })
     await page.getByRole('button', { name: 'Lưu', exact: true }).click()
 

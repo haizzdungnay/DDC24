@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001` |
-| Phiên bản | 1.8 |
+| Phiên bản | 1.9 |
 | Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; `WP-00..03` DONE (`T59-801..804`), `WP-04` IN PROGRESS (`T59-805`) — xem §0** |
 | Ngày | 2026-08-25 |
 | Mốc mã nguồn lập kế hoạch | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` |
@@ -37,7 +37,7 @@ không nói CI, target, HIL hay release.
 | `WP-02` | `T59-803` | **DONE** 2026-08-25 | Một POU Explorer, identity `objectId`↔`programId`, vòng đời POU typed cho ba kind | [evidence 2026-08-25](../../../07_records/test-evidence/programming/2026-08-25-pgm02-t59-803-pou-explorer.md) |
 | `WP-03` | `T59-804` | **DONE** 2026-08-26 | Catalog dùng chung (BE authority) + Quick Library ST + Recent/Favorites + parity BE↔registry trên backend thật + lọc palette FBD theo cổng đang chọn + khoá luật không tự nối + sáu block `TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS` (compiler+runtime+conformance) + typed metadata public trong OpenAPI + dock dùng chung ST↔FBD | [evidence 2026-08-26](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md) |
 | `WP-04` | `T59-805` | **IN PROGRESS** 2026-08-26 | Guard read-only runtime + chèn FB có trạng thái đúng vùng khai báo (`AC-ST-002/003`) + chỉ mục tham chiếu, F12 tới khai báo, khay "không xác định được" (`AC-ST-005`) + khoá `AC-ST-004/010` bằng 8 nguồn ngoài subset | AC áp dụng cho R1 (`AC-ST-001..005`, `010`, `011`) đều có test; FE 146 file/1626 test. Còn hai mục: [cổng phụ thuộc](../../../00_governance/PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) cho surface editor, và chỉ mục ký hiệu do compiler sinh |
-| `WP-05` | `T59-806` | **IN PROGRESS** 2026-08-26 | Hợp đồng `layout` (compiler bỏ qua khi canonical hoá) + canvas SVG node–edge thật + khay Vấn đề nhảy tới đúng block/dây + minimap trên ngưỡng + fixture 256 block | AC áp dụng cho R1 (`AC-FBD-001..007`, `012`) đều có test; ctest 1299/1299, FE 149 file/1684 test, E2E 31 PASS/5 skip. `AC-FBD-008` thuộc R3, `AC-FBD-009..011` thuộc R2 |
+| `WP-05` | `T59-806` | **DONE (R1)** 2026-08-26 | Hợp đồng `layout` (compiler bỏ qua khi canonical hoá) + canvas SVG node–edge thật + khay Vấn đề nhảy tới đúng block/dây + minimap trên ngưỡng + fixture 256 block | AC áp dụng cho R1 (`AC-FBD-001..007`, `012`) đều có test; accessibility có axe quét thẳng canvas (0 vi phạm); ctest 1299/1299, FE 149 file/1684 test, E2E 31 PASS/5 skip. `AC-FBD-008` thuộc R3, `AC-FBD-009..011` thuộc R2 |
 | `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | ORDERED | — | — |
 | `WP-07` | `T59-814` | ORDERED | — | — |
 | `WP-08` | `T59-815` | ORDERED | — | — |
@@ -1202,6 +1202,7 @@ discipline chỉ mở implementation, không chứng minh M4/M5, target/HIL ho�
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.9 | 2026-08-26 | Đóng `WP-05` ở phạm vi R1 sau khi bổ sung quét axe thẳng vào canvas FBD (bộ quét cũ chỉ chạy trên workspace ST). |
 | 1.8 | 2026-08-26 | Ghi ba lát của `WP-05`: hợp đồng hình học, canvas SVG node–edge (không thêm thư viện — spike gate đỏ theo ngân sách), khay Vấn đề + minimap. Mọi AC áp dụng cho R1 đã có test. |
 | 1.7 | 2026-08-26 | Ghi ba lát tiếp theo của `WP-04`: chèn FB có trạng thái đặt khai báo đúng vùng (`AC-ST-002/003`), chỉ mục tham chiếu + F12 tới khai báo (`AC-ST-005`), và khoá `AC-ST-004/010` bằng nguồn ngoài subset. Mọi AC áp dụng cho R1 đã có test; còn hai mục chưa giao là surface editor (chờ cổng) và chỉ mục ký hiệu do compiler sinh. |
 | 1.6 | 2026-08-26 | Đồng bộ header với §0: `WP-03` đã đóng nên `WP-04`/`T59-805` là `IN PROGRESS`, không còn `READY`; sửa dòng Execution authority và đoạn alias vẫn trỏ `T59-804`. |

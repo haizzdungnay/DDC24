@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — đóng `T59-806`, và một mục acceptance suýt bị nhận vơ (2026-08-26)
+
+- **Fixed — canvas FBD chưa từng lần nào bị bộ quét a11y soi thật.** Acceptance
+  của `T59-806` có dòng "accessibility PASS", và dự án **có** bộ quét axe. Nhưng
+  bộ quét chạy trên workspace mặc định, mà workspace mặc định mở chương trình
+  **ST** — nên FBD editor nằm ngoài mọi lần quét từ trước tới nay. Nay quét chạy
+  đúng lúc canvas đang mở (`wcag2a/2aa/21a/21aa/22aa`): **0 vi phạm**. Không có
+  bước này thì "accessibility PASS" chỉ là một dòng chữ.
+
+- **Changed — `T59-806` đóng `DONE (HOST/LOCAL)` cho R1.** Cả ba điều kiện
+  acceptance đều có bằng chứng thật: canonical/port `order` giữ nguyên (2 test
+  C++ + round-trip FE), ST↔FBD equivalence PASS (`verify_programming_fbd_
+  contract.py` + self-test 10/10 mutation bị reject), accessibility PASS như
+  trên. `AC-FBD-008` thuộc R3 và `AC-FBD-009..011` thuộc R2 — ngoài phạm vi card
+  R1, không phải việc bỏ dở.
+
+- **Verification.** E2E Playwright **31 PASS / 5 skip** (gồm lần quét axe mới);
+  `python3 scripts/docs_iso_harness.py` PASS.
+
+
 ### PGM-02 R1 — khoá `AC-FBD-006` và vòng lưu–đọc lại của hình học (2026-08-26)
 
 - **Added — nối sai kiểu bị chặn NGAY, có test (`AC-FBD-006`).** Luật đã có
