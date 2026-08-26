@@ -33,15 +33,24 @@ function sample(overrides: Partial<ProgrammingMonitorSample> = {}): ProgrammingM
 
 function monitor(
   status: ProgrammingRuntimeMonitorState['status'],
-  options: { activeRevisionId?: string | null; items?: ProgrammingMonitorSample[] } = {},
+  options: {
+    activeRevisionId?: string | null
+    items?: ProgrammingMonitorSample[]
+    /** `null` = snapshot KHÔNG mang dấu producer (`T59-810`). */
+    producer?: { capturedMonotonicNs: string } | null
+  } = {},
 ): ProgrammingRuntimeMonitorState {
   const activeRevisionId = options.activeRevisionId === undefined ? 'revision-active' : options.activeRevisionId
+  const producer = options.producer === undefined ? { capturedMonotonicNs: '1000' } : options.producer
   return {
     status,
     data: status === 'ready' ? {
-      schemaVersion: '1.0', activeRevisionId, safeState: false, task: null, items: options.items ?? [],
+      schemaVersion: '1.0', activeRevisionId,
+      ...(producer === null ? {} : { producer }),
+      safeState: false, task: null, items: options.items ?? [],
     } : null,
     error: status === 'error' ? 'Core offline' : null,
+    producerRestarted: false,
     failure: status === 'error' ? 'offline' : null,
     refresh: vi.fn(),
   }
@@ -145,5 +154,37 @@ describe('userPouInterfacesFromDraft', () => {
       library: { profile: 'CORE_REVA', version: '1' },
     } satisfies ProgrammingDraftDocument
     expect(userPouInterfacesFromDraft(v1)).toEqual([])
+  })
+})
+
+/* `T59-810` — một snapshot không có dấu producer đọc được là một snapshot
+ * không biết mình từ đâu tới. Vẽ giá trị của nó lên topology đang hiện là đúng
+ * thứ `AC-ST-007`/`AC-FBD-010` tồn tại để cấm. */
+describe('runtimeOverlayByProgramId — dấu producer (T59-810)', () => {
+  it('thiếu dấu producer ⇒ unavailable, không vẽ giá trị', () => {
+    const overlays = runtimeOverlayByProgramId(
+      PROGRAMS,
+      monitor('ready', { producer: null, items: [sample()] }),
+      'revision-active',
+    )
+    expect(overlays['program-a']).toEqual({ status: 'unavailable' })
+  })
+
+  it('dấu producer hỏng ⇒ unavailable, không đoán', () => {
+    const overlays = runtimeOverlayByProgramId(
+      PROGRAMS,
+      monitor('ready', { producer: { capturedMonotonicNs: 'không-phải-số' }, items: [sample()] }),
+      'revision-active',
+    )
+    expect(overlays['program-a']).toEqual({ status: 'unavailable' })
+  })
+
+  it('dấu hợp lệ + đúng Revision ⇒ vẽ bình thường', () => {
+    const overlays = runtimeOverlayByProgramId(
+      PROGRAMS,
+      monitor('ready', { items: [sample()] }),
+      'revision-active',
+    )
+    expect(overlays['program-a']?.status).toBe('ready')
   })
 })
