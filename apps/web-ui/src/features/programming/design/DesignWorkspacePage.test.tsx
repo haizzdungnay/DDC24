@@ -993,3 +993,40 @@ describe('PGM-02 — slot lưới thu gọn được (T59-807)', () => {
     expect(slotKey({ left: false, inspector: false })).toBe('both-closed')
   })
 })
+
+/* `T59-808` — security hardening: nguồn thù địch.
+ *
+ * Tên POU và mã nguồn là dữ liệu do người dùng nhập, và chúng được hiện lại ở
+ * cây POU, khay Vấn đề, khay tham chiếu và thanh ngữ cảnh. React thoát HTML
+ * mặc định, nhưng "mặc định an toàn" chỉ đúng tới lần đầu ai đó thêm một
+ * `dangerouslySetInnerHTML` cho tiện. Bộ test này khoá điều đó lại. */
+describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không thành mã (T59-808)', () => {
+  const HOSTILE_NAME = '<img src=x onerror="window.__pwned=1">'
+  const HOSTILE_SOURCE = 'PROGRAM P\n(* <script>window.__pwned=1</script> *)\nX := 1;\nEND_PROGRAM\n'
+
+  it('tên POU chứa thẻ HTML không tạo phần tử nào và không chạy script', async () => {
+    const project = baseProject()
+    project.draft = {
+      ...baseDocument(),
+      programs: [{ programId: 'program-a', name: HOSTILE_NAME, kind: 'PROGRAM', language: 'ST', document: HOSTILE_SOURCE }]
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText(HOSTILE_NAME)).toBeInTheDocument())
+
+    // Tên hiện ra ĐÚNG NGUYÊN VĂN, và không có `<img>` nào được tạo từ nó.
+    expect(globalThis.document.querySelector('img[src="x"]')).toBeNull()
+    expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined()
+
+    fireEvent.click(screen.getByText(HOSTILE_NAME))
+    const source = await screen.findByLabelText(/Mã nguồn ST/)
+    expect((source as HTMLTextAreaElement).value).toBe(HOSTILE_SOURCE)
+    expect(globalThis.document.querySelector('script')).toBeNull()
+    expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined()
+  })
+})

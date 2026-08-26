@@ -3,15 +3,15 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001` |
-| Phiên bản | 1.11 |
-| Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; `WP-00..06` DONE ở phạm vi R1 (`T59-801..807`), `WP-10`/`WP-11` (`T59-808`) READY — xem §0** |
+| Phiên bản | 1.12 |
+| Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; `WP-00..06`, `WP-10`, `WP-11` DONE ở phạm vi R1 (`T59-801..808`); `WP-12`/`WP-13` (`T59-809`) READY — xem §0** |
 | Ngày | 2026-08-25 |
 | Mốc mã nguồn lập kế hoạch | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` |
 | Review nguồn | [REC-PGM02-ST-FBD-REDESIGN-REVIEW-001](PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md) |
 | Chủ quản đề xuất | Programming Product + Software/Runtime Architecture |
 | Người phê duyệt | Phạm Đình Chương — Product Owner/CTO + System Architect, electronic authorization `AUTH-PROG-2026-08-24-05` |
 | Change request chủ quản | [`CR-PROG-PGM02-V22-001`](../../../00_governance/PROGRAMMING_OPEN_DECISIONS.md) |
-| Execution authority | [Plan59](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) là tracker/scheduler duy nhất; `T59-808` READY, task sau tự mở theo predecessor |
+| Execution authority | [Plan59](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) là tracker/scheduler duy nhất; `T59-809` READY, task sau tự mở theo predecessor |
 | Release gate | `RELEASE_READY = NO-GO` cho tới khi WP-12/13 và evidence target áp dụng hoàn tất |
 
 Kế hoạch không ước lượng thời gian khi chưa có velocity/resource evidence. Độ
@@ -42,10 +42,10 @@ không nói CI, target, HIL hay release.
 | `WP-07` | `T59-814` | ORDERED | — | — |
 | `WP-08` | `T59-815` | ORDERED | — | — |
 | `WP-09` | `T59-810` | ORDERED | — | — |
-| `WP-10` | `T59-808` / `T59-812` / `T59-816` | **READY (R1)** | — | — |
-| `WP-11` | `T59-808` / `T59-812` / `T59-816` | **READY (R1)** | — | — |
-| `WP-12` | `T59-809` / `T59-813` / `T59-817` | ORDERED | — | — |
-| `WP-13` | `T59-809` / `T59-813` / `T59-817` | ORDERED | — | — |
+| `WP-10` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1)** 2026-08-26 | Cổng ngân sách chunk chạy trong `npm run build` + đính chính bẫy đơn vị kB/KiB | 111,32 KiB / 125 KiB; hai nhánh FAIL của cổng đã kiểm |
+| `WP-11` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1)** 2026-08-26 | Bốn khổ màn có case tràn ngang (bắt lỗi thật ở 1024 px), focus ring theo số pin, bàn phím đi hết, RBAC negative hai tầng, hostile source | mock E2E 42 PASS/8 skip; FE 152 file/1718 test |
+| `WP-12` | `T59-809` / `T59-813` / `T59-817` | **READY (R1)** | — | — |
+| `WP-13` | `T59-809` / `T59-813` / `T59-817` | **READY (R1)** | — | — |
 
 **Danh sách block của plan đã ĐÓNG** 2026-08-26: cả sáu
 (`TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS`) có ngữ nghĩa pin ở
@@ -1202,6 +1202,7 @@ discipline chỉ mở implementation, không chứng minh M4/M5, target/HIL ho�
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.12 | 2026-08-26 | Đóng `WP-10`/`WP-11` ở phạm vi R1 (cổng ngân sách, bốn khổ màn, focus/bàn phím, RBAC negative, hostile source); `WP-12`/`WP-13` (`T59-809`) chuyển READY. |
 | 1.11 | 2026-08-26 | Đóng `WP-06` ở phạm vi R1 cùng phần `WP-01` còn nợ (grid slot, context strip theo mode, state machine + dirty guard); `WP-10`/`WP-11` (`T59-808`) chuyển READY. |
 | 1.10 | 2026-08-26 | Cổng editor ST CLOSED bằng lựa chọn A (`UD-PROG-013`); `WP-04`/`T59-805` đóng ở phạm vi R1 và `WP-06`/`T59-807` chuyển READY. |
 | 1.9 | 2026-08-26 | Đóng `WP-05` ở phạm vi R1 sau khi bổ sung quét axe thẳng vào canvas FBD (bộ quét cũ chỉ chạy trên workspace ST). |
