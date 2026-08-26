@@ -2723,7 +2723,7 @@ Consumer/discipline/Verification/Document Control review là
 | `T59-802` | R1 / `PGM02-V22-WP-01` | Shared shell, canonical route/resolver/legacy redirect và mobile `<768` read-only trong FE route/workspace | `T59-801 DONE` + `IMPLEMENT_READY[PGM02-R1]=GO` | **DONE (HOST/LOCAL)** | Route `/eng/programming/programs?project&pou&mode` sau cờ rollback `VITE_PROGRAMS_WORKSPACE_V2` (mặc định TẮT); resolver 0/1/nhiều/không-tồn-tại/mode-lạ đều fail-closed, không mượn Project khác; `<768 px` read-only bằng policy runtime; FE **139 file/1531 test**, lint/build PASS; E2E mock cut-over **29 PASS/3 skip**, real-backend **1/1**. Chi tiết §3.9 |
 | `T59-803` | R1 / `PGM02-V22-WP-02` | Một POU Explorer typed theo `objectId`; selection/navigation/create/duplicate/rename/delete guard | `T59-802 DONE` | **DONE (HOST/LOCAL)** | DOM còn đúng MỘT navigation POU; view model một nguồn (`pouItems`); `objectId`/`programId` không thay nhau được (tra nhầm trục cho `undefined`); tạo/đổi tên/nhân bản/xoá đi qua op typed `upsertObject`/`renameObject`/`duplicateObject`/`removeObject`; FUNCTION/FB không bao giờ được xếp lịch; xoá có preflight người gọi. FE **141 file/1551 test**, E2E mock **30 PASS/4 skip**, real-backend **1/1**. Chi tiết §3.9 |
 | `T59-804` | R1 / `PGM02-V22-WP-03` | OpenAPI/generated clients + BE typed Draft, normalized Quick Library signature, reference query và atomic semantic refactor | `T59-803 DONE`; contract được promote Active trong task | **DONE (HOST/LOCAL)** | schema/Go/TS exact; ETag/idempotency; analyzer/signature unavailable zero mutation; audit/read-back đúng |
-| `T59-805` | R1 / `PGM02-V22-WP-04` | ST editor hoàn chỉnh: Saved Draft, exact diagnostic anchor, history/cursor/read-back | `T59-804 DONE` | **PARTIAL (HOST/LOCAL)** | Đã giao: chỉ đọc là **policy runtime** chứ không phải một thuộc tính — guard ở `applyEditRange` (chèn/định dạng/tìm-thay/autocomplete/auto-indent) và ở handler `onChange` (gõ/dán/thả), khoá bằng 3 test; FE **143 file/1574 test** PASS, lint/build PASS, chunk Programming **104,77 KiB gzip**. Chưa giao: đổi surface sang CodeMirror 6 dừng tại [`GATE-PROG-ST-EDITOR-DEP-001`](../00_governance/PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) (dư địa ngân sách R1 còn ≈20 KiB gzip vs ước lượng 90–150 KiB), cùng hover/go-to-definition dựa reference index BE. Chi tiết §3.9 |
+| `T59-805` | R1 / `PGM02-V22-WP-04` | ST editor hoàn chỉnh: Saved Draft, exact diagnostic anchor, history/cursor/read-back | `T59-804 DONE` | **PARTIAL (HOST/LOCAL)** | Đã giao 4 lát: (1) chỉ đọc là **policy runtime** — guard ở `applyEditRange` và handler `onChange`; (2) `AC-ST-002/003` chèn FB có trạng thái đặt khai báo vào khối `VAR` và lời gọi vào thân, chọn/tạo instance, một bước hoàn tác; (3) `AC-ST-005` chỉ mục tham chiếu + F12/Ctrl+Click tới khai báo + khay tham chiếu nói "không xác định được" khi không tra được; (4) `AC-ST-004/010` khoá bằng 8 nguồn ngoài subset và kiểm Lưu chỉ phát op Draft. AC áp dụng cho R1 (`AC-ST-001..005`, `010`, `011`) đều có test. FE **146 file/1626 test** PASS, lint/build PASS, chunk Programming **107,90 KiB gzip** (ngân sách R1 125 KiB). **Chưa giao, hai mục:** đổi surface sang CodeMirror 6 dừng tại [`GATE-PROG-ST-EDITOR-DEP-001`](../00_governance/PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) chờ Owner/Architect chọn A/B/C; và chỉ mục ký hiệu **do compiler sinh** (bullet BE của `WP-04`) — cần compiler worker xuất symbol table, runner Go đọc, OpenAPI công bố, FE tiêu thụ. Chi tiết §3.9 |
 | `T59-806` | R1 / `PGM02-V22-WP-05` | FBD true canvas: typed port/order, wire validation, pan/zoom/select/undo và exact FBD anchor | `T59-804 DONE` | **ORDERED — dependency** | Canonical node/port/wire/layout giữ nguyên semantics; ST↔FBD equivalence và accessibility PASS |
 | `T59-807` | R1 / `PGM02-V22-WP-06-R1` | Hợp nhất workbench EDIT, context strip, state/error/copy và full save→Check→read-back | `T59-802..806 DONE` | **ORDERED — dependency** | Real-backend E2E R1, stale ETag/refactor fault/permission/offline; không mock authority |
 | `T59-808` | R1 / `PGM02-V22-WP-10-R1` + `WP-11-R1` | Budget bundle/render, a11y/responsive/security hardening cho EDIT | `T59-807 DONE` | **ORDERED — dependency** | Budget NFR R1, no horizontal overflow, focus/contrast/keyboard, RBAC negative và hostile source PASS |
@@ -2822,9 +2822,46 @@ chọn (giữ editor hiện tại / nạp trễ thành chunk riêng / nâng ngâ
 phép đo bắt buộc trước khi quyết và khuyến nghị giữ editor hiện tại cho R1.
 Quyết định thuộc Product Owner/CTO + System Architect, không thuộc lát này.
 
-Phần còn lại của `T59-805` không phụ thuộc cổng — reference index/diagnostics
-phía BE cho hover và go-to-definition — vẫn nằm trong task và chưa giao. Vì vậy
-task là `PARTIAL`, không phải `DONE` và cũng không phải `BLOCKED`.
+Ba lát tiếp theo đi đúng phần **không** phụ thuộc cổng, và mỗi lát phơi ra một
+lỗi thật:
+
+1. **`AC-ST-002`** — chèn một FUNCTION_BLOCK có trạng thái sinh nguyên khối
+   `VAR ... END_VAR` **ngay tại con trỏ**. Grammar §10 và `parse_pou()` đều đọc
+   hết var block trước rồi mới đọc statement list, nên mọi lần chèn như vậy là
+   một lần Check chắc chắn đỏ. `planLibraryInsertion` đặt khai báo vào khối
+   `VAR`/`VAR RETAIN` và lời gọi vào thân, thêm nhánh **chọn** instance đã khai
+   (`AC-ST-002` có hai nhánh, nhánh chọn chưa từng tồn tại). Cả hai phần đi qua
+   một `applyEditRange` nên vẫn là một bước hoàn tác (`AC-ST-003`).
+2. **`AC-ST-005`** — `collectStSymbols` chỉ nhận sáu kiểu cơ bản, nên **instance
+   FB không tồn tại với editor**: chèn `TON_1 : TON;` xong thì autocomplete,
+   khay ký hiệu và bảng lệnh đều không thấy nó. `stReferenceIndex` thay nó làm
+   nguồn duy nhất, phân biệt đọc/ghi (gán tham số `IN := x` **không** phải ghi),
+   và F12/Ctrl+Click tới khai báo — dùng được cả khi chỉ đọc vì điều hướng
+   không phải mutation. Không tra được thì nói "không xác định được", không nhảy
+   tới đích gần đúng.
+3. **`AC-ST-004`/`AC-ST-010`** — hai AC đúng theo suy luận nhưng không có test
+   nào khoá. Nay có: tám nguồn ngoài subset (chú thích không đóng, `VAR` thiếu
+   `END_VAR`, `ARRAY`/`CASE`, ngoặc lệch, định danh có dấu, một dòng 400 câu
+   lệnh, rỗng, toàn khoảng trắng) chạy qua đường người dùng lẫn lớp module
+   thuần; và Lưu phát đúng một `replaceProgramSource`.
+
+Sau bốn lát, **mọi AC áp dụng cho R1 đều có test**: `AC-ST-001..005`, `010`,
+`011`. `AC-ST-006` thuộc R3 (Simulation), `AC-ST-007..009` thuộc R2 (LIVE).
+
+Task vẫn `PARTIAL` vì đúng hai mục chưa giao, và cả hai đều không phải việc có
+thể tự quyết:
+
+- **đổi surface editor** — chờ Owner/Architect chọn A/B/C ở
+  `GATE-PROG-ST-EDITOR-DEP-001`; hover thật bằng chuột nằm trong mục này vì cần
+  hit-test theo ký tự;
+- **chỉ mục ký hiệu do compiler sinh** — bullet BE của `WP-04`. Cần compiler
+  worker xuất symbol table, `runner.Compile` đọc, OpenAPI công bố, FE tiêu thụ;
+  đây là một lát cắt qua bốn boundary, không phải phần thừa của lát FE. Chỉ mục
+  hiện tại đã tự khai giới hạn trong docstring và sẽ lùi về vai trò dự phòng khi
+  chỉ mục compiler có mặt.
+
+`PARTIAL`, không phải `DONE` và cũng không phải `BLOCKED` — phần làm được đã làm
+hết.
 
 
 ## 4. Bảng ownership

@@ -8,6 +8,24 @@
 
 ## [Unreleased]
 
+### Governance — ghi bốn lát của `T59-805` và hai mục còn lại (2026-08-26)
+
+- **Changed — hồ sơ nói đúng chỗ `WP-04` đang đứng.** Plan 59 §3/§3.9, roadmap
+  proposal PGM-02 §0 và `GATE-PROG-ST-EDITOR-DEP-001` §6 cùng ghi bốn lát đã
+  giao và **mọi AC áp dụng cho R1** (`AC-ST-001..005`, `010`, `011`) đều có
+  test. Hai mục còn lại được nêu đích danh thay vì gộp thành "còn lại": đổi
+  surface editor (chờ Owner/Architect chọn A/B/C) và chỉ mục ký hiệu **do
+  compiler sinh** — lát cắt qua bốn boundary (compiler worker → `runner.Compile`
+  → OpenAPI → FE), không phải phần thừa của một lát FE.
+
+- **Changed — đo lại dư địa ngân sách.** Chunk Programming **107,90 KiB gzip**
+  sau bốn lát; dư địa tới ngân sách R1 còn **≈17 KiB** (lúc lập cổng là ≈20
+  KiB). Con số nhỏ đi làm §2 và khuyến nghị §5 của hồ sơ cổng **đúng hơn**, nên
+  đã ghi thẳng vào đó thay vì để người đọc tự đối chiếu.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only.
+
+
 ### PGM-02 R1 — khoá `AC-ST-004` và `AC-ST-010` bằng test thật (2026-08-26)
 
 - **Added — nguồn ngoài subset không được làm sập editor (`AC-ST-010`).** Tám
