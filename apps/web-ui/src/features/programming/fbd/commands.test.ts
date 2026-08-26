@@ -9,6 +9,7 @@ import {
   resolveFbdKeyboardCommand,
   translateFbdAnnouncement,
 } from './commands'
+import { canonicalFbdJson } from './model'
 import type { FbdDocument, FbdNetwork, FbdWire } from './model'
 
 function golden(): FbdDocument {
@@ -363,5 +364,81 @@ describe('SET_NODE_POSITION (T59-806)', () => {
     const moved = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x: 320, y: 140 })
     const undone = fbdEditorReducer(moved, { type: 'UNDO' })
     expect(undone.document.layout).toBeUndefined()
+  })
+})
+
+/* `AC-FBD-006` — "invalid typed connection is blocked immediately". Chặn NGAY
+ * lúc nối, không đợi Check: một wire sai kiểu nằm trong Draft là một lần Check
+ * đỏ mà người dùng phải tự lần ngược lại xem mình đã nối nhầm ở đâu. */
+describe('nối sai kiểu bị chặn ngay (AC-FBD-006)', () => {
+  function typedGraph(sourceType: string, targetType: string, sourceUnit: string | null = null, targetUnit: string | null = null): FbdDocument {
+    const document = golden()
+    const network = document.networks[0]
+    network.wires = []
+    const source = network.nodes[0]
+    const target = network.nodes[2]
+    source.ports = [{ id: uuid(0x70000000, 1), name: 'OUT', direction: 'OUTPUT', dataType: sourceType as never, unit: sourceUnit, order: 0 }]
+    target.ports = [{ id: uuid(0x70000000, 2), name: 'IN', direction: 'INPUT', dataType: targetType as never, unit: targetUnit, order: 0 }]
+    return document
+  }
+
+  function attempt(document: FbdDocument) {
+    let state = createFbdEditorState(document, true)
+    state = fbdEditorReducer(state, { type: 'BEGIN_OR_COMMIT_CONNECTION', portId: uuid(0x70000000, 1) })
+    expect(state.connectionFromPortId).toBe(uuid(0x70000000, 1))
+    return fbdEditorReducer(state, {
+      type: 'BEGIN_OR_COMMIT_CONNECTION',
+      portId: uuid(0x70000000, 2),
+      wire: { id: uuid(0x80000000, 1), from: { nodeId: '', portId: uuid(0x70000000, 1) }, to: { nodeId: '', portId: uuid(0x70000000, 2) } },
+    })
+  }
+
+  it('khác kiểu dữ liệu ⇒ từ chối, không tạo wire', () => {
+    const after = attempt(typedGraph('BOOL', 'REAL'))
+    expect(after.announcement.code).toBe('connect-incompatible')
+    expect(after.document.networks[0].wires).toHaveLength(0)
+  })
+
+  it('cùng kiểu nhưng khác đơn vị ⇒ từ chối', () => {
+    const after = attempt(typedGraph('REAL', 'REAL', 'degC', 'kPa'))
+    expect(after.announcement.code).toBe('connect-incompatible')
+    expect(after.document.networks[0].wires).toHaveLength(0)
+  })
+
+  it('nối vào port OUTPUT (sai hướng) ⇒ từ chối', () => {
+    const document = typedGraph('BOOL', 'BOOL')
+    document.networks[0].nodes[2].ports[0].direction = 'OUTPUT'
+    const after = attempt(document)
+    expect(after.announcement.code).toBe('connect-incompatible')
+    expect(after.document.networks[0].wires).toHaveLength(0)
+  })
+})
+
+/* `WP-05` AC: "Save/reload reproduces layout; port `order` unchanged". Hình học
+ * chỉ có ích nếu nó sống qua một vòng lưu–đọc lại; và nó không được phép làm
+ * xê dịch `order` của port, vì `order` là thứ compiler dùng để xếp toán hạng. */
+describe('layout sống qua vòng lưu và đọc lại (T59-806)', () => {
+  it('toạ độ và port order giữ nguyên sau canonical hoá + parse lại', () => {
+    const start = createFbdEditorState(golden(), true)
+    const node = start.document.networks[0].nodes[1]
+    const moved = fbdEditorReducer(start, {
+      type: 'SET_NODE_POSITION',
+      networkId: start.document.networks[0].id,
+      nodeId: node.id,
+      x: 480,
+      y: 260,
+    })
+
+    const saved = canonicalFbdJson(moved.document)
+    const reloaded = createFbdEditorState(JSON.parse(saved) as FbdDocument, true)
+
+    expect(reloaded.document.layout?.nodes[node.id]).toEqual({ x: 480, y: 260 })
+    for (const [index, network] of reloaded.document.networks.entries()) {
+      for (const [nodeIndex, reloadedNode] of network.nodes.entries()) {
+        const original = moved.document.networks[index].nodes[nodeIndex]
+        expect(reloadedNode.ports.map((port) => port.order)).toEqual(original.ports.map((port) => port.order))
+        expect(reloadedNode.executionOrder).toBe(original.executionOrder)
+      }
+    }
   })
 })
