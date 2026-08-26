@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `GATE-PROG-ST-EDITOR-DEP-001` |
-| Phiên bản | 1.3 |
+| Phiên bản | 1.4 |
 | Trạng thái | **CLOSED 2026-08-26 — Product Owner/CTO + System Architect chọn LỰA CHỌN A**; ghi tại `UD-PROG-013` |
 | Ngày | 2026-08-26 |
 | Người lập | Dev Lead (thi hành `T59-805`) |
@@ -38,6 +38,25 @@ một ngân sách đã được pin trong hợp đồng máy đọc được.
 
 R1 còn `WP-04`, `WP-05`, `WP-06`, `WP-08`, `WP-10`, `WP-11` chưa giao; tất cả
 đều thêm mã vào cùng chunk này.
+
+### 1.1 Cách đo — và một bẫy đơn vị đã đính chính (2026-08-26)
+
+Mọi con số chunk ghi trong hồ sơ này và trong Plan 59 **trước 2026-08-26** được
+chép từ log build của vite. Log đó in **kB (1000 byte)**, còn hợp đồng
+`pgm02_workspace_v1.json` pin **KiB (1024 byte)**. Đọc con số này thành con số
+kia **thổi phồng mức dùng ~2,4%** — may là lệch về phía an toàn, nhưng vẫn là
+một con số nói sai.
+
+Từ `T59-808`, phép đo có thẩm quyền là `scripts/verify_programming_bundle_budget.py`:
+đọc chính file trong `build/web-ui/dist/assets`, gzip ở **mức mặc định của zlib
+(6)** — mức một máy chủ tĩnh thật dùng, không phải mức 9 là trường hợp tốt nhất
+— và in cả hai đơn vị để không ai đọc nhầm lần nữa. Script chạy **ngay trong
+`npm run build`**, nên nó luôn đo đúng bản vừa tạo.
+
+| Mốc (đo lại đúng phương pháp, 2026-08-26) | Giá trị |
+|---|---:|
+| Chunk Programming sau khi đóng `T59-807` | **111,31 KiB gzip** |
+| Dư địa tới ngân sách R1 | **≈13,7 KiB** |
 
 ## 2. Điều làm cổng này khó
 
@@ -140,8 +159,8 @@ go-to-definition mức CodeMirror, và khi mở lại phải chạy nốt ba ph�
 | `AC-ST-004/010` khoá bằng 8 nguồn ngoài subset và kiểm phạm vi thao tác Lưu | đã giao |
 
 Mọi AC áp dụng cho R1 (`AC-ST-001..005`, `010`, `011`) đều có test. Số đo cập
-nhật 2026-08-26 sau khi `T59-806` đóng: chunk Programming **110,78 KiB gzip**,
-dư địa tới ngân sách R1 còn **≈14 KiB** — nhỏ hơn lúc lập cổng, nên §2 và §5
+nhật 2026-08-26 sau khi `T59-807` đóng và đo lại đúng phương pháp (§1.1): chunk
+Programming **111,31 KiB gzip**, dư địa tới ngân sách R1 còn **≈13,7 KiB** — nhỏ hơn lúc lập cổng, nên §2 và §5
 càng đúng chứ không nhẹ đi. Spike §4.1 đã thay ước lượng bằng số đo: bộ
 CodeMirror tối thiểu **110,07 KiB gzip**.
 
@@ -166,6 +185,7 @@ Hai mục còn lại và cả hai đều **không phải việc tự quyết đ�
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.4 | 2026-08-26 | Thêm §1.1: đính chính bẫy đơn vị (log vite in kB(1000), hợp đồng pin KiB(1024) — đọc nhầm thổi phồng ~2,4%) và chốt phép đo có thẩm quyền là `verify_programming_bundle_budget.py` chạy trong chính `npm run build`. Kết luận §2/§5 không đổi. |
 | 1.3 | 2026-08-26 | **Đóng cổng**: Owner/Architect chọn lựa chọn A (`UD-PROG-013`) — giữ bề mặt editor hiện tại cho R1, không thêm CodeMirror 6. |
 | 1.2 | 2026-08-26 | Chạy spike §4 mục 1 và 4 NGOÀI repo: bộ CodeMirror tối thiểu + mode ST đo thật **110,07 KiB gzip** (341,34 KiB thô), tức nhúng thẳng vượt ngân sách R1 ~77% và vượt luôn R3; license 12/12 MIT, 0 non-MIT. Ghi rõ `T59-805` `PARTIAL` chỉ vì cổng này và nó đang giữ chuỗi R1. |
 | 1.1 | 2026-08-26 | Cập nhật §6 sau bốn lát của `T59-805`: mọi AC áp dụng cho R1 đã có test; đo lại chunk Programming 107,90 KiB gzip (dư địa còn ≈17 KiB); nêu đúng hai mục còn lại và vì sao cả hai đều cần quyết định hoặc cắt qua bốn boundary. |

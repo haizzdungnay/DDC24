@@ -8,6 +8,39 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — ngân sách bundle thành cổng chặn được, và một bẫy đơn vị (`T59-808`) (2026-08-26)
+
+- **Added — `verify_programming_bundle_budget.py`: con số trong hợp đồng nay
+  chặn được hồi quy.** Ngân sách chunk đã pin trong `pgm02_workspace_v1.json`
+  §`nfr.frontend` từ `T59-801` nhưng **không có gì thi hành nó**. Một con số
+  không ai kiểm là một con số sẽ bị vượt trong im lặng — và vượt ngân sách trên
+  thiết bị nhúng không hiện ra như test đỏ, nó hiện ra như một trang tải chậm mà
+  không ai biết đổ lỗi cho commit nào. Cổng chạy **ngay trong `npm run build`**
+  nên luôn đo đúng bản vừa tạo.
+
+- **Fixed — bẫy đơn vị: log vite in kB (1000), hợp đồng pin KiB (1024).** Mọi
+  con số chunk chép từ log build trước hôm nay đọc kB thành KiB, **thổi phồng
+  mức dùng ~2,4%**. May là lệch về phía an toàn, nhưng vẫn là con số nói sai.
+  Số đúng sau khi đóng `T59-807`: **111,31 KiB gzip**, dư địa R1 còn **≈13,7
+  KiB** (không phải ≈10 KiB như đã ghi). Cổng in **cả hai đơn vị** để không ai
+  đọc nhầm lần nữa. Kết luận của `UD-PROG-013` không đổi: CodeMirror vẫn vượt
+  cả ngân sách R3.
+
+- **Đo ở mức nén mặc định của zlib (6), không phải 9.** Mức 9 là trường hợp
+  **tốt nhất** một máy chủ có thể làm; máy chủ tĩnh thật nén ở mặc định. Gate
+  phải đo cái thực tế phục vụ, không phải cái đẹp nhất có thể.
+
+- **Hai nhánh thất bại được kiểm thật:** chunk vượt ngân sách → exit 1 kèm số
+  vượt và nhắc rằng nâng ngân sách là **quyết định sản phẩm** ghi ở
+  `PROGRAMMING_OPEN_DECISIONS.md`, không phải sửa nhanh trong một PR; thiếu
+  chunk hoặc thiếu thư mục build → exit 2. Nhiều bản băm cùng tên trong `assets`
+  cũng bị chặn — đo nhầm bản cũ cho một con số "đạt" không thuộc bản đang xét.
+
+- **Verification.** `npm run build` PASS kèm cổng ngân sách (111,31 KiB / 125
+  KiB); hai nhánh FAIL kiểm bằng `--chunk index` (148,66 KiB → exit 1) và
+  `--chunk khong-ton-tai` (exit 2); `docs_iso_harness.py` PASS.
+
+
 ### Governance — đóng `T59-807`, mở `T59-808` (2026-08-26)
 
 - **Changed — `T59-807` `DONE (HOST/LOCAL)`.** Ba phần acceptance đều có bằng

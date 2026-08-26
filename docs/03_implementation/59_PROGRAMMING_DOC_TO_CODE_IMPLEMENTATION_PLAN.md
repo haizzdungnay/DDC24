@@ -2950,8 +2950,14 @@ mất mạng thì báo lỗi mà **giữ nguyên buffer**. Mỗi lần từ ch�
 bộ Draft — một thao tác bị chặn nhưng kịp ghi một nửa là lớp lỗi tệ nhất của
 lane này.
 
-Lưu ý ngân sách cho `T59-808`: chunk Programming đang **114,88 KiB gzip**, dư
-địa tới ngân sách R1 (125 KiB) còn **≈10 KiB**.
+Lưu ý ngân sách cho `T59-808`: chunk Programming đang **111,31 KiB gzip**, dư
+địa tới ngân sách R1 (125 KiB) còn **≈13,7 KiB**.
+
+Con số này khác con số từng ghi (114,88) vì `T59-808` phát hiện một **bẫy đơn
+vị**: log build của vite in **kB (1000)**, hợp đồng pin **KiB (1024)**. Mọi con
+số chunk chép từ log build trước 2026-08-26 vì vậy thổi phồng mức dùng ~2,4% —
+lệch về phía an toàn, nhưng vẫn sai. Phép đo có thẩm quyền từ nay là
+`scripts/verify_programming_bundle_budget.py`, chạy ngay trong `npm run build`.
 
 ## 4. Bảng ownership
 
