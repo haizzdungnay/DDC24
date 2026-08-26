@@ -64,6 +64,24 @@ export interface FbdNetwork {
   wires: FbdWire[]
 }
 
+export interface FbdPoint {
+  x: number
+  y: number
+}
+
+/**
+ * `T59-806` — hình học TRÌNH BÀY của đồ thị.
+ *
+ * Đặt ở gốc tài liệu và có phiên bản riêng, KHÔNG nằm trong từng node: nhờ vậy
+ * "cùng topology, khác hình học ⇒ cùng IR" là bất biến cấu trúc. Compiler
+ * (`st_fbd_model.cpp`) kiểm rồi `erase("layout")` trước khi canonical hoá, nên
+ * kéo một block sang phải 10 px không đổi hash artifact.
+ */
+export interface FbdLayout {
+  schemaVersion: 1
+  nodes: Record<string, FbdPoint>
+}
+
 export interface FbdDocument {
   $schema: '../../fbd_v1.schema.json'
   schemaVersion: typeof FBD_SCHEMA_VERSION
@@ -71,7 +89,12 @@ export interface FbdDocument {
   graphId: string
   name: string
   networks: FbdNetwork[]
+  /** Tuỳ chọn: tài liệu cũ chưa có hình học vẫn hợp lệ. */
+  layout?: FbdLayout
 }
+
+export const FBD_MAX_LAYOUT_NODES = 4096
+export const FBD_MAX_LAYOUT_COORDINATE = 100_000
 
 export interface FbdIssue {
   code: string
@@ -135,6 +158,30 @@ export function cloneFbdDocument(document: FbdDocument): FbdDocument {
   return clone(document)
 }
 
+export function isValidFbdLayout(layout: unknown): layout is FbdLayout {
+  if (typeof layout !== 'object' || layout === null || Array.isArray(layout)) return false
+  const keys = Object.keys(layout)
+  if (keys.some((key) => key !== 'schemaVersion' && key !== 'nodes')) return false
+  const candidate = layout as Partial<FbdLayout>
+  if (candidate.schemaVersion !== 1) return false
+  const nodes = candidate.nodes
+  if (typeof nodes !== 'object' || nodes === null || Array.isArray(nodes)) return false
+  const nodeIds = Object.keys(nodes)
+  if (nodeIds.length > FBD_MAX_LAYOUT_NODES) return false
+  return nodeIds.every((nodeId) => {
+    if (!canonicalUuid.test(nodeId)) return false
+    const point = (nodes as Record<string, unknown>)[nodeId]
+    if (typeof point !== 'object' || point === null || Array.isArray(point)) return false
+    const pointKeys = Object.keys(point)
+    if (pointKeys.length !== 2 || !pointKeys.includes('x') || !pointKeys.includes('y')) return false
+    return (['x', 'y'] as const).every((axis) => {
+      const value = (point as Record<string, unknown>)[axis]
+      return typeof value === 'number' && Number.isFinite(value) &&
+        value >= -FBD_MAX_LAYOUT_COORDINATE && value <= FBD_MAX_LAYOUT_COORDINATE
+    })
+  })
+}
+
 export function isCanonicalFbdUuid(value: string): boolean {
   return canonicalUuid.test(value)
 }
@@ -145,6 +192,23 @@ export function isFbdIdentifier(value: string): boolean {
 
 export function canonicalizeFbdDocument(document: FbdDocument): FbdDocument {
   const result = cloneFbdDocument(document)
+  /* Khoá của `layout.nodes` là map nên thứ tự chèn quyết định byte đầu ra —
+   * sắp lại để hai tài liệu giống hệt nhau không sinh hai chuỗi khác nhau chỉ
+   * vì thứ tự người dùng kéo block.
+   *
+   * Hàm này chạy TRƯỚC cả validate (kiểm kích thước gọi `canonicalFbdJson`),
+   * nên nó phải chịu được tài liệu chưa hợp lệ: hình học rác bị BỎ khỏi dạng
+   * canonical thay vì làm cả hàm ném lỗi — issue `FBD-SCHEMA-LAYOUT-001` mới
+   * là chỗ báo cho người dùng. */
+  if (result.layout !== undefined) {
+    if (isValidFbdLayout(result.layout)) {
+      const sorted: Record<string, FbdPoint> = {}
+      for (const key of Object.keys(result.layout.nodes).sort()) sorted[key] = result.layout.nodes[key]
+      result.layout = { schemaVersion: result.layout.schemaVersion, nodes: sorted }
+    } else {
+      delete result.layout
+    }
+  }
   result.networks.sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
   for (const network of result.networks) {
     network.nodes.sort((left, right) => left.executionOrder - right.executionOrder || left.id.localeCompare(right.id))
@@ -249,6 +313,12 @@ export function validateFbdDocument(document: FbdDocument, context?: FbdValidati
   }
   if (document.networks.length < 1 || document.networks.length > FBD_MAX_NETWORKS) {
     add('FBD-LIMIT-NETWORK-001', '$.networks')
+  }
+  /* Parity với `is_valid_layout()` ở compiler: hình học sai bị TỪ CHỐI ở biên
+   * chứ không bị im lặng bỏ qua — một toạ độ NaN gửi lên rồi mới hỏng ở Core
+   * là lỗi khó lần hơn nhiều so với một issue ngay tại editor. */
+  if (document.layout !== undefined) {
+    if (!isValidFbdLayout(document.layout)) add('FBD-SCHEMA-LAYOUT-001', '$.layout')
   }
   const ids = new Set([document.graphId])
   const networkOrders = new Set<number>()

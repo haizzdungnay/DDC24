@@ -16,9 +16,34 @@
       "minItems": 1,
       "maxItems": 256,
       "items": { "$ref": "#/$defs/network" }
-    }
+    },
+    "layout": { "$ref": "#/$defs/layout" }
   },
   "$defs": {
+    "layout": {
+      "description": "Hình học TRÌNH BÀY của đồ thị. Tuỳ chọn, có phiên bản riêng, và compiler BỎ QUA hoàn toàn khi sinh IR: cùng một topology với hình học khác nhau phải cho cùng một IR. Đặt ở gốc thay vì trong từng node để bất biến đó là bất biến CẤU TRÚC, không phải một lời hứa.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "nodes"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "nodes": {
+          "type": "object",
+          "maxProperties": 4096,
+          "propertyNames": { "$ref": "#/$defs/uuid" },
+          "additionalProperties": { "$ref": "#/$defs/point" }
+        }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number", "minimum": -100000, "maximum": 100000 },
+        "y": { "type": "number", "minimum": -100000, "maximum": 100000 }
+      }
+    },
     "uuid": {
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
