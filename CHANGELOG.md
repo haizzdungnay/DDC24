@@ -8,6 +8,35 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — máy trạng thái mode và slot lưới thu gọn được (`T59-807`) (2026-08-26)
+
+- **Added — bộ chuyển chế độ, vì trước đó `?mode=` chỉ đổi được bằng cách GÕ TAY
+  vào URL.** Giao diện không hề nói workspace đang ở chế độ nào, cũng không nói
+  hai chế độ kia tồn tại. Nay có nút EDIT/LIVE/SIMULATE; hai chế độ chưa khả
+  dụng **vẫn hiện và vẫn bấm được** để trả lời câu hỏi "vì sao chưa có" — ẩn đi
+  khiến người dùng tưởng thiết bị không làm được, trong khi sự thật là increment
+  R2 (LIVE) và R3 (SIMULATE) chưa tới.
+
+- **Added — ba luật của máy trạng thái, viết ở MỘT chỗ (`programsMode.ts`).**
+  (1) Không tự hạ cấp: yêu cầu một mode không khả dụng **không** âm thầm rơi về
+  `EDIT`, vì người dùng sẽ tưởng mình đang xem LIVE. (2) Rời `EDIT` khi Draft
+  còn thay đổi chưa lưu phải **hỏi** — buffer soạn thảo sống trong bộ nhớ
+  editor, đổi mode là đổi nguồn tài liệu nên buffer không đi theo.
+  (3) `UNAVAILABLE` **thắng** `CONFIRM_DISCARD`: hỏi "bỏ thay đổi chưa lưu?" rồi
+  mới báo "chế độ đó chưa dùng được" là bắt người dùng cân nhắc một đánh đổi vô
+  nghĩa.
+
+- **Added — hai cột biên thu gọn được, nhớ theo trình duyệt.** Ở 1280 px, ba cột
+  `280px + 1fr + 308px` chỉ chừa ~690 px cho chính chỗ người dùng gõ; thu gọn
+  một biên trả lại ~280 px cho editor. Lớp lưới là **chuỗi nguyên văn** trong
+  source vì Tailwind quét tĩnh — một lớp ghép bằng template string sẽ không có
+  trong CSS build ra và cột sẽ im lặng rơi về mặc định.
+
+- **Verification.** FE **152 file / 1714 test PASS** (+18); E2E Playwright
+  **31 PASS / 5 skip**; `tsc`/`eslint`/`check:ui-strings` PASS; `vite build`
+  PASS — chunk Programming **114,88 KiB gzip** (ngân sách R1 125 KiB, dư ≈10 KiB).
+
+
 ### PGM-02 R1 — một workbench dùng chung cho cả Project (`T59-807`) (2026-08-26)
 
 - **Added — `ProgrammingWorkbench`: MỘT chỗ để hỏi "Draft này đang có vấn đề
