@@ -180,7 +180,7 @@ export function runtimeOverlayByProgramId(
   for (const programId of programIds) {
     const items = grouped.get(programId) ?? []
     items.sort((left, right) => left.variableName.localeCompare(right.variableName) || left.variableId.localeCompare(right.variableId))
-    overlays[programId] = { status: 'ready', items }
+    overlays[programId] = { status: 'ready', items, producerRestarted: monitor.producerRestarted }
   }
   return overlays
 }

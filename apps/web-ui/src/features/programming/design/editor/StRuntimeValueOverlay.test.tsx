@@ -74,3 +74,33 @@ describe('StRuntimeValueOverlay (T59-506)', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Chưa có biến runtime')
   })
 })
+
+/* `T59-810` — Core restart giữa hai snapshot. Giá trị trước và sau một lần
+ * restart KHÔNG thuộc cùng một mạch: bộ đếm, trạng thái FB và LKG đều có thể đã
+ * khác. Nối tiếp im lặng là nói dối về tính liên tục. */
+describe('StRuntimeValueOverlay — Core khởi động lại (T59-810)', () => {
+  const item = {
+    variableId: 'v1', variableName: 'SupplyTemp', value: 21.5, valid: true,
+    quality: 'GOOD' as const, freshness: 'LIVE' as const,
+  }
+
+  it('nói ra khi producer đã restart, và VẪN hiện giá trị mới', () => {
+    render(
+      <I18nProvider>
+        <StRuntimeValueOverlay state={{ status: 'ready', items: [item], producerRestarted: true }} />
+      </I18nProvider>,
+    )
+    expect(screen.getByText(/Core đã khởi động lại/)).toBeInTheDocument()
+    // Không giấu số liệu: mạch mới vẫn là số liệu thật của mạch mới.
+    expect(screen.getByText('SupplyTemp')).toBeInTheDocument()
+  })
+
+  it('không restart thì không có cảnh báo thừa', () => {
+    render(
+      <I18nProvider>
+        <StRuntimeValueOverlay state={{ status: 'ready', items: [item] }} />
+      </I18nProvider>,
+    )
+    expect(screen.queryByText(/Core đã khởi động lại/)).toBeNull()
+  })
+})

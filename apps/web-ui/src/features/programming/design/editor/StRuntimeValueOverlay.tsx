@@ -22,7 +22,17 @@ export interface StRuntimeOverlayItem {
 export type StRuntimeOverlayState =
   | { status: 'loading' }
   | { status: 'unavailable'; reason?: string }
-  | { status: 'ready'; items: readonly StRuntimeOverlayItem[] }
+  | {
+      status: 'ready'
+      items: readonly StRuntimeOverlayItem[]
+      /**
+       * `T59-810` — Core đã khởi động lại giữa hai snapshot (mốc monotonic
+       * lùi). Giá trị trước và sau một lần restart KHÔNG thuộc cùng một mạch:
+       * bộ đếm, trạng thái FB và LKG đều có thể đã khác. Nối tiếp im lặng là
+       * nói dối về tính liên tục, nên phải nói ra.
+       */
+      producerRestarted?: boolean
+    }
 
 export interface StRuntimePresentation {
   displayValue: string
@@ -85,6 +95,14 @@ export function StRuntimeValueOverlay({ state }: { state: StRuntimeOverlayState 
         <p className="mt-2 text-xs text-[var(--c-fault-fg)]" role="status">
           {pick('Không đọc được giá trị runtime.', 'Runtime values unavailable.')}
           {state.reason ? ` ${state.reason}` : ''}
+        </p>
+      )}
+      {state.status === 'ready' && state.producerRestarted && (
+        <p className="mt-2 rounded bg-[var(--c-warn-bg)] px-2 py-1 text-xs text-[var(--c-warn-fg)]" role="status">
+          {pick(
+            'Core đã khởi động lại — giá trị bên dưới bắt đầu một mạch mới, không nối tiếp số liệu trước đó.',
+            'Core restarted — the values below begin a new run and do not continue the previous series.',
+          )}
         </p>
       )}
       {state.status === 'ready' && state.items.length === 0 && (
