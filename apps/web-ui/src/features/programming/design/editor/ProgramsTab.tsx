@@ -103,6 +103,53 @@ const EDITOR_TEXT_METRICS: CSSProperties = {
  * keyboard-first, undo/redo bounded) được mount thẳng ở đây, không viết
  * model/reducer/shortcut thứ hai (TASK-PROG-502).
  */
+
+/**
+ * `T59-807` / `WP-01` (phần đi cùng `WP-06`) — hai cột biên của workbench thu
+ * gọn được.
+ *
+ * Ở 1280 px, ba cột `280px + 1fr + 308px` chỉ chừa ~690 px cho chính chỗ người
+ * dùng gõ. Thu gọn một biên trả lại ~280 px cho editor — đúng thứ họ đang nhìn.
+ *
+ * Lớp lưới phải là chuỗi **nguyên văn** trong source: Tailwind quét tĩnh, một
+ * lớp ghép bằng template string sẽ không có trong CSS build ra và cột sẽ im
+ * lặng rơi về mặc định.
+ */
+const SLOT_GRID_CLASS = {
+  'both-open': 'lg:grid-cols-[280px_1fr_308px]',
+  'left-closed': 'lg:grid-cols-[44px_1fr_308px]',
+  'inspector-closed': 'lg:grid-cols-[280px_1fr_44px]',
+  'both-closed': 'lg:grid-cols-[44px_1fr_44px]',
+} as const
+
+export interface ProgramsSlotState { left: boolean; inspector: boolean }
+
+export function slotKey(slots: ProgramsSlotState): keyof typeof SLOT_GRID_CLASS {
+  if (slots.left && slots.inspector) return 'both-open'
+  if (!slots.left && !slots.inspector) return 'both-closed'
+  return slots.left ? 'inspector-closed' : 'left-closed'
+}
+
+const SLOT_STORAGE_KEY = 'mkddc-pgm02-slots'
+
+/** Nhớ theo trình duyệt của từng người; hỏng storage thì mở cả hai, không ném. */
+function useCollapsibleSlots(): [ProgramsSlotState, (next: ProgramsSlotState) => void] {
+  const [slots, setSlots] = useState<ProgramsSlotState>(() => {
+    try {
+      const raw = window.localStorage.getItem(SLOT_STORAGE_KEY)
+      if (!raw) return { left: true, inspector: true }
+      const parsed = JSON.parse(raw) as Partial<ProgramsSlotState>
+      return { left: parsed.left !== false, inspector: parsed.inspector !== false }
+    } catch {
+      return { left: true, inspector: true }
+    }
+  })
+  return [slots, (next) => {
+    setSlots(next)
+    try { window.localStorage.setItem(SLOT_STORAGE_KEY, JSON.stringify(next)) } catch { /* riêng tư/hết quota — không chặn thao tác */ }
+  }]
+}
+
 export function ProgramsTab({
   document,
   saving,
@@ -153,6 +200,7 @@ export function ProgramsTab({
    * `SourceEditor`) để cache còn nguyên khi đổi Program đang chọn. */
   const pointCatalog = useLazyProgrammingPointCatalog()
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [slots, setSlots] = useCollapsibleSlots()
   const [formatRequest, setFormatRequest] = useState<StFormatRequest | null>(null)
   /* Điều hướng chéo Program khi chọn một biến ở Bảng lệnh nhanh: đổi
    * `selectedProgramId` rồi TÁI DÙNG đúng cơ chế `focusDiagnostic` đã có
@@ -263,7 +311,7 @@ export function ProgramsTab({
 
   return (
     <div
-      className="grid gap-4 md:grid-cols-[280px_1fr] lg:grid-cols-[280px_1fr_308px]"
+      className={`grid gap-4 md:grid-cols-[280px_1fr] ${SLOT_GRID_CLASS[slotKey(slots)]}`}
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
           event.preventDefault()
@@ -279,7 +327,20 @@ export function ProgramsTab({
       {/* `T59-803`: cây POU nay do `PouExplorer` sở hữu (đúng MỘT navigation
           trong DOM). Ở đây chỉ còn thứ thuộc về Project chứ không thuộc về cây:
           nhãn chức năng và lối vào Bảng lệnh nhanh. */}
+      {slots.left ? (
       <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
+        <div className="mb-2 flex justify-end">
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            aria-expanded
+            aria-controls="programs-slot-left"
+            onClick={() => setSlots({ ...slots, left: false })}
+          >
+            {pick('Thu gọn cột trái', 'Collapse left column')}
+          </button>
+        </div>
+        <div id="programs-slot-left">
         <ProjectTagsEditor
           canEdit={canEdit}
           value={projectTagsDraft}
@@ -298,7 +359,21 @@ export function ProgramsTab({
             <span className="sr-only">{pick('Bảng lệnh nhanh', 'Command palette')}</span>
           </button>
         </div>
+        </div>
       </div>
+      ) : (
+        <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-1">
+          <button
+            type="button"
+            className="min-h-11 w-full rounded px-1 py-2 text-[10px] leading-tight text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            aria-expanded={false}
+            aria-controls="programs-slot-left"
+            onClick={() => setSlots({ ...slots, left: true })}
+          >
+            {pick('Mở cột trái', 'Expand left column')}
+          </button>
+        </div>
+      )}
       <div>
         {!selected ? (
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Chọn một chương trình ở cây bên trái.', 'Select a program from the tree on the left.')}</p>
@@ -338,6 +413,18 @@ export function ProgramsTab({
         )}
       </div>
       <aside aria-label={pick('Thuộc tính', 'Inspector')}>
+        <div className="mb-2 flex justify-end">
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            aria-expanded={slots.inspector}
+            aria-controls="programs-slot-inspector"
+            onClick={() => setSlots({ ...slots, inspector: !slots.inspector })}
+          >
+            {slots.inspector ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}
+          </button>
+        </div>
+        <div id="programs-slot-inspector" hidden={!slots.inspector}>
         {selected ? (
           <ProgramInspector
             program={selected}
@@ -356,6 +443,7 @@ export function ProgramsTab({
             </p>
           </section>
         )}
+        </div>
       </aside>
     </div>
   )
