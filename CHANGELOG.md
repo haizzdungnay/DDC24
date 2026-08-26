@@ -8,6 +8,24 @@
 
 ## [Unreleased]
 
+### Governance — đóng `T59-807`, mở `T59-808` (2026-08-26)
+
+- **Changed — `T59-807` `DONE (HOST/LOCAL)`.** Ba phần acceptance đều có bằng
+  chứng: workbench dùng chung với mỗi tab khai nguồn và tab chưa có capability
+  giải thích thay vì hiện rỗng; máy trạng thái mode kèm dirty guard và luật
+  không-tự-hạ-cấp; và bốn lớp lỗi chạy **trên backend thật** (2/2 PASS) với
+  zero-mutation kiểm bằng cách so lại **toàn bộ** Draft sau mỗi lần từ chối.
+  Phần `WP-01` còn nợ (grid slot thu gọn, context strip theo mode, state
+  machine) đóng cùng lát vì cùng chạm một cây component.
+
+- **Ghi trước rủi ro ngân sách cho `T59-808`.** Chunk Programming đang
+  **114,88 KiB gzip**; dư địa tới ngân sách R1 (125 KiB) còn **≈10 KiB**. Ghi
+  vào ghi chú thực thi để lát hardening biết trần của mình trước khi viết dòng
+  đầu tiên, thay vì phát hiện lúc build đỏ.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only.
+
+
 ### PGM-02 R1 — bốn lớp lỗi của `T59-807` chạy trên backend THẬT (2026-08-26)
 
 - **Added — ma trận fail-closed real-backend.** Acceptance của `T59-807` đòi E2E
