@@ -19,6 +19,8 @@ import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
+import { ProgramsModeSwitcher } from './ProgramsModeSwitcher'
+import { isProgramsWorkspaceMode, type ProgramsWorkspaceMode } from '../shared/programsRoute'
 import { useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
@@ -290,6 +292,12 @@ export function DesignWorkspacePage({
     })
   }
 
+  /* Mode là trạng thái URL đúng như route canonical khai (`?mode=`). Giá trị
+   * lạ KHÔNG được âm thầm hạ về EDIT ở đây — resolver route đã chặn nó bằng
+   * một trang lỗi; chỗ này chỉ đọc giá trị đã hợp lệ. */
+  const modeParam = searchParams.get('mode')
+  const workspaceMode: ProgramsWorkspaceMode = isProgramsWorkspaceMode(modeParam) ? modeParam : 'EDIT'
+
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
 
@@ -346,6 +354,19 @@ export function DesignWorkspacePage({
               {pick(...TAB_LABEL[candidate])}
             </button>
           ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* `T59-807` — trước lát này `?mode=` chỉ đổi được bằng cách GÕ TAY
+              vào URL, và giao diện không nói workspace đang ở chế độ nào. */}
+          <ProgramsModeSwitcher
+            mode={workspaceMode}
+            draftDirty={draftDirty}
+            onSwitch={(next) => {
+              const query = new URLSearchParams(searchParams)
+              query.set('mode', next)
+              navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
+            }}
+          />
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">

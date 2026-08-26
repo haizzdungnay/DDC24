@@ -8,6 +8,7 @@ import { DesignWorkspacePage } from './DesignWorkspacePage'
 import { ProgrammingApiError } from '../api/generated/client'
 import type { ProgrammingDraftDocument, ProgrammingProject } from '../model/types'
 import type { ProgrammingRuntimeMonitorState } from '../api/queries'
+import { slotKey } from './editor/ProgramsTab'
 
 const auth = vi.hoisted(() => ({ role: 'admin' as UserRole }))
 vi.mock('../../auth', async (importOriginal) => {
@@ -928,5 +929,18 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     fireEvent.keyDown(editor, { key: 'Insert' })
     expect(within(editor).getByText('0/256 block')).toBeInTheDocument()
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+  })
+})
+
+/* `T59-807` / `WP-01` (phần đi cùng `WP-06`) — hai cột biên thu gọn được.
+ *
+ * Ở 1280 px, ba cột `280px + 1fr + 308px` chỉ chừa ~690 px cho chính chỗ người
+ * dùng gõ. Thu gọn một biên trả lại ~280 px cho editor. */
+describe('PGM-02 — slot lưới thu gọn được (T59-807)', () => {
+  it('slotKey chọn đúng lớp lưới cho bốn tổ hợp', () => {
+    expect(slotKey({ left: true, inspector: true })).toBe('both-open')
+    expect(slotKey({ left: false, inspector: true })).toBe('left-closed')
+    expect(slotKey({ left: true, inspector: false })).toBe('inspector-closed')
+    expect(slotKey({ left: false, inspector: false })).toBe('both-closed')
   })
 })
