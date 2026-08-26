@@ -52,6 +52,39 @@ viết code; đó là **evidence bắt buộc để mở `RELEASE_READY`**.
 | `UD-PROG-010` | PID chỉ quảng bá ready sau Controls/Safety evidence. | CLOSED | ADR-050.9 |
 | `UD-PROG-011` | Artifact/store/API/IPC versioned; dual-reader v1/v2 trong migration. | CLOSED | ADR-050 hệ quả |
 | `UD-PROG-012` | Implementation review được waive khỏi entry; release evidence không waive. | CLOSED | ADR-050.10 |
+| `UD-PROG-013` | Editor ST của PGM-02 **giữ bề mặt hiện tại cho R1**; không thêm CodeMirror 6 vào `apps/web-ui`. | CLOSED | Product Owner/CTO + System Architect, 2026-08-26 — [`GATE-PROG-ST-EDITOR-DEP-001`](PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) §4.1/§5 |
+
+### 1.2 `UD-PROG-013` — bề mặt editor ST cho R1
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Quyết định | **Lựa chọn A** — giữ editor hiện tại cho R1; **không** thêm CodeMirror 6 |
+| Ngày | 2026-08-26 |
+| Authority | Product Owner/CTO + System Architect |
+| Hồ sơ cổng | [`GATE-PROG-ST-EDITOR-DEP-001`](PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) |
+
+Số đo quyết định (spike §4.1, đo thật ngoài repo để không đụng lockfile trước
+khi duyệt):
+
+| Mốc | Giá trị |
+|---|---:|
+| Bộ CodeMirror 6 tối thiểu + mode ST | **110,07 KiB gzip** |
+| Chunk Programming hiện tại | 110,78 KiB gzip |
+| Tổng nếu nhúng thẳng | ≈220,85 KiB gzip |
+| Ngân sách R1 / R3 | 125 / 165 KiB gzip |
+
+Nhúng thẳng vượt ngân sách R1 khoảng 77% và vượt luôn ngân sách R3, nên lựa
+chọn C sẽ phải nâng trần vượt cả R3 — bỏ hẳn cơ chế ngân sách chứ không phải nới
+nó. Lựa chọn B (nạp trễ) còn nợ ba phép đo chỉ thực hiện được trên bo.
+
+**Hệ quả trực tiếp:** các AC của `WP-04` không đòi CodeMirror — chúng đòi hành
+vi, và hành vi đó đã có test đầy đủ ở `T59-805`. Cổng đóng, `T59-805` đóng theo,
+`T59-807` mở.
+
+**Mở lại khi nào:** R2 trở đi, nếu người dùng thật sự cần hover chuột /
+go-to-definition mức CodeMirror. Mở lại phải chạy nốt ba phép đo trên bo
+(`openPouP95Ms`, `typingResponseP95Ms`, `steadyJsHeapMiB`) và kiểm build
+offline/air-gapped.
 
 Chi tiết field, API, state, algorithm, timing, error, source mapping, migration và
 test nằm tại
@@ -154,6 +187,7 @@ resource, audit và target/HIL truthfulness—được giữ trong Product v3.0/
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 1.5 | 2026-08-25 | Đóng `F-P59-GHOST-POU-001` ở lớp implementation: catalog `1.7.2`, checker/packager/writer fail-closed theo `documentSchemaVersion`, reader giữ tương thích package legacy; affected gate HOST PASS. Ghi `T59-802 DONE (HOST/LOCAL)` và `T59-803 READY`. Không đổi 12 quyết định unified; `RELEASE_READY` giữ NO-GO. |
+| 1.5 | 2026-08-26 | Ghi `UD-PROG-013`: Owner/Architect chọn **lựa chọn A** ở `GATE-PROG-ST-EDITOR-DEP-001` — giữ bề mặt editor ST hiện tại cho R1, không thêm CodeMirror 6. Quyết bằng số đo thật (bộ tối thiểu 110,07 KiB gzip ⇒ nhúng thẳng ≈220,85 KiB, vượt cả ngân sách R3). Cổng CLOSED; `T59-805` đủ điều kiện đóng và `T59-807` mở. |
 | 1.4 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: Product Owner/CTO + System Architect pin exact Candidate commit `413a043748dce3b44d2c5076412de761760ba17a`, mở PLAN_READY và ba IMPLEMENT_READY nhưng giữ scheduler R1→R2→R3, review ngoài owner/architect `WAIVED FOR IMPLEMENTATION` và RELEASE_READY NO-GO. Chuyển T59-801 DONE, T59-802 READY, T59-803..817 ORDERED. Chốt ghost PROGRAM fail-closed bằng `PRG-ERR-CHECK-001`/`ST-POU-005`; implementation closure vẫn PENDING tới khi source/test đạt. |
 | 1.3-candidate | 2026-08-24 | Làm rõ exact pin hai lớp: manifest ghim 17 hồ sơ Markdown authority; record Owner + Architect phải ghi candidate Git commit SHA để khóa contract/schema/ADR/handoff/SVG. Pin check 17/17 một mình không mở `PLAN_READY` hoặc code. |
 | 1.2-candidate | 2026-08-24 | Ghi output `T59-801`: formal DDD/contract/ADR-053/89 requirement/47 scenario/17-file Candidate pin và 16 card `T59-802..817`; chuyển WP-00 sang REVIEW, giữ Architect exact pin và mọi execution R1/R2/R3 NO-GO. |

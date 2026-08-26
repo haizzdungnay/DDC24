@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.13 |
-| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; `T59-801..804` và `T59-806` DONE (HOST/LOCAL), `T59-805` PARTIAL — acceptance đã đạt nhưng scope `WP-04` còn chờ quyết định `GATE-PROG-ST-EDITOR-DEP-001`; `T59-807..817` ORDERED theo predecessor; RELEASE_READY NO-GO** |
+| Phiên bản | 2.14 |
+| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; `T59-801..806` DONE (HOST/LOCAL), `T59-807` READY, `T59-808..817` ORDERED theo predecessor; RELEASE_READY NO-GO** |
 | Ngày | 2026-08-25 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
@@ -48,7 +48,7 @@ code còn làm được. `RELEASE_READY` vẫn `NO-GO` tới khi evidence thật
 
 | Lớp | Trạng thái hiện tại | Acceptance |
 |---|---|---|
-| `IMPLEMENTATION_CLOSE` | **PENDING** | Corrective `F-P59-GHOST-POU-001` đã có source/catalog/checker/packager/test PASS (2026-08-25). Cổng vẫn PENDING vì R1 mới đóng `T59-802..804` và `T59-805` còn PARTIAL; closure cần đủ `T59-805..809` |
+| `IMPLEMENTATION_CLOSE` | **PENDING** | Corrective `F-P59-GHOST-POU-001` đã có source/catalog/checker/packager/test PASS (2026-08-25). Cổng vẫn PENDING vì R1 mới đóng `T59-802..806`; closure cần đủ `T59-807..809` |
 | `TARGET_FAKE_MCU_DEPLOY` | **PARTIAL (2026-08-24)** | Build đúng commit `fa1f5f4`, backup/install/service/API/UI/read-back **đã có trên Forlinx** với `MCU_MODE=FAKE` ([evidence](../07_records/test-evidence/fw-som/2026-08-24-foxlinx-plan59-corrective-deploy.md)); còn **rollback đầy đủ binary+DB** chưa diễn tập được trên bo |
 | `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** | 10 Program/3 period chạy đủ 24 h; raw JSONL/hash/provenance, fault/signal/restart, `max_iop_poll_gap <200 ms` |
 | `RELEASE_READY` | **NO-GO** | Formal Test Result, residual risk acceptance và mọi Must theo VVP/release authority |
@@ -94,7 +94,7 @@ W0 Contract/Migration foundation
                                                      → W7 Target/HIL/V&V/Release
 
 AUTH-PROG-2026-08-24-05 → W8 reconciliation (`T59-801` DONE)
-                          → R1 EDIT (`T59-802..804` DONE → `T59-805` PARTIAL → `T59-806..809` ORDERED)
+                          → R1 EDIT (`T59-802..806` DONE → `T59-807` READY → `T59-808/809` ORDERED)
                           → R2 LIVE (`T59-810..813` ORDERED sau `T59-809`)
                           → R3 SIMULATE (`T59-814..817` ORDERED sau `T59-813`)
 ```
@@ -116,7 +116,7 @@ task `READY` hoặc `ORDERED` có toàn bộ predecessor `DONE`. Việc mở c�
 | W5 | Atomic lifecycle + sáu-workspace product flow | W2+W4 | Real-backend E2E Draft→Commission→Enable→Runtime→Disable/Restore PASS |
 | W6 | Security/performance/package/release candidate | W5 | RC reproducible; all host gates + install/upgrade/rollback dry-run PASS |
 | W7 | Target/HIL/V&V/release | RC W6 | Required Test Result PASS, residual accepted, release GO record |
-| W8 | Triển khai tuần tự PGM-02 v2.2 trên exact-pinned baseline | `AUTH-PROG-2026-08-24-05`; `T59-801..804 DONE`; `T59-805 PARTIAL` | từng increment R1→R2→R3 chỉ đóng khi source/read-back/gate/verification riêng PASS; release đánh giá độc lập |
+| W8 | Triển khai tuần tự PGM-02 v2.2 trên exact-pinned baseline | `AUTH-PROG-2026-08-24-05`; `UD-PROG-013`; `T59-801..806 DONE`; `T59-807 READY` | từng increment R1→R2→R3 chỉ đóng khi source/read-back/gate/verification riêng PASS; release đánh giá độc lập |
 
 ## 3. Bảng nhiệm vụ master
 
@@ -2706,9 +2706,9 @@ W8 quản change request PGM-02 v2.2. Product Owner/CTO + System Architect đã 
 hành `AUTH-PROG-2026-08-24-05`, pin exact Candidate commit
 `413a043748dce3b44d2c5076412de761760ba17a` và chấp thuận Product/SRS/
 Architecture/DDD/UX/contract/Risk/Trace/VVP/Plan làm đầu vào implementation.
-`T59-801` vì vậy `DONE`; `T59-802..804` đã đóng ở lớp HOST/LOCAL và `T59-805`
-đang chạy (`PARTIAL`). `T59-806..817` giữ `ORDERED` và chỉ tự chuyển `READY` khi
-toàn bộ predecessor trong bảng đã `DONE`.
+`T59-801` vì vậy `DONE`; `T59-802..806` đã đóng ở lớp HOST/LOCAL và `T59-807`
+là task `READY` tiếp theo. `T59-808..817` giữ `ORDERED` và chỉ tự chuyển `READY`
+khi toàn bộ predecessor trong bảng đã `DONE`.
 Consumer/discipline/Verification/Document Control review là
 `WAIVED FOR IMPLEMENTATION`, không phải M4/M5 hoặc evidence release.
 
@@ -2723,9 +2723,9 @@ Consumer/discipline/Verification/Document Control review là
 | `T59-802` | R1 / `PGM02-V22-WP-01` | Shared shell, canonical route/resolver/legacy redirect và mobile `<768` read-only trong FE route/workspace | `T59-801 DONE` + `IMPLEMENT_READY[PGM02-R1]=GO` | **DONE (HOST/LOCAL)** | Route `/eng/programming/programs?project&pou&mode` sau cờ rollback `VITE_PROGRAMS_WORKSPACE_V2` (mặc định TẮT); resolver 0/1/nhiều/không-tồn-tại/mode-lạ đều fail-closed, không mượn Project khác; `<768 px` read-only bằng policy runtime; FE **139 file/1531 test**, lint/build PASS; E2E mock cut-over **29 PASS/3 skip**, real-backend **1/1**. Chi tiết §3.9 |
 | `T59-803` | R1 / `PGM02-V22-WP-02` | Một POU Explorer typed theo `objectId`; selection/navigation/create/duplicate/rename/delete guard | `T59-802 DONE` | **DONE (HOST/LOCAL)** | DOM còn đúng MỘT navigation POU; view model một nguồn (`pouItems`); `objectId`/`programId` không thay nhau được (tra nhầm trục cho `undefined`); tạo/đổi tên/nhân bản/xoá đi qua op typed `upsertObject`/`renameObject`/`duplicateObject`/`removeObject`; FUNCTION/FB không bao giờ được xếp lịch; xoá có preflight người gọi. FE **141 file/1551 test**, E2E mock **30 PASS/4 skip**, real-backend **1/1**. Chi tiết §3.9 |
 | `T59-804` | R1 / `PGM02-V22-WP-03` | OpenAPI/generated clients + BE typed Draft, normalized Quick Library signature, reference query và atomic semantic refactor | `T59-803 DONE`; contract được promote Active trong task | **DONE (HOST/LOCAL)** | schema/Go/TS exact; ETag/idempotency; analyzer/signature unavailable zero mutation; audit/read-back đúng |
-| `T59-805` | R1 / `PGM02-V22-WP-04` | ST editor hoàn chỉnh: Saved Draft, exact diagnostic anchor, history/cursor/read-back | `T59-804 DONE` | **PARTIAL (HOST/LOCAL)** | Đã giao 4 lát: (1) chỉ đọc là **policy runtime** — guard ở `applyEditRange` và handler `onChange`; (2) `AC-ST-002/003` chèn FB có trạng thái đặt khai báo vào khối `VAR` và lời gọi vào thân, chọn/tạo instance, một bước hoàn tác; (3) `AC-ST-005` chỉ mục tham chiếu + F12/Ctrl+Click tới khai báo + khay tham chiếu nói "không xác định được" khi không tra được; (4) `AC-ST-004/010` khoá bằng 8 nguồn ngoài subset và kiểm Lưu chỉ phát op Draft. AC áp dụng cho R1 (`AC-ST-001..005`, `010`, `011`) đều có test. FE **146 file/1626 test** PASS, lint/build PASS, chunk Programming **107,90 KiB gzip** (ngân sách R1 125 KiB). **Chưa giao, hai mục:** đổi surface sang CodeMirror 6 dừng tại [`GATE-PROG-ST-EDITOR-DEP-001`](../00_governance/PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) chờ Owner/Architect chọn A/B/C; và chỉ mục ký hiệu **do compiler sinh** (bullet BE của `WP-04`) — cần compiler worker xuất symbol table, runner Go đọc, OpenAPI công bố, FE tiêu thụ. Chi tiết §3.9 |
+| `T59-805` | R1 / `PGM02-V22-WP-04` | ST editor hoàn chỉnh: Saved Draft, exact diagnostic anchor, history/cursor/read-back | `T59-804 DONE` | **DONE (HOST/LOCAL)** | Đã giao 4 lát: (1) chỉ đọc là **policy runtime** — guard ở `applyEditRange` và handler `onChange`; (2) `AC-ST-002/003` chèn FB có trạng thái đặt khai báo vào khối `VAR` và lời gọi vào thân, chọn/tạo instance, một bước hoàn tác; (3) `AC-ST-005` chỉ mục tham chiếu + F12/Ctrl+Click tới khai báo + khay tham chiếu nói "không xác định được" khi không tra được; (4) `AC-ST-004/010` khoá bằng 8 nguồn ngoài subset và kiểm Lưu chỉ phát op Draft. AC áp dụng cho R1 (`AC-ST-001..005`, `010`, `011`) đều có test. FE **146 file/1626 test** PASS, lint/build PASS, chunk Programming **107,90 KiB gzip** (ngân sách R1 125 KiB). Cổng [`GATE-PROG-ST-EDITOR-DEP-001`](../00_governance/PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) **CLOSED 2026-08-26** — Owner/Architect chọn lựa chọn A (`UD-PROG-013`): giữ bề mặt editor hiện tại cho R1, không thêm CodeMirror 6. Quyết bằng số đo thật (bộ tối thiểu 110,07 KiB gzip ⇒ nhúng thẳng ≈220,85 KiB, vượt cả ngân sách R3). Ngoài phạm vi R1 theo đúng quyết định đó: hover chuột mức CodeMirror, và chỉ mục ký hiệu **do compiler sinh** (bullet BE của `WP-04`, mở lại từ R2). Chi tiết §3.9 |
 | `T59-806` | R1 / `PGM02-V22-WP-05` | FBD true canvas: typed port/order, wire validation, pan/zoom/select/undo và exact FBD anchor | `T59-804 DONE` | **DONE (HOST/LOCAL)** | Đã giao 3 lát: (1) hợp đồng `layout` có phiên bản riêng ở gốc tài liệu — compiler kiểm rồi `erase` trước khi canonical hoá nên hình học **không chạm** hash artifact; (2) canvas SVG node–edge thật (dây vẽ ra thay vì hàng nút UUID), tự xếp tất định INPUT→giữa→OUTPUT, kéo block = một bước hoàn tác, bàn phím giữ nguyên; (3) khay Vấn đề nhảy tới đúng block/dây (`AC-FBD-007`), minimap trên ngưỡng 24 block (`AC-FBD-012`), fixture 256 block/255 wire dựng dưới 250 ms. Ba điều kiện acceptance đều có bằng chứng: canonical/port `order` giữ nguyên (2 test C++ + round-trip FE), ST↔FBD equivalence PASS (`verify_programming_fbd_contract.py` + self-test 10/10), accessibility PASS (**axe wcag2a/2aa/21a/21aa/22aa quét THẲNG canvas FBD, 0 vi phạm** — trước lát này bộ quét chỉ chạy trên workspace ST nên FBD chưa từng bị soi). AC áp dụng cho R1 (`AC-FBD-001..007`, `012`) đều có test. `ctest` 1299/1299; FE **149 file/1684 test**; E2E **31 PASS/5 skip**; chunk Programming **110,78 KiB gzip** (ngân sách R1 125 KiB). `AC-FBD-008` thuộc R3 và `AC-FBD-009..011` thuộc R2 (overlay runtime LIVE) — ngoài phạm vi card R1 này. Chi tiết §3.9 |
-| `T59-807` | R1 / `PGM02-V22-WP-06-R1` | Hợp nhất workbench EDIT, context strip, state/error/copy và full save→Check→read-back | `T59-802..806 DONE` | **ORDERED — dependency** | Real-backend E2E R1, stale ETag/refactor fault/permission/offline; không mock authority |
+| `T59-807` | R1 / `PGM02-V22-WP-06-R1` | Hợp nhất workbench EDIT, context strip, state/error/copy và full save→Check→read-back | `T59-802..806 DONE` | **READY** | Real-backend E2E R1, stale ETag/refactor fault/permission/offline; không mock authority |
 | `T59-808` | R1 / `PGM02-V22-WP-10-R1` + `WP-11-R1` | Budget bundle/render, a11y/responsive/security hardening cho EDIT | `T59-807 DONE` | **ORDERED — dependency** | Budget NFR R1, no horizontal overflow, focus/contrast/keyboard, RBAC negative và hostile source PASS |
 | `T59-809` | R1 / `PGM02-V22-WP-12-R1` + `WP-13-R1` | Chạy/record `VS-PROG-U13`, trace/risk/manifest/rollback và closeout R1 | `T59-808 DONE` | **ORDERED — dependency** | Contract/host/browser/real-backend evidence đúng exact hash; chỉ R1 có verdict, R2/R3 vẫn unavailable |
 | `T59-810` | R2 / `PGM02-V22-WP-09` | Producer→Core IPC→BE contract cho Active document/value tuple, generation/sequence/freshness và Trace pin | `T59-809 DONE` + `IMPLEMENT_READY[PGM02-R2]=GO` | **ORDERED — dependency** | Mismatch/restart/revision switch fail closed; source/value/read-back cùng Active tuple |
@@ -2753,7 +2753,7 @@ thái `DONE` của chúng **không** chứng minh redesign mới đã implement:
 | `PGM02-V22-WP-01` | `T59-306/503` | `T59-802` DONE R1 (HOST/LOCAL) |
 | `PGM02-V22-WP-02` | `T59-301/306/506` | `T59-803` DONE R1 (HOST/LOCAL) |
 | `PGM02-V22-WP-03` | `T59-003/201..205` | `T59-804` DONE R1 (HOST/LOCAL) |
-| `PGM02-V22-WP-04` | `T59-302/408/506` | `T59-805` PARTIAL R1 — chờ `GATE-PROG-ST-EDITOR-DEP-001` cho phần đổi surface |
+| `PGM02-V22-WP-04` | `T59-302/408/506` | `T59-805` DONE R1 (HOST/LOCAL); cổng surface CLOSED bằng `UD-PROG-013` |
 | `PGM02-V22-WP-05` | `T59-105/306/506/601` | `T59-806` DONE R1 (HOST/LOCAL); phần LIVE/SIMULATE của WP-05 thuộc R2/R3 |
 | `PGM02-V22-WP-06` | `T59-302/408/504/506` | `T59-807` R1 + `T59-811` R2 + `T59-816` R3 ORDERED |
 | `PGM02-V22-WP-07` | `T59-106/302/402..407/602/603` | `T59-814` ORDERED R3 |
@@ -2848,20 +2848,22 @@ lỗi thật:
 Sau bốn lát, **mọi AC áp dụng cho R1 đều có test**: `AC-ST-001..005`, `010`,
 `011`. `AC-ST-006` thuộc R3 (Simulation), `AC-ST-007..009` thuộc R2 (LIVE).
 
-Task vẫn `PARTIAL` vì đúng hai mục chưa giao, và cả hai đều không phải việc có
-thể tự quyết:
+**Cổng đóng 2026-08-26 với lựa chọn A** (`UD-PROG-013`). Trước đó task giữ
+`PARTIAL` không phải vì thiếu việc mà vì đóng nó lúc cổng còn mở là **ngầm chọn
+A** — quyết định của Owner/Architect, không phải của người thi hành. Spike §4.1
+của hồ sơ cổng thay ước lượng bằng số đo (bộ CodeMirror tối thiểu **110,07 KiB
+gzip** ⇒ nhúng thẳng ≈220,85 KiB, vượt cả ngân sách R3), Owner chọn A, task đóng
+`DONE (HOST/LOCAL)`.
 
-- **đổi surface editor** — chờ Owner/Architect chọn A/B/C ở
-  `GATE-PROG-ST-EDITOR-DEP-001`; hover thật bằng chuột nằm trong mục này vì cần
-  hit-test theo ký tự;
-- **chỉ mục ký hiệu do compiler sinh** — bullet BE của `WP-04`. Cần compiler
-  worker xuất symbol table, `runner.Compile` đọc, OpenAPI công bố, FE tiêu thụ;
-  đây là một lát cắt qua bốn boundary, không phải phần thừa của lát FE. Chỉ mục
-  hiện tại đã tự khai giới hạn trong docstring và sẽ lùi về vai trò dự phòng khi
-  chỉ mục compiler có mặt.
+Hai mục nằm **ngoài phạm vi R1** theo đúng quyết định đó, không phải nợ:
 
-`PARTIAL`, không phải `DONE` và cũng không phải `BLOCKED` — phần làm được đã làm
-hết.
+- **hover thật bằng chuột** — cần bề mặt hit-test theo ký tự, tức chính thứ
+  lựa chọn A hoãn lại. Khay "Tham chiếu tại con trỏ" phục vụ nhu cầu đó trên bề
+  mặt hiện tại.
+- **chỉ mục ký hiệu do compiler sinh** — bullet BE của `WP-04`, mở lại từ R2.
+  Cần compiler worker xuất symbol table, `runner.Compile` đọc, OpenAPI công bố,
+  FE tiêu thụ: một lát cắt qua bốn boundary. Chỉ mục FE hiện tại đã tự khai giới
+  hạn trong docstring và sẽ lùi về vai trò dự phòng khi chỉ mục compiler có mặt.
 
 
 
@@ -2933,8 +2935,8 @@ không đổi theo nhân sự.
 - Task ID/owner/source target/acceptance/dependency rõ trong §3.
 - Với 52 task baseline: Product/SRS/DDD/ADR đã Active. Với PGM-02 v2.2:
   `AUTH-PROG-2026-08-24-05` đã pin exact Candidate commit
-  `413a043748dce3b44d2c5076412de761760ba17a`; `T59-801..804 DONE`,
-  `T59-805 PARTIAL` và `T59-806..817 ORDERED` theo predecessor.
+  `413a043748dce3b44d2c5076412de761760ba17a`; `T59-801..806 DONE`,
+  `T59-807 READY` và `T59-808..817 ORDERED` theo predecessor.
 - Contract change có producer/consumer/migration/rollback/test list.
 - Fixture và lệnh test nhỏ nhất đã xác định.
 
@@ -2973,7 +2975,7 @@ các evidence task còn khả thi.
 
 | Cổng | Trạng thái |
 |---|---|
-| `IMPLEMENTATION_CLOSE` | **PENDING** — corrective `F-P59-GHOST-POU-001` đã sửa xong source/catalog/checker/packager/test và đạt affected gate 2026-08-25 (`ctest` 1297/1297, Go vet/test PASS, pytest catalog 9/9, G1 10/10). Cổng vẫn PENDING vì R1 mới đóng `T59-802..804`, `T59-805` còn PARTIAL: `T59-806..809` chưa chạy, nên chưa có closure cho PGM-02 v2.2 |
+| `IMPLEMENTATION_CLOSE` | **PENDING** — corrective `F-P59-GHOST-POU-001` đã sửa xong source/catalog/checker/packager/test và đạt affected gate 2026-08-25 (`ctest` 1297/1297, Go vet/test PASS, pytest catalog 9/9, G1 10/10). Cổng vẫn PENDING vì R1 mới đóng `T59-802..806`: `T59-807..809` chưa chạy, nên chưa có closure cho PGM-02 v2.2 |
 | `TARGET_FAKE_MCU_DEPLOY` | **PARTIAL (2026-08-24)** — deploy `fa1f5f4` trên Forlinx `MCU_MODE=FAKE`: 5/5 service active, health đủ 6 mục `ok`, Commission 10 Program `SUCCEEDED`, Programs `CORE_LIVE`, Enable/Disable 6/6 ~0,95 s, Monitor đọc `UI-01` GOOD/LIVE, signal producer→consumer FRESH. **Còn thiếu**: diễn tập rollback đầy đủ binary+DB trên bo (`F-P59-ROLLBACK-DB-001`) |
 | `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** — yêu cầu đủ 24 h, không rút ngắn |
 | `RELEASE_READY` | **NO-GO** |
@@ -3003,6 +3005,7 @@ truy nguyên As-Built đến 2026-08-20.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.14 | 2026-08-26 | Owner/Architect đóng `GATE-PROG-ST-EDITOR-DEP-001` bằng lựa chọn A (`UD-PROG-013`) sau spike đo thật. `T59-805` đóng `DONE (HOST/LOCAL)`; `T59-801..806` DONE và `T59-807` chuyển `READY`. |
 | 2.13 | 2026-08-26 | Đóng `T59-806` `DONE (HOST/LOCAL)` sau khi có bằng chứng thật cho cả ba điều kiện acceptance — riêng accessibility phải mở rộng bộ quét axe vào đúng lúc canvas FBD đang mở, vì bộ quét cũ chỉ chạy trên workspace ST. |
 | 2.12 | 2026-08-26 | Ghi tiến độ `T59-805` (4 lát, mọi AC R1 có test) và `T59-806` (3 lát: hợp đồng `layout`, canvas SVG node–edge, khay Vấn đề + minimap). Hai lỗi thật đáng ghi: hình học từng rò vào `canonical_json` nên đổi hash artifact, và canonical hoá FE ném lỗi khi gặp hình học rác. Cả hai task `PARTIAL` với phần còn lại nêu đích danh. |
 | 2.11 | 2026-08-26 | Đồng bộ tracker với thực tế thi hành W8: `T59-802..804` `DONE (HOST/LOCAL)` và `T59-805` `PARTIAL` (guard read-only runtime đã giao; đổi surface editor dừng ở `GATE-PROG-ST-EDITOR-DEP-001` vì dư địa ngân sách chunk R1 chỉ còn ≈20 KiB gzip). Sửa các dòng còn ghi `T59-802 READY`/`T59-804 READY` ở header, chuỗi authority, bảng Wave, §3.9, crosswalk và DoR §5.1; `IMPLEMENTATION_CLOSE` nêu đúng phần R1 còn thiếu. |

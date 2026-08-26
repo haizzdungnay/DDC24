@@ -8,6 +8,31 @@
 
 ## [Unreleased]
 
+### Governance — `UD-PROG-013`: editor ST giữ bề mặt hiện tại cho R1 (2026-08-26)
+
+- **Decided — Product Owner/CTO + System Architect chọn lựa chọn A.** Cổng
+  `GATE-PROG-ST-EDITOR-DEP-001` **CLOSED**. Không thêm CodeMirror 6 vào
+  `apps/web-ui` trong R1. Quyết bằng số đo của spike §4.1 chứ không bằng ước
+  lượng: bộ CodeMirror tối thiểu **110,07 KiB gzip** ⇒ nhúng thẳng
+  **≈220,85 KiB**, vượt ngân sách R1 ~77% và **vượt luôn ngân sách R3** — nên
+  lựa chọn C sẽ phải nâng trần vượt cả R3, tức bỏ hẳn cơ chế ngân sách chứ không
+  phải nới nó.
+
+- **Changed — `T59-805` đóng `DONE (HOST/LOCAL)`; `T59-807` chuyển `READY`.**
+  Trước đó task giữ `PARTIAL` **không phải vì thiếu việc** mà vì đóng nó lúc
+  cổng còn mở là ngầm chọn A — quyết định của Owner/Architect, không phải của
+  người thi hành. Nay quyết định đã có văn bản, `T59-801..806` DONE và chuỗi R1
+  chạy tiếp.
+
+- **Ghi rõ phạm vi bị hoãn, không phải nợ.** Hover chuột mức CodeMirror và chỉ
+  mục ký hiệu **do compiler sinh** nằm ngoài R1 theo đúng quyết định này, mở lại
+  từ R2 — và khi mở lại phải chạy nốt ba phép đo chỉ làm được trên bo
+  (`openPouP95Ms`, `typingResponseP95Ms`, `steadyJsHeapMiB`) cùng kiểm build
+  offline/air-gapped.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only.
+
+
 ### Governance — chạy spike của cổng editor ST, thay ước lượng bằng số đo (2026-08-26)
 
 - **Added — `GATE-PROG-ST-EDITOR-DEP-001` §4.1: hai trong năm phép đo bắt buộc
