@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `GATE-PROG-ST-EDITOR-DEP-001` |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Trạng thái | **OPEN — chờ quyết định Product Owner/CTO + System Architect** |
 | Ngày | 2026-08-26 |
 | Người lập | Dev Lead (thi hành `T59-805`) |
@@ -95,12 +95,34 @@ Khuyến nghị này KHÔNG phải quyết định. Owner/Architect chọn A, B 
 
 ## 6. Trạng thái
 
-`T59-805` tiếp tục phần **không** phụ thuộc cổng này: guard read-only runtime
-(đã giao), reference index/diagnostics phía BE, và các AC hành vi còn lại. Việc
-đổi surface editor giữ nguyên trạng chờ quyết định.
+`T59-805` đã đi hết phần **không** phụ thuộc cổng này:
+
+| Lát | Trạng thái |
+|---|---|
+| Guard read-only runtime (mọi đường mutation) | đã giao |
+| `AC-ST-002/003` chèn FB có trạng thái đặt khai báo đúng vùng, chọn/tạo instance, một bước hoàn tác | đã giao |
+| `AC-ST-005` chỉ mục tham chiếu, F12/Ctrl+Click tới khai báo, "không xác định được" khi không tra được | đã giao |
+| `AC-ST-004/010` khoá bằng 8 nguồn ngoài subset và kiểm phạm vi thao tác Lưu | đã giao |
+
+Mọi AC áp dụng cho R1 (`AC-ST-001..005`, `010`, `011`) đều có test. Số đo cập
+nhật 2026-08-26 sau bốn lát: chunk Programming **107,90 KiB gzip**, dư địa tới
+ngân sách R1 còn **≈17 KiB** — nhỏ hơn lúc lập cổng, nên §2 và §5 càng đúng chứ
+không nhẹ đi.
+
+Hai mục còn lại và cả hai đều **không phải việc tự quyết được**:
+
+1. **Đổi surface editor** — chờ Owner/Architect chọn A, B hay C ở hồ sơ này.
+   Hover thật bằng chuột nằm trong mục này (cần hit-test theo ký tự). Khay
+   "Tham chiếu tại con trỏ" là thứ làm được ngay trên bề mặt hiện tại và đã
+   giao.
+2. **Chỉ mục ký hiệu do compiler sinh** — bullet BE của `WP-04`. Cần compiler
+   worker xuất symbol table, `runner.Compile` đọc, OpenAPI công bố, FE tiêu
+   thụ: một lát cắt qua bốn boundary. Chỉ mục FE hiện tại tự khai giới hạn ngay
+   trong docstring và sẽ lùi về vai trò dự phòng khi chỉ mục compiler có mặt.
 
 ## 7. Lịch sử
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.1 | 2026-08-26 | Cập nhật §6 sau bốn lát của `T59-805`: mọi AC áp dụng cho R1 đã có test; đo lại chunk Programming 107,90 KiB gzip (dư địa còn ≈17 KiB); nêu đúng hai mục còn lại và vì sao cả hai đều cần quyết định hoặc cắt qua bốn boundary. |
 | 1.0 | 2026-08-26 | Lập cổng: đo dư địa ngân sách còn 20 KiB gzip, nêu ba lựa chọn kèm cái giá, liệt kê năm phép đo bắt buộc trước khi quyết, khuyến nghị A cho R1. |
