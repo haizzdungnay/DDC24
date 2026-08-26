@@ -8,6 +8,42 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — hình học FBD là dữ liệu trình bày, không phải ngữ nghĩa (`T59-806`) (2026-08-26)
+
+- **Added — `layout` có phiên bản riêng ở gốc tài liệu FBD.** `WP-05` cần một
+  canvas node–edge thật, mà canvas thì cần toạ độ; mô hình FBD trước đây **không
+  có chỗ nào** cho hình học (`additionalProperties: false` ở mọi tầng, và
+  compiler `has_only_keys()` từ chối khoá lạ ở gốc). Nay có `layout` tuỳ chọn:
+  `{ schemaVersion, nodes: { <uuid>: { x, y } } }`. Đặt ở **gốc** chứ không
+  trong từng node là có chủ đích — nhờ vậy "cùng topology, khác hình học ⇒ cùng
+  IR" là bất biến **cấu trúc**, không phải một lời hứa ai đó phải nhớ giữ.
+
+- **Fixed — lỗi thật do chính test mới bắt được: hình học rò vào hash artifact.**
+  `canonical_json` của compiler được dựng bằng cách sắp lại **JSON gốc**, không
+  phải từ `FbdDocument`. Nên khi vừa cho phép `layout`, kéo một block sang phải
+  10 px đổi luôn canonical bytes → đổi hash artifact → commission lại và ký lại
+  một chương trình có ngữ nghĩa y hệt. Sửa bằng `root.erase("layout")` ngay
+  trước khi canonical hoá: **kiểm ở biên, quên trước khi canonical hoá**.
+
+- **Fixed — hình học rác làm sập hàm canonical hoá ở FE.**
+  `canonicalizeFbdDocument` chạy **trước** cả validate (phép kiểm kích thước gọi
+  nó), nên một `layout` thiếu `nodes` ném `TypeError` và mất cả tab thay vì sinh
+  issue. Nay nó chịu được tài liệu chưa hợp lệ: hình học rác bị bỏ khỏi dạng
+  canonical, còn `FBD-SCHEMA-LAYOUT-001` mới là chỗ báo cho người dùng.
+
+- **Added — từ chối hình học sai ở cả hai phía, cùng một luật.** Compiler
+  (`is_valid_layout()`) và FE (`isValidFbdLayout()`) cùng chặn: phiên bản lạ,
+  thiếu `nodes`, khoá lạ, khoá node không phải UUID canonical, toạ độ NaN/vô
+  hạn/ngoài trần ±100000, điểm thiếu trục hoặc có khoá thừa. Toạ độ NaN gửi lên
+  rồi mới hỏng ở Core là lỗi khó lần hơn nhiều so với một issue ngay tại editor.
+
+- **Verification.** `ctest` **1299/1299 PASS** (build lại `--fresh` với đủ ba
+  option MODBUS/BACNET/HMI); FE **146 file / 1638 test PASS** (+34);
+  `go vet ./...` và `go test ./... -count=1` PASS; `tsc`/`eslint`/
+  `check:ui-strings` PASS; `verify_programming_fbd_contract.py` PASS + self-test
+  **10/10 mutation bị reject**.
+
+
 ### Governance — ghi bốn lát của `T59-805` và hai mục còn lại (2026-08-26)
 
 - **Changed — hồ sơ nói đúng chỗ `WP-04` đang đứng.** Plan 59 §3/§3.9, roadmap
