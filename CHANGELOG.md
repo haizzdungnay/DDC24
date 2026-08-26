@@ -8,6 +8,44 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — FBD thành canvas node–edge thật (`T59-806` / `AC-FBD-001`) (2026-08-26)
+
+- **Fixed — dây bị giấu.** Bản trước vẽ block thành các thẻ xếp lưới và liệt kê
+  dây thành một hàng nút `abcd1234 → ef567890`. Nghĩa là thứ **duy nhất** một sơ
+  đồ FBD tồn tại để nói — cái gì nối vào cái gì — lại là thứ người dùng phải tự
+  ghép bằng cách đối chiếu tám ký tự đầu của UUID. Nay mỗi dây là một đường
+  bezier vẽ ra giữa đúng hai chấm port.
+
+- **Added — canvas SVG thuần, KHÔNG thêm thư viện.** Ngân sách chunk R1 chỉ còn
+  ~17 KiB gzip (`GATE-PROG-ST-EDITOR-DEP-001`), mà một thư viện canvas cần chừng
+  đó hoặc hơn — và chính `WP-05` đã đặt sẵn đường lùi "SVG fallback nếu spike
+  gate đỏ". Kết quả đo: canvas tốn **2,2 KiB gzip**, chunk lên 110,11 KiB.
+
+- **Added — sơ đồ mở lần đầu đã đọc được.** Node chưa có toạ độ được xếp **tất
+  định**: INPUT cột trái, OUTPUT cột phải, còn lại ở giữa theo `executionOrder`
+  — trái sang phải đúng chiều dữ liệu chảy. Tất định là điều kiện để hai lần mở
+  cùng một tài liệu cho cùng một hình.
+
+- **Added — kéo block, một thao tác = MỘT bước hoàn tác.** `SET_NODE_POSITION`
+  chỉ ghi vào `layout`, **không** đụng `executionOrder`: suy thứ tự thực thi từ
+  x/y nghĩa là kéo một block sang trái sẽ âm thầm đổi chương trình đang chạy.
+  Trong lúc kéo, hình học dịch tại chỗ chứ không dispatch từng frame — mỗi
+  dispatch là một mục lịch sử, nên kéo một block sẽ nuốt sạch undo stack.
+  Toạ độ được làm tròn về số nguyên (pixel lẻ chỉ làm Draft bẩn thêm) và toạ độ
+  ngoài trần bị **từ chối** chứ không kẹp về biên — kẹp âm thầm sẽ đặt block
+  vào chỗ người dùng không hề chọn.
+
+- **Changed — bàn phím vẫn đi trước.** Mỗi block, mỗi port và mỗi dây là một
+  phần tử SVG nhận tiêu điểm với `role="button"` và nhãn đọc được, nên toàn bộ
+  luồng chọn/nối/xoá/hoàn tác bằng bàn phím chạy y nguyên trên canvas mới —
+  journey Playwright `UJ-PROG-02` không sửa một dòng nào.
+
+- **Verification.** FE **148 file / 1665 test PASS** (+27); E2E Playwright
+  **31 PASS / 5 skip** (không đổi so với trước); `tsc`/`eslint`/
+  `check:ui-strings`/`check:programming-api,fbd,errors` PASS; `vite build` PASS
+  — chunk Programming **110,11 KiB gzip** (ngân sách R1 125 KiB, dư địa ≈15 KiB).
+
+
 ### PGM-02 R1 — hình học FBD là dữ liệu trình bày, không phải ngữ nghĩa (`T59-806`) (2026-08-26)
 
 - **Added — `layout` có phiên bản riêng ở gốc tài liệu FBD.** `WP-05` cần một

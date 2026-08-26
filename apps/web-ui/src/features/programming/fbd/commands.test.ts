@@ -303,3 +303,65 @@ describe('translateFbdAnnouncement (BUG-012)', () => {
     expect(translateFbdAnnouncement(pick, { code: 'unknown-code' })).toBe('')
   })
 })
+
+/* `T59-806` — kéo block chỉ đổi HÌNH HỌC. Bộ test này khoá đúng ranh giới đó:
+ * vị trí đi vào `layout`, và không một trường ngữ nghĩa nào đổi theo. */
+describe('SET_NODE_POSITION (T59-806)', () => {
+  function nodeOf(state: ReturnType<typeof createFbdEditorState>) {
+    return state.document.networks[0].nodes[0]
+  }
+
+  it('ghi toạ độ vào layout và KHÔNG đụng executionOrder', () => {
+    const before = createFbdEditorState(golden(), true)
+    const node = nodeOf(before)
+    const order = node.executionOrder
+    const after = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x: 320, y: 140 })
+
+    expect(after.document.layout?.nodes[node.id]).toEqual({ x: 320, y: 140 })
+    expect(after.document.networks[0].nodes[0].executionOrder).toBe(order)
+    expect(after.announcement.code).toBe('block-moved')
+  })
+
+  it('làm tròn về số nguyên — pixel lẻ chỉ làm Draft bẩn thêm', () => {
+    const before = createFbdEditorState(golden(), true)
+    const node = nodeOf(before)
+    const after = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x: 100.4, y: 99.6 })
+    expect(after.document.layout?.nodes[node.id]).toEqual({ x: 100, y: 100 })
+  })
+
+  it.each([
+    ['ngoài trần dương', 1e9],
+    ['ngoài trần âm', -1e9],
+    ['NaN', Number.NaN],
+    ['vô hạn', Number.POSITIVE_INFINITY],
+  ])('TỪ CHỐI toạ độ %s thay vì kẹp về biên', (_label, x) => {
+    const before = createFbdEditorState(golden(), true)
+    const node = nodeOf(before)
+    const after = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x, y: 0 })
+    expect(after.announcement.code).toBe('invalid-position')
+    expect(after.document.layout).toBeUndefined()
+  })
+
+  it('chỉ đọc thì không kéo được', () => {
+    const before = createFbdEditorState(golden(), false)
+    const node = nodeOf(before)
+    const after = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x: 10, y: 10 })
+    expect(after.announcement.code).toBe('no-edit-permission')
+    expect(after.document.layout).toBeUndefined()
+  })
+
+  it('node không tồn tại thì từ chối, không tạo entry layout mồ côi', () => {
+    const before = createFbdEditorState(golden(), true)
+    const after = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: 'ffffffff-ffff-4fff-8fff-ffffffffffff', x: 10, y: 10 })
+    expect(after.announcement.code).toBe('node-not-found')
+    expect(after.document.layout).toBeUndefined()
+  })
+
+  it('kéo xong hoàn tác được về đúng vị trí cũ', () => {
+    const before = createFbdEditorState(golden(), true)
+    const node = nodeOf(before)
+    const moved = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x: 320, y: 140 })
+    const undone = fbdEditorReducer(moved, { type: 'UNDO' })
+    expect(undone.document.layout).toBeUndefined()
+  })
+})
