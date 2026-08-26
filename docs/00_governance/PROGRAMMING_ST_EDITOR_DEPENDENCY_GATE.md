@@ -3,11 +3,11 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `GATE-PROG-ST-EDITOR-DEP-001` |
-| Phiên bản | 1.2 |
-| Trạng thái | **OPEN — chờ quyết định Product Owner/CTO + System Architect** |
+| Phiên bản | 1.3 |
+| Trạng thái | **CLOSED 2026-08-26 — Product Owner/CTO + System Architect chọn LỰA CHỌN A**; ghi tại `UD-PROG-013` |
 | Ngày | 2026-08-26 |
 | Người lập | Dev Lead (thi hành `T59-805`) |
-| Authority cần | `AUTH-*` mới hoặc quyết định ghi vào `PROGRAMMING_OPEN_DECISIONS.md` |
+| Authority | Quyết định đã ghi: [`UD-PROG-013`](PROGRAMMING_OPEN_DECISIONS.md) §1.2 |
 | Liên quan | Proposal PGM-02 `WP-04` ("`apps/web-ui/package.json`/lockfile **sau dependency/license gate**"); `contracts/programming/pgm02_workspace_v1.json` §nfr.frontend |
 
 ## 0. Vì sao có hồ sơ này
@@ -123,6 +123,11 @@ go-to-definition/hover. Ba lý do:
 
 Khuyến nghị này KHÔNG phải quyết định. Owner/Architect chọn A, B hay C.
 
+**2026-08-26 — Owner/Architect chọn LỰA CHỌN A.** Ghi tại `UD-PROG-013`. Cổng
+CLOSED. Mở lại từ R2 trở đi nếu người dùng thật sự cần hover chuột /
+go-to-definition mức CodeMirror, và khi mở lại phải chạy nốt ba phép đo trên bo
+(§4 mục 2, 3, 5).
+
 ## 6. Trạng thái
 
 `T59-805` đã đi hết phần **không** phụ thuộc cổng này:
@@ -140,12 +145,11 @@ dư địa tới ngân sách R1 còn **≈14 KiB** — nhỏ hơn lúc lập c�
 càng đúng chứ không nhẹ đi. Spike §4.1 đã thay ước lượng bằng số đo: bộ
 CodeMirror tối thiểu **110,07 KiB gzip**.
 
-**`T59-805` đang `PARTIAL` chỉ vì cổng này.** Acceptance của task
-(`ST positive/boundary/conflict/diagnostic/reference flows PASS; Active không
-đổi`) đã đạt hết. Nhưng đóng task lúc cổng còn mở nghĩa là **ngầm chọn lựa chọn
-A** — và đó là quyết định của Owner/Architect, không phải của người thi hành.
-Vì `T59-807` yêu cầu `T59-802..806 DONE`, cổng này hiện là thứ **duy nhất** giữ
-chuỗi R1 lại.
+**Cổng đã đóng 2026-08-26** với lựa chọn A (`UD-PROG-013`). Hệ quả: bề mặt
+editor ST giữ nguyên cho R1, `T59-805` đủ điều kiện đóng `DONE (HOST/LOCAL)`, và
+`T59-807` mở. Hover chuột mức CodeMirror nằm ngoài phạm vi R1 theo đúng quyết
+định này — khay "Tham chiếu tại con trỏ" là thứ phục vụ nhu cầu đó trên bề mặt
+hiện tại.
 
 Hai mục còn lại và cả hai đều **không phải việc tự quyết được**:
 
@@ -162,6 +166,7 @@ Hai mục còn lại và cả hai đều **không phải việc tự quyết đ�
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.3 | 2026-08-26 | **Đóng cổng**: Owner/Architect chọn lựa chọn A (`UD-PROG-013`) — giữ bề mặt editor hiện tại cho R1, không thêm CodeMirror 6. |
 | 1.2 | 2026-08-26 | Chạy spike §4 mục 1 và 4 NGOÀI repo: bộ CodeMirror tối thiểu + mode ST đo thật **110,07 KiB gzip** (341,34 KiB thô), tức nhúng thẳng vượt ngân sách R1 ~77% và vượt luôn R3; license 12/12 MIT, 0 non-MIT. Ghi rõ `T59-805` `PARTIAL` chỉ vì cổng này và nó đang giữ chuỗi R1. |
 | 1.1 | 2026-08-26 | Cập nhật §6 sau bốn lát của `T59-805`: mọi AC áp dụng cho R1 đã có test; đo lại chunk Programming 107,90 KiB gzip (dư địa còn ≈17 KiB); nêu đúng hai mục còn lại và vì sao cả hai đều cần quyết định hoặc cắt qua bốn boundary. |
 | 1.0 | 2026-08-26 | Lập cổng: đo dư địa ngân sách còn 20 KiB gzip, nêu ba lựa chọn kèm cái giá, liệt kê năm phép đo bắt buộc trước khi quyết, khuyến nghị A cho R1. |
