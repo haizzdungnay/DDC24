@@ -25,6 +25,7 @@ import {
   type FbdParameterValue,
   type FbdWire,
 } from './model'
+import { FbdCanvas } from './FbdCanvas'
 import {
   FBD_PALETTE,
   FBD_PALETTE_CATEGORY_ORDER,
@@ -316,7 +317,10 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
   const publishedDocument = useRef(canonicalFbdJson(state.document))
-  const portButtons = useRef(new Map<string, HTMLButtonElement>())
+  /* Port nay là phần tử SVG (`<g role="button">`) chứ không còn là
+   * `<button>` HTML — cả hai đều `.focus()` được, nên điều hướng port bằng
+   * bàn phím giữ nguyên. */
+  const portButtons = useRef(new Map<string, SVGGElement>())
   const sectionRef = useRef<HTMLElement>(null)
   const keyboardHelpId = useId()
   const [paletteTypeRef, setPaletteTypeRef] = useState(FBD_PALETTE[0]?.id ?? '')
@@ -736,74 +740,36 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
             >
               {network.order + 1}. {network.name}
             </button>
-            <ol className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-              {network.nodes.map((node) => (
-                <li key={node.id} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3">
-                  <button
-                    type="button"
-                    data-fbd-canvas-control="true"
-                    className="min-h-11 w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-                    aria-pressed={state.selection?.kind === 'node' && state.selection.nodeId === node.id}
-                    onClick={() => dispatch({ type: 'SELECT', selection: { kind: 'node', networkId: network.id, nodeId: node.id } })}
-                  >
-                    <span className="block text-sm font-semibold">#{node.executionOrder} · {node.typeRef}</span>
-                    <span className="block text-xs text-[var(--c-text-dim)]">{node.kind}</span>
-                  </button>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {node.ports.map((port) => {
-                      const selected = state.selection?.kind === 'port' && state.selection.portId === port.id
-                      const isSource = state.connectionFromPortId === port.id
-                      return (
-                        <button
-                          key={port.id}
-                          ref={(element) => {
-                            if (element) portButtons.current.set(port.id, element)
-                            else portButtons.current.delete(port.id)
-                          }}
-                          type="button"
-                          data-fbd-canvas-control="true"
-                          className={`min-h-11 rounded border px-2 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${selected || isSource ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)]' : 'border-[var(--c-border)]'}`}
-                          aria-pressed={selected}
-                          aria-label={`${node.typeRef} ${port.direction} ${port.name} ${port.dataType}${port.unit ? ` ${port.unit}` : ''}`}
-                          onClick={() => dispatch({ type: 'SELECT', selection: { kind: 'port', networkId: network.id, nodeId: node.id, portId: port.id } })}
-                        >
-                          {port.direction === 'INPUT' ? '←' : '→'} {port.name} · {port.dataType}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {state.selection?.kind === 'node' && state.selection.nodeId === node.id && (
-                    <div className="mt-3 border-t border-[var(--c-border)] pt-3" role="group" aria-label={pick('Inspector node', 'Node inspector')}>
-                      <NodeInspector
-                        node={node}
-                        networkId={network.id}
-                        canEdit={canEdit}
-                        dispatch={dispatch}
-                        pick={pick}
-                        paletteEntry={paletteEntries.find((entry) => entry.typeRef === node.typeRef)}
-                      />
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ol>
-            {network.nodes.length === 0 && <p className="text-sm text-[var(--c-text-dim)]">{pick('Network trống — thêm block để bắt đầu.', 'Empty network — add a block to begin.')}</p>}
-            {network.wires.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2" aria-label={pick('Danh sách wire', 'Wire list')}>
-                {network.wires.map((wire) => (
-                  <button
-                    key={wire.id}
-                    type="button"
-                    data-fbd-canvas-control="true"
-                    className="min-h-11 rounded border border-[var(--c-border)] px-2 py-1 font-mono text-[11px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-                    aria-pressed={state.selection?.kind === 'wire' && state.selection.wireId === wire.id}
-                    onClick={() => dispatch({ type: 'SELECT', selection: { kind: 'wire', networkId: network.id, wireId: wire.id } })}
-                  >
-                    {wire.from.portId.slice(0, 8)} → {wire.to.portId.slice(0, 8)}
-                  </button>
-                ))}
-              </div>
-            )}
+            <FbdCanvas
+              network={network}
+              layout={state.document.layout}
+              selection={state.selection}
+              connectionFromPortId={state.connectionFromPortId}
+              canEdit={canEdit}
+              dispatch={dispatch}
+              pick={pick}
+              registerPort={(portId, element) => {
+                if (element) portButtons.current.set(portId, element)
+                else portButtons.current.delete(portId)
+              }}
+            />
+            {state.selection?.kind === 'node' && state.selection.networkId === network.id && (() => {
+              const selectedNodeId = state.selection.nodeId
+              const selectedNode = network.nodes.find((item) => item.id === selectedNodeId)
+              if (!selectedNode) return null
+              return (
+                <div className="mt-3 border-t border-[var(--c-border)] pt-3" role="group" aria-label={pick('Inspector node', 'Node inspector')}>
+                  <NodeInspector
+                    node={selectedNode}
+                    networkId={network.id}
+                    canEdit={canEdit}
+                    dispatch={dispatch}
+                    pick={pick}
+                    paletteEntry={paletteEntries.find((entry) => entry.typeRef === selectedNode.typeRef)}
+                  />
+                </div>
+              )
+            })()}
           </article>
         ))}
       </div>
