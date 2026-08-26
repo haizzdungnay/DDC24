@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — luồng tham chiếu của editor ST (`T59-805` / `AC-ST-005`) (2026-08-26)
+
+- **Added — `stReferenceIndex`: một chỉ mục, khai đúng thẩm quyền của mình.**
+  Chỉ mục dựng từ nguồn đang gõ, phục vụ **điều hướng** (khai báo ở đâu, bị đọc
+  và bị ghi ở đâu) chứ không phán nguồn đúng hay sai — việc đó vẫn của Check ở
+  Core. Nó phân biệt biến thường với instance FUNCTION_BLOCK, bỏ qua khai báo
+  nằm trong chú thích, và **không tính gán tham số là ghi**: trong
+  `FanDelay(IN := FanCmd)` thì `IN` là tên tham số của lời gọi, còn `FanCmd` là
+  một lần đọc — phân biệt bằng độ sâu ngoặc.
+
+- **Added — tới khai báo bằng F12 và Ctrl+Click, dùng được cả khi chỉ đọc.**
+  Điều hướng không phải mutation, nên guard read-only của `T59-805` không chặn
+  nó. Không tra được thì **nói ra**: "Không tìm thấy khai báo của X." và con trỏ
+  đứng yên — thay vì nhảy tới một đích gần đúng, thứ tốn thời gian hơn là không
+  có đích nào.
+
+- **Added — khay "Tham chiếu tại con trỏ".** Hiện tên, kiểu, phân loại
+  (biến / instance FB), nút tới khai báo, và danh sách nơi đọc / nơi ghi nhảy
+  được từng chỗ. Định danh không tra được hiện **"không xác định được"** kèm lý
+  do, đúng `AC-ST-005` ("absence shows unavailable, not guessed content").
+
+- **Fixed — instance FUNCTION_BLOCK trước đây KHÔNG tồn tại với editor.**
+  `collectStSymbols` chỉ nhận sáu kiểu cơ bản, nên sau khi chèn `TON_1 : TON;`
+  thì gõ `TON_` không được gợi ý và khay ký hiệu không thấy nó. Nay hàm này đọc
+  thẳng từ `stReferenceIndex` — một nguồn duy nhất cho cả điều hướng, gợi ý và
+  bảng lệnh, không còn chỗ cho hai câu trả lời khác nhau về cùng một nguồn. Số
+  `tham chiếu` cũng đúng hơn: đếm nơi DÙNG (không tính dòng khai báo) và phân
+  biệt hoa thường đúng như grammar §10, thay vì con số cũ luôn dư ít nhất một.
+
+- **Chưa làm, nói rõ:** hover thật bằng chuột trên từng định danh cần bề mặt
+  editor có hit-test theo ký tự — thuộc quyết định đang chờ ở
+  `GATE-PROG-ST-EDITOR-DEP-001`. Chỉ mục do compiler sinh (phần BE của `WP-04`)
+  cũng chưa có; khi có, nó là nguồn thẩm quyền và chỉ mục này lùi về vai trò dự
+  phòng.
+
+- **Verification.** FE **146 file / 1604 test PASS** (+1 file, +14 test);
+  `tsc --noEmit`, `eslint --max-warnings=0`, `check:ui-strings`,
+  `check:programming-api/fbd/errors` và `vite build` PASS; chunk Programming
+  **107,90 KiB gzip** (ngân sách R1 125 KiB).
+
+
 ### PGM-02 R1 — chèn FB có trạng thái đặt khai báo đúng chỗ (`T59-805` / `AC-ST-002`) (2026-08-26)
 
 - **Fixed — Quick Library từng sinh mã ST không compile được.** Chèn một
