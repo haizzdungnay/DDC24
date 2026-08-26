@@ -114,6 +114,14 @@ theo `VS-PROG-U01..U15`.
 | `VS-PROG-U14` | PGM-02 R2 LIVE — immutable Active source/value coherence | L2/L3/L5/L6 | `SYS-116`, `FE-119`, `BE-116`, `CORE-117`, `NFR-112`: producer→IPC→BE→FE/read-back tuple exact; cutover/gap/mismatch clear overlay trong ≤1 render cycle; Trace không splice revision; LIVE 0 mutation; stale/offline/missing không thành zero. |
 | `VS-PROG-U15` | PGM-02 R3 SIMULATE — isolated deterministic worker/admin-only/zero output | L0/L2/L3/L5/L6 | `SYS-116`, `FE-119`, `BE-117`, `CORE-118`, `NFR-112`: 14/14 viewer/operator mutations 403; replay 100/100 hash equal ở 1×/10×/60×; allowlist/quota/TTL/fault cleanup; production handle denied; Active/LKG/counters và physical AO/DO/relay không đổi. |
 
+### Trạng thái `VS-PROG-U13..U15` (cập nhật 2026-08-26)
+
+| Scenario | Trạng thái | Ghi chú |
+|---|---|---|
+| `VS-PROG-U13` | **PASS (R1 / HOST-LOCAL)** | Record: [`EV-PGM02-R1-CLOSEOUT-001`](../07_records/test-evidence/programming/2026-08-26-pgm02-t59-809-r1-closeout.md) tại commit `d32e560`. PASS này **chỉ** ở lớp HOST/LOCAL: không tuyên bố target, HIL hay release, và không nâng `I/T/P/R` của requirement nào. |
+| `VS-PROG-U14` | `NOT_RUN` | R2 LIVE chưa có implementation (`T59-810..813`). |
+| `VS-PROG-U15` | `NOT_RUN` | R3 SIMULATE chưa có implementation (`T59-814..817`). |
+
 Mọi scenario unified bắt đầu `NOT_RUN`; task implementation có thể tạo unit/
 integration evidence, nhưng `U05/U08/U09/U11/U12/U14/U15` chỉ PASS bằng target/HIL record
 có commit/image/config/hash/instrument/operator/reviewer.
@@ -501,7 +509,7 @@ thuộc mặc định profile mới là tiếng Việt.
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
 | Exact Candidate PGM-02 | Product + System Architect + Document Control | **Đã đóng authority:** `AUTH-PROG-2026-08-24-05`, exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; không dùng pin làm Test Result |
-| `VS-PROG-U13` chưa có implementation/evidence R1 | FE + BE + Compiler + QA | `T59-802=READY`, `T59-803..809=ORDERED`; implement exact contract rồi real-BE browser/generator/negative/fault evidence |
+| ~~`VS-PROG-U13` chưa có implementation/evidence R1~~ **ĐÓNG 2026-08-26** | FE + BE + Compiler + QA | `T59-802..809` DONE ở lớp HOST/LOCAL; record `EV-PGM02-R1-CLOSEOUT-001`. Còn mở ở lớp target/HIL, không phải ở lớp R1 |
 | `VS-PROG-U14` chưa có coherent producer chain | Core + BE + FE + QA | `T59-810..813=ORDERED` sau R1; target fault/TSan/read-back evidence đúng Active tuple |
 | `VS-PROG-U15` chưa có worker/isolation/HIL fixture | Runtime + Security + BE + FE + HW/QA | `ADR-053` Accepted; `T59-814..817=ORDERED` sau R2; isolated worker + calibrated zero-output target/HIL Test Result |
 | Requirement/design: `17 DECIDED/0 OPEN/0 CLOSED`, baseline approved | Product + Architect + discipline authority | **Đã mở implementation** theo `AUTH-PROG-2026-08-11-03` |
@@ -533,6 +541,7 @@ thuộc mặc định profile mới là tiếng Việt.
 | 1.8 | 2026-08-13 | Ghi `EV-PROG-P5-510`: full host gate, deploy/read-back/rollback rehearsal/tái deploy Foxlinx, Chrome desktop/mobile và axe 8/8 scan PASS. Đóng blocker SSH/tool scan; giữ source chưa merge, positive Monitor/Trace có binding, reviewer/usability/HIL/Test Result độc lập. Giữ 2/32 BLOCKED, 0/32 PASS và mọi `T/P/R=N`. |
 | 1.9 | 2026-08-13 | Bổ sung audit live HTTP cho `EV-PROG-P5-510` rev 1.1: UUID/SHA fallback không cần secure context, deep-link qua auth, ST save rồi phục hồi byte gốc, export `200`, import fault `422`, Restore/RETAIN fail-closed, mobile nav/no-overflow và axe 6/6 scan sạch. Ghim hash artifact/index/rollback; ghi rõ một deploy trung gian thiếu build flag đã bị thay. Giữ 2/32 BLOCKED, 0/32 PASS và mọi `T/P/R=N`. |
 | 2.0 | 2026-08-20 | ADR-050: giữ 32 scenario migration và thêm `VS-PROG-U01..U12` cho POU/library/multi-Program/signal/enable/package/output/soak/PID; 44 scenario total, 12 unified đều NOT_RUN. |
+| 2.2 | 2026-08-26 | `VS-PROG-U13` chuyển **PASS ở phạm vi R1/HOST-LOCAL** kèm record `EV-PGM02-R1-CLOSEOUT-001` tại commit `d32e560`; ghi rõ PASS này không tuyên bố target/HIL/release và không nâng `I/T/P/R`. `U14`/`U15` giữ `NOT_RUN`. |
 | 2.1-candidate | 2026-08-24 | Thêm `VS-PROG-U13..U15` cho PGM-02 R1 EDIT/R2 LIVE/R3 SIMULATE và ánh xạ closeout `T59-809/813/817`; tổng 47 scenario, ba scenario mới NOT_RUN; Architect exact pin và mọi card code/release giữ PENDING/NO-GO. |
 | 2.2 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` và mở implementation theo R1→R2→R3; bổ sung ca âm `ST-POU-005` vào U13; giữ U13–U15 NOT_RUN, 0/47 PASS và release NO-GO. |
 
