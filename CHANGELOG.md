@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — một workbench dùng chung cho cả Project (`T59-807`) (2026-08-26)
+
+- **Added — `ProgrammingWorkbench`: MỘT chỗ để hỏi "Draft này đang có vấn đề
+  gì".** Trước lát này mỗi loại thông tin sống ở một chỗ và theo một luật khác
+  nhau: lỗi Draft FBD nằm trong editor FBD, tham chiếu ST nằm trong editor ST,
+  tìm kiếm nằm trong thanh công cụ ST. Nay có khay đáy dùng chung, thu gọn và
+  đổi chiều cao được (bằng **cả chuột lẫn bàn phím**), với các tab Vấn đề / Tìm
+  kiếm / Tham chiếu / Watch / Trace.
+
+- **Added — hai luật chống-nói-dối của workbench.** (1) Mỗi tab **khai nguồn**
+  (`EDIT · Draft · <POU>`): một khay dữ liệu không nói nguồn là khay có thể đang
+  hiện số của Active trong khi người dùng sửa Draft. (2) Tab chưa có capability
+  thì **giải thích**, không hiện danh sách rỗng — "không có gì" và "chưa đo
+  được" dẫn tới hai hành động khác nhau. Watch/Trace ở EDIT nói rõ chúng cần
+  nguồn giá trị runtime.
+
+- **Added — Vấn đề nhìn cả Project, không chỉ POU đang mở.** Khay lỗi trong
+  editor FBD chỉ thấy tài liệu nó đang vẽ, nên một POU khác hỏng vẫn im lặng
+  cho tới lúc Check đỏ. Khay mới quét mọi POU FBD của Draft và nhảy tới đúng POU
+  — chính xác tới mức trang này biết, không giả vờ biết hơn. Nó cũng **nói đích
+  danh** rằng kết quả Kiểm tra thuộc PGM-03 (D-01), thay vì để người đọc tưởng
+  khay này là toàn bộ sự thật.
+
+- **Fixed — lỗi a11y thật do chính gate bắt được.** Tay kéo đổi chiều cao là
+  `role="separator"` **nhận tiêu điểm**, tức là window splitter theo ARIA và bắt
+  buộc có `aria-valuenow`/`valuemin`/`valuemax`. Thiếu chúng thì screen reader
+  đọc được cái tay kéo nhưng không đọc được nó đang ở đâu. Quét axe của dự án
+  báo `aria-required-attr` ngay lần chạy đầu.
+
+- **Fixed — vi phạm luật hook khi Draft tải xong.** `useMemo` dựng dữ liệu
+  workbench ban đầu nằm **sau** early return `loading`/`error` của trang, nên
+  React ném "Rendered more hooks than during the previous render" ngay lần render
+  thứ hai. Tách thành `DesignWorkbench` — component con render sau mọi guard nên
+  có vòng đời hook của riêng nó.
+
+- **Verification.** FE **150 file / 1696 test PASS** (+12); E2E Playwright
+  **31 PASS / 5 skip** (gồm quét axe WCAG A/AA trên chính trang có workbench);
+  `tsc`/`eslint`/`check:ui-strings` PASS; `vite build` PASS — chunk Programming
+  **113,46 KiB gzip** (ngân sách R1 125 KiB).
+
+
 ### Governance — `UD-PROG-013`: editor ST giữ bề mặt hiện tại cho R1 (2026-08-26)
 
 - **Decided — Product Owner/CTO + System Architect chọn lựa chọn A.** Cổng
