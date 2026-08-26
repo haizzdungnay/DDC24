@@ -3191,10 +3191,11 @@ components:
     ProgrammingMonitorPage:
       type: object
       additionalProperties: false
-      required: [schemaVersion, activeRevisionId, safeState, task, items]
+      required: [schemaVersion, activeRevisionId, safeState, task, items, producer]
       properties:
         schemaVersion: { type: string, const: "1.0" }
         activeRevisionId: { type: [string, "null"], format: uuid }
+        producer: { $ref: "#/components/schemas/ProgrammingProducerStamp" }
         safeState: { type: boolean }
         task:
           oneOf:
@@ -3204,6 +3205,27 @@ components:
           type: array
           maxItems: 256
           items: { $ref: "#/components/schemas/ProgrammingMonitorSample" }
+    ProgrammingProducerStamp:
+      description: >-
+        `T59-810` — dấu của NGƯỜI SẢN XUẤT số liệu (Core), đi kèm mọi snapshot
+        runtime. `activeRevisionId` một mình không đủ để giữ mạch: hai snapshot
+        CÙNG một Revision vẫn có thể tới sai thứ tự (poll chồng nhau, retry), và
+        khi đó giá trị đi lùi mà không ai biết. `capturedMonotonicNs` là mốc
+        monotonic lúc Core chụp — tăng nghiêm ngặt trong một lần chạy, và GIẢM
+        khi Core khởi động lại, nên nó phân biệt được "cũ hơn" với "producer đã
+        restart".
+      type: object
+      additionalProperties: false
+      required: [capturedMonotonicNs]
+      properties:
+        capturedMonotonicNs:
+          description: >-
+            Chuỗi thập phân, KHÔNG phải number. Nanosecond kể từ boot vượt
+            `Number.MAX_SAFE_INTEGER` sau ~104 ngày uptime; truyền dạng số sẽ
+            làm client JavaScript làm tròn im lặng đúng lúc thiết bị chạy lâu
+            nhất — tức đúng lúc dấu này cần thiết nhất.
+          type: string
+          pattern: "^[0-9]{1,20}$"
     ProgrammingTraceAccepted:
       type: object
       additionalProperties: false
