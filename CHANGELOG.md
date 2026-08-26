@@ -8,6 +8,31 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — khoá `AC-ST-004` và `AC-ST-010` bằng test thật (2026-08-26)
+
+- **Added — nguồn ngoài subset không được làm sập editor (`AC-ST-010`).** Tám
+  nguồn thù địch chạy qua đúng đường người dùng: chú thích không đóng, khối
+  `VAR` thiếu `END_VAR`, `ARRAY`/`CASE` ngoài subset, ngoặc lệch hoàn toàn,
+  định danh có dấu tiếng Việt, một dòng 400 câu lệnh, nguồn rỗng, nguồn toàn
+  khoảng trắng. Mỗi nguồn còn bị rê con trỏ qua đầu/giữa/cuối và bấm F12 —
+  tức đi qua cả chỉ mục tham chiếu. Editor không cần **hiểu** những thứ đó; nó
+  chỉ không được sập, vì sập là mất buffer người dùng đang gõ.
+
+- **Added — cùng bộ nguồn đó chạy ở lớp module thuần.** `buildStReferenceIndex`
+  và `planLibraryInsertion` phải trả offset nằm trong nguồn và **không xoá ký
+  tự nào** — bất biến kiểm bằng phép dãy con, không phải bằng `toContain` (chèn
+  giữa nguồn làm đứt đoạn liên tục).
+
+- **Added — Lưu chỉ chạm Draft (`AC-ST-004`).** Nút Lưu phát đúng một
+  `replaceProgramSource` và không thao tác vòng đời nào khác. Đây là điều kiện
+  FE của "Save never changes Active": không có đường nào từ editor đụng Active.
+
+- **Verification.** FE **146 file / 1626 test PASS** (+22 test);
+  `tsc --noEmit`, `eslint --max-warnings=0`, `check:ui-strings`,
+  `check:programming-api/fbd/errors` và `vite build` PASS; chunk Programming
+  **107,90 KiB gzip** (không đổi — chỉ thêm test).
+
+
 ### PGM-02 R1 — luồng tham chiếu của editor ST (`T59-805` / `AC-ST-005`) (2026-08-26)
 
 - **Added — `stReferenceIndex`: một chỉ mục, khai đúng thẩm quyền của mình.**

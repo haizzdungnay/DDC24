@@ -78,3 +78,35 @@ describe('stReferenceIndex', () => {
     expect(entry!.declarationOffset).toBeLessThan(SOURCE.indexOf('END_VAR'))
   })
 })
+
+/* `AC-ST-010` ở lớp module thuần: nguồn mà compiler không nhận vẫn không được
+ * làm hàm nào ném lỗi — editor dựng trên hai hàm này, một `throw` là mất buffer
+ * người dùng đang gõ. */
+describe('stReferenceIndex — nguồn ngoài subset không ném lỗi', () => {
+  const HOSTILE = [
+    '',
+    '   \n\t',
+    'PROGRAM P\n(* chú thích không đóng\nEND_PROGRAM\n',
+    'PROGRAM P\nVAR\n  A : INT;\nEND_PROGRAM\n',
+    'VAR VAR VAR END_VAR END_VAR',
+    'PROGRAM P\nVAR A : ARRAY[1..10] OF INT; END_VAR\nEND_PROGRAM\n',
+    ')(:=:=:=',
+    `PROGRAM P\nVAR\n${'  X : INT;\n'.repeat(200)}END_VAR\nEND_PROGRAM\n`,
+  ]
+
+  it.each(HOSTILE)('không ném và trả offset hợp lệ: %j', (source) => {
+    const index = buildStReferenceIndex(source)
+    for (const entry of index.symbols) {
+      expect(entry.declarationOffset).toBeGreaterThanOrEqual(0)
+      expect(entry.declarationOffset).toBeLessThanOrEqual(source.length)
+      for (const occurrence of entry.occurrences) {
+        expect(occurrence.offset).toBeGreaterThanOrEqual(0)
+        expect(occurrence.offset).toBeLessThan(source.length)
+      }
+    }
+    for (let offset = 0; offset <= source.length; offset += 1) {
+      const found = stSymbolAt(source, offset, index)
+      if (found) expect(found.end).toBeGreaterThan(found.start)
+    }
+  })
+})
