@@ -8,6 +8,30 @@
 
 ## [Unreleased]
 
+### PGM-02 R1 — khoá `AC-FBD-006` và vòng lưu–đọc lại của hình học (2026-08-26)
+
+- **Added — nối sai kiểu bị chặn NGAY, có test (`AC-FBD-006`).** Luật đã có
+  trong reducer nhưng chưa test nào khoá. Nay ba dạng sai đều bị từ chối và
+  **không** tạo wire: khác kiểu dữ liệu, cùng kiểu khác đơn vị, và nối vào port
+  sai hướng. Chặn ngay lúc nối chứ không đợi Check — một wire sai kiểu nằm
+  trong Draft là một lần Check đỏ mà người dùng phải tự lần ngược xem đã nối
+  nhầm ở đâu.
+
+- **Added — hình học sống qua vòng lưu và đọc lại.** Toạ độ giữ nguyên sau
+  `canonicalFbdJson` → `JSON.parse`, và **`order` của mọi port không xê dịch** —
+  `order` là thứ compiler dùng để xếp toán hạng, nên một thay đổi trình bày làm
+  lệch nó sẽ đổi ngữ nghĩa chương trình.
+
+- **Changed — hồ sơ ghi đúng tiến độ `T59-806`.** Plan 59 §3 + ghi chú thực thi
+  §3.9 mới, roadmap proposal PGM-02 §0: ba lát đã giao, mọi AC áp dụng cho R1
+  (`AC-FBD-001..007`, `012`) có test, và phần còn lại nêu đích danh là thuộc
+  increment khác (`AC-FBD-008` → R3, `AC-FBD-009..011` → R2) chứ không phải
+  việc bỏ dở.
+
+- **Verification.** FE **149 file / 1684 test PASS** (+4); `tsc`/`eslint`/
+  `check:ui-strings` PASS; `python3 scripts/docs_iso_harness.py` PASS.
+
+
 ### PGM-02 R1 — Vấn đề FBD nhảy tới đúng block, và minimap theo ngưỡng (2026-08-26)
 
 - **Fixed — người dùng có toạ độ lỗi trong tay mà vẫn phải tự đi tìm
