@@ -8,6 +8,37 @@
 
 ## [Unreleased]
 
+### PGM-02 — ĐÓNG increment R1 (`T59-809`) (2026-08-26)
+
+- **Added — record closeout `EV-PGM02-R1-CLOSEOUT-001`**, đo lại toàn bộ tại
+  commit `d32e560`: ctest **1299/1299**, `go vet`+`go test` PASS, FE **152 file
+  / 1718 test**, E2E mock **42 PASS / 8 skip**, **real-backend 2/2**, hợp đồng
+  FBD self-test **10/10 mutation bị reject**, `docs_iso_harness` PASS, chunk
+  Programming **111,32 KiB / 125 KiB**. Từng mệnh đề của `VS-PROG-U13` được ánh
+  xạ tới task và bằng chứng cụ thể của nó.
+
+- **Changed — `VS-PROG-U13` = PASS *kèm phạm vi*, không phải PASS trống.**
+  "PASS ở phạm vi R1/HOST-LOCAL". `U14`/`U15` giữ `NOT_RUN` — chưa chạy nghĩa là
+  chưa chạy.
+
+- **Ba chỗ cố ý KHÔNG nhận vơ.** (1) Không nâng `I/T/P/R` của requirement nào:
+  ma trận truy nguyên join theo requirement của cả Product, còn bằng chứng ở đây
+  là host cho **một** increment. (2) `RELEASE_READY` không đổi — đóng một
+  increment không phải đóng một release, đúng bài học đã ghi từ Plan 57. (3)
+  Không tuyên bố gì về target/HIL.
+
+- **Rollback kiểm ở mức thiết kế, kèm một cảnh báo chỉ lộ lúc cần rút lui gấp.**
+  Đòn bẩy là cờ build `VITE_PROGRAMS_WORKSPACE_V2` **mặc định TẮT**, nên bản
+  phát hành không tự cut-over và rút lui chỉ là build lại không cờ; không cần
+  migration vì `layout` là trường tuỳ chọn và compiler `erase` nó trước khi
+  canonical hoá. **Nhưng**: rollback FE mà giữ Core mới thì an toàn, còn rollback
+  **Core** xuống trước lát hợp đồng hình học sẽ khiến mọi tài liệu FBD do R1 lưu
+  bị từ chối bằng `FBD-SCHEMA-ROOT-001` — khi đó phải xoá `layout` khỏi tài liệu
+  đã lưu trước.
+
+- **`T59-810` mở increment R2 (LIVE).**
+
+
 ### Governance — đóng `T59-808`, mở `T59-809` (2026-08-26)
 
 - **Changed — `T59-808` `DONE (HOST/LOCAL)`.** Cả năm mục acceptance có bằng
