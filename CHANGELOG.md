@@ -8,6 +8,49 @@
 
 ## [Unreleased]
 
+### PGM-02 R2 — Trace pin: dãy mẫu chỉ thuộc về đúng một Revision (`T59-810`) (2026-08-26)
+
+- **Fixed — một phiên Trace có thể ghép mẫu của hai chương trình khác nhau.**
+  `ProgrammingTrace` không mang bất kỳ dấu vết nào về Revision hay producer, nên
+  một phiên kéo dài qua một lần cutover vẫn tiếp tục lấy mẫu — và đồ thị vẫn
+  liền mạch **về hình**, chỉ có điều các điểm cuối thuộc một chương trình khác
+  các điểm đầu. Người đọc không có cách nào nhìn ra chỗ nối.
+
+- **Added — `trace.pin` neo tuple Active lúc tạo phiên.** Neo bằng **chính**
+  snapshot đã dùng để xác thực danh sách biến, không đọc lại: đọc lại là mở một
+  khe cho cutover chen vào giữa hai lần đọc, và phiên sẽ neo vào một tuple khác
+  tuple đã kiểm.
+
+- **Added — kiểm tuple TRƯỚC khi lấy mẫu, ở cả hai đường lấy mẫu.** Đặt phép
+  kiểm sau khi lấy mẫu nghĩa là mẫu đầu tiên của Revision mới **đã lọt vào dãy**
+  rồi mới bị phát hiện — một điểm lạ trong đồ thị còn khó lần hơn là không có
+  điểm nào. Chi phí là một lần đọc monitor mỗi chu kỳ; `CoreClient` đã coalesce
+  nên nó không thêm một scan-cycle nào của Core.
+
+- **Hai dạng trôi, và dấu hỏng cũng là trôi.** Đổi Revision ⇒ mẫu sau thuộc
+  chương trình khác. Producer lùi mốc ⇒ Core đã restart, bộ đếm và trạng thái FB
+  đã khác. Dấu không đọc được ⇒ không chứng minh được vẫn cùng tuple, nên fail
+  closed. So bằng `strconv.ParseUint`, không qua `float64` — một vòng qua float
+  sẽ gộp hai giá trị liền kề ở dải vượt 2^53 và phép so "mốc lùi" im lặng sai.
+
+- **Dừng vì tuple trôi KHÔNG phải là mẫu bị rơi.** `droppedSamples` giữ nguyên;
+  gộp hai tình huống làm con số đó mất nghĩa. Có test khoá cả hai chiều.
+
+- **Added — UI nói đúng vế.** `SOURCE_UNAVAILABLE` gộp "mất nguồn" với "nguồn
+  đổi thành chương trình khác"; với phiên có pin, khay Trace nói rõ vế thứ hai
+  kèm Revision đã neo — nếu không người đọc sẽ đi tìm một sự cố kết nối không hề
+  tồn tại.
+
+- **Added — case real-backend chứng minh tuple end-to-end.** Dấu producer có mặt
+  và là chuỗi; mốc không đi lùi giữa hai lần đọc; phiên Trace neo đúng
+  `activeRevisionId` của snapshot đã xác thực nó, với mốc không cũ hơn mốc đọc
+  trước khi tạo phiên.
+
+- **Verification.** Go `vet`+`test` PASS (10 case bảng + 1 test tích hợp mới);
+  FE **153 file / 1737 test PASS**; E2E mock **42 PASS / 8 skip**; real-backend
+  **3/3 PASS**; build PASS — chunk **111,89 KiB / 125 KiB**.
+
+
 ### PGM-02 R2 — dấu producer cho snapshot runtime (`T59-810`) (2026-08-26)
 
 - **Added — `producer.capturedMonotonicNs` trong `ProgrammingMonitorPage`.**

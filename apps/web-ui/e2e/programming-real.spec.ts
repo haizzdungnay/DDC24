@@ -947,3 +947,56 @@ test('T59-807: R1 fail-closed trên backend thật — ETag cũ, refactor hỏng
   const afterSaveBody = await responseJSON(afterSave, 200)
   expect(JSON.stringify(afterSaveBody), 'Draft sau khi lưu lại phải mang đúng nội dung đã gõ').toContain('T59-807 offline')
 })
+
+/**
+ * `T59-810` — tuple Active đi hết producer→IPC→BE và về tới client, trên backend
+ * THẬT.
+ *
+ * Điều case này khoá không phải "có trường mới trong JSON" mà là **quan hệ**
+ * giữa ba thứ vốn được sinh ở ba nơi khác nhau: snapshot monitor, phiên Trace, và
+ * Revision đang active. Nếu ba thứ đó không nói cùng một tuple thì đồ thị runtime
+ * có thể vẽ giá trị của chương trình này lên topology của chương trình kia — đúng
+ * thứ `AC-ST-007`/`AC-FBD-010` tồn tại để cấm.
+ */
+test('T59-810: dấu producer và Trace pin nói cùng một tuple trên backend thật', async ({ request }) => {
+  test.setTimeout(120_000)
+  const token = await loginAPI(request)
+
+  const monitorResponse = await request.get('/api/v1/programming/runtime/monitor', { headers: readHeaders(token) })
+  const monitor = await responseJSON(monitorResponse, 200)
+
+  // 1. Dấu producer PHẢI có mặt, và phải là CHUỖI thập phân.
+  const producer = monitor.producer as { capturedMonotonicNs?: unknown } | undefined
+  expect(producer, 'snapshot monitor thiếu dấu producer').toBeTruthy()
+  expect(typeof producer!.capturedMonotonicNs, 'dấu phải là chuỗi, không phải number').toBe('string')
+  expect(String(producer!.capturedMonotonicNs)).toMatch(/^[0-9]{1,20}$/)
+
+  // 2. Mốc không được đi lùi giữa hai lần đọc liên tiếp của cùng một Core.
+  const secondResponse = await request.get('/api/v1/programming/runtime/monitor', { headers: readHeaders(token) })
+  const second = await responseJSON(secondResponse, 200)
+  const first = BigInt(String((monitor.producer as Record<string, string>).capturedMonotonicNs))
+  const later = BigInt(String((second.producer as Record<string, string>).capturedMonotonicNs))
+  expect(later >= first, `mốc monotonic đi lùi giữa hai lần đọc: ${first} → ${later}`).toBe(true)
+
+  // 3. Phiên Trace phải NEO vào đúng tuple của snapshot đã dùng để xác thực nó.
+  const monitorItems = (second.items as JsonObject[]) ?? []
+  test.skip(monitorItems.length === 0, 'chưa có biến nào ánh xạ ở Revision active — Trace pin không kiểm được ở đây')
+
+  const variableID = monitorItems[0].variableId as string
+  const acceptedResponse = await request.post('/api/v1/programming/runtime/traces', {
+    headers: mutationHeaders(token),
+    data: { schemaVersion: '1.0', variableIds: [variableID], durationMs: 1000, samplePeriodMs: 100 }
+  })
+  const accepted = await responseJSON(acceptedResponse, 202)
+
+  const traceResponse = await request.get(`/api/v1/programming/runtime/traces/${accepted.traceId as string}`, { headers: readHeaders(token) })
+  const trace = await responseJSON(traceResponse, 200)
+  const pin = trace.pin as { revisionId: string | null; producer: Record<string, string> } | undefined
+  expect(pin, 'phiên Trace không mang pin').toBeTruthy()
+  expect(pin!.revisionId, 'Trace phải neo vào đúng Revision active').toBe(second.activeRevisionId)
+  expect(String(pin!.producer.capturedMonotonicNs)).toMatch(/^[0-9]{1,20}$/)
+
+  // Mốc neo phải nằm trong mạch đang chạy: không nhỏ hơn mốc đọc được trước khi
+  // tạo phiên, vì phiên được neo bằng chính snapshot dùng để xác thực biến.
+  expect(BigInt(String(pin!.producer.capturedMonotonicNs)) >= first, 'mốc neo cũ hơn mốc trước khi tạo phiên').toBe(true)
+})

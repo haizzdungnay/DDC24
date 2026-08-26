@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
 	"sync"
 	"time"
 
@@ -100,9 +101,21 @@ type TraceSampleView struct {
 	Values     []TraceValueView `json:"values"`
 }
 
+// TracePinView — `T59-810`. Tuple Active mà phiên Trace được NEO vào lúc tạo.
+//
+// Một phiên Trace kéo dài qua một lần cutover sẽ ghép mẫu của hai chương trình
+// KHÁC NHAU vào cùng một đồ thị, và người đọc không có cách nào nhìn ra chỗ
+// nối. Neo tuple lúc tạo rồi dừng phiên khi tuple trôi là cách duy nhất để dãy
+// mẫu chỉ thuộc về đúng một Revision.
+type TracePinView struct {
+	RevisionID *string           `json:"revisionId"`
+	Producer   ProducerStampView `json:"producer"`
+}
+
 type TraceView struct {
 	TraceID        string            `json:"traceId"`
 	State          string            `json:"state"`
+	Pin            TracePinView      `json:"pin"`
 	VariableIDs    []string          `json:"variableIds"`
 	DurationMS     int               `json:"durationMs"`
 	SamplePeriodMS int               `json:"samplePeriodMs"`
@@ -196,6 +209,10 @@ func (s *RuntimeService) CreateTrace(ctx context.Context, request TraceRequest, 
 	session := &traceSession{
 		view: TraceView{
 			TraceID: traceID, State: "RUNNING", VariableIDs: append([]string(nil), request.VariableIDs...),
+			// Neo vào ĐÚNG snapshot vừa dùng để xác thực danh sách biến — không
+			// đọc lại, vì đọc lại là mở một khe cho cutover chen vào giữa hai
+			// lần đọc và phiên sẽ neo vào một tuple khác tuple đã kiểm.
+			Pin:        TracePinView{RevisionID: monitor.ActiveRevisionID, Producer: monitor.Producer},
 			DurationMS: request.DurationMS, SamplePeriodMS: request.SamplePeriodMS,
 			StartedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
 			Samples: make([]TraceSampleView, 0, maxSamples),
@@ -285,6 +302,37 @@ func traceAcceptedFrom(session *traceSession, correlationID string) TraceAccepte
 	}
 }
 
+// traceTupleDrifted — tuple Active đã rời khỏi chỗ phiên Trace được neo.
+//
+// Hai dạng trôi, và cả hai đều làm dãy mẫu mất nghĩa:
+//   - đổi Revision  ⇒ mẫu sau thuộc một chương trình khác;
+//   - producer lùi mốc ⇒ Core đã restart, bộ đếm và trạng thái FB đã khác.
+//
+// Dấu không đọc được cũng tính là trôi: một snapshot không biết mình từ đâu
+// tới thì không chứng minh được nó vẫn thuộc tuple đã neo.
+func traceTupleDrifted(pin TracePinView, current MonitorPageView) bool {
+	if (pin.RevisionID == nil) != (current.ActiveRevisionID == nil) {
+		return true
+	}
+	if pin.RevisionID != nil && *pin.RevisionID != *current.ActiveRevisionID {
+		return true
+	}
+	pinned, pinnedOK := parseMonotonicNs(pin.Producer.CapturedMonotonicNs)
+	now, nowOK := parseMonotonicNs(current.Producer.CapturedMonotonicNs)
+	if !pinnedOK || !nowOK {
+		return true
+	}
+	return now < pinned
+}
+
+func parseMonotonicNs(value string) (uint64, bool) {
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return parsed, true
+}
+
 func (s *RuntimeService) runTrace(traceID string) {
 	s.traces.mu.RLock()
 	session := s.traces.sessions[traceID]
@@ -299,6 +347,33 @@ func (s *RuntimeService) runTrace(traceID string) {
 	for {
 		select {
 		case <-ticker.C:
+			/* `T59-810` — kiểm tuple TRƯỚC khi lấy mẫu, ở CẢ HAI đường.
+			 *
+			 * Đặt phép kiểm sau khi lấy mẫu nghĩa là mẫu đầu tiên của Revision
+			 * mới đã lọt vào dãy rồi mới bị phát hiện — và một điểm lạ trong đồ
+			 * thị còn khó lần hơn là không có điểm nào. Chi phí là một lần đọc
+			 * monitor mỗi chu kỳ; `CoreClient` đã coalesce nên nó không thêm
+			 * một scan-cycle nào của Core.
+			 */
+			tuple, tupleErr := s.GetMonitor(context.Background())
+			if tupleErr != nil {
+				// Nhịp này KHÔNG lấy được mẫu ⇒ đúng nghĩa một mẫu bị rơi.
+				s.traces.mu.Lock()
+				if current := s.traces.sessions[traceID]; current != nil && current.view.State == "RUNNING" {
+					current.view.DroppedSamples++
+					current.view.UpdatedAt = s.now().UTC().Format(time.RFC3339Nano)
+				}
+				s.traces.mu.Unlock()
+				_ = s.finishTrace(traceID, "FAILED", "SOURCE_UNAVAILABLE")
+				return
+			}
+			if traceTupleDrifted(session.view.Pin, tuple) {
+				// KHÔNG tăng `DroppedSamples`: không có mẫu nào bị rơi, phiên
+				// dừng có chủ đích vì nguồn đã là một chương trình khác. Gộp hai
+				// tình huống này làm số `dropped` mất nghĩa.
+				_ = s.finishTrace(traceID, "FAILED", "SOURCE_UNAVAILABLE")
+				return
+			}
 			// Nguồn ĐÚNG trước: mẫu Core lấy tại ranh giới quét. Chỉ khi Core
 			// không có phiên này mới rơi về poll monitor — và khi đó đồ thị là
 			// dữ liệu xấp xỉ, không phải dữ liệu của một chu kỳ.
@@ -309,18 +384,9 @@ func (s *RuntimeService) runTrace(traceID string) {
 				}
 				continue
 			}
-			monitor, err := s.GetMonitor(context.Background())
-			if err != nil {
-				s.traces.mu.Lock()
-				if current := s.traces.sessions[traceID]; current != nil && current.view.State == "RUNNING" {
-					current.view.DroppedSamples++
-					current.view.UpdatedAt = s.now().UTC().Format(time.RFC3339Nano)
-				}
-				s.traces.mu.Unlock()
-				_ = s.finishTrace(traceID, "FAILED", "SOURCE_UNAVAILABLE")
-				return
-			}
-			if !s.captureTraceSample(traceID, monitor) {
+			// Dùng lại chính snapshot vừa kiểm tuple: đọc lần hai sẽ lấy mẫu từ
+			// một snapshot KHÁC snapshot đã được xác nhận đúng tuple.
+			if !s.captureTraceSample(traceID, tuple) {
 				_ = s.finishTrace(traceID, "COMPLETED", "QUOTA_REACHED")
 				return
 			}

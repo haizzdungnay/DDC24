@@ -202,9 +202,23 @@ export interface ProgrammingTraceValue {
   freshness: ProgrammingMonitorSample['freshness']
 }
 
+/**
+ * `T59-810` — tuple Active mà phiên Trace được NEO vào lúc tạo.
+ *
+ * Một phiên Trace kéo dài qua một lần cutover sẽ ghép mẫu của hai chương trình
+ * khác nhau vào cùng một đồ thị, và người đọc không có cách nào nhìn ra chỗ
+ * nối. BE dừng phiên khi tuple trôi; `pin` là thứ cho phép UI nói ĐÚNG vì sao
+ * phiên dừng, thay vì chỉ hiện `SOURCE_UNAVAILABLE` chung chung.
+ */
+export interface ProgrammingTracePin {
+  revisionId: string | null
+  producer: ProgrammingProducerStamp
+}
+
 export interface ProgrammingTrace {
   traceId: string
   state: 'RUNNING' | 'COMPLETED' | 'STOPPED' | 'FAILED'
+  pin?: ProgrammingTracePin
   variableIds: string[]
   durationMs: number
   samplePeriodMs: number

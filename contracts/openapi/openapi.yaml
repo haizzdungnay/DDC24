@@ -3264,10 +3264,11 @@ components:
     ProgrammingTrace:
       type: object
       additionalProperties: false
-      required: [traceId, state, variableIds, durationMs, samplePeriodMs, startedAt, updatedAt, stopReason, droppedSamples, samples]
+      required: [traceId, state, variableIds, durationMs, samplePeriodMs, startedAt, updatedAt, stopReason, droppedSamples, samples, pin]
       properties:
         traceId: { type: string, format: uuid }
         state: { type: string, enum: [RUNNING, COMPLETED, STOPPED, FAILED] }
+        pin: { $ref: "#/components/schemas/ProgrammingTracePin" }
         variableIds:
           type: array
           minItems: 1
@@ -3284,6 +3285,19 @@ components:
           type: array
           maxItems: 10000
           items: { $ref: "#/components/schemas/ProgrammingTraceSample" }
+    ProgrammingTracePin:
+      description: >-
+        `T59-810` — tuple Active mà phiên Trace được NEO vào lúc tạo. Một phiên
+        Trace kéo dài qua một lần cutover sẽ ghép mẫu của hai chương trình khác
+        nhau vào cùng một đồ thị; người đọc không có cách nào nhìn ra chỗ nối.
+        Neo tuple lúc tạo và dừng phiên khi tuple trôi là cách duy nhất để dãy
+        mẫu chỉ thuộc về đúng một Revision.
+      type: object
+      additionalProperties: false
+      required: [revisionId, producer]
+      properties:
+        revisionId: { type: [string, "null"], format: uuid }
+        producer: { $ref: "#/components/schemas/ProgrammingProducerStamp" }
     ProgrammingCommissionRequest:
       type: object
       additionalProperties: false

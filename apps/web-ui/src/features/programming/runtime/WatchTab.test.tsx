@@ -256,6 +256,34 @@ describe('WatchTab — T59-504', () => {
     expect(options.body.variableIds).toEqual(['11111111-1111-4111-8111-111111111111'])
   })
 
+  /* `T59-810` — `SOURCE_UNAVAILABLE` gộp hai chuyện rất khác nhau: mất nguồn,
+   * và nguồn ĐỔI THÀNH chương trình khác. Với phiên có pin, người đọc phải biết
+   * vế thứ hai — nếu không họ sẽ đi tìm một sự cố kết nối không hề tồn tại. */
+  it('phiên dừng vì tuple trôi nói rõ lý do, không chỉ SOURCE_UNAVAILABLE', async () => {
+    state.monitor = ready(monitorPage([sample()]))
+    const trace: ProgrammingTrace = {
+      traceId: '99999999-9999-4999-8999-999999999998', state: 'FAILED',
+      pin: { revisionId: '33333333-3333-4333-8333-333333333333', producer: { capturedMonotonicNs: '5000000000' } },
+      variableIds: ['11111111-1111-4111-8111-111111111111'], durationMs: 60_000,
+      samplePeriodMs: 1_000, startedAt: '2026-08-21T01:02:03Z', updatedAt: '2026-08-21T01:02:04Z',
+      stopReason: 'SOURCE_UNAVAILABLE', droppedSamples: 0, samples: []
+    }
+    state.request.mockImplementation((operationId: string) => {
+      if (operationId === 'createProgrammingTrace') {
+        return Promise.resolve({ traceId: trace.traceId, statusUrl: `/api/v1/programming/runtime/traces/${trace.traceId}`, state: 'RUNNING', requestHash: 'a'.repeat(64), acceptedAt: trace.startedAt, correlationId: 'correlation-id-0002' })
+      }
+      if (operationId === 'getProgrammingTrace') return Promise.resolve(trace)
+      return Promise.reject(new Error(`unexpected ${operationId}`))
+    })
+
+    renderWatch()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trace SupplySetpoint' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu trace' }))
+
+    expect(await screen.findByText(/rời khỏi tuple đã neo/)).toBeInTheDocument()
+    expect(screen.getByText(/33333333-3333-4333-8333-333333333333/)).toBeInTheDocument()
+  })
+
   it('Published Signal dùng snapshot riêng và fail-closed khi invalid/mismatch', () => {
     state.signals = readySignals(signalPage({
       items: [
