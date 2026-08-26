@@ -9,6 +9,7 @@ import type {
   ProgrammingProgram,
 } from '../../model/types'
 import type { StRuntimeOverlayItem, StRuntimeOverlayState } from './StRuntimeValueOverlay'
+import { parseCapturedMonotonicNs } from '../../runtime/producerStamp'
 
 const FBD_DATA_TYPE_SET = new Set<string>(FBD_DATA_TYPES)
 
@@ -151,9 +152,16 @@ export function runtimeOverlayByProgramId(
     return overlays
   }
 
+  /* `T59-810` — một snapshot KHÔNG có dấu producer đọc được là một snapshot
+   * không biết mình từ đâu tới. Vẽ giá trị của nó lên topology đang hiện là
+   * đúng thứ `AC-FBD-010`/`AC-ST-007` tồn tại để cấm, nên nó rơi vào cùng
+   * nhánh fail-closed với lệch Revision. */
+  const stampUnusable = parseCapturedMonotonicNs(monitor.data?.producer) === null
+
   if (
     monitor.status !== 'ready' ||
     !monitor.data ||
+    stampUnusable ||
     expectedActiveRevisionId === null ||
     monitor.data.activeRevisionId === null ||
     monitor.data.activeRevisionId !== expectedActiveRevisionId

@@ -93,7 +93,7 @@ beforeEach(() => {
     status: 'ready',
     data: { schemaVersion: '1.0', activeRevisionId: null, safeState: false, task: null, items: [] },
     error: null,
-    failure: null,
+    failure: null, producerRestarted: false,
     refresh: vi.fn()
   }
   localStorage.setItem('mkddc-lang', 'vi')
@@ -766,9 +766,9 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     })
     project.draft!.task.programOrder = ['program-1']
     runtimeMonitor.state = {
-      status: 'ready', error: null, failure: null, refresh: vi.fn(),
+      status: 'ready', error: null, failure: null, producerRestarted: false, refresh: vi.fn(),
       data: {
-        schemaVersion: '1.0', activeRevisionId: 'revision-active', safeState: false, task: null,
+        schemaVersion: '1.0', activeRevisionId: 'revision-active', producer: { capturedMonotonicNs: '1000' }, safeState: false, task: null,
         items: [
           {
             variableId: 'variable-zero', variableName: 'OutputZero', programId: 'program-1',
@@ -811,8 +811,8 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
       programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM AHU\nEND_PROGRAM\n'
     })
     runtimeMonitor.state = {
-      status: 'ready', error: null, failure: null, refresh: vi.fn(),
-      data: { schemaVersion: '1.0', activeRevisionId: 'revision-old', safeState: false, task: null, items: [] }
+      status: 'ready', error: null, failure: null, producerRestarted: false, refresh: vi.fn(),
+      data: { schemaVersion: '1.0', activeRevisionId: 'revision-old', producer: { capturedMonotonicNs: '1000' }, safeState: false, task: null, items: [] }
     }
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)

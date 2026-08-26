@@ -75,7 +75,7 @@ function monitorPage(items: ProgrammingMonitorSample[], overrides: Partial<Progr
 }
 
 function ready(data: ProgrammingMonitorPage): ProgrammingRuntimeMonitorState {
-  return { status: 'ready', data, error: null, failure: null, refresh: vi.fn() }
+  return { status: 'ready', data, error: null, failure: null, producerRestarted: false, refresh: vi.fn() }
 }
 
 function readySignals(data: ProgrammingRuntimeSignalPage): RemoteState<ProgrammingRuntimeSignalPage> {
@@ -185,7 +185,7 @@ describe('WatchTab — T59-504', () => {
 
   it('phân biệt loading, permission, offline, error, không có Active và empty', () => {
     const refresh = vi.fn()
-    state.monitor = { status: 'loading', data: null, error: null, failure: null, refresh }
+    state.monitor = { status: 'loading', data: null, error: null, failure: null, producerRestarted: false, refresh }
     const view = renderWatch()
     expect(screen.getByText('Đang tải monitor…')).toBeInTheDocument()
 
@@ -193,7 +193,7 @@ describe('WatchTab — T59-504', () => {
     view.rerender(<I18nProvider><WatchTab /></I18nProvider>)
     expect(screen.getByText('Bạn không có quyền xem monitor.')).toBeInTheDocument()
 
-    state.monitor = { status: 'error', data: null, error: '503', failure: 'offline', refresh }
+    state.monitor = { status: 'error', data: null, error: '503', failure: 'offline', producerRestarted: false, refresh }
     view.rerender(<I18nProvider><WatchTab /></I18nProvider>)
     expect(screen.getByText('Monitor đang ngoại tuyến.')).toBeInTheDocument()
 

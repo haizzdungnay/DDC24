@@ -121,9 +121,27 @@ export interface ProgrammingMonitorSample {
   freshness: 'LIVE' | 'STALE' | 'UNAVAILABLE'
 }
 
+/**
+ * `T59-810` — dấu của NGƯỜI SẢN XUẤT số liệu (Core), đi kèm mọi snapshot runtime.
+ *
+ * `activeRevisionId` một mình không đủ để giữ mạch: hai snapshot CÙNG một
+ * Revision vẫn có thể tới sai thứ tự (poll chồng nhau, retry), và khi đó giá trị
+ * đi lùi mà không ai biết. `capturedMonotonicNs` tăng nghiêm ngặt trong một lần
+ * chạy của Core và GIẢM khi Core khởi động lại, nên nó phân biệt được "snapshot
+ * cũ hơn" với "producer đã restart" — hai thứ cần hai cách xử lý khác nhau.
+ *
+ * Là CHUỖI thập phân chứ không phải number: nanosecond kể từ boot vượt
+ * `Number.MAX_SAFE_INTEGER` sau ~104 ngày uptime, nên kiểu số sẽ làm tròn im
+ * lặng đúng lúc thiết bị chạy lâu nhất.
+ */
+export interface ProgrammingProducerStamp {
+  capturedMonotonicNs: string
+}
+
 export interface ProgrammingMonitorPage {
   schemaVersion: string
   activeRevisionId: string | null
+  producer?: ProgrammingProducerStamp
   safeState: boolean
   task: ProgrammingTaskMetrics | null
   items: ProgrammingMonitorSample[]

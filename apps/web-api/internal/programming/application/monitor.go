@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"mkddc-web/internal/programming/coreipc"
@@ -115,9 +116,22 @@ type MonitorSampleView struct {
 	Freshness          string          `json:"freshness"`
 }
 
+// ProducerStampView — `T59-810`. `activeRevisionId` một mình KHÔNG giữ được
+// mạch: hai snapshot cùng một Revision vẫn có thể tới sai thứ tự (poll chồng
+// nhau, retry), và khi đó giá trị đi lùi mà không ai biết.
+//
+// `CapturedMonotonicNs` là chuỗi thập phân chứ không phải số, có chủ đích:
+// nanosecond kể từ boot vượt `Number.MAX_SAFE_INTEGER` sau ~104 ngày uptime,
+// nên truyền dạng number sẽ khiến client JavaScript làm tròn im lặng đúng lúc
+// thiết bị chạy lâu nhất — tức đúng lúc dấu này cần thiết nhất.
+type ProducerStampView struct {
+	CapturedMonotonicNs string `json:"capturedMonotonicNs"`
+}
+
 type MonitorPageView struct {
 	SchemaVersion    string              `json:"schemaVersion"`
 	ActiveRevisionID *string             `json:"activeRevisionId"`
+	Producer         ProducerStampView   `json:"producer"`
 	SafeState        bool                `json:"safeState"`
 	Task             *TaskMetricsView    `json:"task"`
 	Items            []MonitorSampleView `json:"items"`
@@ -151,7 +165,11 @@ func (s *RuntimeService) GetMonitor(ctx context.Context) (MonitorPageView, error
 	}
 	activeRevisionID := firstNonNil(impact.ActiveRevisionID, status.ActiveRevisionID)
 	if activeRevisionID == nil {
-		return MonitorPageView{SchemaVersion: "1.0", Items: []MonitorSampleView{}}, nil
+		/* Chưa có Revision active thì cũng chưa có producer nào để đóng dấu.
+		 * Trả `"0"` chứ không bỏ trống: hợp đồng khai `producer` là bắt buộc,
+		 * và `"0"` không bao giờ lớn hơn một mốc thật nên nó không thể vô tình
+		 * qua được phép so thứ tự ở client. */
+		return MonitorPageView{SchemaVersion: "1.0", Producer: ProducerStampView{CapturedMonotonicNs: "0"}, Items: []MonitorSampleView{}}, nil
 	}
 	revision, err := s.store.GetRevision(ctx, *activeRevisionID)
 	if err != nil {
@@ -236,8 +254,11 @@ func (s *RuntimeService) GetMonitor(ctx context.Context) (MonitorPageView, error
 	}
 	page := MonitorPageView{
 		SchemaVersion: "1.0", ActiveRevisionID: activeRevisionID,
+		// Dấu producer đi CÙNG payload, không phải header: nó là thuộc tính của
+		// dữ liệu, nên nó phải sống sót qua mọi lần chuyển tiếp/cache.
+		Producer:  ProducerStampView{CapturedMonotonicNs: strconv.FormatUint(truth.CapturedMonotonicNs, 10)},
 		SafeState: truth.SafeState, Task: truth.Task,
-		Items: make([]MonitorSampleView, 0, len(bindings)),
+		Items:     make([]MonitorSampleView, 0, len(bindings)),
 	}
 	for _, binding := range bindings {
 		variable, ok := variables[binding.VariableID]

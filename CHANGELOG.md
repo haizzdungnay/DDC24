@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### PGM-02 R2 — dấu producer cho snapshot runtime (`T59-810`) (2026-08-26)
+
+- **Added — `producer.capturedMonotonicNs` trong `ProgrammingMonitorPage`.**
+  `activeRevisionId` chỉ trả lời "snapshot này thuộc Revision nào"; nó **không**
+  trả lời "snapshot này mới hơn hay cũ hơn cái vừa vẽ". Hai poll chồng nhau hoặc
+  một lần retry là đủ để một snapshot cũ tới sau — và người vận hành thấy giá
+  trị **đi lùi** mà không có gì báo.
+
+- **Truyền dạng CHUỖI thập phân, không phải number — có chủ đích.** Nanosecond
+  kể từ boot vượt `Number.MAX_SAFE_INTEGER` sau **~104 ngày uptime**, nên kiểu
+  số sẽ khiến client JavaScript làm tròn im lặng đúng lúc thiết bị chạy lâu nhất
+  — tức đúng lúc dấu này cần thiết nhất. Test Go khoá kiểu truyền bằng fixture
+  200 ngày uptime; test FE so sánh bằng **BigInt** và khoá đúng cặp giá trị mà
+  `Number` sẽ gộp làm một.
+
+- **Ba trạng thái, ba cách xử lý — gộp lại là sai.** *Cũ hơn* ⇒ bỏ qua, giữ
+  nguyên thứ đang hiện (vẽ lại số cũ làm khay giá trị nhấp nháy như vừa có dữ
+  liệu mới). *Mốc lùi* ⇒ **Core đã restart**, mạch đứt: giá trị trước và sau một
+  lần restart không cùng một mạch vì bộ đếm, trạng thái FB và LKG đều có thể đã
+  khác. *Không đọc được dấu* ⇒ fail-closed.
+
+- **Added — snapshot không có dấu đọc được thì KHÔNG được vẽ.**
+  `runtimeOverlayByProgramId` xếp nó vào cùng nhánh fail-closed với lệch
+  Revision. Một snapshot không biết mình từ đâu tới mà vẫn tô lên topology đang
+  hiện là đúng thứ `AC-ST-007`/`AC-FBD-010` tồn tại để cấm.
+
+- **Mất kết nối rồi nối lại thì quên mốc cũ** — có thể là một Core khác, nên so
+  tiếp với mốc của mạch đã đứt sẽ kết luận sai cả "restart" lẫn "stale".
+
+- **Verification.** FE **153 file / 1734 test PASS**; `go vet`+`go test` PASS
+  (2 test Go mới); E2E mock **42 PASS / 8 skip**; real-backend **2/2 PASS**;
+  build PASS — chunk **111,57 KiB / 125 KiB**.
+
+
 ### PGM-02 — ĐÓNG increment R1 (`T59-809`) (2026-08-26)
 
 - **Added — record closeout `EV-PGM02-R1-CLOSEOUT-001`**, đo lại toàn bộ tại

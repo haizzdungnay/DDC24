@@ -3,6 +3,7 @@ import { useProgrammingApiClient } from './authClient'
 import { ProgrammingApiError } from './generated/client'
 import { programmingErrorCopy } from './errorCopy'
 import { useI18n } from '../../../shared/i18n'
+import { judgeProducerStamp } from '../runtime/producerStamp'
 import type {
   ProgrammingAuditPage,
   ProgrammingCapabilities,
@@ -302,6 +303,13 @@ export interface ProgrammingRuntimeMonitorState extends RemoteState<ProgrammingM
   /** Phân loại theo HTTP/network authority để UI không biến mọi lỗi thành
    * "offline" và không parse chuỗi message đã dịch. */
   failure: ProgrammingMonitorFailure
+  /**
+   * `T59-810` — `true` khi mốc monotonic của Core LÙI so với snapshot đã vẽ,
+   * tức Core đã khởi động lại. Giá trị trước và sau một lần restart không thuộc
+   * cùng một mạch: bộ đếm, trạng thái FB và LKG đều có thể đã khác, nên nối
+   * tiếp im lặng là nói dối về tính liên tục.
+   */
+  producerRestarted: boolean
 }
 
 export function classifyProgrammingMonitorFailure(reason: unknown): Exclude<ProgrammingMonitorFailure, null> {
@@ -327,8 +335,13 @@ export function useProgrammingRuntimeMonitor(): ProgrammingRuntimeMonitorState {
   const [data, setData] = useState<ProgrammingMonitorPage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [failure, setFailure] = useState<ProgrammingMonitorFailure>(null)
+  const [producerRestarted, setProducerRestarted] = useState(false)
   const loadRef = useRef(load)
   const generation = useRef(0)
+  /* Mốc của snapshot ĐANG HIỆN. `generation` phía trên chỉ bảo vệ khỏi response
+   * của chính hook này về trễ; nó không nói gì về việc Core đã restart hay BE
+   * phục vụ lại một snapshot đã cache. Mốc producer mới trả lời được điều đó. */
+  const lastCaptured = useRef<bigint | null>(null)
   loadRef.current = load
 
   const run = useCallback(() => {
@@ -337,6 +350,16 @@ export function useProgrammingRuntimeMonitor(): ProgrammingRuntimeMonitorState {
     Promise.resolve().then(() => loadRef.current()).then(
       (value) => {
         if (myGeneration !== generation.current) return
+        const verdict = judgeProducerStamp(value.producer, lastCaptured.current)
+        if (verdict.kind === 'STALE') {
+          /* Snapshot không mới hơn thứ đang hiện: giữ nguyên. Vẽ lại số cũ
+           * làm khay giá trị nhấp nháy như vừa có dữ liệu mới. */
+          return
+        }
+        if (verdict.kind === 'ACCEPT' || verdict.kind === 'PRODUCER_RESTARTED') {
+          lastCaptured.current = verdict.capturedMonotonicNs
+        }
+        setProducerRestarted(verdict.kind === 'PRODUCER_RESTARTED')
         setData(value)
         setError(null)
         setFailure(null)
@@ -344,6 +367,10 @@ export function useProgrammingRuntimeMonitor(): ProgrammingRuntimeMonitorState {
       },
       (reason: unknown) => {
         if (myGeneration !== generation.current) return
+        /* Mất kết nối rồi nối lại có thể là một Core khác: quên mốc cũ để lần
+         * so tiếp theo không kết luận "restart" hay "stale" từ một mạch đã đứt. */
+        lastCaptured.current = null
+        setProducerRestarted(false)
         setData(null)
         setError(programmingResourceErrorMessage(pick, reason))
         setFailure(classifyProgrammingMonitorFailure(reason))
@@ -363,7 +390,7 @@ export function useProgrammingRuntimeMonitor(): ProgrammingRuntimeMonitorState {
     }
   }, [run, load])
 
-  return { status, data, error, failure, refresh: run }
+  return { status, data, error, failure, producerRestarted, refresh: run }
 }
 
 /** T59-504 — Published Signal có endpoint/snapshot riêng; tuyệt đối không join
