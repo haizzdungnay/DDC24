@@ -78,3 +78,45 @@ describe('mô hình FBD canonical', () => {
     expect(validateFbdDocument(longString)).toContainEqual(expect.objectContaining({ code: 'FBD-SEM-PARAMETER-001' }))
   })
 })
+
+/* `T59-806` — hình học trình bày. Parity với `is_valid_layout()` của compiler
+ * (`st_fbd_model.cpp`): hình học sai bị TỪ CHỐI ở biên chứ không im lặng bỏ
+ * qua, và hình học đúng không bao giờ đổi phần ngữ nghĩa của tài liệu. */
+describe('FBD layout (T59-806)', () => {
+  const NODE = '30000000-0000-4000-8000-000000000001'
+
+  function withLayout(layout: unknown): FbdDocument {
+    return { ...golden(), layout } as FbdDocument
+  }
+
+  it('tài liệu không có layout vẫn hợp lệ', () => {
+    expect(validateFbdDocument(golden())).toEqual([])
+  })
+
+  it('layout hợp lệ không sinh issue nào', () => {
+    const document = withLayout({ schemaVersion: 1, nodes: { [NODE]: { x: -17.5, y: 99999 } } })
+    expect(validateFbdDocument(document)).toEqual([])
+  })
+
+  it.each([
+    ['phiên bản lạ', { schemaVersion: 2, nodes: {} }],
+    ['thiếu nodes', { schemaVersion: 1 }],
+    ['khoá lạ', { schemaVersion: 1, nodes: {}, viewport: 1 }],
+    ['khoá node không phải uuid', { schemaVersion: 1, nodes: { 'not-a-uuid': { x: 0, y: 0 } } }],
+    ['toạ độ ngoài trần', { schemaVersion: 1, nodes: { [NODE]: { x: 1e9, y: 0 } } }],
+    ['toạ độ NaN', { schemaVersion: 1, nodes: { [NODE]: { x: Number.NaN, y: 0 } } }],
+    ['điểm thiếu trục', { schemaVersion: 1, nodes: { [NODE]: { x: 1 } } }],
+    ['điểm có khoá thừa', { schemaVersion: 1, nodes: { [NODE]: { x: 1, y: 2, z: 3 } } }],
+    ['layout là mảng', []],
+  ])('từ chối %s', (_label, layout) => {
+    expect(validateFbdDocument(withLayout(layout)))
+      .toContainEqual(expect.objectContaining({ code: 'FBD-SCHEMA-LAYOUT-001' }))
+  })
+
+  it('canonical JSON sắp khoá layout nên thứ tự kéo block không đổi byte', () => {
+    const second = '30000000-0000-4000-8000-000000000002'
+    const forward = withLayout({ schemaVersion: 1, nodes: { [NODE]: { x: 1, y: 2 }, [second]: { x: 3, y: 4 } } })
+    const backward = withLayout({ schemaVersion: 1, nodes: { [second]: { x: 3, y: 4 }, [NODE]: { x: 1, y: 2 } } })
+    expect(canonicalFbdJson(forward)).toBe(canonicalFbdJson(backward))
+  })
+})
