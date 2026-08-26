@@ -21,6 +21,15 @@ export const FBD_NODE_PADDING_BOTTOM = 10
 export const FBD_COLUMN_GAP = 220
 export const FBD_ROW_GAP = 28
 export const FBD_CANVAS_MARGIN = 24
+/**
+ * `AC-FBD-012` — ngưỡng bật minimap.
+ *
+ * Dưới ngưỡng, cả sơ đồ nằm gọn trong khung nhìn nên minimap chỉ là thêm thứ
+ * để nhìn. Trên ngưỡng, người dùng bắt đầu cuộn và cần biết mình đang ở đâu.
+ */
+export const FBD_MINIMAP_NODE_THRESHOLD = 24
+export const FBD_MINIMAP_WIDTH = 176
+export const FBD_MINIMAP_HEIGHT = 104
 
 export interface FbdPortGeometry {
   id: string

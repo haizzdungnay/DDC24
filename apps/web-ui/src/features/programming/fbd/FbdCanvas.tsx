@@ -1,6 +1,13 @@
 import { useMemo, useRef, useState, type Dispatch } from 'react'
 import type { FbdEditorAction, FbdSelection } from './commands'
-import { buildFbdNetworkGeometry, FBD_NODE_HEADER_HEIGHT, FBD_NODE_WIDTH } from './geometry'
+import {
+  buildFbdNetworkGeometry,
+  FBD_MINIMAP_HEIGHT,
+  FBD_MINIMAP_NODE_THRESHOLD,
+  FBD_MINIMAP_WIDTH,
+  FBD_NODE_HEADER_HEIGHT,
+  FBD_NODE_WIDTH,
+} from './geometry'
 import type { FbdDocument, FbdNetwork, FbdNode } from './model'
 
 /**
@@ -58,6 +65,7 @@ export function FbdCanvas({
   const [scale, setScale] = useState(1)
   const [drag, setDrag] = useState<DragState | null>(null)
   const surfaceRef = useRef<SVGSVGElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const geometry = useMemo(() => buildFbdNetworkGeometry(network, layout), [network, layout])
   const nodesById = useMemo(() => new Map(network.nodes.map((node) => [node.id, node])), [network.nodes])
@@ -153,7 +161,7 @@ export function FbdCanvas({
           {pick('Vừa khung', 'Reset zoom')}
         </button>
       </div>
-      <div className="overflow-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]">
+      <div ref={scrollRef} className="overflow-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]">
         <svg
           ref={surfaceRef}
           role="group"
@@ -294,6 +302,41 @@ export function FbdCanvas({
           })}
         </svg>
       </div>
+      {view.nodes.length > FBD_MINIMAP_NODE_THRESHOLD && (
+        /* `AC-FBD-012` — sơ đồ vượt ngưỡng thì khung nhìn không còn chứa hết,
+         * và người dùng cần biết mình đang ở đâu trong cái tổng thể. Minimap
+         * chỉ VẼ vị trí, không phải một canvas thứ hai: nhấp vào nó cuộn khung
+         * chính tới đó. */
+        <svg
+          role="group"
+          aria-label={pick('Bản đồ thu nhỏ', 'Minimap')}
+          width={FBD_MINIMAP_WIDTH}
+          height={FBD_MINIMAP_HEIGHT}
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="rounded border border-[var(--c-border)] bg-[var(--c-surface-2)]"
+          onClick={(event) => {
+            const container = scrollRef.current
+            const box = event.currentTarget.getBoundingClientRect()
+            if (!container || box.width === 0 || box.height === 0) return
+            const ratioX = (event.clientX - box.left) / box.width
+            const ratioY = (event.clientY - box.top) / box.height
+            container.scrollLeft = ratioX * width * scale - container.clientWidth / 2
+            container.scrollTop = ratioY * height * scale - container.clientHeight / 2
+          }}
+        >
+          {view.nodes.map((placed) => (
+            <rect
+              key={placed.id}
+              x={placed.x}
+              y={placed.y}
+              width={placed.width}
+              height={placed.height}
+              fill={selection?.kind === 'node' && selection.nodeId === placed.id ? 'var(--c-accent)' : 'var(--c-text-dim)'}
+            />
+          ))}
+        </svg>
+      )}
       {network.nodes.length === 0 && (
         <p className="text-sm text-[var(--c-text-dim)]">{pick('Network trống — thêm block để bắt đầu.', 'Empty network — add a block to begin.')}</p>
       )}
