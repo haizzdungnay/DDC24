@@ -231,6 +231,18 @@ export function WatchTab() {
               </span>
               {trace.stopReason && <span>· {trace.stopReason}</span>}
             </div>
+            {/* `T59-810` — `SOURCE_UNAVAILABLE` gộp hai chuyện rất khác nhau:
+                mất nguồn, và nguồn ĐỔI THÀNH chương trình khác. Với phiên có
+                pin, nói rõ vế thứ hai — nếu không người đọc sẽ đi tìm một sự cố
+                kết nối không hề tồn tại. */}
+            {trace.stopReason === 'SOURCE_UNAVAILABLE' && trace.pin && (
+              <p role="status" className="mt-1 rounded bg-[var(--c-warn-bg)] px-2 py-1 text-xs text-[var(--c-warn-fg)]">
+                {pick(
+                  `Phiên dừng vì nguồn đã rời khỏi tuple đã neo (Revision ${trace.pin.revisionId ?? '—'}). Dãy mẫu chỉ thuộc về tuple đó và không nối tiếp sang cái mới.`,
+                  `The session stopped because the source left the pinned tuple (revision ${trace.pin.revisionId ?? '—'}). The samples belong to that tuple only and do not continue into the new one.`,
+                )}
+              </p>
+            )}
             <TraceTable trace={trace} itemByVariableId={itemByVariableId} pick={pick} />
           </div>
         )}
