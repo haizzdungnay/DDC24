@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { ProgrammingLibraryPage, RemoteState } from '../../model/types'
-import { stInsertionSnippet, type CatalogEntry } from './libraryCatalog'
+import { type CatalogEntry } from './libraryCatalog'
+import { stCallStatement } from '../editor/stInstanceInsertion'
 import { QuickLibraryPanel } from './QuickLibraryPanel'
 
 const preferences = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
@@ -75,7 +76,7 @@ describe('PGM-02 Quick Library (T59-804)', () => {
     // Panel trả về ĐÚNG mục catalog; dựng đoạn mã là việc của bề mặt ST.
     const entry = onInsert.mock.calls[0][0]
     expect(entry.entryId).toBe('LIMIT')
-    expect(stInsertionSnippet(entry)).toBe('OUT := LIMIT(MN, IN, MX);')
+    expect(stCallStatement(entry)).toBe('OUT := LIMIT(MN, IN, MX);')
   })
 
   it('mục chờ review hiện ra nhưng không bấm được, kèm lý do', async () => {
