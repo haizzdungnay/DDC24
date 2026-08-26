@@ -8,6 +8,7 @@ import {
   canonicalFbdJson,
   canonicalizeFbdDocument,
   cloneFbdDocument,
+  FBD_MAX_LAYOUT_COORDINATE,
   findFbdPort,
   isCanonicalFbdUuid,
   isFbdIdentifier,
@@ -80,6 +81,22 @@ export interface FbdEditorState {
   announcement: FbdAnnouncement
 }
 
+/**
+ * Toạ độ hợp lệ theo đúng trần của hợp đồng (`fbd_v1.schema.json` §layout).
+ *
+ * Làm tròn về số nguyên: một pixel lẻ 0,333 không có ý nghĩa hiển thị nào
+ * nhưng đủ để làm byte tài liệu đổi mỗi lần kéo, tức mỗi lần kéo là một Draft
+ * "bẩn" khác. `null` = ngoài trần hoặc không phải số hữu hạn, và đó là TỪ CHỐI
+ * chứ không phải kẹp về biên — kẹp âm thầm sẽ đặt block vào chỗ người dùng
+ * không hề chọn.
+ */
+function clampLayoutCoordinate(value: number): number | null {
+  if (!Number.isFinite(value)) return null
+  const rounded = Math.round(value)
+  if (rounded < -FBD_MAX_LAYOUT_COORDINATE || rounded > FBD_MAX_LAYOUT_COORDINATE) return null
+  return rounded
+}
+
 export type FbdEditorAction =
   | { type: 'REPLACE_DOCUMENT'; document: FbdDocument }
   | { type: 'SET_CAN_EDIT'; canEdit: boolean }
@@ -91,6 +108,7 @@ export type FbdEditorAction =
   | { type: 'CANCEL_CONNECTION' }
   | { type: 'DELETE_SELECTION' }
   | { type: 'MOVE_NODE'; delta: -1 | 1 }
+  | { type: 'SET_NODE_POSITION'; networkId: string; nodeId: string; x: number; y: number }
   | { type: 'SET_NODE_VARIABLE'; networkId: string; nodeId: string; variable: string; unit: string | null }
   | { type: 'SET_NODE_VALUE'; networkId: string; nodeId: string; value: FbdParameterValue }
   | { type: 'SET_NODE_TYPE'; networkId: string; nodeId: string; dataType: FbdDataType }
@@ -350,6 +368,21 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       ordered[nextIndex].executionOrder = currentOrder
       return commit(state, document, { code: 'block-reordered' })
     }
+    case 'SET_NODE_POSITION': {
+      /* `T59-806` — kéo một block chỉ đổi HÌNH HỌC. Không đụng
+       * `executionOrder`: suy thứ tự thực thi từ x/y nghĩa là kéo một block
+       * sang trái sẽ âm thầm đổi chương trình đang chạy. Thứ tự vẫn do người
+       * dùng đặt tường minh bằng `MOVE_NODE`. */
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const document = cloneFbdDocument(state.document)
+      if (!findNode(document, action.networkId, action.nodeId)) return reject(state, { code: 'node-not-found' })
+      const x = clampLayoutCoordinate(action.x)
+      const y = clampLayoutCoordinate(action.y)
+      if (x === null || y === null) return reject(state, { code: 'invalid-position' })
+      const layout = document.layout ?? { schemaVersion: 1 as const, nodes: {} }
+      document.layout = { schemaVersion: 1, nodes: { ...layout.nodes, [action.nodeId]: { x, y } } }
+      return commit(state, document, { code: 'block-moved' })
+    }
     case 'SET_NODE_VARIABLE': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
       const document = cloneFbdDocument(state.document)
@@ -463,6 +496,8 @@ export function translateFbdAnnouncement(pick: (vi: string, en: string) => strin
     case 'select-block-to-reorder': return pick('Hãy chọn block cần đổi thứ tự', 'Select a block to reorder')
     case 'reorder-at-boundary': return pick('Block đã ở biên thứ tự', 'Block is already at the order boundary')
     case 'block-reordered': return pick('Đã đổi thứ tự thực thi block', 'Block execution order changed')
+    case 'block-moved': return pick('Đã đổi vị trí block trên canvas', 'Block moved on the canvas')
+    case 'invalid-position': return pick('Vị trí ngoài phạm vi canvas cho phép', 'Position is outside the allowed canvas range')
     case 'node-not-found': return pick('Không tìm thấy node đã chọn', 'Selected node not found')
     case 'invalid-variable-name': return pick('Tên biến không hợp lệ', 'Invalid variable name')
     case 'invalid-unit': return pick('Đơn vị không hợp lệ (1-32 ký tự)', 'Invalid unit (1-32 characters)')
