@@ -38,6 +38,8 @@ import { QuickLibraryHost } from '../library/QuickLibraryPanel'
 import type { CatalogEntry } from '../library/libraryCatalog'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
+import { buildStReferenceIndex, stSymbolAt } from './stReferenceIndex'
+import { StCrossReferencePanel } from './StCrossReferencePanel'
 import { SelectionQuickActions } from './SelectionQuickActions'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
 
@@ -420,6 +422,7 @@ export function SourceEditor({
   const [searchText, setSearchText] = useState('')
   const [replaceText, setReplaceText] = useState('')
   const [cursor, setCursor] = useState({ line: 1, column: 1 })
+  const [cursorOffset, setCursorOffset] = useState(0)
   const [completion, setCompletion] = useState<{ open: boolean; items: StCompletionItem[]; selected: number; anchor: number }>(
     { open: false, items: [], selected: 0, anchor: 0 },
   )
@@ -436,6 +439,14 @@ export function SourceEditor({
   const historyRef = useRef(createStEditorHistory(source))
   const [, bumpHistoryVersion] = useState(0)
   const symbols = useMemo(() => collectStSymbols(source), [source])
+  /* `AC-ST-005` — chỉ mục tham chiếu dựng từ nguồn đang gõ. Dùng cho ĐIỀU
+   * HƯỚNG (nhảy tới khai báo, đếm nơi đọc/ghi), không phải để phán nguồn
+   * đúng/sai: việc đó vẫn của Check ở Core. */
+  const referenceIndex = useMemo(() => buildStReferenceIndex(source), [source])
+  const cursorSymbol = useMemo(
+    () => stSymbolAt(source, cursorOffset, referenceIndex),
+    [source, cursorOffset, referenceIndex],
+  )
   const matches = useMemo(() => findTextMatches(source, searchText), [searchText, source])
   const tokens = useMemo(() => tokenizeStSource(source), [source])
   const diagnosticRanges = useMemo<StDiagnosticRange[]>(() => diagnostics
@@ -483,6 +494,7 @@ export function SourceEditor({
     const textarea = textareaRef.current
     const offset = textarea?.selectionStart ?? 0
     setCursor(offsetToLineColumn(source, offset))
+    setCursorOffset(offset)
     const start = textarea?.selectionStart ?? 0
     const end = textarea?.selectionEnd ?? 0
     setSelectionRange(start === end ? null : { start, end })
@@ -564,6 +576,7 @@ export function SourceEditor({
     pendingCursorRef.current = { value: next, selectionStart, selectionEnd }
     onChange(next)
     setCursor(offsetToLineColumn(next, selectionEnd))
+    setCursorOffset(selectionEnd)
     setSelectionRange(selectionStart === selectionEnd ? null : { start: selectionStart, end: selectionEnd })
   }
 
@@ -586,6 +599,7 @@ export function SourceEditor({
     }
     onChange(snapshot.source)
     setCursor(offsetToLineColumn(snapshot.source, snapshot.selectionEnd))
+    setCursorOffset(snapshot.selectionEnd)
     setSelectionRange(snapshot.selectionStart === snapshot.selectionEnd ? null : {
       start: snapshot.selectionStart,
       end: snapshot.selectionEnd,
@@ -628,6 +642,7 @@ export function SourceEditor({
    *  giữ đúng "≤2 thao tác" của `AC-ST-001`). */
   const [pendingLibraryEntry, setPendingLibraryEntry] = useState<CatalogEntry | null>(null)
   const [libraryInsertionNote, setLibraryInsertionNote] = useState<string | null>(null)
+  const [referenceNote, setReferenceNote] = useState<string | null>(null)
 
   const consumedFormatRequestRef = useRef<string | null>(null)
   useEffect(() => {
@@ -707,6 +722,26 @@ export function SourceEditor({
     if (!canEdit || !selectionRange) return
     const result = wrapInBlock(source, selectionRange.start, selectionRange.end, 'IF')
     applyEditRange(result.text, result.selectionStart, result.selectionEnd)
+  }
+
+  /** `AC-ST-005` — nhảy tới khai báo của định danh dưới con trỏ (F12 hoặc
+   *  Ctrl+Click). Không tra được thì NÓI RÕ là không tra được: một định danh
+   *  chưa khai báo là thông tin thật về nguồn, không phải chỗ để đoán bừa một
+   *  đích đến gần đúng. */
+  function handleGoToDefinition() {
+    const textarea = textareaRef.current
+    const offset = textarea?.selectionStart ?? cursorOffset
+    const found = stSymbolAt(source, offset, referenceIndex)
+    if (!found) {
+      setReferenceNote(pick('Con trỏ không đứng trên một định danh.', 'The cursor is not on an identifier.'))
+      return
+    }
+    if (!found.entry) {
+      setReferenceNote(pick(`Không tìm thấy khai báo của ${found.identifier}.`, `No declaration found for ${found.identifier}.`))
+      return
+    }
+    setReferenceNote(null)
+    selectRange(found.entry.declarationOffset, found.entry.name.length)
   }
 
   function handleJumpBracket() {
@@ -1031,7 +1066,12 @@ export function SourceEditor({
               setSelectionRange(selectionStart === selectionEnd ? null : { start: selectionStart, end: selectionEnd })
               refreshCompletion(next, selectionEnd)
             }}
-            onClick={() => { updateCursor(); closeCompletion() }}
+            onClick={(event) => {
+              updateCursor()
+              closeCompletion()
+              /* Ctrl/Cmd+Click = tới khai báo, đường chuột của F12. */
+              if (event.ctrlKey || event.metaKey) handleGoToDefinition()
+            }}
             onKeyUp={updateCursor}
             onSelect={updateCursor}
             onScroll={(event) => {
@@ -1072,6 +1112,13 @@ export function SourceEditor({
               }
               if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === '\\') {
                 event.preventDefault(); handleJumpBracket(); return
+              }
+              /* `AC-ST-005` — F12 là phím tiêu chuẩn cho "tới khai báo" ở mọi
+               * editor kỹ thuật; Ctrl+Click ở `onClick` là đường chuột tương
+               * ứng. Cả hai dùng được cả khi chỉ đọc (điều hướng không sửa
+               * nguồn). */
+              if (event.key === 'F12') {
+                event.preventDefault(); handleGoToDefinition(); return
               }
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'i' && canEdit) {
                 event.preventDefault(); setInsertPanelOpen((open) => !open); return
@@ -1183,6 +1230,11 @@ export function SourceEditor({
           </ul>
         )}
       </div>
+      <StCrossReferencePanel
+        cursorSymbol={cursorSymbol}
+        note={referenceNote}
+        onJump={(offset, length) => { setReferenceNote(null); selectRange(offset, length) }}
+      />
       {diagnostics.length > 0 && (
         <p id={`programming-st-diagnostics-${program.programId}`} className="text-xs text-[var(--c-fault-fg)]">
           {pick(`${diagnostics.length} diagnostic. Chọn lỗi trong khay Vấn đề để tới đúng dòng/cột.`, `${diagnostics.length} diagnostic(s). Select one in Problems to jump to its line and column.`)}
@@ -1416,22 +1468,26 @@ function ProgramInspector({ program, programs, draft, canEdit, saving, onChange,
 
 interface StSymbol { name: string; type: string; offset: number; references: number }
 
-/** Khai báo VAR hợp lệ ngay sau `^` (đầu file), sau `;`/xuống dòng (câu lệnh
- *  trước đó), hoặc ngay sau từ khoá mở khối VAR* — KHÔNG bắt buộc đứng đầu
- *  dòng như trước (BUG-013): source dán một dòng duy nhất (chưa qua Format)
- *  vẫn phải nhận diện được khai báo. */
-const ST_VAR_DECLARATION = /(?:^|[;\n]|\bVAR(?:_INPUT|_OUTPUT|_IN_OUT|_TEMP)?\b)\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(BOOL|INT|DINT|UINT|REAL|TIME)\b/gi
-
+/**
+ * Bảng ký hiệu cho khay "Ký hiệu & kiểu", autocomplete và bảng lệnh nhanh.
+ *
+ * `T59-805`: đọc từ `buildStReferenceIndex` thay vì tự quét regex lần thứ hai.
+ * Bản cũ chỉ nhận sáu kiểu cơ bản nên **instance FUNCTION_BLOCK không tồn tại**
+ * với editor: chèn `TON_1 : TON;` xong thì gõ `TON_` không được gợi ý và khay
+ * ký hiệu không thấy nó. Một nguồn duy nhất cho cả điều hướng lẫn gợi ý thì
+ * không có chỗ cho hai câu trả lời khác nhau về cùng một nguồn.
+ *
+ * `references` nay đếm nơi DÙNG (không tính chính dòng khai báo) và phân biệt
+ * hoa thường đúng như grammar §10 — con số cũ đếm cả khai báo và gộp hoa
+ * thường, tức luôn lớn hơn thực tế ít nhất một.
+ */
 export function collectStSymbols(source: string): StSymbol[] {
-  const output: StSymbol[] = []
-  const declaration = new RegExp(ST_VAR_DECLARATION.source, ST_VAR_DECLARATION.flags)
-  let match: RegExpExecArray | null
-  while ((match = declaration.exec(source)) !== null) {
-    const nameOffset = match.index + match[0].indexOf(match[1])
-    const references = source.match(new RegExp(`\\b${escapeRegExp(match[1])}\\b`, 'gi'))?.length ?? 0
-    output.push({ name: match[1], type: match[2].toUpperCase(), offset: nameOffset, references })
-  }
-  return output
+  return buildStReferenceIndex(source).symbols.map((entry) => ({
+    name: entry.name,
+    type: entry.typeName,
+    offset: entry.declarationOffset,
+    references: entry.occurrences.length,
+  }))
 }
 
 export interface StInterfaceVariable { name: string; type: string; direction: 'INPUT' | 'OUTPUT' }
@@ -1460,7 +1516,6 @@ export function collectStInterfaceVariables(source: string): StInterfaceVariable
   return output
 }
 
-function escapeRegExp(value: string): string { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 function findTextMatches(source: string, query: string): number[] {
   if (!query) return []
   const output: number[] = []

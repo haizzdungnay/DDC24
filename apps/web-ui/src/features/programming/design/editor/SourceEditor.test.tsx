@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { useState } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
@@ -439,5 +439,68 @@ describe('SourceEditor — chỉ đọc là policy runtime, không chỉ thuộc
     expect(textarea).not.toHaveAttribute('readonly')
     fireEvent.change(textarea, { target: { value: 'PROGRAM P\nX := 1;\nEND_PROGRAM\n' } })
     expect(onChange).toHaveBeenCalledWith('PROGRAM P\nX := 1;\nEND_PROGRAM\n')
+  })
+})
+
+/* `AC-ST-005` — "Diagnostic jump exact; hover/ref absence shows unavailable,
+ * not guessed content". Phần chẩn đoán đã có test từ trước; nhóm này khoá phần
+ * THAM CHIẾU: tới khai báo phải đúng chỗ, và khi không tra được thì phải NÓI là
+ * không tra được thay vì nhảy tới một đích gần đúng. */
+describe('SourceEditor — tham chiếu tại con trỏ (T59-805 / AC-ST-005)', () => {
+  const SOURCE = 'PROGRAM P\nVAR\n  FanCmd : BOOL;\n  FanDelay : TON;\nEND_VAR\nFanDelay(IN := FanCmd, PT := T#5s);\nFanCmd := FALSE;\nEND_PROGRAM\n'
+
+  function focusIdentifier(textarea: HTMLTextAreaElement, needle: string, occurrence = 0) {
+    let at = -1
+    for (let index = 0; index <= occurrence; index += 1) at = textarea.value.indexOf(needle, at + 1)
+    textarea.setSelectionRange(at + 1, at + 1)
+    fireEvent.select(textarea)
+    return at
+  }
+
+  it('hiện kiểu và phân loại của định danh dưới con trỏ', () => {
+    const { textarea } = renderEditor(SOURCE)
+    focusIdentifier(textarea, 'FanDelay(')
+
+    const panel = screen.getByText('Tham chiếu tại con trỏ').parentElement as HTMLElement
+    expect(within(panel).getByText('FanDelay')).toBeInTheDocument()
+    expect(within(panel).getByText('TON')).toBeInTheDocument()
+    expect(within(panel).getByText('instance FB')).toBeInTheDocument()
+  })
+
+  it('F12 nhảy tới đúng khai báo, không phải lần dùng gần nhất', () => {
+    const { textarea } = renderEditor(SOURCE)
+    focusIdentifier(textarea, 'FanCmd :=')
+    fireEvent.keyDown(textarea, { key: 'F12' })
+
+    expect(textarea.selectionStart).toBe(SOURCE.indexOf('FanCmd : BOOL;'))
+    expect(textarea.selectionEnd).toBe(SOURCE.indexOf('FanCmd : BOOL;') + 'FanCmd'.length)
+  })
+
+  it('định danh chưa khai báo: nói KHÔNG XÁC ĐỊNH ĐƯỢC, con trỏ đứng yên', () => {
+    const source = 'PROGRAM P\nGhostVar := 1;\nEND_PROGRAM\n'
+    const { textarea } = renderEditor(source)
+    focusIdentifier(textarea, 'GhostVar')
+    const before = textarea.selectionStart
+
+    expect(screen.getByText(/không xác định được/)).toBeInTheDocument()
+    fireEvent.keyDown(textarea, { key: 'F12' })
+    expect(screen.getByRole('status')).toHaveTextContent('Không tìm thấy khai báo của GhostVar.')
+    expect(textarea.selectionStart).toBe(before)
+  })
+
+  it('đếm đọc/ghi tách nhau: gán tham số trong lời gọi không phải ghi', () => {
+    const { textarea } = renderEditor(SOURCE)
+    focusIdentifier(textarea, 'FanCmd :=')
+
+    const panel = screen.getByText('Tham chiếu tại con trỏ').parentElement as HTMLElement
+    expect(within(panel).getByText('Đọc (1):')).toBeInTheDocument()
+    expect(within(panel).getByText('Ghi (1):')).toBeInTheDocument()
+  })
+
+  it('chỉ đọc vẫn tra được tham chiếu — điều hướng không phải mutation', () => {
+    const { textarea } = renderEditor(SOURCE, { canEdit: false })
+    focusIdentifier(textarea, 'FanDelay(')
+    fireEvent.keyDown(textarea, { key: 'F12' })
+    expect(textarea.selectionStart).toBe(SOURCE.indexOf('FanDelay : TON;'))
   })
 })
