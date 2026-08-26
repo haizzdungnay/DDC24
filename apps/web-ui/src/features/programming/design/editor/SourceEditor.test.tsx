@@ -504,3 +504,77 @@ describe('SourceEditor — tham chiếu tại con trỏ (T59-805 / AC-ST-005)', 
     expect(textarea.selectionStart).toBe(SOURCE.indexOf('FanDelay : TON;'))
   })
 })
+
+/* `AC-ST-010` — "unsupported compiler construct does not crash editor".
+ *
+ * Editor phải chịu được nguồn mà compiler KHÔNG nhận: cú pháp ngoài subset,
+ * chú thích không đóng, khối VAR thiếu END_VAR, ký tự ngoài ASCII, một dòng
+ * rất dài. Nó không cần hiểu những thứ đó — nó chỉ không được sập, vì sập thì
+ * người dùng mất luôn buffer đang gõ. */
+describe('SourceEditor — nguồn ngoài subset không làm sập editor (AC-ST-010)', () => {
+  const HOSTILE: Array<[string, string]> = [
+    ['chú thích không đóng', 'PROGRAM P\n(* mở mà không đóng\nX := 1;\nEND_PROGRAM\n'],
+    ['VAR thiếu END_VAR', 'PROGRAM P\nVAR\n  A : INT;\nX := 1;\nEND_PROGRAM\n'],
+    ['cú pháp ngoài subset', 'PROGRAM P\nVAR\n  A : ARRAY[1..10] OF INT;\nEND_VAR\nCASE A[1] OF\n1: X := 1;\nEND_CASE;\nEND_PROGRAM\n'],
+    ['toàn dấu ngoặc lệch', 'PROGRAM P\n))((\nX := ((((;\nEND_PROGRAM\n'],
+    ['ngoài ASCII trong định danh', 'PROGRAM P\nVAR\n  Nhiệt_độ : REAL;\nEND_VAR\nNhiệt_độ := 1.0;\nEND_PROGRAM\n'],
+    ['một dòng rất dài', `PROGRAM P\n${'X := X + 1; '.repeat(400)}\nEND_PROGRAM\n`],
+    ['rỗng hoàn toàn', ''],
+    ['chỉ có khoảng trắng', '   \n\t\n'],
+  ]
+
+  it.each(HOSTILE)('%s: editor vẫn dựng được và vẫn nhận thao tác', (_label, source) => {
+    const { textarea } = renderEditor(source)
+    expect(textarea).toBeInTheDocument()
+    // đặt con trỏ khắp nguồn: mọi bước đều đi qua chỉ mục tham chiếu
+    for (const offset of [0, Math.floor(source.length / 2), source.length]) {
+      textarea.setSelectionRange(offset, offset)
+      fireEvent.select(textarea)
+    }
+    fireEvent.keyDown(textarea, { key: 'F12' })
+    expect(screen.getByText('Tham chiếu tại con trỏ')).toBeInTheDocument()
+  })
+})
+
+/* `AC-ST-004` — "Save never changes Active". Ở lớp FE, điều đó có nghĩa: nút
+ * Lưu chỉ phát THAO TÁC DRAFT, không có đường nào từ editor đụng tới Active. */
+describe('SourceEditor — Lưu chỉ chạm Draft (AC-ST-004)', () => {
+  /** Nút Lưu chỉ bật khi buffer khác bản đã cam kết, nên harness phải giữ
+   *  state thật — editor "controlled giả" không bao giờ dirty. */
+  function renderDirtyEditor(initial: string, onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>) {
+    function Harness() {
+      const [source, setSource] = useState(initial)
+      return (
+        <SourceEditor
+          program={program(initial)}
+          source={source}
+          canEdit
+          saving={false}
+          diagnostics={[]}
+          focusDiagnostic={null}
+          onChange={setSource}
+          onSave={onSave}
+          pointCatalogStatus="idle"
+          pointCatalogItems={[]}
+          pointCatalogError={null}
+          onEnsurePointCatalogLoaded={vi.fn()}
+        />
+      )
+    }
+    render(<I18nProvider><Harness /></I18nProvider>)
+    return { textarea: screen.getByLabelText(/Mã nguồn ST/) as HTMLTextAreaElement }
+  }
+
+  it('nút Lưu phát đúng một op replaceProgramSource, không op vòng đời nào khác', async () => {
+    const onSave = vi.fn().mockResolvedValue(true)
+    const { textarea } = renderDirtyEditor('PROGRAM P\nEND_PROGRAM\n', onSave)
+    fireEvent.change(textarea, { target: { value: 'PROGRAM P\nX := 1;\nEND_PROGRAM\n' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const operations = onSave.mock.calls[0][0] as ProgrammingDraftOperation[]
+    expect(operations).toHaveLength(1)
+    expect(operations[0].op).toBe('replaceProgramSource')
+    expect(operations.some((operation) => /commission|activate|enable|restore/i.test(operation.op))).toBe(false)
+  })
+})

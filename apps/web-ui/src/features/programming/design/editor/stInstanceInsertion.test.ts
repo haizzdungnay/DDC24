@@ -140,3 +140,33 @@ describe('stInstanceInsertion', () => {
     expect(plan.text).toContain('  B := 1;\n  OUT := LIMIT(MN, IN, MX);\n')
   })
 })
+
+/** `a` là dãy con của `b` theo đúng thứ tự — bằng chứng "không xoá ký tự nào". */
+function isSubsequence(a: string, b: string): boolean {
+  let index = 0
+  for (const char of b) if (index < a.length && char === a[index]) index += 1
+  return index === a.length
+}
+
+describe('planLibraryInsertion — nguồn ngoài subset vẫn cho kế hoạch dùng được', () => {
+  const HOSTILE = [
+    '',
+    'PROGRAM P\n(* không đóng\nEND_PROGRAM\n',
+    'PROGRAM P\nVAR\n  A : INT;\nEND_PROGRAM\n',
+    'VAR END_VAR VAR END_VAR',
+    ')(:=',
+  ]
+
+  it.each(HOSTILE)('không ném, giữ nguyên phần nguồn cũ: %j', (source) => {
+    for (const target of [entry(), FUNCTION_ENTRY]) {
+      const plan = planLibraryInsertion(source, target, source.length)
+      expect(plan.text.length).toBeGreaterThanOrEqual(source.length)
+      expect(plan.selectionStart).toBeGreaterThanOrEqual(0)
+      expect(plan.selectionStart).toBeLessThanOrEqual(plan.text.length)
+      expect(plan.selectionEnd).toBe(plan.selectionStart)
+      // mọi ký tự cũ vẫn còn theo đúng thứ tự: kế hoạch chỉ CHÈN, không xoá.
+      // (Không dùng `toContain` vì chèn giữa nguồn làm đứt đoạn liên tục.)
+      expect(isSubsequence(source, plan.text)).toBe(true)
+    }
+  })
+})
