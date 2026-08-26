@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Governance — đóng `T59-810`, mở `T59-811` (2026-08-26)
+
+- **Changed — `T59-810` `DONE (HOST/LOCAL)`.** Cả hai vế acceptance có bằng
+  chứng: *generation/freshness* (dấu producer đi hết ba tầng, luật thứ tự tách
+  ba trạng thái, snapshot không có nguồn gốc không được vẽ) và *Trace pin*
+  (phiên neo tuple, kiểm trước khi lấy mẫu, ba dạng trôi fail closed). Case
+  real-backend khoá **quan hệ** monitor↔Trace↔Revision chứ không khoá sự tồn tại
+  của trường.
+
+- **`T59-811` chuyển `READY`** — LIVE read-only controller/overlay/Watch/Trace
+  trong FE.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS.
+
+
 ### PGM-02 R2 — Trace pin: dãy mẫu chỉ thuộc về đúng một Revision (`T59-810`) (2026-08-26)
 
 - **Fixed — một phiên Trace có thể ghép mẫu của hai chương trình khác nhau.**

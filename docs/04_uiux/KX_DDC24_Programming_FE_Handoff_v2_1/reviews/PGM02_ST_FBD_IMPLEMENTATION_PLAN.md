@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001` |
-| Phiên bản | 1.13 |
+| Phiên bản | 1.14 |
 | Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; increment R1 ĐÓNG (`T59-801..809`, `VS-PROG-U13` PASS R1/HOST); `WP-09`/`T59-810` READY mở R2 — xem §0** |
 | Ngày | 2026-08-25 |
 | Mốc mã nguồn lập kế hoạch | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` |
@@ -38,10 +38,10 @@ không nói CI, target, HIL hay release.
 | `WP-03` | `T59-804` | **DONE** 2026-08-26 | Catalog dùng chung (BE authority) + Quick Library ST + Recent/Favorites + parity BE↔registry trên backend thật + lọc palette FBD theo cổng đang chọn + khoá luật không tự nối + sáu block `TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS` (compiler+runtime+conformance) + typed metadata public trong OpenAPI + dock dùng chung ST↔FBD | [evidence 2026-08-26](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md) |
 | `WP-04` | `T59-805` | **DONE (R1)** 2026-08-26 | Guard read-only runtime + chèn FB có trạng thái đúng vùng khai báo (`AC-ST-002/003`) + chỉ mục tham chiếu, F12 tới khai báo, khay "không xác định được" (`AC-ST-005`) + khoá `AC-ST-004/010` bằng 8 nguồn ngoài subset | AC áp dụng cho R1 (`AC-ST-001..005`, `010`, `011`) đều có test; FE 146 file/1626 test. [Cổng phụ thuộc](../../../00_governance/PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) CLOSED bằng lựa chọn A (`UD-PROG-013`): giữ bề mặt hiện tại cho R1. Hover chuột và chỉ mục ký hiệu do compiler sinh mở lại từ R2 |
 | `WP-05` | `T59-806` | **DONE (R1)** 2026-08-26 | Hợp đồng `layout` (compiler bỏ qua khi canonical hoá) + canvas SVG node–edge thật + khay Vấn đề nhảy tới đúng block/dây + minimap trên ngưỡng + fixture 256 block | AC áp dụng cho R1 (`AC-FBD-001..007`, `012`) đều có test; accessibility có axe quét thẳng canvas (0 vi phạm); ctest 1299/1299, FE 149 file/1684 test, E2E 31 PASS/5 skip. `AC-FBD-008` thuộc R3, `AC-FBD-009..011` thuộc R2 |
-| `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | **DONE (R1)** 2026-08-26 | Workbench đáy dùng chung + máy trạng thái mode + slot lưới thu gọn + bốn lớp lỗi trên backend thật | Real-backend E2E 2/2 PASS; FE 152 file/1714 test; mock E2E 31 PASS/5 skip |
+| `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | **DONE (R1)**; `T59-811` READY (R2) 2026-08-26 | Workbench đáy dùng chung + máy trạng thái mode + slot lưới thu gọn + bốn lớp lỗi trên backend thật | Real-backend E2E 2/2 PASS; FE 152 file/1714 test; mock E2E 31 PASS/5 skip |
 | `WP-07` | `T59-814` | ORDERED | — | — |
 | `WP-08` | `T59-815` | ORDERED | — | — |
-| `WP-09` | `T59-810` | **READY (R2)** | — | — |
+| `WP-09` | `T59-810` | **DONE (R2)** 2026-08-26 | Dấu producer (generation/freshness) + Trace pin neo tuple Active | Real-backend 3/3; Go 10 case bảng + 1 tích hợp; FE 153 file/1737 test |
 | `WP-10` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1)** 2026-08-26 | Cổng ngân sách chunk chạy trong `npm run build` + đính chính bẫy đơn vị kB/KiB | 111,32 KiB / 125 KiB; hai nhánh FAIL của cổng đã kiểm |
 | `WP-11` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1)** 2026-08-26 | Bốn khổ màn có case tràn ngang (bắt lỗi thật ở 1024 px), focus ring theo số pin, bàn phím đi hết, RBAC negative hai tầng, hostile source | mock E2E 42 PASS/8 skip; FE 152 file/1718 test |
 | `WP-12` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 | Chạy/record `VS-PROG-U13`, rollback, closeout increment | [`EV-PGM02-R1-CLOSEOUT-001`](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-809-r1-closeout.md) tại `d32e560` |
@@ -1202,6 +1202,7 @@ discipline chỉ mở implementation, không chứng minh M4/M5, target/HIL ho�
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.14 | 2026-08-26 | Đóng `WP-09`/`T59-810` (dấu producer + Trace pin); `T59-811` (LIVE FE) chuyển READY. |
 | 1.13 | 2026-08-26 | Đóng `WP-12`/`WP-13` ở phạm vi R1 kèm record closeout; increment R1 đóng và `WP-09`/`T59-810` mở R2. |
 | 1.12 | 2026-08-26 | Đóng `WP-10`/`WP-11` ở phạm vi R1 (cổng ngân sách, bốn khổ màn, focus/bàn phím, RBAC negative, hostile source); `WP-12`/`WP-13` (`T59-809`) chuyển READY. |
 | 1.11 | 2026-08-26 | Đóng `WP-06` ở phạm vi R1 cùng phần `WP-01` còn nợ (grid slot, context strip theo mode, state machine + dirty guard); `WP-10`/`WP-11` (`T59-808`) chuyển READY. |
