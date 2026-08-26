@@ -932,6 +932,55 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
   })
 })
 
+/* `T59-808` — RBAC negative ở TẦNG GIAO DIỆN.
+ *
+ * 403 của backend là nửa sau của câu chuyện; nửa trước là giao diện. Một viewer
+ * không được thấy nút dẫn tới thao tác chắc chắn bị từ chối — bấm rồi mới biết
+ * mình không có quyền là bắt người dùng học luật bằng cách va vào nó. Nhưng
+ * chặn ghi KHÔNG có nghĩa là làm mù: nguồn vẫn phải đọc được. */
+describe('PGM-02 — viewer/operator không sửa được nguồn (T59-808)', () => {
+  function stubProject() {
+    const project = baseProject()
+    project.draft = {
+      ...baseDocument(),
+      programs: [{
+        programId: 'program-a', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST',
+        document: 'PROGRAM A\nEND_PROGRAM\n'
+      }]
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+  }
+
+  it.each(['viewer', 'operator'] as const)('%s: nguồn đọc được nhưng không có đường sửa', async (role) => {
+    auth.role = role
+    stubProject()
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Chương trình A'))
+
+    const source = await screen.findByLabelText(/Mã nguồn ST/)
+    expect((source as HTMLTextAreaElement).value).toContain('PROGRAM')
+    expect(source).toHaveAttribute('readonly')
+    expect(screen.queryByRole('button', { name: 'Lưu' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Hoàn tác/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Định dạng/ })).toBeNull()
+  })
+
+  it('admin thì ngược lại — có đủ đường sửa', async () => {
+    auth.role = 'admin'
+    stubProject()
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Chương trình A'))
+    const source = await screen.findByLabelText(/Mã nguồn ST/)
+    expect(source).not.toHaveAttribute('readonly')
+  })
+})
+
 /* `T59-807` / `WP-01` (phần đi cùng `WP-06`) — hai cột biên thu gọn được.
  *
  * Ở 1280 px, ba cột `280px + 1fr + 308px` chỉ chừa ~690 px cho chính chỗ người

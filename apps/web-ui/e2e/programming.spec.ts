@@ -1188,3 +1188,96 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     expectNoBrowserFailures(failures, 'bàn phím vỏ v2')
   })
 })
+
+/**
+ * `T59-808` / `PGM02-V22-WP-10-R1` + `WP-11-R1` — hardening EDIT.
+ *
+ * Acceptance đòi "no horizontal overflow, focus/contrast/keyboard". Ba thứ đó
+ * đều có **số đã pin** trong `pgm02_workspace_v1.json` §`nfr` — nhưng trước lát
+ * này không phép kiểm nào đọc chúng, nên chúng là số trang trí.
+ */
+test.describe('PGM-02 hardening EDIT (T59-808)', () => {
+  /** Khổ màn đã pin ở `nfr.viewport`; mỗi khổ là một hợp đồng khác nhau. */
+  const VIEWPORTS = [
+    { label: 'full shell', width: 1280, height: 900 },
+    { label: 'compact dock', width: 1024, height: 800 },
+    { label: 'drawer', width: 768, height: 800 },
+    { label: 'mobile read-only', width: 390, height: 844 },
+  ]
+
+  for (const viewport of VIEWPORTS) {
+    test(`không tràn ngang ở ${viewport.label} (${viewport.width}px)`, async ({ page }) => {
+      const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+      await page.setViewportSize({ width: viewport.width, height: viewport.height })
+      await installProgrammingMocks(page, state)
+      await login(page)
+      await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
+      await expect(page.getByRole('button', { name: 'Mở Điều khiển AHU' })).toBeVisible()
+
+      const width = await page.evaluate(() => ({
+        viewport: document.documentElement.clientWidth,
+        document: document.documentElement.scrollWidth,
+        body: document.body.scrollWidth,
+      }))
+      /* Tràn ngang trên tủ điều khiển không chỉ xấu: nó đẩy nút thao tác ra
+         ngoài vùng chạm, và người vận hành không có chuột để cuộn ngang. */
+      expect(width.document, `${viewport.label}: document tràn ngang`).toBeLessThanOrEqual(width.viewport + 1)
+      expect(width.body, `${viewport.label}: body tràn ngang`).toBeLessThanOrEqual(width.viewport + 1)
+    })
+  }
+
+  test('focus ring dày ít nhất 2 px đúng như hợp đồng pin', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
+    const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
+
+    const target = page.getByRole('button', { name: 'EDIT', exact: true })
+    await expect(target).toBeVisible()
+    await target.focus()
+    const outlineWidth = await target.evaluate((element) => {
+      const style = window.getComputedStyle(element)
+      // Trình duyệt trả `px`; `outline-width` là thứ người dùng bàn phím thấy.
+      return Number.parseFloat(style.outlineWidth || '0')
+    })
+    expect(outlineWidth, 'focusRingMinPx = 2 trong nfr.accessibility').toBeGreaterThanOrEqual(2)
+  })
+
+  test('bộ chuyển chế độ đi hết bằng bàn phím và nói rõ vì sao LIVE chưa có', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
+    const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
+
+    const live = page.getByRole('button', { name: 'LIVE', exact: true })
+    await expect(live).toBeVisible()
+    await live.focus()
+    await page.keyboard.press('Enter')
+    /* Không tự hạ cấp: URL phải GIỮ NGUYÊN `mode=EDIT`, và lý do phải nói ra. */
+    await expect(page.getByText(/capability đó mở ở increment R2/)).toBeVisible()
+    expect(new URL(page.url()).searchParams.get('mode')).toBe('EDIT')
+  })
+
+  test('workbench đi tới được bằng bàn phím và mỗi tab khai nguồn', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
+    const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
+
+    const watchTab = page.getByRole('tab', { name: 'Watch' })
+    await expect(watchTab).toBeVisible()
+    await watchTab.focus()
+    await page.keyboard.press('Enter')
+    // Tab chưa có capability phải GIẢI THÍCH, không hiện danh sách rỗng.
+    await expect(page.getByText(/cần nguồn giá trị runtime/)).toBeVisible()
+
+    const handle = page.getByRole('separator', { name: /Kéo để đổi chiều cao/ })
+    const before = await handle.getAttribute('aria-valuenow')
+    await handle.focus()
+    await page.keyboard.press('ArrowUp')
+    expect(await handle.getAttribute('aria-valuenow')).not.toBe(before)
+  })
+})
