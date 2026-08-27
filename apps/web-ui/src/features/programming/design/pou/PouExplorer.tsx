@@ -9,6 +9,7 @@ import {
   deletePouOperations,
   duplicatePouOperations,
   pouDeleteBlockers,
+  pouPublishedSignalBlockers,
   renamePouOperations,
   validatePouName
 } from './pouCommands'
@@ -44,6 +45,7 @@ const NAME_ERROR_COPY: Record<'EMPTY' | 'PATTERN' | 'DUPLICATE', [string, string
 
 export function PouExplorer({
   document,
+  publishedSignals,
   canEdit,
   saving,
   selectedObjectId,
@@ -51,6 +53,11 @@ export function PouExplorer({
   onSave
 }: {
   document: ProgrammingDraftDocument
+  /**
+   * Tín hiệu công bố của Draft. Đọc từ draft THÔ ở trang cha: `signals[]` không
+   * đi qua `toWorkspaceDocument`, nên Explorer không tự lấy được.
+   */
+  publishedSignals?: readonly { signalId: string; name: string; publisherProgramId: string }[]
   canEdit: boolean
   saving: boolean
   selectedObjectId?: string
@@ -72,6 +79,13 @@ export function PouExplorer({
   const selected = resolvePouSelection(items, selectedObjectId)
   const pendingDelete = resolvePouSelection(items, pendingDeleteObjectId ?? undefined)
   const deleteBlockers = pendingDelete ? pouDeleteBlockers(items, pendingDelete.objectId) : []
+  /* Chặn thứ hai, độc lập: POU đang publish một tín hiệu thì backend từ chối
+     `removeProgram`. Không kiểm ở đây thì người dùng bấm `Xóa` và nhận một mã
+     lỗi 400 không nói cho họ biết phải làm gì. */
+  const signalBlockers = pendingDelete
+    ? pouPublishedSignalBlockers(publishedSignals ?? [], pendingDelete)
+    : []
+  const deleteBlocked = deleteBlockers.length > 0 || signalBlockers.length > 0
 
   useEffect(() => {
     if (renamingObjectId && renameInputRef.current) renameInputRef.current.focus()
@@ -108,7 +122,7 @@ export function PouExplorer({
   }
 
   function confirmDelete() {
-    if (!pendingDelete || deleteBlockers.length > 0) return
+    if (!pendingDelete || deleteBlocked) return
     void onSave(deletePouOperations(document, pendingDelete)).then((ok) => {
       setPendingDeleteObjectId(null)
       if (!ok) return
@@ -291,11 +305,20 @@ export function PouExplorer({
         danger
         confirmLabel={pick('Xóa', 'Delete')}
         confirmLoading={saving}
-        confirmDisabled={deleteBlockers.length > 0}
+        confirmDisabled={deleteBlocked}
         onConfirm={confirmDelete}
         onClose={() => setPendingDeleteObjectId(null)}
       >
-        {deleteBlockers.length > 0 ? (
+        {signalBlockers.length > 0 ? (
+          /* Nói ĐÚNG thứ chặn và ĐÚNG việc phải làm. "Không xoá được" mà không
+             kèm cách gỡ thì người dùng chỉ còn nước bấm lại lần nữa. */
+          <p role="alert">
+            {pick(
+              `Không xóa được "${pendingDelete?.name ?? ''}": nó đang công bố ${signalBlockers.length} tín hiệu (${signalBlockers.map((item) => item.name).join(', ')}). Xóa tín hiệu đó, hoặc chuyển nó sang POU khác ở tab Điểm & Ánh xạ, rồi quay lại.`,
+              `Cannot delete "${pendingDelete?.name ?? ''}": it publishes ${signalBlockers.length} signal(s) (${signalBlockers.map((item) => item.name).join(', ')}). Delete those signals, or move them to another POU in Points & Mapping, then come back.`
+            )}
+          </p>
+        ) : deleteBlockers.length > 0 ? (
           <p role="alert">
             {pick(
               `Không xóa được "${pendingDelete?.name ?? ''}": còn ${deleteBlockers.length} POU đang gọi nó (${deleteBlockers.map((item) => item.name).join(', ')}). Gỡ lời gọi trước.`,

@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### PGM-02 — Không xoá được POU đang công bố tín hiệu (2026-08-28)
+
+- **Fixed — hộp thoại Xoá POU hứa một việc nó không làm được.** Người dùng báo
+  không xoá được `SOAK_01`. Tái hiện trên bo cho **đúng** phản hồi họ thấy:
+  `HTTP 400`, `content-length 217`, `field: "operations[0].removeProgram"`.
+
+  Nguyên nhân **không nằm ở backend**. Backend giữ đúng một bất biến cần thiết:
+  xoá một Program đang publish sẽ để lại một tín hiệu không ai ghi, nên nó từ
+  chối (`draft_v2.go`: *"Signal mất publisher là signal không ai ghi"*).
+  `SOAK_01` là publisher của `SOAK_CONSUMED`.
+
+  Lỗi nằm ở FE: `PouExplorer` chỉ tính blocker là các POU **đang gọi** POU kia,
+  không hề biết luật tín hiệu. Nên nó bật nút `Xóa`, hiện lời hứa "sẽ xóa cả mã
+  nguồn, biến và ánh xạ liên quan", rồi trả về một mã lỗi không nói cho người
+  dùng biết phải làm gì — bấm lại lần nữa cũng chỉ ra kết quả đó.
+
+  Cách sửa: `pouPublishedSignalBlockers` chặn ngay ở hộp thoại và **nói đúng
+  việc phải làm** — "nó đang công bố N tín hiệu (…). Xóa tín hiệu đó, hoặc
+  chuyển sang POU khác ở tab Điểm & Ánh xạ, rồi quay lại". Phép so theo
+  `runtimeProgramId` chứ không theo `objectId`: `publisherProgramId` là identity
+  runtime, và so nhầm trục sẽ vừa bỏ sót vừa chặn oan.
+
+  `signals[]` không đi qua `toWorkspaceDocument`, nên Explorer nhận chúng từ
+  draft thô qua prop `publishedSignals`.
+
+- **Verification** (2026-08-28): vitest **171 file / 1936 test PASS**; lint
+  PASS; build PASS; e2e `programming.spec.ts` **54 passed / 11 skipped**. Kiểm
+  trên bo bằng trình duyệt thật sau khi deploy: hộp thoại hiện đúng lý do và tên
+  tín hiệu, nút `Xóa` **disabled**, **không** còn request lỗi nào.
+
 ### PGM-02 — Vá hai đường sinh 400 phát hiện trên bo thật (2026-08-28)
 
 Người dùng báo `PATCH /programming/projects/{id}/draft` trả **400** trên bo
