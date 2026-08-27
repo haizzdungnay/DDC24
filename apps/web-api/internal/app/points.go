@@ -109,19 +109,45 @@ func (a *App) overlayVirtualPoints(points []PointDTO) []PointDTO {
 	}
 	cfg = normalizeVirtualPointsConfig(cfg)
 	out := make([]PointDTO, 0, len(points)+len(cfg.Items))
+	// Giữ lại slot AV/BV/MSV thô của Core để tra ngược. Chúng vẫn không được
+	// phát ra ngoài (VP là bề mặt duy nhất người dùng thấy), nhưng slot do
+	// CHƯƠNG TRÌNH sở hữu thì giá trị thật nằm ở đây chứ không ở cấu hình.
+	coreSlots := make(map[string]PointDTO, len(points))
 	for _, p := range points {
 		if p.Kind == "virtual" {
 			continue
 		}
 		if prefix, _, ok := parsePointID(p.ID); ok && (prefix == "AV" || prefix == "BV" || prefix == "MSV") {
+			coreSlots[canonicalBoundPointID(p.ID)] = p
 			continue
 		}
 		out = append(out, p)
 	}
 	for _, item := range cfg.Items {
-		if item.Enabled {
-			out = append(out, virtualPointDTO(item))
+		if !item.Enabled {
+			continue
 		}
+		dto := virtualPointDTO(item)
+		/* `source == PROGRAM` ⇒ ST Program ghi slot này mỗi chu kỳ, và `value`
+		 * trong cấu hình chỉ còn là giá trị khởi tạo. Đọc từ cấu hình ở đây sẽ
+		 * hiện một hằng số đứng yên cho một đại lượng đang thay đổi — đúng cái
+		 * bẫy mà `F-PROG-ASBUILT-016` từng chặn cả chiều ghi để tránh. Nay
+		 * chiều ghi được mở thì đường đọc ngược phải mở cùng lúc, không thì
+		 * người vận hành nhìn vào một con số không bao giờ nhúc nhích. */
+		if strings.EqualFold(item.Source, virtualPointSourceProgram) && item.BoundPointID != "" {
+			if slot, ok := coreSlots[canonicalBoundPointID(item.BoundPointID)]; ok {
+				dto.Value = slot.Value
+				dto.Quality = slot.Quality
+				dto.Source = slot.Source
+				dto.UpdatedAt = slot.UpdatedAt
+			} else {
+				// Không tra được slot ⇒ KHÔNG rơi về giá trị cấu hình: đó là
+				// hiện một con số bịa cho một điểm chưa đọc được.
+				dto.Value = nil
+				dto.Quality = "unknown"
+			}
+		}
+		out = append(out, dto)
 	}
 	return out
 }

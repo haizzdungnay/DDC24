@@ -8,6 +8,50 @@
 
 ## [Unreleased]
 
+### VP — mở chiều GHI cho ST Program kèm quyền sở hữu slot (`F-PROG-ASBUILT-016`) (2026-08-28)
+
+- **Changed — `VAR_OUTPUT` bind category `VP` nay được chấp nhận.**
+  `resolve_io_bindings()` từng chặn tường minh mọi chiều ghi vào Virtual Point.
+  Lý do cũ **đúng ở thời điểm đó**: `overlayVirtualPoints` ở web-api vứt bỏ slot
+  `AV/BV/MSV` thô của Core và thay bằng giá trị trong `virtual_points.conf`, nên
+  một giá trị do chương trình ghi sẽ **không bao giờ** hiện ra ở API hay UI.
+
+  Chặn được gỡ **cùng lúc** với đường đọc ngược, không phải trước. Mở chiều ghi
+  mà không mở đường đọc là để người vận hành nhìn một con số đứng yên cho một
+  đại lượng đang thay đổi.
+
+- **Added — `virtualPoint.source` quyết định ai sở hữu slot.** `""`/`"WEB"` giữ
+  nguyên hành vi cũ (web-api đồng bộ giá trị cấu hình xuống Core); `"PROGRAM"`
+  nghĩa là ST Program ghi slot đó và web-api **không** đồng bộ nữa. Không có
+  ranh giới này thì hai bên cùng ghi một ô điểm — chương trình đặt giá trị mỗi
+  chu kỳ, web-api đẩy lại hằng số cấu hình mỗi lần khởi động hoặc mỗi lần ai đó
+  sửa VP — và ô điểm nhấp nháy giữa hai nguồn mà không dấu hiệu nào chỉ ra vì
+  sao. Chuỗi lạ ở trường này bị **từ chối** thay vì rơi êm về nhánh "web-api sở
+  hữu"; `PROGRAM` mà chưa `boundPointId` cũng bị từ chối.
+
+- **Added — đường đọc ngược Core → API cho slot do chương trình sở hữu.**
+  `overlayVirtualPoints` nay lấy `value`/`quality`/`source` **thẳng từ slot
+  Core** cho VP mang `source = "PROGRAM"`. Không tra được slot ⇒ trả `null` +
+  `quality = unknown`, **không** rơi về giá trị cấu hình: hiện một hằng số cho
+  một điểm chưa đọc được là bịa số.
+
+- **Verification** (2026-08-28): `ctest --test-dir build/fw` **1332/1332 PASS**
+  (4 ca mới `StIoMapVpOutput` + 2 ca `StResolveIoBindings` đảo chiều khẳng định
+  + 1 ca CLI); `go vet ./...` và `go test ./... -count=1` PASS (6 ca mới
+  `TestVirtualPointSourceValidation`). Cross-build aarch64 và deploy cả
+  `mkddc-st-compile` lẫn `mkddc-web` lên Foxlinx.
+
+  Trên bo: tạo `VP_AHU_STATE_OUT` (`AV-13`, `source=PROGRAM`), thêm ngõ ra
+  `AhuStateOut := INT_TO_REAL(AhuState)` — **Check PASSED** (trước lát này bị từ
+  chối thẳng), **Commission SUCCEEDED**, chương trình **RUNNING**.
+
+- **Còn lại — chưa đọc được giá trị ngược.** Slot `AV-13` không xuất hiện trong
+  `ReadPoints()` của Core trên bo, nên đường đọc mới trả đúng `quality =
+  unknown` thay vì một con số bịa. Ba mắt xích đã kiểm: `PointWriter::can_write`
+  cho phép AV; `parsePointID("AV13")` chuẩn hoá đúng về `AV-13`;
+  `decodePoints()` có vòng lặp phát 32 slot AV. Chưa xác định được vì sao chúng
+  không tới `overlayVirtualPoints`. **Ghi rõ để không ai đọc nhầm là đã xong.**
+
 ### ST — bổ sung câu lệnh `CASE` theo IEC 61131-3 §7.3.3.2 (2026-08-28)
 
 - **Added — `CASE` là câu lệnh CHUẨN của ST và compiler thiết bị chưa có nó.**

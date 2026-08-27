@@ -115,6 +115,18 @@ type VirtualPoint struct {
 	// (xem syncVirtualPointToCore ở virtualpoint.go) để ST Program bind được
 	// category VP hướng READ (resolve_io_bindings chấp nhận từ 2026-08-17).
 	BoundPointID string `json:"boundPointId,omitempty"`
+	// Source — AI sở hữu giá trị của slot đã bind.
+	//
+	//   ""/"WEB"  : web-api đồng bộ giá trị cấu hình xuống Core (mặc định,
+	//               giữ nguyên hành vi cũ);
+	//   "PROGRAM" : ST Program GHI slot này (`VAR_OUTPUT` bind category VP).
+	//               web-api KHÔNG đồng bộ nữa.
+	//
+	// Không có trường này thì hai bên cùng ghi một ô: chương trình đặt giá trị
+	// mỗi chu kỳ, còn web-api đẩy lại giá trị cấu hình mỗi lần khởi động hoặc
+	// mỗi lần ai đó sửa VP — và ô điểm sẽ nhấp nháy giữa hai nguồn mà không ai
+	// thấy nguyên nhân.
+	Source string `json:"source,omitempty"`
 	// Equipment — `T57-3.1` (`ADR-042`). Rỗng = chưa gán, KHÔNG đoán theo tên.
 	Equipment string `json:"equipment,omitempty"`
 }

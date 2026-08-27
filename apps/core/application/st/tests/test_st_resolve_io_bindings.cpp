@@ -232,19 +232,39 @@ TEST(StResolveIoBindings, AcceptsVpCategoryForInputDirection)
     EXPECT_FALSE(module.io_bindings[0].is_output);
 }
 
-TEST(StResolveIoBindings, RejectsVpCategoryForOutputDirection)
+/* F-PROG-ASBUILT-016 — chiều GHI của Virtual Point NAY ĐƯỢC MỞ.
+ *
+ * Test này trước đây khẳng định điều ngược lại. Lý do cũ ghi trong mã là "chưa
+ * có đường đồng bộ ngược Core->Web API", tức sợ chương trình ghi `av_[]`/`bv_[]`
+ * mà giao diện không bao giờ đọc lại được. Lý do đó không còn đúng: Point
+ * Catalog đọc THẲNG bảng điểm của Core, nên giá trị do chương trình ghi hiện
+ * ngay ở API và UI; `PointTable::set_virtual` cũng đã nhận `PointSource::PROGRAM`
+ * và ghi lại nguồn vào chính ô điểm.
+ *
+ * Ranh giới còn phải giữ KHÔNG nằm ở compiler mà ở quyền sở hữu slot: một VP do
+ * chương trình ghi thì web-api không được đồng bộ giá trị cấu hình vào đó nữa,
+ * nếu không hai bên ghi đè nhau mỗi chu kỳ. Điều đó do `virtualPoint.source`
+ * giữ ở web-api. */
+TEST(StResolveIoBindings, AcceptsVpCategoryForOutputDirection)
 {
-    /* F-PROG-ASBUILT-014 (phần WRITE vẫn mở, xem F-PROG-ASBUILT-016): chưa có
-     * đường đồng bộ NGƯỢC Core->Web API cho Virtual Point, nên VAR_OUTPUT bind
-     * VP phải bị chặn tường minh — không được âm thầm ghi vào av_[]/bv_[] mà
-     * Web API/UI không bao giờ đọc lại được. */
     StIrModule module = compile_ok(kAhuFanControl);
     StIoMapEntry entry = local_entry("FanEnable", "output", "BV-01", StType::BOOL);
     entry.category = "VP";
     std::vector<StDiagnostic> diags;
+    EXPECT_TRUE(resolve_io_bindings(&module, {entry}, &diags))
+        << (diags.empty() ? std::string("(khong co diagnostic)") : diags[0].message);
+}
+
+/* Mở chiều ghi KHÔNG có nghĩa là bỏ luật kiểu: `BV` là slot nhị phân, nên một
+ * biến BOOL ghi vào `AV` (slot số thực) vẫn phải bị từ chối. */
+TEST(StResolveIoBindings, RejectsVpOutputWithMismatchedSlotType)
+{
+    StIrModule module = compile_ok(kAhuFanControl);
+    StIoMapEntry entry = local_entry("FanEnable", "output", "AV-01", StType::BOOL);
+    entry.category = "VP";
+    std::vector<StDiagnostic> diags;
     EXPECT_FALSE(resolve_io_bindings(&module, {entry}, &diags));
     ASSERT_FALSE(diags.empty());
-    EXPECT_EQ(diags[0].code, st_diag_code::kIoMapUnsupportedCategory);
 }
 
 /* T59-303 gỡ chặn MB_RTU: nó KHÔNG còn là "category không hỗ trợ". Thứ vẫn phải

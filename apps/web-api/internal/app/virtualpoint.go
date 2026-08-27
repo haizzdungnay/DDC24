@@ -74,8 +74,18 @@ func (item *VirtualPoint) UnmarshalJSON(data []byte) error {
 // Core tạm không sẵn sàng (ForcePointTTL tự trả degraded, err=nil) — VP vẫn
 // là nguồn sự thật ở virtual_points.conf, đồng bộ Core chỉ là bản sao cho ST
 // Program đọc, không phải ngược lại.
+// virtualPointSourceProgram — slot do ST Program sở hữu; web-api không ghi.
+const virtualPointSourceProgram = "PROGRAM"
+
 func (a *App) syncVirtualPointToCore(ctx context.Context, item VirtualPoint) {
 	if item.BoundPointID == "" {
+		return
+	}
+	// Slot do chương trình sở hữu thì web-api KHÔNG đẩy giá trị cấu hình vào
+	// nữa. Đẩy vào là ghi đè kết quả điều khiển bằng một hằng số cấu hình —
+	// đúng một chu kỳ sau chương trình lại ghi đè ngược, và ô điểm nhấp nháy
+	// giữa hai nguồn mà không dấu hiệu nào chỉ ra vì sao.
+	if strings.EqualFold(item.Source, virtualPointSourceProgram) {
 		return
 	}
 	forcer, ok := a.core.(pointTTLForcer)
@@ -403,6 +413,18 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 			case prefix == "BV" && item.SignalType != virtualPointSignalBoolean:
 				addConfigErr(&errs, base+".boundPointId", "BV binding requires signalType boolean")
 			}
+		}
+		// `source` chỉ nhận hai giá trị. Một chuỗi lạ ở đây sẽ lặng lẽ rơi về
+		// nhánh "web-api sở hữu" và ghi đè chương trình — nên nó phải là lỗi
+		// cấu hình, không phải một mặc định êm ái.
+		if item.Source != "" &&
+			!strings.EqualFold(item.Source, virtualPointSourceProgram) &&
+			!strings.EqualFold(item.Source, "WEB") {
+			addConfigErr(&errs, base+".source", "must be WEB or PROGRAM")
+		}
+		// Sở hữu chỉ có nghĩa khi đã bind vào một slot Core.
+		if strings.EqualFold(item.Source, virtualPointSourceProgram) && item.BoundPointID == "" {
+			addConfigErr(&errs, base+".source", "PROGRAM requires boundPointId")
 		}
 	}
 	boundOwner := make(map[string]string, len(cfg.Items))

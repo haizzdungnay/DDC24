@@ -244,3 +244,64 @@ TEST(StIoMap, EmptyMapReportsAllDeclaredVariablesMissing)
     EXPECT_FALSE(validate_io_map(prog, {}, &diags));
     EXPECT_EQ(diags.size(), 3u) << "3 biến khai báo (SupplyTemp/Setpoint/FanEnable), mỗi biến 1 lỗi missing-binding";
 }
+
+/* ---- VP chiều GHI (gỡ chặn F-PROG-ASBUILT-016) --------------------------
+ *
+ * Trước lát này `resolve_io_bindings()` chặn TƯỜNG MINH mọi `VAR_OUTPUT` bind
+ * vào category `VP`, lý do ghi trong mã là "chưa có đường đồng bộ ngược
+ * Core->Web API". Lý do đó không còn đúng: Point Catalog đọc THẲNG bảng điểm
+ * của Core nên giá trị do chương trình ghi hiện ra ngay ở API/UI, và
+ * `PointTable::set_virtual` đã nhận `PointSource::PROGRAM`.
+ *
+ * Điều CÒN phải giữ là luật kiểu: `AV` là số thực, `BV` là nhị phân, `MSV` là
+ * số nguyên không dấu. Ghi nhầm kiểu vào một slot ảo không nổ ở đâu cả — nó chỉ
+ * cho ra một giá trị vô nghĩa trên màn hình vận hành, đúng loại lỗi khó truy.
+ */
+
+TEST(StIoMapVpOutput, AcceptsBoolOutputToBvSlot)
+{
+    const StProgram prog = parse_ok(kHvac);
+    std::vector<StIoMapEntry> entries = valid_entries();
+    entries[2].category = "VP";
+    entries[2].point_id = "BV-03";
+    std::vector<StDiagnostic> diags;
+    EXPECT_TRUE(validate_io_map(prog, entries, &diags))
+        << (diags.empty() ? std::string("(khong co diagnostic)") : diags[0].message);
+}
+
+TEST(StIoMapVpOutput, RejectsBoolOutputToAvSlot)
+{
+    const StProgram prog = parse_ok(kHvac);
+    std::vector<StIoMapEntry> entries = valid_entries();
+    entries[2].category = "VP";
+    entries[2].point_id = "AV-03";   /* AV la REAL, bien la BOOL */
+    std::vector<StDiagnostic> diags;
+    EXPECT_FALSE(validate_io_map(prog, entries, &diags));
+    ASSERT_FALSE(diags.empty());
+    EXPECT_EQ(diags[0].code, st_diag_code::kIoMapTypeMismatch);
+}
+
+TEST(StIoMapVpOutput, RejectsOutputToNonWritableSnapshot)
+{
+    const StProgram prog = parse_ok(kHvac);
+    std::vector<StIoMapEntry> entries = valid_entries();
+    entries[2].category = "VP";
+    entries[2].point_id = "BV-03";
+    /* Point Catalog noi slot nay khong ghi duoc => tu choi, dung nhu voi LOCAL.
+       Bo qua co do la ghi vao cho mot chu so huu khac dang giu. */
+    entries[2].writable = false;
+    std::vector<StDiagnostic> diags;
+    EXPECT_FALSE(validate_io_map(prog, entries, &diags));
+    ASSERT_FALSE(diags.empty());
+}
+
+TEST(StIoMapVpOutput, ReadDirectionStillWorksUnchanged)
+{
+    const StProgram prog = parse_ok(kHvac);
+    std::vector<StIoMapEntry> entries = valid_entries();
+    entries[0].category = "VP";
+    entries[0].point_id = "AV-07";
+    std::vector<StDiagnostic> diags;
+    EXPECT_TRUE(validate_io_map(prog, entries, &diags));
+    EXPECT_TRUE(diags.empty());
+}
