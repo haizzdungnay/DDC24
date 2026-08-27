@@ -276,5 +276,18 @@ func toLibraryEntryResponse(item programmingapplication.LibraryEntryView) librar
 		response.Interface = json.RawMessage(item.InterfaceJSON)
 		response.Signature = parseLibrarySignature(item.InterfaceJSON)
 	}
+	/* SYSTEM entry mang chữ ký ở `SignatureJSON`, KHÔNG ở `InterfaceJSON`
+	 * (`domain.SystemLibraryEntries()`). Thiếu nhánh này thì cả 46 entry SYSTEM
+	 * ra khỏi API mà không có cổng lẫn category, và Thư viện nhanh hiện "Thiếu
+	 * chữ ký từ thiết bị" cho mọi mục — một câu ĐÚNG về dữ liệu nó nhận được,
+	 * nhưng SAI về thiết bị: chữ ký vẫn nằm nguyên trong binary.
+	 *
+	 * `interface` cố ý KHÔNG được điền từ đây. `interface` là chữ ký THÔ của
+	 * PROJECT entry do người dùng nạp; `signature` là chữ ký ĐÃ PHÂN GIẢI. Trộn
+	 * hai khái niệm sẽ làm client không phân biệt được nguồn nào tự khai và
+	 * nguồn nào máy chủ bảo chứng. */
+	if response.Signature == nil && len(item.SignatureJSON) > 0 {
+		response.Signature = parseLibrarySignature(item.SignatureJSON)
+	}
 	return response
 }
