@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.29.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.30.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -53,6 +53,27 @@ export interface ProgrammingProgramsPage {
   observedAt: string | null;
   programsTruncated: boolean | null;
   items: ProgrammingProgramListItem[];
+}
+
+export interface ProgrammingStHunk {
+  objectId: string;
+  changeType: "ADDED" | "REMOVED" | "REPLACED";
+  beforeStartLine: number;
+  beforeLineCount: number;
+  afterStartLine: number;
+  afterLineCount: number;
+  beforeText: string[];
+  afterText: string[];
+  truncated: boolean;
+  coarse: boolean;
+}
+
+export interface ProgrammingFbdChange {
+  objectId: string;
+  element: "NETWORK" | "NODE" | "PORT" | "WIRE";
+  elementId: string;
+  changeType: "ADDED" | "REMOVED" | "UPDATED" | "ORDER_ONLY" | "GEOMETRY_ONLY";
+  detail: string;
 }
 
 export interface ProgrammingPublicError {
