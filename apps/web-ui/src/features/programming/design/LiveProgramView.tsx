@@ -1,5 +1,5 @@
 import { useI18n } from '../../../shared/i18n'
-import { useProgrammingRevision, useProgrammingRuntime, useProgrammingRuntimeMonitor } from '../api/queries'
+import { useProgrammingRevision, type ProgrammingRuntimeMonitorState } from '../api/queries'
 import { activeProgramSource, type ActiveProgramSource } from '../overview/activeProgramSet'
 import { StRuntimeValueOverlay } from './editor/StRuntimeValueOverlay'
 import { runtimeOverlayByProgramId } from './editor/workspaceAdapters'
@@ -22,20 +22,31 @@ import type { ProgrammingProgram } from '../model/types'
 export function LiveProgramView({
   program,
   objectId,
+  activeRevisionId,
+  monitor,
 }: {
   /** POU đang chọn ở cây — dùng để đối chiếu tên, KHÔNG dùng làm nguồn. */
   program: ProgrammingProgram | undefined
   objectId: string | undefined
+  /** Revision đang chạy, do trang cha đọc — xem ghi chú `monitor` bên dưới. */
+  activeRevisionId: string | null
+  /**
+   * Snapshot runtime **truyền xuống**, không tự gọi hook.
+   *
+   * Trang cha đã poll monitor ở nhịp 1 Hz cho lớp giá trị của editor. Gọi lại
+   * hook ở đây tạo một bộ poll THỨ HAI trên cùng một endpoint: gấp đôi tải cho
+   * Core, hai dãy `capturedMonotonicNs` độc lập, và hai câu trả lời có thể lệch
+   * nhau về cùng một thời điểm. Đúng thứ AC "không duplicate concurrent poll"
+   * tồn tại để chặn.
+   */
+  monitor: ProgrammingRuntimeMonitorState
 }) {
   const { pick } = useI18n()
-  const runtime = useProgrammingRuntime()
-  const activeRevisionId = runtime.data?.activeRevisionId ?? null
   const revision = useProgrammingRevision(activeRevisionId)
-  const monitor = useProgrammingRuntimeMonitor()
 
   const active = activeProgramSource({
     activeRevisionId,
-    status: runtime.status === 'loading' ? 'loading' : revision.status,
+    status: revision.status,
     revision: revision.data,
     objectId: objectId ?? null,
   })

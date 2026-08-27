@@ -17,9 +17,7 @@ const state = vi.hoisted(() => ({
 }))
 
 vi.mock('../api/queries', () => ({
-  useProgrammingRuntime: () => state.runtime,
   useProgrammingRevision: () => state.revision,
-  useProgrammingRuntimeMonitor: () => state.monitor,
 }))
 
 const program: ProgrammingProgram = {
@@ -38,10 +36,17 @@ function revisionBody(source: unknown = ACTIVE_SOURCE) {
   }
 }
 
+/* `monitor` và `activeRevisionId` là PROP, không phải hook: trang cha đã poll
+ * monitor rồi, gọi lại hook ở đây là bộ poll thứ hai trên cùng endpoint. */
 function renderLive(objectId: string | undefined = OBJECT) {
   render(
     <I18nProvider>
-      <LiveProgramView program={program} objectId={objectId} />
+      <LiveProgramView
+        program={program}
+        objectId={objectId}
+        activeRevisionId={(state.runtime as { data?: { activeRevisionId: string | null } }).data?.activeRevisionId ?? null}
+        monitor={state.monitor as never}
+      />
     </I18nProvider>,
   )
 }

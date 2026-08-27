@@ -436,7 +436,12 @@ export function DesignWorkspacePage({
             editor rồi tắt sửa là cách chắc chắn nhất để một hôm nào đó Draft rò
             vào chỗ đáng lẽ phải là Active, mà không có dấu hiệu bên ngoài nào. */}
         {workspaceMode === 'LIVE' ? (
-          <LiveProgramView program={selectedProgram} objectId={selectedObjectId} />
+          <LiveProgramView
+            program={selectedProgram}
+            objectId={selectedObjectId}
+            activeRevisionId={workspace.project.activeRevisionId ?? null}
+            monitor={monitor}
+          />
         ) : (
         <ProgramsTab
           document={document}
@@ -461,6 +466,10 @@ export function DesignWorkspacePage({
             đang có vấn đề gì" cho CẢ Project. */}
         <DesignWorkbench
           mode={workspaceMode === 'LIVE' ? 'LIVE' : 'EDIT'}
+          {...(workspaceMode === 'LIVE' && selectedProgramId
+            ? { runtimeOverlay: runtimeOverlays[selectedProgramId] ?? { status: 'unavailable' as const } }
+            : {})}
+          traceOwnerHref="/eng/programming/runtime?tab=watch"
           document={document}
           source={workbenchSource}
           sourceLabel={workbenchSourceLabel}
