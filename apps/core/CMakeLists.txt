@@ -172,6 +172,43 @@ add_executable(mkddc-programming-core-sim
 target_link_libraries(mkddc-programming-core-sim PRIVATE core_lib)
 mkddc_apply_provenance(mkddc-programming-core-sim)
 
+# T59-814 / ADR-053 — thư viện THUẦN cho sandbox mô phỏng.
+#
+# Danh sách TU ở đây là một phần của biên an toàn, không phải tiện lợi build:
+# nó cố ý KHÔNG link `core_domain` (PointTable/PointWriter/PriorityResolver)
+# hay bất kỳ adapter thiết bị nào. Worker mô phỏng phải dùng ĐÚNG loader và
+# executor production — hai bộ ngữ nghĩa sẽ trôi khỏi nhau — nhưng tuyệt đối
+# không được có sẵn trong binary một cạnh nào dẫn tới đường ghi thiết bị.
+#
+# Thêm một TU vào danh sách này là một thay đổi biên an toàn và phải đi kèm
+# `scripts/verify_programming_sim_worker_boundary.py` còn xanh.
+# Máy chạy mô phỏng tách riêng khỏi danh sách TU của ST: `core_tests` cần nó
+# nhưng đã có sẵn ST qua `core_lib`, và nạp hai lần cùng một TU vào một binary
+# là lỗi link chứ không phải chuyện thẩm mỹ.
+add_library(core_sim_engine STATIC
+    application/programming/simulation/sim_session.cpp
+    application/programming/simulation/sim_sandbox.cpp)
+target_link_libraries(core_sim_engine PUBLIC core_build_settings)
+
+add_library(core_st_sandbox STATIC
+    application/st/st_program.cpp
+    application/st/st_limits.cpp
+    application/st/st_loader.cpp
+    application/st/st_exec.cpp
+    application/st/st_runtime.cpp
+    application/st/st_retain.cpp
+    application/st/st_signal_bus.cpp
+    application/st/st_public_key.cpp
+    application/st/st_pou_registry.cpp
+    application/st/st_fb_instance_layout.cpp
+    application/st/st_package_v2.cpp)
+target_link_libraries(core_st_sandbox PUBLIC core_build_settings PkgConfig::SODIUM)
+
+add_executable(mkddc-programming-sim-worker
+    application/programming/programming_sim_worker_main.cpp)
+target_link_libraries(mkddc-programming-sim-worker PRIVATE core_sim_engine core_st_sandbox)
+mkddc_apply_provenance(mkddc-programming-sim-worker)
+
 # FW-SOM-IEC-002 item 2: validate gateway CLI cho BE gọi (fixed argv, source
 # luôn qua file path, không shell-eval — xem st/st_validate_main.cpp).
 add_executable(mkddc-st-validate application/st/st_validate_main.cpp)
@@ -235,6 +272,7 @@ if(CORE_BUILD_TESTS)
       application/programming/tests/test_programming_stage_atomicity.cpp
       adapters/ipc/tests/test_program_ipc_unix.cpp
       application/programming/tests/test_program_error_catalog.cpp
+      application/programming/tests/test_programming_sim_session.cpp
       adapters/ipc/tests/test_web_ipc.cpp domain/graph/tests/test_graph_runtime.cpp
       adapters/config/test_safe_state_config.cpp
       adapters/ipc/tests/test_config_reload.cpp adapters/persistence/test_state_snapshot.cpp
@@ -272,7 +310,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_retain.cpp application/st/tests/test_st_control_api.cpp
       application/st/tests/test_st_journal.cpp
       tests/allocation_probe.cpp)
-  target_link_libraries(core_tests PRIVATE st_compiler_lib)
+  target_link_libraries(core_tests PRIVATE st_compiler_lib core_sim_engine)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
   # test_st_validate_cli.cpp fork+execv nhị phân thật — cần path tuyệt đối,
   # không đoán build layout (generator expression cho đúng dù đổi cấu trúc).
@@ -315,6 +353,26 @@ if(CORE_BUILD_TESTS)
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_runtime_symbols.py
               --binary $<TARGET_FILE:mkddc-core>
               --nm ${CMAKE_NM})
+
+  # T59-814 / ADR-053 — biên an toàn của worker mô phỏng, đọc BINARY sau link.
+  #
+  # Hai cổng riêng vì chúng trả lời hai câu khác nhau: cổng symbol nói "worker
+  # không có sẵn cạnh nào tới đường điều khiển", còn cổng hành vi nói "hàng rào
+  # tiến trình thật sự chặn, bắt tay thật sự fail-closed và phiên thật sự tất
+  # định". Cái nào thiếu thì `SIM_SAFE` chưa được coi là đã chứng minh.
+  add_test(NAME programming_sim_worker_symbol_boundary
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_sim_worker_boundary.py
+              --binary $<TARGET_FILE:mkddc-programming-sim-worker>
+              --nm ${CMAKE_NM})
+  if(NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME programming_sim_worker_behaviour
+        COMMAND ${Python3_EXECUTABLE}
+                ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_sim_worker.py
+                --binary $<TARGET_FILE:mkddc-programming-sim-worker>
+                --compile-cli $<TARGET_FILE:mkddc-st-compile>
+                --package-cli $<TARGET_FILE:mkddc-st-package>)
+  endif()
 
   # `T57-2.13`/`T57-3.13`: kiểm ở mức BINARY, vì giá trị của engine nằm ở chỗ nó
   # là đúng cái binary backend gọi — một unit test gọi thẳng AlarmRuntime sẽ bỏ
