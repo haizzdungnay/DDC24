@@ -175,7 +175,15 @@ function signatureOfType(catalog: readonly CatalogEntry[] | undefined, typeName:
   return known(`${entry.name}(${inputs.join(', ')})${outputs.length ? ` → ${outputs.join(', ')}` : ''}`)
 }
 
-function stSymbolContextFor(input: InspectorInput): InspectorStSymbolContext | null {
+/**
+ * Ngữ cảnh của một ký hiệu ST.
+ *
+ * `export` để hover (`T59-820`) dùng ĐÚNG hàm này thay vì dựng đường phân giải
+ * thứ hai. Hai đường sẽ lệch nhau đúng lúc điều đó khó thấy nhất — một định
+ * danh mà thư viện không công bố chữ ký — và người đọc sẽ thấy Inspector nói
+ * một đằng, tooltip nói một nẻo về cùng một tên.
+ */
+export function stSymbolContextFor(input: InspectorInput): InspectorStSymbolContext | null {
   const symbol = input.cursorSymbol
   if (!symbol) return null
   const entry = symbol.entry

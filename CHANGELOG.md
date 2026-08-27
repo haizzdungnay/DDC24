@@ -8,6 +8,58 @@
 
 ## [Unreleased]
 
+### PGM-02 — Hover ký hiệu cho editor ST (`T59-820`, `PGM02-V22-WP-04`) (2026-08-27)
+
+- **Added — `PGM-02A §4` liệt `hover symbol/type/signature` là Required và nó
+  chưa từng tồn tại.** `UD-PROG-013` hoãn nó ở R1 rồi hẹn "mở lại từ R2"; R2
+  đóng ngày 2026-08-27 mà không task nào nhận. Nay rê chuột lên một định danh
+  hiện tên, kiểu, chữ ký khối và số nơi tham chiếu.
+
+- **Fixed — lý do hoãn không áp cho chính thứ bị hoãn.** Con số dùng để hoãn là
+  110,07 KiB gzip của CodeMirror 6. Nhưng AC đòi **hành vi**, không đòi thư
+  viện: ba lớp gutter/overlay/textarea của editor vốn đã dùng chung một lưới
+  đơn khoảng cố định, nên toạ độ chuột → offset ký tự là số học thuần. Chi phí
+  thật đo được là **1,30 KiB** gzip (127,67 → 128,97 KiB / ngân sách R3 165
+  KiB) — nhỏ hơn **85 lần** con số từng dùng để hoãn.
+
+- **Fixed — trường `Chữ ký` của Inspector luôn rỗng vì không ai truyền catalog.**
+  Triệu chứng: `ContextInspector` (giao ở `T59-818`) hiện "không xác định được"
+  ở trường `Chữ ký` cho mọi instance khối. Nguyên nhân: `InspectorInput.catalog`
+  không bao giờ được truyền — catalog thư viện chỉ được nạp bên trong
+  `QuickLibraryHost` khi người dùng mở bảng Thư viện nhanh. Khay vì thế nói
+  "thư viện không công bố chữ ký" trong khi sự thật là **chưa ai hỏi thư viện**.
+  Cách sửa: `useLazyProgrammingLibraryCatalog` nạp trễ ở `ProgramsTab` (cùng
+  luật với `pointCatalog`), dùng chung cho cả Inspector lẫn hover.
+
+- **Added — hover và Inspector không thể nói khác nhau.** Tooltip dựng nội dung
+  bằng **đúng** `stSymbolContextFor` mà Inspector dùng, không phải một đường
+  phân giải thứ hai. Hai đường sẽ lệch nhau đúng lúc khó thấy nhất — một định
+  danh mà thư viện không công bố chữ ký.
+
+- **Added — không đo được thì không hover.** Bề rộng ký tự phải đo THẬT từ DOM;
+  chưa layout hoặc font chưa tải ⇒ không hiện tooltip. Một bề rộng đoán sẽ làm
+  tooltip chỉ vào ký hiệu KHÁC thứ chuột đang trỏ, và người đọc không có cách
+  nào biết mình đang bị chỉ sai. Cùng lý do đó: điểm nằm sau ký tự cuối dòng
+  trả `null` thay vì kẹp về định danh gần nhất, và dấu câu ngay sau một tên
+  không kế thừa tooltip của tên đó.
+
+- **Changed — `UD-PROG-013` phần dư được xử lý, không để trôi tiếp.** Nửa hover
+  đã giao. Nửa còn lại — **chỉ mục ký hiệu do compiler sinh** — chuyển thành
+  `UD-PROG-016` OPEN với **hạn ký 2026-09-10**, kèm đo đạc: compiler ST có thật
+  ở `apps/core/application/st` và AST đủ để dẫn xuất chỉ mục, nhưng web-api
+  **không có đường nào** tới nó (12 action IPC đều là vòng đời, không action
+  nào nhận mã nguồn; `grep exec.Command` trả 0). Kèm câu hỏi thiết kế mà plan
+  chưa trả lời: chỉ mục compiler mô tả buffer đang gõ (một vòng IPC mỗi phím
+  trên thiết bị nhúng) hay Revision đã niêm phong (lạc hậu so với thứ đang hiện,
+  nhưng nói bằng giọng thẩm quyền của compiler — tệ hơn chỉ mục nguồn hiện tại).
+
+- **Verification** (2026-08-27): `npx vitest --run --environment jsdom src`
+  **165 file / 1882 test PASS** (16 test hình học/phân giải thuần + 7 test
+  component); `npm run lint` PASS; `npm run build` PASS (chunk `programming`
+  **128,97 KiB** gzip, dư **36,03 KiB**);
+  `npx playwright test e2e/programming.spec.ts` **53 passed / 11 skipped**;
+  `docs_iso_harness.py` PASS.
+
 ### PGM-02 — Compare Draft↔Active bằng typed diff (`T59-819`, `PGM02-V22-WP-09`) (2026-08-27)
 
 - **Added — hash trước/sau nói "có gì đó đổi", không nói "đổi cái gì".**
