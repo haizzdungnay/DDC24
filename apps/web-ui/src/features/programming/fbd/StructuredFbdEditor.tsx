@@ -11,6 +11,7 @@ import {
   translateFbdAnnouncement,
   type FbdEditorAction,
   type FbdKeyboardCommand,
+  type FbdSelection,
 } from './commands'
 import {
   FBD_DATA_TYPES,
@@ -40,6 +41,14 @@ import { userPouPaletteEntry, type UserPouInterface } from './userPou'
 import { QuickLibraryHost } from '../design/library/QuickLibraryPanel'
 
 export interface StructuredFbdEditorProps {
+  /**
+   * `T59-818` — nâng lựa chọn canvas lên cho `ContextInspector` dùng chung.
+   *
+   * Inspector là component DÙNG CHUNG giữa ST và FBD (handoff §9), nên nó không
+   * được tự đọc state nội bộ của editor này. Đưa lựa chọn ra ngoài giữ đúng
+   * ranh giới đó và tránh một đường đọc thứ hai vào cùng tài liệu.
+   */
+  onSelectionChange?: (selection: FbdSelection | null) => void
   document: FbdDocument
   canEdit: boolean
   onChange: (document: FbdDocument) => void
@@ -314,7 +323,7 @@ function NodeInspector({
   )
 }
 
-export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterfaces = EMPTY_USER_POU_INTERFACES, projectId }: StructuredFbdEditorProps) {
+export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterfaces = EMPTY_USER_POU_INTERFACES, projectId, onSelectionChange }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
   const publishedDocument = useRef(canonicalFbdJson(state.document))
@@ -376,6 +385,13 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
       onChange(state.document)
     }
   }, [onChange, state.document])
+
+  /* `T59-818` — phát lựa chọn ra ngoài cho Inspector dùng chung. Chỉ phát khi
+   * lựa chọn ĐỔI, không phát theo mỗi lần render: Inspector dựng lại ngữ cảnh
+   * từ đó, và một luồng phát liên tục sẽ làm nó nhấp nháy. */
+  useEffect(() => {
+    onSelectionChange?.(state.selection)
+  }, [onSelectionChange, state.selection])
 
   useEffect(() => {
     if (state.selection?.kind === 'port') {

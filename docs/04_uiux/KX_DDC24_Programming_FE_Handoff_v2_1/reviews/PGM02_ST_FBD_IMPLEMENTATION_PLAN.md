@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001` |
-| Phiên bản | 1.19 |
+| Phiên bản | 1.20 |
 | Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; R1 ĐÓNG; R2 ĐÓNG (`T59-810..813` DONE); R3 mở với `T59-814` READY. Phán quyết audit 2026-08-27 hạ `WP-09` về DONE một phần và mở `WP-14`/`WP-15` — xem §0 và [`REC-PGM02-AUD-ADJ-001`](../../../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md)** |
 | Ngày | 2026-08-25 |
 | Mốc mã nguồn lập kế hoạch | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` |
@@ -46,7 +46,7 @@ không nói CI, target, HIL hay release.
 | `WP-11` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1+R2)** 2026-08-27 | R1 responsive/keyboard/RBAC/hostile source; R2 khóa mutation toàn workspace LIVE, bốn viewport và sửa finding axe rail icon-only | Playwright T59-812 9 PASS/1 skip; 1280/1024/768/390 không tràn; axe serious/critical 0 |
 | `WP-12` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 · **DONE (R2)** 2026-08-27 | Chạy/record `VS-PROG-U13`/`U14`, rollback, closeout increment | R1: [`EV-PGM02-R1-CLOSEOUT-001`](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-809-r1-closeout.md) tại `d32e560`. R2: [`EV-PGM02-R2-CLOSEOUT-001`](../../../07_records/test-evidence/programming/2026-08-27-pgm02-t59-813-r2-closeout.md), có lane target trên Foxlinx (read-back 14/14 hash, fault + rollback drill) |
 | `WP-13` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 · **DONE (R2)** 2026-08-27 | Docs closeout R1/R2 trong cùng record; R2 kèm re-pin lattice hợp đồng và manifest baseline 1.53 | như trên |
-| `WP-14` | `T59-818` | **OPEN** — mở 2026-08-27 | Inspector context-sensitive năm ngữ cảnh (Program/Variable/ST symbol/FBD block/Connection) theo handoff cha §9 | — |
+| `WP-14` | `T59-818` | **DONE (HOST/LOCAL)** 2026-08-27 | Inspector context-sensitive năm ngữ cảnh (Program/Variable/ST symbol/FBD block/Connection) theo handoff cha §9 | `ContextInspector` dùng chung ST↔FBD; mô hình ngữ cảnh tách thành lớp thuần nên "không xác định được" kiểm được mà không dựng cây component. 15 test mô hình + 8 test component; FE 161 file/1823 test; chunk 122,28/165 KiB (R3). `UD-PROG-015` vẫn chặn đúng ba trường `Access`/`Description`/tên Task |
 | `WP-15` | `T59-821` | **OPEN** — mở 2026-08-27 | **Editor chrome**: toolbar ba mode (`PGM-02A §3`) + tab đa POU (`UD-PROG-014` = B, CLOSED) + status bar + Code Map cho ST | — |
 
 > ### Đính chính 2026-08-27 — `WP-09` KHÔNG đóng trọn
@@ -1378,6 +1378,7 @@ discipline chỉ mở implementation, không chứng minh M4/M5, target/HIL ho�
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.20 | 2026-08-27 | `WP-14` DONE ở lớp HOST/LOCAL: Inspector năm ngữ cảnh dùng chung ST↔FBD, thu gọn khi rỗng đúng luật handoff §9. Ba trường của `UD-PROG-015` không tồn tại trong kiểu dữ liệu, không chỉ là không render. |
 | 1.19 | 2026-08-27 | `WP-08` DONE ở lớp HOST/LOCAL. Dựng UI lên hạ tầng `WP-07` làm lộ hai lỗi của chính nó: `RUN` không chạy tick nào, và worker không tin khoá thiết bị nên mọi phiên hỏng trên bo thật. Cả hai đã sửa trong cùng lát. |
 | 1.16 | 2026-08-27 | Đóng `WP-10`/`WP-11` ở phạm vi R2 qua `T59-812`: subscription/10 Hz/no-overlap/cleanup, topology FBD tách sample, khóa mutation toàn LIVE, responsive/axe bốn viewport và budget gate R2. Sửa luôn dòng WP-06 thừa cột; `T59-813` chuyển READY. |
 | 1.15 | 2026-08-27 | Đóng `WP-06` ở phạm vi R2 (LIVE read-only đủ ST + FBD + Watch); `T59-812` chuyển READY. |

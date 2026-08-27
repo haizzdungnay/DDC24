@@ -8,6 +8,55 @@
 
 ## [Unreleased]
 
+### PGM-02 — Inspector năm ngữ cảnh dùng chung ST↔FBD (`T59-818`) (2026-08-27)
+
+- **Fixed — khay "Thuộc tính" chiếm chỗ mà không nói được gì.** Handoff §9 cấm
+  thẳng: *"Inspector SHALL NOT permanently consume 300 px for two fields"*. Khay
+  cũ nằm trong `ProgramsTab.tsx` và có đúng hai trường — `Tên` và `Loại` — tức
+  rơi trúng điều bị cấm, và bốn ngữ cảnh còn lại (Variable, ký hiệu ST, khối
+  FBD, kết nối) chưa từng tồn tại.
+
+  Nguyên nhân gốc là quản trị chứ không phải giao diện: Inspector có trong hợp
+  đồng nhưng không được chuyển tiếp vào DDD (`grep -i inspector` trả 0 kết quả),
+  nên không `WP` nào nhận việc — đúng loại "scope mồ côi" mà
+  `F-PGM02-AUD-001` chỉ ra.
+
+  Nay là `ContextInspector` dùng chung, thu gọn khi không có ngữ cảnh đáng đọc
+  và nở theo thứ người dùng vừa chạm.
+
+- **Added — "không xác định được" là một KẾT QUẢ, không phải ô trống.** Mọi
+  trường đi qua kiểu `InspectorField`: hoặc `known` kèm giá trị, hoặc không.
+  Không có `''`, không có `0`, không có giá trị mặc định. Hệ quả cụ thể:
+  analyzer không tra được ký hiệu ⇒ `Definition`/`Type`/`Signature` đều nói
+  thẳng là không chắc; thư viện trả `SIGNATURE_UNAVAILABLE` ⇒ FE **không** dựng
+  chữ ký từ tên port; `retained` của khối FBD là `unknown` vì model canonical
+  chưa mang cờ đó — `false` là một câu khác hẳn và nó ảnh hưởng tới cách người
+  ta hiểu chương trình sau khi mất điện.
+
+- **Added — lựa chọn được NÂNG lên workspace.** `StructuredFbdEditor` phát
+  `onSelectionChange`, `SourceEditor` phát `onCursorSymbolChange`. Inspector là
+  component dùng chung nên nó không được đọc state nội bộ của từng editor: nếu
+  đọc thì có hai nơi cùng tính "đang chọn cái gì", và chúng sẽ lệch nhau đúng
+  lúc con trỏ nằm ở ranh giới một định danh.
+
+- **Changed — `UD-PROG-015` được tôn trọng ở tầng KIỂU DỮ LIỆU.** `Access`,
+  `Description` và tên Task không có nguồn trong Draft v2, nên chúng không tồn
+  tại trong kiểu ngữ cảnh — không chỉ là "không render". Nhờ vậy không có đường
+  nào cho một bản sửa sau này điền `"Public"` cho giống ảnh render.
+
+- **Fixed — hồi quy E2E do `T59-815` để lại.** Ba case mock còn khẳng định câu
+  cũ "SIMULATE chưa khả dụng"; `T59-815` đã đổi nguồn sự thật sang capability
+  của server nhưng lát đó không chạy bộ mock nên hồi quy lọt qua. Nay khẳng định
+  đúng câu mới, và thêm một khẳng định rằng deep-link `?mode=SIMULATE` KHÔNG rơi
+  về editor Draft.
+
+- **Changed — cổng ngân sách chuyển sang R3.** `npm run build` nay gọi
+  `--increment r3`: chunk Programming **122,28 KiB / 165 KiB**, dư **42,72 KiB**.
+
+- **Verification.** FE **161 file / 1823 test PASS**; lint PASS; build PASS;
+  Playwright mock **53 PASS / 11 skip**; `go vet` + `go test -count=1` PASS;
+  `docs_iso_harness.py` PASS; `candidate_pin_check.py` PASS.
+
 ### PGM-02 R3 — bề mặt SIMULATE và hai lỗi của hạ tầng nó dựng lên (`T59-815`) (2026-08-27)
 
 - **Fixed — `F-P59-RUN-NOOP-001`: nút Chạy nói dối.** `T59-814` cài `RUN` thành
