@@ -39,9 +39,18 @@ type LibraryEntryView struct {
 	FeatureState      string
 	ContentSHA256     string
 	InterfaceJSON     []byte
-	Dependencies      []LibraryDependencyView
-	StateLayoutKnown  bool
-	StateSizeBytes    uint32
+	// SignatureJSON là chữ ký canonical của registry SYSTEM.
+	//
+	// SYSTEM entry KHÔNG có `InterfaceJSON` — `domain.SystemLibraryEntries()`
+	// đặt dữ liệu vào `SignatureJSON` và để `InterfaceJSON` rỗng. Trước lát này
+	// view chỉ chép `InterfaceJSON`, nên toàn bộ 46 entry SYSTEM tới FE mà
+	// không có cổng lẫn category: Thư viện nhanh hiện "Thiếu chữ ký từ thiết bị"
+	// cho mọi mục và gom tất cả vào nhóm `other`. Lớp HTTP và hợp đồng OpenAPI
+	// đều đã sẵn sàng cho `signature`; đứt dây nằm đúng ở đây.
+	SignatureJSON    []byte
+	Dependencies     []LibraryDependencyView
+	StateLayoutKnown bool
+	StateSizeBytes   uint32
 }
 
 type LibraryDependencyView struct {
@@ -389,6 +398,9 @@ func libraryEntryView(entry programmingstore.LibraryEntry, revision programmings
 	}
 	if len(entry.InterfaceJSON) > 0 {
 		view.InterfaceJSON = append([]byte(nil), entry.InterfaceJSON...)
+	}
+	if len(entry.SignatureJSON) > 0 {
+		view.SignatureJSON = append([]byte(nil), entry.SignatureJSON...)
 	}
 	return view
 }

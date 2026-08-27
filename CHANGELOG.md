@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### PGM-04/PGM-02 — Toàn bộ 46 khối thư viện SYSTEM mất chữ ký và category (2026-08-28)
+
+- **Fixed — Thư viện nhanh báo "Thiếu chữ ký từ thiết bị" cho MỌI mục.** Người
+  dùng thấy cả 46 khối SYSTEM đều không chèn được, và tab nhóm chỉ còn
+  `Tất cả | other`.
+
+  Câu "thiếu chữ ký từ thiết bị" **đúng về dữ liệu FE nhận được nhưng sai về
+  thiết bị**: chữ ký vẫn nằm nguyên trong binary. `domain.SystemLibraryEntries()`
+  đặt nó vào `SignatureJSON` và để `InterfaceJSON` **rỗng** (đúng thiết kế:
+  `interface` là chữ ký THÔ của PROJECT entry do người dùng nạp). Nhưng
+  `libraryEntryView` ở lớp application **chỉ chép `InterfaceJSON`**, nên chữ ký
+  rơi mất đúng ở giữa — trong khi cả hai đầu đã sẵn sàng: lớp HTTP có
+  `parseLibrarySignature` và trường `signature` (`T59-804`), và OpenAPI đã khai
+  `ProgrammingLibrarySignature` với `category`/`ports`/nhãn.
+
+  Hệ quả dây chuyền: không `ports` ⇒ FE xếp mọi mục vào `SIGNATURE_UNAVAILABLE`
+  và chặn chèn; không `category` ⇒ mọi mục dồn vào nhóm `other`, làm
+  `categoryOrder` của registry (10 nhóm có nhãn Việt/Anh) thành vô dụng. Cùng
+  một lỗ hổng cũng làm trường `Chữ ký` của Inspector và tooltip hover rỗng cho
+  mọi khối.
+
+  Cách sửa: mang `SignatureJSON` qua `LibraryEntryView`, và lớp HTTP phân giải
+  `signature` từ nó khi `InterfaceJSON` rỗng. `interface` **cố ý không** được
+  suy từ chữ ký SYSTEM — trộn hai khái niệm làm client mất khả năng phân biệt
+  nguồn tự khai với nguồn máy chủ bảo chứng. **Không đổi hợp đồng**: đây thuần
+  là đứt dây nội bộ.
+
+- **Verification** (2026-08-28): `go vet ./...` + `go test ./... -count=1` PASS;
+  test mới `TestSystemLibraryEntriesCarrySignatureToClients` đi qua **cả chuỗi
+  thật** registry → domain → response và xác nhận **46/46** entry có
+  `signature` với `category` và `ports` khác rỗng (dựng entry giả sẽ vẫn xanh
+  kể cả khi registry thật rỗng, nên test cố ý không làm vậy).
+  Sau khi deploy binary lên bo: API trả **46/46 có `signature`**, phân bố nhóm
+  thật `math 12 · conversion 14 · compare 6 · logic 5 · timer 3 · counter 2 ·
+  trigger 2 · control 2`. Kiểm giao diện bằng trình duyệt trên bo: **0** mục còn
+  báo "Thiếu chữ ký từ thiết bị".
+
 ### PGM-02 — Không xoá được POU đang công bố tín hiệu (2026-08-28)
 
 - **Fixed — hộp thoại Xoá POU hứa một việc nó không làm được.** Người dùng báo

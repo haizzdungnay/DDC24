@@ -13,6 +13,7 @@ import (
 
 	"mkddc-web/internal/auth"
 	programmingapplication "mkddc-web/internal/programming/application"
+	"mkddc-web/internal/programming/domain"
 	programmingstore "mkddc-web/internal/programming/store"
 	webrouter "mkddc-web/internal/router"
 )
@@ -483,4 +484,60 @@ func TestLibrarySignatureIsPublishedOnlyWhenItParses(t *testing.T) {
 	if response.Signature == nil || response.Signature.Category != "timer" {
 		t.Fatalf("chữ ký typed thiếu: %+v", response.Signature)
 	}
+}
+
+// TestSystemLibraryEntriesCarrySignatureToClients — hồi quy bo Foxlinx 2026-08-28.
+//
+// Triệu chứng người dùng thấy: Thư viện nhanh hiện "Thiếu chữ ký từ thiết bị"
+// cho TOÀN BỘ 46 entry SYSTEM, và tab category chỉ còn `other`.
+//
+// Câu đó ĐÚNG về dữ liệu FE nhận được nhưng SAI về thiết bị: chữ ký vẫn nằm
+// nguyên trong binary. `domain.SystemLibraryEntries()` đặt nó vào
+// `SignatureJSON` và để `InterfaceJSON` rỗng, còn lớp application chỉ chép
+// `InterfaceJSON` — nên nó rơi mất đúng ở giữa hai đầu đã sẵn sàng.
+//
+// Test đi qua CẢ chuỗi thật (registry → domain → response) thay vì dựng một
+// entry giả: bịa dữ liệu vào đây sẽ vẫn xanh kể cả khi registry thật rỗng.
+func TestSystemLibraryEntriesCarrySignatureToClients(t *testing.T) {
+	entries, err := domain.SystemLibraryEntries()
+	if err != nil {
+		t.Fatalf("đọc registry SYSTEM: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("registry SYSTEM rỗng — không có gì để kiểm")
+	}
+
+	var checked int
+	for _, entry := range entries {
+		if len(entry.SignatureJSON) == 0 {
+			continue
+		}
+		view := programmingapplication.LibraryEntryView{
+			EntryID: entry.EntryID, Kind: string(entry.Kind), Name: entry.Name,
+			FeatureState: string(entry.FeatureState),
+			// ĐÚNG như SYSTEM entry thật: `InterfaceJSON` rỗng.
+			SignatureJSON: entry.SignatureJSON,
+		}
+		response := toLibraryEntryResponse(view)
+		if response.Signature == nil {
+			t.Fatalf("%s: `signature` vắng mặt ⇒ client sẽ hiện \"thiếu chữ ký từ thiết bị\"", entry.EntryID)
+		}
+		if response.Signature.Category == "" {
+			t.Fatalf("%s: `category` rỗng ⇒ mọi mục dồn vào nhóm `other`", entry.EntryID)
+		}
+		if len(response.Signature.Ports) == 0 {
+			t.Fatalf("%s: `ports` rỗng ⇒ không chèn được và không dựng được chữ ký", entry.EntryID)
+		}
+		// `interface` KHÔNG được điền từ chữ ký SYSTEM: nó là chữ ký THÔ của
+		// PROJECT entry, và trộn hai khái niệm làm client mất khả năng phân
+		// biệt nguồn tự khai với nguồn máy chủ bảo chứng.
+		if response.Interface != nil {
+			t.Fatalf("%s: `interface` không được suy từ chữ ký SYSTEM", entry.EntryID)
+		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("không entry SYSTEM nào mang SignatureJSON — chuỗi đã đứt từ registry")
+	}
+	t.Logf("đã kiểm %d/%d entry SYSTEM có chữ ký đầy đủ", checked, len(entries))
 }
