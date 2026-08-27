@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.21 |
-| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; increment R1 ĐÓNG (`VS-PROG-U13` PASS R1/HOST); R2 đang chạy — `T59-810`/`T59-811` DONE, `T59-812` READY; `T59-813..817` ORDERED; RELEASE_READY NO-GO** |
+| Phiên bản | 2.22 |
+| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; increment R1 ĐÓNG (`VS-PROG-U13` PASS R1/HOST); R2 đang chạy — `T59-810..812` DONE, `T59-813` READY; `T59-814..817` ORDERED; RELEASE_READY NO-GO** |
 | Ngày | 2026-08-25 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
@@ -95,8 +95,7 @@ W0 Contract/Migration foundation
 
 AUTH-PROG-2026-08-24-05 → W8 reconciliation (`T59-801` DONE)
                           → R1 EDIT (`T59-802..809` DONE — increment ĐÓNG)
-                          → R2 LIVE (`T59-810`/`T59-811` DONE → `T59-812` READY → `T59-813` ORDERED)
-                          → R2 LIVE (`T59-810..813` ORDERED sau `T59-809`)
+                          → R2 LIVE (`T59-810..812` DONE → `T59-813` READY)
                           → R3 SIMULATE (`T59-814..817` ORDERED sau `T59-813`)
 ```
 
@@ -2731,8 +2730,8 @@ Consumer/discipline/Verification/Document Control review là
 | `T59-809` | R1 / `PGM02-V22-WP-12-R1` + `WP-13-R1` | Chạy/record `VS-PROG-U13`, trace/risk/manifest/rollback và closeout R1 | `T59-808 DONE` | **DONE (HOST/LOCAL)** | Record [`EV-PGM02-R1-CLOSEOUT-001`](../07_records/test-evidence/programming/2026-08-26-pgm02-t59-809-r1-closeout.md) tại commit `d32e560`: ctest **1299/1299**, Go vet+test PASS, FE **152 file/1718 test**, E2E mock **42 PASS/8 skip**, **real-backend 2/2**, hợp đồng FBD self-test **10/10**, `docs_iso_harness` PASS, chunk **111,32/125 KiB**. `VS-PROG-U13` ghi **PASS ở phạm vi R1/HOST-LOCAL**; `U14`/`U15` giữ `NOT_RUN`. Rollback R1 = build lại **không** cờ `VITE_PROGRAMS_WORKSPACE_V2` (mặc định TẮT), không cần migration — kèm cảnh báo đã ghi: rollback **Core** xuống trước lát hợp đồng hình học thì phải xoá `layout` khỏi tài liệu FBD đã lưu. **Không** nâng `I/T/P/R` của requirement nào — bằng chứng host không mở được cột đó. Chi tiết §3.9 |
 | `T59-810` | R2 / `PGM02-V22-WP-09` | Producer→Core IPC→BE contract cho Active document/value tuple, generation/sequence/freshness và Trace pin | `T59-809 DONE` + `IMPLEMENT_READY[PGM02-R2]=GO` | **DONE (HOST/LOCAL)** | `producer.capturedMonotonicNs` (chuỗi thập phân — ns kể từ boot vượt `Number.MAX_SAFE_INTEGER` sau ~104 ngày uptime) đi hết contract/BE/FE; luật thứ tự tách ba trạng thái `STALE`/`PRODUCER_RESTARTED`/`UNAVAILABLE`, so bằng BigInt; snapshot không có dấu đọc được **không được vẽ**; restart hiện ra cho người vận hành. **Trace pin**: phiên neo tuple Active bằng chính snapshot đã xác thực biến, kiểm tuple **trước** khi lấy mẫu ở cả hai đường, ba dạng trôi (đổi Revision / mốc lùi / dấu hỏng) đều fail closed, và dừng-do-trôi **không** tính là mẫu rơi. Real-backend **3/3 PASS** gồm case chứng minh monitor↔Trace↔Revision nói cùng một tuple; Go 10 case bảng + 1 test tích hợp; FE **153 file/1737 test**; E2E mock **42/8 skip**; chunk **111,89/125 KiB**. Chi tiết §3.9 |
 | `T59-811` | R2 / `PGM02-V22-WP-06-R2` | LIVE read-only controller/overlay/Watch/Trace trong FE | `T59-810 DONE` | **DONE (HOST/LOCAL)** | LIVE là component RIÊNG (`LiveProgramView`/`LiveFbdView`), không phải editor tắt sửa; nguồn đọc qua `activeProgramSource` fail-closed bảy nhánh, mỗi nhánh một lý do riêng. ST vẽ nguồn Active, FBD vẽ **sơ đồ** (canvas thuần, không mount palette/toolbar) — `AC-FBD-011` là bất biến cấu trúc vì tài liệu là prop và `dispatch` chỉ nhận `SELECT`. Watch trong workbench chiếu từ **chính** snapshot trang cha đã poll; Trace trỏ về PGM-06 vì nó sở hữu phiên có quota. Chỉ đọc là thuộc tính của **chế độ**, kiểm bằng phiên **viewer thật**: viewer vẫn ĐỌC được. FE **156 file/1762 test**; E2E mock **44 PASS/10 skip**; real-backend **5/5** (chạy hai lượt liên tiếp sau khi gỡ flake dev-server); chunk **113,87/125 KiB**. Chi tiết §3.9 |
-| `T59-812` | R2 / `PGM02-V22-WP-10-R2` + `WP-11-R2` | Budget 10 Hz, unsubscribe/leak, a11y/responsive/security/fault hardening LIVE | `T59-811 DONE` | **READY** | Budget NFR R2, monotonic rendering, reconnect bounded, no leaked subscription và role bypass |
-| `T59-813` | R2 / `PGM02-V22-WP-12-R2` + `WP-13-R2` | Chạy/record `VS-PROG-U14`, target browser/read-back, trace/risk/rollback và closeout R2 | `T59-812 DONE` | **ORDERED — dependency** | Producer→UI→read-back evidence đúng hash; chỉ R2 có verdict, R3 vẫn unavailable |
+| `T59-812` | R2 / `PGM02-V22-WP-10-R2` + `WP-11-R2` | Budget 10 Hz, unsubscribe/leak, a11y/responsive/security/fault hardening LIVE | `T59-811 DONE` | **DONE (HOST/LOCAL)** | Monitor chỉ subscribe ở LIVE; tối đa một request đang bay; trailing-latest render `≤10 Hz`; cleanup interval/timer/response khi rời LIVE; topology FBD không render lại theo sample; toàn workspace chỉ mutable ở EDIT. FE **157 file/1768 test**; Playwright hardening LIVE **9 PASS/1 skip** với 1280/1024/768/390 + axe 0 serious/critical; toàn bộ mock **53 PASS/11 skip**; backend thật **5/5 PASS**; lint/build PASS; chunk **114,32/145 KiB R2**, dư **30,68 KiB**. Chrome DevTools MCP chưa được nạp vào phiên nên không claim DevTools. Chi tiết §3.9 |
+| `T59-813` | R2 / `PGM02-V22-WP-12-R2` + `WP-13-R2` | Chạy/record `VS-PROG-U14`, target browser/read-back, trace/risk/rollback và closeout R2 | `T59-812 DONE` | **READY** | Producer→UI→read-back evidence đúng hash; chỉ R2 có verdict, R3 vẫn unavailable |
 | `T59-814` | R3 / `PGM02-V22-WP-07` | Simulation API/store/supervisor/private protocol + `mkddc-programming-sim-worker`, sandbox/cgroup/seccomp/virtual time/input allowlist | `T59-813 DONE`; `ADR-053 Accepted`; `IMPLEMENT_READY[PGM02-R3]=GO` | **ORDERED — dependency** | Worker không có production handle; admin-only mutation; idempotency/quota/restart/expiry/determinism fault tests PASS |
 | `T59-815` | R3 / `PGM02-V22-WP-08` | SIMULATE FE session/controls/input/observation/trace, permission và save-required flow | `T59-814 DONE` | **ORDERED — dependency** | viewer/operator read-only; admin action read-back; dirty Draft không spawn worker; stale session recovery PASS |
 | `T59-816` | R3 / `PGM02-V22-WP-06-R3` + `WP-10-R3` + `WP-11-R3` | Tích hợp workbench + resource/performance/a11y/security hardening Simulation | `T59-815 DONE` | **ORDERED — dependency** | Budget NFR R3, kill/reap/cleanup, audit, cross-project/escape corpus và no Active/LKG/RETAIN mutation PASS |
@@ -3090,6 +3089,34 @@ Hai lỗi thật lát cuối phơi ra, cả hai do chính phiên này tạo ra:
    locator sau đó treo tới hết timeout. `openWorkspaceRoute` nạp lại **một** lần
    rồi khẳng định boundary đã biến mất — vẫn hỏng thì là lỗi thật.
 
+
+#### Ghi chú thực thi `T59-812` — LIVE chỉ đọc phải khóa toàn workspace
+
+Trước lát này, câu “LIVE chỉ đọc” đúng trong `LiveProgramView` nhưng sai ở tầng
+trang: `canEdit` chỉ nhìn role/viewport, nên admin vẫn tạo/đổi tên/xóa POU trong
+Explorer, sửa Mapping/Execution và bấm Check khi URL đang là `mode=LIVE`. Chốt
+nay nằm ở owner chung: chỉ `admin + viewport cho phép + mode=EDIT` mới mutable.
+Không dựa vào việc từng component con có nhớ tự tắt nút hay không.
+
+Subscription monitor cũng được chuyển về đúng vòng đời mode. EDIT không mở poll;
+LIVE mở đúng một poll, không cho refresh/interval chồng request, và rời LIVE
+hủy interval, sample chờ cùng response đang bay. Value snapshot đi qua bộ
+trailing-latest tối đa **10 Hz**; lỗi nguồn hủy sample chờ và chuyển unavailable
+ngay, không chờ cửa sổ render. Topology Active parse theo source identity và
+`LiveFbdView` memo hóa, nên value-only update không commit lại canvas.
+
+Browser matrix bắt được một finding thật ở rail icon-only 768–1023 px:
+`aria-label`/`aria-disabled` đặt trên `span` không có role. Thêm `role=link` bị
+vô hiệu hóa làm axe serious/critical về 0 ở 1280/1024/768/390. Cổng bundle trong
+`npm run build` đồng thời đổi từ `--increment r1` sang **`r2`** đúng owner của
+lát này: đo **114,32/145 KiB**, dư **30,68 KiB**, không còn báo dư địa R1.
+
+Evidence HOST/LOCAL: FE **157 file/1768 test**, focused 47/47, lint/typecheck/
+build PASS; Playwright hardening LIVE **9 PASS/1 skip**; toàn bộ Programming
+mock **53 PASS/11 skip**; backend thật **5/5 PASS**. Chrome DevTools MCP đã cấu
+hình nhưng tool không được nạp vào phiên Codex hiện tại, nên không có claim
+DevTools. `T59-813` tự chuyển `READY`; target/HIL/release chưa đổi.
+
 ## 4. Bảng ownership
 
 | Boundary | R | A | Consumer/reviewer |
@@ -3113,7 +3140,7 @@ không đổi theo nhân sự.
 - Với 52 task baseline: Product/SRS/DDD/ADR đã Active. Với PGM-02 v2.2:
   `AUTH-PROG-2026-08-24-05` đã pin exact Candidate commit
   `413a043748dce3b44d2c5076412de761760ba17a`; `T59-801..809 DONE` (R1 đóng),
-  `T59-810 READY` và `T59-811..817 ORDERED` theo predecessor.
+  `T59-810..812 DONE`, `T59-813 READY` và `T59-814..817 ORDERED` theo predecessor.
 - Contract change có producer/consumer/migration/rollback/test list.
 - Fixture và lệnh test nhỏ nhất đã xác định.
 
@@ -3152,7 +3179,7 @@ các evidence task còn khả thi.
 
 | Cổng | Trạng thái |
 |---|---|
-| `IMPLEMENTATION_CLOSE` | **PENDING** — corrective `F-P59-GHOST-POU-001` đã sửa xong source/catalog/checker/packager/test và đạt affected gate 2026-08-25 (`ctest` 1297/1297, Go vet/test PASS, pytest catalog 9/9, G1 10/10). R1 (`T59-802..809`) đã đóng ở lớp HOST/LOCAL; cổng vẫn PENDING vì `T59-810..817` (R2/R3) chưa chạy, nên chưa có closure cho PGM-02 v2.2 |
+| `IMPLEMENTATION_CLOSE` | **PENDING** — corrective `F-P59-GHOST-POU-001` đã sửa xong source/catalog/checker/packager/test và đạt affected gate 2026-08-25 (`ctest` 1297/1297, Go vet/test PASS, pytest catalog 9/9, G1 10/10). R1 (`T59-802..809`) đã đóng ở lớp HOST/LOCAL; R2 đã xong `T59-810..812` và còn closeout `T59-813`; R3 `T59-814..817` chưa chạy, nên chưa có closure cho PGM-02 v2.2 |
 | `TARGET_FAKE_MCU_DEPLOY` | **PARTIAL (2026-08-24)** — deploy `fa1f5f4` trên Forlinx `MCU_MODE=FAKE`: 5/5 service active, health đủ 6 mục `ok`, Commission 10 Program `SUCCEEDED`, Programs `CORE_LIVE`, Enable/Disable 6/6 ~0,95 s, Monitor đọc `UI-01` GOOD/LIVE, signal producer→consumer FRESH. **Còn thiếu**: diễn tập rollback đầy đủ binary+DB trên bo (`F-P59-ROLLBACK-DB-001`) |
 | `TARGET_FAKE_MCU_SOAK` | **NOT_RUN** — yêu cầu đủ 24 h, không rút ngắn |
 | `RELEASE_READY` | **NO-GO** |
@@ -3182,6 +3209,7 @@ truy nguyên As-Built đến 2026-08-20.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.22 | 2026-08-27 | Đóng `T59-812` `DONE (HOST/LOCAL)`: monitor chỉ sống ở LIVE, một request đang bay, render ≤10 Hz, cleanup khi rời mode, topology FBD không render lại theo sample, khóa mutation toàn workspace, responsive/axe bốn viewport và bundle gate đổi đúng R2 (114,32/145 KiB). `T59-813` chuyển READY; target/HIL/release không đổi. |
 | 2.21 | 2026-08-27 | Đóng `T59-811` `DONE (HOST/LOCAL)`: Watch trong workbench, FBD ở LIVE bằng canvas thuần, và "mọi role read-only" kiểm bằng viewer thật. Gỡ hai lỗi do chính phiên tạo ra (poll monitor trùng; flake dev-server). `T59-812` chuyển `READY`. |
 | 2.20 | 2026-08-27 | `T59-811` PARTIAL: LIVE là component riêng đọc nguồn Active fail-closed, chỉ đọc theo chế độ chứ không theo vai, mở capability + route; real-backend đối chiếu ba nguồn độc lập. Ghi hai bài học về lane real-backend (không tự Commission; lane từng ghi tài khoản vào config trong repo). |
 | 2.19 | 2026-08-26 | Đóng `T59-810` `DONE (HOST/LOCAL)`: Trace pin (neo tuple, kiểm trước khi lấy mẫu, ba dạng trôi fail closed) và case real-backend chứng minh monitor↔Trace↔Revision cùng một tuple. `T59-811` chuyển `READY`. |
