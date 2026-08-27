@@ -3,15 +3,15 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001` |
-| Phiên bản | 1.15 |
-| Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; increment R1 ĐÓNG (`T59-801..809`, `VS-PROG-U13` PASS R1/HOST); `WP-09`/`T59-810` READY mở R2 — xem §0** |
+| Phiên bản | 1.16 |
+| Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; R1 ĐÓNG; R2 đã giao `T59-810..812`, `T59-813` READY để closeout — xem §0** |
 | Ngày | 2026-08-25 |
 | Mốc mã nguồn lập kế hoạch | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` |
 | Review nguồn | [REC-PGM02-ST-FBD-REDESIGN-REVIEW-001](PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md) |
 | Chủ quản đề xuất | Programming Product + Software/Runtime Architecture |
 | Người phê duyệt | Phạm Đình Chương — Product Owner/CTO + System Architect, electronic authorization `AUTH-PROG-2026-08-24-05` |
 | Change request chủ quản | [`CR-PROG-PGM02-V22-001`](../../../00_governance/PROGRAMMING_OPEN_DECISIONS.md) |
-| Execution authority | [Plan59](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) là tracker/scheduler duy nhất; `T59-812` READY, task sau tự mở theo predecessor |
+| Execution authority | [Plan59](../../../03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) là tracker/scheduler duy nhất; `T59-813` READY, task sau tự mở theo predecessor |
 | Release gate | `RELEASE_READY = NO-GO` cho tới khi WP-12/13 và evidence target áp dụng hoàn tất |
 
 Kế hoạch không ước lượng thời gian khi chưa có velocity/resource evidence. Độ
@@ -20,8 +20,8 @@ phức tạp dùng `S/M/L/XL`, phản ánh số boundary và rủi ro, không ph
 Tên `WP-00..WP-13` trong proposal này là alias đọc ngắn. Mọi record kiểm soát,
 trace, risk, task và evidence phải dùng namespace canonical
 `PGM02-V22-WP-00..PGM02-V22-WP-13`; `WP-00`..`WP-03` đã DONE. Các task
-R1/R2/R3 đều có entry authority, nhưng chỉ `T59-805` đang chạy; task sau giữ
-ORDERED tới khi dependency trước hoàn tất. Trạng thái từng WP nằm ở §0.
+R1/R2/R3 đều có entry authority; hiện `T59-813` READY, task R3 giữ ORDERED tới
+khi predecessor hoàn tất. Trạng thái từng WP nằm ở §0.
 
 ## 0. Roadmap triển khai — cập nhật theo từng lát
 
@@ -38,12 +38,12 @@ không nói CI, target, HIL hay release.
 | `WP-03` | `T59-804` | **DONE** 2026-08-26 | Catalog dùng chung (BE authority) + Quick Library ST + Recent/Favorites + parity BE↔registry trên backend thật + lọc palette FBD theo cổng đang chọn + khoá luật không tự nối + sáu block `TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS` (compiler+runtime+conformance) + typed metadata public trong OpenAPI + dock dùng chung ST↔FBD | [evidence 2026-08-26](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md) |
 | `WP-04` | `T59-805` | **DONE (R1)** 2026-08-26 | Guard read-only runtime + chèn FB có trạng thái đúng vùng khai báo (`AC-ST-002/003`) + chỉ mục tham chiếu, F12 tới khai báo, khay "không xác định được" (`AC-ST-005`) + khoá `AC-ST-004/010` bằng 8 nguồn ngoài subset | AC áp dụng cho R1 (`AC-ST-001..005`, `010`, `011`) đều có test; FE 146 file/1626 test. [Cổng phụ thuộc](../../../00_governance/PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) CLOSED bằng lựa chọn A (`UD-PROG-013`): giữ bề mặt hiện tại cho R1. Hover chuột và chỉ mục ký hiệu do compiler sinh mở lại từ R2 |
 | `WP-05` | `T59-806` | **DONE (R1)** 2026-08-26 | Hợp đồng `layout` (compiler bỏ qua khi canonical hoá) + canvas SVG node–edge thật + khay Vấn đề nhảy tới đúng block/dây + minimap trên ngưỡng + fixture 256 block | AC áp dụng cho R1 (`AC-FBD-001..007`, `012`) đều có test; accessibility có axe quét thẳng canvas (0 vi phạm); ctest 1299/1299, FE 149 file/1684 test, E2E 31 PASS/5 skip. `AC-FBD-008` thuộc R3, `AC-FBD-009..011` thuộc R2 |
-| `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | **DONE (R1+R2)** 2026-08-27 | LIVE read-only: nguồn Active fail-closed, FBD bằng canvas thuần, Watch chiếu snapshot chung | real-backend 5/5; FE 156 file/1762 test | Workbench đáy dùng chung + máy trạng thái mode + slot lưới thu gọn + bốn lớp lỗi trên backend thật | Real-backend E2E 2/2 PASS; FE 152 file/1714 test; mock E2E 31 PASS/5 skip |
+| `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | **DONE (R1+R2)** 2026-08-27 | R1: workbench/mode/grid/bốn lớp lỗi; R2: nguồn Active fail-closed, FBD canvas thuần, Watch snapshot chung | R1 real-backend 2/2; R2 real-backend 5/5; FE 156 file/1762 test |
 | `WP-07` | `T59-814` | ORDERED | — | — |
 | `WP-08` | `T59-815` | ORDERED | — | — |
 | `WP-09` | `T59-810` | **DONE (R2)** 2026-08-26 | Dấu producer (generation/freshness) + Trace pin neo tuple Active | Real-backend 3/3; Go 10 case bảng + 1 tích hợp; FE 153 file/1737 test |
-| `WP-10` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1)** 2026-08-26 | Cổng ngân sách chunk chạy trong `npm run build` + đính chính bẫy đơn vị kB/KiB | 111,32 KiB / 125 KiB; hai nhánh FAIL của cổng đã kiểm |
-| `WP-11` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1)** 2026-08-26 | Bốn khổ màn có case tràn ngang (bắt lỗi thật ở 1024 px), focus ring theo số pin, bàn phím đi hết, RBAC negative hai tầng, hostile source | mock E2E 42 PASS/8 skip; FE 152 file/1718 test |
+| `WP-10` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1+R2)** 2026-08-27 | R1 cổng ngân sách; R2 monitor chỉ ở LIVE, một request đang bay, coalesce ≤10 Hz, cleanup và topology FBD không render lại theo sample | R2 chunk 114,32/145 KiB, dư 30,68 KiB; focused 47/47; FE 157 file/1768 test |
+| `WP-11` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1+R2)** 2026-08-27 | R1 responsive/keyboard/RBAC/hostile source; R2 khóa mutation toàn workspace LIVE, bốn viewport và sửa finding axe rail icon-only | Playwright T59-812 9 PASS/1 skip; 1280/1024/768/390 không tràn; axe serious/critical 0 |
 | `WP-12` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 | Chạy/record `VS-PROG-U13`, rollback, closeout increment | [`EV-PGM02-R1-CLOSEOUT-001`](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-809-r1-closeout.md) tại `d32e560` |
 | `WP-13` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 | Docs closeout R1 trong cùng record | như trên |
 
@@ -1193,15 +1193,16 @@ ban hành `AUTH-PROG-2026-08-24-05`:
   đọc session/snapshot, không được create/run/pause/step/reset/stop/set input.
 
 WP-00/T59-801 đã DONE; `PLAN_READY=PASS`, ba `IMPLEMENT_READY=GO`. Plan59 vẫn
-bắt buộc dependency nên chỉ `T59-802` READY, task sau ORDERED. Waiver review
+bắt buộc dependency; `T59-810..812` đã DONE và `T59-813` READY. Waiver review
 discipline chỉ mở implementation, không chứng minh M4/M5, target/HIL hoặc release.
 
-**OWNER + ARCHITECT APPROVED — EXACT CANDIDATE `413a043`; T59-802 READY**
+**OWNER + ARCHITECT APPROVED — EXACT CANDIDATE `413a043`; T59-813 READY**
 
 ## Revision history
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.16 | 2026-08-27 | Đóng `WP-10`/`WP-11` ở phạm vi R2 qua `T59-812`: subscription/10 Hz/no-overlap/cleanup, topology FBD tách sample, khóa mutation toàn LIVE, responsive/axe bốn viewport và budget gate R2. Sửa luôn dòng WP-06 thừa cột; `T59-813` chuyển READY. |
 | 1.15 | 2026-08-27 | Đóng `WP-06` ở phạm vi R2 (LIVE read-only đủ ST + FBD + Watch); `T59-812` chuyển READY. |
 | 1.14 | 2026-08-26 | Đóng `WP-09`/`T59-810` (dấu producer + Trace pin); `T59-811` (LIVE FE) chuyển READY. |
 | 1.13 | 2026-08-26 | Đóng `WP-12`/`WP-13` ở phạm vi R1 kèm record closeout; increment R1 đóng và `WP-09`/`T59-810` mở R2. |

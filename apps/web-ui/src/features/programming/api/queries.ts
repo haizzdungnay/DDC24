@@ -4,6 +4,7 @@ import { ProgrammingApiError } from './generated/client'
 import { programmingErrorCopy } from './errorCopy'
 import { useI18n } from '../../../shared/i18n'
 import { judgeProducerStamp } from '../runtime/producerStamp'
+import { createLatestRenderBudget, type LatestRenderBudget } from '../runtime/liveRenderBudget'
 import type {
   ProgrammingAuditPage,
   ProgrammingCapabilities,
@@ -327,7 +328,7 @@ export function classifyProgrammingMonitorFailure(reason: unknown): Exclude<Prog
 /** `GET /runtime/monitor` — snapshot cuối-scan authoritative, poll 1 Hz. Khi
  * nguồn lỗi, xoá snapshot khỏi state thay vì giữ mẫu cũ dưới nhãn LIVE. Hook
  * chuyên biệt giữ thêm loại lỗi để Watch phân biệt permission/offline/error. */
-export function useProgrammingRuntimeMonitor(): ProgrammingRuntimeMonitorState {
+export function useProgrammingRuntimeMonitor(enabled = true): ProgrammingRuntimeMonitorState {
   const { pick } = useI18n()
   const client = useProgrammingApiClient()
   const load = useCallback(() => client.request<ProgrammingMonitorPage>('getProgrammingRuntimeMonitor'), [client])
@@ -338,15 +339,58 @@ export function useProgrammingRuntimeMonitor(): ProgrammingRuntimeMonitorState {
   const [producerRestarted, setProducerRestarted] = useState(false)
   const loadRef = useRef(load)
   const generation = useRef(0)
+  const enabledRef = useRef(enabled)
+  const inFlight = useRef(false)
+  const rerunAfterFlight = useRef(false)
+  const runRef = useRef<() => void>(() => {})
   /* Mốc của snapshot ĐANG HIỆN. `generation` phía trên chỉ bảo vệ khỏi response
    * của chính hook này về trễ; nó không nói gì về việc Core đã restart hay BE
    * phục vụ lại một snapshot đã cache. Mốc producer mới trả lời được điều đó. */
   const lastCaptured = useRef<bigint | null>(null)
+  const restartPending = useRef(false)
   loadRef.current = load
+  enabledRef.current = enabled
+
+  const renderBudget = useRef<LatestRenderBudget<{
+    generation: number
+    value: ProgrammingMonitorPage
+    producerRestarted: boolean
+  }> | null>(null)
+  if (renderBudget.current === null) {
+    renderBudget.current = createLatestRenderBudget((next) => {
+      if (!enabledRef.current || next.generation !== generation.current) return
+      restartPending.current = false
+      setProducerRestarted(next.producerRestarted)
+      setData(next.value)
+      setError(null)
+      setFailure(null)
+      setStatus('ready')
+    })
+  }
 
   const run = useCallback(() => {
-    const myGeneration = ++generation.current
+    if (!enabledRef.current) return
+    /* Poll/refresh không được chồng request. Một endpoint chậm mà cứ mở thêm
+     * request mỗi giây vừa tạo leak, vừa cho response cũ/mới đua nhau. Giữ đúng
+     * một lần chạy và coalesce mọi yêu cầu xen giữa thành một lượt kế tiếp. */
+    if (inFlight.current) {
+      rerunAfterFlight.current = true
+      return
+    }
+    inFlight.current = true
+    /* In-flight bị giới hạn một nên response không thể đảo thứ tự. Generation
+     * ở đây là epoch subscription, chỉ tăng lúc disable/unmount/load đổi; nếu
+     * tăng theo từng request thì một poll STALE có thể vô tình làm sample mới
+     * đang chờ cửa sổ 100 ms bị loại. */
+    const myGeneration = generation.current
     setStatus((current) => current === 'error' ? 'loading' : current)
+    const finish = () => {
+      if (myGeneration !== generation.current) return
+      inFlight.current = false
+      if (!rerunAfterFlight.current || !enabledRef.current) return
+      rerunAfterFlight.current = false
+      queueMicrotask(() => runRef.current())
+    }
     Promise.resolve().then(() => loadRef.current()).then(
       (value) => {
         if (myGeneration !== generation.current) return
@@ -354,32 +398,53 @@ export function useProgrammingRuntimeMonitor(): ProgrammingRuntimeMonitorState {
         if (verdict.kind === 'STALE') {
           /* Snapshot không mới hơn thứ đang hiện: giữ nguyên. Vẽ lại số cũ
            * làm khay giá trị nhấp nháy như vừa có dữ liệu mới. */
+          finish()
           return
         }
         if (verdict.kind === 'ACCEPT' || verdict.kind === 'PRODUCER_RESTARTED') {
           lastCaptured.current = verdict.capturedMonotonicNs
         }
-        setProducerRestarted(verdict.kind === 'PRODUCER_RESTARTED')
-        setData(value)
-        setError(null)
-        setFailure(null)
-        setStatus('ready')
+        restartPending.current = restartPending.current || verdict.kind === 'PRODUCER_RESTARTED'
+        renderBudget.current?.push({
+          generation: myGeneration,
+          value,
+          producerRestarted: restartPending.current,
+        })
+        finish()
       },
       (reason: unknown) => {
         if (myGeneration !== generation.current) return
         /* Mất kết nối rồi nối lại có thể là một Core khác: quên mốc cũ để lần
          * so tiếp theo không kết luận "restart" hay "stale" từ một mạch đã đứt. */
         lastCaptured.current = null
+        restartPending.current = false
+        renderBudget.current?.cancel()
         setProducerRestarted(false)
         setData(null)
         setError(programmingResourceErrorMessage(pick, reason))
         setFailure(classifyProgrammingMonitorFailure(reason))
         setStatus('error')
+        finish()
       }
     )
   }, [pick])
+  runRef.current = run
 
   useEffect(() => {
+    if (!enabled) {
+      generation.current += 1
+      inFlight.current = false
+      rerunAfterFlight.current = false
+      lastCaptured.current = null
+      restartPending.current = false
+      renderBudget.current?.cancel()
+      setProducerRestarted(false)
+      setData(null)
+      setError(null)
+      setFailure(null)
+      setStatus('loading')
+      return undefined
+    }
     run()
     const timer = window.setInterval(run, 1000)
     return () => {
@@ -387,8 +452,13 @@ export function useProgrammingRuntimeMonitor(): ProgrammingRuntimeMonitorState {
       // Invalidate request đang bay; Promise hoàn tất sau unmount không được
       // cập nhật state hoặc tái hiện snapshot của thế hệ cũ.
       generation.current += 1
+      inFlight.current = false
+      rerunAfterFlight.current = false
+      lastCaptured.current = null
+      restartPending.current = false
+      renderBudget.current?.cancel()
     }
-  }, [run, load])
+  }, [enabled, run, load])
 
   return { status, data, error, failure, producerRestarted, refresh: run }
 }

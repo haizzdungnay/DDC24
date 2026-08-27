@@ -114,6 +114,7 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
     renderRail('project-1')
     const settings = railItem('project-settings')
     expect(settings.tagName).toBe('SPAN')
+    expect(settings).toHaveAttribute('role', 'link')
     expect(settings).toHaveAttribute('aria-disabled', 'true')
     expect(settings).toHaveAttribute('title', 'Chưa có trang Cài đặt Project ở bản dựng này')
     expect(programmingRailItems('project-1').find((item) => item.key === 'project-settings')?.to).toBeNull()

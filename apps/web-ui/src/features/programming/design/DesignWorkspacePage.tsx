@@ -76,11 +76,16 @@ export function DesignWorkspacePage({
   const { setEditingContext } = useProgrammingRuntimeContext()
   const detectedMobileReadOnly = useProgrammingMobileReadOnly()
   const mobileReadOnly = mobileReadOnlyOverride ?? detectedMobileReadOnly
-  const canEdit = roleAtLeast(session?.role, 'admin') && !mobileReadOnly
   const { projectId: routeProjectId } = useParams<{ projectId: string }>()
   const projectId = projectIdOverride ?? routeProjectId
   const [searchParams, setSearchParams] = useSearchParams()
   const requested = searchParams.get('tab')
+  /* Mode là state URL. Tính trước mọi hook/query để LIVE là nơi DUY NHẤT mở
+   * monitor subscription; rời LIVE phải cleanup ngay cả khi component không
+   * unmount vì route canonical chỉ đổi query. */
+  const modeParam = searchParams.get('mode')
+  const workspaceMode: ProgramsWorkspaceMode = isProgramsWorkspaceMode(modeParam) ? modeParam : 'EDIT'
+  const canEdit = roleAtLeast(session?.role, 'admin') && !mobileReadOnly && workspaceMode === 'EDIT'
   const fromQuery: DesignTab = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as DesignTab) : 'programs'
   /* `execution` là tab con, không phải trang IA: nó chỉ có địa chỉ dưới dạng
    * `?tab=execution` trên route `programs`. Mọi giá trị khác thì route thắng. */
@@ -162,7 +167,7 @@ export function DesignWorkspacePage({
   }, [requested, route, tab, setSearchParams])
 
   const workspace = useDraftWorkspace(projectId)
-  const monitor = useProgrammingRuntimeMonitor()
+  const monitor = useProgrammingRuntimeMonitor(workspaceMode === 'LIVE')
   /* `toWorkspaceDocument` cấp object/array mới. Nếu gọi trực tiếp dưới render,
    * mỗi lần monitor poll sẽ làm ProgramsTab tưởng Draft đổi, phát lại
    * `onPendingOperationsChange([])` rồi cha set state bằng một mảng mới: vòng
@@ -292,12 +297,6 @@ export function DesignWorkspacePage({
       },
     })
   }
-
-  /* Mode là trạng thái URL đúng như route canonical khai (`?mode=`). Giá trị
-   * lạ KHÔNG được âm thầm hạ về EDIT ở đây — resolver route đã chặn nó bằng
-   * một trang lỗi; chỗ này chỉ đọc giá trị đã hợp lệ. */
-  const modeParam = searchParams.get('mode')
-  const workspaceMode: ProgramsWorkspaceMode = isProgramsWorkspaceMode(modeParam) ? modeParam : 'EDIT'
 
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
@@ -454,7 +453,6 @@ export function DesignWorkspacePage({
           onPendingOperationsChange={updateProgramOperations}
           discardVersion={discardVersion}
           onRunCheck={goToCommission}
-          runtimeOverlayByProgramId={runtimeOverlays}
           userPouInterfaces={userPouInterfaces}
           forceReadOnly={mobileReadOnly}
         />
