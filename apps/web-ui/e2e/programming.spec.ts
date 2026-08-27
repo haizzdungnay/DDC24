@@ -320,6 +320,27 @@ async function installProgrammingMocks(page: Page, state: MockState) {
         createdAt: new Date().toISOString(), attemptCount: 1
       })
     }
+    /* `T59-811` — LIVE đọc thân Revision đang chạy. Trước lát này chế độ LIVE
+       bị chặn ở resolver nên không route nào cần stub; nay nó mount thật, và
+       thiếu stub thì backend giả trả 503 và test bắt được console.error. */
+    if (method === 'GET' && path === `/revisions/${ACTIVE_REVISION_ID}`) {
+      return json(route, {
+        revisionId: ACTIVE_REVISION_ID,
+        sequence: 1,
+        contentHash: 'a'.repeat(64),
+        snapshot: {
+          objects: [{
+            objectId: POU_OBJECT_ID,
+            kind: 'PROGRAM',
+            payload: {
+              objectId: POU_OBJECT_ID, kind: 'PROGRAM', name: 'Điều khiển AHU', language: 'ST',
+              source: 'PROGRAM AHU_ACTIVE\nEND_PROGRAM\n',
+              programConfig: { programId: PROGRAM_ID, periodMs: 1000 }
+            }
+          }]
+        }
+      })
+    }
     if (method === 'GET' && path === `/revisions/${ACTIVE_REVISION_ID}/changes/revision-mock-0001`) {
       return json(route, {
         fromRevisionId: ACTIVE_REVISION_ID, toRevisionId: 'revision-mock-0001',
@@ -1282,5 +1303,71 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
     await handle.focus()
     await page.keyboard.press('ArrowUp')
     expect(await handle.getAttribute('aria-valuenow')).not.toBe(before)
+  })
+})
+
+/**
+ * `T59-811` — LIVE trong trình duyệt.
+ *
+ * Điều case này khoá là thứ không nhìn thấy bằng mắt: Draft và Active hiện ra
+ * trong cùng một cửa sổ. Fixture cố ý cho hai bản khác NỘI DUNG, rồi khẳng định
+ * LIVE hiện đúng bản đang chạy.
+ */
+test.describe('PGM-02 LIVE (T59-811)', () => {
+  test('LIVE hiện nguồn Active, chỉ đọc, và Watch đọc cùng snapshot', async ({ page }, testInfo) => {
+    test.skip(
+      (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      'khổ hẹp là read-only theo cách riêng; LIVE có case desktop'
+    )
+    const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    const failures = observeBrowserFailures(page)
+    await login(page)
+
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=LIVE`)
+
+    const liveSource = page.getByLabel(/Mã nguồn đang chạy/)
+    await expect(liveSource).toBeVisible()
+    // Nguồn của gói ĐANG CHẠY, không phải Draft.
+    await expect(liveSource).toHaveValue(/PROGRAM AHU_ACTIVE/)
+    await expect(liveSource).toHaveAttribute('readonly', '')
+
+    // Chỉ đọc là thuộc tính của CHẾ ĐỘ: phiên này vẫn là admin.
+    await expect(page.getByText('Chỉ đọc với mọi vai')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Lưu', exact: true })).toHaveCount(0)
+
+    // Khay workbench khai đúng chế độ, và Watch nay có nguồn.
+    await expect(page.getByText(/^LIVE · /)).toBeVisible()
+    await page.getByRole('tab', { name: /Watch/ }).click()
+    await expect(page.getByText(/Watch cần nguồn giá trị runtime/)).toHaveCount(0)
+
+    // Trace vẫn thuộc về đúng một nơi, kể cả ở LIVE.
+    await page.getByRole('tab', { name: 'Trace' }).click()
+    await expect(page.getByText(/phiên có quota và vòng đời riêng/)).toBeVisible()
+
+    expectNoBrowserFailures(failures, 'LIVE')
+  })
+
+  test('đổi EDIT → LIVE khi Draft bẩn phải hỏi trước', async ({ page }, testInfo) => {
+    test.skip(
+      (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      'khổ hẹp không sửa được nên không có Draft bẩn'
+    )
+    const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
+
+    const source = page.getByLabel(/Mã nguồn ST/)
+    await expect(source).toBeVisible()
+    await source.fill('PROGRAM P\nX := 1; (* chưa lưu *)\nEND_PROGRAM\n')
+
+    await page.getByRole('button', { name: 'LIVE', exact: true }).click()
+    // Buffer đang gõ KHÔNG đi theo khi đổi nguồn tài liệu, nên phải hỏi.
+    await expect(page.getByText(/Đổi chế độ sẽ đổi nguồn tài liệu/)).toBeVisible()
+    expect(new URL(page.url()).searchParams.get('mode')).toBe('EDIT')
+
+    await page.getByRole('button', { name: 'Ở lại' }).click()
+    await expect(source).toHaveValue(/chưa lưu/)
   })
 })

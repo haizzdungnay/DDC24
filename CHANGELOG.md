@@ -8,6 +8,41 @@
 
 ## [Unreleased]
 
+### PGM-02 R2 — Watch trong workbench ở LIVE, và gỡ một bộ poll trùng (`T59-811`) (2026-08-27)
+
+- **Fixed — hai bộ poll monitor cùng chạy, do chính lát trước tạo ra.**
+  `LiveProgramView` gọi `useProgrammingRuntimeMonitor()` trong khi trang cha đã
+  poll cùng endpoint ở nhịp 1 Hz: gấp đôi tải cho Core, **hai dãy
+  `capturedMonotonicNs` độc lập**, và hai câu trả lời có thể lệch nhau về cùng
+  một thời điểm. Đúng thứ AC "không duplicate concurrent poll" tồn tại để chặn.
+  Nay snapshot **truyền xuống** như prop; component không tự mở nguồn thứ hai.
+
+- **Added — tab Watch có nội dung thật ở LIVE.** Chiếu từ **chính** snapshot
+  trang cha đã poll, và **không tự diễn giải lại giá trị**:
+  `presentStRuntimeValue` là nơi duy nhất biết luật "null/BAD/OFFLINE không bao
+  giờ thành 0", workbench chỉ nhận `display`/`state` đã tính sẵn. Ô không hợp lệ
+  hiện `—` **không kèm đơn vị** — gắn đơn vị vào đó làm nó trông như một số đo.
+
+- **Phân biệt hai câu rất khác nhau.** "Chế độ này không có nguồn giá trị" (EDIT)
+  khác hẳn "POU đang mở không có biến runtime nào được ánh xạ" (LIVE, nguồn có
+  nhưng rỗng). Gộp chúng lại làm người đọc đi tìm sai chỗ.
+
+- **Changed — Trace thuộc về đúng một nơi, ở MỌI chế độ.** Nó sở hữu một phiên
+  có quota, stop reason và ring của Core; mở phiên thứ hai từ workbench là đúng
+  thứ AC "không duplicate concurrent trace session" cấm. Workbench **trỏ tới**
+  PGM-06 thay vì tự mở.
+
+- **Fixed — mock e2e thiếu stub `GET /revisions/{id}`.** Trước lát này LIVE bị
+  chặn ở resolver nên không route nào cần stub; nay nó mount thật, và thiếu stub
+  khiến backend giả trả 503 — chính phép kiểm `console.error` của bộ test bắt
+  được.
+
+- **Verification.** FE **155 file / 1759 test PASS**; E2E mock **44 PASS / 10
+  skip** (+2 case LIVE trong trình duyệt); real-backend **4/4 PASS**;
+  `users.conf` không bị ghi thêm sau khi chạy; build PASS — chunk **113,57 KiB /
+  125 KiB**.
+
+
 ### Governance — ghi tiến độ `T59-811` và hai bài học về lane real-backend (2026-08-27)
 
 - **`T59-811` `PARTIAL`.** Đã giao: LIVE là component riêng đọc nguồn Active

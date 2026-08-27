@@ -4,7 +4,8 @@ import { buildStReferenceIndex } from '../editor/stReferenceIndex'
 import { fbdIssueTargets } from '../../fbd/issueTargets'
 import { validateFbdDocument, type FbdDocument } from '../../fbd/model'
 import type { ProgrammingDraftDocument } from '../../model/types'
-import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol } from './ProgrammingWorkbench'
+import { presentStRuntimeValue, type StRuntimeOverlayState } from '../editor/StRuntimeValueOverlay'
+import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol, type WorkbenchWatchRow } from './ProgrammingWorkbench'
 
 /**
  * `T59-807` — chỗ dựng dữ liệu cho workbench của PGM-02.
@@ -23,6 +24,8 @@ export function DesignWorkbench({
   checkOwnerHref,
   onSelectProgram,
   onJumpToOffset,
+  runtimeOverlay,
+  traceOwnerHref,
 }: {
   mode: WorkbenchMode
   document: ProgrammingDraftDocument
@@ -31,6 +34,12 @@ export function DesignWorkbench({
   checkOwnerHref: string
   onSelectProgram: (programId: string | undefined) => void
   onJumpToOffset: (offset: number, length: number) => void
+  /**
+   * Lớp giá trị của POU đang mở, chiếu từ **chính** snapshot trang cha đã poll.
+   * `undefined` = chế độ hiện tại không có nguồn giá trị nào (EDIT).
+   */
+  runtimeOverlay?: StRuntimeOverlayState
+  traceOwnerHref?: string
 }) {
   const { pick } = useI18n()
 
@@ -88,9 +97,29 @@ export function DesignWorkbench({
      * chuyển hướng theo `programId` đã chốt lúc dựng danh sách. */
   }, [document.programs, pick])
 
+  /* Chiếu overlay thành dòng Watch. `presentStRuntimeValue` là nơi DUY NHẤT
+   * biết luật "null/BAD/OFFLINE không bao giờ thành 0"; diễn giải lại ở đây là
+   * dựng một bản luật thứ hai có thể lệch. */
+  const watch: WorkbenchWatchRow[] | null = runtimeOverlay === undefined
+    ? null
+    : runtimeOverlay.status === 'ready'
+      ? runtimeOverlay.items.map((item) => {
+          const presented = presentStRuntimeValue(item)
+          return {
+            variableId: item.variableId,
+            name: item.variableName,
+            display: presented.displayValue,
+            state: presented.state,
+            unit: item.unit,
+          }
+        })
+      : []
+
   return (
     <ProgrammingWorkbench
       mode={mode}
+      watch={watch}
+      traceOwnerHref={traceOwnerHref}
       sourceLabel={sourceLabel}
       problems={problems}
       symbols={symbols}

@@ -40,6 +40,21 @@ export interface WorkbenchSymbol {
   onJump: () => void
 }
 
+/**
+ * `T59-811` — một dòng Watch trong workbench.
+ *
+ * Đã được **trình bày sẵn** (`display`/`state`) chứ không phải giá trị thô:
+ * luật "null/BAD/OFFLINE không bao giờ thành 0" sống ở `presentStRuntimeValue`,
+ * và diễn giải lại lần thứ hai ở đây là hai chỗ để lệch nhau.
+ */
+export interface WorkbenchWatchRow {
+  variableId: string
+  name: string
+  display: string
+  state: 'live' | 'uncertain' | 'stale' | 'invalid'
+  unit?: string
+}
+
 export interface WorkbenchSearchHit {
   offset: number
   line: number
@@ -60,6 +75,8 @@ export function ProgrammingWorkbench({
   source,
   onJumpToOffset,
   checkOwnerHref,
+  watch,
+  traceOwnerHref,
 }: {
   mode: WorkbenchMode
   /** Nguồn dữ liệu đang hiển thị, ví dụ `Draft · AHU_FanControl`. */
@@ -71,6 +88,13 @@ export function ProgrammingWorkbench({
   onJumpToOffset: (offset: number, length: number) => void
   /** Nơi thật sự sở hữu kết quả Check (PGM-03) — nêu đích danh thay vì im lặng. */
   checkOwnerHref: string
+  /**
+   * Giá trị runtime của POU đang mở, chiếu từ **chính** snapshot trang cha đã
+   * poll. `null`/`undefined` = chế độ hiện tại không có nguồn giá trị nào.
+   */
+  watch?: readonly WorkbenchWatchRow[] | null
+  /** PGM-06 sở hữu phiên Trace; workbench chỉ trỏ tới, không mở phiên thứ hai. */
+  traceOwnerHref?: string
 }) {
   const { pick } = useI18n()
   const [open, setOpen] = useState(true)
@@ -113,8 +137,8 @@ export function ProgrammingWorkbench({
     { id: 'problems', label: pick('Vấn đề', 'Problems'), count: problems.length, available: true },
     { id: 'search', label: pick('Tìm kiếm', 'Search'), count: source ? hits.length : null, available: source !== null },
     { id: 'references', label: pick('Tham chiếu', 'Cross reference'), count: symbols.length, available: symbols.length > 0 || source !== null },
-    { id: 'watch', label: 'Watch', count: null, available: mode !== 'EDIT' },
-    { id: 'trace', label: 'Trace', count: null, available: mode !== 'EDIT' },
+    { id: 'watch', label: 'Watch', count: watch ? watch.length : null, available: watch !== null && watch !== undefined },
+    { id: 'trace', label: 'Trace', count: null, available: false },
   ]
 
   return (
@@ -205,21 +229,79 @@ export function ProgrammingWorkbench({
               <ReferencesPanel symbols={symbols} pick={pick} />
             )
           )}
-          {(tab === 'watch' || tab === 'trace') && (
+          {tab === 'watch' && (
             /* AC: "unavailable tab giải thích capability". Hiện một danh sách
-             * rỗng ở đây sẽ đọc như "không có giá trị nào", trong khi sự thật
-             * là "chế độ EDIT không có nguồn giá trị runtime nào cả". */
-            <Unavailable
-              reason={pick(
-                `${tab === 'watch' ? 'Watch' : 'Trace'} cần nguồn giá trị runtime. Chế độ EDIT chỉ có Draft, không có giá trị nào để hiện — chuyển sang LIVE khi capability đó sẵn sàng.`,
-                `${tab === 'watch' ? 'Watch' : 'Trace'} needs a runtime value source. EDIT mode only has the Draft, so there is nothing to show — switch to LIVE once that capability ships.`,
+             * rỗng sẽ đọc như "không có giá trị nào", trong khi sự thật là
+             * "chế độ này không có nguồn giá trị runtime nào cả". */
+            watch === null || watch === undefined ? (
+              <Unavailable reason={pick(
+                'Watch cần nguồn giá trị runtime. Chế độ EDIT chỉ có Draft, không có giá trị nào để hiện — chuyển sang LIVE để xem gói đang chạy.',
+                'Watch needs a runtime value source. EDIT mode only has the draft, so there is nothing to show — switch to LIVE to see the running package.',
+              )} />
+            ) : (
+              <WatchPanel rows={watch} pick={pick} />
+            )
+          )}
+          {tab === 'trace' && (
+            /* Trace SỞ HỮU một phiên có vòng đời riêng (quota, stop reason,
+             * ring của Core). Mở một phiên thứ hai từ đây là đúng thứ AC
+             * "không duplicate concurrent trace session" cấm — nên workbench
+             * trỏ tới nơi sở hữu nó thay vì tự mở. */
+            <div className="space-y-2">
+              <Unavailable reason={pick(
+                'Trace mở một phiên có quota và vòng đời riêng, nên nó thuộc về đúng một nơi.',
+                'Trace opens a session with its own quota and lifecycle, so it belongs in exactly one place.',
+              )} />
+              {traceOwnerHref && (
+                <p className="text-xs text-[var(--c-text-dim)]">
+                  {pick('Mở phiên Trace tại ', 'Start a trace session in ')}
+                  <a className="text-[var(--c-accent)] underline" href={traceOwnerHref}>
+                    {pick('Runtime & Bảo trì', 'Runtime & Maintenance')}
+                  </a>.
+                </p>
               )}
-            />
+            </div>
           )}
         </div>
       )}
     </section>
   )
+}
+
+function WatchPanel({ rows, pick }: { rows: readonly WorkbenchWatchRow[]; pick: (vi: string, en: string) => string }) {
+  if (rows.length === 0) {
+    /* Nguồn CÓ nhưng POU này không có biến nào được ánh xạ — khác hẳn "không có
+     * nguồn giá trị". Hai câu dẫn tới hai việc khác nhau. */
+    return <Unavailable reason={pick('POU đang mở không có biến runtime nào được ánh xạ.', 'The open POU has no mapped runtime variables.')} />
+  }
+  return (
+    <table className="w-full text-xs">
+      <caption className="sr-only">{pick('Giá trị runtime theo biến', 'Runtime values by variable')}</caption>
+      <thead>
+        <tr className="text-left text-[var(--c-text-dim)]">
+          <th scope="col" className="py-1">{pick('Biến', 'Variable')}</th>
+          <th scope="col" className="py-1">{pick('Giá trị', 'Value')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.variableId} className="border-t border-[var(--c-border)]">
+            <td className="py-1 font-mono text-[var(--c-text)]">{row.name}</td>
+            <td className={`py-1 font-mono ${WATCH_STATE_CLASS[row.state]}`}>
+              {row.display}{row.unit && row.state !== 'invalid' ? ` ${row.unit}` : ''}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+const WATCH_STATE_CLASS: Record<WorkbenchWatchRow['state'], string> = {
+  live: 'text-[var(--c-good-fg)]',
+  uncertain: 'text-[var(--c-warn-fg)]',
+  stale: 'text-[var(--c-warn-fg)]',
+  invalid: 'text-[var(--c-text-dim)]',
 }
 
 function Unavailable({ reason }: { reason: string }) {
