@@ -6,10 +6,11 @@ import { Button } from '../../../../shared/components/Button'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import type { FbdSelection } from '../../fbd/commands'
 import { ContextInspector } from '../inspector/ContextInspector'
+import { stSymbolContextFor } from '../inspector/inspectorContext'
 import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
 import { emptyFbdDocument } from '../pou/pouTemplates'
 import type { UserPouInterface } from '../../fbd/userPou'
-import { useLazyProgrammingPointCatalog } from '../../api/queries'
+import { useLazyProgrammingLibraryCatalog, useLazyProgrammingPointCatalog } from '../../api/queries'
 import type {
   ProgrammingDiagnostic,
   ProgrammingDraftDocument,
@@ -37,10 +38,11 @@ import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeVa
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { QuickLibraryHost } from '../library/QuickLibraryPanel'
-import type { CatalogEntry } from '../library/libraryCatalog'
+import { catalogEntries, type CatalogEntry } from '../library/libraryCatalog'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
 import { buildStReferenceIndex, stSymbolAt, type StCursorSymbol } from './stReferenceIndex'
+import { stHoverSymbolAtPoint, stVisualPositionAt, type StEditorTextMetrics } from './stHover'
 import { StCrossReferencePanel } from './StCrossReferencePanel'
 import { SelectionQuickActions } from './SelectionQuickActions'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
@@ -78,6 +80,16 @@ const EDITOR_PAD_X_PX = 12
 const EDITOR_GUTTER_PAD_X_PX = 8
 const EDITOR_TAB_SIZE = 2
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
+
+/* `T59-820` — mẫu đo bề rộng ký tự cho hover. Chuỗi đủ dài để sai số làm tròn
+ * của một ký tự không nhân lên thành lệch cột ở cuối dòng dài. */
+const HOVER_SAMPLE = '00000000000000000000'
+const HOVER_METRICS: Omit<StEditorTextMetrics, 'charWidthPx'> = {
+  rowHeightPx: EDITOR_ROW_HEIGHT_PX,
+  padTopPx: EDITOR_PAD_TOP_PX,
+  padLeftPx: EDITOR_PAD_X_PX,
+  tabSize: EDITOR_TAB_SIZE,
+}
 
 interface StFormatRequest {
   programId: string
@@ -218,6 +230,11 @@ export function ProgramsTab({
    * fetch `GET /point-catalog` khi mở tab Chương trình; sống ở đây (cha của
    * `SourceEditor`) để cache còn nguyên khi đổi Program đang chọn. */
   const pointCatalog = useLazyProgrammingPointCatalog()
+  /* `T59-820` — cùng luật nạp trễ với `pointCatalog`, và cùng sống ở cha để
+   * cache không mất khi đổi POU đang chọn. Chữ ký khối trong Inspector (§9) và
+   * trong tooltip hover đọc CHUNG catalog này. */
+  const libraryCatalog = useLazyProgrammingLibraryCatalog(document.project.projectId)
+  const libraryEntries = useMemo(() => catalogEntries(libraryCatalog.data), [libraryCatalog.data])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [slots, setSlots] = useCollapsibleSlots()
   const [formatRequest, setFormatRequest] = useState<StFormatRequest | null>(null)
@@ -409,6 +426,8 @@ export function ProgramsTab({
             canEdit={canEdit}
             saving={saving}
             onCursorSymbolChange={setCursorSymbol}
+            libraryEntries={libraryEntries}
+            onEnsureLibraryLoaded={libraryCatalog.ensureLoaded}
             diagnostics={diagnostics.filter((item) => item.location?.programId === selected.programId)}
             focusDiagnostic={
               paletteJumpTarget?.location?.programId === selected.programId ? paletteJumpTarget
@@ -470,6 +489,11 @@ export function ProgramsTab({
                  hiện `Đã tắt` cho một thứ chưa đọc là nói dối về thiết bị. */
               enabled: null,
               cursorSymbol,
+              /* Trước `T59-820` khoá này không được truyền, nên trường `Chữ ký`
+                 của handoff §9 luôn hiện "không xác định được" — trung thực về
+                 hình thức nhưng nói "thư viện không công bố" trong khi sự thật
+                 là "chưa ai hỏi thư viện". */
+              catalog: libraryEntries,
               fbd: inspectorFbdDocument
                 ? { document: inspectorFbdDocument, selection: fbdSelection }
                 : null,
@@ -501,6 +525,81 @@ export function ProgramsTab({
   )
 }
 
+/**
+ * `T59-820` / `PGM-02A §4` — thẻ chú giải ký hiệu khi rê chuột.
+ *
+ * Nội dung dựng bằng **đúng** hàm mà `ContextInspector` dùng
+ * (`stSymbolContextFor`), không phải một bản phân giải thứ hai. Hai đường sẽ
+ * lệch nhau đúng lúc khó thấy nhất — một định danh mà thư viện không công bố
+ * chữ ký — và người đọc sẽ thấy khay bên phải nói một đằng, tooltip nói một nẻo
+ * về cùng một cái tên.
+ *
+ * Mọi trường không tra được đều hiện "không xác định được". Không có `—` ngầm
+ * hiểu là 0, không có kiểu mặc định.
+ */
+function StHoverCard({
+  symbol,
+  catalog,
+  source,
+  runtimeOverlay,
+}: {
+  symbol: StCursorSymbol
+  catalog?: readonly CatalogEntry[]
+  source: string
+  runtimeOverlay?: StRuntimeOverlayState
+}) {
+  const { pick } = useI18n()
+  const context = stSymbolContextFor({ cursorSymbol: symbol, catalog, runtime: runtimeOverlay ?? null })
+  if (!context) return null
+  const position = stVisualPositionAt(source, symbol.start, EDITOR_TAB_SIZE)
+  const unknownLabel = pick('không xác định được', 'not determinable')
+
+  return (
+    <div
+      role="tooltip"
+      data-testid="st-hover-card"
+      /* `pointer-events-none`: thẻ nằm ĐÈ lên chữ, nên nếu nó bắt chuột thì rê
+         vào chính nó sẽ kích `onMouseLeave` của textarea và thẻ tự tắt — nhấp
+         nháy vô hạn. */
+      className="pointer-events-none absolute z-20 max-w-sm rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 py-1.5 text-xs shadow-lg"
+      style={{
+        top: `${(position.row + 1) * EDITOR_ROW_HEIGHT_PX + EDITOR_PAD_TOP_PX}px`,
+        left: `${Math.min(position.column * 8.4 + EDITOR_PAD_X_PX, 320)}px`,
+      }}
+    >
+      <p className="font-mono font-semibold text-[var(--c-text)]">{context.identifier}</p>
+      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
+        <dt className="text-[var(--c-text-dim)]">{pick('Kiểu', 'Type')}</dt>
+        <dd className="text-[var(--c-text)]" data-testid="st-hover-type">
+          {context.dataType.known ? context.dataType.value : unknownLabel}
+        </dd>
+        {/* Chữ ký chỉ có nghĩa với instance khối; hiện nó cho một biến `BOOL`
+            là bày ra một ô luôn rỗng. */}
+        {context.signature.known && (
+          <>
+            <dt className="text-[var(--c-text-dim)]">{pick('Chữ ký', 'Signature')}</dt>
+            <dd className="font-mono text-[var(--c-text)]" data-testid="st-hover-signature">
+              {context.signature.value}
+            </dd>
+          </>
+        )}
+        <dt className="text-[var(--c-text-dim)]">{pick('Nơi tham chiếu', 'References')}</dt>
+        <dd className="text-[var(--c-text)]">
+          {context.referenceCount.known ? context.referenceCount.value : unknownLabel}
+        </dd>
+      </dl>
+      {!context.dataType.known && (
+        /* Nói rõ GIỚI HẠN THẨM QUYỀN: chỉ mục này dựng từ nguồn đang gõ, không
+           phải từ compiler. "Không tra được" ở đây không có nghĩa nguồn sai. */
+        <p className="mt-1 text-[var(--c-text-dim)]">
+          {pick('Chỉ mục dựng từ nguồn đang gõ, không phải từ compiler — Kiểm tra ở Core mới là nơi phán nguồn đúng hay sai.',
+                'The index is built from the source being typed, not from the compiler — Check on the Core is what judges the source.')}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function SourceEditor({
   program,
   source,
@@ -518,6 +617,8 @@ export function SourceEditor({
   formatRequest,
   projectId,
   onCursorSymbolChange,
+  libraryEntries,
+  onEnsureLibraryLoaded,
 }: {
   program: ProgrammingProgram
   source: string
@@ -548,6 +649,9 @@ export function SourceEditor({
    * chúng sẽ lệch nhau đúng lúc con trỏ nằm ở ranh giới một định danh.
    */
   onCursorSymbolChange?: (symbol: StCursorSymbol | null) => void
+  /** `T59-820` — catalog thư viện đã nạp, dùng CHUNG với Inspector. */
+  libraryEntries?: readonly CatalogEntry[]
+  onEnsureLibraryLoaded?: () => void
 }) {
   const { pick } = useI18n()
   const committed = typeof program.document === 'string' ? program.document : ''
@@ -596,6 +700,19 @@ export function SourceEditor({
     () => stSymbolAt(source, cursorOffset, referenceIndex),
     [source, cursorOffset, referenceIndex],
   )
+  /* `T59-820` / `PGM-02A §4` — hover ký hiệu.
+   *
+   * Không có editor engine nào ở đây, nên bề rộng ký tự phải ĐO từ DOM. Đo
+   * hỏng (chưa layout, font chưa tải) ⇒ `stHoverSymbolAtPoint` trả `null` ⇒
+   * không hover. Một bề rộng đoán sẽ làm tooltip chỉ vào ký hiệu KHÁC thứ chuột
+   * đang trỏ, và người đọc không có cách nào biết mình đang bị chỉ sai.
+   *
+   * Thông tin này KHÔNG chỉ có ở hover: cùng ký hiệu đó, khi đưa con trỏ gõ
+   * vào, hiện đầy đủ ở `ContextInspector`. Hover là lối tắt cho chuột, không
+   * phải kênh duy nhất — bàn phím vẫn đọc được mọi thứ. */
+  const hoverMeasureRef = useRef<HTMLSpanElement>(null)
+  const charWidthRef = useRef(0)
+  const [hoverSymbol, setHoverSymbol] = useState<StCursorSymbol | null>(null)
   /* Phát ra ngoài khi ký hiệu đổi. `useEffect` chứ không gọi trong render: gọi
    * trong render sẽ set state của cha giữa lúc con đang render. */
   useEffect(() => {
@@ -1281,7 +1398,57 @@ export function SourceEditor({
                 event.preventDefault(); handleAutoIndentEnter()
               }
             }}
+            onMouseMove={(event) => {
+              /* Đo bề rộng ký tự một lần rồi giữ lại. Đo hỏng ⇒ giữ 0 ⇒
+                 `stHoverSymbolAtPoint` trả `null` ⇒ không hover, thay vì hover
+                 chỉ sai chỗ. */
+              if (charWidthRef.current <= 0 && hoverMeasureRef.current) {
+                const sample = hoverMeasureRef.current.getBoundingClientRect().width / HOVER_SAMPLE.length
+                if (sample > 0) charWidthRef.current = sample
+              }
+              const textarea = event.currentTarget
+              const rect = textarea.getBoundingClientRect()
+              const next = stHoverSymbolAtPoint(
+                source,
+                {
+                  x: event.clientX - rect.left,
+                  y: event.clientY - rect.top,
+                  scrollLeft: textarea.scrollLeft,
+                  scrollTop: textarea.scrollTop,
+                },
+                { ...HOVER_METRICS, charWidthPx: charWidthRef.current },
+                referenceIndex,
+              )
+              /* Chỉ set state khi ĐỔI ký hiệu: rê chuột trong cùng một tên phát
+                 hàng chục sự kiện, và render lại editor cho mỗi cái là chi phí
+                 trả cho việc không có gì thay đổi. */
+              setHoverSymbol((current) => (
+                current && next && current.start === next.start && current.end === next.end ? current : next
+              ))
+              if (next?.entry?.kind === 'FB_INSTANCE') onEnsureLibraryLoaded?.()
+            }}
+            onMouseLeave={() => setHoverSymbol(null)}
           />
+          {/* Phần tử đo, không đọc được bằng trình đọc màn hình và không chiếm
+              chỗ. Nó tồn tại chỉ để hover có một bề rộng ký tự THẬT. */}
+          <span
+            ref={hoverMeasureRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute -z-10 select-none opacity-0"
+            style={{ ...EDITOR_TEXT_METRICS, padding: 0, whiteSpace: 'pre' }}
+          >
+            {HOVER_SAMPLE}
+          </span>
+
+          {hoverSymbol && (
+            <StHoverCard
+              symbol={hoverSymbol}
+              catalog={libraryEntries}
+              source={source}
+              runtimeOverlay={runtimeOverlay}
+            />
+          )}
+
           {completion.open && (
             <ul
               role="listbox"

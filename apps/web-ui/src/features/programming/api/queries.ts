@@ -235,6 +235,63 @@ export function useLazyProgrammingPointCatalog(): LazyPointCatalogState {
   return { status, data, error, ensureLoaded }
 }
 
+export interface LazyLibraryCatalogState {
+  status: 'idle' | 'loading' | 'ready' | 'error'
+  data: ProgrammingLibraryPage | null
+  error: string | null
+  ensureLoaded: () => void
+}
+
+/**
+ * `T59-820` — catalog thư viện nạp TRỄ, dùng chung cho Inspector và hover.
+ *
+ * Chữ ký chuẩn hoá của một khối chỉ có ở catalog. Trước lát này không ai truyền
+ * catalog vào `ContextInspector`, nên trường `Chữ ký` của handoff §9 luôn hiện
+ * "không xác định được" — đúng về mặt trung thực, nhưng nó đang nói "thư viện
+ * không công bố" trong khi sự thật là "chưa ai hỏi thư viện".
+ *
+ * Nạp trễ chứ không nạp khi mount: phần lớn phiên soạn thảo không chạm tới một
+ * khối thư viện nào, và một request cho mọi lần mở tab là chi phí trả cho việc
+ * không dùng.
+ */
+export function useLazyProgrammingLibraryCatalog(projectId: string | undefined): LazyLibraryCatalogState {
+  const { pick } = useI18n()
+  const client = useProgrammingApiClient()
+  const [status, setStatus] = useState<LazyLibraryCatalogState['status']>('idle')
+  const [data, setData] = useState<ProgrammingLibraryPage | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const statusRef = useRef(status)
+  statusRef.current = status
+  // Đổi Project ⇒ catalog cũ không còn đúng phạm vi. Giữ lại nó sẽ hiện chữ ký
+  // của một Project khác cho tên trùng.
+  const loadedProjectRef = useRef<string | undefined>(undefined)
+
+  const ensureLoaded = useCallback(() => {
+    const sameProject = loadedProjectRef.current === projectId
+    if (sameProject && (statusRef.current === 'loading' || statusRef.current === 'ready')) return
+    loadedProjectRef.current = projectId
+    setStatus('loading')
+    const search: Record<string, string | number> = { limit: 100 }
+    if (projectId) search.projectId = projectId
+    client.request<ProgrammingLibraryPage>('searchProgrammingLibraries', { query: search }).then(
+      (value) => {
+        if (loadedProjectRef.current !== projectId) return
+        setData(value)
+        setError(null)
+        setStatus('ready')
+      },
+      (reason: unknown) => {
+        if (loadedProjectRef.current !== projectId) return
+        setData(null)
+        setError(programmingResourceErrorMessage(pick, reason))
+        setStatus('error')
+      },
+    )
+  }, [client, pick, projectId])
+
+  return { status, data, error, ensureLoaded }
+}
+
 /** `GET /checks/{checkId}` — dùng lại độc lập với `useCheckWorkflow` để
  * PGM-03 luôn đọc trạng thái mới nhất kể cả khi vào thẳng bằng navigation
  * state (không phải vừa chạy Check trong cùng phiên). */
