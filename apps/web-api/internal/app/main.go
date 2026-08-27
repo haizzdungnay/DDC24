@@ -144,7 +144,8 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		// một capability do FE tự đoán là đúng thứ `DDD §5.5` cấm.
 		simulation := programmingapplication.NewSimulationService(programmingapplication.SimulationOptions{
 			Store: store, Artifacts: artifacts, WorkerBinary: cfg.ProgrammingSimWorkerPath,
-			ControllerID: cfg.ProgrammingTargetID, NewID: uuid.NewString,
+			TrustedKeyPaths: trustedSimulationKeys(cfg.ProgrammingSimTrustedKey),
+			ControllerID:    cfg.ProgrammingTargetID, NewID: uuid.NewString,
 		})
 		// Đối chiếu NGAY lúc khởi động: mọi phiên chưa terminal còn sót là phiên
 		// không còn worker nào chứng minh được token/protocol, nên phải đóng chứ
@@ -552,4 +553,20 @@ func (a *App) Close() error {
 		programmingErr = a.programmingStore.Close()
 	}
 	return errors.Join(trendErr, historianErr, programmingErr)
+}
+
+// trustedSimulationKeys trả tập khoá worker mô phỏng được phép tin.
+//
+// Bỏ qua đường dẫn không tồn tại thay vì báo lỗi khởi động: một bo chưa sinh
+// khoá thiết bị vẫn phải chạy được phần còn lại của hệ thống, và hệ quả duy
+// nhất là capability SIMULATE không dùng được — đúng trạng thái fail-closed mà
+// `ADR-053` §7 mô tả.
+func trustedSimulationKeys(path string) []string {
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); err != nil {
+		return nil
+	}
+	return []string{path}
 }

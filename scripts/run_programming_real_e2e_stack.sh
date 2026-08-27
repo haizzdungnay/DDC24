@@ -57,7 +57,8 @@ if [[ "${PROGRAMMING_REAL_SKIP_BUILD:-0}" != "1" ]]; then
     -DMKDDC_ENABLE_FW_HOSTCHECK=OFF \
     -DMKDDC_ENABLE_HMI=OFF
   cmake --build "${build_root}/cpp" --parallel --target \
-    mkddc-programming-core-sim mkddc-st-compile mkddc-st-package
+    mkddc-programming-core-sim mkddc-st-compile mkddc-st-package \
+    mkddc-programming-sim-worker
   (
     cd "${repository_root}/apps/web-api"
     go build -trimpath -o "${build_root}/mkddc-web" ./cmd/mkddc-web
@@ -133,6 +134,7 @@ env \
   PROGRAMMING_SIGNING_KEY="${keys_dir}/device.key" \
   PROGRAMMING_COMPILER="${build_root}/cpp/core/mkddc-st-compile" \
   PROGRAMMING_PACKAGER="${build_root}/cpp/core/mkddc-st-package" \
+  PROGRAMMING_SIM_WORKER="${build_root}/cpp/core/mkddc-programming-sim-worker" \
   PROGRAMMING_TARGET_ID="host-programming-real-e2e" \
   "${build_root}/mkddc-web" &
 backend_pid=$!

@@ -41,6 +41,11 @@ func (e *CommandError) Error() string {
 type Options struct {
 	BinaryPath     string
 	CommandTimeout time.Duration
+	// TrustedKeyPaths — tập khoá công khai worker được phép tin, PHẢI trùng tập
+	// Core đang dùng. Rỗng nghĩa là chỉ tin khoá nhúng lúc build, và trên một bo
+	// thật (artifact ký bằng khoá thiết bị) điều đó làm mọi phiên hỏng ở bước
+	// nạp artifact với `SIM-E-002`.
+	TrustedKeyPaths []string
 	// Env cho phép test chèn biến môi trường; production để nil.
 	Env []string
 }
@@ -145,7 +150,14 @@ func Spawn(ctx context.Context, options Options) (*Client, string, string, error
 	}
 	token := hex.EncodeToString(tokenBytes)
 
-	command := exec.Command(options.BinaryPath)
+	arguments := make([]string, 0, len(options.TrustedKeyPaths)*2)
+	for _, path := range options.TrustedKeyPaths {
+		if path == "" {
+			continue
+		}
+		arguments = append(arguments, "--st-trusted-key", path)
+	}
+	command := exec.Command(options.BinaryPath, arguments...)
 	environment := options.Env
 	if environment == nil {
 		// Môi trường TỐI THIỂU: worker không cần PATH, HOME hay bất cứ thứ gì

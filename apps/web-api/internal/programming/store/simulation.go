@@ -290,6 +290,61 @@ func (s *Store) UpdateSimulationSession(ctx context.Context, params UpdateSimula
 	return next, nil
 }
 
+// AdvanceSimulationRuntime ghi tiến độ của một tick TỰ ĐỘNG trong lúc RUNNING.
+//
+// Cố ý KHÔNG tăng `session_sequence` và KHÔNG ghi audit. Hai lý do, và cả hai
+// đều là hệ quả trực tiếp của việc tick không phải là mutation của người dùng:
+//
+//  1. `session_sequence` là version cho `If-Match`. Nếu mỗi tick tăng nó thì
+//     client đang chạy RUN không bao giờ giữ được ETag còn hạn, và lệnh PAUSE
+//     của chính họ sẽ luôn trượt 409 — tức nút Dừng không bấm được đúng lúc
+//     người ta cần nó nhất.
+//  2. Audit mỗi tick sẽ nhấn chìm sổ kiểm toán bằng sự kiện không ai ra lệnh.
+//     Cái cần audit là RUN và PAUSE, không phải từng nhịp giữa hai lệnh đó.
+//
+// Tiến độ vẫn quan sát được: `virtual_time_ms` và `observation_sequence` tăng,
+// và client đọc chúng qua read-back/observations.
+func (s *Store) AdvanceSimulationRuntime(ctx context.Context, sessionID string,
+	virtualTimeMS, observationSequence int64, at time.Time) (SimulationSession, error) {
+	if s == nil || s.db == nil {
+		return SimulationSession{}, fmt.Errorf("Programming store chưa mở")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return SimulationSession{}, err
+	}
+	defer tx.Rollback()
+
+	current, err := readSimulationSessionTx(ctx, tx, sessionID)
+	if err != nil {
+		return SimulationSession{}, err
+	}
+	// Chỉ phiên ĐANG CHẠY mới nhận tick. Một tick tới sau khi người dùng đã
+	// PAUSE là tick của vòng lặp chưa kịp dừng; ghi nó vào sẽ làm đồng hồ ảo
+	// nhảy thêm sau khi màn hình đã báo dừng.
+	if current.State != SimStateRunning {
+		return current, nil
+	}
+	next := current
+	next.VirtualTimeMS = virtualTimeMS
+	next.ObservationSequence = observationSequence
+	next.LastActivityAtUTCMS = at.UTC().UnixMilli()
+	if next.IdleExpiresAtUTCMS < next.HardExpiresAtUTCMS {
+		refreshed := at.Add(900 * time.Second).UTC().UnixMilli()
+		if refreshed > next.HardExpiresAtUTCMS {
+			refreshed = next.HardExpiresAtUTCMS
+		}
+		next.IdleExpiresAtUTCMS = refreshed
+	}
+	if err := writeSimulationSessionTx(ctx, tx, next); err != nil {
+		return SimulationSession{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SimulationSession{}, err
+	}
+	return next, nil
+}
+
 func (s *Store) GetSimulationSession(ctx context.Context, sessionID string) (SimulationSession, error) {
 	if s == nil || s.db == nil {
 		return SimulationSession{}, fmt.Errorf("Programming store chưa mở")
