@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.56 |
+| Phiên bản | 1.57 |
 | Trạng thái | **Active — PGM-02 v2.2 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; release NO-GO** |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -54,7 +54,7 @@ chứng minh code, target, HIL hoặc release.
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `eedd394e476a56e46933cf88798720c02a1924ef22148911ebaf9fdd99b04f17` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `40fcc8d098060f910a944373badcf9d2874d180ba9b08e37afe9e746fc9da03b` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `2dc98b84df4abecdd2c64fa0ea11feb0e5edcc3c82d853f8d1571757449a83e6` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `00c091c9a6da799e0478941a8cb3ec33cbc708a9c61319215364ba3a9e41f5b6` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `35e7acef212b1f37488c8da6787a4525232506c8a77b833b12fa60781bebb76b` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `9d9969a721db22cf4ac1c05fa6343e8e1ae1efd2164571ba82407496c80afb33` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 17 | `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` | `131b195e830d9c182d8ae197d9bc4b7a967e9b11256934e505601eb516c84980` | `413a043748dce3b44d2c5076412de761760ba17a` |
 
@@ -91,6 +91,7 @@ evidence release.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.57 | 2026-08-27 | Re-pin `#15` (Plan59) sau khi `T59-821` giao editor chrome (tab đa POU, toolbar ba mode, status bar, Code Map). **Đánh giá impact:** `#15` đổi `T59-821` READY→DONE và ghi số đo; năm điều `UD-PROG-014` để ngỏ nay chốt bằng test chứ không chỉ bằng văn xuôi, nhưng `UD-PROG-014` vẫn CLOSED nên `#3` không đổi. Không đổi Product/SRS/Architecture/DDD/UX/VVP/Trace/Risk; không đổi contract. `RELEASE_READY` giữ NO-GO. |
 | 1.56 | 2026-08-27 | Re-pin `#3` (`PROGRAMMING_OPEN_DECISIONS.md`) và `#15` (Plan59) sau khi `T59-820` giao hover ký hiệu ST. **Đánh giá impact:** `#3` xử lý phần dư `UD-PROG-013` (nửa hover ĐÃ GIAO, đo thật 1,30 KiB gzip so với 110,07 KiB của CodeMirror từng dùng để hoãn) và mở `UD-PROG-016` OPEN cho nửa chỉ mục do compiler sinh, **hạn ký 2026-09-10**; `#15` đổi `T59-820` READY→DONE kèm số đo. Không đổi Product/SRS/Architecture/DDD/UX/VVP/Trace/Risk; không đổi contract. `RELEASE_READY` giữ NO-GO. |
 | 1.55 | 2026-08-27 | Re-pin dòng `#15` (Plan59) sau khi `T59-819` đóng nhánh Compare Draft↔Active còn nợ của `PGM02-V22-WP-09`. **Đánh giá impact:** `#15` đổi trạng thái `T59-819` READY→DONE (HOST/LOCAL), ghi số đo thật và hạ dòng `WP-09` về DONE trọn; không đổi Product/SRS/Architecture/DDD/UX/VVP/Trace/Risk. **Contract đổi cùng phiên nhưng NGOÀI bảng ghim:** OpenAPI 1.29.0→1.30.0 ADDITIVE (`stHunks[]`/`fbdChanges[]`/`truncated`/`nextCursor`), re-pin `openapiSha256` ở `pgm02_workspace_v1.json` và `g1_contract_join_v1.json`. `RELEASE_READY` giữ NO-GO. |
 | 1.54 | 2026-08-27 | *(dòng lịch sử bổ sung hồi tố 2026-08-27 — bản gốc `7e6a330` bump header mà quên ghi)* Re-pin `#15` (Plan59) và `#13` (`PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md`) khi đóng `T59-814` và mở `T59-815`. |

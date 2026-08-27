@@ -27,7 +27,14 @@ export function LiveProgramView({
   objectId,
   activeRevisionId,
   monitor,
+  refreshPaused,
+  onTogglePauseRefresh,
+  onReturnToDraft,
 }: {
+  /** `T59-821` — thanh LIVE. `undefined` ⇒ nút khoá kèm lý do, không ẩn. */
+  refreshPaused?: boolean
+  onTogglePauseRefresh?: () => void
+  onReturnToDraft?: () => void
   /** POU đang chọn ở cây — dùng để đối chiếu tên, KHÔNG dùng làm nguồn. */
   program: ProgrammingProgram | undefined
   objectId: string | undefined
@@ -79,9 +86,48 @@ export function LiveProgramView({
         </div>
         {/* Chỉ đọc ở đây KHÔNG phải chuyện quyền: kể cả admin cũng không sửa
             được gói đang chạy. Sửa đi qua Draft rồi Commission. */}
-        <span className="rounded-full border border-[var(--c-border)] px-2 py-0.5 text-[11px] text-[var(--c-text-dim)]">
-          {pick('Chỉ đọc với mọi vai', 'Read only for every role')}
-        </span>
+        <div className="flex flex-wrap items-center gap-1">
+          {/* `T59-821` / `PGM-02A §3` — thanh LIVE.
+            *
+            * Bốn nút này KHÔNG bao gồm một nút đổi mode: `SIMULATE`/`LIVE` là
+            * mode switch ở `ProgramsModeSwitcher`, và nhân bản chúng thành nút
+            * toolbar sẽ tạo hai đường đổi mode — chúng sẽ lệch nhau đúng lúc
+            * một trong hai bị quên cập nhật.
+            *
+            * Nút chưa nối vẫn HIỆN và vẫn khoá kèm lý do đọc được. Ẩn im lặng
+            * làm người dùng tưởng tính năng không tồn tại. */}
+          <LiveBarButton
+            label={pick('Tạm dừng làm mới', 'Pause refresh')}
+            enabled={typeof onTogglePauseRefresh === 'function'}
+            pressed={refreshPaused}
+            disabledReason={pick('Nhịp làm mới do khay Runtime sở hữu; trang này chưa nhận quyền tạm dừng.',
+                                 'The refresh cadence is owned by the runtime panel; this view has no pause control yet.')}
+            onClick={() => onTogglePauseRefresh?.()}
+          />
+          <LiveBarButton
+            label={pick('Theo dõi', 'Watch')}
+            enabled={false}
+            disabledReason={pick('Bảng theo dõi biến của LIVE chưa được nối vào trang này.',
+                                 'The LIVE variable watch table is not wired into this view yet.')}
+            onClick={() => undefined}
+          />
+          <LiveBarButton
+            label={pick('Vết', 'Trace')}
+            enabled={false}
+            disabledReason={pick('Bề mặt Vết chưa được nối vào giao diện. Dịch vụ đã có, phần hiển thị thì chưa.',
+                                 'The trace surface is not wired into the UI yet. The service exists; the view does not.')}
+            onClick={() => undefined}
+          />
+          <LiveBarButton
+            label={pick('Về bản nháp', 'Return to draft')}
+            enabled={typeof onReturnToDraft === 'function'}
+            disabledReason={pick('Trang này chưa nhận đường quay lại Draft.', 'This view has no route back to the draft yet.')}
+            onClick={() => onReturnToDraft?.()}
+          />
+          <span className="rounded-full border border-[var(--c-border)] px-2 py-0.5 text-[11px] text-[var(--c-text-dim)]">
+            {pick('Chỉ đọc với mọi vai', 'Read only for every role')}
+          </span>
+        </div>
       </div>
 
       {active.source === null ? (
@@ -161,4 +207,29 @@ function liveSourceReason(
     default:
       return pick('Không có nguồn để hiển thị.', 'No source to display.')
   }
+}
+
+
+function LiveBarButton({
+  label, enabled, onClick, disabledReason, pressed,
+}: {
+  label: string
+  enabled: boolean
+  onClick: () => void
+  disabledReason: string
+  pressed?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      disabled={!enabled}
+      aria-pressed={pressed}
+      onClick={onClick}
+      /* Nút khoá phải nêu lý do đọc được — cấm ẩn im lặng. */
+      title={!enabled ? disabledReason : undefined}
+      className="rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text)] disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {label}
+    </button>
+  )
 }

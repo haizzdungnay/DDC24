@@ -8,6 +8,82 @@
 
 ## [Unreleased]
 
+### PGM-02 — Editor chrome đầy đủ: tab đa POU, toolbar, status bar, Code Map (`T59-821`, `PGM02-V22-WP-15`) (2026-08-27)
+
+- **Added — tab đa POU bắc qua ST↔FBD (`UD-PROG-014` phương án B).** Trục định
+  danh là `objectId`, **không** phải tên POU: đổi tên chỉ đổi nhãn chứ không
+  sinh tab thứ hai, và hai POU trùng tên là hai tab riêng. Buffer vẫn sống theo
+  POU nên hai tab không thể chia chung một buffer.
+
+  `UD-PROG-014` để ngỏ năm điều và bắt team chốt khi implement. Chốt và **ghi
+  vào test** (`pouTabs.test.ts`, 16 ca) chứ không chỉ ghi vào văn xuôi — một
+  luật tab chỉ nằm ở docs sẽ trôi ngay lần refactor đầu, và thứ trôi ở đây là
+  buffer chưa lưu của người dùng:
+  1. trần **8** tab; vượt thì đóng tab **sạch** ít dùng nhất. Mọi tab đều bẩn ⇒
+     **từ chối mở** kèm lý do đọc được. Đóng một tab bẩn để lấy chỗ là vứt công
+     việc của người ta để phục vụ một con số;
+  2. đóng tab bẩn **phải xác nhận**;
+  3. đổi mode áp cho **toàn workspace** — state tab không mang mode nào;
+  4. tab **không** sống qua reload, có chủ ý: mọi nơi lưu đều sinh cùng một lớp
+     lỗi là tab khôi phục trỏ tới POU đã bị xoá ở phiên khác;
+  5. tab trỏ tới POU đã bị xoá **ở lại** và tự khai. Tự đóng sẽ che đi chính sự
+     kiện người dùng cần biết.
+
+- **Added — toolbar EDIT có `Kiểm tra`/`So sánh`/`Khác` (`PGM-02A §3`).**
+  `Kiểm tra` điều hướng sang PGM-03, nơi sở hữu trọn vòng seal/run/poll/result
+  (D-01) — không dựng luồng thứ hai. `SIMULATE`/`LIVE` **không** nhân bản thành
+  nút toolbar: chúng là mode switch ở `ProgramsModeSwitcher`, và hai đường đổi
+  mode sẽ lệch nhau đúng lúc một trong hai bị quên cập nhật.
+
+- **Fixed — hai nút cho cùng một hành động.** `Kiểm tra`/`So sánh` từng nằm ở
+  header workspace; thêm chúng vào toolbar sẽ thành hai nút mà người dùng phải
+  đoán có khác nhau không, và một lần sửa điều kiện khoá chỉ áp cho một trong
+  hai. Nay đúng **một** bản mỗi thời điểm. Vì hai hành động này có phạm vi
+  **gói** chứ không phải POU, trạng thái "chưa chọn POU" vẫn giữ lối vào riêng
+  — khoá chúng lại chỉ vì chưa ai bấm vào một POU là bắt người dùng chọn bừa
+  một POU để làm việc không liên quan tới POU nào.
+
+- **Added — thanh SIMULATE và LIVE.** SIMULATE thêm `Theo dõi`/`Vết`; LIVE có
+  `Tạm dừng làm mới`/`Theo dõi`/`Vết`/`Về bản nháp`. Nút chưa nối vẫn **hiện** và
+  **khoá kèm lý do đọc được** — ẩn im lặng làm người dùng tưởng tính năng không
+  tồn tại thay vì biết nó chưa được nối. `Về bản nháp` gọi chính hàm đổi mode
+  của workspace, không tự navigate.
+
+- **Added — status bar, và điều quan trọng nhất là thứ nó KHÔNG điền.**
+  `UTF-8`/`LF` đúng trong đa số trường hợp nên một giá trị mặc định sẽ **không
+  bao giờ trông sai** — đó chính là lý do cấm: nó vẫn hiện `UTF-8` cho đúng cái
+  tệp đang làm hỏng ký tự tiếng Việt của người dùng. Trình duyệt đã giải mã tệp
+  trước khi FE thấy nó, nên bảng mã hiện `—`. `EOL` thì khác: nó **đọc được** từ
+  chính buffer, kể cả `MIXED` — một câu trả lời thật, thường là dấu vết tệp đi
+  qua hai hệ điều hành. FBD thêm zoom%/ngôn ngữ/kết nối, cũng `—` khi chưa đọc
+  được: báo `Mất kết nối` cho một thiết bị đang khoẻ là gọi người trực đêm dậy
+  vì một giá trị FE tự bịa.
+
+- **Added — Code Map cho ST.** Ngưỡng hiển thị (`CODE_MAP_MIN_LINES = 80`) định
+  nghĩa **một lần** dùng chung: `AC-FBD-012` nói minimap xuất hiện với sơ đồ
+  vượt "một ngưỡng cấu hình", nhưng ngưỡng đó chưa từng tồn tại ở đâu trong repo
+  (`grep -i minimap` trên `src` trả 0). Điều hướng **không đổi một byte tài
+  liệu** — bất biến ép bằng chính hình dạng props: component chỉ nhận `source`
+  và `onNavigate`, không có đường nào ghi ngược.
+
+- **Fixed — `role="tablist"` là lời hứa markup không giữ.** Triệu chứng: e2e đỏ
+  với `aria-required-children` trên canvas FBD. Nguyên nhân: `tablist` đòi con
+  mang role `tab`, mỗi `tab` phải `aria-controls` một `tabpanel`, và bàn phím
+  phải đi bằng phím mũi tên — ở đây không có `tabpanel` nào và mỗi tab còn mang
+  một nút Đóng lồng bên trong. Cách sửa: danh sách + `aria-current`, mô tả đúng
+  thứ đang có là một dãy nút điều hướng.
+
+- **Fixed — lớp bọc mới nuốt mọi cú bấm vào editor.** Triệu chứng: 2 ca e2e
+  timeout với `intercepts pointer events`. Nguyên nhân: textarea là
+  `absolute inset-0` của khung soạn thảo, nên bọc khung đó trong một tầng flex
+  để đặt Code Map bên cạnh làm hộp của textarea lệch. Cách sửa: Code Map nằm
+  dưới khung, không bọc khung.
+
+- **Verification** (2026-08-27): `npx vitest --run --environment jsdom src`
+  **170 file / 1930 test PASS**; `npm run lint` PASS; `npm run build` PASS
+  (chunk `programming` **132,88 KiB** gzip, dư **32,12 KiB**);
+  `npx playwright test e2e/programming.spec.ts` **53 passed / 11 skipped**.
+
 ### PGM-02 — Hover ký hiệu cho editor ST (`T59-820`, `PGM02-V22-WP-04`) (2026-08-27)
 
 - **Added — `PGM-02A §4` liệt `hover symbol/type/signature` là Required và nó
