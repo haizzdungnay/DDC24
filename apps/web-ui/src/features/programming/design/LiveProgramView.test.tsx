@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../shared/i18n'
@@ -133,5 +133,62 @@ describe('LiveProgramView (T59-811)', () => {
     }
     renderLive()
     expect(screen.getByText(/Không đọc được giá trị runtime/)).toBeInTheDocument()
+  })
+})
+
+/* `AC-FBD-009`..`AC-FBD-011` — sơ đồ FBD của gói ĐANG CHẠY.
+ *
+ * Đây là cửa sổ ĐỌC, không phải editor: vẽ chỉ canvas chứ không mount cả
+ * `StructuredFbdEditor`, vì editor mang theo palette/toolbar/bộ lệnh sửa và tắt
+ * từng thứ một là một danh sách phải nhớ giữ đúng mãi mãi. */
+describe('LiveProgramView — sơ đồ FBD đang chạy (T59-811)', () => {
+  const FBD_DOC = {
+    $schema: '../../fbd_v1.schema.json', schemaVersion: 1, profileId: 'revA-1t-1-5-30',
+    graphId: '10000000-0000-4000-8000-000000000001', name: 'AHU_FBD',
+    networks: [{
+      id: '20000000-0000-4000-8000-000000000001', name: 'ENABLE_LOGIC', order: 0,
+      nodes: [{
+        id: '30000000-0000-4000-8000-000000000001', kind: 'INPUT', typeRef: 'BOOL',
+        executionOrder: 0, parameters: { variable: 'OCCUPIED' },
+        ports: [{ id: '40000000-0000-4000-8000-000000000001', name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL', unit: null, order: 0 }]
+      }],
+      wires: []
+    }]
+  }
+
+  function renderFbdLive(source: string) {
+    state.revision = {
+      status: 'ready', error: null, refresh: vi.fn(),
+      data: {
+        revisionId: REVISION,
+        snapshot: { objects: [{ objectId: OBJECT, kind: 'PROGRAM', payload: { objectId: OBJECT, kind: 'PROGRAM', name: 'AHU_FBD', language: 'FBD', source } }] },
+      },
+    }
+    renderLive()
+  }
+
+  it('vẽ SƠ ĐỒ chứ không phải JSON thô, và không mount bộ công cụ sửa', () => {
+    renderFbdLive(JSON.stringify(FBD_DOC))
+    expect(screen.getByRole('group', { name: /Sơ đồ ENABLE_LOGIC/ })).toBeInTheDocument()
+    // Không có JSON thô nào lọt ra màn hình.
+    expect(screen.queryByLabelText(/Mã nguồn đang chạy/)).toBeNull()
+    // Và không có bộ công cụ sửa nào được mount.
+    expect(screen.queryByRole('toolbar', { name: /Lệnh FBD/ })).toBeNull()
+    expect(screen.queryByRole('group', { name: /Palette FBD/ })).toBeNull()
+  })
+
+  it('block chọn được để xem, nhưng KHÔNG kéo được (chỉ đọc)', () => {
+    renderFbdLive(JSON.stringify(FBD_DOC))
+    const block = screen.getByRole('button', { name: /#0 · BOOL/ })
+    fireEvent.keyDown(block, { key: 'Enter' })
+    expect(block).toHaveAttribute('aria-pressed', 'true')
+    // `canEdit=false` ⇒ con trỏ không phải "kéo được"
+    expect(block.getAttribute('class')).not.toContain('cursor-move')
+  })
+
+  it('tài liệu FBD hỏng nói ra, KHÔNG vẽ một sơ đồ trống trông như chương trình rỗng', () => {
+    renderFbdLive('{ không phải json')
+    expect(screen.getByText(/không đọc được/)).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /Sơ đồ/ })).toBeNull()
   })
 })

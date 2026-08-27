@@ -8,6 +8,30 @@
 
 ## [Unreleased]
 
+### PGM-02 R2 — sơ đồ FBD của gói đang chạy (`T59-811` / `AC-FBD-009..011`) (2026-08-27)
+
+- **Added — LIVE vẽ SƠ ĐỒ, không phải JSON thô.** POU ngôn ngữ FBD ở chế độ LIVE
+  trước đó đổ nguyên tài liệu JSON vào ô văn bản — đúng về dữ liệu, vô dụng với
+  người đọc.
+
+- **Vẽ CHỈ canvas, không mount cả `StructuredFbdEditor`.** Editor mang theo
+  palette, toolbar và bộ lệnh sửa; tắt từng thứ một là một danh sách phải nhớ
+  giữ đúng mãi mãi, còn **không mount** chúng thì không có gì để quên. Test khoá
+  cả hai: không có `toolbar` và không có `Palette FBD` trong DOM.
+
+- **`AC-FBD-011` là bất biến CẤU TRÚC ở đây.** Tài liệu là **prop**; thứ duy
+  nhất khay này tự giữ là lựa chọn đang xem. Giá trị runtime làm mới không có
+  đường nào chạm topology. `dispatch` chỉ nhận `SELECT` và **bỏ qua** mọi hành
+  động khác có chủ đích — canvas dùng chung với chế độ EDIT, nên chặn ở đúng một
+  chỗ dễ đọc hơn là tin rằng `canEdit={false}` đã bịt hết mọi đường.
+
+- **Tài liệu FBD hỏng NÓI RA, không vẽ một sơ đồ trống.** Một canvas trống đọc
+  như "chương trình không có gì" — khác hẳn "không đọc được".
+
+- **Verification.** FE **156 file / 1762 test PASS**; E2E mock **44 PASS / 10
+  skip**; real-backend **5/5 PASS**; build PASS — chunk **113,87 KiB / 125 KiB**.
+
+
 ### PGM-02 R2 — viewer thật ĐỌC được LIVE, và gỡ một flake của chính lane (2026-08-27)
 
 - **Added — "mọi role read-only" kiểm bằng phiên viewer THẬT.** Vế đáng kiểm
