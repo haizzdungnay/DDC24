@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ClipboardCheck, GitCompare } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
 import { StateBlock } from '../../../shared/components/StateBlock'
@@ -247,6 +246,16 @@ export function DesignWorkspacePage({
     compareOpen && compareGate.kind === 'READY' ? compareGate.toRevisionId : undefined,
   )
 
+  /* `T59-821` — ĐÚNG MỘT đường đổi mode. Nút "Về bản nháp" của thanh LIVE gọi
+   * chính hàm này thay vì tự navigate: hai đường đổi mode sẽ lệch nhau đúng lúc
+   * một trong hai bị quên cập nhật, và mode là trạng thái của TOÀN workspace. */
+  const switchWorkspaceMode = useCallback((next: ProgramsWorkspaceMode) => {
+    setCompareOpen(false)
+    const query = new URLSearchParams(searchParams)
+    query.set('mode', next)
+    navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
+  }, [navigate, projectId, searchParams])
+
   const closeCompare = useCallback(() => {
     setCompareOpen(false)
     window.requestAnimationFrame(() => compareTriggerRef.current?.focus())
@@ -492,38 +501,19 @@ export function DesignWorkspacePage({
                `workspaceModes` (server đời cũ) thì `simulation` là undefined và
                mode ở trạng thái UNAVAILABLE, không phải "chắc là có". */
             capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
-            onSwitch={(next) => {
-              setCompareOpen(false)
-              const query = new URLSearchParams(searchParams)
-              query.set('mode', next)
-              navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
-            }}
+            onSwitch={switchWorkspaceMode}
           />
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
-            {/* D-01: PGM-02 không tự seal/run Check nữa — chỉ điều hướng sang
-             * PGM-03 (Check & Commission), nơi giờ sở hữu toàn bộ vòng
-             * seal/run/poll/result. Nút vẫn khoá khi Draft chưa lưu, đúng
-             * "dirty guard" D-01 yêu cầu. */}
-            <Button
-              ref={compareTriggerRef}
-              size="sm"
-              variant="secondary"
-              icon={<GitCompare className="h-4 w-4" aria-hidden="true" />}
-              onClick={() => setCompareOpen(true)}
-            >
-              {pick('So sánh', 'Compare')}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
-              disabled={draftDirty}
-              onClick={goToCommission}
-            >
-              {pick('Kiểm tra', 'Check')}
-            </Button>
+            {/* `T59-821` — `Kiểm tra` và `So sánh` ĐÃ CHUYỂN vào toolbar của
+             * chính trình soạn thảo, đúng `PGM-02A §3`. Giữ thêm một bản ở đây
+             * sẽ là HAI nút cho cùng một hành động: người dùng phải đoán chúng
+             * có khác nhau không, và một lần sửa điều kiện khoá sẽ chỉ áp cho
+             * một trong hai.
+             *
+             * D-01 vẫn nguyên: PGM-02 không tự seal/run Check: nó điều hướng
+             * sang PGM-03, nơi sở hữu trọn vòng seal/run/poll/result. */}
           </div>
         )}
       </div>
@@ -619,6 +609,7 @@ export function DesignWorkspacePage({
             objectId={selectedObjectId}
             activeRevisionId={workspace.project.activeRevisionId ?? null}
             monitor={monitor}
+            onReturnToDraft={() => switchWorkspaceMode('EDIT')}
           />
         ) : (
         <ProgramsTab
@@ -633,6 +624,12 @@ export function DesignWorkspacePage({
           onPendingOperationsChange={updateProgramOperations}
           discardVersion={discardVersion}
           onRunCheck={goToCommission}
+          onOpenCompare={() => setCompareOpen(true)}
+          checkDisabledReason={draftDirty
+            ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
+                   'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
+            : null}
+          compareDisabledReason={null}
           userPouInterfaces={userPouInterfaces}
           forceReadOnly={mobileReadOnly}
         />

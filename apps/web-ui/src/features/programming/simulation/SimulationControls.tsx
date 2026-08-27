@@ -25,11 +25,14 @@ export function SimulationControls({
   canControl,
   onAction,
   onStop,
+  onFocusWatch,
 }: {
   slice: SimulationSlice
   canControl: boolean
   onAction: (action: SimulationAction, speed?: number) => void
   onStop: () => void
+  /** Đưa tiêu điểm xuống bảng giá trị đã hiển thị sẵn, không dựng bảng thứ hai. */
+  onFocusWatch?: () => void
 }) {
   const { pick } = useI18n()
   const session = currentSession(slice)
@@ -132,6 +135,34 @@ export function SimulationControls({
           enabled={canControl && !busy && session !== null && !isTerminalState(session.state)}
           onClick={onStop}
         />
+        {/* `T59-821` / `PGM-02A §3` — thanh SIMULATE có `Watch` và `Trace`.
+          *
+          * `Watch` là bảng giá trị theo biến, và nó ĐANG hiển thị sẵn ngay dưới
+          * thanh này trong `SimulateWorkspace`; nút chỉ đưa tiêu điểm xuống đó
+          * thay vì dựng một bảng thứ hai cho cùng dữ liệu.
+          *
+          * `Trace` thì CHƯA có bề mặt: API `listProgrammingSimulationTrace` tồn
+          * tại nhưng chưa FE nào đọc nó. Nút vẫn hiện và vẫn khoá, kèm lý do
+          * đọc được — ẩn nó đi sẽ làm người dùng tưởng tính năng không tồn tại
+          * thay vì biết nó chưa được nối. */}
+        <ControlButton
+          label={pick('Theo dõi', 'Watch')}
+          enabled={session !== null}
+          disabledReason={session === null
+            ? pick('Chưa mở phiên mô phỏng nên chưa có giá trị nào để theo dõi.',
+                   'No simulation session is open, so there are no values to watch.')
+            : undefined}
+          onClick={() => onFocusWatch?.()}
+        />
+        <ControlButton
+          label={pick('Vết', 'Trace')}
+          enabled={false}
+          disabledReason={pick(
+            'Bề mặt Vết chưa được nối vào giao diện. Dịch vụ đã có, phần hiển thị thì chưa.',
+            'The trace surface is not wired into the UI yet. The service exists; the view does not.',
+          )}
+          onClick={() => undefined}
+        />
       </div>
 
       {slice.lastDenial && (
@@ -146,13 +177,16 @@ export function SimulationControls({
 }
 
 function ControlButton({
-  label, enabled, onClick,
-}: { label: string; enabled: boolean; onClick: () => void }) {
+  label, enabled, onClick, disabledReason,
+}: { label: string; enabled: boolean; onClick: () => void; disabledReason?: string }) {
   return (
     <button
       type="button"
       disabled={!enabled}
       onClick={onClick}
+      /* Nút khoá phải NÊU LÝ DO. Một nút xám không giải thích buộc người dùng
+         thử đi thử lại rồi tự dựng một lời giải thích sai. */
+      title={!enabled ? disabledReason : undefined}
       className="rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text)] disabled:cursor-not-allowed disabled:opacity-50"
     >
       {label}
