@@ -574,4 +574,89 @@ TEST(StLang, AssignmentContextSelectsIntegerTypeForLiteralExpression)
         << d.code << ": " << d.message;
 }
 
+
+/* ---- §7.3.3.2 CASE: ca phải bị TỪ CHỐI ---------------------------------
+ *
+ * Nhận đúng thứ hợp lệ mới là nửa việc. Nửa còn lại là từ chối thứ không hợp
+ * lệ — và từ chối kèm vị trí đúng, vì một nhãn trùng hay một dải ngược chiều
+ * là lỗi logic im lặng: chương trình vẫn chạy, chỉ có một nhánh không bao giờ
+ * tới được.
+ */
+
+TEST(StLangCase, DuplicateLabelRejected)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR_INPUT s : INT; END_VAR\nVAR_OUTPUT o : INT; END_VAR\n",
+                            "CASE s OF\n 1: o := 1;\n 1: o := 2;\nEND_CASE;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kSyntaxUnexpected);
+}
+
+TEST(StLangCase, DuplicateAcrossRangeAndSingleLabelRejected)
+{
+    StDiagnostic d;
+    /* Trùng NẰM TRONG một dải cũng phải bắt: `2` đã bị `1..3` phủ. */
+    EXPECT_FALSE(check(prog("VAR_INPUT s : INT; END_VAR\nVAR_OUTPUT o : INT; END_VAR\n",
+                            "CASE s OF\n 1..3: o := 1;\n 2: o := 2;\nEND_CASE;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kSyntaxUnexpected);
+}
+
+TEST(StLangCase, EmptyRangeRejected)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR_INPUT s : INT; END_VAR\nVAR_OUTPUT o : INT; END_VAR\n",
+                            "CASE s OF\n 5..1: o := 1;\nEND_CASE;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kSyntaxUnexpected);
+}
+
+TEST(StLangCase, NonConstantLabelRejected)
+{
+    StDiagnostic d;
+    /* Nhãn phải xác định được lúc dịch; một biến ở vị trí nhãn không thể dựng
+     * thành bảng nhánh và cũng không phải điều IEC cho phép. */
+    EXPECT_FALSE(check(prog("VAR_INPUT s : INT; k : INT; END_VAR\nVAR_OUTPUT o : INT; END_VAR\n",
+                            "CASE s OF\n k: o := 1;\nEND_CASE;\n"), &d));
+}
+
+TEST(StLangCase, MissingEndCaseRejected)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR_INPUT s : INT; END_VAR\nVAR_OUTPUT o : INT; END_VAR\n",
+                            "CASE s OF\n 1: o := 1;\n"), &d));
+}
+
+TEST(StLangCase, MissingOfRejected)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR_INPUT s : INT; END_VAR\nVAR_OUTPUT o : INT; END_VAR\n",
+                            "CASE s\n 1: o := 1;\nEND_CASE;\n"), &d));
+}
+
+TEST(StLangCase, BooleanSelectorRejectedByTypecheck)
+{
+    StDiagnostic d;
+    /* Nhãn là hằng NGUYÊN, nên bộ chọn kiểu BOOL không so được — semantic phải
+     * bắt, chứ không được lặng lẽ ép kiểu. */
+    EXPECT_FALSE(check(prog("VAR_INPUT s : BOOL; END_VAR\nVAR_OUTPUT o : INT; END_VAR\n",
+                            "CASE s OF\n 1: o := 1;\nEND_CASE;\n"), &d));
+}
+
+TEST(StLangCase, DesugarsIntoIfBranchesWithElseLast)
+{
+    StProgram p;
+    StDiagnostic d;
+    ASSERT_TRUE(parse_only(prog("VAR_INPUT s : INT; END_VAR\nVAR_OUTPUT o : INT; END_VAR\n",
+                                "CASE s OF\n 1: o := 1;\n 2, 3: o := 2;\nELSE\n o := 9;\nEND_CASE;\n"),
+                           &p, &d))
+        << d.code << ": " << d.message;
+    ASSERT_EQ(p.body.size(), 1u);
+    EXPECT_EQ(p.body[0].kind, StStmt::Kind::IF);
+    /* Hai nhãn + ELSE = ba nhánh, và nhánh ELSE (cond == nullptr) phải đứng
+     * CUỐI — codegen dựa vào thứ tự đó để nhánh mặc định chỉ chạy khi mọi điều
+     * kiện trước đều sai. */
+    ASSERT_EQ(p.body[0].branches.size(), 3u);
+    EXPECT_NE(p.body[0].branches[0].cond, nullptr);
+    EXPECT_NE(p.body[0].branches[1].cond, nullptr);
+    EXPECT_EQ(p.body[0].branches[2].cond, nullptr);
+}
+
 } // namespace core

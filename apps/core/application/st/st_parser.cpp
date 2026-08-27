@@ -545,7 +545,7 @@ private:
             "BOOL", "INT", "DINT", "UINT", "REAL", "TIME",
             "TON", "TOF", "R_TRIG", "F_TRIG", "PID", "TP", "CTU", "CTD",
             "HYSTERESIS",
-            "CASE", "END_CASE", "FOR", "END_FOR", "WHILE", "END_WHILE",
+            "CASE", "OF", "END_CASE", "FOR", "END_FOR", "WHILE", "END_WHILE",
             "REPEAT", "UNTIL", "END_REPEAT", "EXIT", "CONTINUE", "RETURN", "GOTO",
             "VAR_GLOBAL", "VAR_EXTERNAL", "NATIVE", "POINTER", "REFERENCE", "AT",
             "ARRAY", "STRUCT", "STRING", "WSTRING",
@@ -779,14 +779,23 @@ private:
         return false;
     }
 
+    /* Nhãn CASE đứng ở vị trí câu lệnh nhưng KHÔNG phải câu lệnh: một literal
+     * nguyên (có thể mang dấu âm) không bao giờ mở đầu được một câu lệnh hợp lệ
+     * trong subset này, nên nhận diện nó là không nhập nhằng. */
+    bool at_case_label() const
+    {
+        if (peek().kind == Token::Kind::IntLit) return true;
+        return peek().kind == Token::Kind::Minus && peek_at(1).kind == Token::Kind::IntLit;
+    }
+
     bool parse_stmt_list(const std::vector<std::string>& stop, std::vector<StStmt>* out,
-                         StDiagnostic* diag)
+                         StDiagnostic* diag, bool stop_at_case_label = false)
     {
         if (stmt_depth_ >= st_limits::kMaxStmtDepth)
             return fail_depth("statement", st_limits::kMaxStmtDepth, diag);
         DepthGuard guard(&stmt_depth_);
 
-        while (!at_stop(stop)) {
+        while (!at_stop(stop) && !(stop_at_case_label && at_case_label())) {
             if (at_end()) return fail("unexpected end of source in statement list", diag);
             if (++stmt_count_ > st_limits::kMaxStatements) {
                 set_diag(diag, st_diag_code::kTooManyStatements,
@@ -805,6 +814,7 @@ private:
     bool parse_stmt(StStmt* out, StDiagnostic* diag)
     {
         if (at_kw("IF")) return parse_if(out, diag);
+        if (at_kw("CASE")) return parse_case(out, diag);
 
         if (!at_ident()) return fail("expected identifier or IF at start of statement", diag);
         if (is_keyword(peek().upper))
@@ -863,6 +873,196 @@ private:
 
         if (!expect_kw("END_IF", diag)) return false;
         return expect(Token::Kind::Semicolon, "';' after END_IF", diag);
+    }
+
+    /* ---- CASE (IEC 61131-3 §7.3.3.2) ----------------------------------
+     *
+     * `CASE` được KHỬ ĐƯỜNG về đúng cây `IF/ELSIF/ELSE` sẵn có thay vì thêm một
+     * `StStmt::Kind` mới.
+     *
+     * Lý do là an toàn vận hành, không phải tiện tay: `Kind::IF` đang được đọc
+     * ở năm nơi (semantic, codegen, hai lượt duyệt của POU registry, và bộ đếm
+     * giới hạn). Thêm một Kind mới nghĩa là năm chỗ đó phải cùng được cập nhật,
+     * và chỗ nào quên sẽ IM LẶNG bỏ qua thân CASE — một máy trạng thái không
+     * chạy nhưng vẫn Check PASS, trên thiết bị đang điều khiển thiết bị thật.
+     * Khử đường thì mọi tầng phía sau dùng lại đúng đường đã được kiểm chứng.
+     *
+     * Phép biến đổi giữ nguyên ngữ nghĩa vì biểu thức trong subset này KHÔNG có
+     * tác dụng phụ: `SIGNAL_PUBLISH` là câu lệnh chứ không phải biểu thức, và
+     * hàm chuẩn/hàm người dùng đều thuần. Vì vậy nhân bản biểu thức chọn cho
+     * từng nhánh cho ra đúng kết quả như đánh giá một lần.
+     *
+     *   CASE sel OF
+     *     1, 3:   A;
+     *     10..20: B;
+     *   ELSE      C;
+     *   END_CASE;
+     *
+     *   ⇒ IF (sel=1) OR (sel=3) THEN A;
+     *     ELSIF (sel>=10) AND (sel<=20) THEN B;
+     *     ELSE C; END_IF;
+     */
+    static std::unique_ptr<StExpr> clone_expr(const StExpr& src)
+    {
+        auto copy = std::make_unique<StExpr>();
+        copy->kind = src.kind;
+        copy->literal = src.literal;
+        copy->literal_polymorphic = src.literal_polymorphic;
+        copy->literal_int_value = src.literal_int_value;
+        copy->var_name = src.var_name;
+        copy->member_object = src.member_object;
+        copy->member_field = src.member_field;
+        copy->bin_op = src.bin_op;
+        copy->un_op = src.un_op;
+        copy->func = src.func;
+        copy->user_call_name = src.user_call_name;
+        copy->signal_name = src.signal_name;
+        copy->result_type = src.result_type;
+        copy->line = src.line;
+        copy->column = src.column;
+        copy->length = src.length;
+        if (src.lhs) copy->lhs = clone_expr(*src.lhs);
+        if (src.rhs) copy->rhs = clone_expr(*src.rhs);
+        if (src.operand) copy->operand = clone_expr(*src.operand);
+        copy->args.reserve(src.args.size());
+        for (const auto& arg : src.args)
+            copy->args.push_back(arg ? clone_expr(*arg) : nullptr);
+        return copy;
+    }
+
+    static std::unique_ptr<StExpr> make_int_literal(int64_t value, const Token& at)
+    {
+        auto node = std::make_unique<StExpr>();
+        node->kind = StExpr::Kind::LITERAL;
+        /* Đa hình đúng như literal nguyên viết tay: kiểu thật do semantic chọn
+         * theo ngữ cảnh, nên nhãn CASE so được với INT lẫn DINT/UINT. */
+        node->literal_polymorphic = true;
+        node->literal_int_value = value;
+        node->literal = StValue::make_dint(static_cast<int32_t>(value));
+        node->line = at.line;
+        node->column = at.column;
+        node->length = at.length;
+        return node;
+    }
+
+    static std::unique_ptr<StExpr> make_binop(StBinOp op, std::unique_ptr<StExpr> lhs,
+                                              std::unique_ptr<StExpr> rhs)
+    {
+        auto node = std::make_unique<StExpr>();
+        node->kind = StExpr::Kind::BINOP;
+        node->bin_op = op;
+        node->line = lhs->line;
+        node->column = lhs->column;
+        node->length = lhs->length;
+        node->lhs = std::move(lhs);
+        node->rhs = std::move(rhs);
+        return node;
+    }
+
+    /* Một nhãn CASE phải là HẰNG nguyên. IEC cho phép dấu âm; biểu thức chạy
+     * lúc thực thi thì không, vì nhãn phải xác định được lúc dịch. */
+    bool parse_case_label_value(int64_t* out, StDiagnostic* diag)
+    {
+        bool negative = false;
+        if (peek().kind == Token::Kind::Minus) { advance(); negative = true; }
+        if (peek().kind != Token::Kind::IntLit)
+            return fail("CASE label must be an integer constant", diag);
+        const Token literal = advance();
+        *out = negative ? -literal.int_val : literal.int_val;
+        return true;
+    }
+
+    bool parse_case(StStmt* out, StDiagnostic* diag)
+    {
+        advance();   /* CASE */
+        out->kind = StStmt::Kind::IF;
+
+        std::unique_ptr<StExpr> selector;
+        if (!parse_expr(&selector, diag)) return false;
+        if (!expect_kw("OF", diag)) return false;
+
+        /* IEC đòi nhãn KHÔNG trùng nhau. Trùng nhãn nghĩa là một nhánh không
+         * bao giờ chạy được — im lặng bỏ qua nó là giấu một lỗi logic. */
+        std::vector<int64_t> seen;
+        bool has_branch = false;
+
+        while (!at_kw("ELSE") && !at_kw("END_CASE")) {
+            if (at_end()) return fail("unexpected end of source in CASE", diag);
+
+            std::unique_ptr<StExpr> cond;
+            for (;;) {
+                const Token label_at = peek();
+                int64_t lo = 0;
+                if (!parse_case_label_value(&lo, diag)) return false;
+
+                int64_t hi = lo;
+                if (peek().kind == Token::Kind::Dot && peek_at(1).kind == Token::Kind::Dot) {
+                    advance();
+                    advance();
+                    if (!parse_case_label_value(&hi, diag)) return false;
+                    if (hi < lo) {
+                        set_diag(diag, st_diag_code::kSyntaxUnexpected,
+                                 "CASE range is empty: upper bound is below the lower bound",
+                                 label_at.line, label_at.column, label_at.length);
+                        return false;
+                    }
+                }
+
+                /* Dải quá rộng bị chặn ở đây: nó nở ra thành so sánh biên nên
+                 * không tốn bộ nhớ, nhưng một dải khổng lồ gần như luôn là lỗi
+                 * gõ nhầm, và bắt sớm rẻ hơn nhiều so với debug trên bo. */
+                for (int64_t value = lo; value <= hi; ++value) {
+                    if (std::find(seen.begin(), seen.end(), value) != seen.end()) {
+                        set_diag(diag, st_diag_code::kSyntaxUnexpected,
+                                 "duplicate CASE label " + std::to_string(value),
+                                 label_at.line, label_at.column, label_at.length);
+                        return false;
+                    }
+                    seen.push_back(value);
+                    if (seen.size() > st_limits::kMaxStatements)
+                        return fail("CASE label set is too large", diag);
+                }
+
+                std::unique_ptr<StExpr> term;
+                if (hi == lo) {
+                    term = make_binop(StBinOp::EQ, clone_expr(*selector),
+                                      make_int_literal(lo, label_at));
+                } else {
+                    term = make_binop(
+                        StBinOp::AND,
+                        make_binop(StBinOp::GE, clone_expr(*selector),
+                                   make_int_literal(lo, label_at)),
+                        make_binop(StBinOp::LE, clone_expr(*selector),
+                                   make_int_literal(hi, label_at)));
+                }
+                cond = cond ? make_binop(StBinOp::OR, std::move(cond), std::move(term))
+                            : std::move(term);
+
+                if (peek().kind == Token::Kind::Comma) { advance(); continue; }
+                break;
+            }
+
+            if (!expect(Token::Kind::Colon, "':' after CASE label", diag)) return false;
+
+            StIfBranch branch;
+            branch.cond = std::move(cond);
+            if (!parse_stmt_list({"ELSE", "END_CASE"}, &branch.body, diag, true)) return false;
+            out->branches.push_back(std::move(branch));
+            has_branch = true;
+        }
+
+        if (at_kw("ELSE")) {
+            advance();
+            StIfBranch els;   /* cond == nullptr đánh dấu nhánh ELSE */
+            if (!parse_stmt_list({"END_CASE"}, &els.body, diag)) return false;
+            out->branches.push_back(std::move(els));
+        }
+
+        if (!has_branch && out->branches.empty())
+            return fail("CASE has no branch", diag);
+
+        if (!expect_kw("END_CASE", diag)) return false;
+        return expect(Token::Kind::Semicolon, "';' after END_CASE", diag);
     }
 
     bool parse_assign(StStmt* out, StDiagnostic* diag)

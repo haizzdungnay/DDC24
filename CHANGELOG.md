@@ -8,6 +8,44 @@
 
 ## [Unreleased]
 
+### ST — bổ sung câu lệnh `CASE` theo IEC 61131-3 §7.3.3.2 (2026-08-28)
+
+- **Added — `CASE` là câu lệnh CHUẨN của ST và compiler thiết bị chưa có nó.**
+  `st_parser.cpp` ghi `CASE`/`END_CASE` vào bảng từ khoá nhưng `parse_stmt` chỉ
+  dựng được `IF`, phép gán và lời gọi FB — nên mọi nguồn dùng `CASE` bị từ chối
+  ở đúng từ khoá đó (`'CASE' is a keyword and cannot start a statement`). Phát
+  hiện khi nạp một chuỗi điều khiển AHU có máy trạng thái viết bằng `CASE`.
+
+  Nay hỗ trợ đầy đủ: nhãn đơn, danh sách nhãn (`1, 3, 7:`), dải (`10..20:`),
+  nhãn âm, `ELSE`, và bộ chọn là biểu thức bất kỳ. `OF` được thêm vào bảng từ
+  khoá — thiếu nó thì `OF` lọt vào chỗ định danh.
+
+- **Changed — `CASE` được KHỬ ĐƯỜNG về cây `IF/ELSIF` sẵn có, không thêm
+  `StStmt::Kind` mới.** Lý do là an toàn vận hành chứ không phải tiện tay:
+  `Kind::IF` đang được đọc ở **năm** nơi (semantic, codegen, hai lượt duyệt POU
+  registry, bộ đếm giới hạn). Thêm một Kind mới bắt cả năm chỗ phải cùng được
+  cập nhật, và chỗ nào quên sẽ **im lặng bỏ qua thân CASE** — một máy trạng
+  thái không chạy nhưng vẫn Check PASS, trên thiết bị đang điều khiển thiết bị
+  thật. Khử đường thì mọi tầng phía sau dùng lại đúng đường đã kiểm chứng.
+
+  Phép biến đổi giữ nguyên ngữ nghĩa vì biểu thức trong subset này không có tác
+  dụng phụ (`SIGNAL_PUBLISH` là câu lệnh, hàm đều thuần), nên nhân bản biểu thức
+  chọn cho từng nhánh cho đúng kết quả như đánh giá một lần.
+
+- **Added — từ chối đúng thứ phải từ chối.** Nhãn trùng (kể cả trùng nằm trong
+  một dải), dải ngược chiều (`5..1`), nhãn không phải hằng, thiếu `OF`, thiếu
+  `END_CASE`, và bộ chọn kiểu BOOL đều bị bắt kèm vị trí. Nhãn trùng là lỗi
+  logic **im lặng** — chương trình vẫn chạy, chỉ có một nhánh không bao giờ tới
+  được — nên nó phải là lỗi, không phải cảnh báo.
+
+- **Verification** (2026-08-28): `ctest --test-dir build/fw` **1327/1327 PASS**
+  (cả 3 option MODBUS/BACNET/HMI bật). 15 ca mới: 7 ca **thực thi thật** rồi đọc
+  đầu ra (`StExecCase`) — vì một phép khử đường sai vẫn dịch trót lọt và vẫn
+  Check PASS, nó chỉ sai lúc thiết bị đang chạy — và 8 ca cú pháp/ngữ nghĩa
+  (`StLangCase`). Cross-build aarch64 (`-static-libstdc++`, libsodium lấy từ
+  chính bo) và deploy `/usr/sbin/mkddc-st-compile` lên Foxlinx: chương trình AHU
+  dùng `CASE` **hết lỗi cú pháp** (lỗi còn lại là ánh xạ I/O, không phải ST).
+
 ### PGM-02 — Bộ chọn Point ẩn ứng viên mà không nói lý do (2026-08-28)
 
 - **Fixed — danh sách còn vài mục trông y hệt một danh sách đầy đủ.** Người dùng
