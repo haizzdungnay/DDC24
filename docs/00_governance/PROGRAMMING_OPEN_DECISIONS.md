@@ -4,7 +4,7 @@
 |---|---|
 | ID | `DEC-PROG-REGISTER-001` |
 | Phiên bản | 1.5 |
-| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` CLOSED (decision + implementation); `T59-801`/`T59-802` DONE, `T59-803` READY và `T59-804..817` ORDERED theo dependency** |
+| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` CLOSED (decision + implementation); increment R1 và R2 ĐÓNG (`T59-801..813` DONE), R3 mở với `T59-814` READY. Status authority của từng task là Plan 59, không phải hồ sơ này** |
 | Ngày | 2026-08-25 |
 | Chủ quản | Product + System Architecture |
 | Authority | `ADR-050`; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
@@ -127,7 +127,7 @@ Scoped gate hiện hành:
 | `PLAN_READY[PGM02-V22]` | **PASS** | exact Candidate pin + formal DDD/contract/ADR/trace/VVP/task split đã được duyệt |
 | `IMPLEMENT_READY[PGM02-R1]` | **GO** | `T59-802` READY; `T59-803..809` ORDERED theo predecessor |
 | `IMPLEMENT_READY[PGM02-R2]` | **GO** | task có authority nhưng `T59-810` chỉ tự chuyển READY sau `T59-809 DONE` |
-| `IMPLEMENT_READY[PGM02-R3]` | **GO** | task có authority nhưng `T59-814` chỉ tự chuyển READY sau `T59-813 DONE`; `ADR-053` Accepted |
+| `IMPLEMENT_READY[PGM02-R3]` | **GO** | `T59-813 DONE` 2026-08-27 nên `T59-814` đã tự chuyển READY; `ADR-053` Accepted |
 | `RELEASE_READY` | **NO-GO** | VVP/Test Result/risk/target/HIL/release authority hiện hành |
 
 Canonical ID của work package là `PGM02-V22-WP-00..13`. Tên ngắn `WP-00..13`
@@ -187,6 +187,7 @@ resource, audit và target/HIL truthfulness—được giữ trong Product v3.0/
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 1.5 | 2026-08-25 | Đóng `F-P59-GHOST-POU-001` ở lớp implementation: catalog `1.7.2`, checker/packager/writer fail-closed theo `documentSchemaVersion`, reader giữ tương thích package legacy; affected gate HOST PASS. Ghi `T59-802 DONE (HOST/LOCAL)` và `T59-803 READY`. Không đổi 12 quyết định unified; `RELEASE_READY` giữ NO-GO. |
+| 1.6 | 2026-08-27 | Đồng bộ trạng thái sau khi increment R2 đóng (`T59-813 DONE`): header không còn dừng ở `T59-802`, và `IMPLEMENT_READY[PGM02-R3]` ghi đúng việc `T59-814` đã READY. Không mở hay đóng quyết định nào. |
 | 1.5 | 2026-08-26 | Ghi `UD-PROG-013`: Owner/Architect chọn **lựa chọn A** ở `GATE-PROG-ST-EDITOR-DEP-001` — giữ bề mặt editor ST hiện tại cho R1, không thêm CodeMirror 6. Quyết bằng số đo thật (bộ tối thiểu 110,07 KiB gzip ⇒ nhúng thẳng ≈220,85 KiB, vượt cả ngân sách R3). Cổng CLOSED; `T59-805` đủ điều kiện đóng và `T59-807` mở. |
 | 1.4 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: Product Owner/CTO + System Architect pin exact Candidate commit `413a043748dce3b44d2c5076412de761760ba17a`, mở PLAN_READY và ba IMPLEMENT_READY nhưng giữ scheduler R1→R2→R3, review ngoài owner/architect `WAIVED FOR IMPLEMENTATION` và RELEASE_READY NO-GO. Chuyển T59-801 DONE, T59-802 READY, T59-803..817 ORDERED. Chốt ghost PROGRAM fail-closed bằng `PRG-ERR-CHECK-001`/`ST-POU-005`; implementation closure vẫn PENDING tới khi source/test đạt. |
 | 1.3-candidate | 2026-08-24 | Làm rõ exact pin hai lớp: manifest ghim 17 hồ sơ Markdown authority; record Owner + Architect phải ghi candidate Git commit SHA để khóa contract/schema/ADR/handoff/SVG. Pin check 17/17 một mình không mở `PLAN_READY` hoặc code. |

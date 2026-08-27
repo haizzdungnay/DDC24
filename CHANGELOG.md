@@ -8,6 +8,67 @@
 
 ## [Unreleased]
 
+### PGM-02 R2 — bằng chứng target, diễn tập rollback và closeout increment (`T59-813`) (2026-08-27)
+
+- **Added — lane browser chạy trên chính controller.**
+  `playwright.programming-target.config.ts` bắt buộc khai
+  `PROGRAMMING_TARGET_BASE_URL` (không có mặc định localhost), không dựng
+  `webServer`, và khóa cứng tập case ở `grep`. Bundle triển khai lên Foxlinx
+  SOM-DDC-24 đọc lại trùng **14/14 hash** với build host, kể cả khi đọc qua
+  HTTP. Kết quả: `T59-810`/`T59-811` **3 PASS** online.
+
+- **Added — hai cửa sổ có kiểm soát trên target.** Cửa sổ dừng `mkddc-core`:
+  monitor trả **503**, thân phản hồi không chứa `programValue: 0`, FE bỏ hẳn
+  nguồn Active thay vì rơi về Draft, gỡ lớp giá trị runtime và không để lại
+  `Lưu`/`Hoàn tác`. Cửa sổ rollback: triển khai thật bundle **không** có cờ
+  `VITE_PROGRAMS_WORKSPACE_V2`, xác nhận route canonical R2 biến mất, lối vào
+  cũ mount lại workspace R1, và Draft/Active đọc nguyên vẹn qua đúng API bản cũ
+  dùng — rollback FE không kéo theo migration.
+
+- **Fixed — `F-P59-IDEMPOTENCY-REPLAY-001`: đồ gá e2e sinh idempotency key lặp
+  lại giữa các lần chạy.** `nextUUID` dùng bộ đếm reset theo tiến trình, nên mọi
+  lần chạy gửi lại đúng tập `x-idempotency-key` cũ và backend replay bản ghi cũ
+  — đúng hợp đồng idempotency. Lane host dựng store mới mỗi lần nên không lộ;
+  trên store sống lâu của controller thì `T59-810` đỏ vì phiên Trace "vừa tạo"
+  mang pin cũ hơn snapshot đọc trước đó **611 s**. Nguy hiểm hơn màu đỏ: cùng cơ
+  chế cho **xanh giả** ở mọi case assert rằng một mutation đã chạy. Nay muối UUID
+  theo từng lần chạy — 3/3 lần PASS liên tiếp, so với 3/3 FAIL trước khi sửa.
+
+- **Fixed — `F-P59-TARGET-SCOPE-001`: lane target có thể chạm dữ liệu thật ngoài
+  phạm vi.** `testMatch` chọn file chứ không chọn case, nên các case tự tạo
+  Project và Commission gói mới có thể chạy lên controller — đổi chính Active
+  đang điều khiển để lấy bằng chứng về Active. Phạm vi nay khóa trong config.
+
+- **Fixed — `F-P59-VIEWER-RESIDUE-001`: mỗi lần đo để lại một tài khoản viewer
+  thật.** Case tạo viewer qua API thật nhưng không dọn; nay xóa trong `finally`
+  để vẫn chạy khi assert phía trên đỏ.
+
+- **Fixed — `F-P59-OPENAPI-PIN-001`: lattice hợp đồng ghim revision OpenAPI
+  không còn tồn tại.** R2 đổi `contracts/openapi/openapi.yaml` ở `5c99bc5`
+  (dấu producer) và `4d8cfd3` (Trace pin) nhưng không re-pin, làm
+  `verify-project.sh --component layout` và `verify_programming_g1_contracts.py`
+  **đỏ sẵn trên `main` sạch** từ `T59-810`. Re-pin `openapiSha256` trong
+  `pgm02_workspace_v1.json` và `g1_contract_join_v1.json`; cả hai cổng về PASS.
+
+- **Changed — closeout R2 và đồng bộ hồ sơ.** Thêm record
+  `EV-PGM02-R2-CLOSEOUT-001`; `VS-PROG-U14` chuyển từ `NOT_RUN` sang **PASS ở
+  phạm vi R2 (HOST + TARGET-BROWSER)** kèm đúng giới hạn: chưa có chữ ký
+  operator/reviewer, chưa đo *Active cutover* ở lớp target, không tuyên bố HIL
+  hay I/O vật lý. Plan 59 lên 2.23 (`T59-813 DONE`, R2 đóng, `T59-814 READY`);
+  review plan PGM-02 đóng `WP-12`/`WP-13` phạm vi R2; `PROGRAMMING_OPEN_DECISIONS`
+  hết dừng ở `T59-802`; manifest baseline lên **1.53** để `candidate_pin_check`
+  về 17/17.
+
+- **Verification.** `ctest` **1299/1299 PASS** (configure/build `rc=0`,
+  MODBUS/BACNET/HMI ON); `go vet` + `go test -count=1` PASS; FE **157 file /
+  1768 test PASS**; lint PASS; `npm run build` PASS với chunk Programming
+  **114,33 KiB / 145 KiB (R2)**, dư **30,67 KiB**; mock E2E **53 PASS / 11
+  skip**; real-backend host **5/5 PASS**; lane target **3 PASS online + fault
+  PASS + rollback PASS**, chạy lại sau khi phục hồi Core vẫn **3 PASS**;
+  `verify-project.sh --component layout`, `candidate_pin_check.py` và
+  `docs_iso_harness.py --expect` PASS. Bản đo trên bo là **bản đánh giá R2** có
+  bật cờ cut-over tường minh, **không** phải bản phát hành mặc định.
+
 ### PGM-02 R2 — ngân sách, vòng đời subscription và hardening LIVE (`T59-812`) (2026-08-27)
 
 - **Fixed — LIVE trước đây chỉ khóa editor chính, chưa khóa toàn workspace.**
