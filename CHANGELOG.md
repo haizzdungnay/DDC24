@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### PGM-02 — Truy nguyên 33 AC và phép đo 1280×750 cho workspace (`T59-822`) (2026-08-27)
+
+- **Added — bảng truy nguyên `AC → task → file test` được SINH RA, không chép
+  tay.** `scripts/programming_ac_traceability.py` đọc định danh AC thẳng từ ba
+  tệp handoff và tra tham chiếu bằng `grep` trên cây làm việc. Một bảng chép tay
+  chỉ chứng minh người viết đã tin điều gì tại thời điểm viết; nó vẫn xanh sau
+  khi file test bị xoá.
+
+- **Fixed — 16/33 AC không có tham chiếu nào ngoài chính tệp handoff**
+  (`F-PGM02-AUD-005`). Phần lớn **đã có test thật** nhưng không mang định danh,
+  nên không ai kiểm chứng độc lập được — muốn biết một AC có được phủ hay không
+  phải đọc hết test rồi suy luận bằng văn xuôi. Cách sửa: **gắn định danh vào
+  tên/chú thích test đã có**, không viết lại test. Viết test mới cho thứ đã được
+  phủ là nhân đôi chi phí bảo trì để mua một con số đẹp. Nay **33/33**.
+
+- **Added — phép đo `AC-PGM02-002` cho chính workspace PGM-02.** Trước lát này
+  phép đo 1280×750 **chỉ chạy cho PGM-01 Tổng quan**; suy kết quả của một trang
+  khác sang workspace ba cột không phải là đo.
+
+- **Fixed — cây POU là dải ngang thay vì cột trái.** Triệu chứng: lần chạy đầu
+  của phép đo mới FAIL với mép trên trình soạn thảo ở **y=849** trên viewport
+  750 — người dùng phải cuộn trang mới thấy chỗ mình gõ. Nguyên nhân:
+  `PouExplorer` render thành một dải ngang cao **337 px** phía trên lưới, dù
+  `UX §16.2` quy định `Cây 280px ┬ Editor ┬ Inspector 308px`. Cách sửa: đưa nó
+  vào đúng cột trái qua `explorerSlot` của `ProgramsTab`, với điều kiện loại trừ
+  nhau để `AC-PGM02-001` ("đúng MỘT cây POU") vẫn đúng.
+
+- **Fixed — chiều cao trình soạn thảo cố định không vừa màn 750 px.** Sau khi
+  sửa trên, mép trên còn `y=500` nhưng mép dưới ở **884 px**. Nguyên nhân: khung
+  cố định 24rem cộng ~500 px chrome phía trên. Cách sửa:
+  `h-[clamp(14rem,calc(100vh-32rem),24rem)]` — màn từ 1080 px trở lên giữ nguyên
+  24rem, chỉ màn thấp co lại; sàn 14rem để nó không thành một khe hai dòng.
+
+- **Changed — phép đo tự sửa cho khớp câu của AC.** Bản nháp đầu còn đòi cả
+  trang gói gọn trong 750 px, chặt hơn câu *"main editor/canvas visible without
+  page scroll"* — trang còn Inspector và khay workbench nằm dưới một cách chính
+  đáng. Test phải khoá đúng câu hợp đồng, không khoá một câu nghiêm hơn do mình
+  nghĩ ra: một test như thế sẽ đỏ vì lý do không ai đồng ý rồi bị tắt đi.
+
+- **Verification** (2026-08-27): `programming_ac_traceability.py --check` PASS
+  **33/33**; `npx vitest --run --environment jsdom src` **170 file / 1930 test
+  PASS**; `npm run lint` PASS;
+  `npx playwright test e2e/programming.spec.ts` **54 passed / 11 skipped**
+  (thêm ca `AC-PGM02-002`); `docs_iso_harness.py` PASS.
+
 ### PGM-02 — Editor chrome đầy đủ: tab đa POU, toolbar, status bar, Code Map (`T59-821`, `PGM02-V22-WP-15`) (2026-08-27)
 
 - **Added — tab đa POU bắc qua ST↔FBD (`UD-PROG-014` phương án B).** Trục định
