@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.54 |
+| Phiên bản | 1.55 |
 | Trạng thái | **Active — PGM-02 v2.2 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; release NO-GO** |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -54,7 +54,7 @@ chứng minh code, target, HIL hoặc release.
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `eedd394e476a56e46933cf88798720c02a1924ef22148911ebaf9fdd99b04f17` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `40fcc8d098060f910a944373badcf9d2874d180ba9b08e37afe9e746fc9da03b` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `2dc98b84df4abecdd2c64fa0ea11feb0e5edcc3c82d853f8d1571757449a83e6` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `86399edb1b01b8b1e18a61dd14e732a473a5ecaecdc93af3a29b7aa8a7b8f520` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `d61bcf39cf8e19f41e3427bf3ffbc13b0f97a253ef612cc9ef928c618d76bc47` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `9d9969a721db22cf4ac1c05fa6343e8e1ae1efd2164571ba82407496c80afb33` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 17 | `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` | `131b195e830d9c182d8ae197d9bc4b7a967e9b11256934e505601eb516c84980` | `413a043748dce3b44d2c5076412de761760ba17a` |
 
@@ -91,6 +91,9 @@ evidence release.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.55 | 2026-08-27 | Re-pin dòng `#15` (Plan59) sau khi `T59-819` đóng nhánh Compare Draft↔Active còn nợ của `PGM02-V22-WP-09`. **Đánh giá impact:** `#15` đổi trạng thái `T59-819` READY→DONE (HOST/LOCAL), ghi số đo thật và hạ dòng `WP-09` về DONE trọn; không đổi Product/SRS/Architecture/DDD/UX/VVP/Trace/Risk. **Contract đổi cùng phiên nhưng NGOÀI bảng ghim:** OpenAPI 1.29.0→1.30.0 ADDITIVE (`stHunks[]`/`fbdChanges[]`/`truncated`/`nextCursor`), re-pin `openapiSha256` ở `pgm02_workspace_v1.json` và `g1_contract_join_v1.json`. `RELEASE_READY` giữ NO-GO. |
+| 1.54 | 2026-08-27 | *(dòng lịch sử bổ sung hồi tố 2026-08-27 — bản gốc `7e6a330` bump header mà quên ghi)* Re-pin `#15` (Plan59) và `#13` (`PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md`) khi đóng `T59-814` và mở `T59-815`. |
+| 1.53 | 2026-08-27 | *(dòng lịch sử bổ sung hồi tố 2026-08-27 — bản gốc `b50b525` bump header mà quên ghi)* Re-pin `#3` (`PROGRAMMING_OPEN_DECISIONS.md`), `#14` (`PROGRAMMING_VERIFICATION_PLAN.md`) và `#15` (Plan59) khi đóng `T59-813` và đóng increment R2. |
 | 1.52 | 2026-08-26 | Re-pin hồ sơ đổi trong đợt `T59-804`: Plan59 (`T59-804 DONE`, `T59-805 READY`) và tài liệu ngữ nghĩa điều khiển (`DDD-CTRL-PROG-001` §7A pin sáu block mới TRƯỚC khi code). **Đánh giá impact:** không đổi Product/SRS/UX/VVP/Trace/Risk; `libraryVersion` lên `rev-a.3` qua đường bump có kiểm soát với lịch sử version→hash append-only; `RELEASE_READY` giữ NO-GO. |
 | 1.51 | 2026-08-25 | Re-pin 4 hồ sơ (`#4`, `#14`, `#15`, `#17`) sau khi `T59-803` đóng một POU Explorer và mô hình định danh. **Đánh giá impact:** `#15` ghi task DONE/READY và ghi chú thực thi; `#14` giữ nguyên `I/T/P/R=N`; `#4` ghi gate `G-PGM02-01` còn thiếu catalog authority; `#17` cập nhật ĐÚNG một dòng As-Built (POU tree nay là `PouExplorer`), không đổi Target/§3.5. Product/SRS/Architecture/DDD/UX/VVP/Risk **không đổi**; `RELEASE_READY` NO-GO. |
 | 1.50 | 2026-08-25 | Re-pin 5 hồ sơ (`#3`, `#4`, `#13`, `#14`, `#15`) sau khi `T59-802` đóng vỏ/route canonical PGM-02 và corrective `F-P59-GHOST-POU-001` được sửa xong source/test. **Đánh giá impact:** `#15` ghi `T59-802 DONE (HOST/LOCAL)`/`T59-803 READY` và corrective; `#3`/`#4` chuyển finding sang CLOSED và giữ `IMPLEMENTATION_CLOSE=PENDING`; `#13` ghi control mới cho `RSK-PROG-011` (vẫn Open, chờ đo trên bo); `#14` giữ nguyên `I/T/P/R=N` cho PGM-02. Product/SRS/Architecture/DDD/UX/VVP **không đổi**. Maturity DDD giữ M3, U13..U15 NOT_RUN, 23/23 risk Open và `RELEASE_READY` NO-GO. |
