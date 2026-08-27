@@ -96,19 +96,12 @@ export function ProgramsWorkspaceRoute() {
       />
     )
   }
-  /* `T59-811` mở LIVE ở R2; `T59-814` dựng hạ tầng SIMULATE nhưng bề mặt điều
-   * khiển thuộc `T59-815`. Cho tới lúc đó, deep-link `?mode=SIMULATE` nói đúng
-   * trạng thái và KHÔNG có fallback: một chế độ chưa có bề mặt phải nói ra, chứ
-   * không âm thầm hiện dữ liệu của chế độ khác. */
-  if (mode === 'SIMULATE') {
-    return (
-      <StateBlock
-        state="empty"
-        title={pick('Bề mặt điều khiển Mô phỏng chưa có trong bản này.', 'The Simulation control surface is not in this build.')}
-        detail={pick('Không có fallback sang dữ liệu Draft hoặc runtime gần nhất. Khả năng Mô phỏng của thiết bị được công bố ở capability của server.', 'There is no fallback to draft data or a nearby runtime revision. The controller advertises its Simulation capability in the server capabilities.')}
-      />
-    )
-  }
+  /* `T59-811` mở LIVE ở R2; `T59-815` mở SIMULATE ở R3.
+   *
+   * Route KHÔNG còn tự chặn `?mode=SIMULATE`: câu trả lời "thiết bị này có mô
+   * phỏng được không" thuộc về capability của server, và để hai nơi cùng trả
+   * lời sẽ có ngày chúng trả lời khác nhau. Bề mặt SIMULATE tự nói UNAVAILABLE
+   * khi capability tắt, và vẫn KHÔNG có fallback sang Draft hay runtime. */
 
   return (
     /* KHÔNG truyền `route`: trên canonical route, `?tab=` là thứ quyết định tab

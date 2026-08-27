@@ -14,12 +14,14 @@ import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
 import { toWorkspaceDocument } from '../model/draftV2'
 import { PouExplorer } from './pou/PouExplorer'
-import { useProgrammingRuntimeMonitor, useProgrammingCapabilities } from '../api/queries'
+import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision } from '../api/queries'
 import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
 import { LiveProgramView } from './LiveProgramView'
+import { SimulateWorkspace } from '../simulation/SimulateWorkspace'
+import { useSimulation } from '../simulation/useSimulation'
 import { ProgramsModeSwitcher } from './ProgramsModeSwitcher'
 import { programsModeCapabilities } from '../shared/programsMode'
 import { isProgramsWorkspaceMode, type ProgramsWorkspaceMode } from '../shared/programsRoute'
@@ -78,6 +80,10 @@ export function DesignWorkspacePage({
      hardcode trong `programsModeCapabilities` để một thiết bị thiếu worker mô
      phỏng không bị hứa hẹn một chế độ nó không có. */
   const capabilities = useProgrammingCapabilities()
+  /* `T59-815` — vòng đời phiên SIMULATE. Hook luôn được gọi (luật hook), nhưng
+     nó chỉ poll khi thực sự có phiên sống, nên EDIT/LIVE không sinh tải nào. */
+  const simulation = useSimulation()
+  const runtime = useProgrammingRuntime()
   const { setEditingContext } = useProgrammingRuntimeContext()
   const detectedMobileReadOnly = useProgrammingMobileReadOnly()
   const mobileReadOnly = mobileReadOnlyOverride ?? detectedMobileReadOnly
@@ -185,6 +191,34 @@ export function DesignWorkspacePage({
   )
   const pendingOperations = useMemo(() => [...programOperations, ...executionOperations], [executionOperations, programOperations])
   const draftDirty = pendingOperations.length > 0
+
+  /* `T59-815` — phiên mô phỏng chỉ mở được trên Revision ĐÃ Kiểm tra đạt.
+   *
+   * Không tự chọn `draftRevisionId` hay `baseRevisionId`: worker chỉ nhận
+   * artifact bất biến do chính pipeline Check sinh ra (`ADR-053` §3), nên một
+   * Revision chưa Check thì chưa có gì để chạy. Nói ra điều đó tốt hơn là gửi
+   * lên rồi nhận lỗi. */
+  const latestCheck = workspace.project?.latestCheck
+  const simulateRevisionId = latestCheck && latestCheck.state === 'PASSED' ? latestCheck.revisionId : null
+  const simulateRevision = useProgrammingRevision(workspaceMode === 'SIMULATE' ? simulateRevisionId : null)
+  const startSimulation = useCallback(() => {
+    const controllerId = runtime.data?.controllerId
+    /* `useProgrammingRevision` trả `unknown` vì snapshot Revision là tài liệu
+     * mở; đọc đúng một trường ở đây và kiểm kiểu tại chỗ, thay vì ép kiểu cả
+     * đối tượng thành một hình dạng mà nó không hứa. */
+    const revisionData = simulateRevision.data as { contentHash?: unknown } | undefined
+    const contentHash = typeof revisionData?.contentHash === 'string' ? revisionData.contentHash : null
+    /* Thiếu bất kỳ mảnh danh tính nào thì KHÔNG gửi: `sourceContentSha256` là
+     * thứ duy nhất phân biệt "mô phỏng bản tôi vừa lưu" với "mô phỏng thứ gì
+     * đó", nên gửi một chuỗi rỗng để server tự đoán là bỏ đúng chốt chặn ấy. */
+    if (!controllerId || !simulateRevisionId || !contentHash || !projectId) return
+    void simulation.start({
+      controllerId,
+      projectId,
+      sourceDraftRevisionId: simulateRevisionId,
+      sourceContentSha256: contentHash,
+    })
+  }, [projectId, runtime.data?.controllerId, simulateRevision.data, simulateRevisionId, simulation])
 
   const updateProgramOperations = useCallback((operations: ProgrammingDraftOperation[]) => setProgramOperations(operations), [])
   const updateExecutionOperations = useCallback((operations: ProgrammingDraftOperation[]) => setExecutionOperations(operations), [])
@@ -443,7 +477,24 @@ export function DesignWorkspacePage({
             tài liệu khác: nguồn của gói ĐANG CHẠY. Dùng lại đúng component
             editor rồi tắt sửa là cách chắc chắn nhất để một hôm nào đó Draft rò
             vào chỗ đáng lẽ phải là Active, mà không có dấu hiệu bên ngoài nào. */}
-        {workspaceMode === 'LIVE' ? (
+        {workspaceMode === 'SIMULATE' ? (
+          /* `T59-815` — SIMULATE cũng KHÔNG phải editor bị khoá: nó là bản đã
+             lưu và đã Kiểm tra mà phiên đang chạy, pin theo Revision của phiên
+             chứ không theo Active của thiết bị. */
+          <SimulateWorkspace
+            capability={capabilities.data?.workspaceModes?.simulation}
+            role={session?.role}
+            slice={simulation.slice}
+            inputs={simulation.inputs}
+            objectId={selectedObjectId}
+            draftDirty={draftDirty}
+            draftRevisionId={simulateRevisionId}
+            onStart={startSimulation}
+            onAction={simulation.act}
+            onSetInput={simulation.setInput}
+            onStop={simulation.stop}
+          />
+        ) : workspaceMode === 'LIVE' ? (
           <LiveProgramView
             program={selectedProgram}
             objectId={selectedObjectId}

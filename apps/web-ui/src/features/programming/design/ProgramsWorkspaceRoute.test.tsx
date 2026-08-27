@@ -127,13 +127,14 @@ describe('ProgramsWorkspaceRoute — canonical deep-link/mode', () => {
     expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
   })
 
-  /* `T59-811` mở LIVE ở R2; `T59-814` dựng hạ tầng SIMULATE nhưng bề mặt điều
-   * khiển thuộc `T59-815`. Điều KHÔNG đổi: chế độ
-   * chưa có capability phải nói ra, không được âm thầm hiện Draft. */
-  it('SIMULATE chưa implement hiển thị UNAVAILABLE thay vì Draft', () => {
+  /* `T59-815` mở SIMULATE ở R3. Resolver KHÔNG còn tự chặn chế độ này: câu trả
+   * lời "thiết bị có mô phỏng được không" thuộc capability của server, và hai
+   * nơi cùng trả lời sẽ có ngày trả lời khác nhau. Điều KHÔNG đổi: chế độ chưa
+   * có capability phải nói ra ở bề mặt SIMULATE, không âm thầm hiện Draft. */
+  it('SIMULATE đi tiếp tới workspace thay vì bị resolver chặn', () => {
     renderRoute('/eng/programming/programs?project=p1&mode=SIMULATE')
-    expect(screen.getByText(/Bề mặt điều khiển Mô phỏng chưa có trong bản này/)).toBeInTheDocument()
-    expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Chế độ workspace không hợp lệ/)).toBeNull()
+    expect(screen.getByTestId('editor')).toBeInTheDocument()
   })
 
   it('LIVE mở được workspace, không còn chặn ở resolver', () => {
