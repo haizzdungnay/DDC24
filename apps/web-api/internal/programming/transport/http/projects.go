@@ -100,7 +100,19 @@ func handleProjectRequest(w http.ResponseWriter, r *http.Request, correlationID 
 }
 
 func handleGetRevisionChanges(w http.ResponseWriter, r *http.Request, correlationID string, service *programmingapplication.ProjectService) {
-	changes, err := service.GetRevisionChanges(r.Context(), r.PathValue("from"), r.PathValue("to"))
+	// `cursor` rác bị TỪ CHỐI chứ không âm thầm coi là 0: đọc lại từ đầu khi
+	// client tưởng mình đang đọc trang hai là cách một danh sách trông đầy đủ
+	// trong khi thiếu mất phần giữa.
+	cursor := 0
+	if raw := r.URL.Query().Get("cursor"); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || parsed < 0 {
+			writeMappedError(w, programmingapplication.ErrInvalidRequest, correlationID)
+			return
+		}
+		cursor = parsed
+	}
+	changes, err := service.GetRevisionChangesDetail(r.Context(), r.PathValue("from"), r.PathValue("to"), cursor)
 	if err != nil {
 		writeMappedError(w, err, correlationID)
 		return
