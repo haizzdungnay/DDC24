@@ -4,7 +4,7 @@
 |---|---|
 | ID | `PLAN-PROG-059` |
 | Phiên bản | 2.26 |
-| Trạng thái | **Baseline Active; 74 task/9 Wave có authority; increment R1 ĐÓNG (`VS-PROG-U13` PASS R1/HOST); increment R2 ĐÓNG (`VS-PROG-U14` PASS R2/HOST+TARGET-BROWSER) — `T59-810..813` DONE; R3 đang chạy — `T59-814`/`T59-815` DONE (HOST/LOCAL), `T59-816` READY, `T59-817` ORDERED, `VS-PROG-U15` vẫn NOT_RUN; **corrective audit 2026-08-27 thêm `T59-818..822`** và hạ `PGM02-V22-WP-09` về DONE một phần; RELEASE_READY NO-GO** |
+| Trạng thái | **Baseline Active; 74 task/9 Wave có authority; increment R1 ĐÓNG (`VS-PROG-U13` PASS R1/HOST); increment R2 ĐÓNG (`VS-PROG-U14` PASS R2/HOST+TARGET-BROWSER) — `T59-810..813` DONE; R3 đang chạy — `T59-814`/`T59-815` DONE (HOST/LOCAL), `T59-816` READY, `T59-817` ORDERED, `VS-PROG-U15` vẫn NOT_RUN; **corrective audit 2026-08-27 `T59-818..822` nay DONE (HOST/LOCAL) và đã deploy bo Foxlinx 2026-08-27 — FE + BE**, `PGM02-V22-WP-09` trở lại DONE trọn và 16/16 WP của plan PGM-02 đóng; **R3 vẫn CHƯA đóng** vì `T59-816`/`T59-817` còn mở; RELEASE_READY NO-GO** |
 | Ngày | 2026-08-27 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001`; corrective [`REC-PGM02-AUD-ADJ-001`](../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md) |
