@@ -576,12 +576,13 @@ TEST(StCompileCli, IoMapInRejectsBindingBoolOutputToReadOnlyPoint)
     EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-IOMAP-002");
 }
 
-TEST(StCompileCli, IoMapInRejectsVirtualPointCategoryForOutputDirection)
+TEST(StCompileCli, IoMapInAcceptsVirtualPointCategoryForOutputDirection)
 {
-    /* F-PROG-ASBUILT-014: chiều READ (VAR_INPUT) đã được nối tới Core
-     * av_[]/bv_[]/msv_[] (xem StResolveIoBindings.AcceptsVpCategoryForInputDirection),
-     * nhưng chiều WRITE (VAR_OUTPUT) vẫn chưa có đường đồng bộ ngược Core->Web
-     * API nên còn bị từ chối tường minh — xem F-PROG-ASBUILT-016. */
+    /* F-PROG-ASBUILT-016 — chiều WRITE của Virtual Point nay được mở tới tận
+     * CLI. Test này trước đây khẳng định điều ngược lại; lý do cũ ("chưa có
+     * đường đồng bộ ngược Core->Web API") không còn đúng vì Point Catalog đọc
+     * thẳng bảng điểm của Core. Quyền sở hữu slot do `virtualPoint.source` ở
+     * web-api giữ, không phải do compiler cấm cả chiều ghi. */
     const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
     const std::string io_map_path = temporary_path("/tmp/mkddc-cli-iomap-vp-XXXXXX");
     ASSERT_FALSE(io_map_path.empty());
@@ -595,10 +596,9 @@ TEST(StCompileCli, IoMapInRejectsVirtualPointCategoryForOutputDirection)
     const CliRun run = run_cli_signed({"--source", source, "--source-id", "cli-io-map-vp",
                                 "--io-map-in", io_map_path});
     ::unlink(io_map_path.c_str());
-    ASSERT_EQ(run.exit_code, 1);
+    EXPECT_EQ(run.exit_code, 0) << run.stdout_text;
     const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
-    EXPECT_FALSE(result.at("ok"));
-    EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-IOMAP-008");
+    EXPECT_TRUE(result.at("ok")) << run.stdout_text;
 }
 
 TEST(StCompileCli, SignalManifestProducesActualPublishReference)

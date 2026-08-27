@@ -160,13 +160,22 @@ bool local_prefix_to_point_kind(const std::string& prefix, StPointKind* out)
     return false;
 }
 
-/* VP prefix -> StPointKind IR (F-PROG-ASBUILT-014). Chỉ dùng cho chiều READ
- * (VAR_INPUT) — Web API đồng bộ giá trị Virtual Point đã "bound" vào
- * av_[]/bv_[]/msv_[] của Core qua WebIpc `write` (nguồn PointSource::WEB,
- * xem `apps/web-api/internal/app/virtualpoint.go`); chưa có đường đồng bộ
- * NGƯỢC Core->Web API nên VAR_OUTPUT bind VP bị chặn tường minh ở
- * resolve_io_bindings() thay vì âm thầm ghi Core mà Web API/UI không bao
- * giờ thấy lại — xem F-PROG-ASBUILT-016 (theo dõi phần WRITE). */
+/* VP prefix -> StPointKind IR (F-PROG-ASBUILT-014).
+ *
+ * `F-PROG-ASBUILT-016` từng chặn tường minh chiều WRITE, với lý do ĐÚNG ở thời
+ * điểm đó: `overlayVirtualPoints` ở web-api vứt bỏ slot AV/BV/MSV thô của Core
+ * và thay bằng giá trị trong `virtual_points.conf`, nên một giá trị do chương
+ * trình ghi sẽ KHÔNG BAO GIỜ hiện ra ở API hay UI.
+ *
+ * Chặn được gỡ cùng lúc với việc mở đường đọc ngược, không phải trước: VP mang
+ * `source = "PROGRAM"` nay lấy value/quality/source THẲNG từ slot Core. Mở
+ * chiều ghi mà không mở đường đọc là để người vận hành nhìn một con số đứng yên
+ * cho một đại lượng đang thay đổi.
+ *
+ * Thứ CÒN LẠI cần canh không phải khả năng đọc mà là QUYỀN SỞ HỮU: nếu Web API
+ * vẫn đẩy giá trị cấu hình vào cùng slot, hai bên sẽ ghi đè nhau mỗi chu kỳ.
+ * Ranh giới đó do `virtualPoint.source` ở web-api giữ (`PROGRAM` ⇒ web-api
+ * không đồng bộ nữa), không phải do compiler cấm cả chiều ghi. */
 bool vp_prefix_to_point_kind(const std::string& prefix, StPointKind* out)
 {
     if (prefix == "AV")  { *out = StPointKind::AV;  return true; }
@@ -241,14 +250,6 @@ bool resolve_io_bindings(StIrModule* module, const std::vector<StIoMapEntry>& en
                          "' (allowlist: LOCAL, VP, MB_RTU)");
             return false;
         }
-        if (e.category == "VP" && expect_output) {
-            push_diag(diagnostics, st_diag_code::kIoMapUnsupportedCategory,
-                     "io_map entry for '" + e.variable + "' — category 'VP' hiện chỉ hỗ trợ chiều "
-                         "READ (VAR_INPUT); chưa có đường đồng bộ ngược Core->Web API cho "
-                         "VAR_OUTPUT (xem F-PROG-ASBUILT-016)");
-            return false;
-        }
-
         std::vector<StDiagnostic> contract_diags;
         if (!validate_point_contract(e, expect_output, &contract_diags)) {
             for (StDiagnostic& d : contract_diags) diagnostics->push_back(std::move(d));
