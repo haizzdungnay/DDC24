@@ -112,7 +112,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('SIMULATE — capability là điều kiện tiên quyết', () => {
-  it('thiết bị không công bố khả năng ⇒ không mở phiên và KHÔNG hiện giá trị mẫu nào', () => {
+  it('AC-PGM02-008: thiết bị không công bố khả năng ⇒ không mở phiên và KHÔNG hiện giá trị mẫu nào', () => {
     renderWorkspace({ capability: capability({ supported: false }) })
     expect(screen.getByText(/chưa công bố khả năng Mô phỏng/)).toBeInTheDocument()
     // Không có nút mở phiên, và tuyệt đối không có băng giá trị nào.
@@ -121,14 +121,14 @@ describe('SIMULATE — capability là điều kiện tiên quyết', () => {
     expect(screen.queryByText(/MÔ PHỎNG/)).toBeNull()
   })
 
-  it('server đời cũ không khai workspaceModes ⇒ cũng là không khả dụng', () => {
+  it('AC-PGM02-008: server đời cũ không khai workspaceModes ⇒ cũng là không khả dụng', () => {
     renderWorkspace({ capability: null })
     expect(screen.getByText(/chưa công bố khả năng Mô phỏng/)).toBeInTheDocument()
   })
 })
 
 describe('SIMULATE — bản nháp bẩn không bao giờ được mô phỏng', () => {
-  it('còn thay đổi chưa lưu ⇒ yêu cầu Lưu và KHÔNG có nút mở phiên', () => {
+  it('AC-ST-006 / AC-FBD-008: còn thay đổi chưa lưu ⇒ yêu cầu Lưu và KHÔNG có nút mở phiên', () => {
     const onStart = vi.fn()
     renderWorkspace({ draftDirty: true, onStart })
     expect(screen.getByRole('alert')).toHaveTextContent(/Hãy Lưu \(và chạy Kiểm tra\) trước khi mô phỏng/)
@@ -143,7 +143,7 @@ describe('SIMULATE — bản nháp bẩn không bao giờ được mô phỏng',
 })
 
 describe('SIMULATE — quyền đọc từ server, không từ nhãn vai', () => {
-  it('viewer thấy đủ phiên nhưng không có đường điều khiển nào', () => {
+  it('AC-PGM02-005: viewer thấy đủ phiên nhưng không có đường điều khiển nào', () => {
     const slice = acceptSession(initialSimulationSlice, session({ state: 'RUNNING' }))
     renderWorkspace({ role: 'viewer', slice, inputs: [INPUT] })
 
@@ -205,7 +205,7 @@ describe('SIMULATE — trạng thái chỉ đến từ read-back', () => {
 })
 
 describe('SIMULATE — giá trị luôn nói rõ nguồn và chất lượng', () => {
-  it('chưa có nhịp nào ⇒ nói "chưa có", không hiện số 0', () => {
+  it('AC-PGM02-008: chưa có nhịp nào ⇒ nói "chưa có", không hiện số 0', () => {
     const slice = acceptSession(initialSimulationSlice, session())
     renderWorkspace({ slice, inputs: [INPUT] })
     expect(screen.getByText(/Chưa có nhịp nào chạy/)).toBeInTheDocument()

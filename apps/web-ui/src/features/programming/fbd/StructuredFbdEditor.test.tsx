@@ -44,7 +44,7 @@ describe('StructuredFbdEditor', () => {
     expect(screen.getAllByRole('button', { name: /OUTPUT OUT BOOL/ })).toHaveLength(3)
   })
 
-  it('hoàn tất một wire chỉ bằng Arrow và Enter', async () => {
+  it('AC-FBD-004: hoàn tất một wire chỉ bằng Arrow và Enter — mỗi nối đều do người dùng xác nhận', async () => {
     const document = golden()
     document.networks[0].wires = document.networks[0].wires.slice(1)
     const { onChange } = renderEditor(document)
@@ -69,7 +69,7 @@ describe('StructuredFbdEditor', () => {
     expect(changed.networks[0].wires).toHaveLength(0)
   })
 
-  it('chế độ chỉ đọc chặn cả toolbar và shortcut mutation', () => {
+  it('AC-PGM02-010 / AC-FBD-009: chế độ chỉ đọc chặn cả toolbar và shortcut mutation', () => {
     const { onChange } = renderEditor(golden(), false)
     expect(screen.getByText(/Read only|Chỉ đọc/)).toBeTruthy()
     fireEvent.keyDown(screen.getByRole('region', { name: /Structured FBD editor|Bộ dựng FBD/ }), { key: 'Insert' })
@@ -86,7 +86,7 @@ describe('StructuredFbdEditor', () => {
 })
 
 describe('StructuredFbdEditor — Palette (WP-05)', () => {
-  it('thêm block từ palette (không chỉ AND) và Inspector cho phép đổi kiểu toán hạng', async () => {
+  it('AC-FBD-003 / AC-FBD-005: thêm block từ palette (không chỉ AND) và Inspector cho phép đổi kiểu toán hạng', async () => {
     const { onChange } = renderEditor(golden())
     fireEvent.change(screen.getByLabelText(/^Block$|^Khối$/), { target: { value: 'OR' } })
     fireEvent.click(screen.getByRole('button', { name: /Add block|Thêm khối/ }))
@@ -187,7 +187,7 @@ describe('StructuredFbdEditor — POU và keyboard/a11y (T59-506)', () => {
     returnType: 'REAL',
   }
 
-  it('đưa POU typed vào palette và Insert thêm đúng POU đang chọn bằng bàn phím', async () => {
+  it('AC-FBD-003: đưa POU typed vào palette và Insert thêm đúng POU đang chọn bằng bàn phím', async () => {
     const onChange = vi.fn()
     renderEditor(golden(), true, onChange, [blend])
     const palette = screen.getByLabelText(/^Block$|^Khối$/)
@@ -219,7 +219,7 @@ describe('StructuredFbdEditor — POU và keyboard/a11y (T59-506)', () => {
     expect(changed.networks[0].nodes).toHaveLength(golden().networks[0].nodes.length + 1)
   })
 
-  it('interface POU lỗi không làm crash editor và được báo rõ thay vì sinh pin đoán', () => {
+  it('AC-ST-010: interface POU lỗi không làm crash editor và được báo rõ thay vì sinh pin đoán', () => {
     renderEditor(golden(), true, vi.fn(), [{ ...blend, name: '1 bad POU' }])
     expect(screen.getByRole('status').textContent).toMatch(/POU không thể đưa vào palette|POUs are unavailable/)
     expect(screen.queryByRole('option', { name: /1 bad POU/ })).toBeNull()

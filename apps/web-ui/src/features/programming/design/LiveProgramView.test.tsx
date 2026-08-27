@@ -70,7 +70,7 @@ afterEach(cleanup)
  * cả — nên mọi nhánh không chứng minh được phải từ chối hiển thị.
  */
 describe('LiveProgramView (T59-811)', () => {
-  it('hiện nguồn của gói ĐANG CHẠY, không phải Draft', () => {
+  it('AC-ST-007 / AC-PGM02-003: hiện nguồn của gói ĐANG CHẠY, không phải Draft', () => {
     renderLive()
     const source = screen.getByLabelText(/Mã nguồn đang chạy/) as HTMLTextAreaElement
     expect(source.value).toBe(ACTIVE_SOURCE)
@@ -78,7 +78,7 @@ describe('LiveProgramView (T59-811)', () => {
     expect(source).toHaveAttribute('readonly')
   })
 
-  it('chỉ đọc là thuộc tính của CHẾ ĐỘ, không phải của vai', () => {
+  it('AC-ST-008 / AC-PGM02-006: chỉ đọc là thuộc tính của CHẾ ĐỘ, không phải của vai', () => {
     renderLive()
     expect(screen.getByText('Chỉ đọc với mọi vai')).toBeInTheDocument()
     // Không có đường sửa nào trong khay LIVE.
@@ -91,7 +91,7 @@ describe('LiveProgramView (T59-811)', () => {
     expect(screen.getByText(REVISION)).toBeInTheDocument()
   })
 
-  it('phản hồi thuộc Revision KHÁC ⇒ từ chối hiển thị, không rơi về Draft', () => {
+  it('AC-PGM02-007 / AC-FBD-010: phản hồi thuộc Revision KHÁC ⇒ từ chối hiển thị, không rơi về Draft', () => {
     state.revision = {
       status: 'ready', error: null, refresh: vi.fn(),
       data: { revisionId: 'aaaaaaaa-1111-4111-8111-111111111111', snapshot: { objects: [] } },
@@ -126,7 +126,7 @@ describe('LiveProgramView (T59-811)', () => {
     expect(empty.value).toBe('')
   })
 
-  it('lớp giá trị runtime fail-closed khi snapshot lệch Revision', () => {
+  it('AC-PGM02-007: lớp giá trị runtime fail-closed khi snapshot lệch Revision', () => {
     state.monitor = {
       status: 'ready', error: null, failure: null, producerRestarted: false, refresh: vi.fn(),
       data: { schemaVersion: '1.0', activeRevisionId: 'khac-revision', producer: { capturedMonotonicNs: '1000' }, safeState: false, task: null, items: [] },
@@ -177,7 +177,7 @@ describe('LiveProgramView — sơ đồ FBD đang chạy (T59-811)', () => {
     expect(screen.queryByRole('group', { name: /Palette FBD/ })).toBeNull()
   })
 
-  it('block chọn được để xem, nhưng KHÔNG kéo được (chỉ đọc)', () => {
+  it('AC-FBD-009: block chọn được để xem, nhưng KHÔNG kéo được (chỉ đọc)', () => {
     renderFbdLive(JSON.stringify(FBD_DOC))
     const block = screen.getByRole('button', { name: /#0 · BOOL/ })
     fireEvent.keyDown(block, { key: 'Enter' })

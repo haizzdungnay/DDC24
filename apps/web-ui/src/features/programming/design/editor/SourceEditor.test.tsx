@@ -218,7 +218,7 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     expect(onChange).toHaveBeenCalledWith('A := NEW; B := OLD;')
   })
 
-  it('chỉ đọc (canEdit=false): không có nút Định dạng/Lưu/Replace, textarea readOnly', () => {
+  it('AC-ST-011: chỉ đọc (canEdit=false): không có nút Định dạng/Lưu/Replace, textarea readOnly', () => {
     const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { canEdit: false })
     expect(textarea).toHaveAttribute('readonly')
     expect(screen.queryByRole('button', { name: /Định dạng|Format/ })).not.toBeInTheDocument()
@@ -415,7 +415,7 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
  * THUỘC TÍNH — một lần refactor quên nó là mọi đường mutation mở lại cùng lúc.
  * Bộ test này khoá GUARD RUNTIME, thứ vẫn đúng kể cả khi thuộc tính biến mất. */
 describe('SourceEditor — chỉ đọc là policy runtime, không chỉ thuộc tính', () => {
-  it('không phát onChange cho gõ tay, dán hay thả khi canEdit=false', () => {
+  it('AC-ST-011: không phát onChange cho gõ tay, dán hay thả khi canEdit=false', () => {
     const { textarea, onChange } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { canEdit: false })
     expect(textarea).toHaveAttribute('readonly')
 
