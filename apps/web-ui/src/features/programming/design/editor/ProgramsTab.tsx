@@ -4,6 +4,8 @@ import { useI18n } from '../../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
+import type { FbdSelection } from '../../fbd/commands'
+import { ContextInspector } from '../inspector/ContextInspector'
 import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
 import { emptyFbdDocument } from '../pou/pouTemplates'
 import type { UserPouInterface } from '../../fbd/userPou'
@@ -38,7 +40,7 @@ import { QuickLibraryHost } from '../library/QuickLibraryPanel'
 import type { CatalogEntry } from '../library/libraryCatalog'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
-import { buildStReferenceIndex, stSymbolAt } from './stReferenceIndex'
+import { buildStReferenceIndex, stSymbolAt, type StCursorSymbol } from './stReferenceIndex'
 import { StCrossReferencePanel } from './StCrossReferencePanel'
 import { SelectionQuickActions } from './SelectionQuickActions'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
@@ -191,7 +193,22 @@ export function ProgramsTab({
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
   const selected = document.programs.find((program) => program.programId === selectedProgramId)
+  /* `T59-818` — ngữ cảnh cho Inspector dùng chung. Hai nguồn được NÂNG lên đây
+   * thay vì để Inspector tự đọc state của editor: một Inspector dùng chung mà
+   * tự đọc state riêng của từng editor sẽ có hai định nghĩa "đang chọn cái gì".
+   */
+  const [cursorSymbol, setCursorSymbol] = useState<StCursorSymbol | null>(null)
+  const [fbdSelection, setFbdSelection] = useState<FbdSelection | null>(null)
   const [buffers, setBuffers] = useState<Record<string, string>>({})
+  /* Tài liệu FBD của POU đang chọn, parse MỘT lần cho Inspector. Chỉ dựng khi
+   * POU thật sự là FBD: parse một tài liệu ST thành FBD sẽ cho một đồ thị rỗng
+   * trông hợp lệ, và Inspector sẽ nói về một sơ đồ không tồn tại. */
+  const inspectorFbdDocument = useMemo(
+    () => (selected && selected.language === 'FBD'
+      ? parseFbdDocument(buffers[selected.programId] ?? selected.document, selected.name)
+      : null),
+    [buffers, selected],
+  )
   const [projectTagsDraft, setProjectTagsDraft] = useState(() => document.project.functionalTags.join(', '))
   const [metadataDrafts, setMetadataDrafts] = useState<Record<string, ProgramMetadataDraft>>({})
 
@@ -389,6 +406,7 @@ export function ProgramsTab({
             source={buffers[selected.programId] ?? programSource(selected)}
             canEdit={canEdit}
             saving={saving}
+            onCursorSymbolChange={setCursorSymbol}
             diagnostics={diagnostics.filter((item) => item.location?.programId === selected.programId)}
             focusDiagnostic={
               paletteJumpTarget?.location?.programId === selected.programId ? paletteJumpTarget
@@ -415,6 +433,7 @@ export function ProgramsTab({
             onSave={onSave}
             userPouInterfaces={userPouInterfaces}
             projectId={document.project.projectId}
+            onSelectionChange={setFbdSelection}
           />
         )}
       </div>
@@ -432,14 +451,38 @@ export function ProgramsTab({
         </div>
         <div id="programs-slot-inspector" hidden={!slots.inspector}>
         {selected ? (
-          <ProgramInspector
-            program={selected}
-            programs={document.programs}
-            draft={metadataDrafts[selected.programId] ?? metadataOf(selected)}
-            canEdit={canEdit}
-            saving={saving}
-            onChange={(draft) => setMetadataDrafts((current) => ({ ...current, [selected.programId]: draft }))}
-            onSave={onSave}
+          /* `T59-818` — khay này TỪNG có đúng hai trường (`Tên`, `Loại`), tức
+             rơi trúng điều handoff §9 cấm: chiếm 300px cho hai trường. Nay nó
+             là Inspector năm ngữ cảnh dùng chung ST↔FBD; phần sửa metadata vẫn
+             do `ProgramsTab` sở hữu vì nó gắn với transaction Draft. */
+          <ContextInspector
+            input={{
+              program: selected,
+              /* Chu kỳ đi theo TỪNG POU (`programs[]`), không lấy từ
+                 `task.periodMs` — trong Project nhiều chu kỳ, giá trị đó chỉ là
+                 chu kỳ của Program đầu tiên. */
+              cycleMs: selected.periodMs ?? null,
+              /* Intent Enable/Disable sống ở API runtime-intent, chưa được nối
+                 vào tab này. Để `null` ⇒ Inspector hiện "không xác định được";
+                 hiện `Đã tắt` cho một thứ chưa đọc là nói dối về thiết bị. */
+              enabled: null,
+              cursorSymbol,
+              fbd: inspectorFbdDocument
+                ? { document: inspectorFbdDocument, selection: fbdSelection }
+                : null,
+              runtime: runtimeOverlayByProgramId?.[selected.programId] ?? null,
+            }}
+            editableProgramSlot={
+              <ProgramInspector
+                program={selected}
+                programs={document.programs}
+                draft={metadataDrafts[selected.programId] ?? metadataOf(selected)}
+                canEdit={canEdit}
+                saving={saving}
+                onChange={(draft) => setMetadataDrafts((current) => ({ ...current, [selected.programId]: draft }))}
+                onSave={onSave}
+              />
+            }
           />
         ) : (
           <section className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
@@ -471,6 +514,7 @@ export function SourceEditor({
   runtimeOverlay,
   formatRequest,
   projectId,
+  onCursorSymbolChange,
 }: {
   program: ProgrammingProgram
   source: string
@@ -493,6 +537,14 @@ export function SourceEditor({
   runtimeOverlay?: StRuntimeOverlayState
   /** Lệnh Định dạng từ Command Palette cha; vẫn phải ghi history như nút local. */
   formatRequest?: StFormatRequest
+  /**
+   * `T59-818` — nâng ký hiệu dưới con trỏ lên cho `ContextInspector` dùng chung.
+   *
+   * Inspector phục vụ cả ST lẫn FBD nên nó không được tự đọc state con trỏ của
+   * editor này; nếu tự đọc thì có hai nơi cùng tính "ký hiệu đang chọn" và
+   * chúng sẽ lệch nhau đúng lúc con trỏ nằm ở ranh giới một định danh.
+   */
+  onCursorSymbolChange?: (symbol: StCursorSymbol | null) => void
 }) {
   const { pick } = useI18n()
   const committed = typeof program.document === 'string' ? program.document : ''
@@ -541,6 +593,11 @@ export function SourceEditor({
     () => stSymbolAt(source, cursorOffset, referenceIndex),
     [source, cursorOffset, referenceIndex],
   )
+  /* Phát ra ngoài khi ký hiệu đổi. `useEffect` chứ không gọi trong render: gọi
+   * trong render sẽ set state của cha giữa lúc con đang render. */
+  useEffect(() => {
+    onCursorSymbolChange?.(cursorSymbol)
+  }, [cursorSymbol, onCursorSymbolChange])
   const matches = useMemo(() => findTextMatches(source, searchText), [searchText, source])
   const tokens = useMemo(() => tokenizeStSource(source), [source])
   const diagnosticRanges = useMemo<StDiagnosticRange[]>(() => diagnostics
@@ -1378,6 +1435,7 @@ function FbdEditorPane({
   onSave,
   userPouInterfaces,
   projectId,
+  onSelectionChange,
 }: {
   program: ProgrammingProgram
   source: string
@@ -1387,6 +1445,8 @@ function FbdEditorPane({
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   userPouInterfaces: readonly UserPouInterface[]
   projectId?: string
+  /** `T59-818` — chuyển tiếp lựa chọn canvas lên Inspector dùng chung. */
+  onSelectionChange?: (selection: FbdSelection | null) => void
 }) {
   const { pick } = useI18n()
   const committedJson = useMemo(() => canonicalFbdJson(parseFbdDocument(program.document, program.name)), [program.document, program.name])
@@ -1416,6 +1476,7 @@ function FbdEditorPane({
         userPouInterfaces={userPouInterfaces}
         projectId={projectId}
         onChange={(next) => onChange(canonicalFbdJson(next))}
+        onSelectionChange={onSelectionChange}
       />
       {dirty && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
     </div>
