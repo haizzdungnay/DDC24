@@ -12,6 +12,7 @@ import { Modal } from '../../../shared/components/Modal'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
 import { toWorkspaceDocument } from '../model/draftV2'
+import { draftSignals } from '../model/signals'
 import { PouExplorer } from './pou/PouExplorer'
 import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison } from '../api/queries'
 import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
@@ -406,6 +407,10 @@ export function DesignWorkspacePage({
     })
   }
 
+  /* `signals[]` KHÔNG đi qua `toWorkspaceDocument`, nên phải đọc từ draft THÔ.
+   * Explorer cần nó để biết POU nào đang publish — điều kiện backend dùng để
+   * từ chối `removeProgram`. */
+  const publishedSignals = draftSignals(workspace.project.draft)
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
   const pouNameByObjectId = new Map(
@@ -589,6 +594,7 @@ export function DesignWorkspacePage({
           <div className="mb-3 rounded border border-[var(--c-border)] p-3">
             <PouExplorer
               document={document}
+              publishedSignals={publishedSignals}
               canEdit={canEdit}
               saving={workspace.saving}
               selectedObjectId={selectedObjectId}
@@ -649,6 +655,7 @@ export function DesignWorkspacePage({
             <div className="mb-3">
               <PouExplorer
                 document={document}
+                publishedSignals={publishedSignals}
                 canEdit={canEdit}
                 saving={workspace.saving}
                 selectedObjectId={selectedObjectId}

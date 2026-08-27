@@ -7,8 +7,7 @@ import {
   pouDeleteBlockers,
   renamePouOperations,
   uniquePouName,
-  validatePouName
-} from './pouCommands'
+  validatePouName, pouPublishedSignalBlockers } from './pouCommands'
 import { pouItems, type PouItem } from './pouViewModel'
 
 function baseDocument(): ProgrammingDraftDocument {
@@ -145,5 +144,41 @@ describe('PGM-02 lệnh vòng đời POU', () => {
     const items = pouItems(baseDocument())
     expect(pouDeleteBlockers(items, 'obj-2').map((item) => item.name)).toEqual(['AHU_MAIN'])
     expect(pouDeleteBlockers(items, 'obj-1')).toEqual([])
+  })
+})
+
+describe('pouPublishedSignalBlockers — POU đang publish thì KHÔNG xoá được', () => {
+  const scheduled = {
+    objectId: 'obj-1', runtimeProgramId: 'prog-1', name: 'SOAK_01',
+    kind: 'PROGRAM' as const, language: 'ST' as const, scheduled: true, dependencies: [],
+  }
+  const signals = [
+    { signalId: 's-1', name: 'SOAK_CONSUMED', publisherProgramId: 'prog-1' },
+    { signalId: 's-2', name: 'SOAK_SOURCE', publisherProgramId: 'prog-2' },
+  ]
+
+  it('trả đúng tín hiệu do POU này công bố', () => {
+    /* Hồi quy bo Foxlinx 2026-08-28: `SOAK_01` publish `SOAK_CONSUMED`, backend
+       từ chối `removeProgram` (`400 operations[0].removeProgram`) nhưng FE vẫn
+       bật nút Xóa — người dùng nhận một mã lỗi không nói phải làm gì. */
+    expect(pouPublishedSignalBlockers(signals, scheduled)).toEqual([
+      { signalId: 's-1', name: 'SOAK_CONSUMED' },
+    ])
+  })
+
+  it('POU không publish gì ⇒ không bị chặn', () => {
+    expect(pouPublishedSignalBlockers(signals, { ...scheduled, runtimeProgramId: 'prog-9' })).toEqual([])
+  })
+
+  it('POU chưa xếp lịch không thể publish ⇒ không bị chặn', () => {
+    // `publisherProgramId` là identity RUNTIME. Không có `runtimeProgramId` thì
+    // POU chưa có mục trong `programs[]` và không thể là publisher của gì cả.
+    expect(pouPublishedSignalBlockers(signals, { ...scheduled, runtimeProgramId: undefined, scheduled: false })).toEqual([])
+  })
+
+  it('so theo runtimeProgramId, KHÔNG theo objectId', () => {
+    // Hai trục định danh khác nhau; so nhầm sẽ vừa bỏ sót vừa chặn oan.
+    const signalsByObject = [{ signalId: 's-3', name: 'X', publisherProgramId: 'obj-1' }]
+    expect(pouPublishedSignalBlockers(signalsByObject, scheduled)).toEqual([])
   })
 })

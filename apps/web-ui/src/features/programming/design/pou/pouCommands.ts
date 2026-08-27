@@ -145,6 +145,32 @@ export function pouDeleteBlockers(items: readonly PouItem[], objectId: string): 
 }
 
 /**
+ * Tín hiệu công bố CHẶN việc xoá POU đang publish nó.
+ *
+ * Backend đã có bất biến này và giữ đúng: xoá một Program đang publish sẽ để lại
+ * một signal không ai ghi, nên `removeProgram` bị từ chối
+ * (`draft_v2.go`: *"Signal mất publisher là signal không ai ghi"*).
+ *
+ * Trước lát này FE KHÔNG biết luật đó. Hộp thoại xoá chỉ đếm POU đang *gọi*
+ * POU kia, nên nó bật nút `Xóa`, hứa hẹn "sẽ xóa cả mã nguồn, biến và ánh xạ
+ * liên quan", rồi nhận `400 operations[0].removeProgram` — một mã lỗi không nói
+ * cho người dùng biết phải làm gì. Bắt được trên bo Foxlinx 2026-08-28: POU
+ * `SOAK_01` publish signal `SOAK_CONSUMED` và không tài nào xoá được.
+ *
+ * Phép so theo `runtimeProgramId` vì `publisherProgramId` là identity RUNTIME,
+ * không phải identity tài liệu; POU chưa xếp lịch thì không thể publish gì.
+ */
+export function pouPublishedSignalBlockers(
+  signals: readonly { signalId: string; name: string; publisherProgramId: string }[],
+  item: PouItem,
+): { signalId: string; name: string }[] {
+  if (!item.runtimeProgramId) return []
+  return signals
+    .filter((signal) => signal.publisherProgramId === item.runtimeProgramId)
+    .map((signal) => ({ signalId: signal.signalId, name: signal.name }))
+}
+
+/**
  * Xoá POU cùng mọi thứ chỉ thuộc về nó. Thứ tự bắt buộc: binding → biến → cấu
  * hình chạy (CHỈ khi POU thật sự có) → chính POU.
  *
