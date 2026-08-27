@@ -70,7 +70,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('PGM-02 Quick Library (T59-804)', () => {
-  it('chèn FUNCTION bằng đúng lời gọi có tham số của catalog', async () => {
+  it('AC-ST-001 / AC-FBD-002: chèn FUNCTION bằng đúng lời gọi có tham số của catalog', async () => {
     const { onInsert } = renderPanel()
     fireEvent.click(await screen.findByRole('button', { name: 'Chèn LIMIT' }))
     // Panel trả về ĐÚNG mục catalog; dựng đoạn mã là việc của bề mặt ST.
@@ -79,7 +79,7 @@ describe('PGM-02 Quick Library (T59-804)', () => {
     expect(stCallStatement(entry)).toBe('OUT := LIMIT(MN, IN, MX);')
   })
 
-  it('mục chờ review hiện ra nhưng không bấm được, kèm lý do', async () => {
+  it('AC-FBD-002: mục chờ review hiện ra nhưng không bấm được, kèm lý do', async () => {
     const { onInsert } = renderPanel()
     const pid = await screen.findByRole('button', { name: 'Chèn PID' })
     expect(pid).toBeDisabled()
@@ -119,7 +119,7 @@ describe('PGM-02 Quick Library (T59-804)', () => {
     expect(await screen.findByText(/chỉ nằm trên trình duyệt này/)).toBeInTheDocument()
   })
 
-  it('catalog lỗi thì báo lỗi, không hiện danh sách rỗng như thể không có block', async () => {
+  it('AC-FBD-002: catalog lỗi thì báo lỗi, không hiện danh sách rỗng như thể không có block', async () => {
     renderPanel({ status: 'error', data: null, error: 'PRG-ERR-UNAVAILABLE-001', refresh: vi.fn() })
     expect(await screen.findByRole('alert')).toHaveTextContent('PRG-ERR-UNAVAILABLE-001')
   })

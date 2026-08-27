@@ -43,7 +43,7 @@ describe('StRuntimeValueOverlay (T59-506)', () => {
     expect(within(invalidRow).getByText(/Không hợp lệ/)).toBeInTheDocument()
   })
 
-  it('last-known value STALE còn thấy được nhưng có quality/freshness và nhãn chữ rõ', () => {
+  it('AC-ST-009: last-known value STALE còn thấy được nhưng có quality/freshness và nhãn chữ rõ', () => {
     render(
       <I18nProvider>
         <StRuntimeValueOverlay state={{ status: 'ready', items: [item({ value: 21.5, quality: 'STALE', freshness: 'STALE' })] }} />

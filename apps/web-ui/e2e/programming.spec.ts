@@ -1080,7 +1080,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     expectNoBrowserFailures(failures, 'deep-link objectId')
   })
 
-  test('dưới 768 px: workspace chỉ đọc và không phát sinh request ghi nào', async ({ page }) => {
+  test('AC-PGM02-010: dưới 768 px: workspace chỉ đọc và không phát sinh request ghi nào', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
@@ -1108,7 +1108,47 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     expectNoBrowserFailures(failures, 'mobile read-only')
   })
 
-  test('MỘT cây POU: ba kind, deep-link theo objectId và reload giữ đúng POU', async ({ page }, testInfo) => {
+  test('AC-PGM02-002: 1280×750 — trình soạn thảo PGM-02 thấy được mà KHÔNG cuộn trang', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', 'Phép đo này thuộc khổ desktop')
+    /* `T59-822` — trước lát này phép đo 1280×750 CHỈ chạy cho PGM-01 Tổng quan.
+     * `AC-PGM02-002` nói về chính khổ giấy của workspace PGM-02, nơi ba cột
+     * (cây POU 280 px + trình soạn thảo + Inspector 308 px) cộng thanh tab,
+     * toolbar và thanh trạng thái cùng tranh chiều cao. Suy từ kết quả của một
+     * trang khác không phải là đo. */
+    const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await page.setViewportSize({ width: 1280, height: 750 })
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`)
+
+    await page.getByRole('button', { name: /^Mở / }).first().click()
+    const editor = page.getByLabel(/Mã nguồn ST/)
+    await expect(editor).toBeVisible()
+
+    const fold = 750
+    const box = await editor.boundingBox()
+    expect(box, 'trình soạn thảo phải có hộp bao').not.toBeNull()
+    /* Câu của AC là *"main editor/canvas visible without page scroll"*, nên chủ
+     * ngữ là TRÌNH SOẠN THẢO: cả khung của nó phải nằm trong màn hình đầu.
+     *
+     * Cố ý KHÔNG đòi `scrollHeight <= innerHeight` cho cả tài liệu: trang còn
+     * Inspector và khay workbench nằm dưới một cách chính đáng, và bắt cả trang
+     * gói gọn trong 750 px là một ràng buộc CHẶT HƠN điều AC nói. Test phải
+     * khoá đúng câu của hợp đồng, không khoá một câu nghiêm hơn do mình nghĩ ra
+     * — một test như thế sẽ đỏ vì lý do không ai đồng ý và rồi bị tắt đi. */
+    expect(box!.y, `mép trên trình soạn thảo bị đẩy khỏi màn hình đầu (y=${box!.y})`).toBeGreaterThanOrEqual(0)
+    expect(box!.y, `mép trên trình soạn thảo bị đẩy xuống dưới màn hình đầu (y=${box!.y})`).toBeLessThan(fold)
+    expect(
+      box!.y + box!.height,
+      `mép dưới trình soạn thảo vượt màn hình đầu (${Math.round(box!.y + box!.height)}px > ${fold}px) — phải cuộn trang mới thấy hết chỗ gõ`,
+    ).toBeLessThanOrEqual(fold)
+
+    const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflowX, `trang tràn ngang ${overflowX}px`).toBeLessThanOrEqual(0)
+    await page.screenshot({ path: testInfo.outputPath('pgm02-1280x750.png'), fullPage: false })
+  })
+
+  test('AC-PGM02-001: MỘT cây POU: ba kind, deep-link theo objectId và reload giữ đúng POU', async ({ page }, testInfo) => {
     test.skip(
       (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
       'tạo/xóa POU là mutation; màn hẹp read-only có case riêng'
@@ -1153,7 +1193,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     expectNoBrowserFailures(failures, 'một cây POU')
   })
 
-  test('Thư viện nhanh dùng CHUNG catalog và nói thật về mục chưa dùng được', async ({ page }, testInfo) => {
+  test('AC-PGM02-004 / AC-FBD-002: Thư viện nhanh dùng CHUNG catalog và nói thật về mục chưa dùng được', async ({ page }, testInfo) => {
     test.skip(
       (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
       'chèn khối là mutation; màn hẹp read-only có case riêng'
@@ -1274,7 +1314,7 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
     expect(outlineWidth, 'focusRingMinPx = 2 trong nfr.accessibility').toBeGreaterThanOrEqual(2)
   })
 
-  test('bộ chuyển chế độ đi hết bằng bàn phím và nói rõ vì sao SIMULATE chưa có', async ({ page }, testInfo) => {
+  test('AC-PGM02-008: bộ chuyển chế độ đi hết bằng bàn phím và nói rõ vì sao SIMULATE chưa có', async ({ page }, testInfo) => {
     test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
@@ -1322,7 +1362,7 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
  * LIVE hiện đúng bản đang chạy.
  */
 test.describe('PGM-02 LIVE (T59-811)', () => {
-  test('LIVE hiện nguồn Active, chỉ đọc, và Watch đọc cùng snapshot', async ({ page }, testInfo) => {
+  test('AC-PGM02-006 / AC-ST-008: LIVE hiện nguồn Active, chỉ đọc, và Watch đọc cùng snapshot', async ({ page }, testInfo) => {
     test.skip(
       (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
       'khổ hẹp là read-only theo cách riêng; LIVE có case desktop'
@@ -1356,7 +1396,7 @@ test.describe('PGM-02 LIVE (T59-811)', () => {
     expectNoBrowserFailures(failures, 'LIVE')
   })
 
-  test('đổi EDIT → LIVE khi Draft bẩn phải hỏi trước', async ({ page }, testInfo) => {
+  test('AC-PGM02-003: đổi EDIT → LIVE khi Draft bẩn phải hỏi trước', async ({ page }, testInfo) => {
     test.skip(
       (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
       'khổ hẹp không sửa được nên không có Draft bẩn'

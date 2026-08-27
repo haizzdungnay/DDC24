@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { AlignLeft, ClipboardCheck, Command, GitCompare, Library, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../../auth'
@@ -91,6 +91,22 @@ const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
 
 /* `T59-820` — mẫu đo bề rộng ký tự cho hover. Chuỗi đủ dài để sai số làm tròn
  * của một ký tự không nhân lên thành lệch cột ở cuối dòng dài. */
+/**
+ * `T59-822` / `AC-PGM02-002` — chiều cao khung soạn thảo co theo viewport.
+ *
+ * Chiều cao cố định 24rem không thể vừa màn 1280×750: chrome phía trên (thanh
+ * điều hướng sáu workspace, dải ngữ cảnh, tiêu đề, bộ chuyển chế độ, thanh tab,
+ * thanh công cụ) chiếm khoảng 500 px, nên mép dưới rơi xuống 884 px và người
+ * dùng phải cuộn trang mới thấy hết chỗ mình gõ.
+ *
+ * `clamp` giữ nguyên hành vi cũ trên màn cao — từ 1080 px trở lên vẫn ra đúng
+ * 24rem — và chỉ co lại trên màn thấp. Sàn 14rem để nó không bao giờ co thành
+ * một khe hai dòng; dưới sàn đó thà cuộn còn hơn có một trình soạn thảo không
+ * dùng được. Chuỗi lớp phải NGUYÊN VĂN trong source: Tailwind quét tĩnh, một
+ * lớp ghép bằng template string sẽ không có trong CSS build ra.
+ */
+const EDITOR_HEIGHT_CLASS = 'h-[clamp(14rem,calc(100vh-32rem),24rem)]'
+
 const HOVER_SAMPLE = '00000000000000000000'
 const HOVER_METRICS: Omit<StEditorTextMetrics, 'charWidthPx'> = {
   rowHeightPx: EDITOR_ROW_HEIGHT_PX,
@@ -187,6 +203,7 @@ export function ProgramsTab({
   onOpenCompare,
   checkDisabledReason,
   compareDisabledReason,
+  explorerSlot,
   runtimeOverlayByProgramId,
   userPouInterfaces = EMPTY_USER_POU_INTERFACES,
   forceReadOnly = false,
@@ -211,6 +228,18 @@ export function ProgramsTab({
   /** Lý do `Kiểm tra`/`So sánh` đang khoá. Nút disabled phải nêu lý do đọc được. */
   checkDisabledReason?: string | null
   compareDisabledReason?: string | null
+  /**
+   * `T59-822` / `AC-PGM02-002` — cây POU render vào ĐÚNG cột trái của lưới.
+   *
+   * Trước lát này nó là một dải NGANG phía trên lưới, cao 337 px, nên mép trên
+   * trình soạn thảo rơi xuống `y=849` trên viewport 750 — người dùng phải cuộn
+   * trang mới thấy chỗ mình gõ. `UX §16.2` vốn đã quy định
+   * `Cây 280px ┬ Editor ┬ Inspector 308px`; đây là đưa DOM về đúng điều đó.
+   *
+   * Trang cha chịu trách nhiệm chỉ truyền slot này ở chế độ EDIT và KHÔNG render
+   * thêm một bản nào khác — `AC-PGM02-001` đòi đúng MỘT cây POU trong DOM.
+   */
+  explorerSlot?: ReactNode
   /** T59-506: dữ liệu chỉ đọc do workspace map từ monitor authority. Không có
    * prop nghĩa là lane monitor chưa được nối, editor không dựng giá trị giả. */
   runtimeOverlayByProgramId?: Readonly<Record<string, StRuntimeOverlayState | undefined>>
@@ -441,6 +470,7 @@ export function ProgramsTab({
           </button>
         </div>
         <div id="programs-slot-left">
+        {explorerSlot}
         <ProjectTagsEditor
           canEdit={canEdit}
           value={projectTagsDraft}
@@ -1422,7 +1452,7 @@ export function SourceEditor({
       <label className="sr-only" htmlFor={`programming-st-source-${program.programId}`}>
         {pick(`Mã nguồn ST của ${program.name}`, `ST source for ${program.name}`)}
       </label>
-      <div className="relative grid h-96 grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]">
+      <div className={`relative grid ${EDITOR_HEIGHT_CLASS} grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]`}>
         {/* Con trỏ lệch dòng (báo trực tiếp trên board, 2026-08-15 và
          * 2026-08-17 — ảnh chụp cho thấy lưới kẻ cắt xuyên chữ, không phải
          * chỉ lệch nhẹ): tắt word-wrap (`whitespace-pre` + `wrap="off"`) đã
@@ -1454,7 +1484,7 @@ export function SourceEditor({
             </div>
           ))}
         </div>
-        <div className="relative h-96 overflow-hidden">
+        <div className={`relative ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
           {/* WP-10 P0: overlay tô cú pháp + gạch chân diagnostic, nằm DƯỚI
            * textarea (chữ trong suốt, chỉ hiện con trỏ) — `EDITOR_TEXT_METRICS`
            * (inline) khớp pixel-cho-pixel với textarea phía trên, xem lý do ở
@@ -1505,7 +1535,7 @@ export function SourceEditor({
             id={`programming-st-source-${program.programId}`}
             aria-describedby={diagnostics.length > 0 ? `programming-st-diagnostics-${program.programId}` : undefined}
             wrap="off"
-            className="absolute inset-0 h-96 w-full resize-none whitespace-pre border-0 bg-transparent outline-none"
+            className="absolute inset-0 h-full w-full resize-none whitespace-pre border-0 bg-transparent outline-none"
             /* `color`/`caretColor` VÀ toàn bộ `EDITOR_TEXT_METRICS` (font-size/
              * line-height/padding/tab-size) đều phải là inline style — lý do
              * đầy đủ ở comment tại chỗ khai báo `EDITOR_TEXT_METRICS` phía
