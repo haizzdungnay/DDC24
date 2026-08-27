@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useI18n } from '../../../shared/i18n'
 import { useProgrammingRevision, type ProgrammingRuntimeMonitorState } from '../api/queries'
 import { activeProgramSource, type ActiveProgramSource } from '../overview/activeProgramSet'
@@ -58,6 +59,12 @@ export function LiveProgramView({
     monitor,
     activeRevisionId,
   )
+  /* Parse theo identity của nguồn Active, không theo sample runtime. Nếu không,
+   * mỗi tick tạo một object topology mới và buộc toàn bộ canvas FBD render lại. */
+  const liveFbdDocument = useMemo(
+    () => active.source !== null && active.language === 'FBD' ? parseLiveFbd(active.source) : null,
+    [active.language, active.source],
+  )
 
   return (
     <section className="space-y-3" aria-label={pick('Chương trình đang chạy', 'Running program')}>
@@ -85,12 +92,12 @@ export function LiveProgramView({
         /* `AC-FBD-009` — sơ đồ đang chạy phải là SƠ ĐỒ, không phải JSON thô.
          * Tài liệu hỏng thì nói ra thay vì vẽ một sơ đồ trống trông như "chương
          * trình không có gì". */
-        parseLiveFbd(active.source) === null ? (
+        liveFbdDocument === null ? (
           <p role="status" className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
             {pick('Sơ đồ FBD của gói đang chạy không đọc được.', 'The running package’s FBD diagram cannot be read.')}
           </p>
         ) : (
-          <LiveFbdView document={parseLiveFbd(active.source)!} />
+          <LiveFbdView document={liveFbdDocument} />
         )
       ) : (
         <div className="space-y-2">

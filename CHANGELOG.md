@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### PGM-02 R2 — ngân sách, vòng đời subscription và hardening LIVE (`T59-812`) (2026-08-27)
+
+- **Fixed — LIVE trước đây chỉ khóa editor chính, chưa khóa toàn workspace.**
+  Admin vẫn có thể tạo/đổi tên/xóa POU ở Explorer, sửa Mapping/Execution hoặc
+  bấm Check trong khi màn hình ghi LIVE. Quyền sửa nay phụ thuộc đồng thời vai,
+  viewport **và `mode=EDIT`**; LIVE không còn control mutation ở bất kỳ tab nào.
+
+- **Fixed — monitor poll sống cả ở EDIT và có thể chồng request.** Subscription
+  nay chỉ bật trong LIVE, rời LIVE/unmount hủy interval, sample chờ và response
+  đang bay; refresh/poll xen nhau được gộp để luôn có tối đa một request đang
+  chạy. Render value dùng trailing-latest tối đa **10 Hz**, lỗi/mất nguồn vẫn
+  fail-closed ngay và không giữ số cũ.
+
+- **Changed — topology FBD tách khỏi value refresh.** Nguồn Active chỉ parse lại
+  khi nội dung đổi; `LiveFbdView` được memo hóa nên sample runtime không commit
+  lại canvas/topology. Bổ sung test render-count khóa bất biến này.
+
+- **Fixed — finding axe ở rail 768–1023 px.** Mục “Cài đặt Project” vô hiệu hóa
+  dùng `aria-label`/`aria-disabled` trên `span` không có role; thêm semantic
+  `role=link` bị vô hiệu hóa, axe serious/critical về 0 ở đủ bốn khổ màn.
+
+- **Changed — cổng bundle chuyển đúng sang R2.** `npm run build` nay gọi
+  `--increment r2`: chunk Programming **114,32 KiB / 145 KiB**, dư **30,68
+  KiB**; không còn báo dư địa theo ngân sách R1 125 KiB.
+
+- **Verification.** FE **157 file / 1768 test PASS**; focused **47/47 PASS**;
+  lint/typecheck/build PASS; Playwright hardening LIVE **9 PASS / 1 skip**
+  (desktop-only unsubscribe), bốn viewport 1280/1024/768/390 không tràn ngang,
+  axe serious/critical 0; toàn bộ Programming mock **53 PASS / 11 skip** và
+  backend thật **5/5 PASS**; docs ISO harness `--expect` PASS sau khi đồng bộ số
+  quyết định `UD-PROG` đã tăng có chủ đích từ 12 lên 13 ở lát trước. Chrome
+  DevTools MCP có cấu hình nhưng tool chưa được nạp vào phiên Codex này, nên
+  không nhận vơ bằng chứng DevTools.
+
 ### Governance — đóng `T59-811`, mở `T59-812` (2026-08-27)
 
 - **Changed — `T59-811` `DONE (HOST/LOCAL)`.** LIVE đủ cả ST và FBD, Watch trong

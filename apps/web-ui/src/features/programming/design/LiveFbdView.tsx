@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { useI18n } from '../../../shared/i18n'
 import { FbdCanvas } from '../fbd/FbdCanvas'
 import type { FbdEditorAction, FbdSelection } from '../fbd/commands'
@@ -19,7 +19,7 @@ import type { FbdDocument } from '../fbd/model'
  *    bất biến **cấu trúc**: tài liệu là prop, còn thứ duy nhất component tự giữ là
  *    lựa chọn đang xem.
  */
-export function LiveFbdView({ document }: { document: FbdDocument }) {
+export const LiveFbdView = memo(function LiveFbdView({ document }: { document: FbdDocument }) {
   const { pick } = useI18n()
   /* Trạng thái DUY NHẤT của khay này: người dùng đang nhìn phần tử nào. Nó không
    * đi vào tài liệu, nên không có đường nào từ đây sửa được gói đang chạy. */
@@ -46,9 +46,9 @@ export function LiveFbdView({ document }: { document: FbdDocument }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3 overflow-hidden">
       {networks.map((network) => (
-        <article key={network.id} className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
+        <article key={network.id} className="min-w-0 overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] p-2">
           <h4 className="mb-2 text-xs font-semibold text-[var(--c-text)]">
             {network.order + 1}. {network.name}
           </h4>
@@ -66,4 +66,4 @@ export function LiveFbdView({ document }: { document: FbdDocument }) {
       ))}
     </div>
   )
-}
+})

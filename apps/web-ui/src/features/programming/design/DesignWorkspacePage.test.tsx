@@ -28,11 +28,18 @@ vi.mock('../../auth', async (importOriginal) => {
 const client = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => client }))
 const runtimeMonitor = vi.hoisted(() => ({
-  state: null as unknown as ProgrammingRuntimeMonitorState
+  state: null as unknown as ProgrammingRuntimeMonitorState,
+  enabled: vi.fn(),
 }))
 vi.mock('../api/queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/queries')>()
-  return { ...actual, useProgrammingRuntimeMonitor: () => runtimeMonitor.state }
+  return {
+    ...actual,
+    useProgrammingRuntimeMonitor: (enabled = true) => {
+      runtimeMonitor.enabled(enabled)
+      return runtimeMonitor.state
+    },
+  }
 })
 vi.mock('../layout/ProgrammingLayout', () => ({
   useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn() })
@@ -96,6 +103,7 @@ beforeEach(() => {
     failure: null, producerRestarted: false,
     refresh: vi.fn()
   }
+  runtimeMonitor.enabled.mockClear()
   localStorage.setItem('mkddc-lang', 'vi')
 })
 afterEach(() => {
@@ -757,7 +765,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 })
 
 describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
-  it('nối monitor đúng Active Revision vào ST overlay; null không bị vẽ thành 0', async () => {
+  it('EDIT không subscribe/chiếu Active overlay lên Draft dù monitor có dữ liệu', async () => {
     const project = baseProject()
     project.activeRevisionId = 'revision-active'
     project.draft!.programs.push({
@@ -794,36 +802,48 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
 
     renderWorkspace()
     fireEvent.click(await screen.findByText('Điều khiển AHU'))
-    const overlay = await screen.findByRole('region', { name: 'Lớp giá trị runtime ST' })
-    const zeroRow = within(overlay).getByText('OutputZero').closest('li')
-    const missingRow = within(overlay).getByText('OutputMissing').closest('li')
-    expect(zeroRow).not.toBeNull()
-    expect(missingRow).not.toBeNull()
-    expect(within(zeroRow!).getByText('0 %')).toBeInTheDocument()
-    expect(within(missingRow!).getByText('—')).toBeInTheDocument()
-    expect(within(missingRow!).queryByText(/^0(?:\s|$)/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Lớp giá trị runtime ST' })).not.toBeInTheDocument()
+    expect(runtimeMonitor.enabled).toHaveBeenCalledWith(false)
   })
 
-  it('mismatch Active Revision hiển thị unavailable, không giữ mẫu cũ', async () => {
+  it('LIVE khóa mutation ở toàn workspace, không chỉ khóa textarea chính', async () => {
     const project = baseProject()
     project.activeRevisionId = 'revision-active'
     project.draft!.programs.push({
-      programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM AHU\nEND_PROGRAM\n'
+      programId: 'program-1', objectId: 'object-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'DRAFT KHÔNG ĐƯỢC HIỆN'
     })
+    project.draft!.task.programOrder = ['program-1']
     runtimeMonitor.state = {
       status: 'ready', error: null, failure: null, producerRestarted: false, refresh: vi.fn(),
-      data: { schemaVersion: '1.0', activeRevisionId: 'revision-old', producer: { capturedMonotonicNs: '1000' }, safeState: false, task: null, items: [] }
+      data: { schemaVersion: '1.0', activeRevisionId: 'revision-active', producer: { capturedMonotonicNs: '1000' }, safeState: false, task: null, items: [] }
     }
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'getProgrammingRevision') return Promise.resolve({
+        revisionId: 'revision-active',
+        snapshot: { objects: [{
+          objectId: 'object-1', kind: 'PROGRAM',
+          payload: { objectId: 'object-1', kind: 'PROGRAM', name: 'Điều khiển AHU', language: 'ST', source: 'PROGRAM ACTIVE\nEND_PROGRAM\n' },
+        }] },
+      })
       throw new Error(`unexpected operation ${operationId}`)
     })
 
-    renderWorkspace()
-    fireEvent.click(await screen.findByText('Điều khiển AHU'))
-    const overlay = await screen.findByRole('region', { name: 'Lớp giá trị runtime ST' })
-    expect(within(overlay).getByText('Không đọc được giá trị runtime.')).toBeInTheDocument()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=LIVE')
+    const source = await screen.findByLabelText<HTMLTextAreaElement>('Mã nguồn đang chạy')
+    expect(source).toHaveValue('PROGRAM ACTIVE\nEND_PROGRAM\n')
+    expect(source).toHaveAttribute('readonly')
+    expect(runtimeMonitor.enabled).toHaveBeenCalledWith(true)
+
+    /* Những control này nằm NGOÀI LiveProgramView; trước T59-812 admin vẫn
+     * sửa Draft từ chúng dù màn hình tự nhận là LIVE. */
+    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Thêm chương trình FBD')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kiểm tra' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Lưu$/ })).not.toBeInTheDocument()
+    fireEvent.keyDown(source, { key: 's', ctrlKey: true })
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
   })
 
   it('nối interface Draft v2 vào palette FBD và lọc chính POU đang mở', async () => {

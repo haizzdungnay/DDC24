@@ -53,6 +53,8 @@ interface MockState {
   retainResetCount: number
   traceCount: number
   traceRunning: boolean
+  /** `T59-812`: bộ đếm chỉ dùng để chứng minh subscription LIVE đã cleanup. */
+  monitorRequests?: number
 }
 
 interface BrowserFailures {
@@ -409,8 +411,10 @@ async function installProgrammingMocks(page: Page, state: MockState) {
       })
     }
     if (method === 'GET' && path === '/runtime/monitor') {
+      state.monitorRequests = (state.monitorRequests ?? 0) + 1
       return json(route, {
         schemaVersion: '1.0', activeRevisionId: ACTIVE_REVISION_ID, safeState: false,
+        producer: { capturedMonotonicNs: String(1_000 + state.monitorRequests) },
         task: { taskId: 'Control_Main', periodMs: 1000, budgetMs: 200, state: 'RUNNING', runCount: 120, missedReleaseCount: 0, lastExecNs: 120000, maxExecNs: 310000, overrunCount: 1, consecutiveOverruns: 0 },
         items: [{
           variableId: '55555555-5555-4555-8555-555555555555', variableName: 'SupplySetpoint', programId: state.draft.programs[0]?.programId ?? '44444444-4444-4444-8444-444444444444',
@@ -1369,5 +1373,66 @@ test.describe('PGM-02 LIVE (T59-811)', () => {
 
     await page.getByRole('button', { name: 'Ở lại' }).click()
     await expect(source).toHaveValue(/chưa lưu/)
+  })
+})
+
+/**
+ * `T59-812` — hardening LIVE: ngân sách/vòng đời subscription, responsive,
+ * accessibility và khóa mutation ở TOÀN workspace.
+ */
+test.describe('PGM-02 hardening LIVE (T59-812)', () => {
+  const VIEWPORTS = [
+    { label: 'full shell', width: 1280, height: 900 },
+    { label: 'compact dock', width: 1024, height: 800 },
+    { label: 'drawer', width: 768, height: 800 },
+    { label: 'mobile read-only', width: 390, height: 844 },
+  ]
+
+  for (const viewport of VIEWPORTS) {
+    test(`LIVE không tràn ngang và không lộ mutation ở ${viewport.label} (${viewport.width}px)`, async ({ page }) => {
+      const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+      await page.setViewportSize({ width: viewport.width, height: viewport.height })
+      await installProgrammingMocks(page, state)
+      const failures = observeBrowserFailures(page)
+      await login(page)
+      await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=LIVE`)
+
+      const source = page.getByLabel(/Mã nguồn đang chạy/)
+      await expect(source).toBeVisible()
+      await expect(source).toHaveAttribute('readonly', '')
+      await expect(page.getByRole('button', { name: 'Lưu', exact: true })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Kiểm tra', exact: true })).toHaveCount(0)
+      await expect(page.getByTitle('Thêm chương trình ST')).toHaveCount(0)
+      await expect(page.getByTitle('Thêm chương trình FBD')).toHaveCount(0)
+
+      const width = await page.evaluate(() => ({
+        viewport: document.documentElement.clientWidth,
+        document: document.documentElement.scrollWidth,
+        body: document.body.scrollWidth,
+      }))
+      expect(width.document, `${viewport.label}: document tràn ngang`).toBeLessThanOrEqual(width.viewport + 1)
+      expect(width.body, `${viewport.label}: body tràn ngang`).toBeLessThanOrEqual(width.viewport + 1)
+
+      const axe = await new AxeBuilder({ page }).analyze()
+      const severe = axe.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))
+      expect(severe, `${viewport.label}: axe serious/critical`).toEqual([])
+      expectNoBrowserFailures(failures, `LIVE ${viewport.label}`)
+    })
+  }
+
+  test('rời LIVE hủy monitor subscription; EDIT không tiếp tục poll ngầm', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'đo vòng đời một lần ở lane desktop')
+    const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false, monitorRequests: 0 }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=LIVE`)
+    await expect(page.getByLabel(/Mã nguồn đang chạy/)).toBeVisible()
+    await expect.poll(() => state.monitorRequests ?? 0).toBeGreaterThanOrEqual(2)
+
+    await page.getByRole('button', { name: 'EDIT', exact: true }).click()
+    await expect(page.getByLabel(/Mã nguồn ST/)).toBeVisible()
+    const afterUnsubscribe = state.monitorRequests ?? 0
+    await page.waitForTimeout(2_200)
+    expect(state.monitorRequests).toBe(afterUnsubscribe)
   })
 })

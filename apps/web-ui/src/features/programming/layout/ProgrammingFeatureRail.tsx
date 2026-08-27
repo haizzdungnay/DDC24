@@ -151,6 +151,7 @@ export function ProgrammingFeatureRail({ projectId }: { projectId: string | null
              * mục xám mà không biết vì sao. `title` giữ cho người dùng chuột. */
             <span
               key={key}
+              role="link"
               aria-disabled="true"
               data-rail-item={key}
               aria-label={disabledReason ? `${pick(...label)} — ${pick(...disabledReason)}` : pick(...label)}
