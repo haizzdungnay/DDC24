@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.53 |
+| Phiên bản | 1.54 |
 | Trạng thái | **Active — PGM-02 v2.2 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; release NO-GO** |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -12,7 +12,9 @@
 
 ## 1. Phạm vi và quy tắc
 
-Manifest ghim đúng authority set dùng để chạy Plan59. Revision 1.53 re-pin 3
+Manifest ghim đúng authority set dùng để chạy Plan59. Revision 1.54 re-pin 2
+hồ sơ (`#15` Plan 59 và DDD PGM-02) sau khi `T59-814` đóng; các hồ sơ khác giữ
+nguyên hash. Revision 1.53 re-pin 3
 hồ sơ (`#3`, `#12`, `#15`) sau khi `T59-813` đóng và increment R2 đóng theo;
 14 hồ sơ còn lại giữ nguyên hash. Revision 1.51 re-pin 4
 hồ sơ (`#4`, `#14`, `#15`, `#17`) sau khi `T59-803` đóng. Revision 1.50 re-pin 5
@@ -52,9 +54,9 @@ chứng minh code, target, HIL hoặc release.
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `eedd394e476a56e46933cf88798720c02a1924ef22148911ebaf9fdd99b04f17` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `40fcc8d098060f910a944373badcf9d2874d180ba9b08e37afe9e746fc9da03b` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `2da173c6b499f0cd01dd17d0e29272bf0fb0de93ebe67cfee5894050438b1d41` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `1529ec000ba13fe34cdba9ddd6141b0d28f7e8f6942d8f21b70e29ff19485c30` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `114992522b19f874ec44eabc10ee5740dd5136ddb9d9f44e658c8b4e9ca8f3f3` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `9d9969a721db22cf4ac1c05fa6343e8e1ae1efd2164571ba82407496c80afb33` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 17 | `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` | `c7733ac4e6e5604cf3f6414fa78960e2a790e1cf4ef9ad573bdcae33a0664e45` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 17 | `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` | `18ce9c6ef9a42b488ac29ec89af272a9da56ef920e0dea17c6c75831d5970860` | `413a043748dce3b44d2c5076412de761760ba17a` |
 
 ## 3. Disposition baseline cũ
 

@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DEC-PROG-REGISTER-001` |
-| Phiên bản | 1.5 |
-| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` CLOSED (decision + implementation); increment R1 và R2 ĐÓNG (`T59-801..813` DONE), R3 mở với `T59-814` READY. Status authority của từng task là Plan 59, không phải hồ sơ này** |
+| Phiên bản | 1.6 |
+| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` CLOSED; increment R1 và R2 ĐÓNG (`T59-801..813` DONE), R3 mở với `T59-814` READY. **Một quyết định ĐANG MỞ: `UD-PROG-014` (tab đa POU)**; `UD-PROG-013` còn phần dư cần disposition. Status authority của từng task là Plan 59, không phải hồ sơ này** |
 | Ngày | 2026-08-25 |
 | Chủ quản | Product + System Architecture |
 | Authority | `ADR-050`; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
@@ -53,6 +53,7 @@ viết code; đó là **evidence bắt buộc để mở `RELEASE_READY`**.
 | `UD-PROG-011` | Artifact/store/API/IPC versioned; dual-reader v1/v2 trong migration. | CLOSED | ADR-050 hệ quả |
 | `UD-PROG-012` | Implementation review được waive khỏi entry; release evidence không waive. | CLOSED | ADR-050.10 |
 | `UD-PROG-013` | Editor ST của PGM-02 **giữ bề mặt hiện tại cho R1**; không thêm CodeMirror 6 vào `apps/web-ui`. | CLOSED | Product Owner/CTO + System Architect, 2026-08-26 — [`GATE-PROG-ST-EDITOR-DEP-001`](PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) §4.1/§5 |
+| `UD-PROG-014` | PGM-02 mở **một POU mỗi lần** hay **nhiều tab POU** trong cùng workspace. | **OPEN — chờ Owner** | `REC-PGM02-AUD-ADJ-001` `F-PGM02-AUD-004b`; handoff `PGM-02A §2`/`PGM-02B §2` |
 
 ### 1.2 `UD-PROG-013` — bề mặt editor ST cho R1
 
@@ -85,6 +86,50 @@ vi, và hành vi đó đã có test đầy đủ ở `T59-805`. Cổng đóng, `
 go-to-definition mức CodeMirror. Mở lại phải chạy nốt ba phép đo trên bo
 (`openPouP95Ms`, `typingResponseP95Ms`, `steadyJsHeapMiB`) và kiểm build
 offline/air-gapped.
+
+> **Phần dư chưa xử lý — ghi nhận 2026-08-27.** Điều khoản "mở lại từ R2" ở trên
+> đã **hết hạn mà không ai thực hiện**: R2 (`T59-810..813`) đóng ngày 2026-08-27
+> và không task nào trong đó nhận hover chuột hoặc **chỉ mục ký hiệu do compiler
+> sinh** (bullet BE của `PGM02-V22-WP-04`). Handoff `PGM-02A §4` liệt
+> `hover symbol/type/signature` là **Required**, nên đây là phần dư của hợp đồng,
+> không phải tính năng tuỳ chọn.
+>
+> `T59-820` nay nhận phần dư này với hai đường ra hợp lệ và **chỉ hai**: giao ở
+> R3, hoặc Owner ký hoãn tường minh **có thời hạn**. Không chấp nhận để trạng
+> thái trôi thêm một increment nữa.
+>
+> Nguồn: [`REC-PGM02-AUD-ADJ-001`](../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md) `F-PGM02-AUD-003`.
+
+### 1.3 `UD-PROG-014` — một POU mỗi lần hay nhiều tab POU (ĐANG MỞ)
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Câu hỏi | Workspace PGM-02 mở **một POU mỗi lần** (hiện trạng) hay **nhiều tab POU** song song? |
+| Trạng thái | **OPEN — chờ Product Owner/CTO + System Architect** |
+| Ngày mở | 2026-08-27 |
+| Nguồn | `REC-PGM02-AUD-ADJ-001` `F-PGM02-AUD-004b` |
+| Chặn | Phần tab của `T59-821` / `PGM02-V22-WP-15` |
+
+**Vì sao không tự chốt.** Handoff `PGM-02A §2` và `PGM-02B §2` vẽ vùng editor là
+`tabs + editor toolbar`, nhưng không nơi nào trong gói v2.2 đặc tả hành vi tab:
+bao nhiêu tab tối đa, Draft bẩn ở tab không hiển thị thì cảnh báo lúc nào, đổi
+mode `EDIT→LIVE` thì các tab còn lại ra sao, tab có sống qua reload không. Đó là
+những câu hỏi về **state model và dirty-guard**, tức chạm `DD-07` của
+`DDD-SW-PGM02-WORKSPACE-001`, không phải câu hỏi trang trí.
+
+**Hai lựa chọn.**
+
+| | A — giữ một POU mỗi lần | B — nhiều tab POU |
+|---|---|---|
+| Việc phải làm | Không có code; đóng bằng quyết định + ghi lệch so với bản vẽ | Mở rộng state model FE, dirty-guard đa tài liệu, luật đổi mode, khôi phục phiên |
+| Rủi ro | Lệch bản vẽ đã duyệt, cần ghi nhận tường minh | Bốn lớp lỗi mới quanh dirty Draft ở tab ẩn; tăng chunk; tăng bề mặt test |
+| Ảnh hưởng increment | Không | Kéo dài R3 |
+
+**Khuyến nghị kỹ thuật (không phải quyết định):** lựa chọn A cho R3, vì mọi luật
+mode/dirty hiện có đều được viết cho **một** tài liệu đang mở, và mở tab trước
+khi có đặc tả hành vi tab sẽ tạo đúng loại trạng thái nhập nhằng mà `DD-07` tồn
+tại để chặn. Nếu Owner chọn B thì phải bổ sung đặc tả tab vào handoff trước khi
+code.
 
 Chi tiết field, API, state, algorithm, timing, error, source mapping, migration và
 test nằm tại

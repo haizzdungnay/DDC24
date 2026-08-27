@@ -1,6 +1,6 @@
 {
   "package": "KX-DDC24 Programming FE Handoff v2.2",
-  "version": "2.2",
+  "version": "2.3",
   "status": "TARGET_NOT_AS_BUILT",
   "formalDetailedDesign": "../../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md",
   "pages": [
@@ -19,15 +19,18 @@
           "id": "PGM-02A",
           "language": "ST",
           "doc": "PGM-02A_ST_EDITOR_FE_HANDOFF_v2_2.md",
-          "asset": "assets/PGM-02A_ST_editor_reference.svg"
+          "asset": "assets/PGM-02A_ST_editor_reference.svg",
+          "renderedReference": "assets/ST editor program.png"
         },
         {
           "id": "PGM-02B",
           "language": "FBD",
           "doc": "PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md",
-          "asset": "assets/PGM-02B_FBD_editor_reference.svg"
+          "asset": "assets/PGM-02B_FBD_editor_reference.svg",
+          "renderedReference": "assets/FBD editor program.png"
         }
-      ]
+      ],
+      "annotatedOverview": "assets/ChatGPT Image 09_56_53 24 thg 8, 2026.png"
     },
     {
       "id": "PGM-03",
@@ -49,5 +52,6 @@
       "doc": "PGM-06_RUNTIME_FE_HANDOFF.md",
       "asset": "assets/PGM-06_runtime.png"
     }
-  ]
+  ],
+  "assetNote": "Ba ảnh render PGM-02 (ST/FBD/annotated) do chủ sở hữu cung cấp 2026-08-27 là THAM CHIẾU BỐ CỤC VÀ PHẠM VI, không phải chuẩn pixel (README §5.10) và không phải nguồn dữ liệu: mọi nội dung Quick Library phải sinh từ pou_library_registry_v1.json."
 }

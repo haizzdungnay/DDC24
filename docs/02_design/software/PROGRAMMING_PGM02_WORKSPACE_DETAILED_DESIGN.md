@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-SW-PGM02-WORKSPACE-001` |
-| Phiên bản | 0.3 |
+| Phiên bản | 0.5 |
 | Trạng thái | **`M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`; chưa phải M4/M5 hoặc As-Built** |
 | Ngày | 2026-08-24 |
 | Chủ quản đề xuất | System Architecture + Programming Cross-functional Team |
@@ -119,6 +119,10 @@ cắt mà không tự suy identity, source authority, quyền mutation, state l�
 - Step một Program riêng; arbitrary period/speed; distributed/multi-controller
   simulation; persistence/replay session sau reboot.
 - Tạo ngôn ngữ/POU kind/type mới ngoài profile đang pin.
+- ~~Status bar kiểu IDE: ngoài phạm vi~~ — **đảo ngược 2026-08-27.** Ba ảnh
+  render PGM-02 do chủ sở hữu cung cấp đều có status bar (ST: `Ln, Col · INS ·
+  LF · UTF-8 · No changes`; FBD: `Ready · Ln, Col · zoom% · FBD · Online`), nên
+  status bar **trong phạm vi** và do `PGM02-V22-WP-15` sở hữu. Xem §7.2/§7.3.
 - Claim target/HIL/physical-I/O/release PASS trong `PGM02-V22-WP-00`.
 - Sửa production source, OpenAPI Active, feature flag hoặc deploy trong task
   `T59-801`.
@@ -472,13 +476,17 @@ value/sequence intact.
   typed read-back** sau restart. Không nhét Draft tối đa 2 MiB vào
   `mutation_receipts.result_json` 4 KiB; snapshot content-addressed, có TTL và
   cleanup toàn cục, được persist cùng Draft/receipt/audit trong một transaction.
-- R3 dùng `0014_programming_simulation_sessions.sql` chỉ lưu metadata/
+- R3 dùng `0013_programming_simulation_sessions.sql` chỉ lưu metadata/
   reconciliation state, không lưu process image/RETAIN/source plaintext.
-- Migration head đã đối soát tại inventory là
-  `0012_library_revision_deprecate_receipt.sql`; vì vậy `0013` là ordinal
-  Candidate kế tiếp ở snapshot này. Trước khi tạo bất kỳ migration R1/R3, BE
-  phải đọc lại migration head; nếu ordinal đã bị changeset khác chiếm
-  thì dùng ordinal trống kế tiếp và cập nhật DDD/contract/test pin, không ghi đè.
+- **Ordinal thực tế (`T59-814`, 2026-08-27):** migration read-back R1 dự kiến ở
+  `0013` chưa bao giờ được tạo — R1 giải quyết read-back bằng đường khác. Head
+  lúc thi hành R3 vẫn là `0012_library_revision_deprecate_receipt.sql`, nên R3
+  lấy đúng ordinal trống kế tiếp là `0013`, theo chính quy tắc ở gạch đầu dòng
+  dưới đây. Ghi lại ở đây thay vì để một khoảng trống ordinal mà lần sau không
+  ai giải thích được.
+- Trước khi tạo bất kỳ migration R1/R3, BE phải đọc lại migration head; nếu
+  ordinal đã bị changeset khác chiếm thì dùng ordinal trống kế tiếp và cập nhật
+  DDD/contract/test pin, không ghi đè.
 - Session/process image/trace là ephemeral: idle 900 s, hard 3.600 s, trace tối
   đa 10.000 samples; terminal metadata/audit retention theo policy Programming
   hiện hành, cần pin cụ thể trước R3.
@@ -893,6 +901,8 @@ ProgrammingLayout
       │  ├─ FunctionsGroup
       │  └─ FunctionBlocksGroup
       ├─ WorkspaceMain
+      │  ├─ EditorTabBar (nhiều POU mở song song; `UD-PROG-014` = B)
+      │  ├─ EditorToolbar (mode-aware: EDIT | SIMULATE | LIVE)
       │  ├─ StWorkspace
       │  │  ├─ SourceEditor
       │  │  ├─ DiagnosticGutter
@@ -903,13 +913,16 @@ ProgrammingLayout
       │     └─ FbdDiagnosticOverlay
       ├─ RightDock
       │  ├─ QuickLibraryPanel (EDIT only)
+      │  ├─ ContextInspector (mọi mode; read-only ngoài EDIT)
       │  ├─ ReferencesPanel (EDIT)
       │  ├─ WatchPanel (LIVE/SIM)
       │  └─ SimulationControls (SIM, admin mutation)
-      └─ BottomPanel
-         ├─ DiagnosticsPanel
-         ├─ TracePanel
-         └─ ConnectionSessionStatus
+      ├─ BottomPanel
+      │  ├─ DiagnosticsPanel
+      │  ├─ TracePanel
+      │  └─ ConnectionSessionStatus
+      ├─ NavigatorMap (ST: Code Map · FBD: Mini Map — tái dùng ngưỡng `AC-FBD-012`)
+      └─ WorkspaceStatusBar (Ln/Col, chế độ chèn, EOL, encoding, dirty; FBD thêm zoom% và ngôn ngữ)
 ```
 
 ### 7.3 Ánh xạ vùng UI
@@ -922,6 +935,11 @@ ProgrammingLayout
 | ST editor | typed source + ETag | editable/read-only/conflict/error | edit admin EDIT only | conflict giữ buffer; LIVE/SIM badge read-only | DRAFT-01/02 |
 | FBD canvas | canonical graph UUID/layout/order | editable/read-only/invalid | edit admin EDIT only | anchor exact node/port/wire | FBD-01, DIAG-02 |
 | Quick Library | public normalized signature | loading/empty/review/unavailable | search viewer+; insert admin EDIT | không fallback signature; unsupported giải thích | QL-01..04 |
+| Editor toolbar | mode + role + dirty/check state | enabled/disabled/loading/permission | EDIT: Save/Undo/Redo/Find/Format/Check/Compare admin; SIMULATE: Run/Pause/Step/Reset/Speed/Stop admin; LIVE: Pause Refresh/Watch/Trace/Return to Draft read | nút không dùng được phải nêu lý do, không ẩn im lặng | TB-01, DRAFT-01 |
+| Editor tab bar | danh sách POU đang mở + POU đang chọn | active/dirty/read-only/quá số tab | mở/đóng/chuyển tab mọi vai trò; đóng tab bẩn hỏi xác nhận | tab bẩn có dấu; đóng tab cuối không làm trống workspace im lặng | TAB-01 |
+| Navigator map | tài liệu đang mở (ST text / FBD graph) | hidden/ready | điều hướng mọi vai trò | không đổi nội dung tài liệu, chỉ đổi khung nhìn | NAV-01 |
+| Status bar | vị trí con trỏ, chế độ chèn, EOL, encoding, dirty, zoom, ngôn ngữ POU, trạng thái kết nối | ready/unavailable | read all | không bịa `UTF-8`/`LF` khi chưa đọc được; dirty phải khớp buffer thật | SB-01 |
+| Context Inspector | ngữ cảnh con trỏ/lựa chọn: Program, Variable, ST symbol/call, FBD block, Connection | empty/ready/unavailable/permission | sửa metadata admin EDIT; các ngữ cảnh khác read | không đoán kiểu/signature khi analyzer không chắc; thu gọn khi không có ngữ cảnh hữu ích | INS-01..03 |
 | References | references snapshot/ETag/hash | ready/empty/unavailable/stale | navigate viewer+; remove ref admin EDIT | stale yêu cầu refresh | REF-01/02 |
 | Diagnostics | Check typed locations | queued/running/pass/fail/timed-out | run Check admin; navigate viewer+ | stable messageKey, không render raw internal detail | DIAG-01/02 |
 | LIVE overlay | value tuple | connecting/live/stale/offline/reconciling/unavailable | read only mọi role | “—” cho unavailable; stale kèm observedAt | LIVE-01..03 |
@@ -1092,12 +1110,12 @@ Hiện chưa có Test Result này; `V-PGM02-SIM-ISO-01` là kế hoạch, không
 | Tạo | `apps/web-api/internal/programming/domain/simulation.go` | session/action/input/errors | domain primitives | HTTP/process handles |
 | Tạo | `apps/web-api/internal/programming/application/simulation.go` | supervisor use cases/state | compiler + private worker client | Core mutation client |
 | Tạo | `apps/web-api/internal/programming/transport/http/simulation.go` | Candidate endpoints/RBAC | existing auth/audit | FE role authority |
-| Tạo | `apps/web-api/internal/programming/store/migrations/0014_programming_simulation_sessions.sql` | reconciliation metadata sau migration R1 read-back `0013` | SQLite transaction | process image/secret/source blob |
+| Tạo | `apps/web-api/internal/programming/store/migrations/0013_programming_simulation_sessions.sql` | reconciliation metadata; ordinal trống kế tiếp theo §4.7 | SQLite transaction | process image/secret/source blob |
 | Tạo | `apps/web-api/internal/programming/simworker/*` | private protocol/supervisor | Unix socket/pipe, peer creds | production Core/iobus socket |
 | Tạo | `apps/core/application/programming/programming_sim_worker_main.cpp` | `mkddc-programming-sim-worker` | compiler/artifact executor interfaces | OutputWriter/device/production SHM |
 | Tạo | `apps/core/application/programming/simulation/*` | private scheduler/clock/images | deterministic runtime primitives | singleton production state |
-| Sửa | root `CMakeLists.txt` hoặc owned CMake target | worker executable/tests | isolated target link list | link production drivers |
-| Tạo | `platform/systemd/mkddc-programming-sim-worker@.service` hoặc supervisor-equivalent policy | per-session sandbox | dedicated UID/cgroup/seccomp | auto-restart persistent service |
+| Sửa | `apps/core/CMakeLists.txt` — `core_sim_engine` + `core_st_sandbox` + `mkddc-programming-sim-worker` | worker executable/tests | chỉ loader/executor thuần | KHÔNG link `core_domain` (PointTable/PointWriter/PriorityResolver) |
+| Sửa | `platform/systemd/mkddc-web-pi.service` (`PROGRAMMING_SIM_WORKER`) + `platform/packaging/install.sh` | policy tương đương supervisor, KHÔNG unit riêng | worker tự dựng rlimit/no-new-privs/seccomp | unit systemd riêng hoặc auto-restart |
 | Tạo | `apps/web-ui/src/features/programming/simulation/*` | controls/read model | generated API/capability | local browser executor |
 
 Đường dẫn Target có thể được Architect điều chỉnh khi pin, nhưng ownership,
@@ -1160,6 +1178,13 @@ increment liên quan.
 | `V-PGM02-DIAG-01` / `DDO-PGM02-006` | ST syntax/type error each POU kind | Check/navigate | exact objectId,line,column,length; legacy alias never joins runtime | Compiler→BE→FE integration | Compiler+BE+FE |
 | `V-PGM02-DIAG-02` / `DDO-PGM02-006` | FBD node/port/wire errors | Check/click | exact network plus narrowest node/port/wire UUID; malformed anchor fail closed | Core/BE/FE | Compiler+FE+QA |
 | `TC-PGM02-MODE-01` / `DDO-PGM02-015` | viewer/operator/admin; flags combinations | switch modes/direct API | matrix exact; server 403 authoritative; disabled reason visible | Browser+HTTP security | Security+UX+QA |
+| `TC-PGM02-TB-01` / `DDO-PGM02-015` | ba mode × ba vai trò; Draft sạch/bẩn; Check chạy/xong | duyệt từng nút toolbar theo `PGM-02A §3` | đúng tập nút theo mode; nút không dùng được có lý do đọc được, không biến mất; viewer/operator không kích hoạt được mutation | FE unit + browser + RBAC negative | FE+UX+Security+QA |
+| `TC-PGM02-TAB-01` / `DDO-PGM02-002` | mở N POU gồm ST và FBD, một tab có Draft bẩn | chuyển/đóng tab, đổi mode, reload | đúng POU theo `objectId`; đóng tab bẩn phải xác nhận; đổi mode áp dụng cho mọi tab, không rò buffer giữa tab | FE unit + browser | FE+QA |
+| `TC-PGM02-SB-01` / `DDO-PGM02-015` | ST và FBD; nguồn read-only; buffer bẩn/sạch | đọc status bar sau mỗi thao tác | Ln/Col khớp con trỏ thật; dirty khớp buffer; giá trị chưa đọc được hiện `—`, cấm mặc định `UTF-8/LF` | FE unit | FE+QA |
+| `TC-PGM02-NAV-01` / `DDO-PGM02-006` | tài liệu ST dài và FBD ≥24 block | điều hướng bằng map | khung nhìn nhảy đúng, tài liệu không đổi một byte | FE unit | FE+QA |
+| `TC-PGM02-INS-01` / `DDO-PGM02-002` | con trỏ trên Program / Variable / ST symbol/call | đọc Inspector từng ngữ cảnh | đúng trường theo handoff §9; `Definition/Type/Signature` lấy từ chỉ mục thật, analyzer không chắc thì ghi "không xác định được" | FE unit + integration Compiler metadata | FE+Compiler+QA |
+| `TC-PGM02-INS-02` / `DDO-PGM02-007` | chọn FBD block và connection | đọc Inspector | `Instance/Type/Parameters/Retained/I/O` và `Source/Destination/Type/Quality` khớp canonical graph; port order giữ nguyên | FE unit + round-trip FBD | FE+Compiler |
+| `TC-PGM02-INS-03` / `DDO-PGM02-009` | LIVE/SIM có mẫu tốt/cũ/mất | đọc Live/Sim value trong Inspector | dùng đúng value tuple của mode; stale có nhãn; unavailable là `—`, không phải 0 | FE unit + browser | FE+QA |
 | `TC-PGM02-LIVE-01` / `DDO-PGM02-008` | coherent Active/artifact/observations | open source/overlay/Trace | exact tuple; monotonic sequence; render ≤10 Hz | producer→IPC→BE→FE target integration | Core+BE+FE+QA |
 | `TC-PGM02-LIVE-02` / `DDO-PGM02-008` + `DDO-PGM02-009` | cutover Active during stream + sequence gap | observe switch | old overlay cleared ≤1 render cycle; Trace terminated; full rejoin | concurrency/fault + TSAN where applicable | Runtime+QA |
 | `TC-PGM02-LIVE-03` / `DDO-PGM02-009` | missing/stale/offline samples | render each state | no fake 0; stale has timestamp/badge; offline/unavailable null/em dash | unit+browser+target fault | FE+Core+QA |
@@ -1330,6 +1355,8 @@ CR-PROG-PGM02-V22-001
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 0.5 | 2026-08-27 | Ba ảnh render PGM-02 do chủ sở hữu cấp (`ST editor program.png`, `FBD editor program.png`, ảnh chú giải) được đăng ký vào `handoff_manifest.json` 2.3 và trở thành tham chiếu bố cục/phạm vi. Hệ quả: **đảo ngược** kết luận "status bar ngoài phạm vi" của bản 0.4; thêm `EditorTabBar`, `NavigatorMap`, `WorkspaceStatusBar` vào §7.2; ba dòng ánh xạ §7.3; ba ca kiểm `TC-PGM02-TAB-01`/`SB-01`/`NAV-01` §10.2. `UD-PROG-014` chốt phương án B (nhiều tab). Không đổi contract, state machine hay increment order. |
+| 0.4 | 2026-08-27 | Khôi phục hai vùng UI mà handoff v2.2 bắt buộc nhưng bản 0.1–0.3 bỏ sót khi chuyển tiếp: `ContextInspector` (handoff cha §1/§9, `PGM-02A §9`, `PGM-02B §9`) và `EditorToolbar` mode-aware (`PGM-02A §2/§3/§11`, `PGM-02B §2`). Thêm hai dòng ánh xạ vùng UI §7.3 và ghi tường minh status bar ngoài phạm vi §1.4. Nguồn: [`REC-PGM02-AUD-ADJ-001`](../../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md) `F-PGM02-AUD-001`/`F-PGM02-AUD-004`. Không đổi contract, state machine hay increment order; không nâng maturity. |
 | 0.3 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; nâng đúng `M3 REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`, mở R1/R2/R3 theo dependency; chốt `F-P59-GHOST-POU-001` fail closed `ST-POU-005`; giữ consumer review waived, U13–U15 NOT_RUN và release NO-GO. |
 | 0.2-candidate | 2026-08-24 | Khóa quy tắc exact pin hai lớp: manifest cho 17 hồ sơ Markdown và candidate Git commit SHA cho contract/schema/ADR/handoff/SVG; cấm dùng pin check 17/17 một mình để mở `PLAN_READY` hoặc code |
 | 0.1 | 2026-08-24 | Tạo Detailed Design Target Candidate cho `PGM02-V22-WP-00`; source-map As-Built; contract/state/test/rollback R1 EDIT → R2 LIVE → R3 SIMULATE; giữ exact-hash pin và downstream gates PENDING/NO-GO |

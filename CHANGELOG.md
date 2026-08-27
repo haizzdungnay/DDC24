@@ -8,6 +8,156 @@
 
 ## [Unreleased]
 
+### PGM-02 R3 — hạ tầng Simulation cách ly (`T59-814`) (2026-08-27)
+
+- **Added — `mkddc-programming-sim-worker`, tiến trình mô phỏng EPHEMERAL.**
+  Không phải service: không unit systemd, không auto-restart, sống đúng bằng
+  vòng đời một phiên. Nó dùng **đúng** loader/executor production
+  (`UnpackPackageV2` + `StProgramRuntime`) — hai bộ ngữ nghĩa cho một chương
+  trình là hai bộ để trôi khỏi nhau — nhưng scheduler, đồng hồ và ảnh vào/ra là
+  riêng của phiên. Đồng hồ ảo là **tham số** của `execute()`, nên tất định là
+  tính chất có sẵn chứ không phải thứ phải mô phỏng thêm.
+
+- **Added — ba lớp cắt cạnh tới đường điều khiển, không lớp nào một mình đủ.**
+  (1) Link list hẹp: worker **không** link `core_domain`
+  (PointTable/PointWriter/PriorityResolver) và cố ý không dùng `StScheduler`
+  production — scheduler đó nhận chính đường ghi ra thiết bị. (2) Hàng rào
+  worker tự dựng: đóng FD thừa kế, `RLIMIT_FSIZE=0` (không tạo được file),
+  `NO_NEW_PRIVS`, `RLIMIT_AS`, seccomp-BPF trả `EACCES` cho nhóm syscall thoát
+  sandbox. (3) Supervisor Go: quota, TTL, audit, kill **kèm** reap.
+
+- **Added — hai cổng nhị phân, cả hai đọc binary sau link.**
+  `programming_sim_worker_symbol_boundary` kiểm symbol thật; nó được xác nhận là
+  bắt được bằng cách chạy trên `mkddc-core` — và đỏ ở đó.
+  `programming_sim_worker_behaviour` chạy binary thật: hàng rào chặn **9/9**
+  đường production (`/dev/shm/mkddc_*`, `/dev/mem`, `/dev/ttyS0`, RETAIN,
+  journal, socket Core, `/etc/shadow`, `AF_UNIX`) bằng `EACCES`; bắt tay
+  fail-closed với token/version sai; và hai tiến trình worker độc lập cùng gói
+  cùng input cho chuỗi quan sát **giống hệt nhau**.
+
+- **Added — API R3, bảy route.** `POST /simulation/sessions`, `GET|DELETE
+  /sessions/{id}`, `POST /sessions/{id}/actions`, `PUT
+  /sessions/{id}/inputs/{observationId}`, `GET /sessions/{id}/observations`,
+  `GET /sessions/{id}/trace`. `SET_INPUT` và `STOP` là hành động sản phẩm nhưng
+  được materialize thành resource riêng để có identity và idempotency rõ ràng;
+  endpoint `actions` từ chối hai hành động đó.
+
+- **Added — ba bất biến đẩy xuống SQL, không để trong Go.** Một phiên sống trên
+  mỗi controller (UNIQUE index có điều kiện), phiên terminal không bao giờ sống
+  lại (trigger), sequence không đi lùi (trigger). Kiểm ở Go thôi thì cửa sổ giữa
+  "đếm" và "ghi" đủ rộng cho hai worker cùng sống, và một handler mới quên gọi
+  phép kiểm sẽ phá được bất biến mà không có gì đỏ. Migration
+  `0013_programming_simulation_sessions.sql` chỉ lưu metadata reconciliation —
+  không process image, không RETAIN, không source plaintext.
+
+- **Added — tám mã public `PRG-SIM-*` là họ mã MỚI.** Người vận hành phải phân
+  biệt "input bị từ chối" với "worker chết" với "phiên hết hạn"; gộp chúng vào
+  miền cũ sẽ xoá đúng sự phân biệt đó. Catalog lên **1.8.0** (30→38 public,
+  135→151 detail) và sinh đồng thời cho Go, C++, TypeScript.
+
+- **Changed — RBAC hai lớp, và hệ quả được nói rõ.** Route khai `RoleAdmin` nên
+  middleware chặn trước và handler **không chạy** — bất biến này đã được
+  `security_matrix_test.go` canh cho toàn bộ Programming. Lớp application kiểm
+  lại và trả `PRG-SIM-FORBIDDEN` kèm audit từ chối. Vì vậy vai không đủ quyền
+  gọi HTTP nhận 403 với **thân lỗi chung của middleware**, không phải thân
+  `PRG-SIM-FORBIDDEN`; đổi thứ tự để lấy thân lỗi đẹp hơn sẽ phải cho handler
+  chạy — đánh đổi một bất biến an toàn lấy một chuỗi hiển thị.
+
+- **Changed — SIMULATE trong FE nay đọc capability của SERVER.** Trước đây FE tự
+  khai "chưa có ở increment này"; nay nó đọc
+  `capabilities.workspaceModes.simulation.supported`. Một thiết bị thiếu worker
+  mô phỏng không còn bị hứa hẹn một chế độ nó không có, và server đời cũ (thiếu
+  `workspaceModes`) ⇒ UNAVAILABLE chứ không đoán.
+
+- **Changed — đóng gói.** Worker được cài **cạnh** `mkddc-web`
+  (`/opt/mkddc-web/`), không vào `/usr/sbin`: service chạy `User=mkddc` với PATH
+  systemd mặc định. Unit trỏ `PROGRAMMING_SIM_WORKER` tới đúng nơi đó; thiếu
+  file ⇒ capability SIMULATE tự TẮT, không có trạng thái "bật một nửa". Guard
+  đóng gói khoá cả ba điều đó, kể cả "KHÔNG được có unit systemd riêng".
+
+- **Verification.** `ctest` **1312/1312 PASS** (build `rc=0` — số đo lấy sau khi
+  build thành công, không lấy từ lần chạy có binary cũ); `go vet` + `go test
+  ./... -count=1` PASS; FE **157 file / 1769 test PASS**, lint PASS, `npm run
+  build` PASS với chunk Programming **115,39 KiB / 145 KiB (R2)**, dư **29,61
+  KiB**; `verify-project.sh --component layout` PASS sau khi re-pin lattice
+  (OpenAPI 1.29.0 / 40 operation, catalog 1.8.0, store schema 13).
+
+  Giới hạn: đây là lớp **HOST/LOCAL**. Chưa chạy trên target, chưa có HIL, chưa
+  quan sát I/O vật lý. `VS-PROG-U15` vẫn **NOT_RUN** — verdict thuộc `T59-817`,
+  và `G-PGM02-04 SIM_SAFE` mới đạt phần host.
+
+### PGM-02 — phán quyết gap analysis của auditor và vá bốn scope mồ côi trong plan (2026-08-27)
+
+- **Fixed — `F-PGM02-AUD-002`: `PGM02-V22-WP-09` mang cờ `DONE (R2)` trong khi
+  một nửa scope chưa hề được giao.** Thân `WP-09` sở hữu tường minh nhánh
+  **Compare Draft↔Active typed diff** (`stHunks[]`/`fbdChanges[]` trong
+  `GetRevisionChanges`, Compare drawer có anchor jump, luật seal-before-compare,
+  hai điều kiện acceptance, bộ golden test), nhưng task đóng nó — `T59-810` —
+  có scope chỉ gồm producer stamp và Trace pin. Đo tại `ed6fb21`:
+  `grep -rn "stHunks\|fbdChanges" contracts/ apps/web-api/ apps/web-ui/src` trả
+  về **0 kết quả**. Trạng thái `WP-09` hạ về `DONE (R2, MỘT PHẦN)` đúng nghĩa
+  `PARTIAL` của Plan 59 §0.1; phần Compare tách sang `T59-819`. Không mở lại
+  increment R2 — R2 đóng đúng phạm vi các task R2 đã tuyên.
+
+- **Fixed — `F-PGM02-AUD-001`: Inspector biến mất giữa hợp đồng và thiết kế.**
+  Handoff cha §1 xếp Inspector vào shell dùng chung và §9 định nghĩa năm ngữ
+  cảnh, nhưng `grep -i inspector` trên `DDD-SW-PGM02-WORKSPACE-001` bản 0.1–0.3
+  trả về **0 kết quả**, nên không WP nào nhận và code chỉ có panel hai trường
+  `Tên`+`Loại` (`ProgramsTab.tsx:1516-1558`) — đúng thứ handoff §9 cấm. DDD lên
+  0.4 khôi phục `ContextInspector` vào cây component §7.2, thêm dòng ánh xạ
+  §7.3 và ba ca kiểm `TC-PGM02-INS-01..03` ở §10.2; mở `PGM02-V22-WP-14` /
+  `T59-818`.
+
+- **Fixed — `F-PGM02-AUD-003`: phần dư `WP-04` hết hạn mà không ai thực hiện.**
+  `UD-PROG-013` hoãn hover chuột và chỉ mục ký hiệu do compiler sinh với cam kết
+  "mở lại từ R2"; R2 đóng 2026-08-27 mà không task nào nhận và không có bản ghi
+  hoãn tiếp, trong khi `PGM-02A §4` liệt hover là **Required**. `T59-820` nhận
+  phần dư với đúng hai đường ra: giao ở R3, hoặc Owner ký hoãn **có thời hạn**.
+
+- **Fixed — `F-PGM02-AUD-004`: toolbar và tab editor không được chuyển tiếp vào
+  DDD.** `PGM-02A §2/§3` quy định `tabs + editor toolbar` và tập nút theo từng
+  mode; DDD 0.1–0.3 không nhắc cả hai khái niệm. Thanh EDIT thực tế đã có bảy
+  nút (`FE-ST-009`) nhưng thiếu `Check`/`Compare`/`More`, chưa có thanh riêng
+  cho SIMULATE/LIVE. DDD 0.4 thêm `EditorToolbar` mode-aware + `TC-PGM02-TB-01`;
+  mở `PGM02-V22-WP-15` / `T59-821`. Việc `SIMULATE`/`LIVE` sống ở
+  `ProgramsModeSwitcher` nay được ghi nhận chính thức thay vì lệch âm thầm.
+
+- **Added — `UD-PROG-014` (ĐANG MỞ): một POU mỗi lần hay nhiều tab POU.** Không
+  tự chốt vì gói handoff v2.2 vẽ tab nhưng không đặc tả hành vi tab (số tab tối
+  đa, dirty Draft ở tab ẩn, đổi mode, sống qua reload) — đó là câu hỏi state
+  model/dirty-guard, chạm `DD-07`. Khuyến nghị kỹ thuật ghi trong register là
+  giữ một POU mỗi lần cho R3.
+
+- **Added — `F-PGM02-AUD-005` / `T59-822`: khôi phục truy nguyên AC.** Đo trên
+  toàn repo: `AC-PGM02-001..007/009/010` có **0** tham chiếu ngoài chính file
+  handoff. Phần lớn đã có test thật nhưng không mang định danh AC (ví dụ
+  `AC-ST-011` có test dán tại `SourceEditor.test.tsx:413-425`, `AC-ST-009` tại
+  `StRuntimeValueOverlay.test.tsx:46`), nên người kiểm chứng độc lập phải suy
+  luận bằng văn xuôi. Soi kỹ thì đúng một mục hoá ra là gap thật:
+  `AC-PGM02-002` (1280×750 không cuộn trang) mới chỉ được đo cho PGM-01 Overview
+  (`e2e/programming.spec.ts:920`), chưa đo cho workspace PGM-02.
+
+- **Changed — bác bỏ tường minh phần sai của gap analysis đầu vào.**
+  `gap_analysis_programming_page.md` đối chiếu nhầm cây mã nguồn (mọi đường dẫn
+  trỏ `…/ddc24-main/src/frontend/src/`, tức trang legacy graph demo sau cờ
+  `LEGACY_GRAPH_DEMO_ENABLED`), nên "62 Critical", "~90% chưa implement",
+  "46–71 tuần" và ba phương án A/B/C đều bị bác — POU tree, Quick Library,
+  workbench 5 tab, gutter số dòng, autocomplete, F12, FBD canvas node-edge và
+  LIVE overlay đều đã tồn tại. Status bar `Ln/Col/INS/LF/UTF-8` bị bác vì không
+  có trong hợp đồng đã duyệt, và được ghi ngoài phạm vi tại DDD §1.4. File đầu
+  vào giữ nguyên trạng, gắn banner phán quyết.
+
+- **Added — hồ sơ phán quyết** `REC-PGM02-AUD-ADJ-001`
+  (`docs/07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md`):
+  đối chiếu từng vùng ①–⑫ với file:line thật, bảng chuyển finding→task, và mục
+  ghi rõ việc chưa làm kèm lý do.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` **PASS** (duplicate doc
+  ID 0; code-span `docs/**` không tồn tại 0; `UD-PROG` trong Decision Register
+  13 → **14**). Kiểm liên kết `.md` trên sáu file đã sửa: **0 hỏng**. Phiên này
+  **không sửa code** — bốn finding đều thuộc R3 và thứ tự `R1→R2→R3` do
+  `AUTH-PROG-2026-08-24-05` khoá. `RELEASE_READY` vẫn **NO-GO**.
+
 ### PGM-02 R2 — bằng chứng target, diễn tập rollback và closeout increment (`T59-813`) (2026-08-27)
 
 - **Added — lane browser chạy trên chính controller.**
