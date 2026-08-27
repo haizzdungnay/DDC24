@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   activeProgramSet,
   activeProgramSetReasonLabel,
+  activeProgramSource,
   type ActiveProgramSetInput
 } from './activeProgramSet'
 
@@ -171,5 +172,89 @@ describe('activeProgramSet — T60-017 (đọc Program đang vận hành từ Ac
     }))
     expect(result.programs).toHaveLength(1)
     expect(result.programs[0].name).toBe('AHU_Control')
+  })
+})
+
+/* `T59-811` / `AC-ST-007` — "LIVE displays Active source, never mismatched
+ * Draft".
+ *
+ * Draft và Active trông GIỐNG HỆT nhau trên màn hình: cùng cửa sổ, cùng tên
+ * POU, cùng thứ tiếng ST. Người vận hành đọc nhầm Draft thành thứ đang điều
+ * khiển tủ là một lỗi không có dấu hiệu bên ngoài nào cả — nên mọi nhánh không
+ * chứng minh được phải trả `source: null`, không có nhánh nào rơi về Draft. */
+describe('activeProgramSource (T59-811)', () => {
+  const REVISION = '33333333-3333-4333-8333-333333333333'
+  const OBJECT = '44444444-4444-4444-8444-444444444444'
+
+  function revisionBody(objects: unknown[]): unknown {
+    return { revisionId: REVISION, snapshot: { objects } }
+  }
+  function pou(overrides: Record<string, unknown> = {}) {
+    return {
+      objectId: OBJECT, kind: 'PROGRAM',
+      payload: { objectId: OBJECT, kind: 'PROGRAM', name: 'AHU', language: 'ST', source: 'PROGRAM AHU\nEND_PROGRAM\n', ...overrides }
+    }
+  }
+
+  it('trả đúng nguồn của POU trong Revision đang chạy', () => {
+    const result = activeProgramSource({
+      activeRevisionId: REVISION, status: 'ready', revision: revisionBody([pou()]), objectId: OBJECT,
+    })
+    expect(result).toEqual({
+      revisionId: REVISION, objectId: OBJECT, language: 'ST',
+      source: 'PROGRAM AHU\nEND_PROGRAM\n', reason: null,
+    })
+  })
+
+  it('chương trình RỖNG khác hẳn thân không đọc được', () => {
+    const empty = activeProgramSource({
+      activeRevisionId: REVISION, status: 'ready', revision: revisionBody([pou({ source: '' })]), objectId: OBJECT,
+    })
+    expect(empty.source).toBe('')
+    expect(empty.reason).toBeNull()
+
+    const unreadable = activeProgramSource({
+      activeRevisionId: REVISION, status: 'ready', revision: revisionBody([pou({ source: 123 })]), objectId: OBJECT,
+    })
+    expect(unreadable.source).toBeNull()
+    expect(unreadable.reason).toBe('SOURCE_UNREADABLE')
+  })
+
+  it('thân phản hồi thuộc Revision KHÁC ⇒ không trả nguồn (chốt chặn mượn Draft)', () => {
+    const result = activeProgramSource({
+      activeRevisionId: REVISION, status: 'ready',
+      revision: { revisionId: 'aaaaaaaa-1111-4111-8111-111111111111', snapshot: { objects: [pou()] } },
+      objectId: OBJECT,
+    })
+    expect(result.source).toBeNull()
+    expect(result.reason).toBe('REVISION_MISMATCH')
+  })
+
+  it.each([
+    ['chưa Commission', { activeRevisionId: null, status: 'ready' as const, revision: revisionBody([pou()]) }, 'NO_ACTIVE_REVISION'],
+    ['đang đọc', { activeRevisionId: REVISION, status: 'loading' as const, revision: null }, 'REVISION_LOADING'],
+    ['đọc hỏng', { activeRevisionId: REVISION, status: 'error' as const, revision: null }, 'REVISION_UNAVAILABLE'],
+    ['snapshot không đọc được', { activeRevisionId: REVISION, status: 'ready' as const, revision: { revisionId: REVISION } }, 'SNAPSHOT_UNREADABLE'],
+  ])('%s ⇒ không có nguồn, nêu đúng lý do', (_label, input, reason) => {
+    const result = activeProgramSource({ ...input, objectId: OBJECT })
+    expect(result.source).toBeNull()
+    expect(result.reason).toBe(reason)
+  })
+
+  it('POU chưa Commission thì nói thẳng, không hiện Draft thay thế', () => {
+    const result = activeProgramSource({
+      activeRevisionId: REVISION, status: 'ready', revision: revisionBody([pou()]),
+      objectId: '99999999-9999-4999-8999-999999999999',
+    })
+    expect(result.source).toBeNull()
+    expect(result.reason).toBe('POU_NOT_IN_REVISION')
+  })
+
+  it('chưa chọn POU nào ⇒ cũng không đoán', () => {
+    const result = activeProgramSource({
+      activeRevisionId: REVISION, status: 'ready', revision: revisionBody([pou()]), objectId: null,
+    })
+    expect(result.source).toBeNull()
+    expect(result.reason).toBe('POU_NOT_IN_REVISION')
   })
 })

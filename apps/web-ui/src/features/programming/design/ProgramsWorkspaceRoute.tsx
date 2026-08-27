@@ -96,11 +96,14 @@ export function ProgramsWorkspaceRoute() {
       />
     )
   }
-  if (mode !== 'EDIT') {
+  /* `T59-811` mở LIVE ở increment R2. SIMULATE vẫn đóng tới R3 — và vẫn KHÔNG
+   * có fallback: một chế độ chưa có capability phải nói ra, không được âm thầm
+   * hiện dữ liệu của chế độ khác. */
+  if (mode === 'SIMULATE') {
     return (
       <StateBlock
         state="empty"
-        title={mode === 'LIVE' ? pick('LIVE chưa khả dụng trong increment R1.', 'LIVE is unavailable in the R1 increment.') : pick('SIMULATE chưa khả dụng trong increment R1.', 'SIMULATE is unavailable in the R1 increment.')}
+        title={pick('SIMULATE chưa khả dụng trong increment này.', 'SIMULATE is unavailable in this increment.')}
         detail={pick('Không có fallback sang dữ liệu Draft hoặc runtime gần nhất.', 'There is no fallback to draft data or a nearby runtime revision.')}
       />
     )

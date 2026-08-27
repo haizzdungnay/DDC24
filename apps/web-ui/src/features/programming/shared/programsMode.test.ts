@@ -9,9 +9,10 @@ const pick = (vi: string) => vi
 const CAPS = programsModeCapabilities(pick)
 
 describe('programsModeCapabilities', () => {
-  it('EDIT khả dụng, LIVE và SIMULATE nói rõ increment nào mở chúng', () => {
+  it('EDIT và LIVE khả dụng; SIMULATE nói rõ increment nào mở nó', () => {
     expect(programsModeCapability('EDIT', CAPS)).toMatchObject({ available: true, reason: null })
-    expect(programsModeCapability('LIVE', CAPS)?.reason).toMatch(/increment R2/)
+    // `T59-811` mở LIVE ở R2.
+    expect(programsModeCapability('LIVE', CAPS)).toMatchObject({ available: true, reason: null })
     expect(programsModeCapability('SIMULATE', CAPS)?.reason).toMatch(/increment R3/)
   })
 
@@ -27,27 +28,25 @@ describe('modeSwitchDecision', () => {
   })
 
   it('mode chưa khả dụng bị chặn kèm lý do, KHÔNG âm thầm rơi về EDIT', () => {
-    const decision = modeSwitchDecision({ from: 'EDIT', to: 'LIVE', draftDirty: false, capabilities: CAPS })
+    const decision = modeSwitchDecision({ from: 'EDIT', to: 'SIMULATE', draftDirty: false, capabilities: CAPS })
     expect(decision.kind).toBe('UNAVAILABLE')
-    expect(decision.kind === 'UNAVAILABLE' && decision.reason).toMatch(/increment R2/)
+    expect(decision.kind === 'UNAVAILABLE' && decision.reason).toMatch(/increment R3/)
   })
 
   it('UNAVAILABLE thắng CONFIRM_DISCARD — không bắt trả giá cho thao tác không xảy ra', () => {
     // Draft bẩn VÀ đích không khả dụng: hỏi "bỏ thay đổi?" rồi mới báo "không
     // dùng được" là bắt người dùng cân nhắc một đánh đổi vô nghĩa.
-    const decision = modeSwitchDecision({ from: 'EDIT', to: 'LIVE', draftDirty: true, capabilities: CAPS })
+    const decision = modeSwitchDecision({ from: 'EDIT', to: 'SIMULATE', draftDirty: true, capabilities: CAPS })
     expect(decision.kind).toBe('UNAVAILABLE')
   })
 
   it('rời EDIT khi Draft còn thay đổi chưa lưu phải HỎI', () => {
-    const capabilities = CAPS.map((item) => item.mode === 'LIVE' ? { ...item, available: true, reason: null } : item)
-    expect(modeSwitchDecision({ from: 'EDIT', to: 'LIVE', draftDirty: true, capabilities }))
+    expect(modeSwitchDecision({ from: 'EDIT', to: 'LIVE', draftDirty: true, capabilities: CAPS }))
       .toEqual({ kind: 'CONFIRM_DISCARD' })
   })
 
   it('Draft sạch và đích khả dụng thì đi thẳng', () => {
-    const capabilities = CAPS.map((item) => item.mode === 'LIVE' ? { ...item, available: true, reason: null } : item)
-    expect(modeSwitchDecision({ from: 'EDIT', to: 'LIVE', draftDirty: false, capabilities }))
+    expect(modeSwitchDecision({ from: 'EDIT', to: 'LIVE', draftDirty: false, capabilities: CAPS }))
       .toEqual({ kind: 'ALLOW' })
   })
 

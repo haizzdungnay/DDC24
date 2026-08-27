@@ -19,6 +19,7 @@ import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
+import { LiveProgramView } from './LiveProgramView'
 import { ProgramsModeSwitcher } from './ProgramsModeSwitcher'
 import { isProgramsWorkspaceMode, type ProgramsWorkspaceMode } from '../shared/programsRoute'
 import { useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
@@ -430,6 +431,13 @@ export function DesignWorkspacePage({
             onSave={workspace.save}
           />
         </div>
+        {/* `T59-811` — LIVE KHÔNG phải "editor với nút Lưu bị khoá". Nó là một
+            tài liệu khác: nguồn của gói ĐANG CHẠY. Dùng lại đúng component
+            editor rồi tắt sửa là cách chắc chắn nhất để một hôm nào đó Draft rò
+            vào chỗ đáng lẽ phải là Active, mà không có dấu hiệu bên ngoài nào. */}
+        {workspaceMode === 'LIVE' ? (
+          <LiveProgramView program={selectedProgram} objectId={selectedObjectId} />
+        ) : (
         <ProgramsTab
           document={document}
           saving={workspace.saving}
@@ -445,12 +453,14 @@ export function DesignWorkspacePage({
           userPouInterfaces={userPouInterfaces}
           forceReadOnly={mobileReadOnly}
         />
+        )}
         {/* `T59-807` / `WP-06-R1` — MỘT workbench dùng chung. Trước đây mỗi
             loại thông tin sống ở một chỗ và theo một luật khác nhau: lỗi Draft
             FBD nằm trong editor FBD, tham chiếu ST nằm trong editor ST, tìm
             kiếm nằm trong thanh công cụ ST. Không có chỗ nào để hỏi "Draft này
             đang có vấn đề gì" cho CẢ Project. */}
         <DesignWorkbench
+          mode={workspaceMode === 'LIVE' ? 'LIVE' : 'EDIT'}
           document={document}
           source={workbenchSource}
           sourceLabel={workbenchSourceLabel}

@@ -209,6 +209,7 @@ async function commission(
   )
   const changes = await responseJSON(changesResponse, 200)
   const impact = changes.impact as JsonObject
+  console.info('[T59-811] changes keys=', Object.keys(changes), 'impact keys=', Object.keys(impact ?? {}))
   const keys = [
     'retain',
     'activeOverrides',
@@ -999,4 +1000,84 @@ test('T59-810: dấu producer và Trace pin nói cùng một tuple trên backend
   // Mốc neo phải nằm trong mạch đang chạy: không nhỏ hơn mốc đọc được trước khi
   // tạo phiên, vì phiên được neo bằng chính snapshot dùng để xác thực biến.
   expect(BigInt(String(pin!.producer.capturedMonotonicNs)) >= first, 'mốc neo cũ hơn mốc trước khi tạo phiên').toBe(true)
+})
+
+/**
+ * `T59-811` — LIVE trên backend THẬT.
+ *
+ * Điều case này khoá là thứ **không nhìn thấy bằng mắt**: Draft và Active hiện
+ * ra trong cùng một cửa sổ, cùng tên POU, cùng thứ tiếng ST. Một người vận hành
+ * đọc nhầm Draft thành thứ đang điều khiển tủ không có dấu hiệu bên ngoài nào để
+ * nghi ngờ.
+ *
+ * Test KHÔNG tự Commission: lane real-backend dùng chung một Core cho cả file,
+ * nên commission thêm một Revision ở đây làm hỏng giả định của test khác và
+ * chính nó phụ thuộc thứ tự chạy. Thay vào đó nó đọc trạng thái THẬT của
+ * controller, rồi đối chiếu ba nguồn độc lập: nguồn LIVE trên màn hình, thân
+ * Revision đang chạy đọc qua API, và Draft hiện tại của cùng Project.
+ */
+test('T59-811: LIVE hiện nguồn Active, không phải Draft, và chỉ đọc với mọi vai', async ({ page, request }) => {
+  test.setTimeout(180_000)
+  const token = await loginAPI(request)
+
+  const runtime = await responseJSON(
+    await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) }), 200)
+  const activeRevisionID = runtime.activeRevisionId as string | null
+  test.skip(!activeRevisionID, 'controller chưa Commission gói nào — LIVE không có gì để đối chiếu')
+
+  // Project nào đang sở hữu Revision đang chạy.
+  const projects = await responseJSON(
+    await request.get('/api/v1/programming/projects?limit=100', { headers: readHeaders(token) }), 200)
+  const owner = (projects.items as JsonObject[]).find((item) => item.activeRevisionId === activeRevisionID)
+  expect(owner, `không Project nào khai Revision đang chạy ${activeRevisionID}`).toBeTruthy()
+  const projectID = owner!.projectId as string
+
+  // Thân Revision ĐANG CHẠY, đọc qua API — nguồn đối chiếu độc lập với UI.
+  const revision = await responseJSON(
+    await request.get(`/api/v1/programming/revisions/${activeRevisionID}`, { headers: readHeaders(token) }), 200)
+  const snapshot = revision.snapshot as JsonObject
+  const objects = (snapshot.objects as JsonObject[]) ?? []
+  const pou = objects.find((object) => {
+    const payload = object.payload as JsonObject | undefined
+    return object.kind === 'PROGRAM' && typeof payload?.source === 'string'
+  })
+  test.skip(!pou, 'Revision đang chạy không khai POU nào có thân đọc được')
+  const objectID = pou!.objectId as string
+  const activeSource = ((pou!.payload as JsonObject).source as string)
+
+  // Mở LIVE trong trình duyệt.
+  const liveUrl = `/eng/programming/programs?project=${projectID}&pou=${objectID}&mode=LIVE`
+  await page.goto(liveUrl)
+  const usernameField = page.getByLabel(/Tên đăng nhập|Username/i)
+  if (await usernameField.isVisible().catch(() => false)) {
+    await usernameField.fill('admin')
+    await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+    await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+    await page.waitForURL(/\/eng\/programming\/programs/, { timeout: 15_000 })
+  }
+
+  const liveSource = page.getByLabel(/Mã nguồn đang chạy/)
+  await expect(liveSource).toBeVisible({ timeout: 20_000 })
+  // Bằng đúng thân Revision đang chạy — không phải "trông giống", mà BẰNG.
+  expect(await liveSource.inputValue()).toBe(activeSource)
+
+  // Và nếu Draft đã đi tiếp, LIVE tuyệt đối không được hiện bản đó.
+  const project = await responseJSON(
+    await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) }), 200)
+  const draftText = JSON.stringify(project.draft ?? {})
+  if (!draftText.includes(JSON.stringify(activeSource))) {
+    // Draft khác Active: chính là trường hợp nguy hiểm mà case này tồn tại để chặn.
+    expect(await liveSource.inputValue()).toBe(activeSource)
+  }
+
+  // Chỉ đọc là thuộc tính của CHẾ ĐỘ: phiên này đang là admin.
+  await expect(liveSource).toHaveAttribute('readonly', '')
+  await expect(page.getByText('Chỉ đọc với mọi vai')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Lưu', exact: true })).toHaveCount(0)
+
+  // Khay workbench phải khai đúng chế độ đang xem.
+  await expect(page.getByText(/^LIVE · /)).toBeVisible()
+
+  // Revision đang chạy phải hiện ra để người đọc biết mình đang xem gói nào.
+  await expect(page.getByText(activeRevisionID!)).toBeVisible()
 })

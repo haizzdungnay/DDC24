@@ -159,6 +159,63 @@ export function activeProgramSetReasonLabel(
  * của Draft v2 — và với POU kind `PROGRAM`, `payload.programConfig` mang thêm
  * `programId`/`periodMs` (xem `draft.go: revisionPayload`).
  */
+/**
+ * `T59-811` / `AC-ST-007` — nguồn của MỘT POU trong Revision đang chạy.
+ *
+ * Chế độ LIVE phải hiện **nguồn Active**, không bao giờ hiện Draft. Hai thứ đó
+ * trông giống hệt nhau trên màn hình: cùng một cửa sổ, cùng một tên POU, cùng
+ * một thứ tiếng ST. Người vận hành đọc nhầm Draft thành thứ đang điều khiển tủ
+ * là một lỗi không có dấu hiệu bên ngoài nào cả.
+ *
+ * Vì vậy hàm này dùng lại **đúng** chuỗi kiểm của `activeProgramSet` — kể cả
+ * `REVISION_MISMATCH`, chốt chặn thật sự chống mượn Draft — và trả `source:
+ * null` kèm `reason` ở mọi nhánh không chứng minh được. Không có nhánh nào rơi
+ * về Draft.
+ */
+export interface ActiveProgramSource {
+  revisionId: string | null
+  objectId: string | null
+  language: ProgrammingProgram['language'] | null
+  /** `null` ⇒ KHÔNG được vẽ gì; `reason` nói vì sao. */
+  source: string | null
+  reason: ActiveProgramSetReason | 'SOURCE_UNREADABLE' | 'POU_NOT_IN_REVISION' | null
+}
+
+export function activeProgramSource(
+  input: ActiveProgramSetInput & { objectId: string | null },
+): ActiveProgramSource {
+  const base = activeProgramSet(input)
+  if (base.reason !== null && base.reason !== 'NO_PROGRAM_DECLARED') {
+    return { revisionId: base.revisionId, objectId: input.objectId, language: null, source: null, reason: base.reason }
+  }
+  if (!input.objectId) {
+    return { revisionId: base.revisionId, objectId: null, language: null, source: null, reason: 'POU_NOT_IN_REVISION' }
+  }
+
+  const revision = input.revision as Record<string, unknown>
+  const snapshot = isRecord(revision.snapshot) ? revision.snapshot : null
+  const objects = snapshot && Array.isArray(snapshot.objects) ? snapshot.objects : []
+  for (const entry of objects) {
+    if (!isRecord(entry)) continue
+    const payload = isRecord(entry.payload) ? entry.payload : null
+    const objectId = typeof entry.objectId === 'string' ? entry.objectId : null
+    if (objectId !== input.objectId) continue
+
+    const language = payload && (payload.language === 'ST' || payload.language === 'FBD') ? payload.language : null
+    const source = payload && typeof payload.source === 'string' ? payload.source : null
+    if (source === null) {
+      /* POU có mặt trong Revision nhưng thân của nó không đọc được. Đây KHÔNG
+       * phải "chương trình rỗng": một chương trình rỗng vẫn có `source: ""`. */
+      return { revisionId: base.revisionId, objectId, language, source: null, reason: 'SOURCE_UNREADABLE' }
+    }
+    return { revisionId: base.revisionId, objectId, language, source, reason: null }
+  }
+
+  /* POU đang mở không có trong Revision đang chạy — thường vì nó mới được tạo ở
+   * Draft và chưa Commission. Nói thẳng, đừng hiện Draft thay thế. */
+  return { revisionId: base.revisionId, objectId: input.objectId, language: null, source: null, reason: 'POU_NOT_IN_REVISION' }
+}
+
 function programDeclaration(entry: unknown): ActiveProgramDeclaration | null {
   if (!isRecord(entry)) return null
   const payload = isRecord(entry.payload) ? entry.payload : null
