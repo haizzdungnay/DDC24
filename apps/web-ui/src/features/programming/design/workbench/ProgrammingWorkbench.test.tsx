@@ -60,8 +60,12 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/cần nguồn giá trị runtime/)
     expect(screen.getByRole('status')).toHaveTextContent(/Chế độ EDIT chỉ có Draft/)
 
+    /* Trace KHÔNG cùng lý do với Watch: nó sở hữu một phiên có quota và vòng
+     * đời riêng, nên nó thuộc về đúng một nơi (PGM-06) ở MỌI chế độ. Mở phiên
+     * thứ hai từ workbench là đúng thứ AC "không duplicate concurrent trace
+     * session" cấm. */
     fireEvent.click(screen.getByRole('tab', { name: 'Trace' }))
-    expect(screen.getByRole('status')).toHaveTextContent(/Trace cần nguồn giá trị runtime/)
+    expect(screen.getByRole('status')).toHaveTextContent(/phiên có quota và vòng đời riêng/)
   })
 
   it('khay Vấn đề nhảy tới đúng chỗ, và lỗi không neo được thì nói thẳng', () => {
@@ -185,5 +189,60 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     const height = Number.parseInt((screen.getByRole('tabpanel') as HTMLElement).style.height, 10)
     expect(height).toBeLessThanOrEqual(520)
     expect(height).toBeGreaterThanOrEqual(120)
+  })
+})
+
+/* `T59-811` — Watch trong workbench ở chế độ LIVE.
+ *
+ * Điều đáng khoá không phải "có bảng" mà là: bảng này chiếu từ CHÍNH snapshot
+ * trang cha đã poll, và nó không tự diễn giải lại giá trị. Luật "null/BAD/
+ * OFFLINE không bao giờ thành 0" sống ở `presentStRuntimeValue`; workbench chỉ
+ * nhận `display`/`state` đã tính sẵn. */
+describe('ProgrammingWorkbench — Watch ở LIVE (T59-811)', () => {
+  const rows = [
+    { variableId: 'v1', name: 'SupplyTemp', display: '21.5', state: 'live' as const, unit: 'degC' },
+    { variableId: 'v2', name: 'Missing', display: '—', state: 'invalid' as const, unit: 'degC' },
+  ]
+
+  function renderLiveWatch(watch: typeof rows | [] | null) {
+    render(
+      <I18nProvider>
+        <ProgrammingWorkbench
+          mode="LIVE" sourceLabel="Active · AHU" problems={[]} symbols={[]} source={null}
+          onJumpToOffset={vi.fn()} checkOwnerHref="/x" watch={watch}
+          traceOwnerHref="/eng/programming/runtime?tab=watch"
+        />
+      </I18nProvider>,
+    )
+  }
+
+  it('hiện giá trị đã trình bày sẵn, và KHÔNG thêm đơn vị vào ô không hợp lệ', () => {
+    renderLiveWatch(rows)
+    fireEvent.click(screen.getByRole('tab', { name: /Watch/ }))
+    const panel = screen.getByRole('tabpanel')
+    expect(within(panel).getByText('21.5 degC')).toBeInTheDocument()
+    // `—` là "không có dữ liệu"; gắn đơn vị vào đó làm nó trông như một số đo.
+    expect(within(panel).getByText('—')).toBeInTheDocument()
+    expect(within(panel).queryByText('— degC')).toBeNull()
+  })
+
+  it('tab Watch đếm đúng số biến đang theo dõi', () => {
+    renderLiveWatch(rows)
+    expect(screen.getByRole('tab', { name: 'Watch (2)' })).toBeInTheDocument()
+  })
+
+  it('có nguồn nhưng POU không có biến ánh xạ ⇒ nói đúng vế đó', () => {
+    renderLiveWatch([])
+    fireEvent.click(screen.getByRole('tab', { name: /Watch/ }))
+    // KHÁC HẲN "chế độ này không có nguồn giá trị".
+    expect(screen.getByRole('status')).toHaveTextContent(/không có biến runtime nào được ánh xạ/)
+    expect(screen.queryByText(/Watch cần nguồn giá trị runtime/)).toBeNull()
+  })
+
+  it('Trace vẫn trỏ về nơi sở hữu phiên, kể cả ở LIVE', () => {
+    renderLiveWatch(rows)
+    fireEvent.click(screen.getByRole('tab', { name: 'Trace' }))
+    expect(screen.getByRole('status')).toHaveTextContent(/phiên có quota và vòng đời riêng/)
+    expect(screen.getByRole('link', { name: /Runtime & Bảo trì/ })).toHaveAttribute('href', '/eng/programming/runtime?tab=watch')
   })
 })
