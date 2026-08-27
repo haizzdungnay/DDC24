@@ -132,8 +132,9 @@ kho authoritative từ 2026-08-04 (v2: 6,5 MB sửa lúc 12:05; legacy: 160 kB s
 cuối 04-08), nên **cả 28 điểm đều trả 503** dù dữ liệu vẫn đang được ghi.
 
 Test này khoá hai thứ mà lỗi đó đã vi phạm:
-  · phản hồi phải NÓI RA đã hỏi kho nào (`historySource`);
-  · kho được hỏi phải là kho đang được ghi, không phải kho đầu tiên tiện tay gọi.
+
+	· phản hồi phải NÓI RA đã hỏi kho nào (`historySource`);
+	· kho được hỏi phải là kho đang được ghi, không phải kho đầu tiên tiện tay gọi.
 */
 func TestAlarmEstimateNamesTheHistoryStoreItAsked(t *testing.T) {
 	withoutSimBinaries(t)

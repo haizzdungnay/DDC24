@@ -40,10 +40,10 @@ type SystemHistorySample struct {
 }
 
 type SystemHistoryResponse struct {
-	SchemaVersion int                   `json:"schemaVersion"`
-	GeneratedAt   string                `json:"generatedAt"`
-	WindowS       int                   `json:"windowS"`
-	IntervalS     int                   `json:"intervalS"`
+	SchemaVersion int    `json:"schemaVersion"`
+	GeneratedAt   string `json:"generatedAt"`
+	WindowS       int    `json:"windowS"`
+	IntervalS     int    `json:"intervalS"`
 	// SinceRestart nói thẳng rằng vòng nhớ bắt đầu từ lần khởi động dịch vụ —
 	// người đọc phải biết vì sao biểu đồ ngắn hơn 60 phút ngay sau khi restart.
 	SinceRestart string                `json:"sinceRestart"`

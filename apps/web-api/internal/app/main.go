@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"log"
 	webModbus "mkddc-web/internal/modbusrtu"
 	programmingapplication "mkddc-web/internal/programming/application"
@@ -78,6 +79,7 @@ type App struct {
 	programmingOperations *programmingapplication.OperationService
 	programmingRuntime    *programmingapplication.RuntimeService
 	programmingIntents    *programmingapplication.RuntimeIntentService
+	programmingSimulation *programmingapplication.SimulationService
 	// Plan 57 Wave 3
 	preferences   *UserPreferenceStore
 	systemHistory *SystemHistoryRing
@@ -137,6 +139,24 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming Operation service: %w", operationErr)
 		}
+		// T59-814 / ADR-053: supervisor Simulation phải có TRƯỚC RuntimeService,
+		// vì `GET /capabilities` công bố capability SIMULATE lấy từ đây. Công bố
+		// một capability do FE tự đoán là đúng thứ `DDD §5.5` cấm.
+		simulation := programmingapplication.NewSimulationService(programmingapplication.SimulationOptions{
+			Store: store, Artifacts: artifacts, WorkerBinary: cfg.ProgrammingSimWorkerPath,
+			ControllerID: cfg.ProgrammingTargetID, NewID: uuid.NewString,
+		})
+		// Đối chiếu NGAY lúc khởi động: mọi phiên chưa terminal còn sót là phiên
+		// không còn worker nào chứng minh được token/protocol, nên phải đóng chứ
+		// không attach lại theo PID.
+		if _, reconcileErr := simulation.ReconcileOnStart(context.Background()); reconcileErr != nil {
+			operations.Close()
+			checks.Close()
+			_ = store.Close()
+			return nil, fmt.Errorf("đối chiếu phiên Simulation còn sót: %w", reconcileErr)
+		}
+		app.programmingSimulation = simulation
+
 		runtimeService, runtimeErr := programmingapplication.NewRuntimeService(programmingapplication.RuntimeServiceOptions{
 			Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
 			Store:        store,
@@ -145,6 +165,14 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			Overrides:    app.programmingPointCatalog(),
 			ControllerID: cfg.ProgrammingTargetID,
 			CursorSecret: []byte(cfg.JWTSecret),
+			WorkspaceModes: func() programmingapplication.WorkspaceModesView {
+				return programmingapplication.WorkspaceModesView{
+					ContractVersion: "PGM02-WORKSPACE-V1",
+					Edit:            programmingapplication.WorkspaceModeSupport{Supported: true},
+					Live:            programmingapplication.WorkspaceModeSupport{Supported: true},
+					Simulation:      simulation.Capability(),
+				}
+			},
 		})
 		if runtimeErr != nil {
 			_ = store.Close()

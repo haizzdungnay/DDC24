@@ -34,6 +34,9 @@ type RuntimeServiceOptions struct {
 	CursorSecret []byte
 	Now          func() time.Time
 	NewID        func() string
+	// WorkspaceModes được TIÊM vào chứ không tự dựng: capability Simulation
+	// thuộc supervisor R3, và RuntimeService không có việc gì biết về worker.
+	WorkspaceModes func() WorkspaceModesView
 }
 
 // RuntimeService chiếu trạng thái authoritative của Core (CAPABILITIES/STATUS)
@@ -51,6 +54,8 @@ type RuntimeService struct {
 	now          func() time.Time
 	newID        func() string
 	traces       *runtimeTraceStore
+
+	workspaceModesFn func() WorkspaceModesView
 }
 
 func NewRuntimeService(options RuntimeServiceOptions) (*RuntimeService, error) {
@@ -71,7 +76,7 @@ func NewRuntimeService(options RuntimeServiceOptions) (*RuntimeService, error) {
 	return &RuntimeService{
 		runtime: options.Runtime, store: options.Store, catalog: options.Catalog, monitor: options.Monitor, overrides: options.Overrides,
 		controllerID: options.ControllerID, cursorSecret: options.CursorSecret, now: now, newID: newID,
-		traces: newRuntimeTraceStore(),
+		traces: newRuntimeTraceStore(), workspaceModesFn: options.WorkspaceModes,
 	}, nil
 }
 
@@ -88,6 +93,24 @@ type CapabilitiesView struct {
 	Types         []string           `json:"types"`
 	TaskPeriodsMs []int              `json:"taskPeriodsMs"`
 	Limits        CapabilitiesLimits `json:"limits"`
+	// WorkspaceModes là bổ sung ADDITIVE của PGM-02 (`DDD-SW-PGM02-WORKSPACE-001`
+	// §5.5). Vắng mặt nghĩa là server đời cũ, và FE phải coi mọi mode mới là
+	// UNAVAILABLE thay vì đoán — đó là lý do nó dùng con trỏ chứ không phải
+	// struct rỗng.
+	WorkspaceModes *WorkspaceModesView `json:"workspaceModes,omitempty"`
+}
+
+// WorkspaceModesView nói CHÍNH XÁC những gì controller này làm được, không nói
+// increment nào đang chạy. FE đọc nó để quyết định hiện hay ẩn từng chế độ.
+type WorkspaceModesView struct {
+	ContractVersion string               `json:"contractVersion"`
+	Edit            WorkspaceModeSupport `json:"edit"`
+	Live            WorkspaceModeSupport `json:"live"`
+	Simulation      SimulationCapability `json:"simulation"`
+}
+
+type WorkspaceModeSupport struct {
+	Supported bool `json:"supported"`
 }
 
 type CapabilitiesLimits struct {
@@ -138,7 +161,19 @@ func (s *RuntimeService) GetCapabilities(ctx context.Context) (CapabilitiesView,
 			ProjectsPerController: 1, Tasks: 1, StSourceBytes: 65536, Variables: 512,
 			Statements: 4096, FbdBlocks: 256, FbdConnections: 512, ArtifactBytes: 1048576, Bindings: 256,
 		},
+		WorkspaceModes: s.workspaceModes(),
 	}, nil
+}
+
+// workspaceModes trả nil khi chưa được tiêm, để phản hồi giữ nguyên hình dạng
+// cũ thay vì công bố một capability rỗng mà FE có thể đọc nhầm thành "đã hỏi và
+// câu trả lời là không".
+func (s *RuntimeService) workspaceModes() *WorkspaceModesView {
+	if s == nil || s.workspaceModesFn == nil {
+		return nil
+	}
+	view := s.workspaceModesFn()
+	return &view
 }
 
 func (s *RuntimeService) GetRuntime(ctx context.Context) (RuntimeView, error) {

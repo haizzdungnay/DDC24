@@ -15,13 +15,13 @@ import (
 )
 
 var (
-	scheduleIDRe    = regexp.MustCompile(`^SCH-[A-Za-z0-9_-]{1,60}$`)
-	exceptionIDRe   = regexp.MustCompile(`^EXC-[A-Za-z0-9_-]{1,60}$`)
-	targetIDRe      = regexp.MustCompile(`^TGT-[A-Za-z0-9_-]{1,60}$`)
-	calendarIDRe    = regexp.MustCompile(`^CAL-[A-Za-z0-9_-]{1,60}$`)
-	holidayGroupRe  = regexp.MustCompile(`^HG-[A-Za-z0-9_-]{1,60}$`)
-	scheduleTimeRe  = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$`)
-	scheduleDateRe  = regexp.MustCompile(`^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$`)
+	scheduleIDRe   = regexp.MustCompile(`^SCH-[A-Za-z0-9_-]{1,60}$`)
+	exceptionIDRe  = regexp.MustCompile(`^EXC-[A-Za-z0-9_-]{1,60}$`)
+	targetIDRe     = regexp.MustCompile(`^TGT-[A-Za-z0-9_-]{1,60}$`)
+	calendarIDRe   = regexp.MustCompile(`^CAL-[A-Za-z0-9_-]{1,60}$`)
+	holidayGroupRe = regexp.MustCompile(`^HG-[A-Za-z0-9_-]{1,60}$`)
+	scheduleTimeRe = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$`)
+	scheduleDateRe = regexp.MustCompile(`^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$`)
 )
 
 var scheduleValueTypes = map[string]bool{

@@ -363,8 +363,8 @@ func handleGetConfig[T any](a *App, w http.ResponseWriter, group configAPIGroup,
 
 func (a *App) writeConfigGroup(r *http.Request, group configAPIGroup, cfg any) (ConfigPutResult, error) {
 	/* `T57-3.14`: chụp bản ĐANG lưu trước khi ghi đè, để vết audit nói được
-	   *sửa cái gì* chứ không chỉ *đã sửa*. Đọc hỏng thì bỏ phần tóm tắt —
-	   không được để một tiện ích nhật ký chặn đường ghi cấu hình. */
+	 *sửa cái gì* chứ không chỉ *đã sửa*. Đọc hỏng thì bỏ phần tóm tắt —
+	 không được để một tiện ích nhật ký chặn đường ghi cấu hình. */
 	previous := a.readConfigGroupRaw(group)
 
 	data, err := json.MarshalIndent(cfg, "", "  ")

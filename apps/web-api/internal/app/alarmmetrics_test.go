@@ -115,7 +115,7 @@ func TestAlarmHistoryPruneDropsOldLinesAndKeepsRecent(t *testing.T) {
 	path := filepath.Join(dir, "alarm_history.jsonl")
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
 
-	old := alarmEvent("ALM-OLD", "started", "active", now.AddDate(0, 0, -(alarmHistoryRetentionDays + 5)))
+	old := alarmEvent("ALM-OLD", "started", "active", now.AddDate(0, 0, -(alarmHistoryRetentionDays+5)))
 	recent := alarmEvent("ALM-NEW", "started", "active", now.Add(-time.Hour))
 	lines := []string{}
 	for _, event := range []AlarmHistoryEvent{old, recent} {

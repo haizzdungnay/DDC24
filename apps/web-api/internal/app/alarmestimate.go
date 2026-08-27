@@ -144,13 +144,13 @@ func (a *App) handleEstimateAlarmSetting(w http.ResponseWriter, r *http.Request)
 /*
 readPointHistoryForEstimate đọc lịch sử điểm qua ĐÚNG kho đang được ghi.
 
-BÀI HỌC PHẢI GHI LẠI Ở ĐÂY, VÌ NÓ ĐÃ LÀM TÍNH NĂNG NÀY CHẾT HẲN NGOÀI HIỆN TRƯỜNG
+# BÀI HỌC PHẢI GHI LẠI Ở ĐÂY, VÌ NÓ ĐÃ LÀM TÍNH NĂNG NÀY CHẾT HẲN NGOÀI HIỆN TRƯỜNG
 
 Bản đầu của `T57-3.13` gọi thẳng `a.trends.Query(...)` — kho trend **legacy**.
 Trên máy dev nó không sai rõ ràng vì cả hai kho đều rỗng. Trên board thật thì:
 
-    /data/config/historian-v2.sqlite   6,5 MB   sửa lúc 2026-08-19 12:05
-    /data/mkddc/trend.sqlite           160 kB   sửa lần cuối 2026-08-04 10:53
+	/data/config/historian-v2.sqlite   6,5 MB   sửa lúc 2026-08-19 12:05
+	/data/mkddc/trend.sqlite           160 kB   sửa lần cuối 2026-08-04 10:53
 
 Historian v2 đã là kho authoritative từ 15 ngày trước; kho legacy chết từ đó.
 Hệ quả: **cả 28 điểm đều trả 503 "không có mẫu lịch sử"** dù dữ liệu vẫn đang

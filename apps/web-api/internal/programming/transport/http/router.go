@@ -71,6 +71,28 @@ var routeDefinitions = []routeDefinition{
 	// idempotency key và body bắt buộc: một lệnh gỡ khoá vận hành phải nêu lý do.
 	{method: "POST", path: "/api/v1/programming/runtime/recovery-reset",
 		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
+
+	// T59-814 / ADR-053 — Simulation R3.
+	//
+	// Mọi route mutation khai `RoleAdmin` ở ĐÂY, không chỉ ở lớp application:
+	// bất biến của repo (xem `security_matrix_test.go`) là handler KHÔNG được
+	// chạy khi thiếu quyền. Nhờ vậy một vai không đủ quyền không tạo ra side
+	// effect nào, kể cả một lần đọc làm lộ sự tồn tại của phiên.
+	//
+	// `SET_INPUT` đi bằng PUT trên resource input và `STOP` đi bằng DELETE trên
+	// resource session: chúng là hành động sản phẩm nhưng cần identity và
+	// idempotency riêng (`DDD-SW-PGM02-WORKSPACE-001` §5.4).
+	{method: "POST", path: "/api/v1/programming/simulation/sessions",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
+	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", role: auth.RoleViewer},
+	{method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}",
+		role: auth.RoleAdmin, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", role: auth.RoleViewer},
+	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", role: auth.RoleViewer},
 }
 
 // RegisterProgrammingRoutes chỉ mount contract khi flag bật. Khi flag tắt,
@@ -83,6 +105,7 @@ type Services struct {
 	Operations *programmingapplication.OperationService
 	Runtime    *programmingapplication.RuntimeService
 	Intents    *programmingapplication.RuntimeIntentService
+	Simulation *programmingapplication.SimulationService
 }
 
 func RegisterProgrammingRoutes(routes *[]webrouter.Route, enabled bool, provided ...Services) {
@@ -117,6 +140,9 @@ func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition
 		return
 	}
 	if services.Runtime != nil && handleRuntimeRequest(w, r, correlationID, services.Runtime) {
+		return
+	}
+	if services.Simulation != nil && handleSimulationRequest(w, r, correlationID, services.Simulation) {
 		return
 	}
 	if services.Intents != nil && handleRecoveryResetRequest(w, r, correlationID, services.Intents) {

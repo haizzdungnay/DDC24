@@ -50,20 +50,24 @@ type Config struct {
 	// ProgrammingRevA mở các route contract Programming Rev A. Mặc định tắt để
 	// binary có thể được triển khai trước contract consumer mà không lộ endpoint
 	// mutation chưa nối với Core.
-	ProgrammingRevA            bool
-	ProgrammingDBPath          string
-	ProgrammingBackupDir       string
-	ProgrammingStateDir        string
-	ProgrammingArtifactDir     string
-	ProgrammingStagingDir      string
-	ProgrammingScratchDir      string
-	ProgrammingSocket          string
-	ProgrammingCoreUID         uint32
-	ProgrammingCompilerPath    string
-	ProgrammingPackagerPath    string
+	ProgrammingRevA         bool
+	ProgrammingDBPath       string
+	ProgrammingBackupDir    string
+	ProgrammingStateDir     string
+	ProgrammingArtifactDir  string
+	ProgrammingStagingDir   string
+	ProgrammingScratchDir   string
+	ProgrammingSocket       string
+	ProgrammingCoreUID      uint32
+	ProgrammingCompilerPath string
+	ProgrammingPackagerPath string
+	// ProgrammingSimWorkerPath — worker mô phỏng ephemeral (ADR-053). Rỗng hoặc
+	// thiếu file nghĩa là capability SIMULATE TẮT: không có trạng thái "bật một
+	// nửa", và FE hiển thị UNAVAILABLE thay vì tự dựng một simulator thay thế.
+	ProgrammingSimWorkerPath string
 	// ProgrammingSigningKeyPath — khoá riêng của chính bo (ADR-052). Compiler
 	// worker ký artifact bằng khoá này; Core tin nó qua `--st-trusted-key`.
-	ProgrammingSigningKeyPath string
+	ProgrammingSigningKeyPath  string
 	ProgrammingTargetID        string
 	ProgrammingCompilerTimeout time.Duration
 	WebVersion                 string
@@ -121,6 +125,7 @@ func LoadConfig() (Config, error) {
 		ProgrammingCoreUID:         uint32(os.Getuid()),
 		ProgrammingCompilerPath:    getenv("PROGRAMMING_COMPILER", "/usr/sbin/mkddc-st-compile"),
 		ProgrammingPackagerPath:    getenv("PROGRAMMING_PACKAGER", "/usr/sbin/mkddc-st-package"),
+		ProgrammingSimWorkerPath:   os.Getenv("PROGRAMMING_SIM_WORKER"),
 		ProgrammingSigningKeyPath:  getenv("PROGRAMMING_SIGNING_KEY", "/data/mkddc/keys/device.key"),
 		ProgrammingTargetID:        getenv("PROGRAMMING_TARGET_ID", "controller-local"),
 		ProgrammingCompilerTimeout: 10 * time.Second,
