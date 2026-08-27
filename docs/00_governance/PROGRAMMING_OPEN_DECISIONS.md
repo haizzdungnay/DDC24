@@ -54,6 +54,7 @@ viết code; đó là **evidence bắt buộc để mở `RELEASE_READY`**.
 | `UD-PROG-012` | Implementation review được waive khỏi entry; release evidence không waive. | CLOSED | ADR-050.10 |
 | `UD-PROG-013` | Editor ST của PGM-02 **giữ bề mặt hiện tại cho R1**; không thêm CodeMirror 6 vào `apps/web-ui`. | CLOSED | Product Owner/CTO + System Architect, 2026-08-26 — [`GATE-PROG-ST-EDITOR-DEP-001`](PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) §4.1/§5 |
 | `UD-PROG-014` | PGM-02 mở **nhiều tab POU** song song (phương án B). | **CLOSED** | Chủ sở hữu cấp ba ảnh render PGM-02 ngày 2026-08-27 kèm chỉ thị thi hành; cả ST lẫn FBD đều thể hiện tab bar |
+| `UD-PROG-016` | Chỉ mục ký hiệu **do compiler sinh** cho hover ST — nửa BE của `PGM02-V22-WP-04`. Hover đã giao ở `T59-820` bằng chỉ mục dựng từ nguồn; nguồn thẩm quyền compiler thì chưa có đường nào tới. | **OPEN — chờ Owner** | Đo 2026-08-27: web-api KHÔNG có đường tới compiler ST (nó nằm ở `apps/core/application/st`, chỉ có IPC vòng đời) |
 | `UD-PROG-015` | Ba trường Inspector trong ảnh (`Access`, `Description`, `Cycle (in Task)` dạng tên Task) **chưa có nguồn dữ liệu** trong Draft v2. | **OPEN — chờ Owner** | Đo tại `ed6fb21`: `upsertProgramConfig` chỉ có `programId`/`objectId`/`periodMs` |
 
 ### 1.2 `UD-PROG-013` — bề mặt editor ST cho R1
@@ -99,6 +100,20 @@ offline/air-gapped.
 > R3, hoặc Owner ký hoãn tường minh **có thời hạn**. Không chấp nhận để trạng
 > thái trôi thêm một increment nữa.
 >
+> **Xử lý 2026-08-27 (`T59-820`).** Phần dư tách làm hai nửa và có kết cục khác
+> nhau:
+>
+> - **Hover symbol/type/signature — ĐÃ GIAO.** Lý do hoãn ở R1 là ngân sách của
+>   CodeMirror 6 (110,07 KiB gzip). Nhưng `PGM-02A §4` đòi **hành vi**, không
+>   đòi thư viện: ba lớp gutter/overlay/textarea của editor đã dùng chung một
+>   lưới đơn khoảng cố định, nên toạ độ → offset là số học thuần. Chi phí thật
+>   đo được là **1,30 KiB** gzip (127,67 → 128,97 KiB, ngân sách R3 165 KiB),
+>   tức **nhỏ hơn 85 lần** con số từng dùng để hoãn. Ngân sách chưa bao giờ là
+>   rào cản cho chính hover — nó là rào cản cho một editor engine thứ hai.
+> - **Chỉ mục do compiler sinh — chuyển thành [`UD-PROG-016`](#15-ud-prog-016-—-chỉ-mục-ký-hiệu-do-compiler-sinh-đang-mở).**
+>   Đây là nửa BE và nó không có đường đi nào ở kiến trúc hiện tại; xem đo đạc ở
+>   mục đó.
+>
 > Nguồn: [`REC-PGM02-AUD-ADJ-001`](../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md) `F-PGM02-AUD-003`.
 
 ### 1.3 `UD-PROG-014` — nhiều tab POU (ĐÃ CHỐT: phương án B)
@@ -128,6 +143,58 @@ hai ngôn ngữ** trong cùng một workspace. Đó là câu trả lời cho câ
 Bất biến không được vi phạm: `objectId` là trục định danh của tab, **không** phải
 tên POU (`UD-PROG-003`, DDD §3.5). Hai tab không bao giờ được chia chung một
 buffer soạn thảo.
+
+### 1.5 `UD-PROG-016` — chỉ mục ký hiệu do compiler sinh (ĐANG MỞ)
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Trạng thái | **OPEN — chờ Product Owner/CTO + System Architect** |
+| Ngày mở | 2026-08-27 |
+| Hạn ký | **2026-09-10** (kết thúc R3). Đây là hạn TƯỜNG MINH thay cho lời hứa "mở lại từ R2" đã trôi một increment |
+| Chặn | Không chặn gì đang chạy. Hover đã hoạt động bằng chỉ mục dựng từ nguồn |
+
+**Đã giao rồi thì còn thiếu gì.** `T59-820` giao hover đọc chỉ mục dựng từ
+**nguồn đang gõ** (`stReferenceIndex.ts`), dùng chung đúng một đường phân giải
+với `ContextInspector`. Chỉ mục đó tự khai giới hạn thẩm quyền ngay trong
+tooltip: nó phục vụ điều hướng, không phán nguồn đúng hay sai. Thứ còn thiếu là
+chỉ mục do **compiler** sinh — nguồn duy nhất biết chắc kiểu sau khi phân giải.
+
+**Đo tại `main` 2026-08-27 — vì sao nó không phải một lát nhỏ:**
+
+| Mắt xích | Hiện trạng |
+|---|---|
+| Compiler ST | Có thật, `apps/core/application/st/st_parser.hpp` + `st_compile.hpp`; AST mang `StVarDecl{name,type}` và `StFbDecl{name,fb_type,user_type_name}` — tức chỉ mục **dẫn xuất được** |
+| IPC Core ↔ web-api | 12 action, toàn bộ là **vòng đời** (`STAGE`/`ACTIVATE`/`STATUS`/`TRACE_*`…). **Không có** action nào nhận mã nguồn |
+| web-api → compiler | **Không tồn tại**. `grep exec.Command` trong `internal/programming` trả 0; `checks.go` chạy invariant ở Go, không parse ST |
+| OpenAPI | **Không có** operation nào nhận ST source; `createProgrammingCheck` chạy trên Revision đã niêm phong |
+
+Giao nó nghĩa là một lát dọc bốn tầng: action IPC mới + bump `protocolMinor`,
+service Go, operation OpenAPI mới, rồi FE.
+
+**Và một câu hỏi thiết kế mà plan chưa trả lời — đây mới là lý do thật phải hỏi
+Owner, không phải khối lượng.** Chỉ mục compiler mô tả **ảnh chụp nào**:
+
+- **Theo buffer đang gõ:** đúng thứ người dùng đang nhìn, nhưng là một vòng IPC
+  cho mỗi lần gõ phím, trên một thiết bị nhúng đang chạy chương trình điều
+  khiển thật.
+- **Theo Revision đã niêm phong:** rẻ và chạy được ngay, nhưng chỉ mục **lạc
+  hậu** so với buffer. Hover khi đó sẽ nói kiểu của một dòng mã người dùng vừa
+  sửa xong — và nó nói bằng giọng thẩm quyền của compiler. Điều đó **tệ hơn**
+  chỉ mục dựng từ nguồn hiện tại, vốn luôn khớp thứ đang hiển thị và tự khai là
+  không có thẩm quyền.
+
+Ba lựa chọn: **(A)** giữ nguyên hiện trạng, đóng `WP-04` với hover từ chỉ mục
+nguồn và ghi rõ giới hạn thẩm quyền trong hợp đồng; **(B)** làm lát dọc theo
+buffer, kèm ngân sách độ trễ đo trên bo và cơ chế gộp/huỷ request; **(C)** làm
+theo Revision niêm phong, và khi đó **bắt buộc** nhãn "chỉ mục thuộc bản đã niêm
+phong, không phải bản đang gõ" ngay trong tooltip.
+
+**Khuyến nghị kỹ thuật (không phải quyết định):** A. Chỉ mục nguồn đã trả lời
+đúng câu người dùng hỏi khi rê chuột, và nó không bao giờ nói dối về thẩm quyền
+của mình. B chỉ đáng làm khi có nhu cầu thật về type-checking trong lúc gõ, và
+lúc đó nó là một hạng mục có kế hoạch riêng chứ không phải phần đuôi của một
+task hover. **Tuyệt đối không** chọn C mà bỏ nhãn — một chỉ mục lạc hậu đeo phù
+hiệu compiler là cách nhanh nhất để người vận hành tin sai.
 
 ### 1.4 `UD-PROG-015` — ba trường Inspector chưa có nguồn dữ liệu (ĐANG MỞ)
 

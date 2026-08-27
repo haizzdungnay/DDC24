@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.55 |
+| Phiên bản | 1.56 |
 | Trạng thái | **Active — PGM-02 v2.2 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; release NO-GO** |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -42,7 +42,7 @@ chứng minh code, target, HIL hoặc release.
 |---:|---|---|---|
 | 1 | `docs/00_governance/CONTROL.md` | `fd932a62e62d1d870506ca59395ea7c52d0f741636ab0b1a2d007ebab405dd4c` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 2 | `docs/00_governance/DECISIONS.md` | `76d48ad1cce0a1fda2c17e8b5d5135562bf3f296d7eb630458dfd12db7d84041` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `1ca2be1995dd609c61ee9dcd9e0bbd6812bc8a55f05010541b46d0fef9ee34d1` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `a01b9030953b77a63d8a428d487a08550499b0b13f8eca3556e9ef5c078b77d8` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 4 | `docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md` | `9e75880a1e5a5dd900c4cdb10f771e2602e79f048c354e0398b90d2cef13a356` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 5 | `docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md` | `f41e4b3d68beee81aeae87b62a9c08f5375adb3a0a9b054949d7a21c2d18b335` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 6 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `be230f495072a1ac306c0bb0622e58bd5ed0409d1a42605b38e6b0cc8e6e0be8` | `413a043748dce3b44d2c5076412de761760ba17a` |
@@ -54,7 +54,7 @@ chứng minh code, target, HIL hoặc release.
 | 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `eedd394e476a56e46933cf88798720c02a1924ef22148911ebaf9fdd99b04f17` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `40fcc8d098060f910a944373badcf9d2874d180ba9b08e37afe9e746fc9da03b` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `2dc98b84df4abecdd2c64fa0ea11feb0e5edcc3c82d853f8d1571757449a83e6` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `d61bcf39cf8e19f41e3427bf3ffbc13b0f97a253ef612cc9ef928c618d76bc47` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `00c091c9a6da799e0478941a8cb3ec33cbc708a9c61319215364ba3a9e41f5b6` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `9d9969a721db22cf4ac1c05fa6343e8e1ae1efd2164571ba82407496c80afb33` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 17 | `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` | `131b195e830d9c182d8ae197d9bc4b7a967e9b11256934e505601eb516c84980` | `413a043748dce3b44d2c5076412de761760ba17a` |
 
@@ -91,6 +91,7 @@ evidence release.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.56 | 2026-08-27 | Re-pin `#3` (`PROGRAMMING_OPEN_DECISIONS.md`) và `#15` (Plan59) sau khi `T59-820` giao hover ký hiệu ST. **Đánh giá impact:** `#3` xử lý phần dư `UD-PROG-013` (nửa hover ĐÃ GIAO, đo thật 1,30 KiB gzip so với 110,07 KiB của CodeMirror từng dùng để hoãn) và mở `UD-PROG-016` OPEN cho nửa chỉ mục do compiler sinh, **hạn ký 2026-09-10**; `#15` đổi `T59-820` READY→DONE kèm số đo. Không đổi Product/SRS/Architecture/DDD/UX/VVP/Trace/Risk; không đổi contract. `RELEASE_READY` giữ NO-GO. |
 | 1.55 | 2026-08-27 | Re-pin dòng `#15` (Plan59) sau khi `T59-819` đóng nhánh Compare Draft↔Active còn nợ của `PGM02-V22-WP-09`. **Đánh giá impact:** `#15` đổi trạng thái `T59-819` READY→DONE (HOST/LOCAL), ghi số đo thật và hạ dòng `WP-09` về DONE trọn; không đổi Product/SRS/Architecture/DDD/UX/VVP/Trace/Risk. **Contract đổi cùng phiên nhưng NGOÀI bảng ghim:** OpenAPI 1.29.0→1.30.0 ADDITIVE (`stHunks[]`/`fbdChanges[]`/`truncated`/`nextCursor`), re-pin `openapiSha256` ở `pgm02_workspace_v1.json` và `g1_contract_join_v1.json`. `RELEASE_READY` giữ NO-GO. |
 | 1.54 | 2026-08-27 | *(dòng lịch sử bổ sung hồi tố 2026-08-27 — bản gốc `7e6a330` bump header mà quên ghi)* Re-pin `#15` (Plan59) và `#13` (`PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md`) khi đóng `T59-814` và mở `T59-815`. |
 | 1.53 | 2026-08-27 | *(dòng lịch sử bổ sung hồi tố 2026-08-27 — bản gốc `b50b525` bump header mà quên ghi)* Re-pin `#3` (`PROGRAMMING_OPEN_DECISIONS.md`), `#14` (`PROGRAMMING_VERIFICATION_PLAN.md`) và `#15` (Plan59) khi đóng `T59-813` và đóng increment R2. |
