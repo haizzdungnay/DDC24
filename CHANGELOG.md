@@ -8,6 +8,22 @@
 
 ## [Unreleased]
 
+### Governance — ghi tiến độ `T59-811` và hai bài học về lane real-backend (2026-08-27)
+
+- **`T59-811` `PARTIAL`.** Đã giao: LIVE là component riêng đọc nguồn Active
+  fail-closed, chỉ đọc theo **chế độ** chứ không theo vai, capability + route mở
+  ở R2, và case real-backend đối chiếu ba nguồn độc lập. Chưa giao: Watch/Trace
+  **trong workbench** ở chế độ LIVE, overlay LIVE cho FBD, và kiểm "mọi role
+  read-only" bằng phiên **viewer thật** trên trình duyệt.
+
+- **Hai bài học về lane real-backend ghi vào §3.9**, vì cả hai đều tốn thời gian
+  và đều sẽ tái diễn: (1) **không tự Commission trong test** — lane dùng chung
+  một Core cho cả file, nên một test commission thêm Revision sẽ đỏ tuỳ thứ tự
+  chạy; (2) lane từng **ghi tài khoản vào file config trong repo**.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only.
+
+
 ### Security — lane E2E thật ghi tài khoản vào file config được commit (2026-08-27)
 
 - **Fixed — chín tài khoản `viewer*` do test tạo đã lọt vào
