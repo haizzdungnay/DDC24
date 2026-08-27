@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-059` |
-| Phiên bản | 2.20 |
-| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; increment R1 ĐÓNG (`VS-PROG-U13` PASS R1/HOST); R2 đang chạy — `T59-810` DONE, `T59-811` PARTIAL; `T59-812..817` ORDERED; RELEASE_READY NO-GO** |
+| Phiên bản | 2.21 |
+| Trạng thái | **Baseline Active; 69 task/9 Wave có authority; increment R1 ĐÓNG (`VS-PROG-U13` PASS R1/HOST); R2 đang chạy — `T59-810`/`T59-811` DONE, `T59-812` READY; `T59-813..817` ORDERED; RELEASE_READY NO-GO** |
 | Ngày | 2026-08-25 |
 | Chủ quản | Product Owner/CTO + System Architect + Dev Lead |
 | Authority | Product v3.0; ADR-050; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
@@ -95,7 +95,7 @@ W0 Contract/Migration foundation
 
 AUTH-PROG-2026-08-24-05 → W8 reconciliation (`T59-801` DONE)
                           → R1 EDIT (`T59-802..809` DONE — increment ĐÓNG)
-                          → R2 LIVE (`T59-810` DONE → `T59-811` PARTIAL → `T59-812/813` ORDERED)
+                          → R2 LIVE (`T59-810`/`T59-811` DONE → `T59-812` READY → `T59-813` ORDERED)
                           → R2 LIVE (`T59-810..813` ORDERED sau `T59-809`)
                           → R3 SIMULATE (`T59-814..817` ORDERED sau `T59-813`)
 ```
@@ -2730,8 +2730,8 @@ Consumer/discipline/Verification/Document Control review là
 | `T59-808` | R1 / `PGM02-V22-WP-10-R1` + `WP-11-R1` | Budget bundle/render, a11y/responsive/security hardening cho EDIT | `T59-807 DONE` | **DONE (HOST/LOCAL)** | Ngân sách chunk thành **cổng chặn được** (`verify_programming_bundle_budget.py`, chạy trong chính `npm run build`; hai nhánh FAIL đã kiểm) — kèm đính chính bẫy đơn vị kB/KiB. Bốn khổ màn đã pin đều có case tràn ngang; **lỗi thật bắt được ở 1024 px** (ô lưới `min-width:auto` kéo track `1fr` phình, document 1039 px) đã sửa bằng `min-w-0`. `focusRingMinPx=2` đo bằng `getComputedStyle`; bàn phím đi hết mode switcher + workbench; bấm LIVE bằng Enter giữ nguyên `mode=EDIT`. RBAC negative hai tầng: backend 403/200 (lane real) và giao diện viewer/operator read-only. Hostile source: 8 nguồn ngoài subset (`AC-ST-010`) + tên/nguồn chứa HTML hiện thành chữ, không tạo phần tử và không chạy script. FE **152 file/1718 test**; mock E2E **42 PASS/8 skip**; real-backend **2/2**; chunk **111,32 KiB / 125 KiB**. Chi tiết §3.9 |
 | `T59-809` | R1 / `PGM02-V22-WP-12-R1` + `WP-13-R1` | Chạy/record `VS-PROG-U13`, trace/risk/manifest/rollback và closeout R1 | `T59-808 DONE` | **DONE (HOST/LOCAL)** | Record [`EV-PGM02-R1-CLOSEOUT-001`](../07_records/test-evidence/programming/2026-08-26-pgm02-t59-809-r1-closeout.md) tại commit `d32e560`: ctest **1299/1299**, Go vet+test PASS, FE **152 file/1718 test**, E2E mock **42 PASS/8 skip**, **real-backend 2/2**, hợp đồng FBD self-test **10/10**, `docs_iso_harness` PASS, chunk **111,32/125 KiB**. `VS-PROG-U13` ghi **PASS ở phạm vi R1/HOST-LOCAL**; `U14`/`U15` giữ `NOT_RUN`. Rollback R1 = build lại **không** cờ `VITE_PROGRAMS_WORKSPACE_V2` (mặc định TẮT), không cần migration — kèm cảnh báo đã ghi: rollback **Core** xuống trước lát hợp đồng hình học thì phải xoá `layout` khỏi tài liệu FBD đã lưu. **Không** nâng `I/T/P/R` của requirement nào — bằng chứng host không mở được cột đó. Chi tiết §3.9 |
 | `T59-810` | R2 / `PGM02-V22-WP-09` | Producer→Core IPC→BE contract cho Active document/value tuple, generation/sequence/freshness và Trace pin | `T59-809 DONE` + `IMPLEMENT_READY[PGM02-R2]=GO` | **DONE (HOST/LOCAL)** | `producer.capturedMonotonicNs` (chuỗi thập phân — ns kể từ boot vượt `Number.MAX_SAFE_INTEGER` sau ~104 ngày uptime) đi hết contract/BE/FE; luật thứ tự tách ba trạng thái `STALE`/`PRODUCER_RESTARTED`/`UNAVAILABLE`, so bằng BigInt; snapshot không có dấu đọc được **không được vẽ**; restart hiện ra cho người vận hành. **Trace pin**: phiên neo tuple Active bằng chính snapshot đã xác thực biến, kiểm tuple **trước** khi lấy mẫu ở cả hai đường, ba dạng trôi (đổi Revision / mốc lùi / dấu hỏng) đều fail closed, và dừng-do-trôi **không** tính là mẫu rơi. Real-backend **3/3 PASS** gồm case chứng minh monitor↔Trace↔Revision nói cùng một tuple; Go 10 case bảng + 1 test tích hợp; FE **153 file/1737 test**; E2E mock **42/8 skip**; chunk **111,89/125 KiB**. Chi tiết §3.9 |
-| `T59-811` | R2 / `PGM02-V22-WP-06-R2` | LIVE read-only controller/overlay/Watch/Trace trong FE | `T59-810 DONE` | **PARTIAL (HOST/LOCAL)** | **Đã giao:** `LiveProgramSource`/`LiveProgramView` — LIVE là component RIÊNG chứ không phải editor tắt sửa (Draft và Active trông giống hệt nhau trên màn hình, nên tái dùng editor rồi tắt Lưu là đường rò không có dấu hiệu bên ngoài). `activeProgramSource` dùng lại đúng chuỗi kiểm của `activeProgramSet` kể cả `REVISION_MISMATCH`; bảy nhánh không chứng minh được đều trả `source: null` kèm lý do RIÊNG; chương trình rỗng (`""`) vẫn khác thân không đọc được. Chỉ đọc là thuộc tính của CHẾ ĐỘ, không phải của vai. LIVE mở ở capability + route; SIMULATE giữ đóng và vẫn nói lý do. Real-backend **4/4** gồm case đối chiếu BA nguồn độc lập (màn hình ↔ thân Revision qua API ↔ Draft). FE **154 file/1755 test**; chunk **113,04/125 KiB**. **Chưa giao:** Watch/Trace *trong workbench* ở chế độ LIVE (hai tab đó vẫn báo cần nguồn runtime), overlay LIVE cho FBD, và kiểm `mọi role read-only` bằng phiên viewer thật trên trình duyệt. Chi tiết §3.9 |
-| `T59-812` | R2 / `PGM02-V22-WP-10-R2` + `WP-11-R2` | Budget 10 Hz, unsubscribe/leak, a11y/responsive/security/fault hardening LIVE | `T59-811 DONE` | **ORDERED — dependency** | Budget NFR R2, monotonic rendering, reconnect bounded, no leaked subscription và role bypass |
+| `T59-811` | R2 / `PGM02-V22-WP-06-R2` | LIVE read-only controller/overlay/Watch/Trace trong FE | `T59-810 DONE` | **DONE (HOST/LOCAL)** | LIVE là component RIÊNG (`LiveProgramView`/`LiveFbdView`), không phải editor tắt sửa; nguồn đọc qua `activeProgramSource` fail-closed bảy nhánh, mỗi nhánh một lý do riêng. ST vẽ nguồn Active, FBD vẽ **sơ đồ** (canvas thuần, không mount palette/toolbar) — `AC-FBD-011` là bất biến cấu trúc vì tài liệu là prop và `dispatch` chỉ nhận `SELECT`. Watch trong workbench chiếu từ **chính** snapshot trang cha đã poll; Trace trỏ về PGM-06 vì nó sở hữu phiên có quota. Chỉ đọc là thuộc tính của **chế độ**, kiểm bằng phiên **viewer thật**: viewer vẫn ĐỌC được. FE **156 file/1762 test**; E2E mock **44 PASS/10 skip**; real-backend **5/5** (chạy hai lượt liên tiếp sau khi gỡ flake dev-server); chunk **113,87/125 KiB**. Chi tiết §3.9 |
+| `T59-812` | R2 / `PGM02-V22-WP-10-R2` + `WP-11-R2` | Budget 10 Hz, unsubscribe/leak, a11y/responsive/security/fault hardening LIVE | `T59-811 DONE` | **READY** | Budget NFR R2, monotonic rendering, reconnect bounded, no leaked subscription và role bypass |
 | `T59-813` | R2 / `PGM02-V22-WP-12-R2` + `WP-13-R2` | Chạy/record `VS-PROG-U14`, target browser/read-back, trace/risk/rollback và closeout R2 | `T59-812 DONE` | **ORDERED — dependency** | Producer→UI→read-back evidence đúng hash; chỉ R2 có verdict, R3 vẫn unavailable |
 | `T59-814` | R3 / `PGM02-V22-WP-07` | Simulation API/store/supervisor/private protocol + `mkddc-programming-sim-worker`, sandbox/cgroup/seccomp/virtual time/input allowlist | `T59-813 DONE`; `ADR-053 Accepted`; `IMPLEMENT_READY[PGM02-R3]=GO` | **ORDERED — dependency** | Worker không có production handle; admin-only mutation; idempotency/quota/restart/expiry/determinism fault tests PASS |
 | `T59-815` | R3 / `PGM02-V22-WP-08` | SIMULATE FE session/controls/input/observation/trace, permission và save-required flow | `T59-814 DONE` | **ORDERED — dependency** | viewer/operator read-only; admin action read-back; dirty Draft không spawn worker; stale session recovery PASS |
@@ -3063,9 +3063,32 @@ Hai bài học về lane real-backend, ghi lại vì cả hai đều tốn thờ
    repo kèm hash của một mật khẩu ai cũng biết. Đã sửa: user store là bản sao
    tạm, và chín tài khoản đã lọt bị xoá.
 
-Còn lại của `T59-811`: Watch/Trace **trong workbench** ở chế độ LIVE, overlay
-LIVE cho FBD, và kiểm "mọi role read-only" bằng phiên **viewer thật** trên trình
-duyệt.
+**Ba mục còn lại đã đóng nốt trong cùng phiên:**
+
+- **Watch trong workbench** chiếu từ **chính** snapshot trang cha đã poll, và
+  không tự diễn giải lại giá trị — `presentStRuntimeValue` là nơi duy nhất biết
+  luật "null/BAD/OFFLINE không bao giờ thành 0". **Trace** thì không: nó sở hữu
+  một phiên có quota, stop reason và ring của Core, nên workbench **trỏ tới**
+  PGM-06 thay vì mở phiên thứ hai.
+- **FBD ở LIVE** vẽ **sơ đồ** chứ không phải JSON thô, bằng canvas thuần —
+  không mount cả `StructuredFbdEditor`, vì editor mang theo palette/toolbar/bộ
+  lệnh sửa và tắt từng thứ là một danh sách phải nhớ giữ đúng mãi mãi.
+  `AC-FBD-011` thành bất biến **cấu trúc**: tài liệu là prop, `dispatch` chỉ
+  nhận `SELECT`.
+- **"Mọi role read-only"** kiểm bằng phiên **viewer thật**, và vế đáng kiểm là
+  viewer **vẫn đọc được** — chặn ghi mà làm mù luôn thì người trực ca không xem
+  được thứ đang chạy trên tủ họ đang đứng cạnh.
+
+Hai lỗi thật lát cuối phơi ra, cả hai do chính phiên này tạo ra:
+
+1. **Hai bộ poll monitor cùng chạy.** `LiveProgramView` tự gọi hook trong khi
+   trang cha đã poll cùng endpoint — không chỉ gấp đôi tải, mà hai hook giữ
+   **hai dãy `capturedMonotonicNs` độc lập**, nên luật thứ tự của `T59-810` chạy
+   trên hai lịch sử khác nhau. Sửa: truyền snapshot xuống làm prop.
+2. **Lane real-backend flake ở đúng một chỗ, hai lần.** Lane phục vụ bằng vite
+   dev server; một lần transform hụt làm `RouteErrorBoundary` dựng lên và mọi
+   locator sau đó treo tới hết timeout. `openWorkspaceRoute` nạp lại **một** lần
+   rồi khẳng định boundary đã biến mất — vẫn hỏng thì là lỗi thật.
 
 ## 4. Bảng ownership
 
@@ -3159,6 +3182,7 @@ truy nguyên As-Built đến 2026-08-20.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.21 | 2026-08-27 | Đóng `T59-811` `DONE (HOST/LOCAL)`: Watch trong workbench, FBD ở LIVE bằng canvas thuần, và "mọi role read-only" kiểm bằng viewer thật. Gỡ hai lỗi do chính phiên tạo ra (poll monitor trùng; flake dev-server). `T59-812` chuyển `READY`. |
 | 2.20 | 2026-08-27 | `T59-811` PARTIAL: LIVE là component riêng đọc nguồn Active fail-closed, chỉ đọc theo chế độ chứ không theo vai, mở capability + route; real-backend đối chiếu ba nguồn độc lập. Ghi hai bài học về lane real-backend (không tự Commission; lane từng ghi tài khoản vào config trong repo). |
 | 2.19 | 2026-08-26 | Đóng `T59-810` `DONE (HOST/LOCAL)`: Trace pin (neo tuple, kiểm trước khi lấy mẫu, ba dạng trôi fail closed) và case real-backend chứng minh monitor↔Trace↔Revision cùng một tuple. `T59-811` chuyển `READY`. |
 | 2.18 | 2026-08-26 | Mở R2: `T59-810` PARTIAL — dấu producer (`capturedMonotonicNs`) đi hết ba tầng contract/BE/FE, luật thứ tự tách ba trạng thái, snapshot không có nguồn gốc không được vẽ, và restart hiện ra cho người vận hành. Còn Trace pin + case real-backend end-to-end. |

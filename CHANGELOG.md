@@ -8,6 +8,19 @@
 
 ## [Unreleased]
 
+### Governance — đóng `T59-811`, mở `T59-812` (2026-08-27)
+
+- **Changed — `T59-811` `DONE (HOST/LOCAL)`.** LIVE đủ cả ST và FBD, Watch trong
+  workbench chiếu snapshot chung, và "mọi role read-only" kiểm bằng phiên viewer
+  thật. Ghi chú §3.9 giữ lại **hai lỗi do chính phiên này tạo ra** — poll monitor
+  trùng và flake dev-server — vì cả hai đều là loại sẽ tái diễn.
+
+- **`T59-812` chuyển `READY`** — budget 10 Hz, unsubscribe/leak, a11y/responsive/
+  security/fault hardening cho LIVE.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only.
+
+
 ### PGM-02 R2 — sơ đồ FBD của gói đang chạy (`T59-811` / `AC-FBD-009..011`) (2026-08-27)
 
 - **Added — LIVE vẽ SƠ ĐỒ, không phải JSON thô.** POU ngôn ngữ FBD ở chế độ LIVE
