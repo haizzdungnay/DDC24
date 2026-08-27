@@ -251,13 +251,197 @@ export function useProgrammingCheck(checkId: string | undefined): RemoteState<Pr
  * nhóm do MÁY CHỦ tính (bao gồm cutover/activeOverrides đọc Core thật qua
  * `RuntimeImpactProvider` đã nối sẵn ở `NewOperationService`). `from='none'`
  * khi chưa có Active Revision. */
-export function useProgrammingRevisionChanges(fromRevisionId: string | undefined, toRevisionId: string | undefined): RemoteState<ProgrammingRevisionChanges> {
+export function useProgrammingRevisionChanges(
+  fromRevisionId: string | undefined,
+  toRevisionId: string | undefined,
+  cursor?: string | null,
+): RemoteState<ProgrammingRevisionChanges> {
   const client = useProgrammingApiClient()
   const load = useCallback(() => {
     if (!toRevisionId) return Promise.reject(new Error('toRevisionId is required'))
-    return client.request<ProgrammingRevisionChanges>('compareProgrammingRevisions', { path: { from: fromRevisionId ?? 'none', to: toRevisionId } })
-  }, [client, fromRevisionId, toRevisionId])
+    // `cursor` chỉ đi kèm khi phản hồi trước nói còn phần chưa đọc. Bịa một
+    // cursor ở lần gọi đầu là cách bỏ mất đúng phần đầu danh sách.
+    return client.request<ProgrammingRevisionChanges>('compareProgrammingRevisions', {
+      path: { from: fromRevisionId ?? 'none', to: toRevisionId },
+      ...(cursor ? { query: { cursor } } : {}),
+    })
+  }, [client, fromRevisionId, toRevisionId, cursor])
   return useProgrammingResource(load, 0)
+}
+
+export interface ProgrammingRevisionComparisonState extends RemoteState<ProgrammingRevisionChanges> {
+  loadingMore: boolean
+  /**
+   * Lỗi khi đọc TRANG TIẾP, tách hẳn khỏi `error`.
+   *
+   * Hai loại hỏng này đòi hai cách xử khác nhau. Cả phép so hỏng thì không có
+   * gì đáng tin để vẽ. Còn trang tiếp hỏng thì phần đã tải VẪN ĐÚNG: gộp nó
+   * vào `error` sẽ xoá sạch danh sách người dùng đang đọc vì một lỗi mạng
+   * thoáng qua, và cùng lúc giấu luôn chính nút thử lại.
+   */
+  loadMoreError: string | null
+  loadMore: (cursor: string) => void
+}
+
+interface ComparisonSnapshot {
+  key: string | null
+  status: RemoteState<ProgrammingRevisionChanges>['status']
+  data: ProgrammingRevisionChanges | null
+  error: string | null
+  loadMoreError: string | null
+  loadingMore: boolean
+}
+
+/**
+ * Đường đọc chuyên biệt cho khay Compare T59-819.
+ *
+ * Hook tài nguyên dùng chung cố ý giữ data cũ trong lúc dependency đổi; hành vi
+ * đó hữu ích cho bảng/poll thông thường nhưng nguy hiểm với Compare vì có thể
+ * ghép header của cặp Revision mới với diff của cặp cũ. Hook này gắn state với
+ * đúng tuple, xoá data khỏi GIÁ TRỊ TRẢ VỀ ngay khi tuple đổi và tự ghép cursor
+ * theo một chuỗi duy nhất.
+ */
+export function useProgrammingRevisionComparison(
+  fromRevisionId: string | undefined,
+  toRevisionId: string | undefined,
+): ProgrammingRevisionComparisonState {
+  const client = useProgrammingApiClient()
+  const { pick } = useI18n()
+  const key = fromRevisionId && toRevisionId ? `${fromRevisionId}\u0000${toRevisionId}` : null
+  const generation = useRef(0)
+  const consumedCursors = useRef(new Set<string>())
+  const inFlightCursor = useRef<string | null>(null)
+  const snapshotRef = useRef<ComparisonSnapshot>({
+    key: null, status: 'loading', data: null, error: null, loadMoreError: null, loadingMore: false,
+  })
+  const [snapshot, setSnapshotState] = useState<ComparisonSnapshot>(snapshotRef.current)
+
+  const setSnapshot = useCallback((next: ComparisonSnapshot | ((current: ComparisonSnapshot) => ComparisonSnapshot)) => {
+    setSnapshotState((current) => {
+      const value = typeof next === 'function' ? next(current) : next
+      snapshotRef.current = value
+      return value
+    })
+  }, [])
+
+  const validateTuple = useCallback((value: ProgrammingRevisionChanges) => {
+    if (value.fromRevisionId !== fromRevisionId || value.toRevisionId !== toRevisionId) {
+      throw new Error(pick(
+        'Máy chủ trả bảng khác biệt của một cặp Revision khác; dữ liệu đã bị từ chối.',
+        'The server returned a difference table for another revision pair; the data was rejected.',
+      ))
+    }
+    return value
+  }, [fromRevisionId, pick, toRevisionId])
+
+  const requestPage = useCallback((cursor?: string) => {
+    if (!fromRevisionId || !toRevisionId) return Promise.reject(new Error('revision pair is required'))
+    return client.request<ProgrammingRevisionChanges>('compareProgrammingRevisions', {
+      path: { from: fromRevisionId, to: toRevisionId },
+      ...(cursor ? { query: { cursor } } : {}),
+    }).then(validateTuple)
+  }, [client, fromRevisionId, toRevisionId, validateTuple])
+
+  const refresh = useCallback(() => {
+    const myGeneration = ++generation.current
+    consumedCursors.current.clear()
+    inFlightCursor.current = null
+    if (!key) {
+      setSnapshot({ key: null, status: 'loading', data: null, error: null, loadMoreError: null, loadingMore: false })
+      return
+    }
+    setSnapshot({ key, status: 'loading', data: null, error: null, loadMoreError: null, loadingMore: false })
+    Promise.resolve().then(() => requestPage()).then(
+      (value) => {
+        if (myGeneration !== generation.current) return
+        setSnapshot({ key, status: 'ready', data: value, error: null, loadMoreError: null, loadingMore: false })
+      },
+      (reason: unknown) => {
+        if (myGeneration !== generation.current) return
+        setSnapshot({
+          key, status: 'error', data: null, loadMoreError: null,
+          error: programmingResourceErrorMessage(pick, reason), loadingMore: false,
+        })
+      },
+    )
+  }, [key, pick, requestPage, setSnapshot])
+
+  useEffect(() => {
+    refresh()
+    return () => { generation.current += 1 }
+  }, [refresh])
+
+  const loadMore = useCallback((cursor: string) => {
+    const current = snapshotRef.current
+    // `status === 'error'` VẪN được đọc tiếp khi `data` còn: đó chính là ca
+    // thử lại sau một lần đọc trang hỏng. Đòi `'ready'` ở đây là cách đường
+    // retry bên dưới không bao giờ chạy được.
+    if (!key || current.key !== key || current.status === 'loading' || !current.data) return
+    if (current.data.nextCursor !== cursor || !cursor || consumedCursors.current.has(cursor) || inFlightCursor.current) {
+      return
+    }
+    consumedCursors.current.add(cursor)
+    inFlightCursor.current = cursor
+    const myGeneration = generation.current
+    setSnapshot({ ...current, status: 'ready', loadingMore: true, loadMoreError: null })
+    Promise.resolve().then(() => requestPage(cursor)).then(
+      (page) => {
+        if (myGeneration !== generation.current || inFlightCursor.current !== cursor) return
+        inFlightCursor.current = null
+        /* Máy chủ vi phạm hợp đồng phân trang: `nextCursor` trỏ về một trang
+         * đã đọc. Đi tiếp là quay vòng vô hạn — nhưng chính trang VỪA nhận thì
+         * hợp lệ, vì nó về từ một cursor chưa từng tiêu thụ. Vứt nó đi là tự
+         * đánh mất những khác biệt máy chủ đã gửi đúng, nên nó vẫn được ghép;
+         * chỉ đường đi tiếp bị cắt. */
+        const loopingCursor = (page.nextCursor && consumedCursors.current.has(page.nextCursor))
+          || page.nextCursor === cursor
+        setSnapshot((latest) => {
+          if (latest.key !== key || !latest.data) return latest
+          return {
+            key,
+            status: 'ready',
+            error: null,
+            loadingMore: false,
+            loadMoreError: loopingCursor
+              ? pick(
+                'Máy chủ trả cursor lặp; danh sách đã dừng để tránh lặp hoặc bỏ sót khác biệt.',
+                'The server returned a repeated cursor; loading stopped to avoid duplicate or missing differences.',
+              )
+              : null,
+            data: {
+              ...latest.data,
+              stHunks: [...(latest.data.stHunks ?? []), ...(page.stHunks ?? [])],
+              fbdChanges: [...(latest.data.fbdChanges ?? []), ...(page.fbdChanges ?? [])],
+              // Cursor quay vòng ⇒ `truncated` giữ nguyên bật để danh sách tự
+              // khai là chưa đầy đủ, và `nextCursor` bị bỏ để không mời thử lại
+              // một đường đã chứng minh là quay vòng.
+              truncated: loopingCursor ? true : page.truncated,
+              nextCursor: loopingCursor ? null : (page.nextCursor ?? null),
+            },
+          }
+        })
+      },
+      (reason: unknown) => {
+        if (myGeneration !== generation.current || inFlightCursor.current !== cursor) return
+        inFlightCursor.current = null
+        // Request lỗi chưa tiêu thụ trang; cho phép người dùng retry đúng
+        // cursor đó thay vì khoá vĩnh viễn phần danh sách còn lại.
+        consumedCursors.current.delete(cursor)
+        // Danh sách đã tải vẫn ĐÚNG — chỉ trang tiếp hỏng. Xoá nó đi vì một
+        // lỗi mạng thoáng qua là vứt luôn phần người dùng đang đọc.
+        setSnapshot((latest) => ({
+          ...latest, loadingMore: false,
+          loadMoreError: programmingResourceErrorMessage(pick, reason),
+        }))
+      },
+    )
+  }, [key, pick, requestPage, setSnapshot])
+
+  // Tuple đổi trước khi effect chạy vẫn phải fail-closed ngay trong render.
+  if (!key || snapshot.key !== key) {
+    return { status: 'loading', data: null, error: null, loadMoreError: null, refresh, loadingMore: false, loadMore }
+  }
+  return { ...snapshot, refresh, loadMore }
 }
 
 /** `GET /overrides` — bảng override thủ công còn hiệu lực (UX §16.3 `ActiveOverrideTable`). */

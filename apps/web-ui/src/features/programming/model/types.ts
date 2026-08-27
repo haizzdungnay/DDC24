@@ -12,7 +12,7 @@
  * `ProgrammingProgramRuntimeState` (xem khối re-export ngay dưới).
  */
 
-import type { ProgrammingImpact } from '../api/generated/client'
+import type { ProgrammingFbdChange, ProgrammingImpact, ProgrammingStHunk } from '../api/generated/client'
 
 /**
  * `GET /projects/{projectId}/programs` — re-export NGUYÊN VẸN từ client sinh
@@ -42,11 +42,13 @@ import type { ProgrammingImpact } from '../api/generated/client'
  * khai tay và trỏ về đúng một nguồn.
  */
 export type {
+  ProgrammingFbdChange,
   ProgrammingProgramHealth,
   ProgrammingProgramListItem,
   ProgrammingProgramRuntimeState,
   ProgrammingProgramRuntimeStateSource,
-  ProgrammingProgramsPage
+  ProgrammingProgramsPage,
+  ProgrammingStHunk
 } from '../api/generated/client'
 
 export type ProgrammingTargetState = 'READY' | 'DEGRADED' | 'UNAVAILABLE'
@@ -521,6 +523,21 @@ export interface ProgrammingRevisionChanges {
   toRevisionId: string
   impact: ProgrammingImpact
   changes: ProgrammingRevisionChange[]
+  /**
+   * `T59-819` — diff typed do MÁY CHỦ tính. Hai mảng này sinh thẳng từ schema
+   * OpenAPI (`ProgrammingStHunk`/`ProgrammingFbdChange`) chứ không khai tay:
+   * enum `changeType` của chúng quyết định UI vẽ "đổi logic" hay chỉ "đổi chỗ
+   * đứng trên canvas", và một bản khai tay lệch sẽ lệch im lặng.
+   *
+   * Optional ở đây là để đọc được phản hồi của server đời cũ — và FE PHẢI phân
+   * biệt `undefined` ("server chưa biết so") với `[]` ("đã so, không có gì").
+   */
+  stHunks?: ProgrammingStHunk[]
+  fbdChanges?: ProgrammingFbdChange[]
+  /** Danh sách chạm trần payload. Một danh sách bị cắt im lặng trông y hệt một
+   * danh sách đầy đủ, nên cờ này phải được đọc và nói ra. */
+  truncated?: boolean
+  nextCursor?: string | null
 }
 
 /** `GET /operations/{operationId}` — DM-PROG-001 §3.9 state machine. */
