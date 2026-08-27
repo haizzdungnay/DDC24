@@ -251,13 +251,27 @@ function PointPickerDialog({
    * image.cpp gom output CẢ CHƯƠNG TRÌNH vào một batch; một binding không ghi
    * được làm preflight_outputs() từ chối TOÀN BỘ batch — output khác đúng
    * (AO/DO vật lý) cũng không bao giờ commit theo. */
-  const filtered = catalogItems.filter(
+  /* Hai tầng lọc TÁCH RỜI, vì chúng ẩn Point vì hai lý do khác hẳn nhau và chỉ
+   * một trong hai là thứ người dùng tự chọn:
+   *  - `manuallyFiltered`: Loại / Hướng / "Chỉ ghi được" — do người dùng đặt;
+   *  - `filtered`: thêm ràng buộc tương thích với biến đã chọn — do hệ áp.
+   * Gộp chúng làm một thì không nói được vì sao một Point biến mất. */
+  const manuallyFiltered = catalogItems.filter(
     (entry) =>
       (categoryFilter === 'ALL' || entry.category === categoryFilter) &&
       (directionFilter === 'ALL' || entry.direction === directionFilter) &&
-      (!writableOnly || entry.writable) &&
-      (!chosenVariable || isCompatiblePoint(chosenVariable, entry))
+      (!writableOnly || entry.writable)
   )
+  const filtered = manuallyFiltered.filter((entry) => !chosenVariable || isCompatiblePoint(chosenVariable, entry))
+  /* Point bị ràng buộc tương thích loại ra, tách theo LÝ DO. Ẩn im lặng làm
+   * người dùng tưởng danh mục thiếu dữ liệu — đúng câu hỏi "trang map đang
+   * thiếu VP à?" mà người dùng thật đã hỏi khi 5/7 VP biến mất. */
+  const hiddenWrongType = chosenVariable
+    ? manuallyFiltered.filter((entry) => entry.dataType !== chosenVariable.type).length
+    : 0
+  const hiddenWrongDirection = chosenVariable
+    ? manuallyFiltered.filter((entry) => entry.dataType === chosenVariable.type && !isCompatiblePoint(chosenVariable, entry)).length
+    : 0
 
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="programming-point-picker-title" className="rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-surface)] p-4">
@@ -366,6 +380,26 @@ function PointPickerDialog({
           </ul>
         )}
       </div>
+
+      {filtered.length > 0 && (hiddenWrongType > 0 || hiddenWrongDirection > 0) && chosenVariable && (
+        /* Nói ra SỐ bị ẩn và LÝ DO. Danh sách rỗng đã có thông báo riêng phía
+           trên; ca nguy hiểm hơn là danh sách còn vài mục — trông như đầy đủ,
+           nên không ai nghĩ là đã bị lọc. */
+        <p role="status" data-testid="point-picker-hidden-note" className="mt-2 text-xs text-[var(--c-text-dim)]">
+          {pick(
+            `Đã ẩn ${hiddenWrongType + hiddenWrongDirection} Point không ghép được với biến ${chosenVariable.name}` +
+              (hiddenWrongType > 0 ? `: ${hiddenWrongType} khác kiểu ${chosenVariable.type}` : ':') +
+              (hiddenWrongDirection > 0
+                ? `${hiddenWrongType > 0 ? ',' : ''} ${hiddenWrongDirection} sai hướng (biến ${chosenVariable.direction === 'OUTPUT' ? 'OUTPUT cần Point ghi được' : 'INPUT cần Point đọc được'})`
+                : '') + '.',
+            `Hidden ${hiddenWrongType + hiddenWrongDirection} point(s) that cannot bind to ${chosenVariable.name}` +
+              (hiddenWrongType > 0 ? `: ${hiddenWrongType} of a different type than ${chosenVariable.type}` : ':') +
+              (hiddenWrongDirection > 0
+                ? `${hiddenWrongType > 0 ? ',' : ''} ${hiddenWrongDirection} with the wrong direction (an ${chosenVariable.direction} variable needs a ${chosenVariable.direction === 'OUTPUT' ? 'writable' : 'readable'} point)`
+                : '') + '.',
+          )}
+        </p>
+      )}
 
       <div className="mt-3 flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={onCancel}>

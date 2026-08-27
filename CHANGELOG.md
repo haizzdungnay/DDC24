@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### PGM-02 — Bộ chọn Point ẩn ứng viên mà không nói lý do (2026-08-28)
+
+- **Fixed — danh sách còn vài mục trông y hệt một danh sách đầy đủ.** Người dùng
+  thấy chỉ 2 trong 7 VP xuất hiện khi ánh xạ biến `Occupied` và hỏi *"trang map
+  đang thiếu VP à?"*.
+
+  **Bộ lọc không sai.** `isCompatiblePoint` loại Point khác kiểu hoặc sai hướng,
+  và nó tồn tại vì một lý do nghiêm túc: Core gom output cả chương trình vào một
+  batch, nên **một** binding không ghi được làm `preflight_outputs()` từ chối
+  **toàn bộ** batch — những output đúng cũng không bao giờ commit theo. `Occupied`
+  là `BOOL`, nên chỉ VP kiểu `BOOL` ghép được.
+
+  Lỗi là nó **ẩn im lặng**. Khi danh sách rỗng thì đã có thông báo giải thích;
+  nhưng khi còn vài mục thì không gì cả — và đó mới là ca nguy hiểm hơn, vì
+  người đọc không có dấu hiệu nào để nghi ngờ mình đang xem một danh sách đã bị
+  lọc. Người dùng kết luận dữ liệu bị thiếu, chứ không phải bị lọc.
+
+  Cách sửa: tách hai tầng lọc — bộ lọc **thủ công** (Loại/Hướng/"Chỉ ghi được")
+  khác hẳn ràng buộc **tự động** theo biến đã chọn — rồi nêu số Point bị ẩn kèm
+  lý do, tách riêng "khác kiểu" với "sai hướng". Không đụng vào chính bộ lọc.
+
+- **Verification** (2026-08-28): vitest **171 file / 1939 test PASS** (3 ca mới
+  cho ghi chú); lint PASS; build PASS; e2e **54 passed / 11 skipped**. Kiểm trên
+  bo bằng trình duyệt sau khi deploy: bộ chọn hiện
+  *"Hidden 20 point(s) that cannot bind to Occupied: 20 of a different type than
+  BOOL."*
+
 ### PGM-04/PGM-02 — Toàn bộ 46 khối thư viện SYSTEM mất chữ ký và category (2026-08-28)
 
 - **Fixed — Thư viện nhanh báo "Thiếu chữ ký từ thiết bị" cho MỌI mục.** Người
