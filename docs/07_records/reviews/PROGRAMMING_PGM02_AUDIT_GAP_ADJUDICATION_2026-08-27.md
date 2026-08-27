@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REC-PGM02-AUD-ADJ-001` |
-| Phiên bản | 1.0 |
-| Trạng thái | **Adjudicated — 4 finding hợp lệ chuyển thành task; 5 nhóm phát biểu bị bác vì sai baseline** |
+| Phiên bản | 1.1 |
+| Trạng thái | **Adjudicated v1.1 — 4 finding hợp lệ chuyển thành task; phần bác bỏ status bar ĐÃ ĐẢO NGƯỢC ngày 2026-08-27 sau khi chủ sở hữu cấp ba ảnh render (xem §8)** |
 | Ngày | 2026-08-27 |
 | Chủ quản | System Architect + Dev Lead (FE) |
 | Đầu vào được phán quyết | `gap_analysis_programming_page.md` (`GAP-UI-PROGRAMMING-001`, Draft 2026-08-27) |
@@ -269,7 +269,7 @@ của handoff v2.2, và bổ sung phép đo 1280×750 cho chính workspace PGM-0
 
 | Hạng mục auditor nêu | Phán quyết | Lý do |
 |---|---|---|
-| ⑫ Status bar `Ln/Col/INS/LF/UTF-8`, "No changes" | **Bác** | Không có trong handoff v2.2 hay DDD. Dirty state đã được §4 yêu cầu và đã có. Muốn thêm phải mở CR. |
+| ⑫ Status bar `Ln/Col/INS/LF/UTF-8`, "No changes" | ~~Bác~~ → **CHẤP NHẬN** (đảo ngược cùng ngày, §8) | Lý do bác ban đầu: không có trong handoff v2.2 hay DDD. Ba ảnh render chủ sở hữu cấp lúc 15:54 cùng ngày đều có status bar ⇒ vào phạm vi, do `PGM02-V22-WP-15`/`T59-821` sở hữu. |
 | ① Logo "DDC-24 Programming", Project selector dropdown, badge `r17 Draft`/`r15 Active` | **Bác một phần** | Thông tin này đã có ở `ProgrammingContextStrip` + `ContextDetailsPopover` theo đúng DDD §7.3; hình thức khác mockup không phải gap. |
 | ② Sidebar riêng cho Programming | **Bác** | `ProgrammingFeatureRail` + `ProgrammingMobileNav` đã có; sáu mục `PGM-01..06` là `UD-PROG-008` đã CLOSED. |
 | ⑦ Function block dạng thẻ đồ hoạ có sơ đồ chân, kéo-thả từ thư viện | **Bác** | Handoff §5.1 quy định thẻ mang **signature chữ** (`PID — FB — SP REAL, PV REAL → OUT REAL`), có chủ đích. Kéo-thả không có trong hợp đồng. |
@@ -304,7 +304,8 @@ phạm vi đã tuyên của chúng. Riêng `WP-09` bị hạ trạng thái vì n
    bảng nhiệm vụ master; cập nhật dòng trạng thái và bảng disposition WP.
 3. `PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` — §7.2 thêm
    `ContextInspector` và `EditorToolbar` vào cây component; §7.3 thêm hai dòng
-   ánh xạ vùng UI; §1.4 ghi tường minh status bar ngoài phạm vi; revision 0.4.
+   ánh xạ vùng UI; §1.4 ghi status bar ngoài phạm vi; revision 0.4. **Dòng §1.4
+   này đã bị đảo ngược cùng ngày ở DDD 0.5 — xem §8.**
 4. `PROGRAMMING_OPEN_DECISIONS.md` — mở `UD-PROG-014` (tab đa POU) và ghi phần
    dư `UD-PROG-013` cần disposition.
 5. `CHANGELOG.md` — entry dưới `[Unreleased]`.
@@ -318,3 +319,76 @@ phạm vi đã tuyên của chúng. Riêng `WP-09` bị hạ trạng thái vì n
 - **`UD-PROG-014` cần Owner quyết**, không tự chốt: tab đa POU đổi state model
   FE và luật dirty-guard giữa các POU, tức chạm `DD-07` của DDD.
 - **`RELEASE_READY` vẫn `NO-GO`** và không finding nào ở đây đổi điều đó.
+
+---
+
+## 8. Đảo ngược một phần §4 — ghi nhận 2026-08-27, cùng ngày
+
+Sau khi hồ sơ này phát hành, chủ sở hữu cấp ba ảnh render PGM-02 và ra chỉ thị
+thi hành. Ba ảnh đã đăng ký vào `handoff_manifest.json` **2.3**:
+`assets/PGM-02A_ST_editor_reference.png`,
+`assets/PGM-02B_FBD_editor_reference.png`,
+`assets/PGM-02_ST_FBD_annotated_reference.png`.
+
+### 8.1 Cái tôi kết luận sai, và vì sao
+
+§4 bác status bar với lý do "không có trong handoff v2.2". Lý do đó **đúng với
+bằng chứng lúc đó**: gói handoff dạng văn bản không nhắc status bar ở bất kỳ
+mục nào. Nhưng nó **sai về kết luận**, vì tôi coi phần văn bản của gói handoff là
+toàn bộ hợp đồng, trong khi visual reference cũng là hợp đồng — và bản visual
+đầy đủ chỉ xuất hiện sau đó.
+
+Cả hai ảnh đều có status bar: ST hiện `Ln 1, Col 1 · INS · LF · UTF-8 ·
+No changes`; FBD hiện `Ready · Ln 1, Col 1 (100%) · FBD · Online`.
+
+**Disposition:** status bar **trong phạm vi**, do `PGM02-V22-WP-15` / `T59-821`
+sở hữu. `DDD-SW-PGM02-WORKSPACE-001` 0.5 §1.4 đã gạch bỏ dòng "ngoài phạm vi",
+§7.2 thêm `WorkspaceStatusBar`, §7.3 thêm dòng ánh xạ, §10.2 thêm
+`TC-PGM02-SB-01`.
+
+### 8.2 Cái ba ảnh xác nhận là đúng
+
+| Finding | Ảnh xác nhận |
+|---|---|
+| `F-PGM02-AUD-001` Inspector | Cả hai ảnh có panel Inspector đầy đủ; ST ngữ cảnh `Program`, FBD ngữ cảnh `Block Instance` |
+| `F-PGM02-AUD-004a` toolbar | Cả hai ảnh có hàng công cụ riêng dưới tab bar |
+| `F-PGM02-AUD-004b` tab đa POU | Cả hai ảnh có tab bar; ảnh FBD hiện tab bắc qua **hai ngôn ngữ** ⇒ `UD-PROG-014` chốt phương án **B** |
+| `F-PGM02-AUD-002` Compare | Ảnh không vẽ Compare drawer, nhưng không mâu thuẫn: đây là drawer mở theo yêu cầu, và scope đã có tên trong `WP-09` |
+
+### 8.3 Cái ba ảnh KHÔNG chứng minh — và team không được làm theo
+
+Ảnh là tham chiếu **bố cục và phạm vi**, không phải nguồn dữ liệu. Đo trực tiếp
+tại `7e6a330` cho thấy ảnh chứa ba nhóm nội dung không có thật:
+
+1. **Quick Library FBD** hiện category `HVAC` và block `P`, `PI`, `PID_AutoTune`,
+   `Ramp`. Registry `pou_library_registry_v1.json` (`libraryVersion: rev-a.3`)
+   **không có** category `HVAC` và **không có** bốn block đó; `categoryOrder`
+   thật là `interface · constants · logic · compare · math · conversion · timer ·
+   counter · trigger · control`.
+2. **PID** là ví dụ trung tâm của cả hai ảnh, nhưng registry ghi
+   `featureState: REVIEW_REQUIRED` và `product_profile_v2.schema.json` quy định
+   Check **chặn** mọi Program dùng nó tới khi có approval token Controls/Safety
+   (`UD-PROG-010`).
+3. **Ba trường Inspector** `Access`, `Description`, tên Task `Control_Main` không
+   có nguồn trong Draft v2 (`draft_v2.go:349-377` chỉ có `programId`/`objectId`/
+   `periodMs`) ⇒ `UD-PROG-015` mở, đang chờ Owner.
+
+Ba nhóm này được viết thành luật cứng trong
+[`PROMPT-PGM02-EDITOR-CHROME`](../../03_implementation/PROMPT_PGM02_EDITOR_CHROME_EXECUTION.md)
+§2, vì rủi ro thực tế ở đây không phải team làm thiếu, mà là team làm cho **giống
+ảnh** rồi vô tình bịa nội dung thư viện và làm mềm một cổng an toàn.
+
+### 8.4 Hệ quả với bảng §5
+
+`F-PGM02-AUD-004b` không còn là "Decision chờ Owner": `UD-PROG-014` **CLOSED**,
+phương án B. `T59-821` mở rộng thành **editor chrome** (toolbar + tab + status
+bar + Code Map) và chuyển `READY (một phần)` → `READY`. Phát sinh một quyết định
+mới đang mở: `UD-PROG-015`, chặn đúng ba trường của `T59-818`, không chặn phần
+còn lại.
+
+## 9. Lịch sử
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.1 | 2026-08-27 | Thêm §8: đảo ngược phần bác bỏ status bar sau khi chủ sở hữu cấp ba ảnh render; ghi ba nhóm nội dung trong ảnh không có nguồn dữ liệu; cập nhật hệ quả với `UD-PROG-014`/`UD-PROG-015` và `T59-821` |
+| 1.0 | 2026-08-27 | Phán quyết gốc: bác phần sai baseline, chuyển 4 finding hợp lệ + 1 finding truy nguyên thành `T59-818..822` |

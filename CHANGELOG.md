@@ -8,6 +8,140 @@
 
 ## [Unreleased]
 
+### PGM-02 R3 — bề mặt SIMULATE và hai lỗi của hạ tầng nó dựng lên (`T59-815`) (2026-08-27)
+
+- **Fixed — `F-P59-RUN-NOOP-001`: nút Chạy nói dối.** `T59-814` cài `RUN` thành
+  một lần đổi chuỗi trạng thái trong DB. Không tick nào chạy: đồng hồ ảo đứng
+  yên trong khi mọi thứ đọc được đều nói "đang chạy". Không test nào đỏ, vì tất
+  cả đều kiểm chuyển trạng thái chứ không kiểm thời gian có trôi. Supervisor nay
+  có vòng chạy thật, và hai chi tiết trong đó là điều kiện để nút Dừng còn dùng
+  được: tick tự động **không** tăng `session_sequence` (nếu tăng thì client đang
+  RUN không bao giờ giữ được ETag còn hạn, và chính lệnh PAUSE của họ sẽ luôn
+  trượt 409), và tick tới **sau** khi đã PAUSE bị bỏ ở tầng store (vòng lặp dừng
+  ở ranh giới giữa hai tick nên vẫn có thể còn một tick đang bay).
+
+- **Fixed — `F-P59-SIM-TRUSTED-KEY-001`: worker không tin nổi artifact của chính
+  thiết bị.** Worker chỉ tin khoá nhúng lúc build, trong khi compiler ký artifact
+  bằng khoá THIẾT BỊ và Core tin khoá đó qua `--st-trusted-key`. Hệ quả: trên bo
+  thật, **mọi** phiên mô phỏng hỏng ở bước nạp artifact với `SIM-E-002`, và thông
+  điệp không hề nói ra thiếu khoá. Lỗi không lộ ở lát trước vì cổng hành vi tự
+  dựng gói bằng khoá test — đúng tập khoá worker nhúng sẵn. Nay worker nhận
+  `--st-trusted-key`, đọc khoá **trước** hàng rào (sau seccomp thì không mở được
+  file nào nữa), và supervisor suy mặc định từ chính khoá ký thiết bị.
+
+- **Added — bề mặt SIMULATE.** Điều khiển phiên (RUN/PAUSE/STEP/RESET/tốc độ/
+  dừng), khay ngõ vào ảo theo manifest của artifact đã seal, lớp quan sát, và
+  danh tính đầy đủ của thứ đang chạy (phiên, Revision nguồn, hash nội dung, hạn
+  dùng). Băng **KHÔNG CÓ NGÕ RA THẬT** hiện ở mọi trạng thái.
+
+- **Added — ba luật được đẩy vào một mô-đun THUẦN để kiểm được mà không dựng cây
+  component.** (1) Mọi trạng thái đến từ read-back — không nhánh lạc quan nào;
+  bấm Chạy chỉ khoá nút, chữ "đang chạy" chỉ xuất hiện sau khi server xác nhận.
+  (2) Bỏ phản hồi của phiên khác, sequence cũ và epoch cũ — sau `RESET`, mẫu của
+  epoch trước mang đúng hình dạng hợp lệ nhưng nói về một dòng thời gian đã bị
+  xoá. (3) Nguồn `SIMULATION` nằm trong KIỂU dữ liệu chứ không phải một chú
+  thích, nên không có đường nào một giá trị mô phỏng đi vào chỗ đọc gói đang
+  chạy. Sequence so sánh theo CHUỖI vì là uint64 — `Number` mất chính xác từ
+  2^53 và một sequence làm tròn làm `If-Match` sai không ai thấy.
+
+- **Changed — quyền đọc từ capability của server, không từ nhãn vai.** viewer/
+  operator thấy **đủ** thanh điều khiển ở dạng chỉ đọc kèm lý do; ẩn đi làm
+  người trực ca tưởng thiết bị không có khả năng đó. Ô nhập ngõ vào ảo cũng
+  khoá — bàn phím không được là đường vòng. Server vẫn là chốt cuối: viewer nhận
+  403 cho cả create lẫn action.
+
+- **Changed — Draft bẩn không có đường mô phỏng.** Còn thay đổi chưa lưu thì
+  không có nút mở phiên; hash lệch thì server trả `PRG-SIM-SAVE-REQUIRED` và
+  không tạo phiên. Phiên chỉ mở trên Revision đã Kiểm tra đạt, vì worker chỉ
+  nhận artifact bất biến do chính pipeline Check sinh ra.
+
+- **Changed — resolver không còn tự chặn `?mode=SIMULATE`.** Câu trả lời "thiết
+  bị có mô phỏng được không" thuộc capability của server; để hai nơi cùng trả
+  lời sẽ có ngày chúng trả lời khác nhau.
+
+- **Verification.** `ctest` **1312/1312** (build `rc=0`); `go vet` + `go test
+  -count=1` PASS; FE **159 file / 1800 test PASS**, lint PASS, build PASS với
+  chunk Programming **123,80 KiB / 145 KiB (R2)**, dư **25,03 KiB**; real-backend
+  E2E **6/6 PASS** — trong đó case mới chạy worker THẬT và đo: `SET_INPUT` 4,5 →
+  `STEP` cho đầu ra 9 sau đúng một base tick, `RUN` tiến đồng hồ ảo, `PAUSE` dừng
+  thật, `RESET` về 0 kèm epoch mới, viewer bị chặn 403, `STOP` idempotent; cổng
+  `sim_worker_behaviour`/`symbol_boundary` và `verify-project.sh --component
+  layout` PASS.
+
+  Giới hạn: vẫn là lớp **HOST/LOCAL**. `VS-PROG-U15` vẫn **NOT_RUN** — verdict
+  thuộc `T59-817`.
+
+### PGM-02 — ba ảnh thiết kế của chủ sở hữu, prompt thi hành và vá cổng tài liệu (2026-08-27)
+
+- **Added — prompt thi hành `PROMPT-PGM02-EDITOR-CHROME`**
+  (`docs/03_implementation/PROMPT_PGM02_EDITOR_CHROME_EXECUTION.md`): bốn làn
+  song song `T59-818/819/820/821` + đóng `T59-822`, kèm ma trận ánh xạ
+  ảnh→task→luật và bộ lệnh kiểm chứng bắt buộc.
+
+- **Added — ba ảnh render PGM-02 vào hồ sơ được kiểm soát.** Đăng ký vào
+  `handoff_manifest.json` **2.3** dưới `renderedReference` (PGM-02A/PGM-02B) và
+  `annotatedOverview` (PGM-02).
+
+- **Fixed — 17 liên kết chết sau khi ba SVG tham chiếu bị thay bằng PNG.**
+  `7e6a330` xoá `PGM-02A_ST_editor_reference.svg`,
+  `PGM-02B_FBD_editor_reference.svg`, `PGM-02_ST_FBD_combined_reference.svg`
+  nhưng 12 tài liệu vẫn trỏ vào chúng, làm `docs_iso_harness.py` **FAIL**
+  (`link_missing=6` trong tập hồ sơ ghim). Đã trỏ lại toàn bộ sang ba PNG.
+
+- **Changed — đổi tên ba asset về quy ước repo.** Tên có dấu cách
+  (`ST editor program.png`, `FBD editor program.png`, `ChatGPT Image 09_56_53 24
+  thg 8, 2026.png`) không đi qua được bộ quét liên kết của harness. `git mv`
+  sang `PGM-02A_ST_editor_reference.png`, `PGM-02B_FBD_editor_reference.png`,
+  `PGM-02_ST_FBD_annotated_reference.png`.
+
+- **Fixed — tham chiếu `ProgrammingContextBar.tsx` đã đổi tên.** Hai liên kết
+  trong `KX-DDC24-UIUX-WEB-PROGRAMMING-REDESIGN-PROPOSAL-001_VI.md` trỏ vào
+  component không còn tồn tại; nay trỏ `ProgrammingContextStrip.tsx`.
+
+- **Changed — `UD-PROG-014` CLOSED, phương án B (nhiều tab POU).** Cả hai ảnh
+  đều hiện tab bar, ảnh FBD còn hiện tab bắc qua hai ngôn ngữ. Register ghi năm
+  câu hỏi hành vi tab mà handoff v2.2 vẫn chưa trả lời, để team chốt trong
+  `TC-PGM02-TAB-01` thay vì mỗi người một kiểu.
+
+- **Added — `UD-PROG-015` (ĐANG MỞ): ba trường Inspector chưa có nguồn dữ liệu.**
+  Ảnh hiện `Access`, `Description` và tên Task `Control_Main`; Draft v2 chỉ có
+  `programId`/`objectId`/`periodMs` (`draft_v2.go:349-377`). Ba lựa chọn A/B/C
+  ghi trong register; khuyến nghị A cho R3. Cấm hard-code `Public` hay tên Task
+  ở FE.
+
+- **Changed — DDD PGM-02 lên 0.5, ĐẢO NGƯỢC kết luận status bar của bản 0.4.**
+  Bản 0.4 ghi status bar "ngoài phạm vi" vì handoff văn bản không nhắc; cả hai
+  ảnh đều có status bar, nên nó vào phạm vi và do `PGM02-V22-WP-15` sở hữu. §7.2
+  thêm `EditorTabBar`, `NavigatorMap`, `WorkspaceStatusBar`; §7.3 thêm ba dòng
+  ánh xạ; §10.2 thêm `TC-PGM02-TAB-01`/`SB-01`/`NAV-01`.
+
+- **Ghi nhận — ba nhóm nội dung trong ảnh KHÔNG có nguồn dữ liệu**, viết thành
+  luật cứng trong prompt để team không "làm cho giống ảnh":
+  (a) Quick Library FBD hiện category `HVAC` và block `P`/`PI`/`PID_AutoTune`/
+  `Ramp` — registry `rev-a.3` không có category đó và không có bốn block đó;
+  (b) `PID` là `featureState: REVIEW_REQUIRED`, Check phải tiếp tục chặn Program
+  dùng nó (`UD-PROG-010`);
+  (c) ba trường Inspector ở `UD-PROG-015`.
+
+- **Changed — `T59-821` mở rộng thành "editor chrome" và lên `READY` đủ.** Sau
+  khi `UD-PROG-014` CLOSED, phần tab hết bị chặn nên task không còn `READY (một
+  phần)`. Phạm vi nay gồm bốn phần cùng một cây component: toolbar ba mode + tab
+  đa POU + status bar + Code Map cho ST. `PGM02-V22-WP-15` đổi tiêu đề tương ứng
+  (plan PGM-02 lên **1.18**). Ghi rõ xung đột file: `T59-818` và `T59-821` cùng
+  chạm `ProgramsTab.tsx` nên phải nối tiếp hoặc tách `ProgramInspector` trước.
+
+- **Changed — hồ sơ phán quyết lên 1.1, thêm §8 ghi phần tự đảo ngược.** §4 bản
+  1.0 bác status bar vì "không có trong handoff v2.2" — đúng với bằng chứng lúc
+  đó nhưng sai kết luận, do coi phần văn bản của gói handoff là toàn bộ hợp đồng
+  trong khi visual reference cũng là hợp đồng. §8 ghi lại việc đảo ngược, cái ba
+  ảnh xác nhận, và cái ba ảnh **không** chứng minh.
+
+- **Verification.** `docs_iso_harness.py` **PASS** (`link_missing` 6 → **0**;
+  `UD-PROG` 14 → **15**). `candidate_pin_check.py` **PASS** sau khi re-pin hồ sơ
+  trong `PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md`. Soát chéo trạng
+  thái `T59-818..822` giữa Plan 59 và prompt: **5/5 khớp**. `git diff --check`
+  sạch. Phiên này **không sửa code sản phẩm**.
+
 ### PGM-02 R3 — hạ tầng Simulation cách ly (`T59-814`) (2026-08-27)
 
 - **Added — `mkddc-programming-sim-worker`, tiến trình mô phỏng EPHEMERAL.**
