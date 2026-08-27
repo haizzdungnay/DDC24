@@ -7,10 +7,10 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "548bbb97245df48d2bdd9534870279a32ef8c6a701e42754b3a31f49502a3eab",
+      "sha256": "1525a39e6ce8823b761b4e0b7837f7e863f55d7c76c41f28d0a368c63103db92",
       "major": 1,
-      "version": "1.28.0",
-      "operationCount": 33
+      "version": "1.29.0",
+      "operationCount": 40
     },
     {
       "name": "ipc",
@@ -55,22 +55,22 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "2bc29a935b1a259ed2595ea6ae808fba12b6ee7bd9587a179af79c5a5306dde6",
+      "sha256": "cbb7041a79685222795851f667ecb2badbede6f50741e4141cef0a83690fcde6",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "430c038e5024dec7791dba0aa5691c2fac04d12c1c2291cfe0c1408cf38b797c",
+      "manifestSha256": "80cc40ccaf3641e83442b0b46cae4994c285e5d92eebbeff38997e1c0c127756",
       "major": 1,
-      "version": "1.7.2",
-      "publicErrorCount": 30,
-      "componentDetailCount": 135
+      "version": "1.8.0",
+      "publicErrorCount": 38,
+      "componentDetailCount": 151
     },
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "ed126c2cefb17a517cb75dc3198bde55313d9bf727bbdffab2e7001af46442cb",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0012_library_revision_deprecate_receipt.sql",
-      "migrationSha256": "411005f47bc4874c2d9374803cde96f3f6ffc0f382a22948c18a0649aea9908e",
+      "sha256": "a94025999df5ec8495eb4f7a3f3f2c356b192b9ffd547941f6434b0f26b5ec4c",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0013_programming_simulation_sessions.sql",
+      "migrationSha256": "cfff5cf1bde68f855e73137287ccd9074efe5580cf6ee265b812d81de2ee0174",
       "major": 1,
-      "schemaVersion": 12,
+      "schemaVersion": 13,
       "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {

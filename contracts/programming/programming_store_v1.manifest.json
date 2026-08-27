@@ -1,10 +1,10 @@
 {
   "contractId": "PROGRAMMING-STORE-V1",
-  "schemaVersion": 12,
+  "schemaVersion": 13,
   "databasePath": "${CONFIG_DIR}/programming/programming-v1.sqlite",
   "backupPath": "${CONFIG_DIR}/programming/programming-backups/",
-  "migrationFile": "0012_library_revision_deprecate_receipt.sql",
-  "migrationSha256": "411005f47bc4874c2d9374803cde96f3f6ffc0f382a22948c18a0649aea9908e",
+  "migrationFile": "0013_programming_simulation_sessions.sql",
+  "migrationSha256": "cfff5cf1bde68f855e73137287ccd9074efe5580cf6ee265b812d81de2ee0174",
   "migrations": [
     {
       "version": 1,
@@ -65,6 +65,11 @@
       "version": 12,
       "file": "0012_library_revision_deprecate_receipt.sql",
       "sha256": "411005f47bc4874c2d9374803cde96f3f6ffc0f382a22948c18a0649aea9908e"
+    },
+    {
+      "version": 13,
+      "file": "0013_programming_simulation_sessions.sql",
+      "sha256": "cfff5cf1bde68f855e73137287ccd9074efe5580cf6ee265b812d81de2ee0174"
     }
   ],
   "foreignKeys": true,
