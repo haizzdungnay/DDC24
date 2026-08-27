@@ -49,6 +49,9 @@ export interface StructuredFbdEditorProps {
    * ranh giới đó và tránh một đường đọc thứ hai vào cùng tài liệu.
    */
   onSelectionChange?: (selection: FbdSelection | null) => void
+  /** Neo do một hành động có nhãn ở ngoài editor (vd. Compare). Không tự suy
+   * từ elementId gần đúng; caller đã đối chiếu canonical graph trước khi gửi. */
+  focusSelection?: FbdSelection | null
   document: FbdDocument
   canEdit: boolean
   onChange: (document: FbdDocument) => void
@@ -323,7 +326,7 @@ function NodeInspector({
   )
 }
 
-export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterfaces = EMPTY_USER_POU_INTERFACES, projectId, onSelectionChange }: StructuredFbdEditorProps) {
+export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterfaces = EMPTY_USER_POU_INTERFACES, projectId, onSelectionChange, focusSelection }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
   const publishedDocument = useRef(canonicalFbdJson(state.document))
@@ -377,6 +380,11 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
     publishedDocument.current = canonicalFbdJson(document)
     dispatch({ type: 'REPLACE_DOCUMENT', document })
   }, [document])
+
+  useEffect(() => {
+    if (!focusSelection) return
+    dispatch({ type: 'SELECT', selection: focusSelection })
+  }, [focusSelection])
 
   useEffect(() => {
     const current = canonicalFbdJson(state.document)

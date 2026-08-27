@@ -397,3 +397,53 @@ func assertOpenAPIEnum(t *testing.T, section string, expected []string) {
 		t.Fatalf("enum lệch:\nactual=%v\nwant=%v", actual, want)
 	}
 }
+
+// TestRevisionChangesDiffOpenAPIMatchesGoResponse — khoá typed diff của Compare
+// (`T59-819`) vào contract.
+//
+// Phía TS có generator sinh type thẳng từ OpenAPI, nên một lần sửa schema mà
+// quên sinh lại sẽ đỏ ở `client.test.ts`. Phía Go KHÔNG có generator: struct
+// được viết tay, và không có phép kiểm nào thì `stHunks` có thể mất `json` tag,
+// đổi tên khoá, hay mọc thêm `omitempty` mà mọi test khác vẫn xanh — rồi khay
+// So sánh đọc `undefined` và vẽ "máy chủ chưa biết so" cho một máy chủ đã so.
+//
+// Enum đọc THẲNG từ hằng của lớp application thay vì chép chuỗi: một bản sao
+// trong test chỉ chứng minh test khớp chính nó, không chứng minh OpenAPI khớp
+// thứ máy chủ thật sự gửi.
+func TestRevisionChangesDiffOpenAPIMatchesGoResponse(t *testing.T) {
+	spec := readProgrammingOpenAPI(t)
+
+	assertSchemaMatchesGoResponse(t, spec, "ProgrammingRevisionChanges",
+		programmingapplication.RevisionChangesView{})
+	assertSchemaMatchesGoResponse(t, spec, "ProgrammingStHunk",
+		programmingapplication.StHunk{})
+	assertSchemaMatchesGoResponse(t, spec, "ProgrammingFbdChange",
+		programmingapplication.FbdChange{})
+
+	stHunk := schemaSection(t, spec, "ProgrammingStHunk")
+	assertOpenAPIEnum(t, fieldSection(t, stHunk, "changeType", "beforeStartLine"),
+		programmingapplication.StHunkChangeTypes)
+
+	fbdChange := schemaSection(t, spec, "ProgrammingFbdChange")
+	assertOpenAPIEnum(t, fieldSection(t, fbdChange, "element", "elementId"),
+		programmingapplication.FbdElements)
+	assertOpenAPIEnum(t, fieldSection(t, fbdChange, "changeType", "detail"),
+		programmingapplication.FbdChangeTypes)
+
+	// `truncated` phải là `required` và KHÔNG nullable: "danh sách có bị cắt
+	// không" là câu server luôn trả lời được. Để nó vắng mặt hay `null` là mời
+	// phía dùng đọc một danh sách bị cắt thành một danh sách đầy đủ.
+	changes := schemaSection(t, spec, "ProgrammingRevisionChanges")
+	truncated := fieldSection(t, changes, "truncated", "nextCursor")
+	if strings.Contains(truncated, `"null"`) {
+		t.Fatalf("ProgrammingRevisionChanges.truncated không được nullable:\n%s", truncated)
+	}
+
+	// `nextCursor` thì NGƯỢC LẠI phải nullable: `null` là "đã đọc hết", và một
+	// chuỗi rỗng dùng thay `null` sẽ được `if (cursor)` ở FE đọc thành hết
+	// trang một cách tình cờ chứ không phải theo hợp đồng.
+	nextCursor := fieldSection(t, changes, "nextCursor", "")
+	if !strings.Contains(nextCursor, `{ type: "null" }`) {
+		t.Fatalf("ProgrammingRevisionChanges.nextCursor phải nullable:\n%s", nextCursor)
+	}
+}

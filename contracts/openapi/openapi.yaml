@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.29.0"
+  version: "1.30.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-08-24"
-  note: "v1.28.0 thêm keyset cursor Control Library và mutation admin PUBLISHED sang DEPRECATED; publish vẫn chỉ qua Seal Revision atomic."
+  date: "2026-08-27"
+  note: "v1.30.0 (T59-819) mở rộng ADDITIVE change manifest bằng stHunks[]/fbdChanges[] tất định, có bounded payload + truncated + cursor; diff không đi vào impactRef nên mọi acknowledgement Commission đã cấp vẫn còn hiệu lực."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -2011,6 +2011,14 @@ paths:
       summary: Đọc change manifest giữa hai Revision
       x-rbac: [viewer, operator, admin]
       x-implementation-status: task-prog-206
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: >
+            Vị trí đọc tiếp trong danh sách diff tất định, lấy từ `nextCursor`
+            của phản hồi trước. Bỏ trống để đọc từ đầu.
+          schema: { type: string, minLength: 1, maxLength: 64 }
       responses:
         "200":
           description: Change manifest có impactRef ổn định
@@ -3243,7 +3251,17 @@ components:
     ProgrammingRevisionChanges:
       type: object
       additionalProperties: false
-      required: [fromRevisionId, toRevisionId, impact, changes]
+      # T59-819 — `stHunks`/`fbdChanges`/`truncated` nằm trong `required` vì
+      # server LUÔN gửi khoá: mảng rỗng nghĩa là "đã so và không có gì", khác
+      # hẳn khoá vắng mặt nghĩa là "server đời cũ chưa biết so". Khai optional
+      # sẽ làm hai câu đó trông giống nhau ở phía dùng — đúng chỗ một UI sẽ vẽ
+      # "không có thay đổi" cho một Revision chưa hề được so.
+      # `nextCursor` cũng nằm trong `required` và nullable: máy chủ LUÔN gửi
+      # khoá, `null` nghĩa là "đã đọc hết". Khai optional sẽ làm "hết trang"
+      # trông giống "server đời cũ không biết phân trang".
+      required:
+        [fromRevisionId, toRevisionId, impact, changes, stHunks, fbdChanges,
+         truncated, nextCursor]
       properties:
         fromRevisionId:
           oneOf:
@@ -3255,6 +3273,63 @@ components:
           type: array
           maxItems: 1024
           items: { $ref: "#/components/schemas/ProgrammingRevisionChange" }
+        stHunks:
+          type: array
+          maxItems: 200
+          items: { $ref: "#/components/schemas/ProgrammingStHunk" }
+        fbdChanges:
+          type: array
+          maxItems: 200
+          items: { $ref: "#/components/schemas/ProgrammingFbdChange" }
+        # Danh sách chạm trần payload. Một danh sách bị cắt IM LẶNG trông y hệt
+        # một danh sách đầy đủ, nên cờ này bắt buộc phải có mặt.
+        truncated: { type: boolean }
+        nextCursor:
+          oneOf:
+            - { type: string, minLength: 1, maxLength: 64 }
+            - { type: "null" }
+    ProgrammingStHunk:
+      type: object
+      additionalProperties: false
+      required:
+        [objectId, changeType, beforeStartLine, beforeLineCount, afterStartLine,
+         afterLineCount, beforeText, afterText, truncated, coarse]
+      properties:
+        objectId: { type: string, format: uuid }
+        changeType: { type: string, enum: [ADDED, REMOVED, REPLACED] }
+        # Dòng bắt đầu đếm từ 1 để khớp thứ người dùng thấy trong editor. Hunk
+        # thuần thêm/xoá có `*LineCount = 0` ở phía không tồn tại.
+        beforeStartLine: { type: integer, minimum: 1 }
+        beforeLineCount: { type: integer, minimum: 0 }
+        afterStartLine: { type: integer, minimum: 1 }
+        afterLineCount: { type: integer, minimum: 0 }
+        beforeText:
+          type: array
+          maxItems: 40
+          items: { type: string, maxLength: 4096 }
+        afterText:
+          type: array
+          maxItems: 40
+          items: { type: string, maxLength: 4096 }
+        # Thân hunk bị cắt so với thực tế: `*LineCount` vẫn là số dòng THẬT.
+        truncated: { type: boolean }
+        # Tài liệu vượt trần thuật toán nên cả tệp bị hạ thành một hunk REPLACED.
+        # Kết luận thô, không phải diff chi tiết — người đọc phải phân biệt được.
+        coarse: { type: boolean }
+    ProgrammingFbdChange:
+      type: object
+      additionalProperties: false
+      required: [objectId, element, elementId, changeType, detail]
+      properties:
+        objectId: { type: string, format: uuid }
+        element: { type: string, enum: [NETWORK, NODE, PORT, WIRE] }
+        # Rỗng chỉ với thay đổi ở cấp tài liệu (vd GEOMETRY_ONLY của layout).
+        elementId: { type: string, maxLength: 128 }
+        # ORDER_ONLY và GEOMETRY_ONLY tách riêng khỏi UPDATED: kéo một khối trên
+        # canvas không đổi hành vi chương trình, gộp chung sẽ làm người đọc mất
+        # khả năng phân biệt thứ cần soi kỹ với thứ chỉ cần liếc.
+        changeType: { type: string, enum: [ADDED, REMOVED, UPDATED, ORDER_ONLY, GEOMETRY_ONLY] }
+        detail: { type: string, maxLength: 64 }
     ProgrammingRevisionChange:
       type: object
       additionalProperties: false

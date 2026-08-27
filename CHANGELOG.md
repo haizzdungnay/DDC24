@@ -8,6 +8,84 @@
 
 ## [Unreleased]
 
+### PGM-02 — Compare Draft↔Active bằng typed diff (`T59-819`, `PGM02-V22-WP-09`) (2026-08-27)
+
+- **Added — hash trước/sau nói "có gì đó đổi", không nói "đổi cái gì".**
+  `GetRevisionChanges` trước lát này chỉ trả danh sách object kèm hash. Đó là
+  một sự kiện, không phải một lời giải thích, nên câu duy nhất người vận hành
+  hỏi trước khi Commission vẫn không có chỗ trả lời.
+
+  Nay `GetRevisionChangesDetail` trả thêm `stHunks[]` (LCS theo dòng) và
+  `fbdChanges[]` (so đồ thị canonical theo ID), tất định, có trần payload,
+  `truncated` và `nextCursor`. Đường Commission vẫn gọi bản KHÔNG diff: nó chỉ
+  cần `impact`/`impactRef`, và tính LCS toàn bộ mã nguồn cho mỗi lệnh là công
+  vô ích trên thiết bị nhúng.
+
+  Diff **không** đi vào `impactRef`: dấu niêm phong là của thứ người vận hành
+  phải xác nhận, không phải của thứ họ được xem. Trộn vào sẽ làm mọi
+  acknowledgement đã cấp thành stale ngay khi đổi cách trình bày một hunk.
+
+- **Added — `ORDER_ONLY` và `GEOMETRY_ONLY` tách khỏi `UPDATED`.** Kéo một khối
+  sang chỗ khác trên canvas không đổi hành vi chương trình; gộp nó chung với
+  một thay đổi `typeRef` làm người đọc mất khả năng phân biệt thứ cần soi kỹ
+  với thứ chỉ cần liếc.
+
+- **Fixed — lỗi đọc intent Enabled bị nuốt thành "không có Program nào bật".**
+  Triệu chứng: `enabledProgramsTouched` gộp `err != nil` với `len(intents) == 0`
+  và cùng trả mảng rỗng. Nguyên nhân: một lỗi hạ tầng bị đọc thành một lời
+  khẳng định an toàn, nên `enableIntent` thành `NONE` và Commission đi tiếp
+  không hỏi acknowledgement nào — fail-OPEN ở đúng chỗ nguy hiểm nhất là thay
+  chương trình đang chạy trên thiết bị. Cách sửa: tách hai câu đó; store lỗi ⇒
+  `UNAVAILABLE` và Commission fail-closed.
+
+- **Fixed — `nextCursor` luôn có trên dây nhưng contract khai optional.** Phát
+  hiện bởi cổng đồng bộ hợp đồng mới (dưới). Go không dùng `omitempty` nên khoá
+  luôn được gửi, `null` nghĩa là "đã đọc hết"; khai optional làm "hết trang"
+  trông giống "server đời cũ không biết phân trang". Nay `required` + nullable,
+  đúng quy ước đã áp cho `dirty`/`draftSequence`.
+
+- **Added — cổng đồng bộ hợp đồng cho phía Go.** Phía TS có generator sinh type
+  từ OpenAPI nên quên sinh lại sẽ đỏ ở `client.test.ts`; phía Go **không có
+  generator**, struct viết tay, và không phép kiểm nào thì `stHunks` có thể mất
+  `json` tag hay mọc thêm `omitempty` mà mọi test khác vẫn xanh — rồi khay So
+  sánh đọc `undefined` và vẽ "máy chủ chưa biết so" cho một máy chủ đã so.
+  `TestRevisionChangesDiffOpenAPIMatchesGoResponse` khoá properties/required và
+  đọc enum **thẳng từ hằng** của lớp application (`StHunkChangeTypes`,
+  `FbdChangeTypes`, `FbdElements`) thay vì chép chuỗi vào test.
+
+- **Fixed — `loadMore` có guard làm chính đường thử lại của nó không chạy được.**
+  Triệu chứng: trang tiếp lỗi một lần thì phần còn lại của danh sách khoá vĩnh
+  viễn. Nguyên nhân: handler lỗi xoá cursor khỏi `consumedCursors` để cho retry,
+  nhưng guard đầu hàm đòi `status === 'ready'` — mà lần lỗi vừa rồi đã đặt
+  `status = 'error'`. Kèm theo đó lỗi phân trang bị gộp vào `error` chung, nên
+  khay xoá sạch danh sách đã tải và mang theo luôn nút thử lại. Cách sửa: tách
+  `loadMoreError` khỏi `error`, giữ nguyên phần đã tải, và cho đọc tiếp khi
+  `status !== 'loading'`.
+
+- **Fixed — cursor quay vòng làm mất trang vừa nhận.** Nhánh chống lặp trả sớm
+  trước khi ghép, tức vứt một trang hợp lệ (nó về từ cursor chưa từng tiêu thụ).
+  Nay trang được ghép, chỉ `nextCursor` bị bỏ để không mời thử lại một đường đã
+  chứng minh là quay vòng, còn `truncated` giữ bật để danh sách tự khai là chưa
+  đầy đủ.
+
+- **Changed — luật cổng So sánh.** Draft là bản ghi sống, nên chỉ so hai
+  Revision **bất biến**: dirty ⇒ đòi Lưu, đã lưu mà chưa niêm phong ⇒ đòi Niêm
+  phong. Không có Active ⇒ trạng thái rỗng **có lý do**, khác hẳn "không có
+  khác biệt". Server không gửi khoá diff ⇒ "chưa so", cũng khác hẳn `[]` là "đã
+  so và không có gì". Bấm một hunk chỉ mở nó ở phía chỉ-đọc trong khay; nhảy
+  sang editor phải qua nút có nhãn, vì nhảy ngầm sẽ vứt mất chỗ đang gõ dở.
+
+- **Verification** (2026-08-27, chạy thật trên nhánh `feat/t59-819-compare`):
+  `npx vitest --run --environment jsdom src` **163 file / 1859 test PASS**;
+  `npm run lint` PASS; `npm run build` PASS (chunk `programming` **127.67 KiB**
+  gzip / ngân sách R3 165 KiB, dư 37.33 KiB);
+  `npx playwright test e2e/programming.spec.ts` **53 passed / 11 skipped**;
+  `go vet ./...` + `go test ./... -count=1` PASS (19 gói);
+  `docs_iso_harness.py`, `candidate_pin_check.py` (17/17),
+  `verify_programming_pgm02_contract.py`, `verify_programming_g1_contracts.py`
+  (10/10) PASS. OpenAPI lên **1.30.0**, re-pin `openapiSha256` ở
+  `pgm02_workspace_v1.json` và `g1_contract_join_v1.json`.
+
 ### PGM-02 — Inspector năm ngữ cảnh dùng chung ST↔FBD (`T59-818`) (2026-08-27)
 
 - **Fixed — khay "Thuộc tính" chiếm chỗ mà không nói được gì.** Handoff §9 cấm

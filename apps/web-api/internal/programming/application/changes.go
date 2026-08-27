@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 
 	programmingstore "mkddc-web/internal/programming/store"
@@ -45,9 +46,33 @@ type RevisionChangesView struct {
 	ToRevisionID   string           `json:"toRevisionId"`
 	Impact         RevisionImpact   `json:"impact"`
 	Changes        []RevisionChange `json:"changes"`
+	// T59-819 — diff typed. Hash trước/sau nói "có gì đó đổi"; ba trường dưới
+	// nói ĐỔI CÁI GÌ, là câu duy nhất người vận hành hỏi trước khi Commission.
+	StHunks    []StHunk    `json:"stHunks"`
+	FbdChanges []FbdChange `json:"fbdChanges"`
+	Truncated  bool        `json:"truncated"`
+	NextCursor *string     `json:"nextCursor"`
 }
 
+// GetRevisionChanges trả manifest KHÔNG kèm diff chi tiết.
+//
+// Đây là đường Commission đi: nó chỉ cần `impact` + `impactRef`, và tính LCS
+// trên toàn bộ mã nguồn cho mỗi lệnh là công vô ích trên một thiết bị nhúng.
 func (s *ProjectService) GetRevisionChanges(ctx context.Context, fromRevisionID, toRevisionID string) (RevisionChangesView, error) {
+	return s.revisionChanges(ctx, fromRevisionID, toRevisionID, false, 0)
+}
+
+// GetRevisionChangesDetail trả manifest KÈM `stHunks[]`/`fbdChanges[]`.
+//
+// `cursor` là chỉ số vào chính danh sách tất định đó, nên hai lần gọi liên tiếp
+// không thể bỏ sót hay lặp mục.
+func (s *ProjectService) GetRevisionChangesDetail(ctx context.Context, fromRevisionID, toRevisionID string,
+	cursor int) (RevisionChangesView, error) {
+	return s.revisionChanges(ctx, fromRevisionID, toRevisionID, true, cursor)
+}
+
+func (s *ProjectService) revisionChanges(ctx context.Context, fromRevisionID, toRevisionID string,
+	detail bool, cursor int) (RevisionChangesView, error) {
 	if (fromRevisionID != "none" && !isUUID(fromRevisionID)) || !isUUID(toRevisionID) || fromRevisionID == toRevisionID {
 		return RevisionChangesView{}, ErrInvalidRequest
 	}
@@ -82,7 +107,7 @@ func (s *ProjectService) GetRevisionChanges(ctx context.Context, fromRevisionID,
 	// Program đang Enabled mà Revision này chạm tới. Đọc intent bền vững ở
 	// store, không suy từ diff: "đang chạy" là trạng thái của thiết bị, không
 	// phải thuộc tính của một Revision.
-	enableItems := s.enabledProgramsTouched(ctx, after.Revision.ProjectID, changes)
+	enableItems, enableKnown := s.enabledProgramsTouched(ctx, after.Revision.ProjectID, changes)
 	impact := RevisionImpact{
 		Retain:               impactFromItems(retainItems),
 		OutputMappingChanges: impactFromItems(outputItems),
@@ -90,12 +115,22 @@ func (s *ProjectService) GetRevisionChanges(ctx context.Context, fromRevisionID,
 		ControlLibrary:       impactFromItems(sortedItems(byCategory["LIBRARY"])),
 		ProgramSet:           impactFromItems(sortedItems(byCategory["PROGRAM_SET"])),
 		EnableIntent:         impactFromItems(enableItems),
+
 		ActiveOverrides: RevisionImpactGroup{Status: "UNAVAILABLE", Items: []string{
 			"Core read-back override chưa được nối; Commission phải fail-closed",
 		}},
 		Cutover: RevisionImpactGroup{Status: "UNAVAILABLE", Items: []string{
 			"Core cutover estimator chưa được nối; Commission phải fail-closed",
 		}},
+	}
+	if !enableKnown {
+		// Store intent lỗi ⇒ KHÔNG biết Program nào đang bật. Trước bản vá này
+		// lỗi đó bị nuốt thành danh sách rỗng, tức `NONE`, và Commission đi
+		// tiếp mà không hỏi acknowledgement `enableIntent` nào — fail-OPEN ở
+		// đúng chỗ nguy hiểm nhất: thay chương trình đang chạy trên thiết bị.
+		impact.EnableIntent = RevisionImpactGroup{Status: "UNAVAILABLE", Items: []string{
+			"Không đọc được intent Enabled của Program; Commission phải fail-closed",
+		}}
 	}
 	if s.runtimeImpact != nil {
 		if current, readErr := s.runtimeImpact.CurrentRuntimeImpact(ctx); readErr == nil {
@@ -115,7 +150,25 @@ func (s *ProjectService) GetRevisionChanges(ctx context.Context, fromRevisionID,
 	}{From: fromRevisionID, To: toRevisionID, Changes: changes, Impact: impact}
 	digest, _ := semanticHash(digestInput)
 	impact.ImpactRef = hex.EncodeToString(digest[:])
-	return RevisionChangesView{FromRevisionID: fromRevisionID, ToRevisionID: toRevisionID, Impact: impact, Changes: changes}, nil
+	view := RevisionChangesView{FromRevisionID: fromRevisionID, ToRevisionID: toRevisionID,
+		Impact: impact, Changes: changes, StHunks: make([]StHunk, 0), FbdChanges: make([]FbdChange, 0)}
+	if !detail {
+		return view, nil
+	}
+	// Diff KHÔNG đi vào `digestInput`: `impactRef` là dấu niêm phong của thứ
+	// người vận hành phải xác nhận, không phải của thứ họ được xem. Trộn diff
+	// vào đó sẽ làm mọi acknowledgement đã cấp thành stale ngay khi ta đổi cách
+	// trình bày một hunk.
+	hunks, fbdChanges, nextCursor, truncated, diffErr := diffRevisionSources(beforeObjects, after.Objects, cursor)
+	if diffErr != nil {
+		return RevisionChangesView{}, diffErr
+	}
+	view.StHunks, view.FbdChanges, view.Truncated = hunks, fbdChanges, truncated
+	if nextCursor > 0 {
+		token := strconv.Itoa(nextCursor)
+		view.NextCursor = &token
+	}
+	return view, nil
 }
 
 // sortedItems trả một slice KHÁC nil và sắp xếp — `impactRef` băm cả nội dung
@@ -135,13 +188,19 @@ func sortedItems(items []string) []string {
 // đó là `NONE`, không phải `UNAVAILABLE`: không có Program nào được bật thì
 // thật sự không có gì để cảnh báo.
 func (s *ProjectService) enabledProgramsTouched(ctx context.Context, projectID string,
-	changes []RevisionChange) []string {
+	changes []RevisionChange) ([]string, bool) {
 	if s.store == nil || projectID == "" {
-		return make([]string, 0)
+		return make([]string, 0), true
 	}
 	intents, err := s.store.ListProgramRuntimeIntents(ctx, projectID)
-	if err != nil || len(intents) == 0 {
-		return make([]string, 0)
+	if err != nil {
+		// Phân biệt "đọc được và không có Program nào bật" với "không đọc
+		// được". Gộp hai câu đó là cách một lỗi hạ tầng biến thành một lời
+		// khẳng định an toàn.
+		return make([]string, 0), false
+	}
+	if len(intents) == 0 {
+		return make([]string, 0), true
 	}
 	enabled := make(map[string]struct{}, len(intents))
 	for _, intent := range intents {
@@ -162,7 +221,7 @@ func (s *ProjectService) enabledProgramsTouched(ctx context.Context, projectID s
 		touched = append(touched, change.ObjectID)
 	}
 	sort.Strings(touched)
-	return touched
+	return touched, true
 }
 
 func compareRevisionObjects(before, after []programmingstore.RevisionObject) []RevisionChange {

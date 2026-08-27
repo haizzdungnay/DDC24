@@ -86,6 +86,11 @@ const generatedTypeSchemas = [
   "ProgrammingProgramHealth",
   "ProgrammingProgramListItem",
   "ProgrammingProgramsPage",
+  // T59-819 — typed diff của Compare. Hai schema này KHÔNG khai tay: enum
+  // `changeType` của chúng là thứ quyết định UI vẽ "đổi logic" hay chỉ "đổi
+  // chỗ đứng trên canvas", và một bản khai tay lệch sẽ lệch im lặng.
+  "ProgrammingStHunk",
+  "ProgrammingFbdChange",
 ];
 
 const scalarTypeNames = {

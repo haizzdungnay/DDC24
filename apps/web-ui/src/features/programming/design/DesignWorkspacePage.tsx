@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ClipboardCheck } from 'lucide-react'
+import { ClipboardCheck, GitCompare } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
 import { StateBlock } from '../../../shared/components/StateBlock'
@@ -14,7 +14,7 @@ import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
 import { toWorkspaceDocument } from '../model/draftV2'
 import { PouExplorer } from './pou/PouExplorer'
-import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision } from '../api/queries'
+import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison } from '../api/queries'
 import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
@@ -26,6 +26,10 @@ import { ProgramsModeSwitcher } from './ProgramsModeSwitcher'
 import { programsModeCapabilities } from '../shared/programsMode'
 import { isProgramsWorkspaceMode, type ProgramsWorkspaceMode } from '../shared/programsRoute'
 import { useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
+import { CompareDrawer } from './compare/CompareDrawer'
+import { compareGateFor, type CompareEntry } from './compare/compareModel'
+import type { FbdSelection } from '../fbd/commands'
+import type { FbdDocument } from '../fbd/model'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
@@ -39,6 +43,43 @@ const TAB_LABEL: Record<DesignTab, [string, string]> = {
 /* D-01: PGM-02 không còn tự chạy Check nên không còn nguồn diagnostic nào ở
  * trang này — hằng số module-level tránh tạo mảng rỗng mới mỗi render. */
 const EMPTY_DIAGNOSTICS: ProgrammingDiagnostic[] = []
+
+function fbdSelectionForCompare(
+  source: unknown,
+  change: Extract<CompareEntry, { kind: 'FBD' }>['change'],
+): FbdSelection | null {
+  if (!change.elementId) return null
+  let candidate: unknown = source
+  if (typeof candidate === 'string') {
+    try {
+      candidate = JSON.parse(candidate) as unknown
+    } catch {
+      return null
+    }
+  }
+  if (!candidate || typeof candidate !== 'object' || !Array.isArray((candidate as { networks?: unknown }).networks)) {
+    return null
+  }
+  const document = candidate as FbdDocument
+  if (change.element === 'NETWORK') {
+    return document.networks.some((network) => network.id === change.elementId)
+      ? { kind: 'network', networkId: change.elementId }
+      : null
+  }
+  for (const network of document.networks) {
+    if (change.element === 'NODE' && network.nodes.some((node) => node.id === change.elementId)) {
+      return { kind: 'node', networkId: network.id, nodeId: change.elementId }
+    }
+    if (change.element === 'WIRE' && network.wires.some((wire) => wire.id === change.elementId)) {
+      return { kind: 'wire', networkId: network.id, wireId: change.elementId }
+    }
+    if (change.element === 'PORT') {
+      const node = network.nodes.find((item) => item.ports.some((port) => port.id === change.elementId))
+      if (node) return { kind: 'port', networkId: network.id, nodeId: node.id, portId: change.elementId }
+    }
+  }
+  return null
+}
 
 /**
  * PGM-02 Thiết kế — `UJ-PROG-02/03/04` (TASK-PROG-501..503). Một workspace,
@@ -142,6 +183,9 @@ export function DesignWorkspacePage({
   const [discardVersion, setDiscardVersion] = useState(0)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [savingBeforeNavigation, setSavingBeforeNavigation] = useState(false)
+  const [compareOpen, setCompareOpen] = useState(false)
+  const compareTriggerRef = useRef<HTMLButtonElement>(null)
+  const [compareFbdFocus, setCompareFbdFocus] = useState<{ programId: string; selection: FbdSelection } | null>(null)
 
   useEffect(() => {
     /* Trên route của IA sáu trang, ĐỊA CHỈ đã mang tab — ghi thêm `?tab=` chỉ
@@ -191,6 +235,22 @@ export function DesignWorkspacePage({
   )
   const pendingOperations = useMemo(() => [...programOperations, ...executionOperations], [executionOperations, programOperations])
   const draftDirty = pendingOperations.length > 0
+  const compareGate = useMemo(() => compareGateFor({
+    dirty: draftDirty,
+    activeRevisionId: workspace.project?.activeRevisionId ?? null,
+    // `dirty === false` là read-back duy nhất xác nhận base hiện tại đại diện
+    // đúng nội dung Draft. `null` không được suy thành sạch.
+    sealedRevisionId: workspace.project?.dirty === false ? workspace.project.baseRevisionId : null,
+  }), [draftDirty, workspace.project?.activeRevisionId, workspace.project?.baseRevisionId, workspace.project?.dirty])
+  const comparison = useProgrammingRevisionComparison(
+    compareOpen && compareGate.kind === 'READY' ? compareGate.fromRevisionId : undefined,
+    compareOpen && compareGate.kind === 'READY' ? compareGate.toRevisionId : undefined,
+  )
+
+  const closeCompare = useCallback(() => {
+    setCompareOpen(false)
+    window.requestAnimationFrame(() => compareTriggerRef.current?.focus())
+  }, [])
 
   /* `T59-815` — phiên mô phỏng chỉ mở được trên Revision ĐÃ Kiểm tra đạt.
    *
@@ -339,6 +399,34 @@ export function DesignWorkspacePage({
 
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
+  const pouNameByObjectId = new Map(
+    document.programs.map((program) => [program.objectId ?? program.programId, program.name] as const),
+  )
+
+  const revealCompareEntry = (entry: CompareEntry) => {
+    const program = document.programs.find((candidate) => (candidate.objectId ?? candidate.programId) === entry.objectId)
+    if (!program) return
+    selectPou(entry.objectId)
+    if (entry.kind === 'ST') {
+      setCompareFbdFocus(null)
+      setFocusDiagnostic({
+        code: '', severity: 'ERROR', messageKey: '',
+        location: {
+          programId: program.programId,
+          line: entry.hunk.afterStartLine,
+          column: 1,
+          length: Math.max(1, entry.hunk.afterText[0]?.length ?? 1),
+        },
+      })
+    } else {
+      setFocusDiagnostic(null)
+      const selection = fbdSelectionForCompare(program.document, entry.change)
+      setCompareFbdFocus(selection ? { programId: program.programId, selection } : null)
+    }
+    // Đây là cú nhảy CÓ NHÃN: để editor nhận focus, không trả focus về trigger
+    // như đường Đóng/Escape.
+    setCompareOpen(false)
+  }
 
   return (
     <div className="space-y-3">
@@ -405,6 +493,7 @@ export function DesignWorkspacePage({
                mode ở trạng thái UNAVAILABLE, không phải "chắc là có". */
             capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
             onSwitch={(next) => {
+              setCompareOpen(false)
               const query = new URLSearchParams(searchParams)
               query.set('mode', next)
               navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
@@ -418,6 +507,15 @@ export function DesignWorkspacePage({
              * seal/run/poll/result. Nút vẫn khoá khi Draft chưa lưu, đúng
              * "dirty guard" D-01 yêu cầu. */}
             <Button
+              ref={compareTriggerRef}
+              size="sm"
+              variant="secondary"
+              icon={<GitCompare className="h-4 w-4" aria-hidden="true" />}
+              onClick={() => setCompareOpen(true)}
+            >
+              {pick('So sánh', 'Compare')}
+            </Button>
+            <Button
               size="sm"
               variant="secondary"
               icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
@@ -429,6 +527,27 @@ export function DesignWorkspacePage({
           </div>
         )}
       </div>
+
+      {compareOpen && (
+        <div className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-[var(--c-bg)]/95 p-3 shadow-2xl sm:max-w-3xl">
+          <CompareDrawer
+            gate={compareGate}
+            changes={comparison.data}
+            pouNameByObjectId={pouNameByObjectId}
+            loading={compareGate.kind === 'READY' && comparison.status === 'loading'}
+            errorMessage={compareGate.kind === 'READY' ? comparison.error : null}
+            loadingMore={comparison.loadingMore}
+            loadMoreErrorMessage={comparison.loadMoreError}
+            sealing={workspace.sealing}
+            sealingErrorMessage={workspace.sealError}
+            canSeal={canEdit}
+            onSeal={() => { void workspace.seal() }}
+            onLoadMore={comparison.loadMore}
+            onClose={closeCompare}
+            onRevealInEditor={revealCompareEntry}
+          />
+        </div>
+      )}
 
       {workspace.conflict && (
         <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm">
@@ -510,6 +629,7 @@ export function DesignWorkspacePage({
           onSave={workspace.save}
           diagnostics={EMPTY_DIAGNOSTICS}
           focusDiagnostic={focusDiagnostic}
+          focusFbdSelection={compareFbdFocus}
           onPendingOperationsChange={updateProgramOperations}
           discardVersion={discardVersion}
           onRunCheck={goToCommission}

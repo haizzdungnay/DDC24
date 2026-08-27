@@ -160,6 +160,7 @@ export function ProgramsTab({
   onSave,
   diagnostics,
   focusDiagnostic,
+  focusFbdSelection,
   onPendingOperationsChange,
   discardVersion,
   onRunCheck,
@@ -174,6 +175,7 @@ export function ProgramsTab({
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   diagnostics: ProgrammingDiagnostic[]
   focusDiagnostic: ProgrammingDiagnostic | null
+  focusFbdSelection?: { programId: string; selection: FbdSelection } | null
   onPendingOperationsChange: (operations: ProgrammingDraftOperation[]) => void
   discardVersion: number
   /** ST Editor Quick Control đề xuất #2 (Bảng lệnh nhanh), mục "Kiểm tra": PGM-02
@@ -434,6 +436,7 @@ export function ProgramsTab({
             userPouInterfaces={userPouInterfaces}
             projectId={document.project.projectId}
             onSelectionChange={setFbdSelection}
+            focusSelection={focusFbdSelection?.programId === selected.programId ? focusFbdSelection.selection : null}
           />
         )}
       </div>
@@ -1436,6 +1439,7 @@ function FbdEditorPane({
   userPouInterfaces,
   projectId,
   onSelectionChange,
+  focusSelection,
 }: {
   program: ProgrammingProgram
   source: string
@@ -1447,6 +1451,7 @@ function FbdEditorPane({
   projectId?: string
   /** `T59-818` — chuyển tiếp lựa chọn canvas lên Inspector dùng chung. */
   onSelectionChange?: (selection: FbdSelection | null) => void
+  focusSelection?: FbdSelection | null
 }) {
   const { pick } = useI18n()
   const committedJson = useMemo(() => canonicalFbdJson(parseFbdDocument(program.document, program.name)), [program.document, program.name])
@@ -1477,6 +1482,7 @@ function FbdEditorPane({
         projectId={projectId}
         onChange={(next) => onChange(canonicalFbdJson(next))}
         onSelectionChange={onSelectionChange}
+        focusSelection={focusSelection}
       />
       {dirty && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
     </div>

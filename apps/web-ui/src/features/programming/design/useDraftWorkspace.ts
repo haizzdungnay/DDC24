@@ -40,6 +40,8 @@ export function useDraftWorkspace(projectId: string | undefined) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [sealing, setSealing] = useState(false)
+  const [sealError, setSealError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<DraftConflict | null>(null)
   const generation = useRef(0)
 
@@ -85,7 +87,15 @@ export function useDraftWorkspace(projectId: string | undefined) {
             correlationId: createUuid()
           }
         )
-        setProject((current) => (current ? { ...current, etag: response.etag, draft: response.resource.content } : current))
+        setProject((current) => (current ? {
+          ...current,
+          etag: response.etag,
+          draft: response.resource.content,
+          // Không có dirty read-back trong mutation response. Sau một batch
+          // có operation, giữ trạng thái bảo thủ "cần seal" cho tới khi chính
+          // seal response xác nhận một Revision bất biến.
+          dirty: operations.length > 0 ? true : current.dirty,
+        } : current))
         setConflict(null)
         setError(null)
         return true
@@ -114,10 +124,52 @@ export function useDraftWorkspace(projectId: string | undefined) {
    * Gọi ngay sau seal thành công (xem `useCheckWorkflow.runCheck`) để lần lưu
    * kế tiếp không dùng token cũ và bị 409. */
   const syncAfterSeal = useCallback((revisionId: string, etag: string) => {
-    setProject((current) => (current ? { ...current, etag, baseRevisionId: revisionId } : current))
+    setProject((current) => (current ? { ...current, etag, baseRevisionId: revisionId, dirty: false } : current))
   }, [])
 
-  return { status, project, error, saving, conflict, save, reload: load, dismissConflict: () => setConflict(null), syncAfterSeal }
+  const seal = useCallback(async (): Promise<string | null> => {
+    if (!project || !projectId || sealing) return null
+    setSealing(true)
+    setSealError(null)
+    try {
+      const response = await client.request<MutationResponse<{ projectId: string; revisionId: string }>>(
+        'createProgrammingRevision',
+        {
+          path: { projectId },
+          body: {
+            schemaVersion: '1.0',
+            baseRevisionId: project.baseRevisionId,
+            label: new Date().toISOString(),
+            comment: 'Niêm phong để so sánh Draft với Active',
+          },
+          ifMatch: project.etag,
+          idempotencyKey: createUuid(),
+          correlationId: createUuid(),
+        },
+      )
+      syncAfterSeal(response.resource.revisionId, response.etag)
+      setConflict(null)
+      return response.resource.revisionId
+    } catch (reason) {
+      if (reason instanceof ProgrammingApiError && reason.status === 409) {
+        const args = reason.envelope.error.args as { expected?: string; actual?: string } | undefined
+        setConflict({ expected: args?.expected, actual: args?.actual })
+      }
+      setSealError(
+        reason instanceof ProgrammingApiError
+          ? programmingErrorCopy(pick, reason.envelope.error.code)
+          : pick('Không niêm phong được bản nháp.', 'Could not seal the draft.'),
+      )
+      return null
+    } finally {
+      setSealing(false)
+    }
+  }, [client, pick, project, projectId, sealing, syncAfterSeal])
+
+  return {
+    status, project, error, saving, sealing, sealError, conflict, save, seal,
+    reload: load, dismissConflict: () => setConflict(null), syncAfterSeal,
+  }
 }
 
 export type CheckWorkflowState =
