@@ -84,7 +84,23 @@ export function CheckCommissionPage() {
   const workspace = useDraftWorkspace(projectId)
   const checkWorkflow = useCheckWorkflow(projectId)
   const check = useProgrammingCheck(navState?.checkId)
-  const changes = useProgrammingRevisionChanges(runtime.data?.activeRevisionId ?? 'none', navState?.revisionId)
+  /* Revision đang xét CHÍNH LÀ bản đang chạy ⇒ không có gì để đối chiếu.
+   *
+   * Trước lát này trang gọi thẳng dịch vụ so sánh với `from === to`, mà hợp
+   * đồng cấm đúng cặp đó (`application/changes.go`), nên nó trả 400 và trang
+   * hiện "Không tải được thay đổi" — một thông báo LỖI cho một tình huống hoàn
+   * toàn bình thường. Bắt được trên bo Foxlinx 2026-08-27:
+   * `GET /revisions/2d1c9831…/changes/2d1c9831…` → 400.
+   *
+   * "Không có gì để so vì nó đang chạy" KHÁC HẲN "không đọc được thay đổi", và
+   * hai câu đó phải trông khác nhau. */
+  const alreadyActive = Boolean(
+    navState?.revisionId && runtime.data?.activeRevisionId === navState.revisionId,
+  )
+  const changes = useProgrammingRevisionChanges(
+    alreadyActive ? undefined : (runtime.data?.activeRevisionId ?? 'none'),
+    alreadyActive ? undefined : navState?.revisionId,
+  )
   const overrides = useProgrammingOverrides()
   const commission = useCommissionWorkflow()
 
@@ -121,7 +137,9 @@ export function CheckCommissionPage() {
     runtime.status === 'ready' &&
     runtime.data?.producerState === 'READY' &&
     (runtime.data.safeState === false || runtime.data.safeStateNoControllerOnly === true)
-  const readyToCommission = checkPassed && changes.status === 'ready' && overrides.status === 'ready' && !hasUnavailable && coreReady && !!projectId
+  /* Đang chạy sẵn thì KHÔNG Commission lại: không có gì để nạp, mà một lần
+   * nạp "cho chắc" vẫn là một lần cutover thật trên thiết bị đang điều khiển. */
+  const readyToCommission = checkPassed && !alreadyActive && changes.status === 'ready' && overrides.status === 'ready' && !hasUnavailable && coreReady && !!projectId
 
   useEffect(() => {
     if (!projectId) return
@@ -263,7 +281,12 @@ export function CheckCommissionPage() {
       </Panel>
 
       <Panel title={pick('Thay đổi so với bản đang chạy', 'Changes vs. the running version')}>
-        {changes.status === 'loading' ? (
+        {alreadyActive ? (
+          <p className="text-sm text-[var(--c-text-dim)]">
+            {pick('Revision này chính là bản đang chạy trên thiết bị — không có gì để đối chiếu.',
+                  'This revision is the one already running on the device — there is nothing to compare.')}
+          </p>
+        ) : changes.status === 'loading' ? (
           <StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} />
         ) : changes.status === 'error' || !changes.data ? (
           <StateBlock state="error" title={pick('Không tải được thay đổi.', 'Could not load changes.')} onRetry={changes.refresh} />
@@ -284,7 +307,12 @@ export function CheckCommissionPage() {
       </Panel>
 
       <Panel title={pick('Ảnh hưởng khi áp dụng', 'Impact when applied')}>
-        {changes.status !== 'ready' || !impact ? (
+        {alreadyActive ? (
+          <p className="text-sm text-[var(--c-text-dim)]">
+            {pick('Không có ảnh hưởng để tính: Revision này đang chạy sẵn.',
+                  'There is no impact to compute: this revision is already running.')}
+          </p>
+        ) : changes.status !== 'ready' || !impact ? (
           <StateBlock state={changes.status === 'error' ? 'error' : 'loading'} title={pick('Đang tính ảnh hưởng…', 'Computing impact…')} />
         ) : (
           <ul className="space-y-2 text-sm">

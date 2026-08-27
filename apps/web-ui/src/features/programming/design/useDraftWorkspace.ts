@@ -75,6 +75,22 @@ export function useDraftWorkspace(projectId: string | undefined) {
   const save = useCallback(
     async (operations: ProgrammingDraftOperation[]): Promise<boolean> => {
       if (!project?.draft || !projectId) return false
+      /* Batch RỖNG là không-việc-gì-cả, không phải một lần lưu.
+       *
+       * Hợp đồng đòi `operations` có ít nhất một phần tử
+       * (`application/projects.go`: `len(command.Operations) < 1` ⇒
+       * `PRG-ERR-REQ-001`), nên một PATCH rỗng KHÔNG BAO GIỜ thành công được —
+       * nó chỉ tốn một vòng mạng rồi trả 400, và người dùng nhận một thông báo
+       * lỗi cho việc họ không hề làm sai.
+       *
+       * Đo trên bo Foxlinx 2026-08-27: cùng `baseRevisionId` và cùng ETag,
+       * `operations:[]` trả **400**, còn một operation thật trả 409 (ETag đã
+       * dịch vì có người sửa song song) — tức thân request hợp lệ, chỉ mảng
+       * rỗng là bị từ chối.
+       *
+       * Trả `true` vì đúng là không còn gì chưa lưu: các đường gọi phía sau
+       * (điều hướng sau khi lưu, đóng tab) được đi tiếp một cách chính đáng. */
+      if (operations.length === 0) return true
       setSaving(true)
       try {
         const response = await client.request<MutationResponse<{ projectId: string; draftRevisionId: string; content: ProgrammingDraftDocument }>>(

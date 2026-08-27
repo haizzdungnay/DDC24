@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### PGM-02 — Vá hai đường sinh 400 phát hiện trên bo thật (2026-08-28)
+
+Người dùng báo `PATCH /programming/projects/{id}/draft` trả **400** trên bo
+Foxlinx. Truy theo log thiết bị tìm được **hai nguyên nhân độc lập**, cả hai đều
+là FE gọi một thứ mà hợp đồng cấm.
+
+- **Fixed — `PATCH /draft` với `operations: []`.** Triệu chứng: 400
+  `PRG-ERR-REQ-001` xen kẽ giữa những lần lưu thành công. Nguyên nhân:
+  `useDraftWorkspace.save()` gửi thẳng mảng operations nhận được kể cả khi RỖNG,
+  trong khi hợp đồng đòi ít nhất một operation — nên một PATCH rỗng **không bao
+  giờ thành công được**, nó chỉ tốn một vòng mạng rồi trả lỗi cho một thao tác
+  người dùng không hề làm sai. `save` được truyền cho nhiều component (cây POU,
+  thẻ Project, tab Ánh xạ, tab Thực thi) nên chỉ cần một trong số đó tính ra
+  danh sách rỗng là đủ. Đo trên bo: cùng `baseRevisionId` và cùng ETag,
+  `operations:[]` → **400**; một operation thật → 409 (ETag đã dịch vì có người
+  sửa song song), tức thân request hợp lệ và đúng mảng rỗng bị từ chối. Cách
+  sửa: batch rỗng là không-việc-gì-cả — chặn ngay ở hook, trả `true` vì đúng là
+  không còn gì chưa lưu.
+
+- **Fixed — so sánh Revision với chính nó.** Log bo có
+  `GET /revisions/2d1c9831…/changes/2d1c9831…` → **400**, và PGM-03 hiện "Không
+  tải được thay đổi". Nguyên nhân: `CheckCommissionPage` gọi dịch vụ so sánh mà
+  không kiểm `from` có trùng `to` không; khi Revision đang xét chính là bản đang
+  chạy thì hai id bằng nhau — đúng cặp hợp đồng cấm. `OverviewPage` vốn đã có
+  guard này, PGM-03 thì không. Cách sửa: không phát request, và hiện "Revision
+  này chính là bản đang chạy — không có gì để đối chiếu". Kèm theo
+  `readyToCommission` phải `false`: không có gì để nạp, mà một lần nạp "cho
+  chắc" vẫn là một lần cutover thật trên thiết bị đang điều khiển.
+
+- **Verification** (2026-08-28): vitest **171 file / 1932 test PASS**; lint
+  PASS; build PASS; `npx playwright test e2e/programming.spec.ts` **54 passed /
+  11 skipped**. Sau khi deploy bản vá lên bo, log thiết bị chuyển sang **toàn bộ
+  200** cho cả `PATCH /draft` lẫn `GET …/changes/…`.
+
 ### PGM-02 — Deploy bo Foxlinx và đóng 16/16 WP (`T59-818..822`) (2026-08-28)
 
 - **Deploy bo thật, CẢ backend chứ không chỉ `dist`.** `T59-819` là thay đổi
