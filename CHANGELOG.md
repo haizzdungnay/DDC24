@@ -8,6 +8,45 @@
 
 ## [Unreleased]
 
+### PGM-02 — Deploy bo Foxlinx và đóng 16/16 WP (`T59-818..822`) (2026-08-28)
+
+- **Deploy bo thật, CẢ backend chứ không chỉ `dist`.** `T59-819` là thay đổi
+  backend (`stHunks[]`/`fbdChanges[]` do máy chủ tính). Chỉ đẩy `dist` sẽ cho
+  một kết quả trông như thành công — khay So sánh mở được — nhưng nó hiện "máy
+  chủ chưa trả bảng khác biệt chi tiết" cho đúng thiết bị mà ta vừa tuyên bố là
+  đã có tính năng đó. Đo trước khi deploy backend xác nhận điều này:
+  `grep -c stHunks` trên phản hồi bo trả **0**.
+
+- **Fixed — bản build đầu thiếu cờ workspace.** `npm run build:release` chỉ đặt
+  `VITE_PROGRAMMING_REV_A=1`; workspace PGM-02 còn cần
+  `VITE_PROGRAMS_WORKSPACE_V2=1`, mặc định TẮT theo `DDD-SW-PGM02-WORKSPACE-001
+  §11`. Phát hiện bằng cách grep route canonical trong chính bundle sinh ra —
+  không tin vào lệnh đã gõ. Đây là lần thứ tư cờ build-time của Programming gây
+  hỏng deploy.
+
+- **Verification TRÊN BO** (2026-08-27, `SOM-DDC-24-foxlinx`, aarch64):
+  `mkddc-web-pi.service` **active**, `version 0.1.0-be-b6c` (binary mới);
+  `/api/v1/health` **ok** cả sáu check; core/iobus **active**;
+  `GET /` trả đúng `index-B9rT6_gb.js` vừa build; chunk `programming` **200**,
+  535 502 byte; SPA `/eng/programming/programs` **200**; đăng nhập + danh sách
+  Project OK; **change manifest có đủ `stHunks`/`fbdChanges`/`truncated`/
+  `nextCursor`** với số THẬT từ Revision trên bo; cursor rác **400**, cursor âm
+  **400**, `cursor=0` **200** — fail-closed đúng thiết kế.
+  Binary cross-build `CGO_ENABLED=0 GOARCH=arm64` **statically linked**, không
+  dính glibc/GLIBCXX của bo. Hồ sơ:
+  `docs/07_records/test-evidence/programming/2026-08-27-pgm02-foxlinx-deploy-t59-818-822.md`.
+
+- **Changed — 16/16 WP của `PGM02_ST_FBD_IMPLEMENTATION_PLAN` nay DONE.** Bốn
+  finding của phán quyết audit 2026-08-27 đã đóng hết: `WP-09` (Compare),
+  `WP-04` R3 (hover), `WP-14` (Inspector), `WP-15` (editor chrome), cộng truy
+  nguyên 33/33 AC.
+
+- **KHÔNG đóng increment R3, và nói rõ vì sao.** `T59-816` (hardening
+  Simulation) và `T59-817` (`VS-PROG-U15`, target/HIL, closeout) vẫn mở — chúng
+  nằm ngoài phạm vi lát corrective này. Deploy lên bo **không phải** nghiệm thu
+  target: chưa chạy E2E trên bo, `mkddc-fakemcu` vẫn đang chạy, chưa nghiệm thu
+  I/O vật lý. `RELEASE_READY` giữ **NO-GO**.
+
 ### PGM-02 — Truy nguyên 33 AC và phép đo 1280×750 cho workspace (`T59-822`) (2026-08-27)
 
 - **Added — bảng truy nguyên `AC → task → file test` được SINH RA, không chép
