@@ -96,15 +96,16 @@ export function ProgramsWorkspaceRoute() {
       />
     )
   }
-  /* `T59-811` mở LIVE ở increment R2. SIMULATE vẫn đóng tới R3 — và vẫn KHÔNG
-   * có fallback: một chế độ chưa có capability phải nói ra, không được âm thầm
-   * hiện dữ liệu của chế độ khác. */
+  /* `T59-811` mở LIVE ở R2; `T59-814` dựng hạ tầng SIMULATE nhưng bề mặt điều
+   * khiển thuộc `T59-815`. Cho tới lúc đó, deep-link `?mode=SIMULATE` nói đúng
+   * trạng thái và KHÔNG có fallback: một chế độ chưa có bề mặt phải nói ra, chứ
+   * không âm thầm hiện dữ liệu của chế độ khác. */
   if (mode === 'SIMULATE') {
     return (
       <StateBlock
         state="empty"
-        title={pick('SIMULATE chưa khả dụng trong increment này.', 'SIMULATE is unavailable in this increment.')}
-        detail={pick('Không có fallback sang dữ liệu Draft hoặc runtime gần nhất.', 'There is no fallback to draft data or a nearby runtime revision.')}
+        title={pick('Bề mặt điều khiển Mô phỏng chưa có trong bản này.', 'The Simulation control surface is not in this build.')}
+        detail={pick('Không có fallback sang dữ liệu Draft hoặc runtime gần nhất. Khả năng Mô phỏng của thiết bị được công bố ở capability của server.', 'There is no fallback to draft data or a nearby runtime revision. The controller advertises its Simulation capability in the server capabilities.')}
       />
     )
   }

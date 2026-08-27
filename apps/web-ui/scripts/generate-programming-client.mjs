@@ -36,8 +36,11 @@ for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
 }
 
 endpoints.sort((left, right) => left.operationId.localeCompare(right.operationId));
-if (endpoints.length !== 33) {
-  throw new Error(`Programming OpenAPI phải có 33 operation, thực tế ${endpoints.length}`);
+// 33 operation Rev A/R1-R2 + 7 operation Simulation R3 (T59-814). Con số là
+// contract: thêm endpoint mà quên sinh lại client sẽ đỏ ở đây thay vì lộ ra
+// dưới dạng một hàm thiếu trong FE.
+if (endpoints.length !== 40) {
+  throw new Error(`Programming OpenAPI phải có 40 operation, thực tế ${endpoints.length}`);
 }
 if (new Set(endpoints.map(({ operationId }) => operationId)).size !== endpoints.length) {
   throw new Error("Programming OpenAPI có operationId trùng");

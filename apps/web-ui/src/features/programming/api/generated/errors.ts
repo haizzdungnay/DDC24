@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "2bc29a935b1a259ed2595ea6ae808fba12b6ee7bd9587a179af79c5a5306dde6" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.7.2" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "cbb7041a79685222795851f667ecb2badbede6f50741e4141cef0a83690fcde6" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.8.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
@@ -33,6 +33,14 @@ export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-SIGNAL-FRESHNESS-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.signalFreshness", allowedArgs: ["signalId", "expected", "actual", "limit"] },
   "PRG-ERR-ENABLE-NOT-COMMISSIONED-001": { ownerComponent: "runtime", statusClass: "CONFLICT", httpStatuses: [409], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.enableNotCommissioned", allowedArgs: ["programId"] },
   "PRG-ERR-PROGRAM-STATE-001": { ownerComponent: "runtime", statusClass: "CONFLICT", httpStatuses: [409], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.programState", allowedArgs: ["programId", "state", "limit"] },
+  "PRG-SIM-UNSUPPORTED": { ownerComponent: "simulation", statusClass: "UNAVAILABLE", httpStatuses: [409, 503], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.simUnsupported", allowedArgs: ["contractVersion", "workerVersion"] },
+  "PRG-SIM-SAVE-REQUIRED": { ownerComponent: "simulation", statusClass: "CONFLICT", httpStatuses: [409], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.simSaveRequired", allowedArgs: ["expected", "actual"] },
+  "PRG-SIM-FORBIDDEN": { ownerComponent: "simulation", statusClass: "FORBIDDEN", httpStatuses: [403], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.simForbidden", allowedArgs: ["requiredRole"] },
+  "PRG-SIM-INPUT-NOT-ALLOWED": { ownerComponent: "simulation", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.simInputNotAllowed", allowedArgs: ["observationId", "sourceKind", "expected", "actual", "minimum", "maximum"] },
+  "PRG-SIM-STALE-SESSION": { ownerComponent: "simulation", statusClass: "CONFLICT", httpStatuses: [409, 412], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.simStaleSession", allowedArgs: ["expected", "actual"] },
+  "PRG-SIM-QUOTA": { ownerComponent: "simulation", statusClass: "UNAVAILABLE", httpStatuses: [429], retryable: true, keepsRunningRevision: true, messageKey: "programming.error.simQuota", allowedArgs: ["limit", "retryAfterSeconds"] },
+  "PRG-SIM-WORKER-FAILED": { ownerComponent: "simulation", statusClass: "OPERATION", httpStatuses: [503], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.simWorkerFailed", allowedArgs: ["phase", "timeoutMs"] },
+  "PRG-SIM-EXPIRED": { ownerComponent: "simulation", statusClass: "CONFLICT", httpStatuses: [410], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.simExpired", allowedArgs: ["limit"] },
 } as const;
 
 export type ProgrammingErrorCode = keyof typeof PROGRAMMING_ERROR_CATALOG;
@@ -164,6 +172,22 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "runtime\u0000ST-RT-011": "PRG-ERR-UNAVAILABLE-001",
   "runtime\u0000ST-RT-012": "PRG-ERR-COM-001",
   "runtime\u0000ST-RT-013": "PRG-ERR-COM-001",
+  "sim-supervisor\u0000SIM-SUP-CAPABILITY": "PRG-SIM-UNSUPPORTED",
+  "sim-supervisor\u0000SIM-SUP-CRASH": "PRG-SIM-WORKER-FAILED",
+  "sim-supervisor\u0000SIM-SUP-EXPIRED": "PRG-SIM-EXPIRED",
+  "sim-supervisor\u0000SIM-SUP-HANDSHAKE": "PRG-SIM-UNSUPPORTED",
+  "sim-supervisor\u0000SIM-SUP-PROTOCOL": "PRG-SIM-WORKER-FAILED",
+  "sim-supervisor\u0000SIM-SUP-QUOTA": "PRG-SIM-QUOTA",
+  "sim-supervisor\u0000SIM-SUP-SPAWN": "PRG-SIM-WORKER-FAILED",
+  "sim-supervisor\u0000SIM-SUP-TIMEOUT": "PRG-SIM-WORKER-FAILED",
+  "sim-worker\u0000SIM-E-001": "PRG-SIM-WORKER-FAILED",
+  "sim-worker\u0000SIM-E-002": "PRG-SIM-WORKER-FAILED",
+  "sim-worker\u0000SIM-E-003": "PRG-SIM-WORKER-FAILED",
+  "sim-worker\u0000SIM-E-004": "PRG-SIM-WORKER-FAILED",
+  "sim-worker\u0000SIM-E-005": "PRG-SIM-INPUT-NOT-ALLOWED",
+  "sim-worker\u0000SIM-E-006": "PRG-SIM-INPUT-NOT-ALLOWED",
+  "sim-worker\u0000SIM-E-007": "PRG-SIM-STALE-SESSION",
+  "sim-worker\u0000SIM-E-008": "PRG-SIM-QUOTA",
   "st-control-api\u0000API-E-001": "PRG-ERR-REQ-001",
   "st-control-api\u0000API-E-002": "PRG-ERR-REQ-001",
   "st-control-api\u0000API-E-003": "PRG-ERR-TARGET-001",

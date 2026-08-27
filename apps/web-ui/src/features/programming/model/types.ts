@@ -69,6 +69,40 @@ export interface ProgrammingCapabilities {
     artifactBytes: number
     bindings: number
   }
+  /**
+   * `T59-814` / `DDD-SW-PGM02-WORKSPACE-001` §5.5 — bổ sung ADDITIVE.
+   *
+   * Optional có chủ ý: server đời cũ không có trường này, và khi thiếu thì FE
+   * phải coi mọi mode mới là UNAVAILABLE. Không suy ra "chắc là có" từ việc
+   * bản build FE này biết về SIMULATE — đó chính là cách một giao diện hiện
+   * nút cho một khả năng thiết bị không có.
+   */
+  workspaceModes?: ProgrammingWorkspaceModes
+}
+
+export interface ProgrammingWorkspaceModes {
+  contractVersion: string
+  edit: { supported: boolean }
+  live: { supported: boolean }
+  simulation: ProgrammingSimulationCapability
+}
+
+export interface ProgrammingSimulationCapability {
+  supported: boolean
+  workerVersion: string | null
+  /** Server là authority của quyền; FE chỉ đọc. v1 phải là `['admin']`. */
+  mutationRoles: Array<'viewer' | 'operator' | 'admin'>
+  limits: {
+    maxConcurrentSessionsPerController: number
+    idleTtlSeconds: number
+    hardTtlSeconds: number
+    maxRssMiB: number
+    maxCpuPercentOneCore: number
+    maxActionsPerSecond: number
+    maxTraceSamples: number
+    maxVirtualInputs: number
+    workerCommandTimeoutMs: number
+  }
 }
 
 export type ProgrammingTaskState = 'STOPPED' | 'STARTING' | 'RUNNING' | 'FAULT' | 'UNKNOWN'
