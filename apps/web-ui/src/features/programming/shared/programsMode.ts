@@ -42,14 +42,9 @@ export function programsModeCapabilities(
 ): ProgramsModeCapability[] {
   return [
     { mode: 'EDIT', available: true, reason: null },
-    {
-      mode: 'LIVE',
-      available: false,
-      reason: pick(
-        'LIVE cần nguồn giá trị runtime của Revision đang chạy — capability đó mở ở increment R2.',
-        'LIVE needs the running revision’s runtime value source — that capability ships in increment R2.',
-      ),
-    },
+    /* `T59-811` — LIVE mở ở R2. Nó KHÔNG phải một chế độ soạn thảo khác: nó là
+     * cửa sổ đọc gói ĐANG CHẠY, chỉ đọc với **mọi** vai kể cả admin. */
+    { mode: 'LIVE', available: true, reason: null },
     {
       mode: 'SIMULATE',
       available: false,

@@ -127,9 +127,17 @@ describe('ProgramsWorkspaceRoute — canonical deep-link/mode', () => {
     expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
   })
 
-  it.each(['LIVE', 'SIMULATE'])('%s chưa implement hiển thị UNAVAILABLE thay vì Draft', (mode) => {
-    renderRoute(`/eng/programming/programs?project=p1&mode=${mode}`)
-    expect(screen.getByText(new RegExp(`${mode} chưa khả dụng`))).toBeInTheDocument()
+  /* `T59-811` mở LIVE ở R2; SIMULATE vẫn đóng tới R3. Điều KHÔNG đổi: chế độ
+   * chưa có capability phải nói ra, không được âm thầm hiện Draft. */
+  it('SIMULATE chưa implement hiển thị UNAVAILABLE thay vì Draft', () => {
+    renderRoute('/eng/programming/programs?project=p1&mode=SIMULATE')
+    expect(screen.getByText(/SIMULATE chưa khả dụng/)).toBeInTheDocument()
     expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
+  })
+
+  it('LIVE mở được workspace, không còn chặn ở resolver', () => {
+    renderRoute('/eng/programming/programs?project=p1&mode=LIVE')
+    expect(screen.queryByText(/LIVE chưa khả dụng/)).toBeNull()
+    expect(screen.getByTestId('editor')).toBeInTheDocument()
   })
 })

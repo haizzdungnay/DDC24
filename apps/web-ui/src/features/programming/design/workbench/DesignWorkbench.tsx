@@ -4,7 +4,7 @@ import { buildStReferenceIndex } from '../editor/stReferenceIndex'
 import { fbdIssueTargets } from '../../fbd/issueTargets'
 import { validateFbdDocument, type FbdDocument } from '../../fbd/model'
 import type { ProgrammingDraftDocument } from '../../model/types'
-import { ProgrammingWorkbench, type WorkbenchProblem, type WorkbenchSymbol } from './ProgrammingWorkbench'
+import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol } from './ProgrammingWorkbench'
 
 /**
  * `T59-807` — chỗ dựng dữ liệu cho workbench của PGM-02.
@@ -16,6 +16,7 @@ import { ProgrammingWorkbench, type WorkbenchProblem, type WorkbenchSymbol } fro
  * mọi guard thì có vòng đời hook của riêng nó.
  */
 export function DesignWorkbench({
+  mode,
   document,
   source,
   sourceLabel,
@@ -23,6 +24,7 @@ export function DesignWorkbench({
   onSelectProgram,
   onJumpToOffset,
 }: {
+  mode: WorkbenchMode
   document: ProgrammingDraftDocument
   source: string | null
   sourceLabel: string
@@ -88,7 +90,7 @@ export function DesignWorkbench({
 
   return (
     <ProgrammingWorkbench
-      mode="EDIT"
+      mode={mode}
       sourceLabel={sourceLabel}
       problems={problems}
       symbols={symbols}

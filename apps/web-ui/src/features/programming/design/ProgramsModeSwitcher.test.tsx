@@ -36,14 +36,23 @@ describe('ProgramsModeSwitcher', () => {
   })
 
   it('chế độ chưa khả dụng vẫn HIỆN và giải thích lý do khi bấm', () => {
+    // `T59-811` mở LIVE ở R2, nên SIMULATE là chế độ chưa khả dụng còn lại.
     const { onSwitch } = renderSwitcher()
-    const live = screen.getByRole('button', { name: 'LIVE' })
-    expect(live).toHaveAttribute('aria-disabled', 'true')
+    const simulate = screen.getByRole('button', { name: 'SIMULATE' })
+    expect(simulate).toHaveAttribute('aria-disabled', 'true')
 
-    fireEvent.click(live)
-    expect(screen.getByText(/capability đó mở ở increment R2/)).toBeInTheDocument()
+    fireEvent.click(simulate)
+    expect(screen.getByText(/capability đó mở ở increment R3/)).toBeInTheDocument()
     // KHÔNG tự hạ cấp: không có lần đổi chế độ nào xảy ra
     expect(onSwitch).not.toHaveBeenCalled()
+  })
+
+  it('LIVE nay khả dụng và đi thẳng khi Draft sạch', () => {
+    const { onSwitch } = renderSwitcher()
+    const live = screen.getByRole('button', { name: 'LIVE' })
+    expect(live).toHaveAttribute('aria-disabled', 'false')
+    fireEvent.click(live)
+    expect(onSwitch).toHaveBeenCalledWith('LIVE')
   })
 
   it('SIMULATE nói increment khác với LIVE — lý do là thật, không phải câu chung', () => {
@@ -54,8 +63,8 @@ describe('ProgramsModeSwitcher', () => {
 
   it('Draft bẩn + đích không khả dụng: báo không khả dụng, KHÔNG hỏi bỏ thay đổi', () => {
     renderSwitcher({ draftDirty: true })
-    fireEvent.click(screen.getByRole('button', { name: 'LIVE' }))
-    expect(screen.getByText(/capability đó mở ở increment R2/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'SIMULATE' }))
+    expect(screen.getByText(/capability đó mở ở increment R3/)).toBeInTheDocument()
     expect(screen.queryByText(/Draft còn thay đổi chưa lưu/)).toBeNull()
   })
 
