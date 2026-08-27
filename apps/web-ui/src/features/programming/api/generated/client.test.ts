@@ -16,11 +16,38 @@ import {
 import impactGolden from "../../../../../../../contracts/openapi/testdata/programming-impact.json";
 
 describe("Programming API client sinh từ OpenAPI", () => {
-  it("khóa đủ 33 operation và contract Commission/Runtime Signal", () => {
+  it("khóa đủ 40 operation và contract Commission/Runtime Signal/Simulation", () => {
     // 25 operation Rev A + 4 operation Control Library (T59-202/T59-203)
     // + 2 operation intent Enable/Disable (T59-405) + 1 Published Signal
-    // runtime read-only (T59-504) + 1 recovery-reset (T59-702).
-    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(33);
+    // runtime read-only (T59-504) + 1 recovery-reset (T59-702)
+    // + 7 operation Simulation R3 (T59-814).
+    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(40);
+    // T59-814 / ADR-053 — RBAC của Simulation nằm ở CHÍNH contract sinh ra:
+    // mọi mutation admin-only, mọi đường đọc mở cho viewer/operator. Nếu ai đó
+    // nới quyền ở OpenAPI thì test này đỏ trước khi FE kịp hiện thêm nút.
+    expect(PROGRAMMING_ENDPOINTS.createProgrammingSimulationSession).toEqual({
+      method: "POST",
+      path: "/api/v1/programming/simulation/sessions",
+      roles: ["admin"],
+    });
+    expect(PROGRAMMING_ENDPOINTS.actProgrammingSimulationSession.roles).toEqual(["admin"]);
+    expect(PROGRAMMING_ENDPOINTS.setProgrammingSimulationInput.roles).toEqual(["admin"]);
+    expect(PROGRAMMING_ENDPOINTS.stopProgrammingSimulationSession.roles).toEqual(["admin"]);
+    expect(PROGRAMMING_ENDPOINTS.getProgrammingSimulationSession.roles).toEqual([
+      "viewer",
+      "operator",
+      "admin",
+    ]);
+    expect(PROGRAMMING_ENDPOINTS.listProgrammingSimulationObservations.roles).toEqual([
+      "viewer",
+      "operator",
+      "admin",
+    ]);
+    expect(PROGRAMMING_ENDPOINTS.listProgrammingSimulationTrace.roles).toEqual([
+      "viewer",
+      "operator",
+      "admin",
+    ]);
     // T59-702 — lối ra tường minh khỏi RECOVERY_REQUIRED. Admin-only: đây là
     // lệnh gỡ khoá vận hành, đưa Core về IDLE KHÔNG có Active và bắt buộc
     // Commission lại; không gói nào tự sống lại.

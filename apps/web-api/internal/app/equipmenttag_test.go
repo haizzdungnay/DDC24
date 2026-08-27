@@ -98,7 +98,6 @@ func TestPointConfigStillRequiresAtLeastOneField(t *testing.T) {
 	}
 }
 
-
 // fullIOConfigJSON dựng cấu hình IO ĐỦ kênh (16 UI + 4 AO + 4 DO).
 //
 // Bộ kiểm hợp lệ đòi đủ kênh — đó là luật đúng cho một thiết bị thật, nên test

@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DEC-PROG-REGISTER-001` |
-| Phiên bản | 1.5 |
-| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` CLOSED (decision + implementation); increment R1 và R2 ĐÓNG (`T59-801..813` DONE), R3 mở với `T59-814` READY. Status authority của từng task là Plan 59, không phải hồ sơ này** |
+| Phiên bản | 1.7 |
+| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` CLOSED; increment R1 và R2 ĐÓNG (`T59-801..813` DONE), R3 mở với `T59-814` READY. **Một quyết định ĐANG MỞ: `UD-PROG-014` (tab đa POU)**; `UD-PROG-013` còn phần dư cần disposition. Status authority của từng task là Plan 59, không phải hồ sơ này** |
 | Ngày | 2026-08-25 |
 | Chủ quản | Product + System Architecture |
 | Authority | `ADR-050`; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
@@ -53,6 +53,8 @@ viết code; đó là **evidence bắt buộc để mở `RELEASE_READY`**.
 | `UD-PROG-011` | Artifact/store/API/IPC versioned; dual-reader v1/v2 trong migration. | CLOSED | ADR-050 hệ quả |
 | `UD-PROG-012` | Implementation review được waive khỏi entry; release evidence không waive. | CLOSED | ADR-050.10 |
 | `UD-PROG-013` | Editor ST của PGM-02 **giữ bề mặt hiện tại cho R1**; không thêm CodeMirror 6 vào `apps/web-ui`. | CLOSED | Product Owner/CTO + System Architect, 2026-08-26 — [`GATE-PROG-ST-EDITOR-DEP-001`](PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) §4.1/§5 |
+| `UD-PROG-014` | PGM-02 mở **nhiều tab POU** song song (phương án B). | **CLOSED** | Chủ sở hữu cấp ba ảnh render PGM-02 ngày 2026-08-27 kèm chỉ thị thi hành; cả ST lẫn FBD đều thể hiện tab bar |
+| `UD-PROG-015` | Ba trường Inspector trong ảnh (`Access`, `Description`, `Cycle (in Task)` dạng tên Task) **chưa có nguồn dữ liệu** trong Draft v2. | **OPEN — chờ Owner** | Đo tại `ed6fb21`: `upsertProgramConfig` chỉ có `programId`/`objectId`/`periodMs` |
 
 ### 1.2 `UD-PROG-013` — bề mặt editor ST cho R1
 
@@ -86,11 +88,78 @@ go-to-definition mức CodeMirror. Mở lại phải chạy nốt ba phép đo t
 (`openPouP95Ms`, `typingResponseP95Ms`, `steadyJsHeapMiB`) và kiểm build
 offline/air-gapped.
 
-Chi tiết field, API, state, algorithm, timing, error, source mapping, migration và
-test nằm tại
-[`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md).
-Không mở lại một dòng ở bảng này bằng comment code; thay đổi target phải có ADR
-mới hoặc revision ADR-050 do Product Owner phê duyệt.
+> **Phần dư chưa xử lý — ghi nhận 2026-08-27.** Điều khoản "mở lại từ R2" ở trên
+> đã **hết hạn mà không ai thực hiện**: R2 (`T59-810..813`) đóng ngày 2026-08-27
+> và không task nào trong đó nhận hover chuột hoặc **chỉ mục ký hiệu do compiler
+> sinh** (bullet BE của `PGM02-V22-WP-04`). Handoff `PGM-02A §4` liệt
+> `hover symbol/type/signature` là **Required**, nên đây là phần dư của hợp đồng,
+> không phải tính năng tuỳ chọn.
+>
+> `T59-820` nay nhận phần dư này với hai đường ra hợp lệ và **chỉ hai**: giao ở
+> R3, hoặc Owner ký hoãn tường minh **có thời hạn**. Không chấp nhận để trạng
+> thái trôi thêm một increment nữa.
+>
+> Nguồn: [`REC-PGM02-AUD-ADJ-001`](../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md) `F-PGM02-AUD-003`.
+
+### 1.3 `UD-PROG-014` — nhiều tab POU (ĐÃ CHỐT: phương án B)
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Quyết định | **Phương án B** — workspace PGM-02 mở nhiều tab POU song song |
+| Trạng thái | **CLOSED** |
+| Ngày | 2026-08-27 |
+| Authority | Chủ sở hữu cấp ba ảnh render PGM-02 (`PGM-02A_ST_editor_reference.png`, `PGM-02B_FBD_editor_reference.png`, ảnh chú giải) kèm chỉ thị "implement bám theo thiết kế và plan" |
+| Hồ sơ | `handoff_manifest.json` 2.3; `DDD-SW-PGM02-WORKSPACE-001` 0.5 §7.2/§7.3/§10.2 |
+
+Ảnh ST hiện hai tab `AHU_Main.Main [ST]` và `AHU_Main.PID_Loop [ST]` kèm nút `+`;
+ảnh FBD hiện `AHU_Main.FBD (FBD)` và `AHU_Main.Main (ST)` — tức tab **bắc qua cả
+hai ngôn ngữ** trong cùng một workspace. Đó là câu trả lời cho câu hỏi mở của
+`REC-PGM02-AUD-ADJ-001` `F-PGM02-AUD-004b`.
+
+**Điều gói handoff v2.2 vẫn KHÔNG nói, và team phải chốt khi implement** (ghi vào
+`TC-PGM02-TAB-01`, không tự ý mỗi người một kiểu):
+
+1. số tab tối đa và hành vi khi vượt;
+2. đóng tab có Draft bẩn — phải xác nhận, cấm mất buffer im lặng;
+3. đổi mode `EDIT→LIVE/SIMULATE` áp cho **toàn workspace**, không phải từng tab;
+4. tab có sống qua reload không, và nếu có thì khôi phục từ đâu;
+5. tab trỏ tới POU đã bị xoá/đổi tên ở phiên khác.
+
+Bất biến không được vi phạm: `objectId` là trục định danh của tab, **không** phải
+tên POU (`UD-PROG-003`, DDD §3.5). Hai tab không bao giờ được chia chung một
+buffer soạn thảo.
+
+### 1.4 `UD-PROG-015` — ba trường Inspector chưa có nguồn dữ liệu (ĐANG MỞ)
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Trạng thái | **OPEN — chờ Product Owner/CTO + System Architect** |
+| Ngày mở | 2026-08-27 |
+| Chặn | Ba trường tương ứng của `T59-818`; **không** chặn phần còn lại |
+
+Ảnh Inspector (ngữ cảnh Program) hiện bảy trường. Đo tại `ed6fb21`, Draft v2 chỉ
+có `programId`, `objectId`, `periodMs` (`application/draft_v2.go:349-377`) cộng
+`name`/`kind` ở `objects[]`. Đối chiếu:
+
+| Trường trong ảnh | Nguồn thật | Kết luận |
+|---|---|---|
+| `Name` | `objects[].name` | có |
+| `Language` | suy từ `replaceProgramSource.language` | có |
+| `Type` | `objects[].kind` | có |
+| `Cycle (in Task)` phần chu kỳ `1 s` | `programs[].periodMs` | có |
+| `Access: Public` | — | **không có** |
+| `Description` | — | **không có** |
+| `Cycle (in Task)` phần tên Task `Control_Main` | — | **không có** — `UD-PROG-002` xếp lịch theo period 1/5/30 s cho từng Program, không có thực thể Task có tên |
+
+Ba lựa chọn cho Owner: **(A)** bỏ ba trường khỏi Inspector cho tới khi có nhu cầu
+thật; **(B)** thêm `description` (và `access`) vào Draft v2 bằng thay đổi additive
+có migration, giữ nguyên quyết định không tạo thực thể Task; **(C)** dựng thực thể
+Task có tên — việc này chạm `UD-PROG-002` và `PROGRAM_TASK_SCHEDULER_SPEC`, tức
+phải sửa cả runtime.
+
+**Khuyến nghị kỹ thuật (không phải quyết định):** A cho R3, B nếu Owner muốn giữ
+đúng ảnh. **Tuyệt đối không** hiện `Public` hoặc một tên Task cứng ở FE để cho
+giống ảnh — đó là bịa dữ liệu, vi phạm nguyên tắc số 1 của gói handoff.
 
 ### 1.1 `CR-PROG-PGM02-V22-001` — exact baseline được phê duyệt
 

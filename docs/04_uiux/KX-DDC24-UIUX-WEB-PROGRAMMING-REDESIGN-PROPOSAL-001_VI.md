@@ -62,7 +62,7 @@ thật trên board nên không phụ thuộc giới hạn này.
 | `PGM-06` | `/eng/programming/runtime` | 3 tab con → `RuntimeTab`/`WatchTab`/`VersionsTab`+`DangerZone` | `runtime/RuntimeServicePage.tsx` (90) |
 
 Dùng chung trên cả sáu: `layout/ProgrammingHeader.tsx` (h1 + nút Làm mới),
-`layout/ProgrammingDesktopNav.tsx` (6 tab), `layout/ProgrammingContextBar.tsx`
+`layout/ProgrammingDesktopNav.tsx` (6 tab), `layout/ProgrammingContextStrip.tsx`
 (371 dòng, 6 cột + notice), `layout/ProgrammingMobileNav.tsx` (bottom nav 6 mục).
 
 ---
@@ -75,7 +75,7 @@ Mức độ: **C** = chặn trải nghiệm · **A** = ảnh hưởng rõ · **B
 
 | ID | Mức | Phát hiện |
 |---|---|---|
-| `F-01` | **C** | **UUID là dữ kiện chiếm chỗ nhất trên mọi trang.** Thanh context in nguyên `draftRevisionId` và `activeRevisionId` ([`ProgrammingContextBar.tsx:82-97`](../../apps/web-ui/src/features/programming/layout/ProgrammingContextBar.tsx#L82-L97)). Ở 1280 px mỗi chuỗi xuống **ba dòng** và chiếm 2/6 cột. Cùng chuỗi đó lặp lại ở Tổng quan, `RuntimeTab` (Active + LKG), `VersionsTab` (Active + LKG) — **một người dùng gặp đúng một chuỗi 36 ký tự tới bốn lần trong một phiên**. Không có thao tác nào của kỹ sư điều khiển cần đọc UUID. |
+| `F-01` | **C** | **UUID là dữ kiện chiếm chỗ nhất trên mọi trang.** Thanh context in nguyên `draftRevisionId` và `activeRevisionId` ([`ProgrammingContextStrip.tsx:82-97`](../../apps/web-ui/src/features/programming/layout/ProgrammingContextStrip.tsx#L82-L97)). Ở 1280 px mỗi chuỗi xuống **ba dòng** và chiếm 2/6 cột. Cùng chuỗi đó lặp lại ở Tổng quan, `RuntimeTab` (Active + LKG), `VersionsTab` (Active + LKG) — **một người dùng gặp đúng một chuỗi 36 ký tự tới bốn lần trong một phiên**. Không có thao tác nào của kỹ sư điều khiển cần đọc UUID. |
 | `F-02` | **A** | **Trạng thái nói bằng hằng số nội bộ.** `RUNNING 1 · DISABLED 1`, `PROGRAM:program-…` / `ADDED`, `CORE_REVA`, `FUNCTION_BLOCK`, `USER_STOPPED`, `GOOD · LIVE`, `UNKNOWN / RECONCILING`. Chuỗi enum đi thẳng từ hợp đồng ra màn hình, kể cả khi đã có sẵn hàm `pick()` song ngữ ngay cạnh. |
 | `F-03` | **B** | **Vòng đời Revision hiện đủ 9 ô mọi lúc**, kể cả `FAILED` và `UNKNOWN / RECONCILING` ([`CheckCommissionPage.tsx:REVISION_LIFECYCLE`](../../apps/web-ui/src/features/programming/commission/CheckCommissionPage.tsx#L60-L64)). Người dùng phải quét 9 ô để tìm ô đang sáng, trong đó hai ô cuối là **ngoại lệ**, không phải bước của quy trình. |
 
@@ -93,7 +93,7 @@ Mức độ: **C** = chặn trải nghiệm · **A** = ảnh hưởng rõ · **B
 | ID | Mức | Phát hiện |
 |---|---|---|
 | `F-08` | **A** | **Bốn tầng để tới một dòng code:** `NavRail` nhóm *Kỹ thuật* (mục **thứ 7/7**, [`NavRail.tsx:63`](../../apps/web-ui/src/shared/components/NavRail.tsx#L63)) → 6 tab workspace → 3 tab con → panel. Trang Chương trình có **hai hàng tab chồng nhau**. Icon của mục là `ShieldCheck` (khiên bảo mật) cho "Lập trình điều khiển" — sai nghĩa. |
-| `F-09` | **C** | **Thanh context chiếm đầu mọi trang, không sticky, không thu gọn.** 150–190 px trên desktop; ở `/programs` nó đẩy dòng code đầu tiên xuống dưới mốc ~640 px. Trên mobile 390 px lưới đổ về **1 cột × 6 hàng ≈ 470 px** ([`ProgrammingContextBar.tsx:70`](../../apps/web-ui/src/features/programming/layout/ProgrammingContextBar.tsx#L70) — `sm:grid-cols-2 xl:grid-cols-6`, mặc định 1 cột), nên màn hình đầu tiên **chỉ có tiêu đề và thanh context**. Ảnh chụp Pixel 7 xác nhận. |
+| `F-09` | **C** | **Thanh context chiếm đầu mọi trang, không sticky, không thu gọn.** 150–190 px trên desktop; ở `/programs` nó đẩy dòng code đầu tiên xuống dưới mốc ~640 px. Trên mobile 390 px lưới đổ về **1 cột × 6 hàng ≈ 470 px** ([`ProgrammingContextStrip.tsx:70`](../../apps/web-ui/src/features/programming/layout/ProgrammingContextStrip.tsx#L70) — `sm:grid-cols-2 xl:grid-cols-6`, mặc định 1 cột), nên màn hình đầu tiên **chỉ có tiêu đề và thanh context**. Ảnh chụp Pixel 7 xác nhận. |
 | `F-10` | **B** | **Tab "Thực thi" không có địa chỉ riêng**, chỉ tồn tại dưới dạng `?tab=execution` ([`DesignWorkspacePage.tsx:62`](../../apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx#L62)). Chu kỳ tác vụ và thứ tự chạy — hai thông số quyết định hành vi runtime — nằm ở chỗ khó tìm nhất trong feature. |
 
 ### 4.4 Trang Chương trình (`PGM-02`)

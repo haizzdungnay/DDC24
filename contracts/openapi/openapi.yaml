@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.28.0"
+  version: "1.29.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -2630,6 +2630,201 @@ paths:
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  # T59-814 / ADR-053 — Simulation R3.
+  #
+  # `SET_INPUT` và `STOP` là hành động sản phẩm nhưng được materialize thành
+  # resource riêng (PUT input, DELETE session) để có identity và idempotency rõ
+  # ràng; endpoint `actions` vì vậy KHÔNG nhận hai hành động đó.
+  /programming/simulation/sessions:
+    post:
+      operationId: createProgrammingSimulationSession
+      summary: Mở phiên Simulation từ Revision đã Check
+      x-rbac: [admin]
+      x-implementation-status: t59-814
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingSimulationCreateRequest" }
+      responses:
+        "201":
+          description: Phiên đã seal và worker đã sẵn sàng
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationSession" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "429": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/simulation/sessions/{sessionId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getProgrammingSimulationSession
+      summary: Đọc trạng thái phiên Simulation
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-814
+      responses:
+        "200":
+          description: Trạng thái phiên
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationSession" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+    delete:
+      operationId: stopProgrammingSimulationSession
+      summary: Dừng phiên Simulation (materialize của hành động STOP)
+      x-rbac: [admin]
+      x-implementation-status: t59-814
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      responses:
+        "200":
+          description: Phiên đã ở trạng thái terminal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationSession" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "412": { $ref: "#/components/responses/ProgrammingError" }
+        "428": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/simulation/sessions/{sessionId}/actions:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: actProgrammingSimulationSession
+      summary: RUN/PAUSE/STEP_CYCLE/RESET/SET_SPEED trên phiên
+      x-rbac: [admin]
+      x-implementation-status: t59-814
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingSimulationActionRequest" }
+      responses:
+        "200":
+          description: Phiên sau đúng một lần chuyển trạng thái
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationSession" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "410": { $ref: "#/components/responses/ProgrammingError" }
+        "412": { $ref: "#/components/responses/ProgrammingError" }
+        "428": { $ref: "#/components/responses/ProgrammingError" }
+        "429": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/simulation/sessions/{sessionId}/inputs/{observationId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: observationId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    put:
+      operationId: setProgrammingSimulationInput
+      summary: Ghi một virtual input trong allowlist của manifest
+      x-rbac: [admin]
+      x-implementation-status: t59-814
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingSimulationInputRequest" }
+      responses:
+        "200":
+          description: Phiên sau khi input được commit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationSession" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "410": { $ref: "#/components/responses/ProgrammingError" }
+        "412": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "428": { $ref: "#/components/responses/ProgrammingError" }
+        "429": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/simulation/sessions/{sessionId}/observations:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listProgrammingSimulationObservations
+      summary: Đọc ảnh chụp observation của phiên
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-814
+      responses:
+        "200":
+          description: Ảnh chụp typed của phiên
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationFrame" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/simulation/sessions/{sessionId}/trace:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listProgrammingSimulationTrace
+      summary: Đọc trang mẫu trace có biên của phiên
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-814
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingCursor" }
+        - { $ref: "#/components/parameters/ProgrammingLimit" }
+      responses:
+        "200":
+          description: Trang mẫu trace
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationTracePage" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -2793,6 +2988,14 @@ components:
             - PRG-ERR-OUTPUT-OWNER-001
             - PRG-ERR-ENABLE-NOT-COMMISSIONED-001
             - PRG-ERR-PROGRAM-STATE-001
+            - PRG-SIM-UNSUPPORTED
+            - PRG-SIM-SAVE-REQUIRED
+            - PRG-SIM-FORBIDDEN
+            - PRG-SIM-INPUT-NOT-ALLOWED
+            - PRG-SIM-STALE-SESSION
+            - PRG-SIM-QUOTA
+            - PRG-SIM-WORKER-FAILED
+            - PRG-SIM-EXPIRED
             - PRG-ERR-PID-REVIEW-001
         messageKey:
           type: string
@@ -2812,6 +3015,9 @@ components:
       type: object
       additionalProperties: false
       required: [schemaVersion, profile, targetState, limits, languages, types, taskPeriodsMs]
+      # `workspaceModes` là bổ sung ADDITIVE của PGM-02 (DDD §5.5) và cố ý
+      # KHÔNG required: server đời cũ không có nó, và client mới phải coi mọi
+      # mode là UNAVAILABLE khi thiếu — không được đoán.
       properties:
         schemaVersion: { type: string, const: "1.0" }
         profile: { type: string, const: "MK-DDC-24-REV-A" }
@@ -2828,6 +3034,52 @@ components:
           type: array
           items: { type: integer, enum: [1000, 5000, 30000] }
           uniqueItems: true
+        workspaceModes:
+          type: object
+          additionalProperties: false
+          required: [contractVersion, edit, live, simulation]
+          properties:
+            contractVersion: { type: string, const: "PGM02-WORKSPACE-V1" }
+            edit:
+              type: object
+              additionalProperties: false
+              required: [supported]
+              properties:
+                supported: { type: boolean }
+            live:
+              type: object
+              additionalProperties: false
+              required: [supported]
+              properties:
+                supported: { type: boolean }
+            simulation:
+              type: object
+              additionalProperties: false
+              required: [supported, workerVersion, mutationRoles, limits]
+              properties:
+                supported: { type: boolean }
+                workerVersion: { type: string, nullable: true, maxLength: 32 }
+                # v1 PHẢI là [admin]. Server là authority của quyền; FE chỉ đọc.
+                mutationRoles:
+                  type: array
+                  items: { type: string, enum: [viewer, operator, admin] }
+                  uniqueItems: true
+                limits:
+                  type: object
+                  additionalProperties: false
+                  required: [maxConcurrentSessionsPerController, idleTtlSeconds, hardTtlSeconds,
+                             maxRssMiB, maxCpuPercentOneCore, maxActionsPerSecond, maxTraceSamples,
+                             maxVirtualInputs, workerCommandTimeoutMs]
+                  properties:
+                    maxConcurrentSessionsPerController: { type: integer, minimum: 1 }
+                    idleTtlSeconds: { type: integer, minimum: 1 }
+                    hardTtlSeconds: { type: integer, minimum: 1 }
+                    maxRssMiB: { type: integer, minimum: 1 }
+                    maxCpuPercentOneCore: { type: integer, minimum: 1, maximum: 100 }
+                    maxActionsPerSecond: { type: integer, minimum: 1 }
+                    maxTraceSamples: { type: integer, minimum: 1 }
+                    maxVirtualInputs: { type: integer, minimum: 1 }
+                    workerCommandTimeoutMs: { type: integer, minimum: 1 }
         limits:
           type: object
           additionalProperties: false
@@ -3226,6 +3478,141 @@ components:
             nhất — tức đúng lúc dấu này cần thiết nhất.
           type: string
           pattern: "^[0-9]{1,20}$"
+    # T59-814 / ADR-053 — Simulation R3.
+    #
+    # Mọi số đếm đi bằng CHUỖI thập phân (`sessionSequence`, `virtualTimeMs`,
+    # `observationSequence`, `resetEpoch`): chúng là uint64 và JSON number của
+    # JavaScript mất chính xác từ 2^53. Một sequence bị làm tròn sẽ làm mọi phép
+    # so `If-Match` sai theo cách không ai nhìn thấy.
+    ProgrammingSimulationCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, controllerId, projectId, sourceDraftRevisionId, sourceContentSha256]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        controllerId: { type: string, minLength: 1, maxLength: 128 }
+        projectId: { type: string, format: uuid }
+        sourceDraftRevisionId: { type: string, format: uuid }
+        sourceContentSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+    ProgrammingSimulationActionRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, action]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        # `SET_INPUT` và `STOP` cố ý KHÔNG có ở đây: chúng có resource riêng.
+        action: { type: string, enum: [RUN, PAUSE, STEP_CYCLE, RESET, SET_SPEED] }
+        speed: { type: integer, enum: [1, 10, 60] }
+    ProgrammingSimulationInputRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, dataType, value]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        # Kiểu ĐI KÈM giá trị và phải khớp manifest. Suy kiểu từ hình dạng JSON
+        # sẽ biến biên kiểm kiểu thành biên kiểm định dạng.
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        value: { nullable: false }
+    ProgrammingSimulationInput:
+      type: object
+      additionalProperties: false
+      required: [observationId, programId, variable, sourceKind, dataType, unit, min, max, simulationWritable]
+      properties:
+        observationId: { type: string, minLength: 1, maxLength: 128 }
+        programId: { type: string }
+        variable: { type: string }
+        # Chỉ hai nguồn này được ghi. OUTPUT/IN_OUT/RETAIN/INTERNAL/COMMAND/
+        # OVERRIDE/PRODUCTION_WRITER không bao giờ xuất hiện trong allowlist.
+        sourceKind: { type: string, enum: [VAR_INPUT, READ_BINDING] }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        unit: { type: string, nullable: true, maxLength: 32 }
+        min: { type: number, nullable: true }
+        max: { type: number, nullable: true }
+        simulationWritable: { type: boolean }
+    ProgrammingSimulationObservation:
+      type: object
+      additionalProperties: false
+      required: [observationId, programId, variable, kind, dataType, quality, value]
+      properties:
+        observationId: { type: string, minLength: 1, maxLength: 128 }
+        programId: { type: string }
+        variable: { type: string }
+        kind: { type: string, enum: [INPUT, OUTPUT] }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        # UNAVAILABLE khi Program chưa từng đến hạn. Không có "0 mặc định": một
+        # số 0 không phân biệt được với số 0 thật là đúng loại lỗi phải tránh.
+        quality: { type: string, enum: [GOOD, UNCERTAIN, BAD, UNAVAILABLE] }
+        value: { nullable: true }
+    ProgrammingSimulationFrame:
+      type: object
+      additionalProperties: false
+      required: [virtualTimeMs, snapshotSequence, resetEpoch, observations]
+      properties:
+        virtualTimeMs: { type: integer, format: int64, minimum: 0 }
+        snapshotSequence: { type: integer, format: int64, minimum: 0 }
+        resetEpoch: { type: integer, format: int64, minimum: 0 }
+        observations:
+          type: array
+          maxItems: 4096
+          items: { $ref: "#/components/schemas/ProgrammingSimulationObservation" }
+    ProgrammingSimulationTraceSample:
+      type: object
+      additionalProperties: false
+      required: [virtualTimeMs, snapshotSequence, values]
+      properties:
+        virtualTimeMs: { type: integer, format: int64, minimum: 0 }
+        snapshotSequence: { type: integer, format: int64, minimum: 0 }
+        values:
+          type: array
+          maxItems: 4096
+          items: { nullable: true }
+    ProgrammingSimulationTracePage:
+      type: object
+      additionalProperties: false
+      required: [samples, nextCursor, total, dropped]
+      properties:
+        samples:
+          type: array
+          maxItems: 1024
+          items: { $ref: "#/components/schemas/ProgrammingSimulationTraceSample" }
+        nextCursor: { type: integer, format: int64, minimum: 0 }
+        total: { type: integer, format: int64, minimum: 0 }
+        # `dropped` > 0 nghĩa là trace đã đầy và DỪNG ghi. Nói ra thay vì cuộn
+        # vòng im lặng: một trace bị cuộn trông y hệt một trace đầy đủ.
+        dropped: { type: integer, format: int64, minimum: 0 }
+    ProgrammingSimulationSession:
+      type: object
+      additionalProperties: false
+      required: [sessionId, controllerId, projectId, sourceDraftRevisionId, sourceContentSha256,
+                 state, sessionSequence, etag, baseTickMs, virtualTimeMs, speed,
+                 observationSequence, resetEpoch, createdAt, lastActivityAt, idleExpiresAt,
+                 hardExpiresAt, failureCode, workerVersion]
+      properties:
+        sessionId: { type: string, format: uuid }
+        controllerId: { type: string, minLength: 1, maxLength: 128 }
+        projectId: { type: string, format: uuid }
+        sourceDraftRevisionId: { type: string, format: uuid }
+        sourceContentSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        state: { type: string, enum: [PREPARING, PAUSED, RUNNING, COMPLETED, FAILED, EXPIRED, STOPPED] }
+        sessionSequence: { type: string, pattern: "^[0-9]{1,20}$" }
+        etag: { type: string, minLength: 1, maxLength: 128 }
+        baseTickMs: { type: integer, nullable: true, minimum: 1 }
+        virtualTimeMs: { type: string, pattern: "^[0-9]{1,20}$" }
+        speed: { type: integer, enum: [1, 10, 60] }
+        observationSequence: { type: string, pattern: "^[0-9]{1,20}$" }
+        resetEpoch: { type: string, pattern: "^[0-9]{1,20}$" }
+        createdAt: { type: string, format: date-time }
+        lastActivityAt: { type: string, format: date-time }
+        idleExpiresAt: { type: string, format: date-time }
+        hardExpiresAt: { type: string, format: date-time }
+        # Mã ổn định, không phải văn bản tự do. Null nghĩa là "chưa hỏng".
+        failureCode: { type: string, nullable: true, maxLength: 64 }
+        workerVersion: { type: string, nullable: true, maxLength: 32 }
+        simulationInputs:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/ProgrammingSimulationInput" }
+        auditId: { type: string, format: uuid }
     ProgrammingTraceAccepted:
       type: object
       additionalProperties: false

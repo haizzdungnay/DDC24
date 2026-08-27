@@ -30,29 +30,36 @@ export type ModeSwitchDecision =
   | { kind: 'CONFIRM_DISCARD' }
 
 /**
- * Capability của từng mode trong increment hiện tại.
+ * Capability của từng mode.
  *
- * `LIVE` và `SIMULATE` chưa khả dụng vì **increment**, không phải vì thiết bị
- * thiếu khả năng: `LIVE` mở ở R2 (`T59-810..813`), `SIMULATE` ở R3
- * (`T59-814..817`). Viết ra ở một chỗ để giao diện, route resolver và test cùng
- * đọc một câu trả lời — trước đây câu đó nằm rải trong `ProgramsWorkspaceRoute`.
+ * `T59-814` đổi nguồn sự thật của SIMULATE: trước đây FE tự khai "chưa có ở
+ * increment này", nay nó ĐỌC `capabilities.workspaceModes.simulation.supported`
+ * từ server. Lý do là một thiết bị có thể thiếu worker mô phỏng dù FE đã biết
+ * về R3 — và khi đó câu "sẽ có ở increment sau" là sai với người đang đứng
+ * trước thiết bị đó.
+ *
+ * Thiếu `workspaceModes` (server đời cũ) ⇒ SIMULATE UNAVAILABLE. Không đoán,
+ * và tuyệt đối không dựng simulator trong trình duyệt để thay thế.
  */
 export function programsModeCapabilities(
   pick: (vi: string, en: string) => string,
+  simulation?: { supported: boolean } | null,
 ): ProgramsModeCapability[] {
   return [
     { mode: 'EDIT', available: true, reason: null },
     /* `T59-811` — LIVE mở ở R2. Nó KHÔNG phải một chế độ soạn thảo khác: nó là
      * cửa sổ đọc gói ĐANG CHẠY, chỉ đọc với **mọi** vai kể cả admin. */
     { mode: 'LIVE', available: true, reason: null },
-    {
-      mode: 'SIMULATE',
-      available: false,
-      reason: pick(
-        'SIMULATE cần worker mô phỏng chạy trong sandbox — capability đó mở ở increment R3.',
-        'SIMULATE needs the sandboxed simulation worker — that capability ships in increment R3.',
-      ),
-    },
+    simulation?.supported === true
+      ? { mode: 'SIMULATE', available: true, reason: null }
+      : {
+          mode: 'SIMULATE',
+          available: false,
+          reason: pick(
+            'Thiết bị này chưa công bố khả năng Mô phỏng (cần worker mô phỏng chạy trong sandbox).',
+            'This controller does not advertise the Simulation capability (a sandboxed simulation worker is required).',
+          ),
+        },
   ]
 }
 

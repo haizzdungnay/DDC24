@@ -14,13 +14,14 @@ import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
 import { toWorkspaceDocument } from '../model/draftV2'
 import { PouExplorer } from './pou/PouExplorer'
-import { useProgrammingRuntimeMonitor } from '../api/queries'
+import { useProgrammingRuntimeMonitor, useProgrammingCapabilities } from '../api/queries'
 import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
 import { LiveProgramView } from './LiveProgramView'
 import { ProgramsModeSwitcher } from './ProgramsModeSwitcher'
+import { programsModeCapabilities } from '../shared/programsMode'
 import { isProgramsWorkspaceMode, type ProgramsWorkspaceMode } from '../shared/programsRoute'
 import { useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
 
@@ -73,6 +74,10 @@ export function DesignWorkspacePage({
   const { pick } = useI18n()
   const { session } = useAuth()
   const navigate = useNavigate()
+  /* `T59-814` — capability là nguồn sự thật cho SIMULATE. Đọc ở đây thay vì
+     hardcode trong `programsModeCapabilities` để một thiết bị thiếu worker mô
+     phỏng không bị hứa hẹn một chế độ nó không có. */
+  const capabilities = useProgrammingCapabilities()
   const { setEditingContext } = useProgrammingRuntimeContext()
   const detectedMobileReadOnly = useProgrammingMobileReadOnly()
   const mobileReadOnly = mobileReadOnlyOverride ?? detectedMobileReadOnly
@@ -361,6 +366,10 @@ export function DesignWorkspacePage({
           <ProgramsModeSwitcher
             mode={workspaceMode}
             draftDirty={draftDirty}
+            /* `T59-814` — SIMULATE lấy capability TỪ SERVER. Thiếu
+               `workspaceModes` (server đời cũ) thì `simulation` là undefined và
+               mode ở trạng thái UNAVAILABLE, không phải "chắc là có". */
+            capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
             onSwitch={(next) => {
               const query = new URLSearchParams(searchParams)
               query.set('mode', next)

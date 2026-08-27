@@ -127,11 +127,12 @@ describe('ProgramsWorkspaceRoute — canonical deep-link/mode', () => {
     expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
   })
 
-  /* `T59-811` mở LIVE ở R2; SIMULATE vẫn đóng tới R3. Điều KHÔNG đổi: chế độ
+  /* `T59-811` mở LIVE ở R2; `T59-814` dựng hạ tầng SIMULATE nhưng bề mặt điều
+   * khiển thuộc `T59-815`. Điều KHÔNG đổi: chế độ
    * chưa có capability phải nói ra, không được âm thầm hiện Draft. */
   it('SIMULATE chưa implement hiển thị UNAVAILABLE thay vì Draft', () => {
     renderRoute('/eng/programming/programs?project=p1&mode=SIMULATE')
-    expect(screen.getByText(/SIMULATE chưa khả dụng/)).toBeInTheDocument()
+    expect(screen.getByText(/Bề mặt điều khiển Mô phỏng chưa có trong bản này/)).toBeInTheDocument()
     expect(screen.queryByTestId('editor')).not.toBeInTheDocument()
   })
 

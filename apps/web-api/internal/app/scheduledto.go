@@ -13,14 +13,14 @@ const scheduleSchemaVersion = "3.1"
 
 // Trạng thái Schedule Object (đặc tả §12).
 const (
-	scheduleStatusDraft      = "DRAFT"
-	scheduleStatusValidated  = "VALIDATED"
-	scheduleStatusPublished  = "PUBLISHED"
-	scheduleStatusActive     = "ACTIVE"
-	scheduleStatusInactive   = "INACTIVE"
-	scheduleStatusDisabled   = "DISABLED"
-	scheduleStatusError      = "ERROR"
-	scheduleStatusOutOfSync  = "OUT_OF_SYNC"
+	scheduleStatusDraft     = "DRAFT"
+	scheduleStatusValidated = "VALIDATED"
+	scheduleStatusPublished = "PUBLISHED"
+	scheduleStatusActive    = "ACTIVE"
+	scheduleStatusInactive  = "INACTIVE"
+	scheduleStatusDisabled  = "DISABLED"
+	scheduleStatusError     = "ERROR"
+	scheduleStatusOutOfSync = "OUT_OF_SYNC"
 )
 
 // Mã lỗi đặc tả §11. Mọi thông báo lỗi hướng người dùng phải mang một mã.
@@ -54,32 +54,32 @@ const (
 
 // ScheduleObject là một lịch hoàn chỉnh.
 type ScheduleObject struct {
-	SchemaVersion      string                 `json:"schema_version"`
-	ScheduleID         string                 `json:"schedule_id"`
-	ScheduleName       string                 `json:"schedule_name"`
-	Description        string                 `json:"description,omitempty"`
-	Enabled            bool                   `json:"enabled"`
-	Status             string                 `json:"status"`
-	Timezone           string                 `json:"timezone"`
+	SchemaVersion      string                  `json:"schema_version"`
+	ScheduleID         string                  `json:"schedule_id"`
+	ScheduleName       string                  `json:"schedule_name"`
+	Description        string                  `json:"description,omitempty"`
+	Enabled            bool                    `json:"enabled"`
+	Status             string                  `json:"status"`
+	Timezone           string                  `json:"timezone"`
 	EffectivePeriod    ScheduleEffectivePeriod `json:"effective_period"`
-	ValueType          string                 `json:"value_type"`
-	PriorityForWriting int                    `json:"priority_for_writing"`
+	ValueType          string                  `json:"value_type"`
+	PriorityForWriting int                     `json:"priority_for_writing"`
 	// CorePriorityLevel dẫn xuất, chỉ đọc. Giao diện PHẢI hiển thị nó cạnh
 	// PriorityForWriting, nếu không "Priority 16" là con số vô nghĩa với người
 	// vận hành đứng trước bo.
-	CorePriorityLevel int                     `json:"core_priority_level"`
-	ScheduleDefault   ScheduleValue           `json:"schedule_default"`
-	WeeklySchedule    ScheduleWeekly          `json:"weekly_schedule"`
-	ExceptionSchedule []ScheduleException     `json:"exception_schedule"`
-	TargetObjects     []ScheduleTargetObject  `json:"target_objects"`
-	BacnetObject      *ScheduleBacnetRef      `json:"bacnet_object,omitempty"`
-	Revision          uint64                  `json:"revision"`
-	MigratedFromV1    bool                    `json:"migrated_from_v1,omitempty"`
-	Runtime           *ScheduleRuntimeState   `json:"runtime,omitempty"`
-	CreatedAt         string                  `json:"created_at,omitempty"`
-	CreatedBy         string                  `json:"created_by,omitempty"`
-	UpdatedAt         string                  `json:"updated_at,omitempty"`
-	UpdatedBy         string                  `json:"updated_by,omitempty"`
+	CorePriorityLevel int                    `json:"core_priority_level"`
+	ScheduleDefault   ScheduleValue          `json:"schedule_default"`
+	WeeklySchedule    ScheduleWeekly         `json:"weekly_schedule"`
+	ExceptionSchedule []ScheduleException    `json:"exception_schedule"`
+	TargetObjects     []ScheduleTargetObject `json:"target_objects"`
+	BacnetObject      *ScheduleBacnetRef     `json:"bacnet_object,omitempty"`
+	Revision          uint64                 `json:"revision"`
+	MigratedFromV1    bool                   `json:"migrated_from_v1,omitempty"`
+	Runtime           *ScheduleRuntimeState  `json:"runtime,omitempty"`
+	CreatedAt         string                 `json:"created_at,omitempty"`
+	CreatedBy         string                 `json:"created_by,omitempty"`
+	UpdatedAt         string                 `json:"updated_at,omitempty"`
+	UpdatedBy         string                 `json:"updated_by,omitempty"`
 }
 
 // ScheduleValue bọc giá trị để hợp đồng có chỗ mở rộng mà không phá kiểu.

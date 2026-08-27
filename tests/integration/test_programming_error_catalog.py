@@ -63,6 +63,13 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # biến một gate thành cảnh báo giả, và lần sau người đọc sẽ sửa số cho
         # xanh mà không đọc xem thứ gì vừa được thêm.
         #
+        # Cập nhật `T59-814` (ADR-053): 30→38 public và 135→151 detail, catalog
+        # 1.8.0. Tám public code `PRG-SIM-*` là họ mã MỚI, không gộp vào miền cũ:
+        # người vận hành phải phân biệt được "input bị từ chối" với "worker
+        # chết" với "phiên hết hạn", và cả ba đều có cách xử lý khác nhau. 16
+        # detail đi kèm: tám `SIM-E-*` do worker phát và tám `SIM-SUP-*` do
+        # supervisor phát; guard hai chiều đọc chính hai file nguồn đó.
+        #
         # F-P59-GHOST-POU-001 (2026-08-24): 134→135 detail, catalog 1.7.2.
         # `ST-POU-005` ánh xạ về `PRG-ERR-CHECK-001` để Check/Package từ chối
         # PROGRAM POU chưa schedule thay vì tự gán chu kỳ 1000 ms. Public code
@@ -87,9 +94,9 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # `generate_programming_errors.py --check` canh, chạy ngay phía trên
         # trong cùng gate.
         catalog, raw, schema_raw = GENERATOR.load_and_validate()
-        self.assertEqual(catalog["catalogVersion"], "1.7.2")
-        self.assertEqual(len(catalog["publicErrors"]), 30)
-        self.assertEqual(len(catalog["componentDetails"]), 135)
+        self.assertEqual(catalog["catalogVersion"], "1.8.0")
+        self.assertEqual(len(catalog["publicErrors"]), 38)
+        self.assertEqual(len(catalog["componentDetails"]), 151)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
 

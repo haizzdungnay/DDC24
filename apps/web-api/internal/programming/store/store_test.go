@@ -93,7 +93,7 @@ func TestOpenProgrammingStoreFreshSchemaPolicyAndRestart(t *testing.T) {
 	}
 	// T59-005 thêm năm bảng Product v2; danh sách này là ảnh chụp có chủ ý để
 	// schema không lớn lên lặng lẽ.
-	expectedTables := []string{"artifacts", "audit_records", "check_requests", "checks", "commission_records", "drafts", "library_entries", "library_revisions", "library_usages", "mutation_receipts", "operations", "pou_objects", "program_runtime_intents", "projects", "published_signal_defs", "revision_objects", "revisions", "schema_migrations"}
+	expectedTables := []string{"artifacts", "audit_records", "check_requests", "checks", "commission_records", "drafts", "library_entries", "library_revisions", "library_usages", "mutation_receipts", "operations", "pou_objects", "program_runtime_intents", "projects", "published_signal_defs", "revision_objects", "revisions", "schema_migrations", "simulation_sessions"}
 	rows, err := store.db.Query(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 	if err != nil {
 		t.Fatal(err)

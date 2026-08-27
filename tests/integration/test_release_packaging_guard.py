@@ -135,6 +135,49 @@ class ProgrammingRuntimePackagingTest(unittest.TestCase):
             "binary sinh ra artifact là provenance không đầy đủ",
         )
 
+    def test_sim_worker_duoc_cai_canh_mkddc_web(self) -> None:
+        """`mkddc-web` sinh worker mô phỏng bằng đường dẫn tuyệt đối.
+
+        Hai bất biến, và bất biến thứ hai mới là cái khó thấy:
+
+        1. Binary phải được CÀI, nếu không thì capability SIMULATE tắt vĩnh viễn
+           trên mọi bo cài bằng script này.
+        2. Nó phải nằm CẠNH `mkddc-web`, không phải trong `/usr/sbin`. Service
+           chạy `User=mkddc` với PATH systemd mặc định (không có `/usr/sbin`),
+           và unit trỏ `PROGRAMMING_SIM_WORKER` vào `/opt/mkddc-web/...` — cài
+           sai chỗ thì mọi lần tạo phiên trả `PRG-SIM-UNSUPPORTED` mà không có
+           lỗi nào sớm hơn để bắt.
+        """
+        install = _uncommented_lines(self.INSTALL_SCRIPT.read_text(encoding="utf-8"))
+        installs = [
+            l for l in install
+            if "mkddc-programming-sim-worker" in l and l.strip().split()[0] in ("install", "inst")
+        ]
+        self.assertTrue(
+            installs,
+            "install.sh phải cài mkddc-programming-sim-worker — thiếu nó thì "
+            "capability SIMULATE tắt trên mọi bo cài bằng script này",
+        )
+        self.assertTrue(
+            any('"$WEBDIR/mkddc-programming-sim-worker"' in l or
+                "/opt/mkddc-web/mkddc-programming-sim-worker" in l for l in installs),
+            f"worker mô phỏng phải nằm cạnh mkddc-web, không vào sbin: {installs}",
+        )
+
+        unit = (ROOT / "platform/systemd/mkddc-web-pi.service").read_text(encoding="utf-8")
+        self.assertIn(
+            "Environment=PROGRAMMING_SIM_WORKER=/opt/mkddc-web/mkddc-programming-sim-worker",
+            unit,
+            "unit mkddc-web phải trỏ PROGRAMMING_SIM_WORKER tới đúng nơi install.sh đặt",
+        )
+        # Worker là EPHEMERAL theo ADR-053: không unit riêng, không auto-restart.
+        # Một unit systemd cho nó sẽ làm phiên sống qua reboot, nằm ngoài quota
+        # và TTL của supervisor.
+        self.assertFalse(
+            (ROOT / "platform/systemd/mkddc-programming-sim-worker.service").exists(),
+            "worker mô phỏng KHÔNG được có unit systemd riêng (ADR-053 §1)",
+        )
+
     def test_programming_bat_mac_dinh_o_ca_hai_phia(self) -> None:
         """FE bật lúc build, BE bật bằng env — thiếu một nửa là 404 im lặng.
 

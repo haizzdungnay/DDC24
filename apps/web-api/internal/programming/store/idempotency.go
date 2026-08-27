@@ -14,8 +14,13 @@ type mutationReceiptResult struct {
 	ProjectID  string `json:"projectId,omitempty"`
 	DraftID    string `json:"draftId,omitempty"`
 	RevisionID string `json:"revisionId,omitempty"`
-	ETag       int64  `json:"etag"`
-	AuditID    string `json:"auditId"`
+	// T59-814: phiên Simulation có danh tính riêng, không mượn `revisionId`.
+	// Nhét sessionId vào trường revisionId sẽ làm mọi replay trông như đang nói
+	// về một Revision — và đó đúng là loại nhầm lẫn mà biên EDIT/LIVE/SIMULATE
+	// tồn tại để chặn.
+	SessionID string `json:"sessionId,omitempty"`
+	ETag      int64  `json:"etag"`
+	AuditID   string `json:"auditId"`
 }
 
 const mutationReceiptTTL = 24 * time.Hour
@@ -24,6 +29,7 @@ type MutationReplay struct {
 	ProjectID  string
 	DraftID    string
 	RevisionID string
+	SessionID  string
 	ETag       int64
 	AuditID    string
 }
@@ -53,7 +59,7 @@ func (s *Store) LookupMutation(ctx context.Context, actorID, action, targetID st
 		return MutationReplay{}, false, fmt.Errorf("mutation receipt hỏng")
 	}
 	return MutationReplay{ProjectID: result.ProjectID, DraftID: result.DraftID, RevisionID: result.RevisionID,
-		ETag: result.ETag, AuditID: result.AuditID}, true, nil
+		SessionID: result.SessionID, ETag: result.ETag, AuditID: result.AuditID}, true, nil
 }
 
 func validateMutationIdentity(key, request [sha256.Size]byte) error {

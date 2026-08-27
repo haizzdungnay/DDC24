@@ -12,9 +12,25 @@ import (
 
 func TestErrorCatalogGeneratedSurface(t *testing.T) {
 	// T59-004: 20 -> 26 public code (POU/library/signal/output owner/enable/
-	// PID review). Con số là ảnh chụp có chủ ý để catalog không lớn lên lặng lẽ.
-	if len(errorMetadataByCode) != 30 {
-		t.Fatalf("public error count = %d; want 30", len(errorMetadataByCode))
+	// PID review). T59-814: +8 mã `PRG-SIM-*` của Simulation R3. Con số là ảnh
+	// chụp có chủ ý để catalog không lớn lên lặng lẽ.
+	if len(errorMetadataByCode) != 38 {
+		t.Fatalf("public error count = %d; want 38", len(errorMetadataByCode))
+	}
+	// Mã chi tiết của worker và supervisor phải về ĐÚNG public code của mình,
+	// không gộp vào một mã chung: người vận hành phân biệt "input bị từ chối"
+	// với "worker chết" bằng chính hai mã này.
+	if got := MapComponentError("sim-worker", "SIM-E-005"); got != ErrSimInputNotAllowed {
+		t.Fatalf("SIM-E-005 = %s; want %s", got, ErrSimInputNotAllowed)
+	}
+	if got := MapComponentError("sim-worker", "SIM-E-002"); got != ErrSimWorkerFailed {
+		t.Fatalf("SIM-E-002 = %s; want %s", got, ErrSimWorkerFailed)
+	}
+	if got := MapComponentError("sim-supervisor", "SIM-SUP-EXPIRED"); got != ErrSimExpired {
+		t.Fatalf("SIM-SUP-EXPIRED = %s; want %s", got, ErrSimExpired)
+	}
+	if got := MapComponentError("sim-supervisor", "SIM-SUP-CAPABILITY"); got != ErrSimUnsupported {
+		t.Fatalf("SIM-SUP-CAPABILITY = %s; want %s", got, ErrSimUnsupported)
 	}
 	if got := MapComponentError("artifact-loader", "IR-E-004"); got != ErrTarget {
 		t.Fatalf("IR-E-004 = %s; want %s", got, ErrTarget)

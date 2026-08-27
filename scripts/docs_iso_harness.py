@@ -50,7 +50,7 @@ EXPECT = {
     "trace_violations": 0,
     "vs_prog": 47,
     "rsk_prog": 23,
-    "od_prog": 13,
+    "od_prog": 15,
     "uc_prog": 17,
     "uj_prog": 8,
     "ux_req": 27,

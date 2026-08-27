@@ -24,7 +24,7 @@ CPP_OUTPUT = ROOT / "apps/core/application/programming/program_error_generated.h
 TS_OUTPUT = ROOT / "apps/web-ui/src/features/programming/api/generated/errors.ts"
 INTERFACE_SPEC = ROOT / "docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md"
 
-PUBLIC_CODE = re.compile(r"^PRG-ERR-[A-Z0-9-]+$")
+PUBLIC_CODE = re.compile(r"^PRG-(?:ERR|SIM)-[A-Z0-9-]+$")
 MESSAGE_KEY = re.compile(r"^programming\.[A-Za-z0-9_.-]+$")
 SYMBOL = re.compile(r"^Err[A-Za-z0-9]+$")
 SAFE_ARG = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,31}$")
@@ -123,7 +123,7 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
     # CHỈ đọc dòng đầu của bảng authority. Trước đây quét toàn bộ §9 nên một câu
     # văn xuôi nhắc tên mã đã gỡ cũng làm gate đỏ, và ngược lại một mã chỉ được
     # nhắc trong văn xuôi vẫn "thỏa" gate mà không hề có dòng authority nào.
-    spec_codes = set(re.findall(r"^\|\s*`(PRG-ERR-[A-Z0-9-]+)`\s*\|", section9, re.M))
+    spec_codes = set(re.findall(r"^\|\s*`(PRG-(?:ERR|SIM)-[A-Z0-9-]+)`\s*\|", section9, re.M))
     if codes != spec_codes:
         raise ValueError(
             "catalog lệch IFSPEC §9: thiếu=" + str(sorted(spec_codes - codes)) +
@@ -151,6 +151,12 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
     go_source = (ROOT / "apps/web-api/internal/programming/application/checks.go").read_text()
     expected_details["compiler"].update(re.findall(r"ST-(?:CLI|WORKER)-[A-Z0-9-]+", go_source))
     expected_details["runtime"] = set(re.findall(r"ST-RT-[0-9]{3}", diagnostic_source))
+    expected_details["sim-worker"] = set(re.findall(
+        r"SIM-E-[0-9]{3}",
+        (ROOT / "apps/core/application/programming/simulation/sim_error.hpp").read_text()))
+    expected_details["sim-supervisor"] = set(re.findall(
+        r"SIM-SUP-[A-Z0-9-]+",
+        (ROOT / "apps/web-api/internal/programming/simworker/protocol.go").read_text()))
 
     contract_only = {
         (item["component"], item["detailCode"])

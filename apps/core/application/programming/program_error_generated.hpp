@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "2bc29a935b1a259ed2595ea6ae808fba12b6ee7bd9587a179af79c5a5306dde6";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.7.2";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "cbb7041a79685222795851f667ecb2badbede6f50741e4141cef0a83690fcde6";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.8.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -41,6 +41,14 @@ enum class ProgramPublicError : uint8_t {
     SignalFreshness,
     EnableNotCommissioned,
     ProgramState,
+    SimUnsupported,
+    SimSaveRequired,
+    SimForbidden,
+    SimInputNotAllowed,
+    SimStaleSession,
+    SimQuota,
+    SimWorkerFailed,
+    SimExpired,
 };
 
 struct ProgramErrorMetadata {
@@ -54,7 +62,7 @@ struct ProgramErrorMetadata {
     std::string_view message_key;
 };
 
-inline constexpr std::array<ProgramErrorMetadata, 30> kProgramErrorMetadata = {{
+inline constexpr std::array<ProgramErrorMetadata, 38> kProgramErrorMetadata = {{
     {ProgramPublicError::Request, "PRG-ERR-REQ-001", "api", "REQUEST", 400, false, true, "programming.error.request" },
     {ProgramPublicError::NotFound, "PRG-ERR-NOT-FOUND-001", "api", "NOT_FOUND", 404, false, true, "programming.error.notFound" },
     {ProgramPublicError::Conflict, "PRG-ERR-CONFLICT-001", "api", "CONFLICT", 409, false, true, "programming.error.conflict" },
@@ -85,6 +93,14 @@ inline constexpr std::array<ProgramErrorMetadata, 30> kProgramErrorMetadata = {{
     {ProgramPublicError::SignalFreshness, "PRG-ERR-SIGNAL-FRESHNESS-001", "compiler", "VALIDATION", 422, false, true, "programming.error.signalFreshness" },
     {ProgramPublicError::EnableNotCommissioned, "PRG-ERR-ENABLE-NOT-COMMISSIONED-001", "runtime", "CONFLICT", 409, false, true, "programming.error.enableNotCommissioned" },
     {ProgramPublicError::ProgramState, "PRG-ERR-PROGRAM-STATE-001", "runtime", "CONFLICT", 409, false, true, "programming.error.programState" },
+    {ProgramPublicError::SimUnsupported, "PRG-SIM-UNSUPPORTED", "simulation", "UNAVAILABLE", 409, false, true, "programming.error.simUnsupported" },
+    {ProgramPublicError::SimSaveRequired, "PRG-SIM-SAVE-REQUIRED", "simulation", "CONFLICT", 409, false, true, "programming.error.simSaveRequired" },
+    {ProgramPublicError::SimForbidden, "PRG-SIM-FORBIDDEN", "simulation", "FORBIDDEN", 403, false, true, "programming.error.simForbidden" },
+    {ProgramPublicError::SimInputNotAllowed, "PRG-SIM-INPUT-NOT-ALLOWED", "simulation", "VALIDATION", 422, false, true, "programming.error.simInputNotAllowed" },
+    {ProgramPublicError::SimStaleSession, "PRG-SIM-STALE-SESSION", "simulation", "CONFLICT", 409, false, true, "programming.error.simStaleSession" },
+    {ProgramPublicError::SimQuota, "PRG-SIM-QUOTA", "simulation", "UNAVAILABLE", 429, true, true, "programming.error.simQuota" },
+    {ProgramPublicError::SimWorkerFailed, "PRG-SIM-WORKER-FAILED", "simulation", "OPERATION", 503, false, true, "programming.error.simWorkerFailed" },
+    {ProgramPublicError::SimExpired, "PRG-SIM-EXPIRED", "simulation", "CONFLICT", 410, false, true, "programming.error.simExpired" },
 }};
 
 struct ComponentErrorMapping {
@@ -93,7 +109,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 135> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 151> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -220,6 +236,22 @@ inline constexpr std::array<ComponentErrorMapping, 135> kComponentErrorMappings 
     {"runtime", "ST-RT-011", ProgramPublicError::Unavailable },
     {"runtime", "ST-RT-012", ProgramPublicError::Commission },
     {"runtime", "ST-RT-013", ProgramPublicError::Commission },
+    {"sim-supervisor", "SIM-SUP-CAPABILITY", ProgramPublicError::SimUnsupported },
+    {"sim-supervisor", "SIM-SUP-CRASH", ProgramPublicError::SimWorkerFailed },
+    {"sim-supervisor", "SIM-SUP-EXPIRED", ProgramPublicError::SimExpired },
+    {"sim-supervisor", "SIM-SUP-HANDSHAKE", ProgramPublicError::SimUnsupported },
+    {"sim-supervisor", "SIM-SUP-PROTOCOL", ProgramPublicError::SimWorkerFailed },
+    {"sim-supervisor", "SIM-SUP-QUOTA", ProgramPublicError::SimQuota },
+    {"sim-supervisor", "SIM-SUP-SPAWN", ProgramPublicError::SimWorkerFailed },
+    {"sim-supervisor", "SIM-SUP-TIMEOUT", ProgramPublicError::SimWorkerFailed },
+    {"sim-worker", "SIM-E-001", ProgramPublicError::SimWorkerFailed },
+    {"sim-worker", "SIM-E-002", ProgramPublicError::SimWorkerFailed },
+    {"sim-worker", "SIM-E-003", ProgramPublicError::SimWorkerFailed },
+    {"sim-worker", "SIM-E-004", ProgramPublicError::SimWorkerFailed },
+    {"sim-worker", "SIM-E-005", ProgramPublicError::SimInputNotAllowed },
+    {"sim-worker", "SIM-E-006", ProgramPublicError::SimInputNotAllowed },
+    {"sim-worker", "SIM-E-007", ProgramPublicError::SimStaleSession },
+    {"sim-worker", "SIM-E-008", ProgramPublicError::SimQuota },
     {"st-control-api", "API-E-001", ProgramPublicError::Request },
     {"st-control-api", "API-E-002", ProgramPublicError::Request },
     {"st-control-api", "API-E-003", ProgramPublicError::Target },

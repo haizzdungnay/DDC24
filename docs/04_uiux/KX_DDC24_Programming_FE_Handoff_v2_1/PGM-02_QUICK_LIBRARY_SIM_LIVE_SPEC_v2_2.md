@@ -485,9 +485,9 @@ Không downgrade ngầm sang path thiếu isolation.
 
 Visual references:
 
-- [PGM-02 combined desktop + mobile](assets/PGM-02_ST_FBD_combined_reference.svg)
-- [PGM-02A ST editor](assets/PGM-02A_ST_editor_reference.svg)
-- [PGM-02B FBD editor](assets/PGM-02B_FBD_editor_reference.svg)
+- [PGM-02 combined desktop + mobile](assets/PGM-02_ST_FBD_annotated_reference.png)
+- [PGM-02A ST editor](assets/PGM-02A_ST_editor_reference.png)
+- [PGM-02B FBD editor](assets/PGM-02B_FBD_editor_reference.png)
 
 Các asset là Target layout có dữ liệu minh họa, không phải screenshot runtime.
 

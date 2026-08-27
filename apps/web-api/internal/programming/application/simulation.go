@@ -1,0 +1,842 @@
+package application
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	programmingartifact "mkddc-web/internal/programming/artifact"
+	"mkddc-web/internal/programming/domain"
+	"mkddc-web/internal/programming/simworker"
+	programmingstore "mkddc-web/internal/programming/store"
+)
+
+// Trần v1, pin trong `contracts/programming/pgm02_workspace_v1.json` §limits.
+// Chúng nằm ở đây dưới dạng hằng vì server là AUTHORITY của trần — FE đọc chúng
+// qua capability chứ không được tự khai một bộ trần riêng.
+const (
+	SimulationMaxSessionsPerController = 1
+	SimulationIdleTTL                  = 900 * time.Second
+	SimulationHardTTL                  = 3600 * time.Second
+	SimulationMaxActionsPerSecond      = 10
+	SimulationMaxTraceSamples          = 10000
+	SimulationMaxVirtualInputs         = 256
+	SimulationWorkerCommandTimeout     = 2000 * time.Millisecond
+	SimulationMaxRSSMiB                = 64
+	SimulationMaxCPUPercentOneCore     = 25
+)
+
+// SimulationActions là tập hành động sản phẩm. `SET_INPUT` và `STOP` được
+// materialize bằng resource riêng (PUT input, DELETE session) để có identity và
+// idempotency rõ ràng, nên chúng KHÔNG được nhận qua endpoint action.
+var simulationActionEndpointAllowed = map[string]struct{}{
+	"RUN": {}, "PAUSE": {}, "STEP_CYCLE": {}, "RESET": {}, "SET_SPEED": {},
+}
+
+var simulationSpeeds = map[int64]struct{}{1: {}, 10: {}, 60: {}}
+
+// SimulationOptions gom mọi phụ thuộc bên ngoài. `WorkerBinaryPath` rỗng nghĩa
+// là capability TẮT — không có đường nào bật một nửa.
+type SimulationOptions struct {
+	Store        *programmingstore.Store
+	Artifacts    *programmingartifact.Store
+	WorkerBinary string
+	ControllerID string
+	Now          func() time.Time
+	NewID        func() string
+	Spawn        func(context.Context, simworker.Options) (*simworker.Client, string, string, error)
+}
+
+// SimulationService là supervisor phiên: RBAC, quota, TTL, audit và vòng đời
+// tiến trình. Nó KHÔNG diễn giải ngữ nghĩa ST — đó là việc của worker.
+type SimulationService struct {
+	store        *programmingstore.Store
+	artifacts    *programmingartifact.Store
+	workerBinary string
+	controllerID string
+	now          func() time.Time
+	newID        func() string
+	spawn        func(context.Context, simworker.Options) (*simworker.Client, string, string, error)
+
+	mu sync.Mutex
+	// Worker sống theo phiên và CHỈ tồn tại trong tiến trình này. Sau khi
+	// `mkddc-web` khởi động lại, map rỗng — và đó là lý do mọi phiên chưa
+	// terminal phải bị đóng lúc khởi động thay vì attach lại theo PID.
+	workers      map[string]*simworker.Client
+	manifests    map[string]simworker.Manifest
+	actionWindow map[string][]time.Time
+}
+
+func NewSimulationService(options SimulationOptions) *SimulationService {
+	now := options.Now
+	if now == nil {
+		now = time.Now
+	}
+	spawn := options.Spawn
+	if spawn == nil {
+		spawn = simworker.Spawn
+	}
+	controller := options.ControllerID
+	if controller == "" {
+		controller = "local"
+	}
+	return &SimulationService{
+		store: options.Store, artifacts: options.Artifacts,
+		workerBinary: options.WorkerBinary, controllerID: controller,
+		now: now, newID: options.NewID, spawn: spawn,
+		workers:      make(map[string]*simworker.Client),
+		manifests:    make(map[string]simworker.Manifest),
+		actionWindow: make(map[string][]time.Time),
+	}
+}
+
+// SimulationCapability là thứ FE đọc để quyết định hiện hay ẩn SIMULATE. Thiếu
+// bất kỳ mảnh nào thì `Supported=false`; không có trạng thái "bật một nửa".
+type SimulationCapability struct {
+	Supported     bool             `json:"supported"`
+	WorkerVersion *string          `json:"workerVersion"`
+	MutationRoles []string         `json:"mutationRoles"`
+	Limits        SimulationLimits `json:"limits"`
+}
+
+type SimulationLimits struct {
+	MaxConcurrentSessionsPerController int   `json:"maxConcurrentSessionsPerController"`
+	IdleTTLSeconds                     int   `json:"idleTtlSeconds"`
+	HardTTLSeconds                     int   `json:"hardTtlSeconds"`
+	MaxRSSMiB                          int   `json:"maxRssMiB"`
+	MaxCPUPercentOneCore               int   `json:"maxCpuPercentOneCore"`
+	MaxActionsPerSecond                int   `json:"maxActionsPerSecond"`
+	MaxTraceSamples                    int   `json:"maxTraceSamples"`
+	MaxVirtualInputs                   int   `json:"maxVirtualInputs"`
+	WorkerCommandTimeoutMs             int64 `json:"workerCommandTimeoutMs"`
+}
+
+func (s *SimulationService) Capability() SimulationCapability {
+	capability := SimulationCapability{
+		MutationRoles: []string{"admin"},
+		Limits: SimulationLimits{
+			MaxConcurrentSessionsPerController: SimulationMaxSessionsPerController,
+			IdleTTLSeconds:                     int(SimulationIdleTTL / time.Second),
+			HardTTLSeconds:                     int(SimulationHardTTL / time.Second),
+			MaxRSSMiB:                          SimulationMaxRSSMiB,
+			MaxCPUPercentOneCore:               SimulationMaxCPUPercentOneCore,
+			MaxActionsPerSecond:                SimulationMaxActionsPerSecond,
+			MaxTraceSamples:                    SimulationMaxTraceSamples,
+			MaxVirtualInputs:                   SimulationMaxVirtualInputs,
+			WorkerCommandTimeoutMs:             SimulationWorkerCommandTimeout.Milliseconds(),
+		},
+	}
+	if s == nil || s.store == nil || s.artifacts == nil || s.workerBinary == "" {
+		return capability
+	}
+	capability.Supported = true
+	return capability
+}
+
+// SimulationSessionView là read-back công khai của một phiên.
+//
+// Không có PID, không có đường dẫn, không có token. Chúng không phải danh tính
+// công khai và một PID lộ ra sẽ được dùng để kill nhầm tiến trình khác.
+type SimulationSessionView struct {
+	SessionID             string                      `json:"sessionId"`
+	ControllerID          string                      `json:"controllerId"`
+	ProjectID             string                      `json:"projectId"`
+	SourceDraftRevisionID string                      `json:"sourceDraftRevisionId"`
+	SourceContentSHA256   string                      `json:"sourceContentSha256"`
+	State                 string                      `json:"state"`
+	SessionSequence       string                      `json:"sessionSequence"`
+	ETag                  string                      `json:"etag"`
+	BaseTickMS            *int64                      `json:"baseTickMs"`
+	VirtualTimeMS         string                      `json:"virtualTimeMs"`
+	Speed                 int64                       `json:"speed"`
+	ObservationSequence   string                      `json:"observationSequence"`
+	ResetEpoch            string                      `json:"resetEpoch"`
+	CreatedAt             string                      `json:"createdAt"`
+	LastActivityAt        string                      `json:"lastActivityAt"`
+	IdleExpiresAt         string                      `json:"idleExpiresAt"`
+	HardExpiresAt         string                      `json:"hardExpiresAt"`
+	FailureCode           *string                     `json:"failureCode"`
+	WorkerVersion         *string                     `json:"workerVersion"`
+	SimulationInputs      []simworker.InputDescriptor `json:"simulationInputs,omitempty"`
+	AuditID               string                      `json:"auditId,omitempty"`
+}
+
+func simulationView(session programmingstore.SimulationSession) SimulationSessionView {
+	view := SimulationSessionView{
+		SessionID: session.SessionID, ControllerID: session.ControllerID,
+		ProjectID: session.ProjectID, SourceDraftRevisionID: session.SourceDraftRevisionID,
+		SourceContentSHA256: fmt.Sprintf("%x", session.SourceContentSHA256),
+		State:               session.State,
+		SessionSequence:     fmt.Sprintf("%d", session.SessionSequence),
+		ETag:                session.ETag(),
+		VirtualTimeMS:       fmt.Sprintf("%d", session.VirtualTimeMS),
+		Speed:               session.Speed,
+		ObservationSequence: fmt.Sprintf("%d", session.ObservationSequence),
+		ResetEpoch:          fmt.Sprintf("%d", session.ResetEpoch),
+		CreatedAt:           millisToRFC3339(session.CreatedAtUTCMS),
+		LastActivityAt:      millisToRFC3339(session.LastActivityAtUTCMS),
+		IdleExpiresAt:       millisToRFC3339(session.IdleExpiresAtUTCMS),
+		HardExpiresAt:       millisToRFC3339(session.HardExpiresAtUTCMS),
+	}
+	if session.BaseTickMS > 0 {
+		baseTick := session.BaseTickMS
+		view.BaseTickMS = &baseTick
+	}
+	if session.FailureCode != "" {
+		failure := session.FailureCode
+		view.FailureCode = &failure
+	}
+	if session.WorkerVersion != "" {
+		version := session.WorkerVersion
+		view.WorkerVersion = &version
+	}
+	return view
+}
+
+func millisToRFC3339(value int64) string {
+	return time.UnixMilli(value).UTC().Format(time.RFC3339Nano)
+}
+
+// SimulationRequest là danh tính của một lần gọi. Role đến từ middleware auth,
+// không từ body: một client tự khai vai của mình thì RBAC không còn là RBAC.
+type SimulationRequest struct {
+	ActorID       string
+	Role          string
+	CorrelationID string
+	Idempotency   [sha256.Size]byte
+	RequestHash   [sha256.Size]byte
+	IfMatch       string
+}
+
+type CreateSimulationSessionInput struct {
+	ProjectID             string
+	SourceDraftRevisionID string
+	SourceContentSHA256   string
+}
+
+// requireAdmin là cổng RBAC DUY NHẤT của mọi mutation R3.
+//
+// Nó cố tình đứng trước mọi thứ khác — trước cả khi đọc store — để một vai
+// không đủ quyền không tạo ra bất kỳ side effect nào, kể cả một lần đọc có thể
+// làm lộ sự tồn tại của phiên.
+func (s *SimulationService) requireAdmin(role string) *domain.PublicError {
+	if strings.EqualFold(role, "admin") {
+		return nil
+	}
+	public := domain.NewPublicError(domain.ErrSimForbidden)
+	public.Args = map[string]any{"requiredRole": "admin"}
+	return &public
+}
+
+func (s *SimulationService) requireCapability() *domain.PublicError {
+	if s.Capability().Supported {
+		return nil
+	}
+	public := domain.NewPublicError(domain.ErrSimUnsupported)
+	return &public
+}
+
+// ReconcileOnStart đóng mọi phiên chưa terminal còn sót từ lần chạy trước.
+//
+// Không attach lại: một tiến trình không chứng minh được token/protocol của
+// phiên thì nó không phải worker của phiên đó, dù PID có trùng. Đây cũng là
+// điểm khác biệt giữa "khôi phục" và "nhận vơ".
+func (s *SimulationService) ReconcileOnStart(ctx context.Context) (int, error) {
+	if s == nil || s.store == nil {
+		return 0, nil
+	}
+	closed, err := s.store.TerminateLiveSimulationSessions(ctx,
+		programmingstore.SimStateFailed, simworker.DetailCrash, s.now())
+	return len(closed), err
+}
+
+// SweepExpired đóng phiên quá TTL và kill/reap worker tương ứng.
+func (s *SimulationService) SweepExpired(ctx context.Context) (int, error) {
+	if s == nil || s.store == nil {
+		return 0, nil
+	}
+	expired, err := s.store.ExpireSimulationSessions(ctx, s.now())
+	for _, sessionID := range expired {
+		s.releaseWorker(sessionID)
+	}
+	return len(expired), err
+}
+
+func (s *SimulationService) releaseWorker(sessionID string) {
+	s.mu.Lock()
+	client := s.workers[sessionID]
+	delete(s.workers, sessionID)
+	delete(s.manifests, sessionID)
+	delete(s.actionWindow, sessionID)
+	s.mu.Unlock()
+	if client != nil {
+		client.Kill()
+	}
+}
+
+func (s *SimulationService) worker(sessionID string) (*simworker.Client, simworker.Manifest, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	client, found := s.workers[sessionID]
+	return client, s.manifests[sessionID], found
+}
+
+// allowAction thi hành trần tốc độ 10 action/s cho mỗi phiên.
+func (s *SimulationService) allowAction(sessionID string, at time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	window := s.actionWindow[sessionID]
+	cutoff := at.Add(-time.Second)
+	kept := window[:0]
+	for _, stamp := range window {
+		if stamp.After(cutoff) {
+			kept = append(kept, stamp)
+		}
+	}
+	if len(kept) >= SimulationMaxActionsPerSecond {
+		s.actionWindow[sessionID] = kept
+		return false
+	}
+	s.actionWindow[sessionID] = append(kept, at)
+	return true
+}
+
+// CreateSession seal phiên từ một Revision ĐÃ Check và spawn worker.
+//
+// `ADR-053` §3: worker chỉ nhận artifact bất biến sinh từ Saved Draft snapshot
+// đã Check. Vì vậy ở đây KHÔNG có đường biên dịch riêng — dùng lại đúng bytes
+// artifact mà pipeline Check production đã sinh ra. Một đường biên dịch thứ hai
+// là một bộ ngữ nghĩa thứ hai để trôi khỏi bộ đang chạy trên tủ.
+func (s *SimulationService) CreateSession(ctx context.Context, request SimulationRequest,
+	input CreateSimulationSessionInput) (SimulationSessionView, *domain.PublicError) {
+
+	if public := s.requireAdmin(request.Role); public != nil {
+		return SimulationSessionView{}, public
+	}
+	if public := s.requireCapability(); public != nil {
+		return SimulationSessionView{}, public
+	}
+
+	revision, err := s.store.GetRevisionHeader(ctx, input.SourceDraftRevisionID)
+	if err != nil {
+		public := domain.NewPublicError(domain.ErrNotFound)
+		return SimulationSessionView{}, &public
+	}
+	if revision.ProjectID != input.ProjectID {
+		public := domain.NewPublicError(domain.ErrScope)
+		return SimulationSessionView{}, &public
+	}
+
+	// Hash client gửi phải khớp hash canonical của Revision đã lưu. Đây là chỗ
+	// duy nhất phân biệt "mô phỏng thứ tôi vừa lưu" với "mô phỏng thứ gì đó".
+	declared := strings.ToLower(strings.TrimSpace(input.SourceContentSHA256))
+	actual := fmt.Sprintf("%x", revision.ManifestSHA256)
+	if declared != actual {
+		public := domain.NewPublicError(domain.ErrSimSaveRequired)
+		public.Args = map[string]any{"expected": actual, "actual": declared}
+		return SimulationSessionView{}, &public
+	}
+
+	check, err := s.store.GetPassedCheckForRevision(ctx, input.SourceDraftRevisionID)
+	if err != nil || check.Artifact == nil {
+		// Chưa Check thì chưa có artifact bất biến nào để chạy. Không tự biên
+		// dịch ở đây: cách sửa của người dùng là chạy Check, và nói đúng điều đó
+		// tốt hơn là âm thầm dựng một artifact thứ hai.
+		public := domain.NewPublicError(domain.ErrSimSaveRequired)
+		public.Args = map[string]any{"expected": "PASSED", "actual": "NO_CHECK"}
+		return SimulationSessionView{}, &public
+	}
+	artifactBytes, err := s.artifacts.Read(check.Artifact.RelativePath, check.Artifact.SHA256,
+		check.Artifact.ByteSize)
+	if err != nil {
+		public := domain.NewPublicError(domain.ErrArtifact)
+		return SimulationSessionView{}, &public
+	}
+
+	at := s.now()
+	var contentHash [sha256.Size]byte
+	copy(contentHash[:], revision.ManifestSHA256[:])
+
+	sessionID := s.newID()
+	auditID := s.newID()
+	details, _ := json.Marshal(map[string]any{
+		"sourceDraftRevisionId": input.SourceDraftRevisionID,
+		"sourceContentSha256":   actual,
+		"artifactSha256":        fmt.Sprintf("%x", check.Artifact.SHA256),
+	})
+
+	session, err := s.store.CreateSimulationSession(ctx, programmingstore.CreateSimulationSessionParams{
+		SimulationSession: programmingstore.SimulationSession{
+			SessionID: sessionID, ControllerID: s.controllerID, ProjectID: input.ProjectID,
+			SourceDraftRevisionID: input.SourceDraftRevisionID, SourceContentSHA256: contentHash,
+			IdleExpiresAtUTCMS: at.Add(SimulationIdleTTL).UTC().UnixMilli(),
+			HardExpiresAtUTCMS: at.Add(SimulationHardTTL).UTC().UnixMilli(),
+			CreatedBy:          request.ActorID,
+		},
+		ActorID: request.ActorID, Role: request.Role, AuditID: auditID,
+		CorrelationID: request.CorrelationID, At: at,
+		IdempotencyKeySHA256: request.Idempotency, RequestSHA256: request.RequestHash,
+		AuditDetailsJSON: details,
+	})
+	if err != nil {
+		if errors.Is(err, programmingstore.ErrSimulationSessionLive) {
+			public := domain.NewPublicError(domain.ErrSimQuota)
+			public.Args = map[string]any{"limit": SimulationMaxSessionsPerController,
+				"retryAfterSeconds": 5}
+			return SimulationSessionView{}, &public
+		}
+		if errors.Is(err, programmingstore.ErrIdempotencyConflict) {
+			public := domain.NewPublicError(domain.ErrConflict)
+			return SimulationSessionView{}, &public
+		}
+		public := domain.NewPublicError(domain.ErrUnavailable)
+		return SimulationSessionView{}, &public
+	}
+
+	// Từ đây trở đi mọi lỗi phải KILL worker và đóng phiên: một phiên PREPARING
+	// không có worker là một slot quota bị giữ mãi mãi.
+	client, workerVersion, detail, err := s.spawn(ctx, simworker.Options{
+		BinaryPath: s.workerBinary, CommandTimeout: SimulationWorkerCommandTimeout,
+	})
+	if err != nil {
+		return s.failSession(ctx, request, session, detail, at)
+	}
+
+	manifest, err := client.Prepare(ctx, artifactBytes)
+	if err != nil {
+		client.Kill()
+		return s.failSession(ctx, request, session, simulationDetailOf(err, client), at)
+	}
+	if len(manifest.SimulationInputs) > SimulationMaxVirtualInputs {
+		client.Kill()
+		return s.failSession(ctx, request, session, simworker.DetailQuota, at)
+	}
+
+	s.mu.Lock()
+	s.workers[session.SessionID] = client
+	s.manifests[session.SessionID] = manifest
+	s.mu.Unlock()
+
+	artifactHash := make([]byte, sha256.Size)
+	copy(artifactHash, check.Artifact.SHA256[:])
+	prepared, err := s.store.UpdateSimulationSession(ctx, programmingstore.UpdateSimulationSessionParams{
+		SessionID: session.SessionID, ExpectedSequence: session.SessionSequence,
+		State: programmingstore.SimStatePaused, VirtualTimeMS: 0, Speed: 1,
+		ObservationSequence: 0, ResetEpoch: 0, BaseTickMS: manifest.BaseTickMS,
+		SnapshotID: check.CheckID, ArtifactSHA256: artifactHash, WorkerVersion: workerVersion,
+		At: at, IdleExpiresAtUTCMS: at.Add(SimulationIdleTTL).UTC().UnixMilli(),
+		ActorID: request.ActorID, Role: request.Role, AuditID: s.newID(),
+		Action: programmingstore.ActionSimulationCreate, ResultCode: "PREPARED",
+		CorrelationID: request.CorrelationID, AuditDetailsJSON: details,
+	})
+	if err != nil {
+		s.releaseWorker(session.SessionID)
+		public := domain.NewPublicError(domain.ErrUnavailable)
+		return SimulationSessionView{}, &public
+	}
+
+	view := simulationView(prepared)
+	view.SimulationInputs = manifest.SimulationInputs
+	view.AuditID = auditID
+	return view, nil
+}
+
+// failSession đưa phiên về FAILED kèm lý do và trả public error tương ứng.
+func (s *SimulationService) failSession(ctx context.Context, request SimulationRequest,
+	session programmingstore.SimulationSession, detail string, at time.Time) (SimulationSessionView, *domain.PublicError) {
+
+	s.releaseWorker(session.SessionID)
+	if detail == "" {
+		detail = simworker.DetailCrash
+	}
+	failed, err := s.store.UpdateSimulationSession(ctx, programmingstore.UpdateSimulationSessionParams{
+		SessionID: session.SessionID, ExpectedSequence: session.SessionSequence,
+		State: programmingstore.SimStateFailed, VirtualTimeMS: session.VirtualTimeMS,
+		Speed: session.Speed, ObservationSequence: session.ObservationSequence,
+		ResetEpoch: session.ResetEpoch, FailureCode: detail, At: at,
+		ActorID: request.ActorID, Role: request.Role, AuditID: s.newID(),
+		Action: programmingstore.ActionSimulationCreate, ResultCode: detail,
+		CorrelationID: request.CorrelationID, AuditDetailsJSON: []byte(`{"failure":"worker"}`),
+	})
+	public := simulationPublicForDetail(detail)
+	if err != nil {
+		return SimulationSessionView{}, &public
+	}
+	view := simulationView(failed)
+	return view, &public
+}
+
+func simulationDetailOf(err error, client *simworker.Client) string {
+	var commandError *simworker.CommandError
+	if errors.As(err, &commandError) {
+		return commandError.DetailCode
+	}
+	if client != nil {
+		if detail := client.BrokenDetail(); detail != "" {
+			return detail
+		}
+	}
+	if errors.Is(err, simworker.ErrTimeout) {
+		return simworker.DetailTimeout
+	}
+	return simworker.DetailCrash
+}
+
+// simulationPublicForDetail ánh xạ mã chi tiết sang public code theo ĐÚNG bảng
+// trong catalog. Không tự chế ánh xạ tại chỗ: catalog là nguồn duy nhất, và
+// generator sẽ đỏ nếu một mã chi tiết mới chưa được ánh xạ.
+func simulationPublicForDetail(detail string) domain.PublicError {
+	switch detail {
+	case "SIM-E-005", "SIM-E-006":
+		return domain.NewPublicError(domain.ErrSimInputNotAllowed)
+	case "SIM-E-007":
+		return domain.NewPublicError(domain.ErrSimStaleSession)
+	case "SIM-E-008", simworker.DetailQuota:
+		return domain.NewPublicError(domain.ErrSimQuota)
+	case simworker.DetailExpired:
+		return domain.NewPublicError(domain.ErrSimExpired)
+	case simworker.DetailCapability, simworker.DetailHandshake:
+		return domain.NewPublicError(domain.ErrSimUnsupported)
+	default:
+		return domain.NewPublicError(domain.ErrSimWorkerFailed)
+	}
+}
+
+// GetSession là đường đọc cho MỌI vai có object scope.
+func (s *SimulationService) GetSession(ctx context.Context, sessionID string) (SimulationSessionView, *domain.PublicError) {
+	if public := s.requireCapability(); public != nil {
+		return SimulationSessionView{}, public
+	}
+	session, err := s.store.GetSimulationSession(ctx, sessionID)
+	if err != nil {
+		public := domain.NewPublicError(domain.ErrNotFound)
+		return SimulationSessionView{}, &public
+	}
+	view := simulationView(session)
+	if _, manifest, found := s.worker(sessionID); found {
+		view.SimulationInputs = manifest.SimulationInputs
+	}
+	return view, nil
+}
+
+// mutableSession gom mọi tiền điều kiện chung của một mutation trên phiên:
+// vai, capability, tồn tại, chưa terminal, chưa hết hạn, `If-Match` khớp và
+// còn trong trần tốc độ. Gom lại một chỗ vì bỏ sót một điều kiện ở một handler
+// là cách một mutation lọt qua mà không ai thấy.
+func (s *SimulationService) mutableSession(ctx context.Context, request SimulationRequest, sessionID string) (
+	programmingstore.SimulationSession, *simworker.Client, simworker.Manifest, *domain.PublicError) {
+
+	var empty programmingstore.SimulationSession
+	if public := s.requireAdmin(request.Role); public != nil {
+		return empty, nil, simworker.Manifest{}, public
+	}
+	if public := s.requireCapability(); public != nil {
+		return empty, nil, simworker.Manifest{}, public
+	}
+	session, err := s.store.GetSimulationSession(ctx, sessionID)
+	if err != nil {
+		public := domain.NewPublicError(domain.ErrNotFound)
+		return empty, nil, simworker.Manifest{}, &public
+	}
+	if programmingstore.SimStateIsTerminal(session.State) {
+		public := domain.NewPublicError(domain.ErrSimExpired)
+		if session.State != programmingstore.SimStateExpired {
+			public = domain.NewPublicError(domain.ErrSimStaleSession)
+		}
+		return empty, nil, simworker.Manifest{}, &public
+	}
+	now := s.now()
+	if now.UTC().UnixMilli() >= session.IdleExpiresAtUTCMS ||
+		now.UTC().UnixMilli() >= session.HardExpiresAtUTCMS {
+		// Hết hạn được phát hiện tại điểm dùng, không chỉ ở vòng quét: một lệnh
+		// tới đúng lúc TTL vừa qua không được chạy chỉ vì vòng quét chưa kịp.
+		_, _ = s.SweepExpired(ctx)
+		public := domain.NewPublicError(domain.ErrSimExpired)
+		return empty, nil, simworker.Manifest{}, &public
+	}
+	if request.IfMatch != "" && request.IfMatch != session.ETag() {
+		public := domain.NewPublicError(domain.ErrSimStaleSession)
+		public.Args = map[string]any{"expected": session.ETag(), "actual": request.IfMatch}
+		return empty, nil, simworker.Manifest{}, &public
+	}
+	client, manifest, found := s.worker(sessionID)
+	if !found || client == nil {
+		// Phiên có trong DB nhưng worker không còn trong tiến trình này: đúng
+		// hình dạng sau một lần restart chưa reconcile. Không đoán, không attach.
+		public := domain.NewPublicError(domain.ErrSimWorkerFailed)
+		return empty, nil, simworker.Manifest{}, &public
+	}
+	if !s.allowAction(sessionID, now) {
+		public := domain.NewPublicError(domain.ErrSimQuota)
+		public.Args = map[string]any{"limit": SimulationMaxActionsPerSecond, "retryAfterSeconds": 1}
+		return empty, nil, simworker.Manifest{}, &public
+	}
+	return session, client, manifest, nil
+}
+
+// Action thực hiện một hành động điều khiển phiên.
+func (s *SimulationService) Action(ctx context.Context, request SimulationRequest, sessionID, action string,
+	speed int64) (SimulationSessionView, *domain.PublicError) {
+
+	if _, allowed := simulationActionEndpointAllowed[action]; !allowed {
+		public := domain.NewPublicError(domain.ErrRequest)
+		public.Field = "action"
+		return SimulationSessionView{}, &public
+	}
+	session, client, manifest, public := s.mutableSession(ctx, request, sessionID)
+	if public != nil {
+		return SimulationSessionView{}, public
+	}
+
+	at := s.now()
+	next := programmingstore.UpdateSimulationSessionParams{
+		SessionID: session.SessionID, ExpectedSequence: session.SessionSequence,
+		State: session.State, VirtualTimeMS: session.VirtualTimeMS, Speed: session.Speed,
+		ObservationSequence: session.ObservationSequence, ResetEpoch: session.ResetEpoch,
+		At: at, IdleExpiresAtUTCMS: at.Add(SimulationIdleTTL).UTC().UnixMilli(),
+		ActorID: request.ActorID, Role: request.Role, AuditID: s.newID(),
+		Action: programmingstore.ActionSimulationAction, ResultCode: action,
+		CorrelationID: request.CorrelationID,
+	}
+	next.AuditDetailsJSON, _ = json.Marshal(map[string]any{"action": action, "speed": speed})
+
+	switch action {
+	case "RUN":
+		next.State = programmingstore.SimStateRunning
+	case "PAUSE":
+		next.State = programmingstore.SimStatePaused
+	case "SET_SPEED":
+		if _, ok := simulationSpeeds[speed]; !ok {
+			public := domain.NewPublicError(domain.ErrRequest)
+			public.Field = "speed"
+			return SimulationSessionView{}, &public
+		}
+		// Speed CHỈ đổi nhịp treo tường. Nó không gửi lệnh nào cho worker, nên
+		// không thể đổi thứ tự, bỏ tick hay đổi hash đầu ra.
+		next.Speed = speed
+	case "STEP_CYCLE":
+		frame, err := client.Step(ctx)
+		if err != nil {
+			return s.failSession(ctx, request, session, simulationDetailOf(err, client), at)
+		}
+		next.State = programmingstore.SimStatePaused
+		next.VirtualTimeMS = frame.VirtualTimeMS
+		next.ObservationSequence = frame.SnapshotSequence
+		next.ResetEpoch = frame.ResetEpoch
+	case "RESET":
+		frame, err := client.Reset(ctx)
+		if err != nil {
+			return s.failSession(ctx, request, session, simulationDetailOf(err, client), at)
+		}
+		next.State = programmingstore.SimStatePaused
+		next.VirtualTimeMS = frame.VirtualTimeMS
+		next.ObservationSequence = frame.SnapshotSequence
+		next.ResetEpoch = frame.ResetEpoch
+	}
+
+	updated, err := s.store.UpdateSimulationSession(ctx, next)
+	if err != nil {
+		if errors.Is(err, programmingstore.ErrSimulationSequenceConflict) {
+			public := domain.NewPublicError(domain.ErrSimStaleSession)
+			return SimulationSessionView{}, &public
+		}
+		public := domain.NewPublicError(domain.ErrUnavailable)
+		return SimulationSessionView{}, &public
+	}
+	view := simulationView(updated)
+	view.SimulationInputs = manifest.SimulationInputs
+	return view, nil
+}
+
+// SetInput ghi một virtual input đã qua allowlist của manifest.
+func (s *SimulationService) SetInput(ctx context.Context, request SimulationRequest,
+	sessionID, observationID, dataType string, value any) (SimulationSessionView, *domain.PublicError) {
+
+	session, client, manifest, public := s.mutableSession(ctx, request, sessionID)
+	if public != nil {
+		return SimulationSessionView{}, public
+	}
+
+	// Allowlist được kiểm ở CẢ HAI phía. Supervisor kiểm để một `observationId`
+	// lạ không bao giờ tới được worker; worker kiểm lại vì nó không được tin
+	// rằng phía gọi luôn đúng.
+	var descriptor *simworker.InputDescriptor
+	for index := range manifest.SimulationInputs {
+		if manifest.SimulationInputs[index].ObservationID == observationID {
+			descriptor = &manifest.SimulationInputs[index]
+			break
+		}
+	}
+	if descriptor == nil || !descriptor.SimulationWritable {
+		failure := domain.NewPublicError(domain.ErrSimInputNotAllowed)
+		failure.Args = map[string]any{"observationId": observationID}
+		s.auditDenied(ctx, request, session, programmingstore.ActionSimulationSetInput,
+			string(domain.ErrSimInputNotAllowed))
+		return SimulationSessionView{}, &failure
+	}
+	if !strings.EqualFold(descriptor.DataType, dataType) {
+		failure := domain.NewPublicError(domain.ErrSimInputNotAllowed)
+		failure.Args = map[string]any{"observationId": observationID,
+			"expected": descriptor.DataType, "actual": dataType}
+		s.auditDenied(ctx, request, session, programmingstore.ActionSimulationSetInput,
+			string(domain.ErrSimInputNotAllowed))
+		return SimulationSessionView{}, &failure
+	}
+
+	at := s.now()
+	if err := client.SetInput(ctx, observationID, descriptor.DataType, value); err != nil {
+		var commandError *simworker.CommandError
+		if errors.As(err, &commandError) {
+			// Worker từ chối là kết quả hợp lệ: giá trị đã commit trước đó còn
+			// nguyên và phiên vẫn chạy. Không được biến nó thành FAILED.
+			failure := simulationPublicForDetail(commandError.DetailCode)
+			failure.Args = map[string]any{"observationId": observationID}
+			s.auditDenied(ctx, request, session, programmingstore.ActionSimulationSetInput,
+				commandError.DetailCode)
+			return SimulationSessionView{}, &failure
+		}
+		return s.failSession(ctx, request, session, simulationDetailOf(err, client), at)
+	}
+
+	details, _ := json.Marshal(map[string]any{"observationId": observationID, "dataType": descriptor.DataType})
+	updated, err := s.store.UpdateSimulationSession(ctx, programmingstore.UpdateSimulationSessionParams{
+		SessionID: session.SessionID, ExpectedSequence: session.SessionSequence,
+		State: session.State, VirtualTimeMS: session.VirtualTimeMS, Speed: session.Speed,
+		ObservationSequence: session.ObservationSequence, ResetEpoch: session.ResetEpoch,
+		At: at, IdleExpiresAtUTCMS: at.Add(SimulationIdleTTL).UTC().UnixMilli(),
+		ActorID: request.ActorID, Role: request.Role, AuditID: s.newID(),
+		Action: programmingstore.ActionSimulationSetInput, ResultCode: "ACCEPTED",
+		CorrelationID: request.CorrelationID, AuditDetailsJSON: details,
+	})
+	if err != nil {
+		if errors.Is(err, programmingstore.ErrSimulationSequenceConflict) {
+			public := domain.NewPublicError(domain.ErrSimStaleSession)
+			return SimulationSessionView{}, &public
+		}
+		public := domain.NewPublicError(domain.ErrUnavailable)
+		return SimulationSessionView{}, &public
+	}
+	view := simulationView(updated)
+	view.SimulationInputs = manifest.SimulationInputs
+	return view, nil
+}
+
+// auditDenied ghi lại một lần TỪ CHỐI. Một mutation bị chặn vẫn là một sự kiện
+// bảo mật: nếu chỉ audit khi thành công thì không ai thấy được một loạt lần thử
+// bị chặn.
+func (s *SimulationService) auditDenied(ctx context.Context, request SimulationRequest,
+	session programmingstore.SimulationSession, action, resultCode string) {
+	details, _ := json.Marshal(map[string]any{"denied": true})
+	_, _ = s.store.CommitAudit(ctx, programmingstore.AuditInput{
+		AuditID: s.newID(), ActorID: request.ActorID, Role: request.Role, Action: action,
+		TargetType: "SIMULATION_SESSION", TargetID: session.SessionID,
+		OccurredAtUTCMS: s.now().UTC().UnixMilli(), ResultCode: resultCode,
+		CorrelationID: request.CorrelationID, DetailsJSON: details,
+	})
+}
+
+// Observations trả ảnh chụp hiện tại. Đường đọc, mọi vai có scope đều gọi được.
+func (s *SimulationService) Observations(ctx context.Context, sessionID string) (simworker.Frame, *domain.PublicError) {
+	if public := s.requireCapability(); public != nil {
+		return simworker.Frame{}, public
+	}
+	client, _, found := s.worker(sessionID)
+	if !found || client == nil {
+		public := domain.NewPublicError(domain.ErrSimWorkerFailed)
+		return simworker.Frame{}, &public
+	}
+	frame, err := client.Read(ctx)
+	if err != nil {
+		public := simulationPublicForDetail(simulationDetailOf(err, client))
+		return simworker.Frame{}, &public
+	}
+	return frame, nil
+}
+
+// Trace trả một trang mẫu có biên.
+func (s *SimulationService) Trace(ctx context.Context, sessionID string, cursor, limit int64) (simworker.TracePage, *domain.PublicError) {
+	if public := s.requireCapability(); public != nil {
+		return simworker.TracePage{}, public
+	}
+	client, _, found := s.worker(sessionID)
+	if !found || client == nil {
+		public := domain.NewPublicError(domain.ErrSimWorkerFailed)
+		return simworker.TracePage{}, &public
+	}
+	page, err := client.Trace(ctx, cursor, limit)
+	if err != nil {
+		public := simulationPublicForDetail(simulationDetailOf(err, client))
+		return simworker.TracePage{}, &public
+	}
+	return page, nil
+}
+
+// StopSession là đường kết thúc tường minh. Lặp lại STOP trên một phiên đã
+// terminal trả về ĐÚNG trạng thái terminal đó, không phải lỗi: dừng một thứ đã
+// dừng là một yêu cầu hợp lý.
+func (s *SimulationService) StopSession(ctx context.Context, request SimulationRequest, sessionID string) (SimulationSessionView, *domain.PublicError) {
+	if public := s.requireAdmin(request.Role); public != nil {
+		return SimulationSessionView{}, public
+	}
+	if public := s.requireCapability(); public != nil {
+		return SimulationSessionView{}, public
+	}
+	session, err := s.store.GetSimulationSession(ctx, sessionID)
+	if err != nil {
+		public := domain.NewPublicError(domain.ErrNotFound)
+		return SimulationSessionView{}, &public
+	}
+	if programmingstore.SimStateIsTerminal(session.State) {
+		s.releaseWorker(sessionID)
+		return simulationView(session), nil
+	}
+	if request.IfMatch != "" && request.IfMatch != session.ETag() {
+		public := domain.NewPublicError(domain.ErrSimStaleSession)
+		public.Args = map[string]any{"expected": session.ETag(), "actual": request.IfMatch}
+		return SimulationSessionView{}, &public
+	}
+
+	at := s.now()
+	if client, _, found := s.worker(sessionID); found && client != nil {
+		_ = client.Stop(ctx)
+	}
+	s.releaseWorker(sessionID)
+
+	details, _ := json.Marshal(map[string]any{"reason": "operator"})
+	stopped, err := s.store.UpdateSimulationSession(ctx, programmingstore.UpdateSimulationSessionParams{
+		SessionID: session.SessionID, ExpectedSequence: session.SessionSequence,
+		State: programmingstore.SimStateStopped, VirtualTimeMS: session.VirtualTimeMS,
+		Speed: session.Speed, ObservationSequence: session.ObservationSequence,
+		ResetEpoch: session.ResetEpoch, At: at,
+		ActorID: request.ActorID, Role: request.Role, AuditID: s.newID(),
+		Action: programmingstore.ActionSimulationStop, ResultCode: "STOPPED",
+		CorrelationID: request.CorrelationID, AuditDetailsJSON: details,
+	})
+	if err != nil {
+		public := domain.NewPublicError(domain.ErrUnavailable)
+		return SimulationSessionView{}, &public
+	}
+	return simulationView(stopped), nil
+}
+
+// Shutdown kill/reap mọi worker còn sống. Gọi lúc `mkddc-web` dừng: bỏ qua bước
+// này sẽ để lại đúng những tiến trình mồ côi mà ADR-053 bắt phải chứng minh
+// không tồn tại.
+func (s *SimulationService) Shutdown() {
+	s.mu.Lock()
+	clients := make([]*simworker.Client, 0, len(s.workers))
+	for sessionID, client := range s.workers {
+		clients = append(clients, client)
+		delete(s.workers, sessionID)
+		delete(s.manifests, sessionID)
+	}
+	s.mu.Unlock()
+	for _, client := range clients {
+		client.Kill()
+	}
+}

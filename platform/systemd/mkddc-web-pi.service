@@ -11,6 +11,16 @@ WorkingDirectory=/opt/mkddc-web
 Environment=PORT=8081
 Environment=CONFIG_DIR=/data/config
 Environment=STATIC_DIR=/opt/mkddc-web/dist
+# T59-814 / ADR-053 — worker mô phỏng ephemeral, KHÔNG phải service.
+#
+# Không có unit riêng và không auto-restart là CÓ CHỦ Ý: một worker sống qua
+# reboot nằm ngoài quota/TTL của supervisor, và một phiên mô phỏng tự sống lại
+# sau mất điện là thứ không ai yêu cầu. `mkddc-web` sinh nó theo từng phiên và
+# kill/reap khi phiên kết thúc.
+#
+# Trỏ sai hoặc thiếu file ⇒ capability SIMULATE tự TẮT và giao diện hiện
+# UNAVAILABLE; không có trạng thái "bật một nửa".
+Environment=PROGRAMMING_SIM_WORKER=/opt/mkddc-web/mkddc-programming-sim-worker
 # Biên CORS/WebSocket chạy fail-closed (REV-PLT-01): không đặt CORS_ORIGIN thì
 # chỉ same-origin được phép — đúng cho triển khai chuẩn, nơi mkddc-web phục vụ
 # luôn giao diện từ STATIC_DIR. Chỉ đặt CORS_ORIGIN trong /etc/mkddc-web.env khi

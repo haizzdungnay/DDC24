@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.7.2",
+  "catalogVersion": "1.8.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     {
@@ -498,6 +498,138 @@
       "allowedArgs": [
         "programId",
         "state",
+        "limit"
+      ]
+    },
+    {
+      "symbol": "ErrSimUnsupported",
+      "code": "PRG-SIM-UNSUPPORTED",
+      "ownerComponent": "simulation",
+      "statusClass": "UNAVAILABLE",
+      "httpStatuses": [
+        409,
+        503
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simUnsupported",
+      "allowedArgs": [
+        "contractVersion",
+        "workerVersion"
+      ]
+    },
+    {
+      "symbol": "ErrSimSaveRequired",
+      "code": "PRG-SIM-SAVE-REQUIRED",
+      "ownerComponent": "simulation",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simSaveRequired",
+      "allowedArgs": [
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrSimForbidden",
+      "code": "PRG-SIM-FORBIDDEN",
+      "ownerComponent": "simulation",
+      "statusClass": "FORBIDDEN",
+      "httpStatuses": [
+        403
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simForbidden",
+      "allowedArgs": [
+        "requiredRole"
+      ]
+    },
+    {
+      "symbol": "ErrSimInputNotAllowed",
+      "code": "PRG-SIM-INPUT-NOT-ALLOWED",
+      "ownerComponent": "simulation",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simInputNotAllowed",
+      "allowedArgs": [
+        "observationId",
+        "sourceKind",
+        "expected",
+        "actual",
+        "minimum",
+        "maximum"
+      ]
+    },
+    {
+      "symbol": "ErrSimStaleSession",
+      "code": "PRG-SIM-STALE-SESSION",
+      "ownerComponent": "simulation",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409,
+        412
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simStaleSession",
+      "allowedArgs": [
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrSimQuota",
+      "code": "PRG-SIM-QUOTA",
+      "ownerComponent": "simulation",
+      "statusClass": "UNAVAILABLE",
+      "httpStatuses": [
+        429
+      ],
+      "retryable": true,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simQuota",
+      "allowedArgs": [
+        "limit",
+        "retryAfterSeconds"
+      ]
+    },
+    {
+      "symbol": "ErrSimWorkerFailed",
+      "code": "PRG-SIM-WORKER-FAILED",
+      "ownerComponent": "simulation",
+      "statusClass": "OPERATION",
+      "httpStatuses": [
+        503
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simWorkerFailed",
+      "allowedArgs": [
+        "phase",
+        "timeoutMs"
+      ]
+    },
+    {
+      "symbol": "ErrSimExpired",
+      "code": "PRG-SIM-EXPIRED",
+      "ownerComponent": "simulation",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        410
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simExpired",
+      "allowedArgs": [
         "limit"
       ]
     }
@@ -1178,6 +1310,86 @@
       "component": "st-control-api",
       "detailCode": "API-E-009",
       "publicCode": "PRG-ERR-PROGRAM-STATE-001"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-001",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-002",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-003",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-004",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-005",
+      "publicCode": "PRG-SIM-INPUT-NOT-ALLOWED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-006",
+      "publicCode": "PRG-SIM-INPUT-NOT-ALLOWED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-007",
+      "publicCode": "PRG-SIM-STALE-SESSION"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-008",
+      "publicCode": "PRG-SIM-QUOTA"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-SPAWN",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-HANDSHAKE",
+      "publicCode": "PRG-SIM-UNSUPPORTED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-TIMEOUT",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-PROTOCOL",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-CRASH",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-QUOTA",
+      "publicCode": "PRG-SIM-QUOTA"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-EXPIRED",
+      "publicCode": "PRG-SIM-EXPIRED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-CAPABILITY",
+      "publicCode": "PRG-SIM-UNSUPPORTED"
     }
   ]
 }

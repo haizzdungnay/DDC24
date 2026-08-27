@@ -401,6 +401,14 @@ test giữa Go và C++.
 | `PRG-ERR-ENABLE-NOT-COMMISSIONED-001` | Enable Program chưa Commission hoặc không có trong package Active | 409, intent không đổi |
 | `PRG-ERR-PROGRAM-STATE-001` | Enable/Disable sai trạng thái hiện tại hoặc đã đủ trần 16 Program Enabled | 409, intent không đổi |
 | `PRG-ERR-PID-REVIEW-001` | package dùng PID mà thiếu approval token Controls/Safety | 422, chặn Commission |
+| `PRG-SIM-UNSUPPORTED` | capability/worker/protocol chưa tương thích | 409/503; không spawn worker |
+| `PRG-SIM-SAVE-REQUIRED` | Draft đang hiển thị khác Saved Draft | 409; không tạo record/snapshot/worker |
+| `PRG-SIM-FORBIDDEN` | vai không được mutate phiên | 403; zero side effect, có security audit |
+| `PRG-SIM-INPUT-NOT-ALLOWED` | ngoài allowlist manifest, hoặc sai type/unit/range | 422; giữ nguyên value/sequence trước |
+| `PRG-SIM-STALE-SESSION` | ETag/sequence phiên đã cũ | 409/412; không gửi lệnh nào cho worker |
+| `PRG-SIM-QUOTA` | vượt trần phiên đồng thời/tốc độ action/tài nguyên | 429; không phiên mới, có Retry-After |
+| `PRG-SIM-WORKER-FAILED` | worker crash/timeout/giao thức hỏng | 503; phiên FAILED, kill+reap, Active không đổi |
+| `PRG-SIM-EXPIRED` | hết idle TTL hoặc hard TTL | 410; terminal, phải tạo phiên mới |
 
 Các mã component hiện hữu `API-E-*`, `IR-E-*`, `ST-*`, `RT-RETAIN-*` là detail
 code. BE map chúng sang `PRG-ERR-*` nhưng vẫn giữ `detailCode` để service; không

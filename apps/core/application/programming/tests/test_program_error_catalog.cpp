@@ -9,8 +9,14 @@ TEST(ProgramErrorCatalog, PublicCodesAndMetadataAreStable)
 {
     /* T59-006: 26 -> 30 public code. T59-004 đặt sáu mã gộp tự chọn; DDD §5.2 đã
      * khóa đúng mười mã, nên chúng được thay bằng bộ tên chuẩn. Con số là ảnh chụp có chủ ý để thay đổi catalog luôn đi qua
-     * mắt người review. */
-    static_assert(kProgramErrorMetadata.size() == 30);
+     * mắt người review.
+     *
+     * T59-814 (ADR-053): 30 -> 38, thêm tám mã `PRG-SIM-*` của Simulation R3.
+     * Core KHÔNG phát các mã đó — worker mô phỏng và supervisor phát — nhưng
+     * catalog là MỘT nguồn cho cả ba ngôn ngữ, nên bảng sinh ra ở đây cũng lớn
+     * lên. Đó là điều đúng: một bảng mã bị cắt theo ngôn ngữ sẽ làm hai phía
+     * hiểu khác nhau về cùng một mã. */
+    static_assert(kProgramErrorMetadata.size() == 38);
     static_assert(kProgramErrorCatalogSha256.size() == 64);
     EXPECT_EQ(ProgramErrorMetadataFor(ProgramPublicError::Artifact).public_code,
               "PRG-ERR-ARTIFACT-001");
