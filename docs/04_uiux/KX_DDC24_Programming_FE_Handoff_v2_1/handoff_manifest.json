@@ -20,17 +20,17 @@
           "language": "ST",
           "doc": "PGM-02A_ST_EDITOR_FE_HANDOFF_v2_2.md",
           "asset": "assets/PGM-02A_ST_editor_reference.svg",
-          "renderedReference": "assets/ST editor program.png"
+          "renderedReference": "assets/PGM-02A_ST_editor_reference.png"
         },
         {
           "id": "PGM-02B",
           "language": "FBD",
           "doc": "PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md",
           "asset": "assets/PGM-02B_FBD_editor_reference.svg",
-          "renderedReference": "assets/FBD editor program.png"
+          "renderedReference": "assets/PGM-02B_FBD_editor_reference.png"
         }
       ],
-      "annotatedOverview": "assets/ChatGPT Image 09_56_53 24 thg 8, 2026.png"
+      "annotatedOverview": "assets/PGM-02_ST_FBD_annotated_reference.png"
     },
     {
       "id": "PGM-03",

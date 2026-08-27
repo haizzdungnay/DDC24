@@ -870,9 +870,9 @@ rlimit violation phải terminate fail closed, không hạ precision hoặc bỏ
 
 Các asset sau là tài liệu trực quan, không phải screenshot runtime:
 
-- [Combined desktop/mobile Target Candidate](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_ST_FBD_combined_reference.svg).
-- [ST editor Target Candidate](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02A_ST_editor_reference.svg).
-- [FBD editor Target Candidate](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02B_FBD_editor_reference.svg).
+- [Combined desktop/mobile Target Candidate](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_ST_FBD_annotated_reference.png).
+- [ST editor Target Candidate](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02A_ST_editor_reference.png).
+- [FBD editor Target Candidate](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02B_FBD_editor_reference.png).
 - [Desktop POU baseline hiện hành](../../04_uiux/assets/programming/PGM-02_PROGRAMS_POU_DESKTOP.svg),
   [Mobile POU baseline hiện hành](../../04_uiux/assets/programming/PGM-02_PROGRAMS_POU_MOBILE.svg)
   và [Design workspace baseline](../../04_uiux/assets/programming/PGM-02_DESIGN_WORKSPACE_DESKTOP.svg)
@@ -1355,7 +1355,7 @@ CR-PROG-PGM02-V22-001
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
-| 0.5 | 2026-08-27 | Ba ảnh render PGM-02 do chủ sở hữu cấp (`ST editor program.png`, `FBD editor program.png`, ảnh chú giải) được đăng ký vào `handoff_manifest.json` 2.3 và trở thành tham chiếu bố cục/phạm vi. Hệ quả: **đảo ngược** kết luận "status bar ngoài phạm vi" của bản 0.4; thêm `EditorTabBar`, `NavigatorMap`, `WorkspaceStatusBar` vào §7.2; ba dòng ánh xạ §7.3; ba ca kiểm `TC-PGM02-TAB-01`/`SB-01`/`NAV-01` §10.2. `UD-PROG-014` chốt phương án B (nhiều tab). Không đổi contract, state machine hay increment order. |
+| 0.5 | 2026-08-27 | Ba ảnh render PGM-02 do chủ sở hữu cấp (`PGM-02A_ST_editor_reference.png`, `PGM-02B_FBD_editor_reference.png`, ảnh chú giải) được đăng ký vào `handoff_manifest.json` 2.3 và trở thành tham chiếu bố cục/phạm vi. Hệ quả: **đảo ngược** kết luận "status bar ngoài phạm vi" của bản 0.4; thêm `EditorTabBar`, `NavigatorMap`, `WorkspaceStatusBar` vào §7.2; ba dòng ánh xạ §7.3; ba ca kiểm `TC-PGM02-TAB-01`/`SB-01`/`NAV-01` §10.2. `UD-PROG-014` chốt phương án B (nhiều tab). Không đổi contract, state machine hay increment order. |
 | 0.4 | 2026-08-27 | Khôi phục hai vùng UI mà handoff v2.2 bắt buộc nhưng bản 0.1–0.3 bỏ sót khi chuyển tiếp: `ContextInspector` (handoff cha §1/§9, `PGM-02A §9`, `PGM-02B §9`) và `EditorToolbar` mode-aware (`PGM-02A §2/§3/§11`, `PGM-02B §2`). Thêm hai dòng ánh xạ vùng UI §7.3 và ghi tường minh status bar ngoài phạm vi §1.4. Nguồn: [`REC-PGM02-AUD-ADJ-001`](../../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md) `F-PGM02-AUD-001`/`F-PGM02-AUD-004`. Không đổi contract, state machine hay increment order; không nâng maturity. |
 | 0.3 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; nâng đúng `M3 REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`, mở R1/R2/R3 theo dependency; chốt `F-P59-GHOST-POU-001` fail closed `ST-POU-005`; giữ consumer review waived, U13–U15 NOT_RUN và release NO-GO. |
 | 0.2-candidate | 2026-08-24 | Khóa quy tắc exact pin hai lớp: manifest cho 17 hồ sơ Markdown và candidate Git commit SHA cho contract/schema/ADR/handoff/SVG; cấm dùng pin check 17/17 một mình để mở `PLAN_READY` hoặc code |

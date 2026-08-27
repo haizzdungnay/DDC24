@@ -123,9 +123,9 @@ Each page is DONE only when:
 - [PGM-02A ST Editor v2.2](PGM-02A_ST_EDITOR_FE_HANDOFF_v2_2.md)
 - [PGM-02B FBD Editor v2.2](PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md)
 - [Quick Library / SIMULATE / LIVE Target contract v2.2](PGM-02_QUICK_LIBRARY_SIM_LIVE_SPEC_v2_2.md)
-- [Visual combined desktop + mobile read-only](assets/PGM-02_ST_FBD_combined_reference.svg)
-- [Visual ST Editor và required states](assets/PGM-02A_ST_editor_reference.svg)
-- [Visual FBD Editor và required states](assets/PGM-02B_FBD_editor_reference.svg)
+- [Visual combined desktop + mobile read-only](assets/PGM-02_ST_FBD_annotated_reference.png)
+- [Visual ST Editor và required states](assets/PGM-02A_ST_editor_reference.png)
+- [Visual FBD Editor và required states](assets/PGM-02B_FBD_editor_reference.png)
 - [Rà soát kiến trúc và khoảng trống PGM-02 ST/FBD](reviews/PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md)
 - [Kế hoạch triển khai đề xuất PGM-02 ST/FBD](reviews/PGM02_ST_FBD_IMPLEMENTATION_PLAN.md)
 

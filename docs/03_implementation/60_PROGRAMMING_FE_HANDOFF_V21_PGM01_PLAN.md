@@ -55,7 +55,7 @@ truy nguyên `AC-PGM01-01..06`.
 | Route sáu workspace | `apps/web-ui/src/features/programming/ProgrammingRoutes.tsx` | Đủ sáu route canonical, có redirect legacy |
 | Shell layout | `layout/ProgrammingLayout.tsx` | Header + nav ngang + context bar + `<Outlet/>`, xếp dọc |
 | Nav | `layout/ProgrammingDesktopNav.tsx` | **Tab ngang**, không phải rail dọc 220 px |
-| Thanh context | `layout/ProgrammingContextBar.tsx` | 6 ô `<dl>` trong panel cao ~76 px, **không sticky**, **hiện thẳng revision UUID** |
+| Thanh context | `layout/ProgrammingContextStrip.tsx` | 6 ô `<dl>` trong panel cao ~76 px, **không sticky**, **hiện thẳng revision UUID** |
 | Overview | `overview/OverviewPage.tsx` | 5 panel: Running application / Core & safe state / Draft attention / Attention list / Recent audit |
 | Read-model dùng chung | `api/queries.ts` | `capabilities`, `runtime`, `projects`, `programIntents`, `revisionChanges`, `audit`, `monitor`, `signals` |
 | Bảng dùng chung | `shared/components/DataTable.tsx` | Có sẵn, hỗ trợ loading/error/empty |

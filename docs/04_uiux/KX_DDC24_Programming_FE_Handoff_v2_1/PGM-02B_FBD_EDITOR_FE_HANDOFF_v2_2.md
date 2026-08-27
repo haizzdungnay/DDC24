@@ -4,7 +4,7 @@
 **Evidence class:** `TARGET DESIGN — NOT AS-BUILT / NOT RUNTIME EVIDENCE`<br>
 **Route:** `/eng/programming/programs`  
 **POU language:** `FBD`  
-**Visual reference:** [PGM-02B FBD Editor Target](assets/PGM-02B_FBD_editor_reference.svg)<br>
+**Visual reference:** [PGM-02B FBD Editor Target](assets/PGM-02B_FBD_editor_reference.png)<br>
 **Target contract supplement:** [PGM-02 Quick Library / SIMULATE / LIVE v2.2](PGM-02_QUICK_LIBRARY_SIM_LIVE_SPEC_v2_2.md)<br>
 **Formal Detailed Design authority:** [PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md](../../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md)
 

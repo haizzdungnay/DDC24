@@ -346,7 +346,7 @@ canh, và bước đó đang PASS).
 
 ### F-LAYOUT-03 — Circular dependency có sẵn *(P2, backlog)*
 
-`features/programming/layout/ProgrammingLayout.tsx ↔ ProgrammingContextBar.tsx`.
+`features/programming/layout/ProgrammingLayout.tsx ↔ ProgrammingContextStrip.tsx`.
 Đã kiểm chứng tồn tại y hệt trên cây sạch trước mọi thay đổi. Không nằm trong
 phạm vi task; ghi lại để xử lý riêng.
 

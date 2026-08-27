@@ -252,7 +252,7 @@ ProgrammingLayout / ContextStrip
 ```
 
 Visual target duy nhất hiện hữu trong package là
-[ảnh ST/FBD kết hợp](<../assets/ChatGPT Image 09_56_53 24 thg 8, 2026.png>).
+[ảnh ST/FBD kết hợp](<../assets/PGM-02_ST_FBD_annotated_reference.png>).
 Ba tên asset mà các handoff v2.2 dẫn chiếu không tồn tại.
 
 ### 3.2 Component ownership và disposition

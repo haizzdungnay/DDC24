@@ -185,9 +185,9 @@ Restore/import/replacement; không trộn vào tab đọc bình thường.
 | PGM-06 | [Runtime desktop](assets/programming/PGM-06_RUNTIME_SERVICE_DESKTOP.svg) | RETAIN modal theo [state set](assets/programming/PGM-04_RETAIN_RESET_DIALOG.svg) |
 
 Với PGM-02 v2.2, ba asset Target Candidate được review/pin cùng revision của DDD:
-[workspace kết hợp ST/FBD](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_ST_FBD_combined_reference.svg),
-[ST editor](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02A_ST_editor_reference.svg)
-và [FBD canvas](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02B_FBD_editor_reference.svg).
+[workspace kết hợp ST/FBD](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_ST_FBD_annotated_reference.png),
+[ST editor](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02A_ST_editor_reference.png)
+và [FBD canvas](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02B_FBD_editor_reference.png).
 Chúng thể hiện dữ liệu minh họa, không phải runtime evidence. Asset PGM-02 cũ
 vẫn là baseline/migration reference tới khi Candidate được pin; asset PGM-03/04
 cũ không normative.
