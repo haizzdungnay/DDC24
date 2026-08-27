@@ -104,6 +104,12 @@ fi
 # nhưng KHÔNG được cài, nên trên bo mới cài, Commission gọi vào một đường dẫn
 # không tồn tại — lỗi chỉ lộ ra ở đúng thao tác cuối của người vận hành.
 [ -x "$BUILD/core/mkddc-st-package" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-st-package" >&2; exit 1; }
+# T59-814 / ADR-053: worker mô phỏng ephemeral. Nó KHÔNG phải service — không có
+# unit systemd và không auto-restart; `mkddc-web` sinh nó theo từng phiên. Thiếu
+# binary thì capability SIMULATE tự TẮT (`PROGRAMMING_SIM_WORKER` trỏ vào một
+# đường dẫn không tồn tại), nên bo vẫn chạy bình thường — nhưng bản phát hành
+# thì phải có nó, và guard đóng gói canh đúng điều đó.
+[ -x "$BUILD/core/mkddc-programming-sim-worker" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-programming-sim-worker" >&2; exit 1; }
 [ -x "$MKDDC_GO_BINARY_REL" ] || { echo "ERROR: chưa build $MKDDC_GO_BINARY_REL (chạy platform/packaging/build-release.sh)" >&2; exit 1; }
 [ -f "$MKDDC_WEB_UI_DIST_REL/index.html" ] || { echo "ERROR: chưa build frontend $MKDDC_WEB_UI_DIST_REL" >&2; exit 1; }
 [ -f build/release/provenance.json ] || { echo "ERROR: thiếu provenance.json" >&2; exit 1; }
@@ -248,7 +254,7 @@ if [ -x "$SBIN/mkddc-core" ]; then
     for f in "$SBIN/mkddc-core" "$SBIN/mkddc-iobus" "$SBIN/mkddc-netcfg" \
              "$SBIN/mkddc-st-compile" "$SBIN/mkddc-st-package" \
              "$SBIN/mkddc-fake-mcu" "$SBIN/mkddc-hmi" "$WEBDIR/mkddc-web" \
-             "$WEBDIR/mkddc-schedule-sim" \
+             "$WEBDIR/mkddc-schedule-sim" "$WEBDIR/mkddc-programming-sim-worker" \
              "$SHAREDIR/provenance.json" "$SHAREDIR/checksums.sha256"; do
         [ -e "$f" ] && cp -a "$f" "$SNAP/" || true
     done
@@ -289,6 +295,10 @@ inst -m 0755 "$BUILD/core/mkddc-st-package" "$SBIN/mkddc-st-package"
 # chắc chắn tìm thấy.
 inst -d -m 0755 "$WEBDIR"
 inst -m 0755 "$BUILD/core/mkddc-schedule-sim" "$WEBDIR/mkddc-schedule-sim"
+# T59-814: đặt CẠNH mkddc-web như mkddc-schedule-sim, không vào /usr/sbin.
+# `mkddc-web` chạy `User=mkddc` với PATH systemd mặc định (không có /usr/sbin),
+# và supervisor gọi bằng đường dẫn tuyệt đối lấy từ `PROGRAMMING_SIM_WORKER`.
+inst -m 0755 "$BUILD/core/mkddc-programming-sim-worker" "$WEBDIR/mkddc-programming-sim-worker"
 inst -m 0755 "$MKDDC_GO_BINARY_REL" "$WEBDIR/mkddc-web"
 inst -d -m 0755 "$WEBDIR/dist"
 cp -a "$MKDDC_WEB_UI_DIST_REL/." "$WEBDIR/dist/"
@@ -305,11 +315,13 @@ inst -m 0644 build/release/checksums.sha256 "$SHAREDIR/checksums.sha256"
     "$SBIN/mkddc-netcfg" --version
     "$SBIN/mkddc-st-compile" --version
     "$SBIN/mkddc-st-package" --version
+    "$WEBDIR/mkddc-programming-sim-worker" --version
     "$WEBDIR/mkddc-web" --version
 } > "$SHAREDIR/runtime-build-info.txt"
 sha256sum "$SBIN/mkddc-core" "$SBIN/mkddc-iobus" "$SBIN/mkddc-netcfg" \
     "$SBIN/mkddc-st-compile" "$SBIN/mkddc-st-package" \
     "$WEBDIR/mkddc-web" "$WEBDIR/mkddc-schedule-sim" \
+    "$WEBDIR/mkddc-programming-sim-worker" \
     > "$SHAREDIR/runtime-checksums.sha256"
 inst -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/configure-web-hostname.sh" "$LIBEXECDIR/configure-web-hostname"
 inst -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/avahi/mkddc-web.service" "$SHAREDIR/avahi/mkddc-web.service"
