@@ -97,10 +97,20 @@ if [[ ! -S "${core_socket}" || ! -S "${core_status_socket}" ]]; then
   exit 1
 fi
 
+# `T59-811` — user store là bản SAO trong runtime tạm, không phải file trong
+# repo.
+#
+# Trước đây `USERS_CONF` trỏ thẳng vào `apps/web-api/config/users.conf` trong
+# khi mọi thứ khác dùng `runtime_root`. Backend ghi user mới ra đúng đường dẫn
+# đó, nên mỗi lần một test tạo tài khoản (vd viewer cho case RBAC) là một tài
+# khoản thật rơi vào file được commit — kèm bcrypt hash của một mật khẩu ai cũng
+# biết. Chín tài khoản như vậy đã lọt vào repo trước khi phát hiện.
+cp "${repository_root}/apps/web-api/config/users.conf" "${runtime_root}/config/users.conf"
+
 env \
   PORT="${backend_port}" \
   JWT_SECRET="programming-real-e2e-secret-at-least-32-bytes" \
-  USERS_CONF="${repository_root}/apps/web-api/config/users.conf" \
+  USERS_CONF="${runtime_root}/config/users.conf" \
   CONFIG_DIR="${runtime_root}/config" \
   STATIC_DIR="${runtime_root}/static" \
   CORE_PID="${runtime_root}/missing-core.pid" \
