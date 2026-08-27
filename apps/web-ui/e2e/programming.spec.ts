@@ -1022,11 +1022,13 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     await expect(page.getByText(/Chế độ workspace không hợp lệ|workspace mode is invalid/)).toBeVisible()
     expect(new URL(page.url()).searchParams.get('mode')).toBe('NOPE')
 
-    // LIVE/SIMULATE thuộc R2/R3: nói rõ chưa khả dụng, không rơi về Draft.
-    for (const mode of ['LIVE', 'SIMULATE'] as const) {
-      await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=${mode}`)
-      await expect(page.getByText(new RegExp(`${mode} chưa khả dụng|${mode} is unavailable`))).toBeVisible()
-    }
+    // `T59-811` mở LIVE ở R2; SIMULATE vẫn thuộc R3 và phải nói rõ chưa khả
+    // dụng, không rơi về Draft.
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=SIMULATE`)
+    await expect(page.getByText(/SIMULATE chưa khả dụng|SIMULATE is unavailable/)).toBeVisible()
+
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=LIVE`)
+    await expect(page.getByText(/LIVE chưa khả dụng|LIVE is unavailable/)).toHaveCount(0)
 
     expectNoBrowserFailures(failures, 'resolver canonical')
   })
@@ -1244,19 +1246,20 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
     expect(outlineWidth, 'focusRingMinPx = 2 trong nfr.accessibility').toBeGreaterThanOrEqual(2)
   })
 
-  test('bộ chuyển chế độ đi hết bằng bàn phím và nói rõ vì sao LIVE chưa có', async ({ page }, testInfo) => {
+  test('bộ chuyển chế độ đi hết bằng bàn phím và nói rõ vì sao SIMULATE chưa có', async ({ page }, testInfo) => {
     test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     await login(page)
     await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
 
-    const live = page.getByRole('button', { name: 'LIVE', exact: true })
-    await expect(live).toBeVisible()
-    await live.focus()
+    // `T59-811` mở LIVE ở R2, nên SIMULATE là chế độ chưa khả dụng còn lại.
+    const simulate = page.getByRole('button', { name: 'SIMULATE', exact: true })
+    await expect(simulate).toBeVisible()
+    await simulate.focus()
     await page.keyboard.press('Enter')
     /* Không tự hạ cấp: URL phải GIỮ NGUYÊN `mode=EDIT`, và lý do phải nói ra. */
-    await expect(page.getByText(/capability đó mở ở increment R2/)).toBeVisible()
+    await expect(page.getByText(/capability đó mở ở increment R3/)).toBeVisible()
     expect(new URL(page.url()).searchParams.get('mode')).toBe('EDIT')
   })
 

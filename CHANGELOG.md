@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### PGM-02 R2 — LIVE là cửa sổ đọc gói đang chạy (`T59-811`) (2026-08-27)
+
+- **Added — `LiveProgramView`, một component RIÊNG chứ không phải editor tắt
+  sửa.** LIVE là một **tài liệu khác**: nguồn của gói đang chạy, không phải
+  Draft đang sửa. Hai thứ ấy trông giống hệt nhau trên màn hình — cùng cửa sổ,
+  cùng tên POU, cùng thứ tiếng ST — nên dùng lại đúng component editor rồi tắt
+  nút Lưu là cách chắc chắn nhất để một hôm nào đó Draft rò vào chỗ đáng lẽ phải
+  là Active, mà **không có dấu hiệu bên ngoài nào cả**.
+
+- **Added — `activeProgramSource`: bộ đọc nguồn Active, fail-closed.** Dùng lại
+  **đúng** chuỗi kiểm của `activeProgramSet`, kể cả `REVISION_MISMATCH` — chốt
+  chặn thật sự chống mượn Draft. Bảy nhánh không chứng minh được đều trả
+  `source: null` kèm lý do **riêng của nhánh đó**: chưa Commission, đang đọc,
+  đọc hỏng, lệch Revision, snapshot không đọc được, thân POU không đọc được, POU
+  chưa có trong gói đang chạy. Mỗi lý do dẫn tới một hành động khác nhau của
+  người đọc nên chúng không được gộp thành "không có dữ liệu".
+
+- **Phân biệt được giữ: chương trình RỖNG khác hẳn thân không đọc được.** Một
+  chương trình rỗng vẫn có `source: ""` và vẫn hiện ra; `source` không phải chuỗi
+  là `SOURCE_UNREADABLE`.
+
+- **Changed — chỉ đọc ở LIVE là thuộc tính của CHẾ ĐỘ, không phải của vai.** Kể
+  cả admin cũng không sửa được gói đang chạy; sửa đi qua Draft rồi Commission.
+
+- **Changed — LIVE mở ở R2.** `programsModeCapabilities` và route resolver cùng
+  đọc một câu trả lời; SIMULATE vẫn đóng tới R3 và vẫn **nói ra lý do** thay vì
+  âm thầm hiện dữ liệu chế độ khác.
+
+- **Added — case real-backend đối chiếu BA nguồn độc lập.** Nguồn LIVE trên màn
+  hình, thân Revision đang chạy đọc qua API, và Draft hiện tại của cùng Project.
+  Case cố ý **không tự Commission**: lane real-backend dùng chung một Core cho cả
+  file, nên commission thêm một Revision vừa làm hỏng giả định của test khác vừa
+  khiến chính nó phụ thuộc thứ tự chạy — nó đọc trạng thái thật của controller
+  thay vì dựng ra một trạng thái mới.
+
+- **Verification.** FE **154 file / 1755 test PASS**; `go vet`+`go test` PASS;
+  E2E mock **42 PASS / 8 skip**; real-backend **4/4 PASS**; build PASS — chunk
+  **113,04 KiB / 125 KiB** (dư 11,96 KiB).
+
+
 ### Governance — đóng `T59-810`, mở `T59-811` (2026-08-26)
 
 - **Changed — `T59-810` `DONE (HOST/LOCAL)`.** Cả hai vế acceptance có bằng
