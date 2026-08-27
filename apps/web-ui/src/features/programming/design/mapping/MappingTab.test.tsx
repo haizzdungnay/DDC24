@@ -195,3 +195,63 @@ describe('MappingTab — chọn biến từ VAR_INPUT/VAR_OUTPUT, không gõ tay
     expect(within(dialog).getByRole('button', { name: 'Ánh xạ' })).toBeDisabled()
   })
 })
+
+describe('bộ chọn Point — ẩn ứng viên thì phải NÓI RA (user report 2026-08-28)', () => {
+  /* Người dùng thật hỏi "trang map đang thiếu VP à?" khi 5/7 VP biến mất khỏi
+     danh sách. Bộ lọc tương thích ĐÚNG — biến BOOL không ghép được Point REAL —
+     nhưng nó ẩn im lặng, và một danh sách còn vài mục trông y hệt một danh sách
+     đầy đủ. Ca này nguy hiểm hơn danh sách rỗng, vốn đã có thông báo riêng. */
+  function documentWithBoolInput(): ProgrammingDraftDocument {
+    const document = baseDocument()
+    document.programs.push({
+      programId: 'program-1', name: 'AHU_MasterSequence', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM AHU_MasterSequence\nVAR_INPUT\n  Occupied : BOOL;\nEND_VAR\nEND_PROGRAM'
+    })
+    return document
+  }
+
+  function vp(pointId: string, dataType: string, direction: ProgrammingPointCatalogEntry['direction']): ProgrammingPointCatalogEntry {
+    return { category: 'VP', pointId, deviceId: undefined, name: `VP ${pointId}`, dataType, direction, writable: direction !== 'READ', quality: 'GOOD', value: 0 }
+  }
+
+  it('còn ứng viên nhưng có mục bị ẩn ⇒ nêu SỐ và LÝ DO', () => {
+    catalogItems.length = 0
+    catalogItems.push(vp('VP1', 'BOOL', 'READ'), vp('VP6', 'BOOL', 'READ'))
+    catalogItems.push(vp('VP2', 'REAL', 'READ'), vp('VP3', 'REAL', 'READ'), vp('VP5', 'INT', 'READ'))
+
+    render(<I18nProvider><MappingTab draft={documentWithBoolInput()} document={documentWithBoolInput()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
+
+    // Hai VP kiểu BOOL vẫn hiện — bộ lọc tương thích là ĐÚNG, không đụng vào.
+    expect(screen.getByText('VP:VP1')).toBeInTheDocument()
+    expect(screen.getByText('VP:VP6')).toBeInTheDocument()
+    expect(screen.queryByText('VP:VP2')).toBeNull()
+
+    const note = screen.getByTestId('point-picker-hidden-note')
+    expect(note).toHaveTextContent('Đã ẩn 3 Point')
+    expect(note).toHaveTextContent('khác kiểu BOOL')
+  })
+
+  it('sai HƯỚNG được kể riêng khỏi sai KIỂU', () => {
+    catalogItems.length = 0
+    // Cùng kiểu BOOL nhưng chỉ ghi được ⇒ biến INPUT không đọc được từ nó.
+    catalogItems.push(vp('VP1', 'BOOL', 'READ'), vp('VP9', 'BOOL', 'WRITE'))
+
+    render(<I18nProvider><MappingTab draft={documentWithBoolInput()} document={documentWithBoolInput()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
+
+    const note = screen.getByTestId('point-picker-hidden-note')
+    expect(note).toHaveTextContent('sai hướng')
+    expect(note).toHaveTextContent('INPUT cần Point đọc được')
+  })
+
+  it('không ẩn gì thì KHÔNG hiện ghi chú', () => {
+    catalogItems.length = 0
+    catalogItems.push(vp('VP1', 'BOOL', 'READ'))
+
+    render(<I18nProvider><MappingTab draft={documentWithBoolInput()} document={documentWithBoolInput()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
+
+    expect(screen.queryByTestId('point-picker-hidden-note')).toBeNull()
+  })
+})
