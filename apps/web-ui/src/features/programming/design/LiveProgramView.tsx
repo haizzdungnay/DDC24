@@ -1,6 +1,8 @@
 import { useI18n } from '../../../shared/i18n'
 import { useProgrammingRevision, type ProgrammingRuntimeMonitorState } from '../api/queries'
 import { activeProgramSource, type ActiveProgramSource } from '../overview/activeProgramSet'
+import { LiveFbdView } from './LiveFbdView'
+import type { FbdDocument } from '../fbd/model'
 import { StRuntimeValueOverlay } from './editor/StRuntimeValueOverlay'
 import { runtimeOverlayByProgramId } from './editor/workspaceAdapters'
 import type { ProgrammingProgram } from '../model/types'
@@ -79,6 +81,17 @@ export function LiveProgramView({
         <p role="status" className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
           {liveSourceReason(pick, active.reason)}
         </p>
+      ) : active.language === 'FBD' ? (
+        /* `AC-FBD-009` — sơ đồ đang chạy phải là SƠ ĐỒ, không phải JSON thô.
+         * Tài liệu hỏng thì nói ra thay vì vẽ một sơ đồ trống trông như "chương
+         * trình không có gì". */
+        parseLiveFbd(active.source) === null ? (
+          <p role="status" className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
+            {pick('Sơ đồ FBD của gói đang chạy không đọc được.', 'The running package’s FBD diagram cannot be read.')}
+          </p>
+        ) : (
+          <LiveFbdView document={parseLiveFbd(active.source)!} />
+        )
       ) : (
         <div className="space-y-2">
           <label className="block text-xs text-[var(--c-text-dim)]" htmlFor="programming-live-source">
@@ -98,6 +111,19 @@ export function LiveProgramView({
       {program && <StRuntimeValueOverlay state={overlays[program.programId] ?? { status: 'unavailable' }} />}
     </section>
   )
+}
+
+/**
+ * Tài liệu FBD của gói đang chạy. `null` = không đọc được — KHÁC HẲN một sơ đồ
+ * rỗng, và hai thứ đó phải hiện ra khác nhau.
+ */
+function parseLiveFbd(source: string): FbdDocument | null {
+  try {
+    const parsed = JSON.parse(source) as FbdDocument
+    return Array.isArray(parsed?.networks) ? parsed : null
+  } catch {
+    return null
+  }
 }
 
 /**
