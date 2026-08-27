@@ -8,6 +8,23 @@
 
 ## [Unreleased]
 
+### Security — lane E2E thật ghi tài khoản vào file config được commit (2026-08-27)
+
+- **Fixed — chín tài khoản `viewer*` do test tạo đã lọt vào
+  `apps/web-api/config/users.conf`.** `run_programming_real_e2e_stack.sh` trỏ
+  `USERS_CONF` thẳng vào file **trong repo**, trong khi mọi biến khác dùng
+  `runtime_root` tạm. Backend ghi user mới ra đúng đường dẫn đó, nên mỗi lần
+  case RBAC của `T59-807` tạo một viewer là một tài khoản **thật** rơi vào file
+  được commit — kèm bcrypt hash của mật khẩu `viewer123` mà chính spec ghi rõ.
+
+- **Sửa cả hai vế.** User store của lane nay là **bản sao** trong runtime tạm
+  (`cp` trước khi khởi động backend), và chín tài khoản đã lọt vào repo bị xoá.
+  Chạy lại lane sau khi sửa: `git status` sạch — file không còn bị ghi thêm.
+
+- **Verification.** `npm run test:e2e:programming-real` **4/4 PASS**;
+  `apps/web-api/config/users.conf` chỉ còn `admin`; `bash -n` trên script PASS.
+
+
 ### PGM-02 R2 — LIVE là cửa sổ đọc gói đang chạy (`T59-811`) (2026-08-27)
 
 - **Added — `LiveProgramView`, một component RIÊNG chứ không phải editor tắt
