@@ -34,9 +34,24 @@ type JsonObject = Record<string, unknown>
 
 let requestSequence = 0
 
+/**
+ * Muối theo TỪNG LẦN CHẠY, không chỉ theo từng request.
+ *
+ * Bộ đếm thuần sinh ra đúng cùng một tập `x-idempotency-key` ở mọi lần chạy.
+ * Lane host dựng store mới mỗi lần nên không thấy gì. Lane target thì store của
+ * controller sống lâu hơn phiên test: lần chạy thứ hai gửi lại đúng key cũ,
+ * backend trả về **bản ghi của lần trước** — đúng hợp đồng idempotency — nên
+ * mutation không thật sự chạy còn assert lại đọc trạng thái cũ.
+ *
+ * Đã làm `T59-810` đỏ giả trên bo Foxlinx: phiên Trace "vừa tạo" mang pin cũ
+ * hơn snapshot đọc ngay trước đó 611 s, vì đó là phiên của lần chạy trước. Cùng
+ * cơ chế này có thể cho xanh giả ở chiều ngược lại, nên phải chặn từ đồ gá.
+ */
+const RUN_SALT = crypto.randomUUID().replace(/-/g, '').slice(0, 6)
+
 function nextUUID(prefix = '90000000'): string {
   requestSequence += 1
-  return `${prefix}-0000-4000-8000-${String(requestSequence).padStart(12, '0')}`
+  return `${prefix}-0000-4000-8000-${RUN_SALT}${String(requestSequence).padStart(6, '0')}`
 }
 
 async function responseJSON(response: APIResponse, expectedStatus: number): Promise<JsonObject> {
@@ -1169,5 +1184,10 @@ test('T59-811: viewer thật vẫn ĐỌC được LIVE, và không có đườn
     await expect(viewerPage.getByRole('button', { name: /Hoàn tác/ })).toHaveCount(0)
   } finally {
     await context.close()
+    /* Lane target chạy trên controller thật dùng chung: một tài khoản viewer bỏ
+     * lại sau mỗi lần đo là quyền truy cập thừa, không phải rác vô hại. Xoá ở
+     * đây thay vì ở cuối test để nó vẫn chạy khi assert phía trên đỏ. */
+    const removed = await request.delete(`/api/v1/users/${viewerName}`, { headers: mutationHeaders(token) })
+    expect([200, 204], `không dọn được viewer tạm ${viewerName}`).toContain(removed.status())
   }
 })

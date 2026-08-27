@@ -44,8 +44,8 @@ không nói CI, target, HIL hay release.
 | `WP-09` | `T59-810` | **DONE (R2)** 2026-08-26 | Dấu producer (generation/freshness) + Trace pin neo tuple Active | Real-backend 3/3; Go 10 case bảng + 1 tích hợp; FE 153 file/1737 test |
 | `WP-10` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1+R2)** 2026-08-27 | R1 cổng ngân sách; R2 monitor chỉ ở LIVE, một request đang bay, coalesce ≤10 Hz, cleanup và topology FBD không render lại theo sample | R2 chunk 114,32/145 KiB, dư 30,68 KiB; focused 47/47; FE 157 file/1768 test |
 | `WP-11` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1+R2)** 2026-08-27 | R1 responsive/keyboard/RBAC/hostile source; R2 khóa mutation toàn workspace LIVE, bốn viewport và sửa finding axe rail icon-only | Playwright T59-812 9 PASS/1 skip; 1280/1024/768/390 không tràn; axe serious/critical 0 |
-| `WP-12` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 | Chạy/record `VS-PROG-U13`, rollback, closeout increment | [`EV-PGM02-R1-CLOSEOUT-001`](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-809-r1-closeout.md) tại `d32e560` |
-| `WP-13` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 | Docs closeout R1 trong cùng record | như trên |
+| `WP-12` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 · **DONE (R2)** 2026-08-27 | Chạy/record `VS-PROG-U13`/`U14`, rollback, closeout increment | R1: [`EV-PGM02-R1-CLOSEOUT-001`](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-809-r1-closeout.md) tại `d32e560`. R2: [`EV-PGM02-R2-CLOSEOUT-001`](../../../07_records/test-evidence/programming/2026-08-27-pgm02-t59-813-r2-closeout.md), có lane target trên Foxlinx (read-back 14/14 hash, fault + rollback drill) |
+| `WP-13` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 · **DONE (R2)** 2026-08-27 | Docs closeout R1/R2 trong cùng record; R2 kèm re-pin lattice hợp đồng và manifest baseline 1.53 | như trên |
 
 **Danh sách block của plan đã ĐÓNG** 2026-08-26: cả sáu
 (`TP`/`CTU`/`CTD`/`SCALE`/`DEADBAND`/`HYSTERESIS`) có ngữ nghĩa pin ở
@@ -1205,6 +1205,7 @@ discipline chỉ mở implementation, không chứng minh M4/M5, target/HIL ho�
 | 1.16 | 2026-08-27 | Đóng `WP-10`/`WP-11` ở phạm vi R2 qua `T59-812`: subscription/10 Hz/no-overlap/cleanup, topology FBD tách sample, khóa mutation toàn LIVE, responsive/axe bốn viewport và budget gate R2. Sửa luôn dòng WP-06 thừa cột; `T59-813` chuyển READY. |
 | 1.15 | 2026-08-27 | Đóng `WP-06` ở phạm vi R2 (LIVE read-only đủ ST + FBD + Watch); `T59-812` chuyển READY. |
 | 1.14 | 2026-08-26 | Đóng `WP-09`/`T59-810` (dấu producer + Trace pin); `T59-811` (LIVE FE) chuyển READY. |
+| 1.14 | 2026-08-27 | Đóng `WP-12`/`WP-13` ở phạm vi R2 kèm record closeout R2; increment R2 đóng và `WP-07`/`T59-814` mở R3. Lát này bổ sung lane browser target và sửa bốn finding do chính lane đó lộ ra. |
 | 1.13 | 2026-08-26 | Đóng `WP-12`/`WP-13` ở phạm vi R1 kèm record closeout; increment R1 đóng và `WP-09`/`T59-810` mở R2. |
 | 1.12 | 2026-08-26 | Đóng `WP-10`/`WP-11` ở phạm vi R1 (cổng ngân sách, bốn khổ màn, focus/bàn phím, RBAC negative, hostile source); `WP-12`/`WP-13` (`T59-809`) chuyển READY. |
 | 1.11 | 2026-08-26 | Đóng `WP-06` ở phạm vi R1 cùng phần `WP-01` còn nợ (grid slot, context strip theo mode, state machine + dirty guard); `WP-10`/`WP-11` (`T59-808`) chuyển READY. |
