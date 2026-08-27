@@ -1047,10 +1047,13 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     await expect(page.getByText(/Chế độ workspace không hợp lệ|workspace mode is invalid/)).toBeVisible()
     expect(new URL(page.url()).searchParams.get('mode')).toBe('NOPE')
 
-    // `T59-811` mở LIVE ở R2; SIMULATE vẫn thuộc R3 và phải nói rõ chưa khả
-    // dụng, không rơi về Draft.
+    /* `T59-815` mở SIMULATE ở R3. Resolver KHÔNG còn tự chặn chế độ này — câu
+       trả lời "thiết bị có mô phỏng được không" thuộc capability của server.
+       Điều KHÔNG đổi: mock không công bố capability nên bề mặt phải nói ra và
+       tuyệt đối không rơi về Draft. */
     await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=SIMULATE`)
-    await expect(page.getByText(/SIMULATE chưa khả dụng|SIMULATE is unavailable/)).toBeVisible()
+    await expect(page.getByText(/chưa công bố khả năng Mô phỏng|does not advertise the Simulation capability/)).toBeVisible()
+    await expect(page.getByLabel(/Mã nguồn ST của/)).toHaveCount(0)
 
     await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=LIVE`)
     await expect(page.getByText(/LIVE chưa khả dụng|LIVE is unavailable/)).toHaveCount(0)
@@ -1278,13 +1281,14 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
     await login(page)
     await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
 
-    // `T59-811` mở LIVE ở R2, nên SIMULATE là chế độ chưa khả dụng còn lại.
+    /* `T59-815`: lý do SIMULATE chưa dùng được nay là lý do của THIẾT BỊ
+       (capability server không công bố), không phải lý do của lịch dự án. */
     const simulate = page.getByRole('button', { name: 'SIMULATE', exact: true })
     await expect(simulate).toBeVisible()
     await simulate.focus()
     await page.keyboard.press('Enter')
     /* Không tự hạ cấp: URL phải GIỮ NGUYÊN `mode=EDIT`, và lý do phải nói ra. */
-    await expect(page.getByText(/capability đó mở ở increment R3/)).toBeVisible()
+    await expect(page.getByText(/chưa công bố khả năng Mô phỏng/)).toBeVisible()
     expect(new URL(page.url()).searchParams.get('mode')).toBe('EDIT')
   })
 

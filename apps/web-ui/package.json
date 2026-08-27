@@ -23,7 +23,7 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview --host 0.0.0.0",
     "build:e2e": "VITE_DDC_MODE=live VITE_AUTH_MODE=mock VITE_HISTORIAN_V2_TRENDS=1 VITE_PROGRAMMING_REV_A=1 vite build",
-    "check:bundle-budget": "python3 ../../scripts/verify_programming_bundle_budget.py --increment r2"
+    "check:bundle-budget": "python3 ../../scripts/verify_programming_bundle_budget.py --increment r3"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
