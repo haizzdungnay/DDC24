@@ -8,6 +8,28 @@
 
 ## [Unreleased]
 
+### PGM-02 R2 — viewer thật ĐỌC được LIVE, và gỡ một flake của chính lane (2026-08-27)
+
+- **Added — "mọi role read-only" kiểm bằng phiên viewer THẬT.** Vế đáng kiểm
+  không phải "viewer cũng không sửa được" — điều đó hiển nhiên — mà là **viewer
+  vẫn đọc được**: chặn ghi mà làm mù luôn thì người trực ca không xem được thứ
+  đang chạy trên tủ họ đang đứng cạnh. Case dùng một browser context **riêng**
+  thay vì đăng xuất rồi đăng nhập lại trên cùng trang: đổi phiên tại chỗ để lại
+  state của phiên cũ và làm test đỏ vì lý do không liên quan.
+
+- **Fixed — flake của lane real-backend, gặp hai lần ở đúng một chỗ.** Lane
+  phục vụ bằng **vite dev server**, tức mỗi module biên dịch theo yêu cầu ở lần
+  chạm đầu. Khi nhiều test cùng nạp trang, một lần transform hụt làm trình duyệt
+  nhận `Failed to fetch dynamically imported module`, React dựng
+  `RouteErrorBoundary`, và **mọi locator sau đó treo tới hết timeout** — 2 phút
+  cho một lỗi không liên quan gì tới thứ đang kiểm. `openWorkspaceRoute` nạp lại
+  **một** lần (lần thứ hai trúng cache vite) rồi khẳng định error boundary đã
+  biến mất; vẫn hỏng thì đó là lỗi thật và test phải đỏ.
+
+- **Verification.** Real-backend **5/5 PASS, chạy hai lượt liên tiếp** để chứng
+  minh hết flake; `users.conf` không bị ghi thêm.
+
+
 ### PGM-02 R2 — Watch trong workbench ở LIVE, và gỡ một bộ poll trùng (`T59-811`) (2026-08-27)
 
 - **Fixed — hai bộ poll monitor cùng chạy, do chính lát trước tạo ra.**

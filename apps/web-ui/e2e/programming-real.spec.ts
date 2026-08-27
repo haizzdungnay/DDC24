@@ -62,6 +62,29 @@ function readHeaders(token: string): Record<string, string> {
   }
 }
 
+
+/**
+ * Mở một route của workspace trên lane real-backend.
+ *
+ * Lane này phục vụ bằng **vite dev server**, tức mỗi module được biên dịch theo
+ * yêu cầu ở lần chạm đầu. Khi nhiều test cùng nạp trang, một lần transform hụt
+ * làm trình duyệt nhận `Failed to fetch dynamically imported module` và React
+ * dựng `RouteErrorBoundary` — trang trắng, mọi locator sau đó treo tới hết
+ * timeout. Đã gặp hai lần, cả hai đều ở đúng chỗ này và không liên quan gì tới
+ * thứ test đang kiểm.
+ *
+ * Nạp lại MỘT lần là đủ (lần thứ hai trúng cache của vite). Nếu vẫn hỏng thì đó
+ * là lỗi thật và test phải đỏ — nên hàm này không thử vô hạn.
+ */
+async function openWorkspaceRoute(page: Page, url: string): Promise<void> {
+  await page.goto(url)
+  const boundary = page.getByTestId('route-error-boundary')
+  if (await boundary.isVisible().catch(() => false)) {
+    await page.reload()
+  }
+  await expect(boundary, 'route vẫn hỏng sau một lần nạp lại').toHaveCount(0)
+}
+
 async function loginAPI(request: APIRequestContext): Promise<string> {
   const response = await request.post('/api/v1/auth/login', {
     data: { username: 'admin', password: 'admin123' }
@@ -912,7 +935,7 @@ test('T59-807: R1 fail-closed trên backend thật — ETag cũ, refactor hỏng
 
   // ── 4. Mất mạng giữa lúc gõ ───────────────────────────────────────────────
   const workspaceUrl = `/eng/programming/programs?project=${projectID}&pou=${PROGRAM_ID}&mode=EDIT`
-  await page.goto(workspaceUrl)
+  await openWorkspaceRoute(page, workspaceUrl)
   /* Có phiên hay chưa là chuyện của context, không phải điều test này khẳng
      định — nên đăng nhập KHI được hỏi thay vì bắt buộc phải thấy màn login. */
   const usernameField = page.getByLabel(/Tên đăng nhập|Username/i)
@@ -1047,7 +1070,7 @@ test('T59-811: LIVE hiện nguồn Active, không phải Draft, và chỉ đọc
 
   // Mở LIVE trong trình duyệt.
   const liveUrl = `/eng/programming/programs?project=${projectID}&pou=${objectID}&mode=LIVE`
-  await page.goto(liveUrl)
+  await openWorkspaceRoute(page, liveUrl)
   const usernameField = page.getByLabel(/Tên đăng nhập|Username/i)
   if (await usernameField.isVisible().catch(() => false)) {
     await usernameField.fill('admin')
@@ -1080,4 +1103,71 @@ test('T59-811: LIVE hiện nguồn Active, không phải Draft, và chỉ đọc
 
   // Revision đang chạy phải hiện ra để người đọc biết mình đang xem gói nào.
   await expect(page.getByText(activeRevisionID!)).toBeVisible()
+})
+
+/**
+ * `T59-811` — "mọi role read-only" ở LIVE, kiểm bằng phiên VIEWER THẬT.
+ *
+ * Phần trước đã chứng minh admin không sửa được ở LIVE. Nhưng câu AC là "mọi
+ * role", và vế còn lại của nó không phải "viewer cũng không sửa được" — điều đó
+ * hiển nhiên. Vế đáng kiểm là **viewer vẫn ĐỌC được**: chặn ghi mà làm mù luôn
+ * thì người trực ca không xem được thứ đang chạy trên tủ họ đang đứng cạnh.
+ *
+ * Dùng một browser context RIÊNG thay vì đăng xuất rồi đăng nhập lại trên cùng
+ * trang: đổi phiên tại chỗ để lại state của phiên cũ (token trong bộ nhớ, hook
+ * đang bay) và làm test đỏ vì lý do không liên quan gì tới thứ đang kiểm.
+ */
+test('T59-811: viewer thật vẫn ĐỌC được LIVE, và không có đường sửa nào', async ({ browser, request }, testInfo) => {
+  test.setTimeout(180_000)
+  const token = await loginAPI(request)
+
+  const runtime = await responseJSON(
+    await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) }), 200)
+  const activeRevisionID = runtime.activeRevisionId as string | null
+  test.skip(!activeRevisionID, 'controller chưa Commission gói nào')
+
+  const projects = await responseJSON(
+    await request.get('/api/v1/programming/projects?limit=100', { headers: readHeaders(token) }), 200)
+  const owner = (projects.items as JsonObject[]).find((item) => item.activeRevisionId === activeRevisionID)
+  expect(owner, 'không Project nào khai Revision đang chạy').toBeTruthy()
+  const projectID = owner!.projectId as string
+
+  const revision = await responseJSON(
+    await request.get(`/api/v1/programming/revisions/${activeRevisionID}`, { headers: readHeaders(token) }), 200)
+  const objects = ((revision.snapshot as JsonObject).objects as JsonObject[]) ?? []
+  const pou = objects.find((object) => {
+    const payload = object.payload as JsonObject | undefined
+    return object.kind === 'PROGRAM' && typeof payload?.source === 'string'
+  })
+  test.skip(!pou, 'Revision đang chạy không khai POU nào có thân đọc được')
+  const objectID = pou!.objectId as string
+  const activeSource = (pou!.payload as JsonObject).source as string
+
+  // Viewer THẬT do backend cấp, không phải một cờ giả ở FE.
+  const viewerName = `live${Date.now().toString(36)}`
+  const viewerCreated = await request.post('/api/v1/users', {
+    headers: mutationHeaders(token),
+    data: { username: viewerName, role: 'viewer', password: 'viewer123' }
+  })
+  expect(viewerCreated.status(), await viewerCreated.text()).toBe(201)
+
+  const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL })
+  try {
+    const viewerPage = await context.newPage()
+    await openWorkspaceRoute(viewerPage, `/eng/programming/programs?project=${projectID}&pou=${objectID}&mode=LIVE`)
+    await viewerPage.getByLabel(/Tên đăng nhập|Username/i).fill(viewerName)
+    await viewerPage.getByLabel(/^Mật khẩu$|^Password$/i).fill('viewer123')
+    await viewerPage.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+    await viewerPage.waitForURL(/\/eng\/programming\/programs/, { timeout: 20_000 })
+
+    const source = viewerPage.getByLabel(/Mã nguồn đang chạy/)
+    await expect(source).toBeVisible({ timeout: 20_000 })
+    // Vế đáng kiểm: viewer ĐỌC ĐƯỢC, và đọc đúng bản đang chạy.
+    expect(await source.inputValue()).toBe(activeSource)
+    await expect(source).toHaveAttribute('readonly', '')
+    await expect(viewerPage.getByRole('button', { name: 'Lưu', exact: true })).toHaveCount(0)
+    await expect(viewerPage.getByRole('button', { name: /Hoàn tác/ })).toHaveCount(0)
+  } finally {
+    await context.close()
+  }
 })
