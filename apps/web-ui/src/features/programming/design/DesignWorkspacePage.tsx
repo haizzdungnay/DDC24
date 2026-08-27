@@ -572,16 +572,31 @@ export function DesignWorkspacePage({
         {/* MỘT POU Explorer duy nhất (T59-803): trước đây cây này và cây
             "Cây ứng dụng" bên trong ProgramsTab cùng nằm trong DOM, đọc hai
             nguồn khác nhau và có thể nói khác nhau về cùng một Project. */}
-        <div className="mb-3 rounded border border-[var(--c-border)] p-3">
-          <PouExplorer
-            document={document}
-            canEdit={canEdit}
-            saving={workspace.saving}
-            selectedObjectId={selectedObjectId}
-            onSelect={selectPou}
-            onSave={workspace.save}
-          />
-        </div>
+        {/* `T59-822` / `AC-PGM02-002` — ở EDIT, cây POU đi vào ĐÚNG cột trái
+            của lưới ba cột (`explorerSlot` của `ProgramsTab`), không còn là một
+            dải ngang phía trên. Dải ngang cũ cao 337 px và đẩy mép trên trình
+            soạn thảo xuống `y=849` trên viewport 750 — người dùng phải cuộn
+            trang mới thấy chỗ mình gõ, đúng điều `AC-PGM02-002` cấm. Phép đo
+            này trước nay chỉ chạy cho PGM-01 nên chưa ai thấy.
+
+            LIVE/SIMULATE không mount `ProgramsTab` nên vẫn dùng dải trên; hai
+            chế độ đó ít chrome hơn hẳn và không có ngân sách chiều cao bị ép.
+
+            Điều kiện dưới đây phải LOẠI TRỪ NHAU: `AC-PGM02-001` đòi đúng MỘT
+            cây POU trong DOM, và hai bản cùng lúc là chính lỗi `T59-803` đã
+            phải đi sửa một lần. */}
+        {workspaceMode !== 'EDIT' && (
+          <div className="mb-3 rounded border border-[var(--c-border)] p-3">
+            <PouExplorer
+              document={document}
+              canEdit={canEdit}
+              saving={workspace.saving}
+              selectedObjectId={selectedObjectId}
+              onSelect={selectPou}
+              onSave={workspace.save}
+            />
+          </div>
+        )}
         {/* `T59-811` — LIVE KHÔNG phải "editor với nút Lưu bị khoá". Nó là một
             tài liệu khác: nguồn của gói ĐANG CHẠY. Dùng lại đúng component
             editor rồi tắt sửa là cách chắc chắn nhất để một hôm nào đó Draft rò
@@ -630,6 +645,18 @@ export function DesignWorkspacePage({
                    'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
             : null}
           compareDisabledReason={null}
+          explorerSlot={(
+            <div className="mb-3">
+              <PouExplorer
+                document={document}
+                canEdit={canEdit}
+                saving={workspace.saving}
+                selectedObjectId={selectedObjectId}
+                onSelect={selectPou}
+                onSave={workspace.save}
+              />
+            </div>
+          )}
           userPouInterfaces={userPouInterfaces}
           forceReadOnly={mobileReadOnly}
         />
