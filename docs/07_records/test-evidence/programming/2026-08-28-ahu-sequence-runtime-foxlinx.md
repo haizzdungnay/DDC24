@@ -103,6 +103,78 @@ mở khi có `ResetCmd` **và** điều kiện trip đã hết — đúng `FB_Fa
 Đây là bằng chứng mạnh hơn một lát cắt "chạy tốt": hệ đã **phát hiện sự cố và
 tự đưa thiết bị về trạng thái an toàn**.
 
+## 5. Mô phỏng fake MCU và chỉnh định trực tiếp (bổ sung 2026-08-28)
+
+### 5.1 Fake MCU đã mô phỏng đúng vật lý — không cần sửa
+
+`tools/fake_mcu/fake_mcu.cpp` đã mô hình AHU khép kín: `UI-12` (Proof of Flow)
+là **tiếp điểm khô bám theo `DO-01`** với trễ khởi động `SIM_FAN_SPINUP_S = 2 s`,
+`UI-09` Filter DP bẩn dần theo giờ quạt chạy, `UI-10` Freeze Stat trip khi
+MAT < 3 °C, và van lạnh mở làm SAT tụt thật. Không phải mô phỏng tĩnh.
+
+Việc mất proof trước đó **không phải lỗi mô phỏng**: chuỗi an toàn latch fault,
+lệnh quạt về 0, nên tiếp điểm cũng về 0 — đúng vật lý. Gỡ bằng cách xung
+`ResetCmd` **giữ qua vài chu kỳ quét**: `rtReset` là `R_TRIG`, một xung
+true→false trong cùng một chu kỳ 1 s sẽ không sinh cạnh nào.
+
+### 5.2 Bảy Virtual Point tham số chỉnh định
+
+Hệ số PI và các mức tối thiểu chuyển từ **hằng số trong mã nguồn** thành
+`VAR_INPUT` đọc từ VP: `VP_FAN_KP` (AV-12), `VP_FAN_KI` (AV-06),
+`VP_MIN_FAN_PCT` (AV-07), `VP_MIN_OA_PCT` (AV-08), `VP_COOL_KP` (AV-09),
+`VP_COOL_KI` (AV-10), `VP_PROOF_S` (AV-11, chưa nối vì cần đổi REAL→TIME).
+
+Lý do không phải tiện tay: bắt người vận hành sửa mã rồi Check + Commission lại
+chỉ để đổi một hệ số là bắt họ dùng cả một chu trình phát hành cho một nút vặn.
+
+### 5.3 Chỉnh định LÚC ĐANG CHẠY đã dập được dao động thật
+
+Với hệ số đề xuất ban đầu (`CoolKp=12`, `CoolKi=0.20`) hệ **hunting bang-bang**:
+
+```
+02:15:25  SAT=10.8  CHW=10V  HW=0
+02:15:26  SAT=24.9  CHW=0    HW=6.96V
+02:15:27  SAT=11.1  CHW=10V  HW=0     ← đảo mỗi chu kỳ
+```
+
+Hạ xuống `CoolKp=1.5`, `CoolKi=0.05` **qua VP, không biên dịch lại**:
+
+```
+02:17:01  Fan=True AO1=4.38V DSP= 89 Pa  SAT=24.23  CHW=1.35V  HW=0
+02:17:05  Fan=True AO1=5.44V DSP=138 Pa  SAT=24.30  CHW=1.49V  HW=0
+02:17:09  Fan=True AO1=6.12V DSP=176 Pa  SAT=23.76  CHW=1.58V  HW=0
+02:17:13  Fan=True AO1=6.57V DSP=203 Pa  SAT=23.91  CHW=1.72V  HW=0
+```
+
+Quạt ramp đơn điệu về SP 250 Pa, van lạnh mở dần theo sai lệch, van nóng đóng,
+economizer khoá (OAT nóng hơn RA), không báo động. **Nhánh làm lạnh cơ khí nay
+đã quan sát được** — mục còn nợ ở §5 bản trước.
+
+## 6. Hai lỗi sản phẩm phát hiện thêm
+
+### 6.1 Check PASSED nhưng Core từ chối artifact lúc nạp
+
+Ràng buộc ngõ ra chương trình vào `DO-03`/`DO-04` (hai relay dự phòng) cho
+**Check PASSED và Commission SUCCEEDED**, nhưng Core báo `FAULTED` với
+`lastExecNs = 0` — hỏng ngay lúc nạp, chưa chạy được một chu kỳ nào. Gỡ đúng hai
+binding đó thì chương trình chạy lại tức thì (`RUNNING`, 21 µs).
+
+Đây là **lỗ hổng của cổng tiền kiểm**: Check là thứ người vận hành dựa vào để
+quyết định có nạp xuống thiết bị hay không, mà nó lại nói PASS cho một gói Core
+sẽ từ chối. Hệ quả thực tế: người dùng Commission thành công rồi ngồi nhìn một
+chương trình không bao giờ chạy, không có thông điệp nào giải thích.
+
+### 6.2 Giá trị Virtual Point biến mất sau khi Core khởi động lại
+
+`syncBoundVirtualPointsToCore` chỉ chạy lúc **web-api** khởi động. Khi **Core**
+khởi động lại, `av_[]`/`bv_[]` trở về 0 và không có gì đẩy lại — nên mọi VP đã
+bind bỗng đọc thành `0`/`false` trong chương trình, **im lặng**. Quan sát được:
+sau khi restart Core, `VP_OCCUPIED` đọc thành false nên AHU không rời trạng thái
+OFF; restart web-api thì giá trị trở lại và hệ chạy.
+
+Cùng họ với lỗi 6.1 và với lỗi VP `writable=false` ở §2.2: một giá trị sai được
+đưa vào vòng điều khiển mà không có dấu hiệu nào.
+
 ## 5. Điều lát này KHÔNG chứng minh
 
 - **Chưa nghiệm thu I/O vật lý.** `mkddc-fakemcu` đang mô phỏng I/O trên bo này;
