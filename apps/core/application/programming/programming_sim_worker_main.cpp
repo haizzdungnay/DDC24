@@ -41,6 +41,9 @@
 #include <sodium.h>
 #include <nlohmann/json.hpp>
 
+#include <array>
+#include <fstream>
+
 #include "programming/simulation/sim_error.hpp"
 #include "programming/simulation/sim_sandbox.hpp"
 #include "programming/simulation/sim_session.hpp"
@@ -301,10 +304,11 @@ int run_sandbox_probe()
     return (applied && all_denied) ? 0 : 1;
 }
 
-int run_protocol_loop(const std::string& expected_token)
+int run_protocol_loop(const std::string& expected_token, const core::StLoaderOptions& loader_options)
 {
     LineReader reader;
     SimSession session;
+    session.set_loader_options(loader_options);
     bool greeted = false;
     std::string line;
 
@@ -489,10 +493,13 @@ int run_protocol_loop(const std::string& expected_token)
 int main(int argc, char** argv)
 {
     bool probe_mode = false;
+    std::vector<std::string> trusted_key_paths;
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
         if (argument == "--sandbox-probe") probe_mode = true;
-        else if (argument == "--version") {
+        else if (argument == "--st-trusted-key" && index + 1 < argc) {
+            trusted_key_paths.push_back(argv[++index]);
+        } else if (argument == "--version") {
             std::printf("%s\n", kWorkerVersion);
             return 0;
         }
@@ -516,6 +523,43 @@ int main(int argc, char** argv)
      * đã hết bí mật. */
     ::unsetenv("MKDDC_SIM_SESSION_TOKEN");
 
+    /* Đọc khoá tin cậy TRƯỚC hàng rào: sau khi seccomp cấm `openat`, worker
+     * không mở được file nào nữa. Đây cũng là lý do khoá đi bằng ĐƯỜNG DẪN ở
+     * dòng lệnh chứ không bằng một lệnh giao thức — lệnh tới sau hàng rào.
+     *
+     * Tập khoá này phải TRÙNG với tập Core đang dùng. Worker chỉ tin khoá nhúng
+     * lúc build sẽ từ chối mọi artifact ký bằng khoá THIẾT BỊ, tức mô phỏng
+     * không bao giờ chạy được trên một bo thật. */
+    core::StLoaderOptions loader_options;
+    std::vector<std::array<uint8_t, 32>> trusted_keys;
+    for (const std::string& path : trusted_key_paths) {
+        std::ifstream key_file(path);
+        std::string hex;
+        if (!key_file || !(key_file >> hex) || hex.size() != 64) {
+            write_line(json{{"ok", false},
+                            {"errorCode", core::programming::sim::kErrProtocol},
+                            {"detail", "khoá tin cậy không đọc được hoặc sai độ dài"}});
+            return 2;
+        }
+        std::array<uint8_t, 32> key{};
+        for (std::size_t byte = 0; byte < 32; ++byte) {
+            key[byte] = static_cast<uint8_t>(std::stoul(hex.substr(byte * 2, 2), nullptr, 16));
+        }
+        trusted_keys.push_back(key);
+    }
+    if (!trusted_keys.empty()) {
+        if (trusted_keys.size() > core::kMaxTrustedKeys) {
+            write_line(json{{"ok", false},
+                            {"errorCode", core::programming::sim::kErrLimit},
+                            {"detail", "vượt số khoá tin cậy tối đa"}});
+            return 2;
+        }
+        for (std::size_t index = 0; index < trusted_keys.size(); ++index) {
+            loader_options.trusted_keys[index] = trusted_keys[index].data();
+        }
+        loader_options.trusted_key_count = trusted_keys.size();
+    }
+
     core::programming::sim::SandboxReport report;
     std::string sandbox_error;
     if (!core::programming::sim::apply_sandbox(kAddressSpaceBytes, &report, &sandbox_error)) {
@@ -525,5 +569,5 @@ int main(int argc, char** argv)
         return 2;
     }
 
-    return run_protocol_loop(expected_token);
+    return run_protocol_loop(expected_token, loader_options);
 }

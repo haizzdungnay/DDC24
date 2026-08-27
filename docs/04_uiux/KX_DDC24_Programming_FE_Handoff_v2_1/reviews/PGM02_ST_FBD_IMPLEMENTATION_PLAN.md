@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001` |
-| Phiên bản | 1.17 |
+| Phiên bản | 1.19 |
 | Trạng thái | **Supporting plan — exact-pinned by `AUTH-PROG-2026-08-24-05`; R1 ĐÓNG; R2 ĐÓNG (`T59-810..813` DONE); R3 mở với `T59-814` READY. Phán quyết audit 2026-08-27 hạ `WP-09` về DONE một phần và mở `WP-14`/`WP-15` — xem §0 và [`REC-PGM02-AUD-ADJ-001`](../../../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md)** |
 | Ngày | 2026-08-25 |
 | Mốc mã nguồn lập kế hoạch | `3d2db5d88912bf927475e8f1ef8ca70a9df4afc4` |
@@ -40,14 +40,14 @@ không nói CI, target, HIL hay release.
 | `WP-05` | `T59-806` | **DONE (R1)** 2026-08-26 | Hợp đồng `layout` (compiler bỏ qua khi canonical hoá) + canvas SVG node–edge thật + khay Vấn đề nhảy tới đúng block/dây + minimap trên ngưỡng + fixture 256 block | AC áp dụng cho R1 (`AC-FBD-001..007`, `012`) đều có test; accessibility có axe quét thẳng canvas (0 vi phạm); ctest 1299/1299, FE 149 file/1684 test, E2E 31 PASS/5 skip. `AC-FBD-008` thuộc R3, `AC-FBD-009..011` thuộc R2 |
 | `WP-06` | `T59-807` (R1) / `T59-811` (R2) / `T59-816` (R3) | **DONE (R1+R2)** 2026-08-27 | R1: workbench/mode/grid/bốn lớp lỗi; R2: nguồn Active fail-closed, FBD canvas thuần, Watch snapshot chung | R1 real-backend 2/2; R2 real-backend 5/5; FE 156 file/1762 test |
 | `WP-07` | `T59-814` | **DONE (HOST/LOCAL)** 2026-08-27 | Simulation API/store/supervisor/worker ephemeral + sandbox + virtual time + input allowlist | Cổng nhị phân: `programming_sim_worker_symbol_boundary` (không link `core_domain`) và `programming_sim_worker_behaviour` (hàng rào + bắt tay + tất định). `G-PGM02-04 SIM_SAFE` mới đạt phần HOST; phần target/HIL zero-physical-output thuộc `T59-817` |
-| `WP-08` | `T59-815` | ORDERED | — | — |
+| `WP-08` | `T59-815` | **DONE (HOST/LOCAL)** 2026-08-27 | Bề mặt SIMULATE: điều khiển phiên, ngõ vào ảo, lớp quan sát, save-required và RBAC đọc từ capability | Mô hình phiên thuần có test riêng (bỏ phản hồi phiên khác/sequence cũ/epoch cũ); component test phủ capability tắt, Draft bẩn, viewer chỉ đọc, `UNAVAILABLE` không hoá 0. E2E backend+worker THẬT: RUN tiến đồng hồ ảo, PAUSE dừng thật, STEP đúng một base tick, RESET về 0. Sửa `F-P59-RUN-NOOP-001` và `F-P59-SIM-TRUSTED-KEY-001` của `WP-07` |
 | `WP-09` | `T59-810` (đã giao) / `T59-819` (còn nợ) | **DONE (R2, MỘT PHẦN)** 2026-08-26 | Đã giao: dấu producer (generation/freshness) + Trace pin neo tuple Active. **Chưa giao: toàn bộ nhánh Compare Draft↔Active** (`stHunks[]`/`fbdChanges[]`, Compare drawer, golden tests) — xem cảnh báo ngay dưới bảng | Phần đã giao: real-backend 3/3; Go 10 case bảng + 1 tích hợp; FE 153 file/1737 test. Phần Compare: **chưa có bằng chứng nào** |
 | `WP-10` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1+R2)** 2026-08-27 | R1 cổng ngân sách; R2 monitor chỉ ở LIVE, một request đang bay, coalesce ≤10 Hz, cleanup và topology FBD không render lại theo sample | R2 chunk 114,32/145 KiB, dư 30,68 KiB; focused 47/47; FE 157 file/1768 test |
 | `WP-11` | `T59-808` / `T59-812` / `T59-816` | **DONE (R1+R2)** 2026-08-27 | R1 responsive/keyboard/RBAC/hostile source; R2 khóa mutation toàn workspace LIVE, bốn viewport và sửa finding axe rail icon-only | Playwright T59-812 9 PASS/1 skip; 1280/1024/768/390 không tràn; axe serious/critical 0 |
 | `WP-12` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 · **DONE (R2)** 2026-08-27 | Chạy/record `VS-PROG-U13`/`U14`, rollback, closeout increment | R1: [`EV-PGM02-R1-CLOSEOUT-001`](../../../07_records/test-evidence/programming/2026-08-26-pgm02-t59-809-r1-closeout.md) tại `d32e560`. R2: [`EV-PGM02-R2-CLOSEOUT-001`](../../../07_records/test-evidence/programming/2026-08-27-pgm02-t59-813-r2-closeout.md), có lane target trên Foxlinx (read-back 14/14 hash, fault + rollback drill) |
 | `WP-13` | `T59-809` / `T59-813` / `T59-817` | **DONE (R1)** 2026-08-26 · **DONE (R2)** 2026-08-27 | Docs closeout R1/R2 trong cùng record; R2 kèm re-pin lattice hợp đồng và manifest baseline 1.53 | như trên |
 | `WP-14` | `T59-818` | **OPEN** — mở 2026-08-27 | Inspector context-sensitive năm ngữ cảnh (Program/Variable/ST symbol/FBD block/Connection) theo handoff cha §9 | — |
-| `WP-15` | `T59-821` | **OPEN** — mở 2026-08-27 | Toolbar editor đủ ba mode theo `PGM-02A §3`; phần tab đa POU chờ `UD-PROG-014` | — |
+| `WP-15` | `T59-821` | **OPEN** — mở 2026-08-27 | **Editor chrome**: toolbar ba mode (`PGM-02A §3`) + tab đa POU (`UD-PROG-014` = B, CLOSED) + status bar + Code Map cho ST | — |
 
 > ### Đính chính 2026-08-27 — `WP-09` KHÔNG đóng trọn
 >
@@ -1232,12 +1232,14 @@ lặng; Inspector phình chiếm chỗ của editor ở 1280 px.
 
 **Exit:** `TC-PGM02-INS-01..03` PASS; không tăng chunk quá ngân sách R3.
 
-## WP-15 — Toolbar editor ba mode và tab POU
+## WP-15 — Editor chrome: toolbar ba mode, tab POU, status bar, navigator map
 
 **Objective**
 
-Chuẩn hoá thanh công cụ editor theo đúng `PGM-02A §3` cho cả ba mode, và giải
-quyết dứt điểm câu hỏi tab đa POU thay vì để nó lơ lửng trong bản vẽ.
+Dựng đủ phần "khung" của editor mà hợp đồng và ba ảnh render đòi nhưng bản DDD
+0.1–0.3 không chuyển tiếp: thanh công cụ theo mode, tab đa POU, status bar và
+navigator map. Đây là bốn thứ khác nhau nhưng cùng một cây component và cùng một
+lớp trạng thái, nên tách WP sẽ tạo ba lần sửa chồng lên `ProgramsTab.tsx`.
 
 **Nguồn:** `PGM-02A §2/§3/§11`; `PGM-02B §2`; `REC-PGM02-AUD-ADJ-001`
 `F-PGM02-AUD-004`. DDD 0.4 §7.2/§7.3/§10.2.
@@ -1253,8 +1255,19 @@ quyết dứt điểm câu hỏi tab đa POU thay vì để nó lơ lửng trong
 - Ghi nhận chính thức: `SIMULATE`/`LIVE` là **mode switch** ở
   `ProgramsModeSwitcher`, không nhân bản thành nút toolbar.
 - Nút không dùng được phải nêu lý do đọc được, cấm ẩn im lặng (luật `MODE-01`).
-- **Tab đa POU: chỉ thi hành sau khi `UD-PROG-014` CLOSED.** Nếu Owner chọn giữ
-  một POU mỗi lần thì phần này đóng bằng quyết định, không bằng code.
+- **Tab đa POU — `UD-PROG-014` CLOSED 2026-08-27, phương án B.** Tab bắc qua cả
+  ST lẫn FBD trong cùng workspace (ảnh FBD hiện `AHU_Main.FBD (FBD)` cạnh
+  `AHU_Main.Main (ST)`). `objectId` là trục định danh của tab, **không** phải tên
+  POU; hai tab không bao giờ chia chung buffer soạn thảo. Năm câu hỏi hành vi mà
+  handoff v2.2 chưa trả lời (số tab tối đa; đóng tab bẩn; đổi mode áp cho toàn
+  workspace; sống qua reload; tab trỏ POU đã xoá) phải được chốt **trong**
+  `TC-PGM02-TAB-01`, không để mỗi người một kiểu.
+- **Status bar** — trong phạm vi từ DDD 0.5 (đảo ngược bản 0.4). ST:
+  `Ln, Col · INS · LF · UTF-8 · dirty`. FBD: `Ready · Ln, Col · zoom% · FBD ·
+  trạng thái kết nối`. Giá trị chưa đọc được hiện `—`; **cấm** mặc định
+  `UTF-8`/`LF` cho có.
+- **Code Map cho ST** — tái dùng ngưỡng và luật của minimap FBD (`AC-FBD-012`).
+  Điều hướng chỉ đổi khung nhìn, không đổi một byte nào của tài liệu.
 
 **Files affected**
 
@@ -1262,7 +1275,10 @@ quyết dứt điểm câu hỏi tab đa POU thay vì để nó lơ lửng trong
   `design/workbench/ProgrammingWorkbench.tsx`, `design/ProgramsWorkspaceRoute.tsx`.
 
 **Dependencies:** `T59-819` (Compare) cho nút Compare; `T59-815` cho thanh
-SIMULATE; `UD-PROG-014` cho phần tab.
+SIMULATE. `UD-PROG-014` đã CLOSED nên phần tab không còn bị chặn.
+**Xung đột file:** WP-14 (`T59-818`) và WP-15 cùng chạm `ProgramsTab.tsx` — hai
+làn phải nối tiếp, hoặc tách `ProgramInspector` ra file riêng trước khi cả hai
+bắt đầu.
 
 **Acceptance criteria**
 
@@ -1274,7 +1290,9 @@ SIMULATE; `UD-PROG-014` cho phần tab.
 
 **Tests/verification**
 
-- `TC-PGM02-TB-01` (DDD §10.2) + RBAC negative + axe cho thanh icon-only.
+- `TC-PGM02-TB-01` toolbar, `TC-PGM02-TAB-01` tab, `TC-PGM02-SB-01` status bar,
+  `TC-PGM02-NAV-01` navigator map (DDD 0.5 §10.2) + RBAC negative + axe cho
+  thanh icon-only.
 
 **Risk:** nút `Check` dựng luồng thứ hai lệch với `useCheckWorkflow`; thanh
 toolbar đẩy editor xuống dưới màn hình đầu ở 1280×750.
@@ -1296,6 +1314,8 @@ PGM-02 (thuộc `T59-822`).
 | Compare saved Draft Revision↔Active typed ST/FBD diff | 09 | 12 |
 | Inspector đúng năm ngữ cảnh, không đoán signature | 14 | 12 |
 | Toolbar đúng tập nút theo mode, không rò mutation | 15 | 12 |
+| Tab theo `objectId`, không chia chung buffer | 15 | 12 |
+| Status bar không bịa encoding/EOL, dirty khớp buffer | 15 | 12 |
 | Trace concurrency/revision truth | 09 | 12 |
 | SIMULATE saved snapshot/no physical output | 07 | 08/12 |
 | Missing/invalid/stale không thành 0 | 06/08/09 | 12 |
@@ -1358,10 +1378,11 @@ discipline chỉ mở implementation, không chứng minh M4/M5, target/HIL ho�
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.19 | 2026-08-27 | `WP-08` DONE ở lớp HOST/LOCAL. Dựng UI lên hạ tầng `WP-07` làm lộ hai lỗi của chính nó: `RUN` không chạy tick nào, và worker không tin khoá thiết bị nên mọi phiên hỏng trên bo thật. Cả hai đã sửa trong cùng lát. |
 | 1.16 | 2026-08-27 | Đóng `WP-10`/`WP-11` ở phạm vi R2 qua `T59-812`: subscription/10 Hz/no-overlap/cleanup, topology FBD tách sample, khóa mutation toàn LIVE, responsive/axe bốn viewport và budget gate R2. Sửa luôn dòng WP-06 thừa cột; `T59-813` chuyển READY. |
 | 1.15 | 2026-08-27 | Đóng `WP-06` ở phạm vi R2 (LIVE read-only đủ ST + FBD + Watch); `T59-812` chuyển READY. |
 | 1.14 | 2026-08-26 | Đóng `WP-09`/`T59-810` (dấu producer + Trace pin); `T59-811` (LIVE FE) chuyển READY. |
-| 1.15 | 2026-08-27 | `WP-07` DONE ở lớp HOST/LOCAL: worker mô phỏng cách ly, supervisor, API R3 và tám mã `PRG-SIM-*`. `G-PGM02-04 SIM_SAFE` đạt phần host; phần zero-physical-output trên target vẫn là kế hoạch, không phải PASS. `WP-08`/`T59-815` mở. |
+| 1.17 | 2026-08-27 | `WP-07` DONE ở lớp HOST/LOCAL: worker mô phỏng cách ly, supervisor, API R3 và tám mã `PRG-SIM-*`. `G-PGM02-04 SIM_SAFE` đạt phần host; phần zero-physical-output trên target vẫn là kế hoạch, không phải PASS. `WP-08`/`T59-815` mở. |
 | 1.14 | 2026-08-27 | Đóng `WP-12`/`WP-13` ở phạm vi R2 kèm record closeout R2; increment R2 đóng và `WP-07`/`T59-814` mở R3. Lát này bổ sung lane browser target và sửa bốn finding do chính lane đó lộ ra. |
 | 1.13 | 2026-08-26 | Đóng `WP-12`/`WP-13` ở phạm vi R1 kèm record closeout; increment R1 đóng và `WP-09`/`T59-810` mở R2. |
 | 1.12 | 2026-08-26 | Đóng `WP-10`/`WP-11` ở phạm vi R1 (cổng ngân sách, bốn khổ màn, focus/bàn phím, RBAC negative, hostile source); `WP-12`/`WP-13` (`T59-809`) chuyển READY. |

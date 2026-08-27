@@ -46,22 +46,25 @@ type SimulationOptions struct {
 	Store        *programmingstore.Store
 	Artifacts    *programmingartifact.Store
 	WorkerBinary string
-	ControllerID string
-	Now          func() time.Time
-	NewID        func() string
-	Spawn        func(context.Context, simworker.Options) (*simworker.Client, string, string, error)
+	// TrustedKeyPaths phải trùng tập khoá Core tin. Xem `simworker.Options`.
+	TrustedKeyPaths []string
+	ControllerID    string
+	Now             func() time.Time
+	NewID           func() string
+	Spawn           func(context.Context, simworker.Options) (*simworker.Client, string, string, error)
 }
 
 // SimulationService là supervisor phiên: RBAC, quota, TTL, audit và vòng đời
 // tiến trình. Nó KHÔNG diễn giải ngữ nghĩa ST — đó là việc của worker.
 type SimulationService struct {
-	store        *programmingstore.Store
-	artifacts    *programmingartifact.Store
-	workerBinary string
-	controllerID string
-	now          func() time.Time
-	newID        func() string
-	spawn        func(context.Context, simworker.Options) (*simworker.Client, string, string, error)
+	store           *programmingstore.Store
+	artifacts       *programmingartifact.Store
+	workerBinary    string
+	trustedKeyPaths []string
+	controllerID    string
+	now             func() time.Time
+	newID           func() string
+	spawn           func(context.Context, simworker.Options) (*simworker.Client, string, string, error)
 
 	mu sync.Mutex
 	// Worker sống theo phiên và CHỈ tồn tại trong tiến trình này. Sau khi
@@ -70,6 +73,9 @@ type SimulationService struct {
 	workers      map[string]*simworker.Client
 	manifests    map[string]simworker.Manifest
 	actionWindow map[string][]time.Time
+	// Vòng chạy tự động của phiên đang RUNNING. Đóng kênh = yêu cầu dừng ở
+	// RANH GIỚI giữa hai tick, không phải cắt ngang một tick đang chạy.
+	runLoops map[string]chan struct{}
 }
 
 func NewSimulationService(options SimulationOptions) *SimulationService {
@@ -87,11 +93,13 @@ func NewSimulationService(options SimulationOptions) *SimulationService {
 	}
 	return &SimulationService{
 		store: options.Store, artifacts: options.Artifacts,
-		workerBinary: options.WorkerBinary, controllerID: controller,
-		now: now, newID: options.NewID, spawn: spawn,
+		workerBinary: options.WorkerBinary, trustedKeyPaths: options.TrustedKeyPaths,
+		controllerID: controller,
+		now:          now, newID: options.NewID, spawn: spawn,
 		workers:      make(map[string]*simworker.Client),
 		manifests:    make(map[string]simworker.Manifest),
 		actionWindow: make(map[string][]time.Time),
+		runLoops:     make(map[string]chan struct{}),
 	}
 }
 
@@ -268,6 +276,7 @@ func (s *SimulationService) SweepExpired(ctx context.Context) (int, error) {
 }
 
 func (s *SimulationService) releaseWorker(sessionID string) {
+	s.stopRunLoop(sessionID)
 	s.mu.Lock()
 	client := s.workers[sessionID]
 	delete(s.workers, sessionID)
@@ -277,6 +286,106 @@ func (s *SimulationService) releaseWorker(sessionID string) {
 	if client != nil {
 		client.Kill()
 	}
+}
+
+// stopRunLoop yêu cầu vòng chạy dừng và KHÔNG chờ nó kết thúc.
+//
+// Không chờ là có chủ ý: vòng chạy có thể đang nằm trong một lệnh `STEP` với
+// trần 2 s, và giữ khoá HTTP handler suốt thời gian đó là biến một lệnh dừng
+// thành một lần treo. Tick cuối cùng nếu có sẽ bị `AdvanceSimulationRuntime`
+// bỏ qua vì phiên không còn ở trạng thái RUNNING.
+func (s *SimulationService) stopRunLoop(sessionID string) {
+	s.mu.Lock()
+	stop, found := s.runLoops[sessionID]
+	if found {
+		delete(s.runLoops, sessionID)
+	}
+	s.mu.Unlock()
+	if found {
+		close(stop)
+	}
+}
+
+// startRunLoop chạy tick tự động cho một phiên RUNNING.
+//
+// Đây là phần làm `RUN` khác `PAUSE` về HÀNH VI, không chỉ về nhãn. Trước lát
+// này `RUN` chỉ đổi một chuỗi trong DB: đồng hồ ảo đứng yên, và giao diện sẽ
+// hiện "đang chạy" cho một phiên không chạy gì cả.
+//
+// Speed CHỈ đổi khoảng chờ giữa hai tick. Không bỏ tick, không đổi ngữ nghĩa
+// timer, không đổi thứ tự — nên cùng một chuỗi input cho cùng một kết quả ở
+// 1×, 10× và 60×.
+func (s *SimulationService) startRunLoop(sessionID string, baseTickMS, speed int64) {
+	if baseTickMS <= 0 {
+		return
+	}
+	if speed <= 0 {
+		speed = 1
+	}
+	s.stopRunLoop(sessionID)
+
+	stop := make(chan struct{})
+	s.mu.Lock()
+	s.runLoops[sessionID] = stop
+	s.mu.Unlock()
+
+	interval := time.Duration(baseTickMS/speed) * time.Millisecond
+	if interval < 5*time.Millisecond {
+		interval = 5 * time.Millisecond
+	}
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				client, _, found := s.worker(sessionID)
+				if !found || client == nil {
+					return
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), SimulationWorkerCommandTimeout)
+				frame, err := client.Step(ctx)
+				cancel()
+				if err != nil {
+					// Tick hỏng là hỏng CỦA PHIÊN. Đưa phiên về FAILED rồi thoát;
+					// chạy tiếp sau một tick lỗi là tích luỹ trạng thái không ai
+					// giải thích được.
+					s.failRunningSession(sessionID, simulationDetailOf(err, client))
+					return
+				}
+				if _, err := s.store.AdvanceSimulationRuntime(context.Background(), sessionID,
+					frame.VirtualTimeMS, frame.SnapshotSequence, s.now()); err != nil {
+					return
+				}
+			}
+		}
+	}()
+}
+
+// failRunningSession đóng một phiên hỏng giữa lúc đang chạy tự động.
+//
+// Nó đọc lại sequence hiện tại thay vì dùng giá trị đã cầm: vòng chạy sống song
+// song với HTTP handler, và một lệnh của người dùng có thể vừa commit xong.
+func (s *SimulationService) failRunningSession(sessionID, detail string) {
+	ctx := context.Background()
+	session, err := s.store.GetSimulationSession(ctx, sessionID)
+	if err != nil || programmingstore.SimStateIsTerminal(session.State) {
+		return
+	}
+	details, _ := json.Marshal(map[string]any{"failure": "run-loop"})
+	_, _ = s.store.UpdateSimulationSession(ctx, programmingstore.UpdateSimulationSessionParams{
+		SessionID: sessionID, ExpectedSequence: session.SessionSequence,
+		State: programmingstore.SimStateFailed, VirtualTimeMS: session.VirtualTimeMS,
+		Speed: session.Speed, ObservationSequence: session.ObservationSequence,
+		ResetEpoch: session.ResetEpoch, FailureCode: detail, At: s.now(),
+		ActorID: session.CreatedBy, Role: "admin", AuditID: s.newID(),
+		Action: programmingstore.ActionSimulationAction, ResultCode: detail,
+		CorrelationID: "simulation-run-loop", AuditDetailsJSON: details,
+	})
+	s.releaseWorker(sessionID)
 }
 
 func (s *SimulationService) worker(sessionID string) (*simworker.Client, simworker.Manifest, bool) {
@@ -402,6 +511,7 @@ func (s *SimulationService) CreateSession(ctx context.Context, request Simulatio
 	// không có worker là một slot quota bị giữ mãi mãi.
 	client, workerVersion, detail, err := s.spawn(ctx, simworker.Options{
 		BinaryPath: s.workerBinary, CommandTimeout: SimulationWorkerCommandTimeout,
+		TrustedKeyPaths: s.trustedKeyPaths,
 	})
 	if err != nil {
 		return s.failSession(ctx, request, session, detail, at)
@@ -609,6 +719,9 @@ func (s *SimulationService) Action(ctx context.Context, request SimulationReques
 	case "RUN":
 		next.State = programmingstore.SimStateRunning
 	case "PAUSE":
+		// Dừng vòng chạy TRƯỚC khi commit: nếu commit trước, một tick đang bay
+		// vẫn có thể ghi tiến độ sau khi màn hình đã báo dừng.
+		s.stopRunLoop(session.SessionID)
 		next.State = programmingstore.SimStatePaused
 	case "SET_SPEED":
 		if _, ok := simulationSpeeds[speed]; !ok {
@@ -648,6 +761,13 @@ func (s *SimulationService) Action(ctx context.Context, request SimulationReques
 		public := domain.NewPublicError(domain.ErrUnavailable)
 		return SimulationSessionView{}, &public
 	}
+
+	// Vòng chạy được (tái) khởi động SAU khi trạng thái đã commit. Bật trước
+	// commit sẽ có tick chạy cho một trạng thái chưa ai xác nhận.
+	if updated.State == programmingstore.SimStateRunning {
+		s.startRunLoop(updated.SessionID, updated.BaseTickMS, updated.Speed)
+	}
+
 	view := simulationView(updated)
 	view.SimulationInputs = manifest.SimulationInputs
 	return view, nil

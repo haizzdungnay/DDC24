@@ -265,3 +265,85 @@ func TestSimulationSessionCreateReplayIsRejectedNotDuplicated(t *testing.T) {
 		t.Fatal("replay cùng idempotency key không được tạo phiên thứ hai")
 	}
 }
+
+func TestSimulationRuntimeTickDoesNotBumpVersionOrLeaveRunning(t *testing.T) {
+	store := openTestStore(t)
+	at := time.Unix(1_800_000_000, 0).UTC()
+	created, err := store.CreateSimulationSession(context.Background(),
+		simulationSessionParams(t, store, "ddc-01", "a", at))
+	if err != nil {
+		t.Fatal(err)
+	}
+	running, err := store.UpdateSimulationSession(context.Background(), UpdateSimulationSessionParams{
+		SessionID: created.SessionID, ExpectedSequence: 0, State: SimStateRunning,
+		Speed: 1, BaseTickMS: 1000, At: at.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Tick tự động: tiến độ tăng nhưng VERSION không đổi. Nếu version tăng theo
+	// từng tick thì client đang RUN không bao giờ giữ được ETag còn hạn, và
+	// chính lệnh PAUSE của họ sẽ luôn trượt 409.
+	ticked, err := store.AdvanceSimulationRuntime(context.Background(), created.SessionID,
+		1000, 1, at.Add(2*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ticked.SessionSequence != running.SessionSequence {
+		t.Fatalf("tick không được tăng session_sequence: %d → %d",
+			running.SessionSequence, ticked.SessionSequence)
+	}
+	if ticked.VirtualTimeMS != 1000 || ticked.ObservationSequence != 1 {
+		t.Fatalf("tick phải ghi tiến độ: %+v", ticked)
+	}
+
+	// PAUSE rồi mới tới tick của vòng lặp chưa kịp dừng: tick đó phải bị BỎ.
+	// Ghi nó vào sẽ làm đồng hồ ảo nhảy thêm sau khi màn hình đã báo dừng.
+	paused, err := store.UpdateSimulationSession(context.Background(), UpdateSimulationSessionParams{
+		SessionID: created.SessionID, ExpectedSequence: ticked.SessionSequence,
+		State: SimStatePaused, Speed: 1, VirtualTimeMS: ticked.VirtualTimeMS,
+		ObservationSequence: ticked.ObservationSequence, At: at.Add(3 * time.Second),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	late, err := store.AdvanceSimulationRuntime(context.Background(), created.SessionID,
+		9000, 9, at.Add(4*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if late.VirtualTimeMS != paused.VirtualTimeMS || late.ObservationSequence != paused.ObservationSequence {
+		t.Fatalf("tick tới sau PAUSE phải bị bỏ: %+v", late)
+	}
+	if late.State != SimStatePaused {
+		t.Fatalf("tick muộn không được kéo phiên về RUNNING: %s", late.State)
+	}
+}
+
+func TestSimulationRuntimeTickRefreshesIdleTTLWithoutPassingHardTTL(t *testing.T) {
+	store := openTestStore(t)
+	at := time.Unix(1_800_000_000, 0).UTC()
+	created, err := store.CreateSimulationSession(context.Background(),
+		simulationSessionParams(t, store, "ddc-01", "a", at))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpdateSimulationSession(context.Background(), UpdateSimulationSessionParams{
+		SessionID: created.SessionID, ExpectedSequence: 0, State: SimStateRunning,
+		Speed: 1, BaseTickMS: 1000, At: at.Add(time.Second),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Tick sát hard TTL: idle TTL được làm mới nhưng KHÔNG vượt hard TTL. Một
+	// phiên bận rộn cũng không được sống mãi.
+	ticked, err := store.AdvanceSimulationRuntime(context.Background(), created.SessionID,
+		1000, 1, at.Add(59*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ticked.IdleExpiresAtUTCMS > ticked.HardExpiresAtUTCMS {
+		t.Fatalf("idle TTL vượt hard TTL: idle=%d hard=%d",
+			ticked.IdleExpiresAtUTCMS, ticked.HardExpiresAtUTCMS)
+	}
+}

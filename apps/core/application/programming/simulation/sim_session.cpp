@@ -131,7 +131,8 @@ bool SimSession::activate_all(const char** error_code, std::string* detail)
         entry.runtime = std::make_unique<StProgramRuntime>();
 
         StLoadError load_error;
-        if (!entry.runtime->activate(entry.ir_blob.data(), entry.ir_blob.size(), &load_error)) {
+        if (!entry.runtime->activate(entry.ir_blob.data(), entry.ir_blob.size(), &load_error,
+                                     &loader_options_)) {
             if (error_code) *error_code = kErrArtifact;
             if (detail) {
                 *detail = load_error.code.empty() ? std::string("IR-E-001") : load_error.code;

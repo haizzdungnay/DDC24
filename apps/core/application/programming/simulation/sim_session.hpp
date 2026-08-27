@@ -98,6 +98,14 @@ struct SimProgramState {
 
 class SimSession {
 public:
+    /* Tập khoá tin cậy để verify artifact.
+     *
+     * BẮT BUỘC đặt trước `prepare()` và phải TRÙNG với tập Core đang dùng. Nếu
+     * worker chỉ tin khoá nhúng lúc build thì nó từ chối mọi artifact ký bằng
+     * khoá THIẾT BỊ — tức mô phỏng không bao giờ chạy được trên một bo thật,
+     * và triệu chứng chỉ là `SIM-E-002` ở tận lớp HTTP. */
+    void set_loader_options(const StLoaderOptions& options) { loader_options_ = options; }
+
     /* Nạp package đã seal. Trả false + `*error_code` (SIM-E-*) khi hỏng; khi đó
      * phiên ở trạng thái chưa chuẩn bị và không có tài nguyên nào bị giữ lại. */
     bool prepare(const std::vector<uint8_t>& artifact, uint16_t expected_profile,
@@ -158,6 +166,7 @@ private:
     std::vector<SimTraceSample> trace_;
     std::size_t trace_dropped_ = 0;
 
+    StLoaderOptions loader_options_;
     uint32_t base_tick_ms_ = 0;
     uint64_t virtual_time_ms_ = 0;
     uint64_t snapshot_sequence_ = 0;

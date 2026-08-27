@@ -1191,3 +1191,207 @@ test('T59-811: viewer thật vẫn ĐỌC được LIVE, và không có đườn
     expect([200, 204], `không dọn được viewer tạm ${viewerName}`).toContain(removed.status())
   }
 })
+
+/**
+ * `T59-815` / `PGM02-V22-WP-08` — SIMULATE trên backend THẬT, worker thật.
+ *
+ * Điều case này khoá không phải "API trả 200" mà là ba câu mà chỉ một hệ thống
+ * đang chạy mới trả lời được:
+ *
+ *  1. `RUN` có thật sự chạy không. Trước `T59-815`, `RUN` chỉ đổi một chuỗi
+ *     trạng thái trong DB: đồng hồ ảo đứng yên trong khi màn hình ghi "đang
+ *     chạy". Đây là chỗ duy nhất phát hiện được kiểu nói dối đó.
+ *  2. `STEP_CYCLE` có tiến ĐÚNG một base tick không, hay tiến theo thời gian
+ *     treo tường.
+ *  3. Vai không đủ quyền có bị chặn ở SERVER không, chứ không chỉ bị ẩn nút.
+ */
+test('T59-815: phiên mô phỏng chạy thật, dừng thật và chặn vai không đủ quyền', async ({ request }) => {
+  test.setTimeout(180_000)
+  const token = await loginAPI(request)
+
+  const capabilities = await responseJSON(
+    await request.get('/api/v1/programming/capabilities', { headers: readHeaders(token) }), 200)
+  const modes = capabilities.workspaceModes as JsonObject | undefined
+  const simulation = modes?.simulation as JsonObject | undefined
+  test.skip(simulation?.supported !== true, 'stack chưa bật worker mô phỏng')
+  expect(simulation!.mutationRoles).toEqual(['admin'])
+
+  // Một Project mới, một Program ST, rồi seal + Check. Worker chỉ nhận artifact
+  // bất biến do chính pipeline Check sinh ra, nên bước Check là bắt buộc.
+  const created = await responseJSON(await request.post('/api/v1/programming/projects', {
+    headers: mutationHeaders(token),
+    data: { schemaVersion: '1.0', name: 'AHU T59-815 sim', description: 'Playwright simulation' }
+  }), 201)
+  const projectID = (created.resource as JsonObject).projectId as string
+  const draftID = (created.resource as JsonObject).draftRevisionId as string
+
+  const saved = await responseJSON(await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(token, { 'if-match': created.etag as string }),
+    data: {
+      schemaVersion: '1.0',
+      baseRevisionId: draftID,
+      operations: [{
+        op: 'upsertProgram',
+        program: {
+          programId: PROGRAM_ID, name: 'AHU_SIM', kind: 'PROGRAM', language: 'ST',
+          document: 'PROGRAM AHU_SIM\nVAR_INPUT Setpoint : REAL; END_VAR\nVAR_OUTPUT Doubled : REAL; END_VAR\n  Doubled := Setpoint * 2.0;\nEND_PROGRAM\n'
+        }
+      }]
+    }
+  }), 200)
+
+  const sealed = await sealAndCheck(request, token, projectID, draftID, saved.etag as string, 'SIM')
+  const revision = await responseJSON(
+    await request.get(`/api/v1/programming/revisions/${sealed.revisionID}`, { headers: readHeaders(token) }), 200)
+  const contentHash = revision.contentHash as string
+  expect(contentHash).toMatch(/^[a-f0-9]{64}$/)
+
+  // Hash không khớp ⇒ SAVE_REQUIRED và KHÔNG có phiên nào được tạo. Đây là chốt
+  // phân biệt "mô phỏng bản tôi vừa lưu" với "mô phỏng thứ gì đó".
+  const mismatch = await request.post('/api/v1/programming/simulation/sessions', {
+    headers: mutationHeaders(token),
+    data: {
+      schemaVersion: '1.0', controllerId: 'host-programming-real-e2e', projectId: projectID,
+      sourceDraftRevisionId: sealed.revisionID, sourceContentSha256: 'f'.repeat(64)
+    }
+  })
+  const mismatchBody = await mismatch.text()
+  expect(mismatch.status(), mismatchBody).toBe(409)
+  expect(mismatchBody).toContain('PRG-SIM-SAVE-REQUIRED')
+
+  const session = await responseJSON(await request.post('/api/v1/programming/simulation/sessions', {
+    headers: mutationHeaders(token),
+    data: {
+      schemaVersion: '1.0', controllerId: 'host-programming-real-e2e', projectId: projectID,
+      sourceDraftRevisionId: sealed.revisionID, sourceContentSha256: contentHash
+    }
+  }), 201)
+  const sessionID = session.sessionId as string
+  expect(session.state).toBe('PAUSED')
+  expect(session.baseTickMs).toBeGreaterThan(0)
+  /* Allowlist đến TỪ artifact đã seal: chỉ `VAR_INPUT`, không có biến đầu ra.
+   *
+   * `observationId` mang `programId` chứ không mang TÊN POU — runtime instance
+   * dùng identity ổn định, còn tên là thứ người dùng đổi được. Ràng buộc test
+   * vào tên sẽ đỏ mỗi lần ai đó đổi nhãn. */
+  const setpointId = `${PROGRAM_ID}.Setpoint`
+  const doubledId = `${PROGRAM_ID}.Doubled`
+  const inputs = (session.simulationInputs as JsonObject[]) ?? []
+  expect(inputs.map((item) => item.observationId)).toContain(setpointId)
+  expect(inputs.map((item) => item.observationId)).not.toContain(doubledId)
+
+  async function readSession(): Promise<JsonObject> {
+    return responseJSON(await request.get(`/api/v1/programming/simulation/sessions/${sessionID}`,
+      { headers: readHeaders(token) }), 200)
+  }
+  async function act(action: string, etag: string, speed?: number): Promise<JsonObject> {
+    const data: JsonObject = { schemaVersion: '1.0', action }
+    if (speed !== undefined) data.speed = speed
+    return responseJSON(await request.post(`/api/v1/programming/simulation/sessions/${sessionID}/actions`, {
+      headers: mutationHeaders(token, { 'if-match': etag }), data
+    }), 200)
+  }
+
+  // Ghi một virtual input rồi STEP: đầu ra phải dùng đúng giá trị vừa ghi.
+  const afterInput = await responseJSON(await request.put(
+    `/api/v1/programming/simulation/sessions/${sessionID}/inputs/${setpointId}`, {
+      headers: mutationHeaders(token, { 'if-match': session.etag as string }),
+      data: { schemaVersion: '1.0', dataType: 'REAL', value: 4.5 }
+    }), 200)
+
+  const stepped = await act('STEP_CYCLE', afterInput.etag as string)
+  const baseTick = session.baseTickMs as number
+  expect(stepped.state).toBe('PAUSED')
+  // ĐÚNG một base tick, không phải một khoảng thời gian treo tường.
+  expect(Number(stepped.virtualTimeMs)).toBe(baseTick)
+
+  const observations = await responseJSON(
+    await request.get(`/api/v1/programming/simulation/sessions/${sessionID}/observations`,
+      { headers: readHeaders(token) }), 200)
+  const doubled = ((observations.observations as JsonObject[]) ?? [])
+    .find((item) => item.observationId === doubledId)
+  expect(doubled, 'thiếu observation của biến đầu ra').toBeTruthy()
+  expect(doubled!.value).toBe(9)
+
+  // Ghi vào biến ĐẦU RA phải bị từ chối, và phiên vẫn sống.
+  const deniedInput = await request.put(
+    `/api/v1/programming/simulation/sessions/${sessionID}/inputs/${doubledId}`, {
+      headers: mutationHeaders(token, { 'if-match': stepped.etag as string }),
+      data: { schemaVersion: '1.0', dataType: 'REAL', value: 1 }
+    })
+  const deniedBody = await deniedInput.text()
+  expect(deniedInput.status(), deniedBody).toBe(422)
+  expect(deniedBody).toContain('PRG-SIM-INPUT-NOT-ALLOWED')
+  expect((await readSession()).state).toBe('PAUSED')
+
+  // RUN phải THẬT SỰ chạy: đồng hồ ảo tiến mà không cần lệnh nào thêm.
+  const running = await act('RUN', stepped.etag as string)
+  expect(running.state).toBe('RUNNING')
+  const startedAt = Number(running.virtualTimeMs)
+  await new Promise((resolve) => setTimeout(resolve, 3000))
+  const advanced = await readSession()
+  expect(advanced.state).toBe('RUNNING')
+  expect(Number(advanced.virtualTimeMs),
+    'RUN không tiến đồng hồ ảo — nút Chạy đang nói dối').toBeGreaterThan(startedAt)
+
+  // PAUSE phải dừng THẬT: sau khi dừng, đồng hồ ảo đứng yên.
+  const paused = await act('PAUSE', advanced.etag as string)
+  expect(paused.state).toBe('PAUSED')
+  const pausedAt = Number((await readSession()).virtualTimeMs)
+  await new Promise((resolve) => setTimeout(resolve, 2000))
+  expect(Number((await readSession()).virtualTimeMs),
+    'đồng hồ ảo vẫn tiến sau khi PAUSE').toBe(pausedAt)
+
+  // RESET đưa về t=0 và tăng resetEpoch để client bỏ mẫu của epoch cũ.
+  const reset = await act('RESET', (await readSession()).etag as string)
+  expect(Number(reset.virtualTimeMs)).toBe(0)
+  expect(Number(reset.resetEpoch)).toBeGreaterThan(Number(session.resetEpoch))
+
+  // Vai không đủ quyền bị chặn ở SERVER, không chỉ bị ẩn nút.
+  const viewerName = `sim${Date.now().toString(36)}`
+  const viewerCreated = await request.post('/api/v1/users', {
+    headers: mutationHeaders(token),
+    data: { username: viewerName, role: 'viewer', password: 'viewer123' }
+  })
+  expect(viewerCreated.status(), await viewerCreated.text()).toBe(201)
+  try {
+    const viewerLogin = await responseJSON(await request.post('/api/v1/auth/login', {
+      data: { username: viewerName, password: 'viewer123' }
+    }), 200)
+    const viewerToken = viewerLogin.token as string
+
+    // Đọc được…
+    const viewerRead = await request.get(`/api/v1/programming/simulation/sessions/${sessionID}`,
+      { headers: readHeaders(viewerToken) })
+    expect(viewerRead.status()).toBe(200)
+
+    // …nhưng không điều khiển được, và cũng không mở được phiên mới.
+    const viewerAction = await request.post(`/api/v1/programming/simulation/sessions/${sessionID}/actions`, {
+      headers: mutationHeaders(viewerToken, { 'if-match': reset.etag as string }),
+      data: { schemaVersion: '1.0', action: 'RUN' }
+    })
+    expect(viewerAction.status(), await viewerAction.text()).toBe(403)
+    const viewerCreate = await request.post('/api/v1/programming/simulation/sessions', {
+      headers: mutationHeaders(viewerToken),
+      data: {
+        schemaVersion: '1.0', controllerId: 'host-programming-real-e2e', projectId: projectID,
+        sourceDraftRevisionId: sealed.revisionID, sourceContentSha256: contentHash
+      }
+    })
+    expect(viewerCreate.status(), await viewerCreate.text()).toBe(403)
+    // Phiên vẫn nguyên trạng sau hai lần bị từ chối.
+    expect((await readSession()).state).toBe('PAUSED')
+  } finally {
+    const removed = await request.delete(`/api/v1/users/${viewerName}`, { headers: mutationHeaders(token) })
+    expect([200, 204]).toContain(removed.status())
+  }
+
+  // STOP là terminal và idempotent.
+  const stopped = await responseJSON(await request.delete(
+    `/api/v1/programming/simulation/sessions/${sessionID}`,
+    { headers: mutationHeaders(token, { 'if-match': (await readSession()).etag as string }) }), 200)
+  expect(stopped.state).toBe('STOPPED')
+  const stoppedAgain = await request.delete(`/api/v1/programming/simulation/sessions/${sessionID}`,
+    { headers: mutationHeaders(token, { 'if-match': stopped.etag as string }) })
+  expect(stoppedAgain.status()).toBe(200)
+})
