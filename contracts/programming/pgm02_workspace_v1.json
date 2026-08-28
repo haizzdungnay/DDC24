@@ -23,6 +23,18 @@
     },
     "releaseReady": "NO_GO"
   },
+  "amendments": [
+    {
+      "version": "1.2",
+      "date": "2026-08-28",
+      "authorization": "AUTH-PROG-2026-08-28-DEVPROG-004",
+      "ownerDisposition": "APPROVED_MINOR_AMENDMENT",
+      "change": "Thêm operation `annotateObject` (15 → 16) cho chú thích POU: description nhiều dòng và access một dòng.",
+      "reason": "DEV-PROG-004 đòi ba trường Access/Description/tên Task mà UD-PROG-015 đã chốt là không có nguồn trong Draft v2. Cấp nguồn cho chúng cần một operation ghi được chú thích mà KHÔNG gửi lại `source` — gửi lại `source` sẽ để một buffer cũ ghi đè mã nguồn của phiên khác.",
+      "compatibility": "BACKWARD_COMPATIBLE_ADDITIVE",
+      "record": "docs/07_records/reviews/PROGRAMMING_UI_DEV_PROG_001_018_2026-08-28.md"
+    }
+  ],
   "pins": {
     "productProfileSha256": "8623adb865bc6367fcc655f26dfc1d2fd2385971c3bc5738ad7e74c831d83204",
     "libraryRegistrySha256": "a59c6db561f6550ab010f3a84118363b76f8e3d4103dd759cbb8200c26dd4660",
