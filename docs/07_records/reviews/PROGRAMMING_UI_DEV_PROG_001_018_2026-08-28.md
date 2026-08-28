@@ -259,3 +259,22 @@ chọn`), và **không tự Lưu / không tự Kiểm tra / không tự Commissi
 Kiểm chứng: 26 ca cho chính formatter + 6 ca cho nút trong trình soạn thảo;
 chạy được trên **nguồn AHU thật lấy từ bo** (127 dòng, có `CASE`, `LIMIT`, chú
 thích khối) và **idempotent** — format hai lần cho cùng một kết quả.
+
+### Đo trên bo thật sau khi deploy formatter
+
+Bundle `index-DAfKdxEx.js` (build có `VITE_PROGRAMS_WORKSPACE_V2=1`), sao lưu
+`dist.bak-fmt-<TS>`. Bấm **Định dạng** trên chính nguồn `AHU_MasterSequence`
+đang nằm trong Draft của bo:
+
+| Phép đo | Kết quả |
+|---|---|
+| Buffer có đổi | có (128 → 127 dòng) |
+| Mọi ký tự không-trắng giữ nguyên | **đúng** (`strip(before) === strip(after)`) |
+| Còn ký tự Tab | không |
+| Còn `END_IF` tách khỏi `;` | không |
+| Lỗi runtime trình duyệt | không có |
+| Menu hai mức | `Định dạng tài liệu  Ctrl+Shift+F` / `Định dạng vùng chọn` |
+| Tự Lưu? | **KHÔNG** — dải ngữ cảnh chuyển sang `r5 · Chưa lưu`, `Kiểm tra` bị khoá kèm lý do |
+
+Điểm cuối là phép kiểm quan trọng nhất của lát này: Định dạng chỉ đổi buffer,
+và người dùng vẫn chủ động `Kiểm tra → Lưu → Đưa vào vận hành`.
