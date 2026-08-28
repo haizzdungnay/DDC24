@@ -1,4 +1,4 @@
-import { stSymbolAt, type StCursorSymbol, type StReferenceIndex } from './stReferenceIndex'
+import { ST_NON_SYMBOL_KEYWORDS, stSymbolAt, type StCursorSymbol, type StReferenceIndex } from './stReferenceIndex'
 
 /**
  * `T59-820` / `PGM02-V22-WP-04` (phần còn nợ) — hover ký hiệu cho editor ST.
@@ -102,6 +102,35 @@ function characterIndexAtVisualColumn(line: string, visualColumn: number, tabSiz
 }
 
 /**
+ * `DEV-PROG-016` — offset cho thao tác THẢ, có KẸP về ký tự gần nhất.
+ *
+ * Khác `stOffsetAtPoint` đúng ở luật biên, và khác một cách có chủ ý. Rê chuột
+ * qua khoảng trắng cuối dòng KHÔNG được bật tooltip của định danh cuối cùng —
+ * nên hover trả `null`. Nhưng thả một khối vào khoảng trắng cuối dòng là một
+ * thao tác rõ nghĩa ("chèn ở cuối dòng này"), và trả `null` ở đó biến một cú
+ * thả hợp lệ thành một cú thả im lặng không có gì xảy ra.
+ */
+export function stDropOffsetAtPoint(
+  source: string,
+  point: StHoverPoint,
+  metrics: StEditorTextMetrics,
+): number {
+  const exact = stOffsetAtPoint(source, point, metrics)
+  if (exact !== null) return exact
+  if (!(metrics.rowHeightPx > 0)) return source.length
+
+  const lines = source.split('\n')
+  const textY = point.y + point.scrollTop - metrics.padTopPx
+  const row = Math.min(lines.length - 1, Math.max(0, Math.floor(textY / metrics.rowHeightPx)))
+  let offset = 0
+  for (let index = 0; index < row; index += 1) offset += lines[index].length + 1
+  /* Thả bên trái lề ⇒ đầu dòng; thả sau ký tự cuối ⇒ cuối dòng. Hai đầu của
+   * cùng một dòng, không phải một giá trị mặc định chung. */
+  const textX = point.x + point.scrollLeft - metrics.padLeftPx
+  return textX < 0 ? offset : offset + lines[row].length
+}
+
+/**
  * Vị trí (dòng, cột hiển thị) của một offset — phép nghịch của `stOffsetAtPoint`.
  *
  * Tooltip neo vào chính KÝ HIỆU chứ không vào con chuột: neo vào chuột làm hộp
@@ -151,19 +180,14 @@ export function stHoverSymbolAtPoint(
 /**
  * Từ khoá của subset ST (§10) và hằng dựng sẵn.
  *
- * Danh sách này cố ý TÁCH khỏi danh sách trong `stReferenceIndex`: ở đó nó phục
- * vụ việc loại từ khoá khỏi chỉ mục khai báo; ở đây nó phục vụ việc im lặng khi
- * rê chuột. Hai mục đích khác nhau, và gộp chúng sẽ khiến một lần chỉnh danh
- * sách vì mục đích này lặng lẽ đổi hành vi của mục đích kia.
+ * Danh sách này TỪNG được khai riêng ở đây với lý do "hai mục đích khác nhau"
+ * (loại từ khoá khỏi chỉ mục khai báo vs. im lặng khi rê chuột). `DEV-PROG-004`
+ * bác lý do đó bằng một lỗi thật: hai bản đã lệch, chỉ mục dùng bản HẸP hơn, và
+ * mở một POU kind `FUNCTION` làm Inspector nhảy sang ngữ cảnh "Ký hiệu ST" với
+ * bốn dòng "không xác định được". Cả hai chỗ hỏi CÙNG một câu — *"định danh này
+ * có phải ký hiệu người dùng khai không"* — nên chúng phải đọc cùng một danh
+ * sách. Danh sách sống ở `stReferenceIndex` vì đó là nơi phân giải ký hiệu.
  */
-const HOVER_KEYWORDS = new Set([
-  'PROGRAM', 'END_PROGRAM', 'FUNCTION', 'END_FUNCTION', 'FUNCTION_BLOCK', 'END_FUNCTION_BLOCK',
-  'VAR', 'VAR_INPUT', 'VAR_OUTPUT', 'VAR_IN_OUT', 'VAR_TEMP', 'END_VAR', 'RETAIN',
-  'IF', 'THEN', 'ELSIF', 'ELSE', 'END_IF', 'CASE', 'OF', 'END_CASE',
-  'FOR', 'TO', 'BY', 'DO', 'END_FOR', 'WHILE', 'END_WHILE', 'REPEAT', 'UNTIL', 'END_REPEAT',
-  'AND', 'OR', 'XOR', 'NOT', 'MOD', 'TRUE', 'FALSE', 'RETURN', 'EXIT',
-])
-
 export function isStKeyword(identifier: string): boolean {
-  return HOVER_KEYWORDS.has(identifier.toUpperCase())
+  return ST_NON_SYMBOL_KEYWORDS.has(identifier.toUpperCase())
 }

@@ -32,7 +32,10 @@ export function PouTabBar({
   limitNotice?: string | null
 }) {
   const { pick } = useI18n()
-  if (state.tabs.length === 0) return null
+  /* `DEV-PROG-005` — thanh tab vẫn hiện khi CHƯA có tab nào, miễn là có bộ chọn
+   * POU: nếu ẩn cả thanh thì nút `+` chỉ tồn tại sau khi người dùng đã mở được
+   * một POU bằng đường khác, tức đúng lúc họ cần nó nhất thì nó không có. */
+  if (state.tabs.length === 0 && !onOpenPicker) return null
 
   return (
     <div>

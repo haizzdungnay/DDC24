@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { ProgrammingLibraryPage, RemoteState } from '../../model/types'
 import { type CatalogEntry } from './libraryCatalog'
@@ -14,6 +15,17 @@ vi.mock('../../../../shared/api/client', () => ({
     putMyPreferences: preferences.put
   }
 }))
+
+/**
+ * `DEV-PROG-002` — mỗi mục nay là một THẺ (`quick-library-card`) mang tên, sơ đồ
+ * chân và lý do bị chặn. Bám vào thẻ thay vì vào nút "Chèn" là bám đúng vùng mà
+ * người dùng đọc, và không vỡ khi nút bị `disabled`.
+ */
+function cardFor(entryId: string): HTMLElement {
+  const card = document.querySelector(`[data-testid="quick-library-card"][data-entry="${entryId}"]`)
+  if (!(card instanceof HTMLElement)) throw new Error(`không thấy thẻ khối ${entryId}`)
+  return card
+}
 
 function libraryPage(): ProgrammingLibraryPage {
   return {
@@ -83,7 +95,11 @@ describe('PGM-02 Quick Library (T59-804)', () => {
     const { onInsert } = renderPanel()
     const pid = await screen.findByRole('button', { name: 'Chèn PID' })
     expect(pid).toBeDisabled()
-    expect(within(pid).getByText('Chờ review sản phẩm')).toBeInTheDocument()
+    // `DEV-PROG-002` — lý do nay nằm trong THẺ khối chứ không trong chính nút:
+    // nút đã bị `disabled` nên chữ bên trong nó không đọc được bằng con trỏ, và
+    // thẻ mới còn phải chứa sơ đồ chân. Điều cần khẳng định không đổi: lý do
+    // hiển thị ngay cạnh mục, không phải chỉ trong `title`.
+    expect(within(cardFor('PID')).getByText('Chờ review sản phẩm')).toBeInTheDocument()
     fireEvent.click(pid)
     expect(onInsert).not.toHaveBeenCalled()
   })
@@ -148,7 +164,75 @@ describe('T59-804 — dock dùng chung: bề mặt tự nói mục nào chưa nh
     // PID: catalog đã chặn (REVIEW_REQUIRED) nên lý do của catalog thắng.
     const pid = await screen.findByRole('button', { name: 'Chèn PID' })
     expect(pid).toBeDisabled()
-    expect(within(pid).getByText('Chờ review sản phẩm')).toBeInTheDocument()
+    expect(within(cardFor('PID')).getByText('Chờ review sản phẩm')).toBeInTheDocument()
+  })
+
+  it('DEV-PROG-002: thẻ khối vẽ sơ đồ chân từ chữ ký backend, không tự bịa', async () => {
+    renderPanel()
+    const limit = within(await waitFor(() => cardFor('LIMIT')))
+    // LIMIT có ba chân vào (MN/IN/MX) và một chân ra (OUT) trong chữ ký fixture.
+    expect(limit.getByText('→ MN')).toBeInTheDocument()
+    expect(limit.getByText('→ IN')).toBeInTheDocument()
+    expect(limit.getByText('→ MX')).toBeInTheDocument()
+    expect(limit.getByText('OUT →')).toBeInTheDocument()
+  })
+
+  it('DEV-PROG-002: chữ ký không đọc được ⇒ nói ra, KHÔNG vẽ một hộp trống', async () => {
+    // Một khối không chân trông y hệt "khối không có đầu vào" — hai câu khác
+    // hẳn nhau, và câu sai dẫn người dùng chèn một lời gọi thiếu tham số.
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={{
+            status: 'ready',
+            data: {
+              items: [{
+                scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
+                entryId: 'MYSTERY', kind: 'FUNCTION', name: 'MYSTERY', featureState: 'AVAILABLE',
+                contentSha256: 'c'.repeat(64), interface: 'không-phải-json',
+                dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0
+              }],
+              nextCursor: null
+            },
+            error: null,
+            loadingMore: false,
+            loadMoreError: null,
+            refresh: vi.fn(),
+            loadMore: vi.fn()
+          } as unknown as RemoteState<ProgrammingLibraryPage>}
+          language="ST"
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+    const card = within(await waitFor(() => cardFor('MYSTERY')))
+    expect(card.getByText('Thiết bị không công bố chân của khối này.')).toBeInTheDocument()
+    expect(card.getByText('Thiếu chữ ký từ thiết bị')).toBeInTheDocument()
+  })
+
+  it('DEV-PROG-002: "Xem thêm khối…" chỉ hiện khi có Project thật để trỏ tới', async () => {
+    renderPanel()
+    await waitFor(() => cardFor('LIMIT'))
+    // Không có `projectId` ⇒ không có đích thật; không dựng một liên kết chết.
+    expect(screen.queryByRole('link', { name: 'Xem thêm khối…' })).toBeNull()
+    cleanup()
+
+    render(
+      <MemoryRouter>
+        <I18nProvider>
+          <QuickLibraryPanel
+            library={ready()}
+            language="ST"
+            projectId="p-1"
+            onInsert={vi.fn()}
+            onClose={vi.fn()}
+          />
+        </I18nProvider>
+      </MemoryRouter>
+    )
+    const link = await screen.findByRole('link', { name: 'Xem thêm khối…' })
+    expect(link).toHaveAttribute('href', '/eng/programming/projects/p-1/library')
   })
 
   it('mục catalog dùng được nhưng bề mặt chưa nhận thì hiện lý do của bề mặt', async () => {
@@ -166,7 +250,7 @@ describe('T59-804 — dock dùng chung: bề mặt tự nói mục nào chưa nh
     )
     const limit = await screen.findByRole('button', { name: 'Chèn LIMIT' })
     expect(limit).toBeDisabled()
-    expect(within(limit).getByText('Chưa vẽ được trên canvas')).toBeInTheDocument()
+    expect(within(cardFor('LIMIT')).getByText('Chưa vẽ được trên canvas')).toBeInTheDocument()
     fireEvent.click(limit)
     expect(onInsert).not.toHaveBeenCalled()
   })

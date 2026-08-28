@@ -125,3 +125,30 @@ describe('phủ đủ phạm vi audit đã đo', () => {
     expect(THEME_NAMES).toEqual(['light', 'dark'])
   })
 })
+
+/**
+ * `DEV-PROG-010` — rail Lập trình có bảng màu RIÊNG (nền tối ở cả hai theme),
+ * nên nó nằm ngoài vòng lặp "chữ trên ba nền chuẩn" phía trên. Không kiểm ở đây
+ * thì đúng vùng điều hướng duy nhất của workspace là vùng duy nhất không ai đo
+ * tương phản.
+ */
+describe.each(THEME_NAMES)('theme "%s" — rail Lập trình đạt WCAG 2.2 AA', (name: ThemeName) => {
+  const theme = THEMES[name]
+
+  it('chữ chính trên nền rail đạt 4.5:1', () => {
+    const ratio = contrastRatio(color(theme, '--c-rail-text'), color(theme, '--c-rail-bg'))
+    expect(ratio, `chỉ đạt ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_TEXT)
+  })
+
+  it('chữ mờ trên nền rail vẫn đạt 4.5:1 — "mờ" không phải cớ để đọc không ra', () => {
+    const ratio = contrastRatio(color(theme, '--c-rail-text-dim'), color(theme, '--c-rail-bg'))
+    expect(ratio, `chỉ đạt ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_TEXT)
+  })
+
+  it('chữ chính đọc được cả trên nền của MỤC ĐANG CHỌN', () => {
+    // Mục đang chọn tô nền sáng hơn; nếu chỉ đo trên nền rail thì đúng mục người
+    // dùng đang đứng lại là mục không ai kiểm.
+    const ratio = contrastRatio(color(theme, '--c-rail-text'), color(theme, '--c-rail-active-bg'))
+    expect(ratio, `chỉ đạt ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_TEXT)
+  })
+})

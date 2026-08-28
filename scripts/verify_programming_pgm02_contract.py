@@ -81,14 +81,29 @@ def validate_semantics(contract: dict[str, Any], *, check_pins: bool = True) -> 
     }
     if edit["check"] != expected_unscheduled:
         errors.append("PROGRAM POU chưa schedule phải được giữ ở Draft nhưng Check/Package fail-closed, không tự đặt chu kỳ")
+    # `annotateObject` (`DEV-PROG-004`, hợp đồng 1.2): chú thích POU phải VÁ TẠI
+    # CHỖ. Nếu sửa mô tả phải đi qua `upsertObject` thì client buộc gửi kèm
+    # `source`, và một buffer cũ trong trình duyệt sẽ ghi đè mã nguồn của phiên
+    # khác — chính lớp lỗi mà tách operation này ra để chặn.
+    #
+    # Mọi lần nâng `version.minor` phải có một mục `amendments` MANG ĐÚNG số bản
+    # đó. Không có ràng buộc này thì một con số bị sửa lặng lẽ vẫn qua được cổng,
+    # và hồ sơ mất luôn dấu vết ai đã duyệt thay đổi hợp đồng.
     expected_operations = {
         "setFunctionalTags", "replaceProgramSource", "upsertObject", "removeObject",
-        "renameObject", "duplicateObject", "upsertProgram", "removeProgram",
+        "renameObject", "annotateObject", "duplicateObject", "upsertProgram", "removeProgram",
         "upsertSignal", "removeSignal", "upsertBinding", "upsertVariable",
         "removeVariable", "setTask", "removeBinding",
     }
     if set(edit["draft"]["operations"]) != expected_operations:
-        errors.append("typed Draft phải phủ đúng 15 operation v1/v2 hiện hành")
+        errors.append("typed Draft phải phủ đúng 16 operation v1/v2 hiện hành")
+    minor = contract["version"]["minor"]
+    if minor > 1:
+        signed = {item["version"] for item in contract.get("amendments", [])}
+        if f"1.{minor}" not in signed:
+            errors.append(
+                f"hợp đồng ở bản 1.{minor} nhưng KHÔNG có mục amendments nào ký cho bản đó"
+            )
     if set(edit["draft"]["contentSchemaVersions"]) != {1, 2}:
         errors.append("typed Draft phải giữ tương thích content schema v1/v2")
     required_typed_schemas = {

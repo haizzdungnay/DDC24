@@ -99,30 +99,36 @@ export function ProgrammingFeatureRail({ projectId }: { projectId: string | null
   return (
     <aside
       data-testid="programming-feature-rail"
-      className="sticky top-16 hidden max-h-[calc(100vh-4rem)] shrink-0 flex-col gap-2 self-start overflow-y-auto border-r border-[var(--c-border)] bg-[var(--c-surface)] py-2 pr-2 md:flex md:w-16 lg:w-[220px]"
+      className="sticky top-16 hidden max-h-[calc(100vh-4rem)] shrink-0 flex-col gap-2 self-start overflow-y-auto rounded-[var(--radius)] bg-[var(--c-rail-bg)] py-2 md:flex md:w-16 lg:w-[220px]"
     >
-      <div className="px-2">
-        <div
-          className="truncate text-sm font-black leading-none text-[var(--c-text)]"
-          title={PRODUCT_INFO.name}
-        >
-          <span className="lg:hidden">{PRODUCT_INFO.code}</span>
-          <span className="hidden lg:inline">{PRODUCT_INFO.name}</span>
-        </div>
-      </div>
-
-      <nav aria-label={pick(...PROGRAMMING_RAIL_NAV_LABEL)} className="flex min-h-0 flex-col gap-1">
+      {/* `DEV-PROG-010` — LOGO LÀ LỐI RA.
+        *
+        * `R60-03` vẫn nguyên hiệu lực: rail toàn cục bị ẩn ở chế độ focus, nên
+        * ở ≥1024 px đây là đường DUY NHẤT rời workspace bằng chuột. Điều đổi là
+        * hình thức, không phải sự tồn tại — mục "← Thoát Lập trình" riêng đã
+        * gộp vào chính thương hiệu ở đầu rail. Nó vẫn là một `NavLink` thật, có
+        * `aria-label` nói rõ hành động, và KHÔNG BAO GIỜ bị vô hiệu hoá.
+        *
+        * Tên đầy đủ là "<sản phẩm> Lập trình": một chữ "DDC24" trơ trọi không
+        * nói được người dùng đang ở khu vực nào của hệ thống. */}
+      <nav aria-label={pick(...PROGRAMMING_RAIL_NAV_LABEL)} className="flex min-h-0 flex-col gap-1 px-1">
+        {/* Thương hiệu nằm TRONG landmark điều hướng, không đứng ngoài nó: đây
+            là một đích điều hướng thật (lối ra), và `R60-03` đòi nó là liên kết
+            ĐẦU TIÊN của rail — người dùng bàn phím gặp lối ra trước khi phải đi
+            hết sáu workspace. */}
         <NavLink
           to="/"
-          aria-label={pick('Thoát Lập trình', 'Exit Programming')}
+          data-testid="programming-rail-brand"
+          aria-label={pick('Thoát Lập trình — về Bảng điều khiển', 'Exit Programming — back to the dashboard')}
           title={pick('Quay lại Bảng điều khiển và điều hướng toàn hệ thống', 'Back to the dashboard and the system-wide navigation')}
-          className="flex min-h-11 items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] px-2 text-sm font-semibold text-[var(--c-text-dim)] transition hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--c-accent)] md:justify-center lg:justify-start"
+          className="flex min-h-11 items-center gap-2 rounded-[var(--radius)] px-2 text-sm font-black leading-tight text-[var(--c-rail-text)] transition hover:bg-[var(--c-rail-active-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--c-accent)] md:justify-center lg:justify-start"
         >
           <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="hidden truncate lg:inline">{pick('← Thoát Lập trình', '← Exit Programming')}</span>
+          <span className="lg:hidden">{PRODUCT_INFO.code}</span>
+          <span className="hidden truncate lg:inline">{PRODUCT_INFO.name} {pick('Lập trình', 'Programming')}</span>
         </NavLink>
 
-        <hr className="my-1 border-[var(--c-border)]" aria-hidden="true" />
+        <hr className="my-1 border-[var(--c-rail-active-bg)]" aria-hidden="true" />
 
         {items.map(({ key, label, to, icon: Icon, end, disabledReason }) =>
           to ? (
@@ -133,11 +139,14 @@ export function ProgrammingFeatureRail({ projectId }: { projectId: string | null
               aria-label={pick(...label)}
               title={pick(...label)}
               data-rail-item={key}
+              /* Mục đang chọn tô NGUYÊN chiều ngang (`DEV-PROG-010`): một vạch
+                 4 px bên trái là tín hiệu quá nhỏ trên rail tối, và nó biến mất
+                 hẳn ở chế độ chỉ-icon 768–1023 px. */
               className={({ isActive }) =>
                 `flex min-h-11 items-center gap-2 rounded-[var(--radius)] border-l-4 px-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--c-accent)] md:justify-center lg:justify-start ${
                   isActive
-                    ? 'border-l-[var(--c-accent)] bg-[var(--c-surface-2)] font-semibold text-[var(--c-text)]'
-                    : 'border-l-transparent text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'
+                    ? 'border-l-[var(--c-accent)] bg-[var(--c-rail-active-bg)] font-semibold text-[var(--c-rail-text)]'
+                    : 'border-l-transparent text-[var(--c-rail-text-dim)] hover:bg-[var(--c-rail-active-bg)] hover:text-[var(--c-rail-text)]'
                 }`
               }
             >
@@ -156,7 +165,7 @@ export function ProgrammingFeatureRail({ projectId }: { projectId: string | null
               data-rail-item={key}
               aria-label={disabledReason ? `${pick(...label)} — ${pick(...disabledReason)}` : pick(...label)}
               title={disabledReason ? pick(...disabledReason) : undefined}
-              className="flex min-h-11 items-center gap-2 rounded-[var(--radius)] border-l-4 border-l-transparent px-2 text-sm font-medium text-[var(--c-text-dim)] opacity-45 md:justify-center lg:justify-start"
+              className="flex min-h-11 items-center gap-2 rounded-[var(--radius)] border-l-4 border-l-transparent px-2 text-sm font-medium text-[var(--c-rail-text-dim)] opacity-60 md:justify-center lg:justify-start"
             >
               <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="hidden truncate lg:inline">{pick(...label)}</span>

@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
 import { SourceEditor } from './ProgramsTab'
+import { StCrossReferencePanel } from './StCrossReferencePanel'
+import type { StCursorSymbol } from './stReferenceIndex'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
 
 function program(document: string): ProgrammingProgram {
@@ -23,24 +25,42 @@ function renderEditor(source: string, options?: {
   const onChange = options?.onChange ?? vi.fn()
   const onSave = options?.onSave ?? vi.fn().mockResolvedValue(true)
   const onEnsurePointCatalogLoaded = options?.onEnsurePointCatalogLoaded ?? vi.fn()
-  const utils = render(
-    <I18nProvider>
-      <SourceEditor
-        program={program(source)}
-        source={source}
-        canEdit={options?.canEdit ?? true}
-        saving={false}
-        diagnostics={options?.diagnostics ?? []}
-        focusDiagnostic={null}
-        onChange={onChange}
-        onSave={onSave}
-        pointCatalogStatus={options?.pointCatalogStatus ?? 'idle'}
-        pointCatalogItems={options?.pointCatalogItems ?? []}
-        pointCatalogError={null}
-        onEnsurePointCatalogLoaded={onEnsurePointCatalogLoaded}
-      />
-    </I18nProvider>,
-  )
+  /* Khay "Tham chiếu tại con trỏ" nay sống ở CỘT PHẢI (`ProgramsTab`), cạnh
+   * Inspector nói về cùng ký hiệu đó — trước nó nằm dưới chỗ gõ và kéo dài cột
+   * giữa. Harness dựng lại ĐÚNG cách nối của production (`onCursorSymbolChange`
+   * → panel) thay vì soi vào trong editor: bộ test này khoá hành vi "con trỏ
+   * đổi thì khay nói đúng ký hiệu", và hành vi đó đi qua chính seam này. */
+  function Harness() {
+    const [cursorSymbol, setCursorSymbol] = useState<StCursorSymbol | null>(null)
+    /* Buffer phải là STATE, không phải hằng số đóng gói.
+     *
+     * Khay tham chiếu render lại theo con trỏ, và một `source` cố định sẽ dội
+     * giá trị CŨ ngược vào `<textarea>` ở đúng lần render đó — buffer người dùng
+     * vừa gõ biến mất. Ở production `ProgramsTab` giữ `buffers`, nên harness
+     * phải giữ đúng vai trò ấy thay vì dựng một mô hình dữ liệu khác. */
+    const [value, setValue] = useState(source)
+    return (
+      <>
+        <SourceEditor
+          program={program(source)}
+          source={value}
+          canEdit={options?.canEdit ?? true}
+          saving={false}
+          diagnostics={options?.diagnostics ?? []}
+          focusDiagnostic={null}
+          onChange={(next) => { setValue(next); onChange(next) }}
+          onSave={onSave}
+          onCursorSymbolChange={setCursorSymbol}
+          pointCatalogStatus={options?.pointCatalogStatus ?? 'idle'}
+          pointCatalogItems={options?.pointCatalogItems ?? []}
+          pointCatalogError={null}
+          onEnsurePointCatalogLoaded={onEnsurePointCatalogLoaded}
+        />
+        <StCrossReferencePanel cursorSymbol={cursorSymbol} note={null} onJump={vi.fn()} />
+      </>
+    )
+  }
+  const utils = render(<I18nProvider><Harness /></I18nProvider>)
   return { ...utils, onChange, onSave, onEnsurePointCatalogLoaded, textarea: screen.getByLabelText(/Mã nguồn ST/) as HTMLTextAreaElement }
 }
 
@@ -106,7 +126,10 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     expect(textarea.value).toBe(expected)
     expect(textarea.selectionStart).toBe(expected.length)
     expect(textarea.selectionEnd).toBe(expected.length)
-    expect(screen.getByText(/Dòng 2, cột 5/)).toBeInTheDocument()
+    // `DEV-PROG-001` bỏ hàng "Dòng x, cột y" trùng lặp; vị trí con trỏ nay do
+    // THANH TRẠNG THÁI nói (`Dòng:Cột`). Ý định của test không đổi: DOM phải
+    // phản ánh con trỏ ngay trong cùng lượt xử lý phím.
+    expect(screen.getByTestId('editor-status-position')).toHaveTextContent('2:5')
   })
 
   it('Autocomplete chấp nhận: DOM value/selection cập nhật đồng bộ ngay sau Enter chọn gợi ý', () => {
@@ -118,7 +141,7 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     fireEvent.keyDown(textarea, { key: 'Enter' })
     expect(textarea.value).toBe('X := ABS')
     expect(textarea.selectionStart).toBe('X := ABS'.length)
-    expect(screen.getByText(/Dòng 1, cột 9/)).toBeInTheDocument()
+    expect(screen.getByTestId('editor-status-position')).toHaveTextContent('1:9')
   })
 
   it('Thay chỉ đổi lần khớp kế tiếp: DOM value/selection cập nhật đồng bộ', () => {
@@ -576,5 +599,102 @@ describe('SourceEditor — Lưu chỉ chạm Draft (AC-ST-004)', () => {
     expect(operations).toHaveLength(1)
     expect(operations[0].op).toBe('replaceProgramSource')
     expect(operations.some((operation) => /commission|activate|enable|restore/i.test(operation.op))).toBe(false)
+  })
+})
+
+describe('DEV-PROG-012 — Tới dòng từ thanh trạng thái', () => {
+  it('bấm ô Dòng:Cột mở hộp Tới dòng, nhập số đưa con trỏ tới đầu dòng đó', () => {
+    const source = 'PROGRAM P\nVAR\n  A : INT;\nEND_VAR\nA := 1;\nEND_PROGRAM\n'
+    const { textarea } = renderEditor(source)
+    fireEvent.click(within(screen.getByTestId('editor-status-position')).getByRole('button'))
+    const form = screen.getByTestId('editor-go-to-line')
+    fireEvent.change(within(form).getByLabelText(/Tới dòng/), { target: { value: '5' } })
+    fireEvent.submit(form)
+    expect(textarea.selectionStart).toBe(source.indexOf('A := 1;'))
+    expect(screen.getByTestId('editor-status-position')).toHaveTextContent('5:1')
+  })
+
+  it('số ngoài phạm vi KẸP về dòng cuối, không báo lỗi bắt gõ lại', () => {
+    // Người gõ `9999` đang nói "xuống cuối tệp"; một thông báo lỗi ở đó chỉ bắt
+    // họ đoán lại một con số họ không biết.
+    const source = 'A := 1;\nB := 2;\n'
+    const { textarea } = renderEditor(source)
+    fireEvent.click(within(screen.getByTestId('editor-status-position')).getByRole('button'))
+    const form = screen.getByTestId('editor-go-to-line')
+    fireEvent.change(within(form).getByLabelText(/Tới dòng/), { target: { value: '9999' } })
+    fireEvent.submit(form)
+    expect(textarea.selectionStart).toBe(source.length)
+  })
+
+  it('số không hợp lệ KHÔNG di chuyển con trỏ và không đóng hộp', () => {
+    const { textarea } = renderEditor('A := 1;\nB := 2;\n')
+    textarea.setSelectionRange(0, 0)
+    fireEvent.click(within(screen.getByTestId('editor-status-position')).getByRole('button'))
+    const form = screen.getByTestId('editor-go-to-line')
+    fireEvent.change(within(form).getByLabelText(/Tới dòng/), { target: { value: 'abc' } })
+    fireEvent.submit(form)
+    expect(textarea.selectionStart).toBe(0)
+    expect(screen.getByTestId('editor-go-to-line')).toBeInTheDocument()
+  })
+})
+
+describe('DEV-PROG-019 — nút Định dạng trong trình soạn thảo', () => {
+  const MESSY = 'PROGRAM t\nIF A THEN\nX:=1;\nEND_IF\n;\nEND_PROGRAM\n'
+
+  it('bấm Định dạng đưa buffer về đúng style, KHÔNG tự Lưu', () => {
+    const onSave = vi.fn().mockResolvedValue(true)
+    const { textarea } = renderEditor(MESSY, { onSave })
+    fireEvent.click(screen.getByRole('button', { name: 'Định dạng' }))
+    expect(textarea.value).toBe([
+      'PROGRAM t',
+      '    IF A THEN',
+      '        X := 1;',
+      '    END_IF;',
+      'END_PROGRAM',
+      '',
+    ].join('\n'))
+    // Định dạng chỉ đổi buffer; Kiểm tra/Lưu/Commission vẫn do người dùng chủ động.
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('Ctrl+Shift+F làm đúng việc của nút', () => {
+    const { textarea } = renderEditor(MESSY)
+    fireEvent.keyDown(textarea, { key: 'F', ctrlKey: true, shiftKey: true })
+    expect(textarea.value).toContain('    END_IF;')
+  })
+
+  it('nguồn không phân tích được ⇒ KHÔNG đổi buffer và NÓI RA lý do', () => {
+    // Im lặng khi từ chối là để người dùng bấm nút, không thấy gì xảy ra, và
+    // tưởng nút hỏng.
+    const broken = 'PROGRAM t\n(* chú thích chưa đóng\nX := 1;\nEND_PROGRAM\n'
+    const { textarea } = renderEditor(broken)
+    fireEvent.click(screen.getByRole('button', { name: 'Định dạng' }))
+    expect(textarea.value).toBe(broken)
+    expect(screen.getByRole('alert')).toHaveTextContent(/Không định dạng được/)
+    expect(screen.getByRole('alert')).toHaveTextContent(/không được đóng/)
+  })
+
+  it('nguồn đã đúng style ⇒ nói "đã đúng định dạng", không báo lỗi', () => {
+    const tidy = 'PROGRAM t\n    X := 1;\nEND_PROGRAM\n'
+    renderEditor(tidy)
+    fireEvent.click(screen.getByRole('button', { name: 'Định dạng' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Mã nguồn đã đúng định dạng.')
+  })
+
+  it('menu ▾ có hai mức: tài liệu và vùng chọn', () => {
+    renderEditor(MESSY)
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn định dạng' }))
+    const menu = screen.getByRole('menu', { name: 'Tuỳ chọn định dạng' })
+    expect(within(menu).getByRole('menuitem', { name: /Định dạng tài liệu/ })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Định dạng vùng chọn' })).toBeInTheDocument()
+  })
+
+  it('Định dạng vùng chọn khi chưa chọn gì ⇒ nói ra, không âm thầm format cả tệp', () => {
+    const { textarea } = renderEditor(MESSY)
+    textarea.setSelectionRange(0, 0)
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn định dạng' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Định dạng vùng chọn' }))
+    expect(textarea.value).toBe(MESSY)
+    expect(screen.getByRole('alert')).toHaveTextContent('Chưa chọn vùng nào để định dạng.')
   })
 })

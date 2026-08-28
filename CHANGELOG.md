@@ -8,6 +8,155 @@
 
 ## [Unreleased]
 
+### Programming PGM-02 — 18 mục `DEV-PROG-001..018` từ review giao diện (2026-08-28)
+
+- **Fixed — `DEV-PROG-001`: dải tab workbench không còn bị đẩy ra khỏi màn hình.**
+  Triệu chứng báo về là "tab bị sidebar che". Đo trên bo Foxlinx (Chrome thật,
+  đăng nhập `admin`, POU `AHU_MasterSequence` 128 dòng, viewport 1280×800): rail
+  nằm ở `x=21..241` còn workbench bắt đầu ở `x=257` — **không hề chồng lấn**.
+  Nguyên nhân thật là chiều cao: tài liệu cao **2861 px** và dải tab nằm ở
+  `y=2675`, tức phải cuộn ~1900 px mới tới; rail thì `sticky` nên vẫn đứng đó
+  suốt lúc cuộn, và ảnh chụp trông y như bị che.
+
+  Gốc là workspace EDIT xếp dọc không giới hạn: khung soạn thảo bị chốt 288 px
+  trong khi danh sách `Ký hiệu & kiểu` (36 ký hiệu của POU thật, ~900 px) và các
+  khay phụ phía dưới đẩy chiều cao của cả trang. Nay editor + workbench nằm
+  trong một cột cao theo viewport; ba cột của `ProgramsTab` tự cuộn trong lòng
+  chúng; khung soạn thảo co giãn theo chỗ còn lại; khay phụ có vùng cuộn riêng
+  và thanh trạng thái được ghim ở đáy cột. Đo lại cùng kịch bản: tài liệu
+  **852 px**, dải tab ở `y=570`, cả 5 tab `hit-test` trúng chính nó ở 1280 /
+  1440 / 1920 px.
+
+- **Added — `DEV-PROG-004`: Inspector có đủ trường, và `UD-PROG-015` đóng.**
+  Ba trường `Access`, `Description`, TÊN Task trước nay cố ý vắng mặt vì Draft
+  v2 **không có nguồn** cho chúng. Nay có nguồn thật: operation mới
+  `annotateObject` ghi `objects[].description` (nhiều dòng, ≤2048 ký tự) và
+  `objects[].access` (một dòng, ≤120 ký tự); tên Task đọc từ `task.name`.
+  Inspector thêm `Tham số` (cổng VAR_INPUT/VAR_OUTPUT phân tích từ chính buffer
+  đang mở) và `Thuộc tính khác` (cặp khoá/giá trị CÓ THẬT của POU), cả hai gập
+  được bằng `<details>`. Chưa ghi gì thì hiện "chưa ghi mô tả"/"không xác định
+  được" — không có giá trị mẫu kiểu `"Public"`.
+
+  `annotateObject` **vá tại chỗ** thay vì đi qua `upsertObject`: `upsertObject`
+  thay toàn bộ object nên sửa một dòng mô tả sẽ buộc client gửi kèm `source`, và
+  một buffer cũ trong trình duyệt sẽ ghi đè mã nguồn của phiên khác.
+
+- **Changed — hợp đồng `PGM02-WORKSPACE-V1` lên 1.2** (15 → 16 operation) để
+  khai `annotateObject`. **Chủ sở hữu đã duyệt 2026-08-28**; chữ ký ghi vào chính
+  hợp đồng ở khối `amendments` (`AUTH-PROG-2026-08-28-DEVPROG-004`,
+  `APPROVED_MINOR_AMENDMENT`, `BACKWARD_COMPATIBLE_ADDITIVE`), pin gốc giữ
+  nguyên. Kèm **cổng mới** trong verifier: nâng `version.minor` mà không có mục
+  `amendments` ký cho đúng bản đó ⇒ ĐỎ — đã kiểm bằng đột biến (đổi bản ký thành
+  `1.9` ⇒ exit 1).
+
+- **Changed — `DEV-PROG-005`: trần tab POU 8 → 10** và nút `+` của thanh tab nay
+  mở Bảng lệnh nhanh (bộ chọn POU đã có, cùng đường mở/lấy-lại-tiêu-điểm tab).
+  Thanh tab hiện cả khi chưa có tab nào, nếu không nút `+` chỉ tồn tại sau khi
+  người dùng đã mở được một POU bằng đường khác.
+
+- **Added — `DEV-PROG-002`: Thư viện nhanh cắm cố định ở cột phải, có sơ đồ chân.**
+  Bản trước là panel NỔI phủ lên chính mã nguồn, và mỗi mục chỉ là một dòng chữ
+  mang tên khối. Nay mỗi mục là một thẻ vẽ chân vào/ra từ `signature.ports` mà
+  backend đã công bố sẵn; mục không đọc được chữ ký thì NÓI RA thay vì vẽ một
+  hộp trống trông như khối không có đầu vào. Menu `⋯` mở kind/nhóm/phiên bản/12
+  ký tự đầu `contentSha256`/danh sách chân. "Xem thêm khối…" trỏ sang Control
+  Library và chỉ hiện khi có Project thật.
+
+  Panel đặt ở CỘT PHẢI chứ không cạnh khung soạn thảo: đo ở 1440 px, cắm cạnh
+  editor làm vùng gõ còn **188 px**; đặt ở cột phải giữ nguyên **484 px**.
+
+- **Added — `DEV-PROG-003`: khay `Watch (Trực tiếp)` đủ cột.** Thêm Kiểu, Chất
+  lượng, Mốc đọc và đường xu hướng, cạnh Biến/Giá trị đã có. Hai cột cũ không
+  trả lời được ba câu người chỉnh định thật sự hỏi — số này có tin được không,
+  nó cũ tới mức nào, nó đang đi lên hay xuống — nên một giá trị đóng băng vì mất
+  kết nối trông y hệt một giá trị ổn định. Xu hướng chỉ vẽ mẫu ĐÃ THẤY từ lúc mở
+  khay và nói ra điều đó; giá trị không đọc được không bao giờ thành một điểm.
+  Nháy đúp một ký hiệu trong trình soạn thảo đưa biến vào khay.
+
+- **Changed — `DEV-PROG-006/011`: thanh bên chỉ còn cây POU.** Khay "Thuộc tính
+  POU" và ô nhãn chức năng Project chuyển sang cột phải. Cây có nhóm gập được
+  (đang lọc thì luôn mở), chấm chỉ POU đang mở, và menu chuột phải Mở/Đổi
+  tên/Nhân bản/Xóa. "Đặt làm Active" KHÔNG có trong menu và menu nói ra nơi thực
+  hiện nó: ý định bật/tắt Program sống ở API runtime-intent, không ở Draft.
+
+- **Changed — `DEV-PROG-007/008/009/013/014`: vùng chrome trên cùng gọn lại.**
+  Bộ chọn Project (chỉ khi >1 Project); nhãn revision `r{N}` cho Nháp/Đang vận
+  hành (`null` ⇒ bỏ hẳn, không in `r0`); `Lưu`/`Kiểm tra` lên header qua hành
+  động do workspace ĐĂNG KÝ (header không tự dựng batch operation); tóm tắt
+  trạng thái Program còn trạng thái nặng nhất kèm `+N`, bản đầy đủ ở `title`;
+  thanh trên cùng gộp tên và trạng thái thiết bị thành một badge.
+
+- **Changed — `DEV-PROG-010`: rail Lập trình nền tối.** Bốn token mới
+  (`--c-rail-*`) thay vì hằng số màu trong markup, kèm ba ca WCAG mới đo chữ
+  chính/chữ mờ/mục đang chọn ở cả hai theme. Lối thoát gộp vào thương hiệu ở đầu
+  rail — `R60-03` không đổi.
+
+- **Added — `DEV-PROG-012`: bấm ô `Dòng:Cột` mở hộp "Tới dòng"** (kèm `Ctrl+G`).
+  Số ngoài phạm vi KẸP về dòng cuối; số không hợp lệ không di chuyển con trỏ.
+
+- **Added — `DEV-PROG-016/017/018`.** Kéo-thả khối từ Thư viện vào trình soạn
+  thảo (kiểu dữ liệu riêng, không phải `text/plain`, để không bỏ qua đường dựng
+  khai báo instance và lịch sử Undo); tìm bằng biểu thức chính quy với lỗi được
+  NÓI RA thay vì âm thầm rơi về tìm chữ thường; khay Tham chiếu liệt kê TỪNG chỗ
+  dùng; khay So sánh tô dòng thêm/bớt (LCS theo dòng, trên 400 dòng mỗi phía thì
+  kết luận thô có cờ).
+
+- **Decision — `DEV-PROG-015`: GIỮ tab "Thực thi".** Gộp vào Runtime & Bảo trì
+  là sai ranh giới — nó sửa DRAFT, chỉ có hiệu lực sau Commission, còn trang
+  Runtime có mọi thứ hiệu lực tức thì. Ẩn đi là mất lối vào duy nhất tới chu kỳ
+  Task và thứ tự Program. Lý do đầy đủ và điều kiện xét lại ghi trong
+  `ExecutionTab.tsx`.
+
+- **Fixed — ba card phụ về đúng cột chức năng** (phản hồi trực tiếp của người
+  dùng). `Ký hiệu & kiểu` bỏ hẳn (khay `Tham chiếu` của workbench đã nói cùng
+  điều, đầy đủ hơn); `Bản đồ mã` sang cột trái dưới cây POU; `Tham chiếu tại con
+  trỏ` sang cột phải dưới Inspector. Chiều cao mặc định workbench 200 → 150 px.
+
+- **Fixed — bốn hồi quy do chính lát này gây ra, E2E bắt được:** LIVE không còn
+  hiện nút `Lưu`/`Kiểm tra` (không đăng ký hành động khi không sửa được, thay vì
+  hiện nút bị khoá); hai nút cùng hành động nay khác TÊN TRUY CẬP; `aria-controls`
+  của nút gập nhóm POU trỏ tới `id` luôn tồn tại; danh sách "không phải ký hiệu"
+  gộp về một bản (hai bản đã lệch, làm Inspector nói `Ký hiệu ST` cho một POU
+  kind `FUNCTION`).
+
+### Programming — nút Định dạng ST viết lại theo AST (`DEV-PROG-019`) (2026-08-28)
+
+- **Fixed — formatter cũ PHÁ chú thích của người dùng.** `formatStSource` làm
+  bằng regex (`.replace(/;/g, ';\n')` + một regex tách từ khoá), cả hai không
+  biết mình đang ở trong chú thích. Đo được: `(* chú thích có dấu ; và chữ IF bên
+  trong *)` bị xé thành ba dòng rác. Một chú thích tiếng Việt có chữ "IF" hoặc
+  một dấu `;` là đủ; với ST thật (IF lồng, CASE, chuỗi, chú thích khối) nó phá
+  được cả mã, và người dùng chỉ phát hiện ở lần Kiểm tra sau đó.
+
+- **Added — `stFormat/`: lexer → parser → AST → printer → parse lần hai → so
+  cây.** Khác cây ⇒ **không đổi một byte nào** và nói ra lý do. Ngoài phép so
+  cây còn một phép so thứ hai — **dãy chú thích theo đúng thứ tự** — vì cây có
+  thể trùng khớp trong khi một dòng chú thích bị đánh rơi.
+
+- **Added — style DDC-24 đã chốt**: thụt lề 4 dấu cách (không Tab), dòng tối đa
+  120, từ khoá UPPERCASE, định danh giữ nguyên hoa/thường, `END_IF;`/`END_CASE;`
+  luôn cùng một dòng, tham số FB dài xuống dòng và căn cột `:=`, luận lý dài mỗi
+  điều kiện một dòng, gán dài xuống dòng sau `:=`, dòng trống thu về tối đa 1.
+  Bốn điều formatter KHÔNG được làm (thêm/bớt ngoặc, đảo câu lệnh, đảo khai báo,
+  đổi literal/tên/chú thích) đều có test riêng.
+
+- **Added — hai mức**: `Định dạng tài liệu` (`Ctrl+Shift+F`) và `Định dạng vùng
+  chọn`. Nút **không tự Lưu, không tự Kiểm tra, không tự Commission**. Từ chối
+  format thì NÓI RA kèm số dòng — im lặng khiến người dùng tưởng nút hỏng.
+
+- **Verification**: 26 ca cho formatter + 6 ca cho nút; chạy trên nguồn AHU THẬT
+  lấy từ bo (127 dòng, có `CASE`/`LIMIT`/chú thích khối) và **idempotent**.
+
+- **Verification** (2026-08-28): `npx vitest --run --environment jsdom src`
+  **174 file / 2006 test PASS**;
+  `npx playwright test e2e/programming.spec.ts` **55 PASS / 13 skipped / 0 fail**;
+  `npm run lint` PASS; `npx tsc --noEmit` PASS; `go vet ./...` +
+  `go test ./... -count=1` PASS (ca mới
+  `TestAnnotateObjectVaTaiChoVaChoPhepXuongDong`);
+  `python3 scripts/verify_programming_pgm02_contract.py` PASS;
+  `npm run build` PASS — chunk `programming` **140,64 KiB** gzip / ngân sách R3
+  165 KiB (dư 24,36 KiB).
+
 ### VP — mở chiều GHI cho ST Program kèm quyền sở hữu slot (`F-PROG-ASBUILT-016`) (2026-08-28)
 
 - **Changed — `VAR_OUTPUT` bind category `VP` nay được chấp nhận.**

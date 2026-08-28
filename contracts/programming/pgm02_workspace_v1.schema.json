@@ -11,6 +11,7 @@
     "sourceBaselineCommit",
     "approvedCandidateCommit",
     "authority",
+    "amendments",
     "pins",
     "route",
     "identity",
@@ -31,7 +32,7 @@
       "required": ["major", "minor"],
       "properties": {
         "major": { "const": 1 },
-        "minor": { "const": 1 }
+        "minor": { "const": 2 }
       }
     },
     "status": { "const": "TARGET_APPROVED_FOR_IMPLEMENTATION" },
@@ -60,6 +61,25 @@
           }
         },
         "releaseReady": { "const": "NO_GO" }
+      }
+    },
+    "amendments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "date", "authorization", "ownerDisposition", "change", "reason", "compatibility", "record"],
+        "properties": {
+          "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+          "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+          "authorization": { "type": "string", "minLength": 8 },
+          "ownerDisposition": { "enum": ["APPROVED_MINOR_AMENDMENT", "APPROVED_FULL_PLAN"] },
+          "change": { "type": "string", "minLength": 8 },
+          "reason": { "type": "string", "minLength": 8 },
+          "compatibility": { "enum": ["BACKWARD_COMPATIBLE_ADDITIVE", "BREAKING"] },
+          "record": { "type": "string", "minLength": 8 }
+        }
       }
     },
     "pins": {
@@ -212,7 +232,7 @@
             "replaceProgramSourceIdentity": { "const": "objectId" },
             "deprecatedReplaceProgramSourceAlias": { "const": "programId_FOR_ONE_COMPATIBILITY_MAJOR" },
             "operationDiscriminator": { "const": "op" },
-            "operations": { "type": "array", "minItems": 15, "maxItems": 15, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+            "operations": { "type": "array", "minItems": 16, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
             "responseContentSchema": { "const": "ProgrammingDraftDocumentV2" },
             "conflictError": { "const": "PRG-ERR-CONFLICT-001" },
             "malformedRequestStatus": { "const": 400 },

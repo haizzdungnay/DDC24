@@ -19,7 +19,7 @@ import type { ProgrammingProgram } from '../../model/types'
  *
  * | # | Điều để ngỏ | Chốt |
  * |---|---|---|
- * | 1 | Số tab tối đa và hành vi khi vượt | **8**; vượt thì đóng tab **sạch** ít dùng nhất. Không còn tab sạch nào ⇒ **TỪ CHỐI mở** kèm lý do đọc được |
+ * | 1 | Số tab tối đa và hành vi khi vượt | **10** (`DEV-PROG-005`; trước đó 8); vượt thì đóng tab **sạch** ít dùng nhất. Không còn tab sạch nào ⇒ **TỪ CHỐI mở** kèm lý do đọc được |
  * | 2 | Đóng tab có Draft bẩn | Phải xác nhận; `closePouTab` trả `needsConfirm` chứ không tự đóng |
  * | 3 | Đổi mode | Áp cho **toàn workspace** — mode không nằm trong state này |
  * | 4 | Tab sống qua reload | **Không**. Xem lý do ở `POU_TAB_LIMIT` bên dưới |
@@ -31,8 +31,16 @@ import type { ProgrammingProgram } from '../../model/types'
  * không bao giờ được — đó là vứt công việc của người ta để phục vụ một con số.
  */
 
-/** Trần số tab mở cùng lúc. */
-export const POU_TAB_LIMIT = 8
+/**
+ * Trần số tab mở cùng lúc.
+ *
+ * `DEV-PROG-005` nâng 8 → **10**. Con số 8 là một lựa chọn của người cài đặt,
+ * không phải một ràng buộc đo được: không có ngân sách bộ nhớ hay hiệu năng nào
+ * chốt ở 8, và luật đuổi tab (chỉ đuổi tab SẠCH, ít dùng nhất) mới là thứ giữ
+ * an toàn cho công việc chưa lưu — luật đó không đổi. Đề bài sản phẩm chốt 10
+ * nên lấy 10; mọi hành vi ở trần vẫn đi qua đúng `openPouTab`.
+ */
+export const POU_TAB_LIMIT = 10
 
 /**
  * Điều 4 — tab KHÔNG sống qua reload, và đây là lựa chọn có chủ ý.

@@ -88,7 +88,12 @@ export function ProgrammingContextStrip({
   editing,
   canMutate,
   details,
-  onOpenDetails
+  onOpenDetails,
+  projectOptions = [],
+  selectedProjectId = null,
+  onSelectProject,
+  draftSequence = null,
+  activeSequence = null
 }: {
   projectStatus: ResourceStatus
   runtimeStatus: ResourceStatus
@@ -108,6 +113,20 @@ export function ProgrammingContextStrip({
    *  (đo lường, mở panel riêng…). Không có `details` lẫn handler ⇒ nút hiện
    *  nhưng vô hiệu hoá kèm lý do, thay vì biến mất không dấu vết. */
   onOpenDetails?: () => void
+  /**
+   * `DEV-PROG-007` — danh sách Project để chuyển nhanh. Rỗng hoặc đúng một mục
+   * ⇒ hiện TÊN, không hiện một hộp chọn chỉ có một dòng: một bộ chọn không đổi
+   * được gì là một lời mời bấm vào chỗ không có gì xảy ra.
+   */
+  projectOptions?: readonly { projectId: string; name: string }[]
+  selectedProjectId?: string | null
+  onSelectProject?: (projectId: string) => void
+  /**
+   * `DEV-PROG-008` — số thứ tự Revision (`T60-015`). `null` = "đã xét và chưa
+   * biết"; nhãn khi đó BỎ phần `r{N}` chứ không in `r0`.
+   */
+  draftSequence?: number | null
+  activeSequence?: number | null
 }) {
   const { pick } = useI18n()
   const notice = contextNotice({
@@ -145,15 +164,33 @@ export function ProgrammingContextStrip({
         className="flex items-center gap-x-4 overflow-hidden text-xs"
       >
         <ContextField field="project" label={pick('Project', 'Project')}>
-          <span className="truncate text-[var(--c-text)]">{projectValue(pick, projectStatus, editing?.projectName)}</span>
+          {projectOptions.length > 1 && onSelectProject ? (
+            <select
+              data-testid="programming-project-select"
+              aria-label={pick('Chọn Project', 'Select project')}
+              className="min-w-0 max-w-48 truncate rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-1 py-0.5 text-xs text-[var(--c-text)]"
+              value={selectedProjectId ?? ''}
+              onChange={(event) => { if (event.target.value) onSelectProject(event.target.value) }}
+            >
+              {/* Chưa phân giải Project nào thì phải có một mục rỗng để `value`
+                  khớp — nếu không, `<select>` tự hiện mục ĐẦU TIÊN và giao diện
+                  nói rằng người dùng đang ở một Project họ chưa chọn. */}
+              {!selectedProjectId && <option value="">{pick('— chưa chọn', '— none selected')}</option>}
+              {projectOptions.map((item) => (
+                <option key={item.projectId} value={item.projectId}>{item.name}</option>
+              ))}
+            </select>
+          ) : (
+            <span className="truncate text-[var(--c-text)]">{projectValue(pick, projectStatus, editing?.projectName)}</span>
+          )}
         </ContextField>
 
         <ContextField field="draft" label={pick('Nháp', 'Draft')}>
-          <DraftBadge pick={pick} projectStatus={projectStatus} editing={editing} />
+          <DraftBadge pick={pick} projectStatus={projectStatus} editing={editing} sequence={draftSequence} />
         </ContextField>
 
         <ContextField field="active" label={pick('Đang vận hành', 'Active')}>
-          <ActiveBadge pick={pick} runtimeStatus={runtimeStatus} runtime={runtime} />
+          <ActiveBadge pick={pick} runtimeStatus={runtimeStatus} runtime={runtime} sequence={activeSequence} />
         </ContextField>
 
         <ContextField field="core" label={pick('Core', 'Core')}>
@@ -222,20 +259,27 @@ function ContextField({ field, label, children }: { field: string; label: string
   )
 }
 
-function DraftBadge({ pick, projectStatus, editing }: {
+function DraftBadge({ pick, projectStatus, editing, sequence }: {
   pick: Pick
   projectStatus: ResourceStatus
   editing: ProgrammingEditingContext | null
+  sequence: number | null
 }) {
   if (projectStatus === 'loading') return <SemanticBadge pick={pick} state="unknown" label={pick('Đang tải…', 'Loading…')} />
   if (projectStatus === 'error') return <SemanticBadge pick={pick} state="unknown" label={pick('Không đọc được', 'Unavailable')} />
   if (!editing) return <SemanticBadge pick={pick} state="disabled" label={pick('Chưa có bản nháp', 'No draft yet')} />
 
   const parts: string[] = []
+  /* `DEV-PROG-008` — số Revision đứng ĐẦU nhãn: nó là thứ người dùng đối chiếu
+     với hồ sơ và với bảng So sánh. `null` = chưa đọc được ⇒ bỏ hẳn phần đó,
+     không in `r0` (một Revision số 0 không tồn tại, và nó trông như một số
+     thật). */
+  if (sequence !== null) parts.push(`r${sequence}`)
   if (editing.dirty) parts.push(pick('Chưa lưu', 'Unsaved'))
   const check = checkStateLabel(pick, editing.checkState)
   if (check) parts.push(check)
-  const label = parts.length ? parts.join(' · ') : pick('Đã lưu', 'Saved')
+  if (parts.length === 0 || (parts.length === 1 && sequence !== null)) parts.push(pick('Đã lưu', 'Saved'))
+  const label = parts.join(' · ')
 
   // Thứ tự ưu tiên: lỗi Check thắng "chưa lưu", vì nó là kết luận của server;
   // "chưa lưu" chỉ là trạng thái cục bộ của trình duyệt.
@@ -249,24 +293,32 @@ function DraftBadge({ pick, projectStatus, editing }: {
   return <SemanticBadge pick={pick} state={state} label={label} />
 }
 
+
 /**
  * Active KHÔNG in `activeRevisionId` nữa (`AC-PGM01-01`). Nhãn `Active #12` theo
  * `D-05` cần `revisions.sequence`, mà trường đó chỉ lộ ra HTTP ở `T60-015` —
  * chưa có thì nói "đang vận hành / chưa vận hành", tuyệt đối không rút gọn UUID
  * để lấp chỗ trống.
  */
-function ActiveBadge({ pick, runtimeStatus, runtime }: {
+function ActiveBadge({ pick, runtimeStatus, runtime, sequence }: {
   pick: Pick
   runtimeStatus: ResourceStatus
   runtime: ProgrammingRuntime | null
+  sequence: number | null
 }) {
   if (runtimeStatus === 'loading') return <SemanticBadge pick={pick} state="unknown" label={pick('Đang tải…', 'Loading…')} />
   if (runtimeStatus === 'error' || !runtime || runtime.producerState === 'UNAVAILABLE') {
     return <SemanticBadge pick={pick} state="unknown" label={pick('Không đọc được', 'Unavailable')} />
   }
   if (!runtime.activeRevisionId) return <SemanticBadge pick={pick} state="disabled" label={pick('Chưa vận hành', 'Not commissioned')} />
-  if (runtime.producerState === 'DEGRADED') return <SemanticBadge pick={pick} state="stale" label={pick('Có — số liệu cũ', 'Yes — stale data')} />
-  return <SemanticBadge pick={pick} state="good" label={pick('Có', 'Yes')} />
+  /* `DEV-PROG-008` — `activeSequence` chỉ được điền khi Revision đang chạy
+     THUỘC ĐÚNG Project này (`T60-015`). Thiếu nó thì nhãn nói "Có" như cũ; ghép
+     một số của Project khác vào đây sẽ là một câu khẳng định sai về thiết bị. */
+  const revision = sequence === null ? '' : `r${sequence} · `
+  if (runtime.producerState === 'DEGRADED') {
+    return <SemanticBadge pick={pick} state="stale" label={`${revision}${pick('Có — số liệu cũ', 'Yes — stale data')}`} />
+  }
+  return <SemanticBadge pick={pick} state="good" label={`${revision}${pick('Có', 'Yes')}`} />
 }
 
 function CoreBadge({ pick, runtimeStatus, runtime }: {
@@ -338,12 +390,19 @@ function RuntimeBadge({ pick, projectStatus, runtimeStatus, runtime, intentStatu
         : counts.RUNNING > 0
           ? 'good'
           : 'disabled'
-  return <SemanticBadge pick={pick} state={state} label={runtimeStateSummary(counts)} />
+  return (
+    <SemanticBadge
+      pick={pick}
+      state={state}
+      label={runtimeStateSummary(counts)}
+      title={runtimeStateSummaryFull(counts)}
+    />
+  )
 }
 
 /** Mọi badge của strip đi qua đây: `T60-104` bảo đảm icon + chữ, không chỉ màu. */
-function SemanticBadge({ pick, state, label }: { pick: Pick; state: SemanticState; label: string }) {
-  return <StatusBadge {...semanticBadgeProps(pick, state, label)} className="shrink-0" />
+function SemanticBadge({ pick, state, label, title }: { pick: Pick; state: SemanticState; label: string; title?: string }) {
+  return <StatusBadge {...semanticBadgeProps(pick, state, label)} className="shrink-0" title={title} />
 }
 
 function countRuntimeStates(intents: ProgrammingProgramsPage): Record<ProgrammingProgramRuntimeState, number> {
@@ -363,7 +422,28 @@ function countRuntimeStates(intents: ProgrammingProgramsPage): Record<Programmin
   return counts
 }
 
-function runtimeStateSummary(counts: Record<ProgrammingProgramRuntimeState, number>): string {
+/**
+ * `DEV-PROG-014` — tóm tắt NGẮN cho hàng 38 px, bản đầy đủ đi vào `title`.
+ *
+ * Bản cũ nối tất cả trạng thái có mặt: một Project mười Program hỏng cho ra
+ * `FAULTED 10 · UNKNOWN 2 · RUNNING 1` — dài hơn cả tên Project, và nó đẩy
+ * chính tên Project ra khỏi hàng. Trạng thái NẶNG NHẤT là thứ quyết định người
+ * vận hành làm gì tiếp; phần còn lại là `+N` và đọc đủ ở tooltip hoặc ở trang
+ * Runtime & Bảo trì, nơi sở hữu bảng trạng thái.
+ *
+ * `RUNNING 1` một mình vẫn hiện nguyên: khi mọi thứ đang chạy, đó không phải
+ * một phần bị cắt mà là toàn bộ câu trả lời.
+ */
+export function runtimeStateSummary(counts: Record<ProgrammingProgramRuntimeState, number>): string {
+  const order: ProgrammingProgramRuntimeState[] = ['FAULTED', 'UNKNOWN', 'WAITING', 'RUNNING', 'DISABLED']
+  const present = order.filter((state) => counts[state] > 0)
+  if (present.length === 0) return ''
+  const head = `${present[0]} ${counts[present[0]]}`
+  return present.length === 1 ? head : `${head} · +${present.length - 1}`
+}
+
+/** Bản đầy đủ, dùng cho `title` — không cắt gì. */
+export function runtimeStateSummaryFull(counts: Record<ProgrammingProgramRuntimeState, number>): string {
   const order: ProgrammingProgramRuntimeState[] = ['FAULTED', 'UNKNOWN', 'WAITING', 'RUNNING', 'DISABLED']
   return order.filter((state) => counts[state] > 0).map((state) => `${state} ${counts[state]}`).join(' · ')
 }
