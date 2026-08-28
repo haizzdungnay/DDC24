@@ -204,7 +204,15 @@ export function ProgrammingWorkbench({
     { id: 'problems', label: pick('Vấn đề', 'Problems'), count: problems.length, available: true },
     { id: 'search', label: pick('Tìm kiếm', 'Search'), count: source ? hits.length : null, available: source !== null },
     { id: 'references', label: pick('Tham chiếu', 'Cross reference'), count: symbols.length, available: symbols.length > 0 || source !== null },
-    { id: 'watch', label: pick('Watch (Trực tiếp)', 'Watch (Live)'), count: watch ? watch.length : null, available: watch !== null && watch !== undefined },
+    /* `T59-816` — nhãn khay phải nói ĐÚNG nguồn. Ở SIMULATE các con số này đến
+       từ worker mô phỏng chứ không từ tủ; gọi chúng là "Trực tiếp" là cách
+       nhanh nhất để một người trực ca đọc một giá trị mô phỏng như thể thiết bị
+       đang cho ra nó. */
+    { id: 'watch',
+      label: mode === 'SIMULATE'
+        ? pick('Watch (Mô phỏng)', 'Watch (Simulation)')
+        : pick('Watch (Trực tiếp)', 'Watch (Live)'),
+      count: watch ? watch.length : null, available: watch !== null && watch !== undefined },
     { id: 'trace', label: 'Trace', count: null, available: false },
   ]
 

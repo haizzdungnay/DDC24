@@ -22,6 +22,8 @@ import { DesignWorkbench } from './workbench/DesignWorkbench'
 import { LiveProgramView } from './LiveProgramView'
 import { SimulateWorkspace } from '../simulation/SimulateWorkspace'
 import { useSimulation } from '../simulation/useSimulation'
+import { currentSession, simulationWatchRows } from '../simulation/simulationSession'
+import { activeProgramSource } from '../overview/activeProgramSet'
 import { ProgramsModeSwitcher } from './ProgramsModeSwitcher'
 import { programsModeCapabilities } from '../shared/programsMode'
 import { isProgramsWorkspaceMode, type ProgramsWorkspaceMode } from '../shared/programsRoute'
@@ -278,7 +280,18 @@ export function DesignWorkspacePage({
    * lên rồi nhận lỗi. */
   const latestCheck = workspace.project?.latestCheck
   const simulateRevisionId = latestCheck && latestCheck.state === 'PASSED' ? latestCheck.revisionId : null
-  const simulateRevision = useProgrammingRevision(workspaceMode === 'SIMULATE' ? simulateRevisionId : null)
+  /* Revision mà PHIÊN đang mở đã niêm phong — khác `simulateRevisionId` (bản
+   * Check đạt gần nhất): một phiên đang chạy có thể neo vào bản cũ hơn nếu
+   * người dùng vừa lưu và Check thêm một lần nữa. Workbench phải nói theo
+   * phiên, không theo bản mới nhất. */
+  const simulationSourceRevisionId = currentSession(simulation.slice)?.sourceDraftRevisionId
+    ?? simulateRevisionId
+  const simulateRevision = useProgrammingRevision(
+    workspaceMode === 'SIMULATE' ? simulationSourceRevisionId : null)
+  /* LIVE đọc bản đang chạy ở TRANG CHA rồi truyền xuống, cùng lý do như
+   * `monitor`: hai lần đọc cùng một endpoint cho hai câu trả lời có thể lệch. */
+  const liveRevision = useProgrammingRevision(
+    workspaceMode === 'LIVE' ? (workspace.project?.activeRevisionId ?? null) : null)
   const startSimulation = useCallback(() => {
     const controllerId = runtime.data?.controllerId
     /* `useProgrammingRevision` trả `unknown` vì snapshot Revision là tài liệu
@@ -414,12 +427,48 @@ export function DesignWorkspacePage({
    * Nguồn văn bản chỉ có với POU ngôn ngữ ST; POU FBD trả `null` để tab Tìm
    * kiếm nói thẳng "không phải mã nguồn văn bản" thay vì hiện một ô nhập vô
    * nghĩa. */
-  const workbenchSource = selectedProgram?.language === 'ST' && typeof selectedProgram.document === 'string'
+  const draftSource = selectedProgram?.language === 'ST' && typeof selectedProgram.document === 'string'
     ? selectedProgram.document
     : null
-  const workbenchSourceLabel = selectedProgram
-    ? `Draft · ${selectedProgram.name}`
-    : pick('Draft · chưa chọn POU', 'Draft · no POU selected')
+
+  /* `T59-816` — workbench phải đọc ĐÚNG tài liệu của chế độ đang mở.
+   *
+   * Trước lát này nó luôn đọc buffer Draft, kể cả khi người dùng đang ở LIVE
+   * hay SIMULATE. Hậu quả không phải thẩm mỹ: tab Tìm kiếm tìm trong Draft
+   * trong khi màn hình chiếu bản đã niêm phong, và khay Tham chiếu đếm số lần
+   * dùng của một biến trong một tài liệu KHÁC tài liệu đang chạy. Hai câu trả
+   * lời cho cùng một câu hỏi, không có dấu hiệu nào cho biết cái nào đang
+   * hiển thị.
+   *
+   * `sealedSource` là kết quả trang cha đã đọc — LIVE và SIMULATE nhận nó qua
+   * prop thay vì tự gọi hook, đúng lý do đã áp cho `monitor`: một endpoint
+   * được đọc hai lần cho hai câu trả lời có thể lệch nhau. */
+  const sealedSource = workspaceMode === 'SIMULATE'
+    ? activeProgramSource({
+        activeRevisionId: simulationSourceRevisionId,
+        status: simulateRevision.status,
+        revision: simulateRevision.data,
+        objectId: selectedObjectId ?? null,
+      })
+    : workspaceMode === 'LIVE'
+      ? activeProgramSource({
+          activeRevisionId: workspace.project.activeRevisionId ?? null,
+          status: liveRevision.status,
+          revision: liveRevision.data,
+          objectId: selectedObjectId ?? null,
+        })
+      : null
+
+  const workbenchSource = workspaceMode === 'EDIT' ? draftSource : sealedSource?.source ?? null
+  const workbenchSourceLabel = workspaceMode === 'EDIT'
+    ? (selectedProgram
+        ? `Draft · ${selectedProgram.name}`
+        : pick('Draft · chưa chọn POU', 'Draft · no POU selected'))
+    : workspaceMode === 'SIMULATE'
+      ? pick(`Bản đã niêm phong · ${selectedProgram?.name ?? 'chưa chọn POU'}`,
+             `Sealed revision · ${selectedProgram?.name ?? 'no POU selected'}`)
+      : pick(`Đang chạy · ${selectedProgram?.name ?? 'chưa chọn POU'}`,
+             `Running · ${selectedProgram?.name ?? 'no POU selected'}`)
 
   /** Nhảy tới một offset trong POU đang mở, dùng lại đúng cơ chế neo
    *  `line/column/length` mà PGM-03 đã dùng — không dựng đường nhảy thứ hai. */
@@ -442,6 +491,7 @@ export function DesignWorkspacePage({
    * Explorer cần nó để biết POU nào đang publish — điều kiện backend dùng để
    * từ chối `removeProgram`. */
   const publishedSignals = draftSignals(workspace.project.draft)
+  const simulationWatch = simulationWatchRows(simulation.slice.frame)
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
   const pouNameByObjectId = new Map(
@@ -722,9 +772,12 @@ export function DesignWorkspacePage({
             đang có vấn đề gì" cho CẢ Project. */}
         </div>
         <DesignWorkbench
-          mode={workspaceMode === 'LIVE' ? 'LIVE' : 'EDIT'}
+          mode={workspaceMode}
           {...(workspaceMode === 'LIVE' && selectedProgramId
             ? { runtimeOverlay: runtimeOverlays[selectedProgramId] ?? { status: 'unavailable' as const } }
+            : {})}
+          {...(workspaceMode === 'SIMULATE'
+            ? { simulationWatch: simulationWatch }
             : {})}
           traceOwnerHref="/eng/programming/runtime?tab=watch"
           watchAddRequest={watchAddRequest}

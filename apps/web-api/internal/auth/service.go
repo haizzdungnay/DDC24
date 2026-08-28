@@ -67,6 +67,11 @@ const (
 	PermissionUsersManage Permission = "users.manage"
 	/* Thao tác mức hệ thống có ảnh hưởng ra ngoài phiên: nâng cấp, khởi động lại. */
 	PermissionSystemRelease Permission = "system.release"
+	/* Điều khiển phiên mô phỏng R3 (`ADR-053`). Tách khỏi `program.edit` vì mô
+	   phỏng KHÔNG phải một phép sửa Draft: nó sinh ra một tiến trình worker có
+	   hạn ngạch bộ nhớ/CPU trên chính tủ điều khiển. Ranh giới admin-only là do
+	   `ADR-053` đặt, không phải do lát RBAC này chọn. */
+	PermissionSimulationRun Permission = "simulation.run"
 )
 
 /*
@@ -82,6 +87,7 @@ Ma trận vai → quyền.
 	system.release                           ✓        ✓
 	database.manage                                   ✓
 	users.manage                                      ✓
+	simulation.run                                    ✓
 
 Viết bằng `switch` tường minh chứ không bằng phép so thứ hạng: ma trận này KHÔNG
 buộc phải tuyến tính mãi mãi, và một ngày nào đó thêm một vai chỉ-đọc-nhật-ký
@@ -128,7 +134,7 @@ func knownPermission(permission Permission) bool {
 	switch permission {
 	case PermissionRead, PermissionSelfManage, PermissionOperate, PermissionProgramEdit,
 		PermissionProgramActivate, PermissionSettingsManage, PermissionDatabaseManage,
-		PermissionUsersManage, PermissionSystemRelease:
+		PermissionUsersManage, PermissionSystemRelease, PermissionSimulationRun:
 		return true
 	default:
 		return false
@@ -140,8 +146,26 @@ func AllPermissions() []Permission {
 	return []Permission{
 		PermissionRead, PermissionSelfManage, PermissionOperate, PermissionProgramEdit,
 		PermissionProgramActivate, PermissionSettingsManage, PermissionDatabaseManage,
-		PermissionUsersManage, PermissionSystemRelease,
+		PermissionUsersManage, PermissionSystemRelease, PermissionSimulationRun,
 	}
+}
+
+/*
+Các vai có một quyền, theo thứ tự ổn định.
+
+Tồn tại để một bề mặt công bố năng lực (ví dụ `SimulationCapability.mutationRoles`
+mà FE đọc để bật/tắt thanh điều khiển) DẪN XUẤT từ ma trận thay vì chép tay danh
+sách vai. Chép tay là cách một ngày nào đó FE hiện nút cho một vai mà server từ
+chối — người dùng bấm được, rồi nhận 403.
+*/
+func RolesWithPermission(permission Permission) []Role {
+	granted := make([]Role, 0, len(AllRoles()))
+	for _, role := range AllRoles() {
+		if RoleHasPermission(role, permission) {
+			granted = append(granted, role)
+		}
+	}
+	return granted
 }
 
 /* Mọi vai đã khai, theo thứ tự quyền tăng dần. */

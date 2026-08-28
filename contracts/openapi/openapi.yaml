@@ -2647,7 +2647,7 @@ paths:
     post:
       operationId: createProgrammingSimulationSession
       summary: Mở phiên Simulation từ Revision đã Check
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2695,7 +2695,7 @@ paths:
     delete:
       operationId: stopProgrammingSimulationSession
       summary: Dừng phiên Simulation (materialize của hành động STOP)
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2722,7 +2722,7 @@ paths:
     post:
       operationId: actProgrammingSimulationSession
       summary: RUN/PAUSE/STEP_CYCLE/RESET/SET_SPEED trên phiên
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2761,7 +2761,7 @@ paths:
     put:
       operationId: setProgrammingSimulationInput
       summary: Ghi một virtual input trong allowlist của manifest
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }

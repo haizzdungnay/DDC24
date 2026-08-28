@@ -178,13 +178,13 @@ export interface ProgrammingOperationAccepted {
 }
 
 export const PROGRAMMING_ENDPOINTS = {
-  "actProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions", roles: ["engineer","admin"] },
+  "actProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions", roles: ["admin"] },
   "commissionProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/commission", roles: ["engineer","admin"] },
   "compareProgrammingRevisions": { method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", roles: ["viewer","operator","engineer","admin"] },
   "createProgrammingCheck": { method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", roles: ["engineer","admin"] },
   "createProgrammingProject": { method: "POST", path: "/api/v1/programming/projects", roles: ["engineer","admin"] },
   "createProgrammingRevision": { method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/revisions", roles: ["engineer","admin"] },
-  "createProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions", roles: ["engineer","admin"] },
+  "createProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions", roles: ["admin"] },
   "createProgrammingTrace": { method: "POST", path: "/api/v1/programming/runtime/traces", roles: ["engineer","admin"] },
   "deleteProgrammingLibraryEntry": { method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", roles: ["engineer","admin"] },
   "deprecateProgrammingLibraryRevision": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate", roles: ["engineer","admin"] },
@@ -213,8 +213,8 @@ export const PROGRAMMING_ENDPOINTS = {
   "restoreProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/restore", roles: ["engineer","admin"] },
   "searchProgrammingLibraries": { method: "GET", path: "/api/v1/programming/libraries", roles: ["viewer","operator","engineer","admin"] },
   "setProgrammingProgramIntent": { method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent", roles: ["engineer","admin"] },
-  "setProgrammingSimulationInput": { method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}", roles: ["engineer","admin"] },
-  "stopProgrammingSimulationSession": { method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}", roles: ["engineer","admin"] },
+  "setProgrammingSimulationInput": { method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}", roles: ["admin"] },
+  "stopProgrammingSimulationSession": { method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}", roles: ["admin"] },
   "stopProgrammingTrace": { method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["engineer","admin"] },
   "updateProgrammingDraft": { method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", roles: ["engineer","admin"] },
   "upsertProgrammingLibraryEntry": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", roles: ["engineer","admin"] },

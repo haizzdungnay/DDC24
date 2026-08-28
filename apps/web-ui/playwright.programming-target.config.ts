@@ -21,7 +21,7 @@ export default defineConfig({
    * Active — vừa sai phạm vi closeout R2, vừa là mutation không ai yêu cầu.
    * Lane target vì vậy khoá cứng tập case ở đây, không dựa vào người chạy nhớ
    * gõ `--grep`. */
-  grep: /T59-810|T59-811|T59-813/,
+  grep: /T59-810|T59-811|T59-813|T59-817|T60-303/,
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,

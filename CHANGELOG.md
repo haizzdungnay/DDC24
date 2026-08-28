@@ -8,6 +8,62 @@
 
 ## [Unreleased]
 
+### Programming R3 SIMULATE — đóng `T59-816`/`T59-817`, đóng increment R3 và Plan 60 (2026-08-28)
+
+- **Security** — **sửa một mâu thuẫn uỷ quyền hai tầng**. Lát `WEB-RBAC-001`
+  thêm vai `engineer`; bảng route Simulation khi đó khai `program.edit` mà
+  `engineer` CÓ, trong khi cổng application vẫn so chuỗi `"admin"`. Hai lớp nói
+  hai điều khác nhau về cùng một ranh giới, và bảng route — thứ người ta đọc để
+  biết hệ thống chặn ai — nói sai. Nay cả ba nơi (bảng route, cổng application,
+  `capability.mutationRoles`) hỏi cùng một câu hỏi `simulation.run`. Ranh giới
+  **không đổi**: `ADR-053` đặt admin-only và lát này không nới nó.
+- **Added** cổng chặn được cho `x-rbac` của OpenAPI ↔ bảng route Go
+  (`rbac_contract_test.go`), so hai chiều. `x-rbac` không tham gia runtime nên
+  khi nó sai thì không có gì đỏ — chỉ có một tài liệu nói dối về ranh giới bảo
+  mật. Lớp lỗi này vừa xảy ra thật trong cùng phiên. Kiểm bằng **đột biến**.
+- **Fixed** workbench dùng chung đọc **sai tài liệu** ở LIVE và SIMULATE: nó
+  luôn lấy buffer Draft, nên tab Tìm kiếm tìm trong Draft trong khi màn hình
+  chiếu bản đã niêm phong, và khay Tham chiếu đếm số lần dùng của một biến
+  trong một tài liệu khác tài liệu đang chạy. Nay nguồn và nhãn đi theo đúng
+  chế độ, và Revision được đọc ở trang cha rồi truyền xuống thay vì mỗi
+  component tự gọi hook.
+- **Added** khay Watch của workbench ở SIMULATE: đọc khung của phiên, đổi nhãn
+  thành `Watch (Mô phỏng)` — gọi nó là "Trực tiếp" là cách nhanh nhất để người
+  trực ca đọc một giá trị mô phỏng như thể thiết bị đang cho ra nó. Giá trị
+  `UNAVAILABLE` hiện `—`, không bao giờ `0`.
+- **Added** bộ kiểm vòng đời tài nguyên chạy với **tiến trình thật**
+  (`simulation_lifecycle_test.go`): STOP thu hồi cả worker treo sau lời chào
+  tạm biệt; quét TTL kill+reap và đóng phiên; worker chết giữa chừng ⇒ phiên
+  đóng và slot quota nhả; cross-project ⇒ `PRG-ERR-SCOPE-001` không tốn tiến
+  trình nào. Kiểm bằng đột biến (bỏ `Kill()` trong `releaseWorker` ⇒ đỏ).
+- **Added** `--replays` (mặc định 100) cho `verify_programming_sim_worker.py`:
+  100 tiến trình worker độc lập, một hash quan sát duy nhất. Và
+  `TestSimulationSpeedNeverReachesTheWorkerAndNeverChangesTheResult` chứng minh
+  1×/10×/60× gửi **cùng chuỗi lệnh** xuống worker — bằng cách đọc chính chuỗi
+  lệnh, không bằng cách so kết quả (hai tốc độ vẫn có thể trùng kết quả một
+  cách tình cờ).
+- **Added** lane e2e cho SIMULATE (mock, có quét axe) và ba case real-backend
+  chạy được ở lane **target**: phiên thật trên bo, RBAC 4 mutation × 3 vai, và
+  `T60-303` Overview đối chiếu với read-back Core thật.
+- **Fixed** một assertion e2e lỗi thời đã làm `T59-505` đỏ ở lane real-backend
+  từ lúc bảng Ánh xạ chuyển sang từ vựng của biến (`INPUT`/`OUTPUT`) thay vì
+  của binding (`READ`/`WRITE`) — lane này không chạy mỗi lượt nên không ai thấy.
+- **Deployed** `mkddc-programming-sim-worker` (cross-build aarch64) lên bo
+  Foxlinx và bật `PROGRAMMING_SIM_WORKER`; SIMULATE nay chạy được ở lớp target.
+- **Verification:** `ctest` **1336/1336**; `go vet` + `go test ./... -count=1`
+  PASS; FE **185 file / 2081 test**; lint + build PASS với chunk `programming`
+  **153,79/165 KiB (R3)**; mock e2e **59 PASS/13 skip**; real-backend host
+  **8 PASS/1 skip**; lane target **5 PASS/2 skip**; worker gate replay
+  **100/100**; `verify-project.sh --component layout` `rc=0`;
+  `candidate_pin_check.py` 17/17; `docs_iso_harness.py --expect` PASS.
+  Trên bo: probe hàng rào **9/9 `EACCES`**, phiên thật không đổi Active/LKG và
+  không đổi 8/8 ngõ ra, worker 1 → 0 sau khi dừng và 0 zombie.
+- **Ghi rõ điều CHƯA đạt:** `VS-PROG-U15` là **PASS MỘT PHẦN**. Vế *"physical
+  AO/DO/relay không đổi"* ở đây đọc từ bảng điểm của chính Core — tức thứ Core
+  *tin rằng* nó đang xuất ra, không phải điện áp trên đầu cực. Phép đo bằng
+  thiết bị cần người và đồng hồ đo; nó cùng nhóm chặn với `T59-706`.
+  `RELEASE_READY` giữ `NO-GO`.
+
 ### Web RBAC — vai thứ tư `engineer` và uỷ quyền theo NĂNG LỰC (`WEB-RBAC-001/002`) (2026-08-28)
 
 Port PR #67 (`codex/web-rbac-four-role-release`, viết cho cây `web/backend/` đã

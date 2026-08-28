@@ -26,25 +26,31 @@ func TestRoleHasPermissionMatrix(t *testing.T) {
 			PermissionOperate: false, PermissionProgramEdit: false, PermissionProgramActivate: false,
 			PermissionSettingsManage: false, PermissionDatabaseManage: false,
 			PermissionUsersManage: false, PermissionSystemRelease: false,
+			PermissionSimulationRun: false,
 		},
 		RoleOperator: {
 			PermissionRead: true, PermissionSelfManage: true, PermissionOperate: true,
 			PermissionProgramEdit: false, PermissionProgramActivate: false,
 			PermissionSettingsManage: false, PermissionDatabaseManage: false,
 			PermissionUsersManage: false, PermissionSystemRelease: false,
+			PermissionSimulationRun: false,
 		},
 		RoleEngineer: {
 			PermissionRead: true, PermissionSelfManage: true, PermissionOperate: true,
 			PermissionProgramEdit: true, PermissionProgramActivate: true,
 			PermissionSettingsManage: true, PermissionSystemRelease: true,
-			// Hai quyền engineer KHÔNG có — đây là lý do vai này tồn tại.
+			// Ba quyền engineer KHÔNG có — đây là lý do vai này tồn tại.
 			PermissionDatabaseManage: false, PermissionUsersManage: false,
+			/* `T59-816` — mô phỏng sinh tiến trình worker có hạn ngạch trên chính
+			   tủ; `ADR-053` đặt ranh giới admin-only và lát RBAC không nới nó. */
+			PermissionSimulationRun: false,
 		},
 		RoleAdmin: {
 			PermissionRead: true, PermissionSelfManage: true, PermissionOperate: true,
 			PermissionProgramEdit: true, PermissionProgramActivate: true,
 			PermissionSettingsManage: true, PermissionDatabaseManage: true,
 			PermissionUsersManage: true, PermissionSystemRelease: true,
+			PermissionSimulationRun: true,
 		},
 	}
 
@@ -176,5 +182,44 @@ func TestEngineerAccountIsAcceptedByUserManagement(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("tài khoản engineer không xuất hiện trong danh sách")
+	}
+}
+
+/*
+`T59-816` — `RolesWithPermission` là nguồn của danh sách vai mà FE đọc.
+
+Kiểm cả hai chiều để một cài đặt trả rỗng hoặc trả tất cả đều không lọt: tập trả
+về phải khớp CHÍNH XÁC tập vai mà ma trận cho phép.
+*/
+func TestRolesWithPermissionMatchesMatrix(t *testing.T) {
+	for _, permission := range AllPermissions() {
+		want := map[Role]bool{}
+		for _, role := range AllRoles() {
+			if RoleHasPermission(role, permission) {
+				want[role] = true
+			}
+		}
+		got := map[Role]bool{}
+		for _, role := range RolesWithPermission(permission) {
+			if got[role] {
+				t.Fatalf("RolesWithPermission(%s) trả trùng %s", permission, role)
+			}
+			got[role] = true
+		}
+		if len(got) != len(want) {
+			t.Fatalf("RolesWithPermission(%s) = %v; want %v", permission, got, want)
+		}
+		for role := range want {
+			if !got[role] {
+				t.Errorf("RolesWithPermission(%s) thiếu %s", permission, role)
+			}
+		}
+	}
+
+	// Ranh giới cụ thể mà `ADR-053` đặt, viết ra thành số để một lần nới quyền
+	// im lặng cũng phải đi qua đây.
+	roles := RolesWithPermission(PermissionSimulationRun)
+	if len(roles) != 1 || roles[0] != RoleAdmin {
+		t.Fatalf("simulation.run mở cho %v; ADR-053 đặt admin-only", roles)
 	}
 }

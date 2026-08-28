@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-UNIFIED-BASELINE-MANIFEST-2026-08-20` |
-| Phiên bản | 1.59 |
+| Phiên bản | 1.60 |
 | Trạng thái | **Active — PGM-02 v2.2 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05`; release NO-GO** |
 | Chủ quản | Document Control |
 | Source baseline trước thay đổi | `49a2ad14c2a8081a494a288f510cd356dab7ee86` |
@@ -51,10 +51,10 @@ chứng minh code, target, HIL hoặc release.
 | 9 | `docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md` | `7e16867859a461b5f7be9304030f935da9572f494761898efb50ba3552e29470` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 10 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `1517f02ab79be2618929472e5e3a34e8bd58d70cac757c456c4a72b674ecd59a` | `44448eaa3ead251e0aa6cbe4953b93c1ed5d3658` |
 | 11 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `559f3032d8f8dbb1ed45883a9ec04787534b2945d52a929713b64b22e343fcd1` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `eedd394e476a56e46933cf88798720c02a1924ef22148911ebaf9fdd99b04f17` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 12 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `282ae8c1818791fee44018739282bbfa7155c67b60955b921eb8ae101b761aa8` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 13 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `40fcc8d098060f910a944373badcf9d2874d180ba9b08e37afe9e746fc9da03b` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 14 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `2dc98b84df4abecdd2c64fa0ea11feb0e5edcc3c82d853f8d1571757449a83e6` | `413a043748dce3b44d2c5076412de761760ba17a` |
-| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `493097c37a295444efdd42efba076fa83bab7cdbf1dcb087237d7ad37e1f20a5` | `413a043748dce3b44d2c5076412de761760ba17a` |
+| 15 | `docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` | `8f99ffd590c21b6859f3ffc62100cb7022bfb08dbf1602fa952dd8a534e20a65` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 16 | `docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md` | `9d9969a721db22cf4ac1c05fa6343e8e1ae1efd2164571ba82407496c80afb33` | `413a043748dce3b44d2c5076412de761760ba17a` |
 | 17 | `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` | `131b195e830d9c182d8ae197d9bc4b7a967e9b11256934e505601eb516c84980` | `413a043748dce3b44d2c5076412de761760ba17a` |
 
@@ -91,6 +91,7 @@ evidence release.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.60 | 2026-08-28 | Re-pin `#12` (`PROGRAMMING_VERIFICATION_PLAN.md`) và `#15` (Plan59) sau khi `T59-816`/`T59-817` đóng và **increment R3 đóng**. **Đánh giá impact:** `#15` đổi hai dòng task READY/ORDERED → DONE, chuyển `IMPLEMENTATION_CLOSE` sang ĐẠT cho PGM-02 v2.2 và ghi số đo thật; `#12` chuyển `VS-PROG-U15` `NOT_RUN` → **PASS MỘT PHẦN** kèm nêu đích danh vế chưa đạt (đo AO/DO/relay bằng thiết bị). Không đổi Product/SRS/Architecture/DDD/UX/Trace/Risk. **Contract đổi cùng phiên nhưng NGOÀI bảng ghim:** `x-rbac` của bốn route Simulation `[engineer, admin]` → `[admin]` (sửa một mâu thuẫn uỷ quyền, KHÔNG nới ranh giới) và re-pin `openapiSha256` ở `pgm02_workspace_v1.json`. `RELEASE_READY` giữ NO-GO. |
 | 1.59 | 2026-08-28 | Re-pin `#15` (Plan59) sau khi deploy bo Foxlinx và đóng 16/16 WP của plan PGM-02. **Đánh giá impact:** `#15` chỉ đổi dòng trạng thái §0 — ghi rằng `T59-818..822` đã DONE và đã deploy bo (FE + BE), và ghi rõ **R3 vẫn CHƯA đóng** vì `T59-816`/`T59-817` còn mở. Không đổi trạng thái task nào khác, không đổi Product/SRS/Architecture/DDD/UX/VVP/Trace/Risk, không đổi contract. `RELEASE_READY` giữ NO-GO. |
 | 1.58 | 2026-08-27 | Re-pin `#15` (Plan59) sau khi `T59-822` đóng: bảng truy nguyên **33/33 AC** sinh bởi `scripts/programming_ac_traceability.py`, và phép đo `AC-PGM02-002` (1280×750) chạy cho chính workspace PGM-02. **Đánh giá impact:** `#15` đổi `T59-822` ORDERED→DONE. Phép đo mới FAIL lần đầu và lộ hai lỗi bố cục có sẵn (cây POU là dải ngang thay vì cột trái theo `UX §16.2`; chiều cao editor cố định) — đã sửa trong cùng phiên, không đổi hợp đồng nào. Không đổi Product/SRS/Architecture/DDD/UX/VVP/Trace/Risk. `RELEASE_READY` giữ NO-GO. |
 | 1.57 | 2026-08-27 | Re-pin `#15` (Plan59) sau khi `T59-821` giao editor chrome (tab đa POU, toolbar ba mode, status bar, Code Map). **Đánh giá impact:** `#15` đổi `T59-821` READY→DONE và ghi số đo; năm điều `UD-PROG-014` để ngỏ nay chốt bằng test chứ không chỉ bằng văn xuôi, nhưng `UD-PROG-014` vẫn CLOSED nên `#3` không đổi. Không đổi Product/SRS/Architecture/DDD/UX/VVP/Trace/Risk; không đổi contract. `RELEASE_READY` giữ NO-GO. |

@@ -100,14 +100,14 @@ var routeDefinitions = []routeDefinition{
 	// resource session: chúng là hành động sản phẩm nhưng cần identity và
 	// idempotency riêng (`DDD-SW-PGM02-WORKSPACE-001` §5.4).
 	{method: "POST", path: "/api/v1/programming/simulation/sessions",
-		permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
+		permission: auth.PermissionSimulationRun, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", permission: auth.PermissionRead},
 	{method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}",
-		permission: auth.PermissionProgramEdit, idempotencyRequired: true, ifMatchRequired: true},
+		permission: auth.PermissionSimulationRun, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions",
-		permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+		permission: auth.PermissionSimulationRun, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}",
-		permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+		permission: auth.PermissionSimulationRun, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", permission: auth.PermissionRead},
 	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", permission: auth.PermissionRead},
 }

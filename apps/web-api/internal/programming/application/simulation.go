@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"mkddc-web/internal/auth"
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	"mkddc-web/internal/programming/domain"
 	"mkddc-web/internal/programming/simworker"
@@ -52,6 +53,11 @@ type SimulationOptions struct {
 	Now             func() time.Time
 	NewID           func() string
 	Spawn           func(context.Context, simworker.Options) (*simworker.Client, string, string, error)
+	/* Môi trường truyền cho worker. Rỗng là mặc định và là lựa chọn ĐÚNG cho
+	   production (`simworker.Spawn` không kế thừa môi trường của `mkddc-web`);
+	   trường này tồn tại để bộ kiểm vòng đời chọn được kịch bản hành vi của một
+	   worker stub. */
+	Env []string
 }
 
 // SimulationService là supervisor phiên: RBAC, quota, TTL, audit và vòng đời
@@ -65,6 +71,7 @@ type SimulationService struct {
 	now             func() time.Time
 	newID           func() string
 	spawn           func(context.Context, simworker.Options) (*simworker.Client, string, string, error)
+	workerEnv       []string
 
 	mu sync.Mutex
 	// Worker sống theo phiên và CHỈ tồn tại trong tiến trình này. Sau khi
@@ -95,7 +102,7 @@ func NewSimulationService(options SimulationOptions) *SimulationService {
 		store: options.Store, artifacts: options.Artifacts,
 		workerBinary: options.WorkerBinary, trustedKeyPaths: options.TrustedKeyPaths,
 		controllerID: controller,
-		now:          now, newID: options.NewID, spawn: spawn,
+		now:          now, newID: options.NewID, spawn: spawn, workerEnv: options.Env,
 		workers:      make(map[string]*simworker.Client),
 		manifests:    make(map[string]simworker.Manifest),
 		actionWindow: make(map[string][]time.Time),
@@ -124,9 +131,26 @@ type SimulationLimits struct {
 	WorkerCommandTimeoutMs             int64 `json:"workerCommandTimeoutMs"`
 }
 
+/*
+Danh sách vai được điều khiển mô phỏng, DẪN XUẤT từ ma trận quyền.
+
+FE dùng danh sách này để quyết định hiện thanh điều khiển ở dạng bấm được hay
+chỉ-đọc. Trước `T59-816` nó là hằng `[]string{"admin"}` chép tay — một bản sao
+thứ ba của cùng một ranh giới, bên cạnh bảng route và cổng application. Bản sao
+chép tay là cách FE mọc ra một nút mà server từ chối.
+*/
+func simulationMutationRoles() []string {
+	roles := auth.RolesWithPermission(auth.PermissionSimulationRun)
+	names := make([]string, 0, len(roles))
+	for _, role := range roles {
+		names = append(names, string(role))
+	}
+	return names
+}
+
 func (s *SimulationService) Capability() SimulationCapability {
 	capability := SimulationCapability{
-		MutationRoles: []string{"admin"},
+		MutationRoles: simulationMutationRoles(),
 		Limits: SimulationLimits{
 			MaxConcurrentSessionsPerController: SimulationMaxSessionsPerController,
 			IdleTTLSeconds:                     int(SimulationIdleTTL / time.Second),
@@ -227,17 +251,29 @@ type CreateSimulationSessionInput struct {
 	SourceContentSHA256   string
 }
 
-// requireAdmin là cổng RBAC DUY NHẤT của mọi mutation R3.
+// requireSimulationControl là cổng RBAC DUY NHẤT của mọi mutation R3.
 //
 // Nó cố tình đứng trước mọi thứ khác — trước cả khi đọc store — để một vai
 // không đủ quyền không tạo ra bất kỳ side effect nào, kể cả một lần đọc có thể
 // làm lộ sự tồn tại của phiên.
-func (s *SimulationService) requireAdmin(role string) *domain.PublicError {
-	if strings.EqualFold(role, "admin") {
+//
+// `T59-816` — trước lát này hàm so chuỗi `"admin"`. Việc thêm vai `engineer`
+// (`WEB-RBAC-001`) biến phép so đó thành một mâu thuẫn im lặng: router khai
+// `program.edit`, mà engineer CÓ `program.edit`, nên engineer đi qua được lớp
+// ngoài rồi mới bị lớp trong từ chối bằng `PRG-SIM-FORBIDDEN`. Hai lớp nói hai
+// điều khác nhau về cùng một ranh giới là trạng thái tệ nhất: bảng route —
+// thứ người ta đọc để biết hệ thống chặn ai — nói sai.
+//
+// Nay cả hai lớp hỏi CÙNG một câu hỏi (`simulation.run`), nên chúng không thể
+// trôi khỏi nhau nữa. Ranh giới thì KHÔNG đổi: `simulation.run` chỉ admin có,
+// đúng như `ADR-053` đặt ra.
+func (s *SimulationService) requireSimulationControl(role string) *domain.PublicError {
+	if auth.RoleHasPermission(auth.Role(strings.ToLower(strings.TrimSpace(role))),
+		auth.PermissionSimulationRun) {
 		return nil
 	}
 	public := domain.NewPublicError(domain.ErrSimForbidden)
-	public.Args = map[string]any{"requiredRole": "admin"}
+	public.Args = map[string]any{"requiredPermission": string(auth.PermissionSimulationRun)}
 	return &public
 }
 
@@ -424,7 +460,7 @@ func (s *SimulationService) allowAction(sessionID string, at time.Time) bool {
 func (s *SimulationService) CreateSession(ctx context.Context, request SimulationRequest,
 	input CreateSimulationSessionInput) (SimulationSessionView, *domain.PublicError) {
 
-	if public := s.requireAdmin(request.Role); public != nil {
+	if public := s.requireSimulationControl(request.Role); public != nil {
 		return SimulationSessionView{}, public
 	}
 	if public := s.requireCapability(); public != nil {
@@ -511,7 +547,7 @@ func (s *SimulationService) CreateSession(ctx context.Context, request Simulatio
 	// không có worker là một slot quota bị giữ mãi mãi.
 	client, workerVersion, detail, err := s.spawn(ctx, simworker.Options{
 		BinaryPath: s.workerBinary, CommandTimeout: SimulationWorkerCommandTimeout,
-		TrustedKeyPaths: s.trustedKeyPaths,
+		TrustedKeyPaths: s.trustedKeyPaths, Env: s.workerEnv,
 	})
 	if err != nil {
 		return s.failSession(ctx, request, session, detail, at)
@@ -642,7 +678,7 @@ func (s *SimulationService) mutableSession(ctx context.Context, request Simulati
 	programmingstore.SimulationSession, *simworker.Client, simworker.Manifest, *domain.PublicError) {
 
 	var empty programmingstore.SimulationSession
-	if public := s.requireAdmin(request.Role); public != nil {
+	if public := s.requireSimulationControl(request.Role); public != nil {
 		return empty, nil, simworker.Manifest{}, public
 	}
 	if public := s.requireCapability(); public != nil {
@@ -900,7 +936,7 @@ func (s *SimulationService) Trace(ctx context.Context, sessionID string, cursor,
 // terminal trả về ĐÚNG trạng thái terminal đó, không phải lỗi: dừng một thứ đã
 // dừng là một yêu cầu hợp lý.
 func (s *SimulationService) StopSession(ctx context.Context, request SimulationRequest, sessionID string) (SimulationSessionView, *domain.PublicError) {
-	if public := s.requireAdmin(request.Role); public != nil {
+	if public := s.requireSimulationControl(request.Role); public != nil {
 		return SimulationSessionView{}, public
 	}
 	if public := s.requireCapability(); public != nil {
@@ -959,4 +995,23 @@ func (s *SimulationService) Shutdown() {
 	for _, client := range clients {
 		client.Kill()
 	}
+}
+
+/*
+workerPIDForTest — PID của worker đang phục vụ một phiên, chỉ dùng cho test.
+
+PID KHÔNG phải danh tính công khai: nó không bao giờ được persist, trả cho FE
+hay ghi vào audit, vì một PID lộ ra là một PID có thể bị dùng để kill nhầm tiến
+trình khác. Hàm này tồn tại vì bằng chứng "không rò tiến trình" chỉ kiểm được ở
+mức hệ điều hành, và `/proc/<pid>` là chỗ duy nhất phân biệt được một tiến trình
+đã thu hồi với một zombie.
+*/
+func (s *SimulationService) workerPIDForTest(sessionID string) int {
+	s.mu.Lock()
+	client := s.workers[sessionID]
+	s.mu.Unlock()
+	if client == nil {
+		return 0
+	}
+	return client.PID()
 }

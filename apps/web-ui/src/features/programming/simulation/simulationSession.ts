@@ -339,3 +339,33 @@ export function encodeSimulationInput(
   }
   return Number(text)
 }
+
+/**
+ * `T59-816` / `PGM02-V22-WP-06-R3` — chiếu khung mô phỏng thành dòng Watch của
+ * workbench dùng chung.
+ *
+ * Vì sao đi qua `presentStRuntimeValue` thay vì tự định dạng: luật "giá trị
+ * không đọc được KHÔNG BAO GIỜ hiện thành 0" chỉ được viết một lần, ở đó. Một
+ * bản định dạng thứ hai cho mô phỏng là một bản để lệch — và lệch theo đúng
+ * hướng nguy hiểm nhất, vì người dùng đang thử một thay đổi trước khi đưa nó ra
+ * thiết bị thật.
+ *
+ * `quality` của mô phỏng dùng chung bảng với runtime: worker trả `GOOD` cho giá
+ * trị đã tính, `UNAVAILABLE` khi chưa có. Không ánh xạ lại tên ở đây.
+ */
+export function simulationWatchRows(
+  frame: SimulationFrame | null,
+): { observationId: string; name: string; value: unknown; quality: string; dataType: string }[] {
+  if (!frame) return []
+  return frame.observations.map((observation) => ({
+    observationId: observation.observationId,
+    /* Tên hiển thị bỏ tiền tố Program: khay Watch đã nói POU nào đang mở, và
+     * `Fast.Setpoint` lặp lại "Fast" trên mọi dòng chỉ làm hẹp cột giá trị. */
+    name: observation.observationId.includes('.')
+      ? observation.observationId.slice(observation.observationId.indexOf('.') + 1)
+      : observation.observationId,
+    value: observation.quality === 'UNAVAILABLE' ? null : observation.value,
+    quality: observation.quality,
+    dataType: observation.dataType,
+  }))
+}

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"mkddc-web/internal/auth"
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	"mkddc-web/internal/programming/domain"
 	"mkddc-web/internal/programming/simworker"
@@ -84,10 +85,67 @@ func seedProjectForSimulation(t *testing.T, store *programmingstore.Store) {
 	}
 }
 
+/*
+`T59-816` — ranh giới điều khiển mô phỏng phải là MỘT câu trả lời.
+
+Trước lát này có ba bản sao của cùng ranh giới: bảng route khai `program.edit`,
+cổng application so chuỗi `"admin"`, và capability trả hằng `["admin"]`. Ba bản
+sao đồng ý với nhau chỉ vì chưa có vai nào rơi vào giữa. Vai `engineer`
+(`WEB-RBAC-001`) rơi đúng vào giữa: nó CÓ `program.edit`, nên nó qua được router
+rồi mới bị application từ chối — bảng route, thứ người ta đọc để biết ai bị
+chặn, nói sai.
+
+Bộ này quét TOÀN BỘ `auth.AllRoles()` chứ không phải ba vai chép tay, nên một vai
+mới thêm vào mà quên xếp chỗ sẽ đỏ ở đây thay vì lộ ra trên tủ.
+*/
+func TestSimulationControlBoundaryIsOneAnswerForEveryRole(t *testing.T) {
+	service, counter, store := newSimulationFixture(t, "/bin/true")
+
+	allowed := map[string]bool{}
+	for _, role := range service.Capability().MutationRoles {
+		allowed[role] = true
+	}
+
+	for _, role := range auth.AllRoles() {
+		name := string(role)
+		want := auth.RoleHasPermission(role, auth.PermissionSimulationRun)
+		if allowed[name] != want {
+			t.Errorf("capability.mutationRoles nói %q=%v; ma trận nói %v", name, allowed[name], want)
+		}
+		if want {
+			// Vai được phép không kiểm ở đây (nó cần fixture đầy đủ); phần
+			// happy-path do các test khác của lát R3 phủ.
+			continue
+		}
+		request := SimulationRequest{ActorID: "u1", Role: name, CorrelationID: "corr-simulation-matrix"}
+		request.Idempotency = sha256.Sum256([]byte("key-matrix-" + name))
+		request.RequestHash = sha256.Sum256([]byte("request-matrix-" + name))
+		if _, public := service.CreateSession(context.Background(), request,
+			CreateSimulationSessionInput{ProjectID: "p", SourceDraftRevisionID: "r"}); public == nil ||
+			public.Code != domain.ErrSimForbidden {
+			t.Errorf("vai %q tạo được phiên dù ma trận từ chối: public=%v", name, public)
+		}
+	}
+
+	if counter.calls.Load() != 0 {
+		t.Fatalf("vai không đủ quyền đã làm sinh %d worker", counter.calls.Load())
+	}
+	live, err := store.ListLiveSimulationSessions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(live) != 0 {
+		t.Fatalf("vai không đủ quyền đã tạo %d phiên trong DB", len(live))
+	}
+}
+
 func TestSimulationMutationsRequireAdminAndSpawnNothing(t *testing.T) {
 	service, counter, store := newSimulationFixture(t, "/bin/true")
 
-	for _, role := range []string{"viewer", "operator", ""} {
+	/* `engineer` nằm trong danh sách này một cách CÓ CHỦ Ý: nó có `program.edit`
+	   nhưng không có `simulation.run`, nên nó là vai duy nhất mà một mâu thuẫn
+	   giữa hai lớp uỷ quyền lộ ra được. */
+	for _, role := range []string{"viewer", "operator", "engineer", ""} {
 		request := SimulationRequest{ActorID: "u1", Role: role, CorrelationID: "corr-simulation-role"}
 		request.Idempotency = sha256.Sum256([]byte("key-" + role))
 		request.RequestHash = sha256.Sum256([]byte("request-" + role))

@@ -4,7 +4,7 @@ import { buildStReferenceIndex } from '../editor/stReferenceIndex'
 import { fbdIssueTargets } from '../../fbd/issueTargets'
 import { validateFbdDocument, type FbdDocument } from '../../fbd/model'
 import type { ProgrammingDraftDocument } from '../../model/types'
-import { presentStRuntimeValue, type StRuntimeOverlayState } from '../editor/StRuntimeValueOverlay'
+import { presentStRuntimeValue, type StRuntimeOverlayState, type StRuntimeQuality } from '../editor/StRuntimeValueOverlay'
 import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol, type WorkbenchWatchRow } from './ProgrammingWorkbench'
 
 /**
@@ -33,6 +33,7 @@ function trendSample(value: unknown, state: 'live' | 'uncertain' | 'stale' | 'in
 
 export function DesignWorkbench({
   mode,
+  simulationWatch,
   document,
   source,
   sourceLabel,
@@ -55,6 +56,16 @@ export function DesignWorkbench({
    * `undefined` = chế độ hiện tại không có nguồn giá trị nào (EDIT).
    */
   runtimeOverlay?: StRuntimeOverlayState
+  /**
+   * `T59-816` — lớp giá trị của phiên MÔ PHỎNG.
+   *
+   * Tách khỏi `runtimeOverlay` một cách có chủ ý: hai nguồn này không bao giờ
+   * được cộng vào nhau. Giá trị mô phỏng và giá trị của gói đang chạy trông
+   * giống hệt nhau trên màn hình, và trộn chúng là cách người trực ca đọc một
+   * con số mô phỏng như thể tủ đang cho ra con số đó.
+   */
+  simulationWatch?: readonly { observationId: string; name: string; value: unknown;
+    quality: string; dataType: string }[] | null
   traceOwnerHref?: string
   /** `DEV-PROG-003` — chuyển tiếp yêu cầu theo dõi biến tới khay Watch. */
   watchAddRequest?: { name: string; nonce: number } | null
@@ -141,7 +152,40 @@ export function DesignWorkbench({
   /* Chiếu overlay thành dòng Watch. `presentStRuntimeValue` là nơi DUY NHẤT
    * biết luật "null/BAD/OFFLINE không bao giờ thành 0"; diễn giải lại ở đây là
    * dựng một bản luật thứ hai có thể lệch. */
-  const watch: WorkbenchWatchRow[] | null = runtimeOverlay === undefined
+  /* `T59-816` — ở SIMULATE, khay Watch đọc khung của phiên. `presentStRuntimeValue`
+     vẫn là nơi duy nhất quyết định cách trình bày, nên một giá trị `UNAVAILABLE`
+     của mô phỏng hiện `—` giống hệt một giá trị runtime không đọc được — không
+     có đường nào nó thành `0`. */
+  const simulationRows: WorkbenchWatchRow[] | null = useMemo(() => {
+    if (simulationWatch === undefined || simulationWatch === null) return null
+    return simulationWatch.map((row) => {
+      /* Ánh xạ chất lượng của worker sang bảng runtime. `UNAVAILABLE` của mô
+       * phỏng nghĩa là "chưa tính được ở nhịp này" — đúng nghĩa `BAD` ở bảng
+       * kia, và cả hai đều phải hiện `—`. Mô phỏng KHÔNG có khái niệm cũ/mới:
+       * khung nào cũng là khung mới nhất của đồng hồ ảo, nên `freshness` luôn
+       * `LIVE` chứ không phải một phỏng đoán theo thời gian tường. */
+      const quality: StRuntimeQuality = row.quality === 'GOOD' ? 'GOOD'
+        : row.quality === 'UNCERTAIN' ? 'UNCERTAIN' : 'BAD'
+      const presented = presentStRuntimeValue({
+        variableId: row.observationId, variableName: row.name, value: row.value,
+        valid: row.quality !== 'UNAVAILABLE',
+        quality, freshness: 'LIVE',
+      })
+      return {
+        variableId: row.observationId,
+        name: row.name,
+        display: presented.displayValue,
+        state: presented.state,
+        quality,
+        typeName: row.dataType,
+        numeric: trendSample(row.value, presented.state),
+      }
+    })
+  }, [simulationWatch])
+
+  const watch: WorkbenchWatchRow[] | null = simulationRows !== null
+    ? simulationRows
+    : runtimeOverlay === undefined
     ? null
     : runtimeOverlay.status === 'ready'
       ? runtimeOverlay.items.map((item) => {

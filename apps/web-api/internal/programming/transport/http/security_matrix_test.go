@@ -138,7 +138,7 @@ func TestEveryProgrammingRouteRejectsUnauthenticatedBeforeHandler(t *testing.T) 
 	}
 }
 
-func TestEveryMutationRouteRequiresProgramPermissionAndBlocksViewer(t *testing.T) {
+func TestEveryMutationRouteRequiresProgramPermissionAndBlocksViewerAndOperator(t *testing.T) {
 	for _, definition := range routeDefinitions {
 		definition := definition
 		if !mutates(definition) {
@@ -146,33 +146,44 @@ func TestEveryMutationRouteRequiresProgramPermissionAndBlocksViewer(t *testing.T
 		}
 		t.Run(definition.method+" "+definition.path, func(t *testing.T) {
 			/* `WEB-RBAC-001` — mutation không còn khai "admin" mà khai VIỆC nó
-			   làm. Hai mức hợp lệ, và chỉ hai: sửa Draft (`program.edit`) hoặc
-			   chạm tới thiết bị đang chạy (`program.activate`). Một mutation
-			   khai `read` là lỗ hổng; khai `users.manage` là siết nhầm chỗ. */
+			   làm. Ba mức hợp lệ, và chỉ ba: sửa Draft (`program.edit`), chạm
+			   tới thiết bị đang chạy (`program.activate`), hoặc điều khiển
+			   phiên mô phỏng (`simulation.run`, `ADR-053`). Một mutation khai
+			   `read` là lỗ hổng; khai `users.manage` là siết nhầm chỗ. */
 			switch definition.permission {
 			case auth.PermissionProgramEdit, auth.PermissionProgramActivate:
+			case auth.PermissionSimulationRun:
+				if !strings.Contains(definition.path, "/simulation/") {
+					t.Fatalf("route ngoài họ simulation khai simulation.run")
+				}
 			default:
-				t.Fatalf("route mutation phải khai program.edit hoặc program.activate, đang là %q",
+				t.Fatalf("route mutation phải khai program.edit, program.activate hoặc simulation.run, đang là %q",
 					definition.permission)
 			}
-			spy := &authorizerSpy{authenticated: true, role: auth.RoleViewer}
-			routes := []webrouter.Route{}
-			RegisterProgrammingRoutes(&routes, true)
-			mux, err := webrouter.New(spy, routes, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			recorder := httptest.NewRecorder()
-			mux.ServeHTTP(recorder, requestForRoute(definition))
+			/* `VS-PROG-U15` gọi tên CẢ HAI vai. Kiểm mỗi `viewer` là chưa đủ:
+			   `operator` mới là vai có mặt trên tủ hằng ngày, và nó có
+			   `operate` — quyền gần nhất với một mutation Programming. Nếu một
+			   route nào đó lỡ khai `operate`, chỉ vòng lặp này bắt được. */
+			for _, role := range []auth.Role{auth.RoleViewer, auth.RoleOperator} {
+				spy := &authorizerSpy{authenticated: true, role: role}
+				routes := []webrouter.Route{}
+				RegisterProgrammingRoutes(&routes, true)
+				mux, err := webrouter.New(spy, routes, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				recorder := httptest.NewRecorder()
+				mux.ServeHTTP(recorder, requestForRoute(definition))
 
-			if recorder.Code != http.StatusForbidden {
-				t.Fatalf("viewer gọi mutation: status = %d; want 403", recorder.Code)
-			}
-			if spy.handlerCalled {
-				t.Fatal("handler chạy dù thiếu quyền — mutation có thể đã xảy ra")
-			}
-			if spy.requiredPermission != definition.permission {
-				t.Fatalf("quyền yêu cầu = %q; want %q", spy.requiredPermission, definition.permission)
+				if recorder.Code != http.StatusForbidden {
+					t.Fatalf("%s gọi mutation: status = %d; want 403", role, recorder.Code)
+				}
+				if spy.handlerCalled {
+					t.Fatalf("%s: handler chạy dù thiếu quyền — mutation có thể đã xảy ra", role)
+				}
+				if spy.requiredPermission != definition.permission {
+					t.Fatalf("quyền yêu cầu = %q; want %q", spy.requiredPermission, definition.permission)
+				}
 			}
 		})
 	}
@@ -270,11 +281,27 @@ engineer mọi quyền thì chiều thứ nhất xanh, còn không cho gì thì 
 xanh.
 */
 func TestEngineerCanReachEveryProgrammingRouteAndOperatorCannotActivate(t *testing.T) {
+	simulationControl := 0
 	for _, definition := range routeDefinitions {
+		if definition.permission == auth.PermissionSimulationRun {
+			/* Ngoại lệ DUY NHẤT, và nó được viết ra chứ không lách qua: điều
+			   khiển mô phỏng là admin-only theo `ADR-053` vì phiên sinh ra một
+			   tiến trình worker có hạn ngạch RAM/CPU trên chính tủ. Engineer
+			   vẫn ĐỌC được phiên (route GET khai `read`). */
+			simulationControl++
+			if auth.RoleHasPermission(auth.RoleEngineer, definition.permission) {
+				t.Errorf("%s %s: engineer có simulation.run — ADR-053 đặt admin-only",
+					definition.method, definition.path)
+			}
+			continue
+		}
 		if !auth.RoleHasPermission(auth.RoleEngineer, definition.permission) {
 			t.Errorf("%s %s: engineer KHÔNG có %q — vai này tồn tại để làm việc Programming",
 				definition.method, definition.path, definition.permission)
 		}
+	}
+	if simulationControl != 4 {
+		t.Fatalf("số route điều khiển mô phỏng = %d; want 4 (create/stop/action/input)", simulationControl)
 	}
 
 	activations := 0
@@ -295,5 +322,33 @@ func TestEngineerCanReachEveryProgrammingRouteAndOperatorCannotActivate(t *testi
 	}
 	if activations == 0 {
 		t.Fatal("không có route nào khai program.activate — bảng route hoặc phép phân loại đã sai")
+	}
+}
+
+
+/*
+`VS-PROG-U15` — phép ĐẾM bề mặt mutation, viết thành số.
+
+Con số trong kịch bản V&V (`14/14`) được viết khi bề mặt còn nhỏ hơn. Một kịch
+bản nói "14/14" trong khi bảng route có 20 mutation là một kịch bản đã lỗi thời
+mà không ai thấy — và cách duy nhất để nó không lỗi thời lần nữa là để phép đếm
+tự chạy và tự đỏ.
+*/
+func TestMutationSurfaceCountIsRecordedNotAssumed(t *testing.T) {
+	byPermission := map[auth.Permission]int{}
+	total := 0
+	for _, definition := range routeDefinitions {
+		if !mutates(definition) {
+			continue
+		}
+		total++
+		byPermission[definition.permission]++
+	}
+	t.Logf("bề mặt mutation Programming: %d route — program.edit=%d, program.activate=%d, simulation.run=%d",
+		total, byPermission[auth.PermissionProgramEdit],
+		byPermission[auth.PermissionProgramActivate], byPermission[auth.PermissionSimulationRun])
+	if total != 20 {
+		t.Fatalf("bề mặt mutation = %d route; con số đã ghi trong record V&V là 20. "+
+			"Thêm/bớt route thì phải cập nhật record, không sửa số ở đây cho khớp", total)
 	}
 }

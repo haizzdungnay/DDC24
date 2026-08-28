@@ -865,6 +865,58 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
   })
 
+  /*
+  `T59-816` — workbench dùng chung phải đọc ĐÚNG tài liệu của chế độ đang mở.
+
+  Trước lát này nó luôn đọc buffer Draft: ở LIVE và SIMULATE, tab Tìm kiếm tìm
+  trong Draft trong khi màn hình chiếu bản đã niêm phong. Hai tài liệu, một
+  khay, và không dấu hiệu nào cho biết khay đang nói về cái nào — nên một lần
+  tìm "biến này còn dùng ở đâu" trả lời về một chương trình KHÁC chương trình
+  đang chạy trên tủ.
+  */
+  it('ở LIVE, workbench tìm trong bản đang chạy chứ không tìm trong Draft', async () => {
+    const project = baseProject()
+    project.activeRevisionId = 'revision-active'
+    project.draft!.programs.push({
+      programId: 'program-1', objectId: 'object-1', name: 'Điều khiển AHU', kind: 'PROGRAM',
+      language: 'ST', document: 'PROGRAM CHI_CO_TRONG_DRAFT\nEND_PROGRAM\n'
+    })
+    project.draft!.task.programOrder = ['program-1']
+    runtimeMonitor.state = {
+      status: 'ready', error: null, failure: null, producerRestarted: false, refresh: vi.fn(),
+      data: { schemaVersion: '1.0', activeRevisionId: 'revision-active', safeState: false, task: null, items: [] }
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'getProgrammingRevision') return Promise.resolve({
+        revisionId: 'revision-active',
+        snapshot: { objects: [{
+          objectId: 'object-1', kind: 'PROGRAM',
+          payload: { objectId: 'object-1', kind: 'PROGRAM', name: 'Điều khiển AHU', language: 'ST',
+            source: 'PROGRAM CHI_CO_TRONG_ACTIVE\nEND_PROGRAM\n' },
+        }] },
+      })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=LIVE')
+    await screen.findByLabelText<HTMLTextAreaElement>('Mã nguồn đang chạy')
+
+    // Nhãn khay phải nói nguồn, không được ghi "Draft" khi đang chiếu bản chạy.
+    expect(screen.getByText(/LIVE · Đang chạy · Điều khiển AHU/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: /Tìm kiếm/ }))
+    fireEvent.change(screen.getByLabelText('Tìm trong POU đang mở'),
+      { target: { value: 'CHI_CO_TRONG' } })
+    /* Đọc TRONG khay kết quả: chuỗi này cũng nằm trong textarea chiếu nguồn,
+       nên tìm ở phạm vi toàn trang sẽ khớp cả hai và không chứng minh được
+       khay đang tìm ở đâu. */
+    const panel = screen.getByRole('tabpanel')
+    expect(within(panel).getByText(/PROGRAM CHI_CO_TRONG_ACTIVE/)).toBeInTheDocument()
+    expect(within(panel).queryByText(/PROGRAM CHI_CO_TRONG_DRAFT/)).not.toBeInTheDocument()
+  })
+
   it('nối interface Draft v2 vào palette FBD và lọc chính POU đang mở', async () => {
     const fbdSource = JSON.stringify({
       $schema: '../../fbd_v1.schema.json', schemaVersion: 1, profileId: 'revA-1t-1-5-30',

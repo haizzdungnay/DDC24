@@ -731,7 +731,12 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
     .getByRole('link', { name: 'Điểm & Ánh xạ' })
     .click()
   await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
-  const mappingRow = page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+READ\s+REAL/ })
+  /* Cột "Hướng/kiểu" của bảng Ánh xạ đã gán nói hướng của BIẾN
+     (`INPUT`/`OUTPUT`, lấy từ `VAR_INPUT`/`VAR_OUTPUT`), không nói hướng của
+     binding (`READ`/`WRITE`). Mẫu cũ bám vào `READ` nên case này đã đỏ từ lúc
+     bảng chuyển sang từ vựng của biến — và vì lane real-backend không chạy
+     trong mỗi lượt, không ai thấy. Bám đúng bề mặt hiện tại. */
+  const mappingRow = page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+INPUT\s+·\s+REAL/ })
   await expect(mappingRow).toBeVisible()
 
   // F-P59-UI-001: Published Signal được tạo bằng UI, không phải chỉ seed API.
@@ -1394,4 +1399,323 @@ test('T59-815: phiên mô phỏng chạy thật, dừng thật và chặn vai kh
   const stoppedAgain = await request.delete(`/api/v1/programming/simulation/sessions/${sessionID}`,
     { headers: mutationHeaders(token, { 'if-match': stopped.etag as string }) })
   expect(stoppedAgain.status()).toBe(200)
+})
+
+/**
+ * `T60-303` — Overview đọc bảng Programs từ Core THẬT sau Commission + Enable.
+ *
+ * Vì sao cần một case real-backend riêng khi `T60-302` đã phủ bằng mock: bảng
+ * này là chỗ ba nguồn gặp nhau — intent bền vững trong store, read-back sống từ
+ * Core, và tên/ngôn ngữ/chu kỳ khai trong Revision đang chạy. Mock cho cả ba
+ * cùng lúc và luôn khớp nhau; trên hệ thật chúng đến từ ba đường khác nhau và
+ * có thể nói khác nhau. Đúng lớp lỗi mà `runtimeStateSource` tồn tại để lộ ra.
+ *
+ * Case này KHÔNG tự Commission thêm Revision: file này đã cảnh báo rằng làm thế
+ * phá giả định của các case khác. Nó Enable trên chính gói đang chạy, đọc, rồi
+ * TRẢ LẠI intent ban đầu — một case đọc trạng thái không được để lại trạng thái.
+ */
+test('T60-303: Overview dựng bảng Programs từ read-back Core thật sau Commission + Enable', async ({ page, request }) => {
+  test.setTimeout(180_000)
+  const token = await loginAPI(request)
+
+  const runtime = await responseJSON(
+    await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) }), 200)
+  const activeRevisionID = runtime.activeRevisionId as string | null
+  test.skip(!activeRevisionID, 'controller chưa Commission gói nào — bảng Programs không có gì để đối chiếu')
+
+  const projects = await responseJSON(
+    await request.get('/api/v1/programming/projects?limit=100', { headers: readHeaders(token) }), 200)
+  const owner = (projects.items as JsonObject[]).find((item) => item.activeRevisionId === activeRevisionID)
+  expect(owner, `không Project nào khai Revision đang chạy ${activeRevisionID}`).toBeTruthy()
+  const projectID = owner!.projectId as string
+
+  /* Nguồn đối chiếu ĐỘC LẬP với giao diện: cùng endpoint mà trang đọc, nhưng
+     gọi thẳng. Nếu chỉ so giao diện với chính nó thì một adapter hỏng vẫn xanh. */
+  const programsPage = await responseJSON(
+    await request.get(`/api/v1/programming/projects/${projectID}/programs`, { headers: readHeaders(token) }), 200)
+  const rows = (programsPage.items as JsonObject[]) ?? []
+  test.skip(rows.length === 0, 'gói đang chạy không khai Program nào')
+
+  const target = rows[0]
+  const targetProgramID = target.programId as string
+  const originalIntent = target.desiredEnabled === true
+
+  // Enable — nửa "Enable" của tiêu đề task. Idempotent nếu nó đã bật.
+  const enableResponse = await request.put(
+    `/api/v1/programming/projects/${projectID}/programs/${targetProgramID}/runtime-intent`,
+    { headers: mutationHeaders(token), data: { schemaVersion: '1.0', desiredEnabled: true } })
+  await responseJSON(enableResponse, 200)
+
+  try {
+    await openWorkspaceRoute(page, `/eng/programming?project=${projectID}`)
+    const usernameField = page.getByLabel(/Tên đăng nhập|Username/i)
+    if (await usernameField.isVisible().catch(() => false)) {
+      await usernameField.fill('admin')
+      await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+      await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+      await page.waitForURL(/\/eng\/programming/, { timeout: 15_000 })
+    }
+
+    const table = page.getByRole('table')
+    await expect(table).toBeVisible({ timeout: 30_000 })
+
+    /* Số DÒNG phải khớp read-back, không nhiều không ít. Thiếu một dòng nghĩa
+       là một Program đang chạy mà người vận hành không thấy; thừa một dòng
+       nghĩa là màn hình khai một Program không tồn tại trong gói đang chạy. */
+    const bodyRows = table.locator('tbody tr')
+    await expect(bodyRows).toHaveCount(rows.length)
+
+    /* Và mỗi tên Program của read-back phải xuất hiện đúng như read-back nói.
+       Tên đến từ Revision đang chạy chứ không từ Draft — đó là lý do cột này
+       tồn tại ở dạng tên chứ không phải UUID. */
+    const revision = await responseJSON(
+      await request.get(`/api/v1/programming/revisions/${activeRevisionID}`, { headers: readHeaders(token) }), 200)
+    const objects = ((revision.snapshot as JsonObject).objects as JsonObject[]) ?? []
+    const namesInRevision = new Set(objects
+      .filter((object) => object.kind === 'PROGRAM')
+      .map((object) => ((object.payload as JsonObject | undefined)?.name as string | undefined) ?? '')
+      .filter((name) => name.length > 0))
+    const shownNames = (await bodyRows.locator('td').first().allInnerTexts()).join('\n')
+    for (const name of namesInRevision) {
+      expect(shownNames, `bảng thiếu Program "${name}" của gói đang chạy`).toContain(name)
+    }
+
+    /* `AC-PGM01-01` — không UUID ở mặt trước. Kiểm bằng chính ID thật đang có
+       trong hệ, không bằng một biểu thức đoán hình dạng UUID. */
+    await expect(table).not.toContainText(targetProgramID)
+    await expect(table).not.toContainText(activeRevisionID!)
+
+    /* `AC-PGM01-04` — không bịa `0`. Một ô Chu kỳ hoặc Chạy gần nhất chưa đo
+       được phải là `—` KÈM lý do; ô có số thì số đó phải khác rỗng. */
+    const cycleTexts = await bodyRows.locator('td').nth(2).allInnerTexts()
+    for (const text of cycleTexts) {
+      expect(text.trim().length, 'ô Chu kỳ rỗng — thiếu cả số lẫn lý do').toBeGreaterThan(0)
+    }
+  } finally {
+    // Trả intent về đúng như lúc bắt đầu: một case đọc không được đổi cấu hình.
+    await request.put(
+      `/api/v1/programming/projects/${projectID}/programs/${targetProgramID}/runtime-intent`,
+      { headers: mutationHeaders(token), data: { schemaVersion: '1.0', desiredEnabled: originalIntent } })
+  }
+})
+
+/**
+ * `T59-817` / `VS-PROG-U15` — phiên mô phỏng trên chính thiết bị, và bằng chứng
+ * **zero output**.
+ *
+ * Khác `T59-815` (lane host, tự dựng Project rồi Check): case này chạy được
+ * trên lane TARGET vì nó không tạo gì cả. Nó mở phiên trên đúng Revision đang
+ * điều khiển tủ, chạy vài nhịp, rồi dừng — và trước/sau mỗi bước đọc lại trạng
+ * thái điều khiển thật.
+ *
+ * Ranh giới của bằng chứng, nói thẳng: đây là quan sát ở lớp PHẦN MỀM — bảng
+ * điểm của chính Core, Active/LKG, và bộ đếm Task. Nó KHÔNG phải phép đo bằng
+ * thiết bị trên đầu cực AO/DO/relay. Phần đo vật lý ấy cần người và đồng hồ đo,
+ * và `VS-PROG-U15` chưa được đóng cho tới khi có nó.
+ */
+test('T59-817: phiên mô phỏng trên thiết bị không đổi Active/LKG và không động tới ngõ ra', async ({ request }) => {
+  test.setTimeout(180_000)
+  const token = await loginAPI(request)
+
+  const capabilities = await responseJSON(
+    await request.get('/api/v1/programming/capabilities', { headers: readHeaders(token) }), 200)
+  const simulation = (capabilities.workspaceModes as JsonObject | undefined)?.simulation as JsonObject | undefined
+  test.skip(simulation?.supported !== true, 'thiết bị chưa cài worker mô phỏng')
+  /* Danh sách vai này do server DẪN XUẤT từ ma trận quyền (`T59-816`). Kiểm nó
+     ở đây là kiểm phép dẫn xuất đó trên chính thiết bị, không phải trên host. */
+  expect(simulation!.mutationRoles).toEqual(['admin'])
+
+  const runtimeBefore = await responseJSON(
+    await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) }), 200)
+  const activeRevisionID = runtimeBefore.activeRevisionId as string | null
+  test.skip(!activeRevisionID, 'thiết bị chưa Commission gói nào')
+  const controllerID = runtimeBefore.controllerId as string
+
+  const projects = await responseJSON(
+    await request.get('/api/v1/programming/projects?limit=100', { headers: readHeaders(token) }), 200)
+  const owner = (projects.items as JsonObject[]).find((item) => item.activeRevisionId === activeRevisionID)
+  expect(owner, 'không Project nào khai Revision đang chạy').toBeTruthy()
+  const projectID = owner!.projectId as string
+  const latestCheck = owner!.latestCheck as JsonObject | undefined
+  test.skip(latestCheck?.state !== 'PASSED' || latestCheck?.revisionId !== activeRevisionID,
+    'Revision đang chạy không có Check ĐẠT — không có artifact bất biến để mô phỏng')
+
+  const revision = await responseJSON(
+    await request.get(`/api/v1/programming/revisions/${activeRevisionID}`, { headers: readHeaders(token) }), 200)
+  const contentHash = revision.contentHash as string
+
+  /* Ảnh chụp TRƯỚC của mọi thứ mô phỏng không được chạm. Ngõ ra đọc từ bảng
+     điểm của Core: đó là thứ Core tin rằng nó đang xuất ra. */
+  const outputsBefore = await responseJSON(
+    await request.get('/api/v1/points', { headers: readHeaders(token) }), 200) as unknown as JsonObject[]
+  const outputSnapshot = (items: JsonObject[]) => JSON.stringify(items
+    .filter((item) => /^(AO|DO|RLY)/.test(String(item.id ?? '')))
+    .map((item) => [item.id, item.value, item.quality, item.overriddenBy ?? null])
+    .sort())
+  const before = outputSnapshot(outputsBefore as unknown as JsonObject[])
+  expect(before, 'thiết bị không khai ngõ ra nào — phép so zero-output vô nghĩa').not.toBe('[]')
+
+  const session = await responseJSON(await request.post('/api/v1/programming/simulation/sessions', {
+    headers: mutationHeaders(token),
+    data: {
+      schemaVersion: '1.0', controllerId: controllerID, projectId: projectID,
+      sourceDraftRevisionId: activeRevisionID, sourceContentSha256: contentHash
+    }
+  }), 201)
+  const sessionID = session.sessionId as string
+  expect(session.state).toBe('PAUSED')
+  expect(session.workerVersion).toBeTruthy()
+
+  let etag = session.etag as string
+  try {
+    for (let tick = 1; tick <= 3; tick += 1) {
+      const stepped = await responseJSON(await request.post(
+        `/api/v1/programming/simulation/sessions/${sessionID}/actions`,
+        { headers: mutationHeaders(token, { 'if-match': etag }),
+          data: { schemaVersion: '1.0', action: 'STEP_CYCLE' } }), 200)
+      etag = stepped.etag as string
+      // Đồng hồ ẢO tiến đúng một base tick mỗi nhịp; đồng hồ thật không liên quan.
+      expect(stepped.virtualTimeMs).toBe(String(tick * 1000))
+      expect(stepped.observationSequence).toBe(String(tick))
+    }
+
+    const frame = await responseJSON(await request.get(
+      `/api/v1/programming/simulation/sessions/${sessionID}/observations`,
+      { headers: readHeaders(token) }), 200)
+    expect((frame.observations as unknown[]).length).toBeGreaterThan(0)
+
+    // Trong lúc phiên đang chạy: Active/LKG và ngõ ra phải đứng yên.
+    const runtimeDuring = await responseJSON(
+      await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) }), 200)
+    expect(runtimeDuring.activeRevisionId).toBe(activeRevisionID)
+    expect(runtimeDuring.lkgRevisionId).toBe(runtimeBefore.lkgRevisionId)
+    const outputsDuring = await responseJSON(
+      await request.get('/api/v1/points', { headers: readHeaders(token) }), 200) as unknown as JsonObject[]
+    expect(outputSnapshot(outputsDuring), 'ngõ ra đổi trong lúc mô phỏng').toBe(before)
+  } finally {
+    await request.delete(`/api/v1/programming/simulation/sessions/${sessionID}`,
+      { headers: mutationHeaders(token, { 'if-match': etag }) })
+  }
+
+  /* Slot quota phải được nhả sau khi dừng. Đây là phép kiểm rò tiến trình mà
+     một client HTTP làm được: nếu worker cũ còn sống, phiên thứ hai nhận
+     `PRG-SIM-QUOTA` chứ không mở được. */
+  const second = await request.post('/api/v1/programming/simulation/sessions', {
+    headers: mutationHeaders(token),
+    data: {
+      schemaVersion: '1.0', controllerId: controllerID, projectId: projectID,
+      sourceDraftRevisionId: activeRevisionID, sourceContentSha256: contentHash
+    }
+  })
+  const secondBody = await second.text()
+  expect(second.status(), secondBody).toBe(201)
+  const secondSession = JSON.parse(secondBody) as JsonObject
+  await request.delete(`/api/v1/programming/simulation/sessions/${secondSession.sessionId as string}`,
+    { headers: mutationHeaders(token, { 'if-match': secondSession.etag as string }) })
+
+  const runtimeAfter = await responseJSON(
+    await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) }), 200)
+  expect(runtimeAfter.activeRevisionId).toBe(activeRevisionID)
+  const outputsAfter = await responseJSON(
+    await request.get('/api/v1/points', { headers: readHeaders(token) }), 200) as unknown as JsonObject[]
+  expect(outputSnapshot(outputsAfter), 'ngõ ra đổi sau phiên mô phỏng').toBe(before)
+})
+
+/**
+ * `T59-817` / `VS-PROG-U15` — bốn mutation mô phỏng, ba vai không đủ quyền, đo
+ * trên chính thiết bị.
+ *
+ * `VS-PROG-U15` đòi "viewer/operator mutations 403". Case này thêm `engineer`
+ * vào phép đo, và đó là vai QUAN TRỌNG nhất trong ba: nó có `program.edit`, nên
+ * trước `T59-816` nó đi qua được lớp uỷ quyền ngoài rồi mới bị lớp trong từ
+ * chối. Hai lớp nói hai điều khác nhau về cùng một ranh giới là trạng thái tệ
+ * nhất, vì bảng route — thứ người ta đọc để biết ai bị chặn — khi ấy nói sai.
+ */
+test('T59-817: viewer/operator/engineer đều không mở được phiên mô phỏng trên thiết bị', async ({ request, playwright }) => {
+  test.setTimeout(180_000)
+  const token = await loginAPI(request)
+
+  const capabilities = await responseJSON(
+    await request.get('/api/v1/programming/capabilities', { headers: readHeaders(token) }), 200)
+  const simulation = (capabilities.workspaceModes as JsonObject | undefined)?.simulation as JsonObject | undefined
+  test.skip(simulation?.supported !== true, 'thiết bị chưa cài worker mô phỏng')
+
+  const runtime = await responseJSON(
+    await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) }), 200)
+  const controllerID = runtime.controllerId as string
+
+  const suffix = Date.now().toString(36)
+  const accounts = [
+    { role: 'viewer', username: `simv${suffix}` },
+    { role: 'operator', username: `simo${suffix}` },
+    { role: 'engineer', username: `sime${suffix}` },
+  ]
+  const password = 'SimProbe#2026'
+  const created: string[] = []
+
+  try {
+    for (const account of accounts) {
+      const response = await request.post('/api/v1/users', {
+        headers: mutationHeaders(token),
+        data: { username: account.username, role: account.role, password }
+      })
+      expect(response.status(), await response.text()).toBe(201)
+      created.push(account.username)
+    }
+
+    for (const account of accounts) {
+      const context = await playwright.request.newContext({ baseURL: test.info().project.use.baseURL })
+      try {
+        const login = await responseJSON(await context.post('/api/v1/auth/login', {
+          data: { username: account.username, password }
+        }), 200)
+        const roleToken = login.token as string
+
+        /* Bốn mutation của họ Simulation. Đếm ở đây thay vì viết tay từng dòng:
+           thêm một route mới mà quên bảo vệ sẽ không tự lọt qua case này —
+           nhưng nó cũng không tự bị bắt, nên `security_matrix_test.go` mới là
+           phép đếm đầy đủ. Case này là phép đo TRÊN THIẾT BỊ cho cùng ranh giới. */
+        const attempts: { method: string; path: string; data?: JsonObject }[] = [
+          { method: 'post', path: '/api/v1/programming/simulation/sessions',
+            data: { schemaVersion: '1.0', controllerId: controllerID, projectId: PROGRAM_ID,
+              sourceDraftRevisionId: PROGRAM_ID, sourceContentSha256: 'a'.repeat(64) } },
+          { method: 'delete', path: `/api/v1/programming/simulation/sessions/${PROGRAM_ID}` },
+          { method: 'post', path: `/api/v1/programming/simulation/sessions/${PROGRAM_ID}/actions`,
+            data: { schemaVersion: '1.0', action: 'RUN' } },
+          { method: 'put', path: `/api/v1/programming/simulation/sessions/${PROGRAM_ID}/inputs/X`,
+            data: { schemaVersion: '1.0', dataType: 'REAL', value: 1 } },
+        ]
+
+        for (const attempt of attempts) {
+          const headers = {
+            authorization: `Bearer ${roleToken}`,
+            'content-type': 'application/json',
+            'x-idempotency-key': nextUUID('92000000'),
+            'x-correlation-id': `t59817-rbac-${suffix}`,
+            'if-match': '"1"',
+          }
+          const response = attempt.method === 'delete'
+            ? await context.delete(attempt.path, { headers })
+            : attempt.method === 'put'
+              ? await context.put(attempt.path, { headers, data: attempt.data })
+              : await context.post(attempt.path, { headers, data: attempt.data })
+          const body = await response.text()
+          expect(response.status(),
+            `${account.role} ${attempt.method.toUpperCase()} ${attempt.path}: ${body}`).toBe(403)
+          /* 403 phải tới TRƯỚC khi chạm store: nếu handler đã chạy rồi mới từ
+             chối, một vai không đủ quyền vẫn biết được phiên nào tồn tại. */
+          expect(body, `${account.role}: envelope lộ chi tiết phiên`).not.toContain('sessionId')
+        }
+      } finally {
+        await context.dispose()
+      }
+    }
+  } finally {
+    /* Tài khoản bỏ lại trên một controller dùng chung là quyền truy cập thừa,
+       không phải rác vô hại. Dọn trong `finally` để nó vẫn chạy khi assert đỏ. */
+    for (const username of created) {
+      const removed = await request.delete(`/api/v1/users/${username}`, { headers: mutationHeaders(token) })
+      expect([200, 204], `không dọn được tài khoản tạm ${username}`).toContain(removed.status())
+    }
+  }
 })

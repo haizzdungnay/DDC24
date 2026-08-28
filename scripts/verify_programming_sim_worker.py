@@ -25,6 +25,7 @@ Exit `0` khi tất cả đạt, `1` khi có vi phạm, `2` khi thiếu công c�
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -267,19 +268,55 @@ def check_semantics(binary: Path, package: bytes) -> None:
     check(worker.close() == 0, "worker phải thoát 0 sau STOP")
 
 
+def frame_signature(frames: list[dict]) -> list:
+    return [[frame.get("virtualTimeMs"),
+             sorted((item["observationId"], item["value"])
+                    for item in frame.get("observations", []))]
+            for frame in frames]
+
+
+def replay_hash(frames: list[dict]) -> str:
+    """Băm chuỗi quan sát.
+
+    Băm thay vì so danh sách: `VS-PROG-U15` đòi bằng chứng dạng "N/N hash equal",
+    và một chuỗi hex ghi vào record đọc được bởi người duyệt, còn một danh sách
+    frame thì không.
+    """
+    canonical = json.dumps(frame_signature(frames), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def check_determinism(binary: Path, package: bytes) -> None:
     inputs = [("Fast.Setpoint", "REAL", 3.25)]
     first = run_session(binary, package, inputs, steps=6)
     second = run_session(binary, package, inputs, steps=6)
 
-    def signature(frames: list[dict]) -> list:
-        return [[frame.get("virtualTimeMs"),
-                 sorted((item["observationId"], item["value"])
-                        for item in frame.get("observations", []))]
-                for frame in frames]
-
-    check(signature(first) == signature(second),
+    check(frame_signature(first) == frame_signature(second),
           "hai tiến trình worker độc lập cho kết quả khác nhau — phiên không còn tất định")
+
+
+def check_replay(binary: Path, package: bytes, replays: int) -> str:
+    """`VS-PROG-U15` — N lần phát lại phải cho MỘT hash.
+
+    Vì sao lặp nhiều lần thay vì hai: thứ đang săn là phi-tất-định *hiếm* — thứ
+    tự lặp trên map, một ô nhớ chưa khởi tạo, một phép làm tròn phụ thuộc trạng
+    thái FPU trước đó. Hai lần chạy trùng nhau chứng minh rất ít; một trăm lần
+    trùng nhau thu hẹp đáng kể khoảng còn lại.
+
+    Mỗi lần phát lại là một TIẾN TRÌNH worker mới. Chạy lại trong cùng tiến
+    trình sẽ bỏ lọt đúng lớp lỗi mà phiên mô phỏng dễ mắc nhất: trạng thái sót
+    lại giữa hai lần chạy.
+    """
+    inputs = [("Fast.Setpoint", "REAL", 3.25)]
+    hashes: dict[str, int] = {}
+    for _ in range(replays):
+        digest = replay_hash(run_session(binary, package, inputs, steps=6))
+        hashes[digest] = hashes.get(digest, 0) + 1
+    check(len(hashes) == 1,
+          f"{replays} lần phát lại cho {len(hashes)} hash khác nhau: {hashes}")
+    winner = max(hashes, key=lambda key: hashes[key])
+    print(f"  replay: {hashes[winner]}/{replays} hash bằng nhau ({winner[:16]}…)")
+    return winner
 
 
 def main() -> int:
@@ -287,6 +324,8 @@ def main() -> int:
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--compile-cli", required=True, type=Path)
     parser.add_argument("--package-cli", required=True, type=Path)
+    parser.add_argument("--replays", type=int, default=100,
+                        help="số lần phát lại cho phép kiểm tất định (VS-PROG-U15 đòi 100)")
     args = parser.parse_args()
 
     for path in (args.binary, args.compile_cli, args.package_cli):
@@ -300,6 +339,7 @@ def main() -> int:
         package = build_package(args.compile_cli, args.package_cli, Path(workdir))
         check_semantics(args.binary, package)
         check_determinism(args.binary, package)
+        check_replay(args.binary, package, max(2, args.replays))
 
     if failures:
         print("FAIL: sim worker vi phạm hợp đồng:", file=sys.stderr)
@@ -307,7 +347,7 @@ def main() -> int:
             print(f"  - {item}", file=sys.stderr)
         return 1
     print("PASS: sim worker — hàng rào chặn mọi probe production, bắt tay fail-closed, "
-          "ngữ nghĩa lệnh đúng và hai tiến trình độc lập cho kết quả giống hệt nhau")
+          "ngữ nghĩa lệnh đúng, và mọi lần phát lại cho cùng một hash quan sát")
     return 0
 
 

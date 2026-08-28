@@ -20,6 +20,11 @@ const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const ACTIVE_REVISION_ID = '22222222-2222-4222-8222-222222222222'
 const POU_OBJECT_ID = '44444444-4444-4444-8444-444444444444'
 const PROGRAM_ID = '66666666-6666-4666-8666-666666666666'
+/* `T59-816` — bản đã niêm phong mà phiên mô phỏng chạy, và ID phiên. Cố ý KHÁC
+   `ACTIVE_REVISION_ID`: một phiên mô phỏng chạy được trên bản chưa hề điều
+   khiển tủ, và mọi nhãn nguồn phải nói đúng bản nào. */
+const SIM_REVISION_ID = '77777777-7777-4777-8777-777777777777'
+const SIM_SESSION_ID = '88888888-8888-4888-8888-888888888888'
 
 interface MockProgram {
   objectId?: string
@@ -55,6 +60,19 @@ interface MockState {
   traceRunning: boolean
   /** `T59-812`: bộ đếm chỉ dùng để chứng minh subscription LIVE đã cleanup. */
   monitorRequests?: number
+  /**
+   * `T59-816`: phiên mô phỏng do thiết bị công bố.
+   *
+   * `undefined` = thiết bị KHÔNG công bố khả năng mô phỏng (mặc định của mọi
+   * case cũ). Bật lên chỉ ở lane SIMULATE để phần còn lại của bộ e2e vẫn kiểm
+   * đúng đường "chưa hỗ trợ".
+   */
+  simulation?: {
+    supported: boolean
+    session: null | { state: string; sequence: number; virtualTimeMs: number; tick: number }
+    /** Đếm mọi lần chạm vào đường điều khiển THẬT — phải đứng yên suốt phiên. */
+    controlPathWrites: number
+  }
 }
 
 interface BrowserFailures {
@@ -163,6 +181,25 @@ async function installProgrammingMocks(page: Page, state: MockState) {
     if (method === 'GET' && path === '/capabilities') {
       return json(route, {
         schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY',
+        ...(state.simulation?.supported
+          ? {
+              workspaceModes: {
+                simulation: {
+                  supported: true, workerVersion: 'sim-worker-e2e-1',
+                  /* `T59-816`: danh sách vai này do SERVER công bố và FE chỉ
+                     đọc. Mock phải nói đúng ranh giới `ADR-053` (admin-only),
+                     nếu không lane e2e sẽ xác nhận một bề mặt rộng hơn bề mặt
+                     thật. */
+                  mutationRoles: ['admin'],
+                  limits: {
+                    maxConcurrentSessionsPerController: 1, idleTtlSeconds: 900, hardTtlSeconds: 3600,
+                    maxRssMiB: 128, maxCpuPercentOneCore: 50, maxActionsPerSecond: 10,
+                    maxTraceSamples: 1024, maxVirtualInputs: 64, workerCommandTimeoutMs: 2000,
+                  },
+                },
+              },
+            }
+          : {}),
         languages: ['ST', 'FBD'], types: ['BOOL', 'INT', 'DINT', 'UINT', 'REAL', 'TIME'], taskPeriodsMs: [1000, 5000, 30000],
         limits: { projectsPerController: 1, tasks: 1, stSourceBytes: 65536, variables: 512, statements: 4096, fbdBlocks: 256, fbdConnections: 512, artifactBytes: 1048576, bindings: 256 }
       })
@@ -212,7 +249,118 @@ async function installProgrammingMocks(page: Page, state: MockState) {
       return json(route, { items: [{ projectId: PROJECT_ID, name: 'AHU-01', etag: draftETag(state), activeRevisionId: ACTIVE_REVISION_ID, draftRevisionId: state.draft.project.projectId, updatedAt: new Date().toISOString() }] })
     }
     if (method === 'GET' && path === `/projects/${PROJECT_ID}`) {
-      return json(route, { projectId: PROJECT_ID, name: 'AHU-01', etag: draftETag(state), activeRevisionId: ACTIVE_REVISION_ID, draftRevisionId: state.draft.project.projectId, updatedAt: new Date().toISOString(), draft: state.draft })
+      return json(route, { projectId: PROJECT_ID, name: 'AHU-01', etag: draftETag(state), activeRevisionId: ACTIVE_REVISION_ID, draftRevisionId: state.draft.project.projectId, updatedAt: new Date().toISOString(), draft: state.draft,
+        /* `T59-816`: phiên mô phỏng chỉ mở được trên Revision đã Check ĐẠT.
+           Không có `latestCheck`, bề mặt phải nói "chưa có bản đã kiểm" chứ
+           không được tự chọn Draft. */
+        ...(state.simulation?.supported
+          ? { latestCheck: { checkId: 'check-sim-0001', revisionId: SIM_REVISION_ID, state: 'PASSED' } }
+          : {}) })
+    }
+
+    /* `T59-816` — họ route Simulation R3.
+       Mock này cố ý KHÔNG mô phỏng ngữ nghĩa ST: nó trả một chuỗi khung tất
+       định. Thứ lane e2e kiểm là bề mặt (đọc-lại, nhãn nguồn, a11y, và việc
+       KHÔNG có mutation nào rơi vào đường điều khiển thật), còn ngữ nghĩa
+       worker đã có cổng riêng chạy binary thật. */
+    if (path.startsWith('/simulation/sessions')) {
+      const simulation = state.simulation
+      if (!simulation?.supported) return json(route, { code: 'PRG-SIM-UNSUPPORTED-001' }, 409)
+
+      const view = () => {
+        const session = simulation.session
+        if (session === null) return null
+        return {
+          sessionId: SIM_SESSION_ID, controllerId: 'foxlinx-lab', projectId: PROJECT_ID,
+          sourceDraftRevisionId: SIM_REVISION_ID, sourceContentSha256: 'b'.repeat(64),
+          state: session.state, sessionSequence: String(session.sequence),
+          etag: `"${SIM_SESSION_ID}:${session.sequence}"`,
+          baseTickMs: 1000, virtualTimeMs: String(session.virtualTimeMs), speed: 1,
+          observationSequence: String(session.tick), resetEpoch: '0',
+          createdAt: '2026-08-28T00:00:00Z', lastActivityAt: '2026-08-28T00:00:00Z',
+          idleExpiresAt: '2026-08-28T00:15:00Z', hardExpiresAt: '2026-08-28T01:00:00Z',
+          failureCode: null, workerVersion: 'sim-worker-e2e-1',
+          simulationInputs: [{
+            observationId: 'AHU.Setpoint', programId: PROGRAM_ID, variable: 'Setpoint',
+            sourceKind: 'VAR_INPUT', dataType: 'REAL', unit: '°C', min: 10, max: 30,
+            simulationWritable: true,
+          }],
+        }
+      }
+
+      if (method === 'POST' && path === '/simulation/sessions') {
+        simulation.session = { state: 'PAUSED', sequence: 1, virtualTimeMs: 0, tick: 0 }
+        return json(route, view(), 201)
+      }
+      if (method === 'GET' && path.endsWith('/observations')) {
+        const session = simulation.session
+        return json(route, {
+          virtualTimeMs: session?.virtualTimeMs ?? 0,
+          snapshotSequence: session?.tick ?? 0,
+          resetEpoch: 0,
+          observations: session === null || session.tick === 0 ? [] : [
+            { observationId: 'AHU.Setpoint', programId: PROGRAM_ID, variable: 'Setpoint',
+              kind: 'INPUT', dataType: 'REAL', quality: 'GOOD', value: 22.5 },
+            { observationId: 'AHU.FanCommand', programId: PROGRAM_ID, variable: 'FanCommand',
+              kind: 'OUTPUT', dataType: 'BOOL', quality: 'GOOD', value: true },
+            /* Một ô CHƯA tính được. Nó phải hiện `—`, không bao giờ `0`. */
+            { observationId: 'AHU.HeatDemand', programId: PROGRAM_ID, variable: 'HeatDemand',
+              kind: 'OUTPUT', dataType: 'REAL', quality: 'UNAVAILABLE', value: null },
+          ],
+        })
+      }
+      if (method === 'POST' && path.endsWith('/actions')) {
+        const session = simulation.session
+        if (session === null) return json(route, { code: 'PRG-ERR-NOTFOUND-001' }, 404)
+        const body = request.postDataJSON() as { action?: string }
+        session.sequence += 1
+        if (body.action === 'STEP_CYCLE') {
+          session.tick += 1
+          session.virtualTimeMs += 1000
+          session.state = 'PAUSED'
+        }
+        if (body.action === 'RUN') session.state = 'RUNNING'
+        if (body.action === 'PAUSE') session.state = 'PAUSED'
+        return json(route, view())
+      }
+      if (method === 'PUT' && path.includes('/inputs/')) {
+        const session = simulation.session
+        if (session === null) return json(route, { code: 'PRG-ERR-NOTFOUND-001' }, 404)
+        session.sequence += 1
+        return json(route, view())
+      }
+      if (method === 'DELETE') {
+        if (simulation.session !== null) {
+          simulation.session.state = 'STOPPED'
+          simulation.session.sequence += 1
+        }
+        const stopped = view()
+        simulation.session = null
+        return json(route, stopped)
+      }
+      if (method === 'GET') {
+        const current = view()
+        if (current === null) return json(route, { code: 'PRG-ERR-NOTFOUND-001' }, 404)
+        return json(route, current)
+      }
+    }
+
+    /* Bản đã niêm phong mà PHIÊN chạy — cố ý KHÁC cả Draft lẫn Active, để
+       chứng minh được workbench đang đọc đúng tài liệu nào. */
+    if (method === 'GET' && path === `/revisions/${SIM_REVISION_ID}`) {
+      return json(route, {
+        revisionId: SIM_REVISION_ID, sequence: 2, contentHash: 'b'.repeat(64),
+        snapshot: {
+          objects: [{
+            objectId: POU_OBJECT_ID, kind: 'PROGRAM',
+            payload: {
+              objectId: POU_OBJECT_ID, kind: 'PROGRAM', name: 'Điều khiển AHU', language: 'ST',
+              source: 'PROGRAM AHU_DA_NIEM_PHONG\nEND_PROGRAM\n',
+              programConfig: { programId: PROGRAM_ID, periodMs: 1000 },
+            },
+          }],
+        },
+      })
     }
     if (method === 'GET' && path === `/projects/${PROJECT_ID}/programs`) {
       return json(route, {
@@ -1553,5 +1701,93 @@ test.describe('PGM-02 hardening LIVE (T59-812)', () => {
     const afterUnsubscribe = state.monitorRequests ?? 0
     await page.waitForTimeout(2_200)
     expect(state.monitorRequests).toBe(afterUnsubscribe)
+  })
+})
+
+/**
+ * `T59-816` / `PGM02-V22-WP-06-R3` + `WP-11-R3` — hardening SIMULATE.
+ *
+ * Lane này chạy trên một thiết bị CÓ công bố khả năng mô phỏng. Đó là điểm khác
+ * duy nhất so với các case cũ, và nó mở ra đúng phần bề mặt mà `T59-815` giao
+ * nhưng chưa có ai đi hết bằng một trình duyệt thật: mở phiên, chạy một nhịp,
+ * đọc giá trị, rồi dừng.
+ *
+ * Ba câu hỏi bộ này trả lời, và cả ba đều là câu hỏi an toàn chứ không phải
+ * thẩm mỹ:
+ *
+ * 1. Màn hình có nói rõ số đang hiện đến từ MÔ PHỎNG không? Giá trị mô phỏng và
+ *    giá trị của tủ trông giống hệt nhau.
+ * 2. Một ô chưa tính được có hiện `—` thay vì `0` không?
+ * 3. Suốt cả phiên, có mutation nào rơi vào đường điều khiển thật không?
+ */
+test.describe('PGM-02 hardening SIMULATE (T59-816)', () => {
+  function simulationState(): MockState {
+    return {
+      etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED',
+      commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false,
+      simulation: { supported: true, session: null, controlPathWrites: 0 },
+    }
+  }
+
+  test('phiên mô phỏng đi hết vòng và KHÔNG chạm đường điều khiển thật', async ({ page }) => {
+    const state = simulationState()
+    await installProgrammingMocks(page, state)
+    const failures = observeBrowserFailures(page)
+    await login(page)
+
+    /* Đếm mọi request có thể đổi gói đang chạy. Đếm ở lớp mạng chứ không tin
+       vào giao diện: một nút bị ẩn vẫn không chứng minh được rằng không có
+       đường nào khác gọi tới. */
+    const controlPathCalls: string[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      const method = request.method()
+      if (method === 'GET') return
+      if (!url.pathname.startsWith('/api/v1/programming')) return
+      if (url.pathname.includes('/simulation/')) return
+      controlPathCalls.push(`${method} ${url.pathname}`)
+    })
+
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=SIMULATE`)
+
+    await page.getByRole('button', { name: /Mở phiên mô phỏng|Start simulation session/ }).click()
+
+    /* Nguồn hiện trên màn hình phải là bản đã NIÊM PHONG của phiên, không phải
+       Draft đang gõ và cũng không phải bản đang chạy trên tủ. */
+    const sealed = page.getByLabel(/Mã nguồn đang mô phỏng|Simulated source/)
+    await expect(sealed).toHaveValue(/AHU_DA_NIEM_PHONG/)
+
+    await page.getByRole('button', { name: /^(Một nhịp|Step)$/ }).click()
+
+    /* Khay Watch của workbench dùng chung phải khai nguồn là MÔ PHỎNG. */
+    const watchTab = page.getByRole('tab', { name: /Watch \((Mô phỏng|Simulation)\)/ })
+    await expect(watchTab).toBeVisible()
+    await watchTab.click()
+    const panel = page.getByRole('tabpanel')
+    await expect(panel.getByText('22.5')).toBeVisible()
+    // `UNAVAILABLE` phải hiện `—`. Vẽ nó thành 0 tạo một cú rơi thẳng đứng
+    // trông hệt như thiết bị vừa tắt.
+    await expect(panel.getByText('—').first()).toBeVisible()
+
+    await page.getByRole('button', { name: /Dừng phiên|Stop session/ }).click()
+
+    expect(controlPathCalls, 'phiên mô phỏng đã chạm đường điều khiển thật').toEqual([])
+    expect(state.commissionCount).toBe(0)
+    expect(state.restoreCount).toBe(0)
+    expect(state.retainResetCount).toBe(0)
+    expectNoBrowserFailures(failures, 'phiên SIMULATE')
+  })
+
+  test('bề mặt SIMULATE không có vi phạm axe nghiêm trọng', async ({ page }) => {
+    const state = simulationState()
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=SIMULATE`)
+    await page.getByRole('button', { name: /Mở phiên mô phỏng|Start simulation session/ }).click()
+    await expect(page.getByLabel(/Mã nguồn đang mô phỏng|Simulated source/)).toBeVisible()
+
+    const axe = await new AxeBuilder({ page }).analyze()
+    const severe = axe.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))
+    expect(severe, 'SIMULATE: axe serious/critical').toEqual([])
   })
 })
