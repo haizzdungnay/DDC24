@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { GitCompare, X } from 'lucide-react'
 
 import { useI18n } from '../../../../shared/i18n'
+import { diffCounts, diffLines, type LineDiffResult } from './lineDiff'
 import { Button } from '../../../../shared/components/Button'
 import type { ProgrammingRevisionChanges } from '../../model/types'
 import {
@@ -373,7 +374,19 @@ function CompareDetail({
         )}
       </div>
 
-      {entry.kind === 'ST' ? (
+      {entry.kind === 'ST' ? (() => {
+        /* Tính ngay tại chỗ vẽ, không nhét vào `compareModel`: mô hình đó là
+           phép chiếu THUẦN từ phản hồi máy chủ và dùng chung cho cả danh sách
+           bên trái, nơi không ai cần bảng diff. Tính ở đó là trả tiền LCS cho
+           mọi hunk trong khi người dùng chỉ mở một. */
+        const diff = diffLines(
+          entry.hunk.beforeText,
+          entry.hunk.afterText,
+          entry.hunk.beforeStartLine,
+          entry.hunk.afterStartLine,
+        )
+        const counts = diffCounts(diff)
+        return (
         <div className="mt-2 grid gap-2 md:grid-cols-2">
           <ReadOnlySide
             testId="compare-detail-before"
@@ -381,6 +394,8 @@ function CompareDetail({
             startLine={entry.hunk.beforeStartLine}
             lineCount={entry.hunk.beforeLineCount}
             lines={entry.hunk.beforeText}
+            side="before"
+            diff={diff}
           />
           <ReadOnlySide
             testId="compare-detail-after"
@@ -388,6 +403,8 @@ function CompareDetail({
             startLine={entry.hunk.afterStartLine}
             lineCount={entry.hunk.afterLineCount}
             lines={entry.hunk.afterText}
+            side="after"
+            diff={diff}
           />
           {entry.hunk.truncated && (
             <p className="md:col-span-2 text-xs text-[var(--c-warn-fg)]">
@@ -401,8 +418,19 @@ function CompareDetail({
                     'The file is too large for a line-level diff — this is the coarse conclusion "the whole file changed", not a detailed difference.')}
             </p>
           )}
+          {diff.coarse && (
+            <p className="md:col-span-2 text-xs text-[var(--c-warn-fg)]">
+              {pick('Đoạn này quá dài để so từng dòng — hai phía được đánh dấu nguyên khối.',
+                    'This hunk is too long for a line-level diff — both sides are marked as whole blocks.')}
+            </p>
+          )}
+          <p className="md:col-span-2 text-[11px] text-[var(--c-text-dim)]">
+            {pick(`+${counts.added} dòng thêm · −${counts.removed} dòng bớt`,
+                  `+${counts.added} added · −${counts.removed} removed`)}
+          </p>
         </div>
-      ) : (
+        )
+      })() : (
         <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <dt className="text-[var(--c-text-dim)]">{pick('Thành phần', 'Element')}</dt>
           <dd className="text-[var(--c-text)]">{entry.change.element}</dd>
@@ -416,10 +444,30 @@ function CompareDetail({
   )
 }
 
+/**
+ * `DEV-PROG-018` — một phía của khay So sánh, có TÔ DÒNG khác biệt.
+ *
+ * Trước lát này hai phía là hai khối chữ trơn: người đọc phải tự dò xem dòng
+ * nào đổi, và với một hunk vài chục dòng đó đúng là việc máy làm được.
+ *
+ * Mỗi phía chỉ vẽ dòng THUỘC VỀ NÓ: phía `before` bỏ qua dòng được THÊM, phía
+ * `after` bỏ qua dòng bị BỚT. Vẽ cả hai ở cả hai phía sẽ làm số dòng hiển thị
+ * không còn khớp số dòng thật của tệp — mà số dòng thật mới là thứ người dùng
+ * dùng để mở đúng chỗ trong trình soạn thảo.
+ */
 function ReadOnlySide({
-  title, startLine, lineCount, lines, testId,
-}: { title: string; startLine: number; lineCount: number; lines: string[]; testId: string }) {
+  title, startLine, lineCount, lines, testId, side, diff,
+}: {
+  title: string
+  startLine: number
+  lineCount: number
+  lines: string[]
+  testId: string
+  side: 'before' | 'after'
+  diff: LineDiffResult
+}) {
   const { pick } = useI18n()
+  const rows = diff.rows.filter((row) => (side === 'before' ? row.kind !== 'ADDED' : row.kind !== 'REMOVED'))
   return (
     <div data-testid={testId}>
       <p className="text-[11px] uppercase text-[var(--c-text-dim)]">
@@ -428,9 +476,39 @@ function ReadOnlySide({
       {lines.length === 0 ? (
         <p className="mt-1 text-xs italic text-[var(--c-text-dim)]">{pick('(không có dòng nào ở phía này)', '(no lines on this side)')}</p>
       ) : (
-        <pre className="mt-1 overflow-x-auto rounded-[var(--radius)] bg-[var(--c-surface-2)] p-2 font-mono text-[11px] text-[var(--c-text)]">
-          {lines.join('\n')}
-        </pre>
+        <ol className="mt-1 overflow-x-auto rounded-[var(--radius)] bg-[var(--c-surface-2)] p-2 font-mono text-[11px] text-[var(--c-text)]">
+          {rows.map((row, index) => {
+            const changed = row.kind !== 'SAME'
+            /* Dấu `+`/`−` đứng trước mỗi dòng: màu KHÔNG bao giờ là tín hiệu duy
+               nhất, và một ảnh chụp đen trắng trong hồ sơ nghiệm thu vẫn phải
+               đọc được đâu là dòng thêm, đâu là dòng bớt. */
+            const marker = row.kind === 'ADDED' ? '+' : row.kind === 'REMOVED' ? '\u2212' : ' '
+            return (
+              <li
+                key={`${side}-${index}`}
+                data-diff={row.kind}
+                className={`whitespace-pre ${
+                  row.kind === 'ADDED'
+                    ? 'bg-[var(--c-good-bg)] text-[var(--c-good-fg)]'
+                    : row.kind === 'REMOVED'
+                      ? 'bg-[var(--c-fault-bg)] text-[var(--c-fault-fg)]'
+                      : ''
+                }`}
+              >
+                <span className="select-none text-[var(--c-text-dim)]">
+                  {String(side === 'before' ? row.beforeLine ?? '' : row.afterLine ?? '').padStart(5, ' ')}
+                  {' '}{marker}{' '}
+                </span>
+                {row.text}
+                {changed && (
+                  <span className="sr-only">
+                    {row.kind === 'ADDED' ? pick(' (dòng thêm)', ' (added line)') : pick(' (dòng bớt)', ' (removed line)')}
+                  </span>
+                )}
+              </li>
+            )
+          })}
+        </ol>
       )}
     </div>
   )

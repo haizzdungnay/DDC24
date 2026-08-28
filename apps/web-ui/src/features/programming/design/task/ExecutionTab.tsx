@@ -13,6 +13,28 @@ const ALLOWED_PERIODS = [1000, 5000, 30000] as const
  * (base step/watchdog/ngân sách) là placeholder chỉ-đọc: các trường đó đến
  * từ Core runtime profile, chưa có route đọc ở P5 (UX §3.1 — không đặt trên
  * luồng chính, chỉ ở đây khi thật sự có producer).
+ *
+ * `DEV-PROG-015` — QUYẾT ĐỊNH: GIỮ TAB NÀY, KHÔNG ẨN, KHÔNG GỘP.
+ *
+ * Đề bài nêu tab này không có trong mockup và hỏi giữ / ẩn / gộp vào
+ * `Runtime & Bảo trì`. Ba lựa chọn không tương đương:
+ *
+ * - **Gộp vào Runtime & Bảo trì là SAI RANH GIỚI.** Tab này sửa `task` trong
+ *   DRAFT — dữ liệu thiết kế, chỉ có hiệu lực sau khi Kiểm tra và Đưa vào vận
+ *   hành. `Runtime & Bảo trì` sở hữu ý định bật/tắt và số đo của gói ĐANG CHẠY.
+ *   Đặt một ô sửa Draft giữa các số liệu runtime là mời người vận hành đổi chu
+ *   kỳ trên một trang mà mọi thứ khác đều có hiệu lực tức thì — và nó sẽ không
+ *   có hiệu lực cho tới lần Commission kế tiếp, không dấu hiệu nào nói ra.
+ * - **Ẩn đi là MẤT MỘT LỐI VÀO KHÔNG CÓ CHỖ THAY.** Chu kỳ Task và thứ tự
+ *   Program không sửa được ở bất kỳ bề mặt nào khác. Ẩn tab nghĩa là hai thuộc
+ *   tính của Draft chỉ đổi được bằng API.
+ * - **Mockup không có nó là bằng chứng YẾU.** Mockup vẽ một màn hình soạn thảo;
+ *   nó không phủ định sự tồn tại của cấu hình lịch chạy, và không có phát biểu
+ *   nào trong đề bài nói lịch chạy chuyển đi đâu.
+ *
+ * Xét lại khi — và chỉ khi — chu kỳ chuyển sang thuộc TỪNG Program (Draft v2 đã
+ * có `programs[].periodMs`): lúc đó ô chu kỳ thuộc về Inspector của POU và tab
+ * này chỉ còn thứ tự thực thi.
  */
 export function ExecutionTab({
   document,

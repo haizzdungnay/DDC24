@@ -70,6 +70,19 @@ export function DesignWorkbench({
       reads: entry.occurrences.filter((item) => item.role === 'READ').length,
       writes: entry.occurrences.filter((item) => item.role === 'WRITE').length,
       onJump: () => onJumpToOffset(entry.declarationOffset, entry.name.length),
+      /* `DEV-PROG-017` — từng chỗ dùng kèm dòng và đoạn mã của dòng đó. Cắt
+         120 ký tự: một dòng ST dài hơn thế trong khay rộng ~700 px chỉ tràn ra,
+         và phần đuôi không giúp nhận ra dòng nào. */
+      occurrences: entry.occurrences.map((item) => {
+        const lineStart = source.lastIndexOf('\n', item.offset - 1) + 1
+        const lineEnd = source.indexOf('\n', item.offset)
+        return {
+          line: source.slice(0, item.offset).split('\n').length,
+          role: item.role,
+          preview: source.slice(lineStart, lineEnd === -1 ? source.length : lineEnd).trim().slice(0, 120),
+          onJump: () => onJumpToOffset(item.offset, entry.name.length),
+        }
+      }),
     }))
     /* `onJumpToOffset` cố ý KHÔNG nằm trong deps: nó là callback dựng mới mỗi
      * render ở trang cha, đưa vào đây thì memo không bao giờ trúng. Closure vẫn

@@ -37,12 +37,12 @@ import {
 import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeValueOverlay'
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
-import { QuickLibraryHost } from '../library/QuickLibraryPanel'
+import { LIBRARY_DRAG_TYPE, QuickLibraryHost } from '../library/QuickLibraryPanel'
 import { catalogEntries, type CatalogEntry } from '../library/libraryCatalog'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
 import { buildStReferenceIndex, stSymbolAt, type StCursorSymbol } from './stReferenceIndex'
-import { stHoverSymbolAtPoint, stVisualPositionAt, type StEditorTextMetrics } from './stHover'
+import { stDropOffsetAtPoint, stHoverSymbolAtPoint, stVisualPositionAt, type StEditorTextMetrics } from './stHover'
 import { PouTabBar } from './PouTabBar'
 import {
   activatePouTab, closePouTab, emptyPouTabs, isPouTabMissing, openPouTab, pouTabKey,
@@ -1105,6 +1105,33 @@ export function SourceEditor({
   const [goToDraft, setGoToDraft] = useState('')
   const goToInputRef = useRef<HTMLInputElement | null>(null)
 
+  /**
+   * `DEV-PROG-016` — offset văn bản dưới con trỏ của một sự kiện kéo/thả.
+   *
+   * Trả `null` khi chưa đo được bề rộng ký tự (font chưa tải, chưa layout):
+   * đoán một bề rộng sẽ thả khối vào một dòng KHÁC dòng người dùng nhắm, và
+   * chèn nhầm chỗ trong mã điều khiển tệ hơn hẳn không chèn.
+   */
+  function dropOffsetFrom(event: { clientX: number; clientY: number; currentTarget: HTMLTextAreaElement }): number | null {
+    if (charWidthRef.current <= 0 && hoverMeasureRef.current) {
+      const sample = hoverMeasureRef.current.getBoundingClientRect().width / HOVER_SAMPLE.length
+      if (sample > 0) charWidthRef.current = sample
+    }
+    if (charWidthRef.current <= 0) return null
+    const textarea = event.currentTarget
+    const rect = textarea.getBoundingClientRect()
+    return stDropOffsetAtPoint(
+      source,
+      {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        scrollLeft: textarea.scrollLeft,
+        scrollTop: textarea.scrollTop,
+      },
+      { ...HOVER_METRICS, charWidthPx: charWidthRef.current },
+    )
+  }
+
   function selectRange(offset: number, length: number) {
     const textarea = textareaRef.current
     if (!textarea) return
@@ -1868,6 +1895,39 @@ export function SourceEditor({
               if (next?.entry?.kind === 'FB_INSTANCE') onEnsureLibraryLoaded?.()
             }}
             onMouseLeave={() => setHoverSymbol(null)}
+            /* `DEV-PROG-016` — nhận khối kéo từ Thư viện nhanh.
+             *
+             * `onDragOver` phải `preventDefault()` mới cho thả; nó cũng dời con
+             * trỏ tới chỗ sắp thả, để người dùng THẤY nơi khối sẽ rơi vào trước
+             * khi buông tay. Thiếu phản hồi đó thì kéo-thả là một thao tác mù.
+             *
+             * `onDrop` cũng `preventDefault()` để trình duyệt KHÔNG tự chèn gì:
+             * việc chèn đi qua đúng `applyLibraryInsertion` như khi bấm chuột,
+             * nên khai báo instance và một-bước-hoàn-tác giữ nguyên. */
+            onDragOver={(event) => {
+              if (!canEdit || !event.dataTransfer.types.includes(LIBRARY_DRAG_TYPE)) return
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'copy'
+              const offset = dropOffsetFrom(event)
+              if (offset !== null) selectRange(offset, 0)
+            }}
+            onDrop={(event) => {
+              if (!canEdit || !event.dataTransfer.types.includes(LIBRARY_DRAG_TYPE)) return
+              event.preventDefault()
+              const entryId = event.dataTransfer.getData(LIBRARY_DRAG_TYPE)
+              const entry = libraryEntries?.find((candidate) => candidate.entryId === entryId)
+              /* Không tìm thấy mục ⇒ không làm gì. Catalog có thể đã tải lại
+                 giữa lúc kéo, và chèn "một khối nào đó" thay cho khối người
+                 dùng chọn còn tệ hơn không chèn. */
+              if (!entry) return
+              const offset = dropOffsetFrom(event)
+              if (offset !== null) selectRange(offset, 0)
+              if (entry.stateful && collectDeclaredInstances(source, entry.name).length > 0) {
+                setPendingLibraryEntry(entry)
+                return
+              }
+              applyLibraryInsertion(entry)
+            }}
           />
           {/* Phần tử đo, không đọc được bằng trình đọc màn hình và không chiếm
               chỗ. Nó tồn tại chỉ để hover có một bề rộng ký tự THẬT. */}

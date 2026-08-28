@@ -206,3 +206,19 @@ describe('mobile navigation drawer', () => {
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true')
   })
 })
+
+describe('DEV-PROG-013 — thanh trên cùng gộp tên và trạng thái thiết bị', () => {
+  it('một badge duy nhất mang cả hai, không phải hai phần tử rời', () => {
+    // Tên thiết bị và trạng thái của nó là MỘT dữ kiện. Tách làm hai phần tử
+    // chiếm hai khoảng trên một hàng 64 px vốn đã phải nhường chỗ cho chuông,
+    // đồng hồ và menu người dùng ở 768–1023 px.
+    renderNavigation(<TopBar connectionState="connected" alarmCount={0} currentUser={{ username: 'admin', role: 'admin' }} />)
+    expect(screen.getAllByText(/(Thiết bị|Device):/).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('mất kết nối vẫn nói ra, không im lặng rơi về "online"', () => {
+    cleanup()
+    renderNavigation(<TopBar connectionState="disconnected" alarmCount={0} currentUser={{ username: 'admin', role: 'admin' }} />)
+    expect(screen.getAllByText(/(Thiết bị|Device):.*OFFLINE/i).length).toBeGreaterThanOrEqual(1)
+  })
+})

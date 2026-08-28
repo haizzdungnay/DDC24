@@ -57,8 +57,25 @@ export function TopBar({ connectionState, alarmCount, unackedCount = 0, annuncia
           </button>
         )}
         <div className="hidden h-9 w-px bg-[var(--c-border)] lg:block" />
-        {deviceName && <span className="hidden min-w-0 truncate text-sm font-semibold lg:inline" title={deviceName}>{deviceName}</span>}
-        <StatusBadge state={online ? 'online' : 'offline'} label={`${t('system')}: ${online ? t('online') : t('offline')}`} />
+        {/* `DEV-PROG-013` — TÊN thiết bị và TRẠNG THÁI của nó là một dữ kiện,
+            không phải hai. Trước lát này chúng là hai phần tử rời (`DDC-24-TANG-1`
+            rồi `HỆ THỐNG: ONLINE`), chiếm hai khoảng trên một hàng 64 px vốn đã
+            phải nhường chỗ cho chuông, đồng hồ và menu người dùng ở 768–1023 px.
+            Gộp lại thành `Thiết bị: <tên> ONLINE` giữ nguyên cả hai thông tin và
+            trả lại một khoảng.
+
+            Tên thiết bị vẫn ẩn dưới `lg` như cũ (nhãn badge rút về `Thiết bị:
+            ONLINE`): ở màn hẹp, tên dài đẩy badge cảnh báo ra khỏi hàng, mà
+            cảnh báo là thứ không được mất. */}
+        <span className="hidden lg:contents">
+          <StatusBadge
+            state={online ? 'online' : 'offline'}
+            label={`${t('device')}: ${deviceName ? `${deviceName} · ` : ''}${online ? t('online') : t('offline')}`}
+          />
+        </span>
+        <span className="lg:hidden">
+          <StatusBadge state={online ? 'online' : 'offline'} label={`${t('device')}: ${online ? t('online') : t('offline')}`} />
+        </span>
         <span className="hidden sm:inline-flex"><StatusBadge state={IS_DEMO ? 'demo' : 'live'} label={IS_DEMO ? t('demo') : t('live')} /></span>
         {snapshot && (
           <>

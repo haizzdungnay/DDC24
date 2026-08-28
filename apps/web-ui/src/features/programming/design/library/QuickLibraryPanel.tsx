@@ -30,6 +30,15 @@ import {
  * đoán port). Giấu chúng đi sẽ biến "chưa hỗ trợ" thành "không tồn tại", và đó
  * là câu trả lời sai cho người đang tìm khối PID.
  */
+/**
+ * `DEV-PROG-016` — kiểu dữ liệu của thao tác kéo khối thư viện.
+ *
+ * Không dùng `text/plain`: trình duyệt sẽ để `<textarea>` tự chèn chuỗi đó, bỏ
+ * qua đường dựng khai báo instance (`AC-ST-002`) và bỏ qua lịch sử Undo của
+ * editor. Một kiểu riêng khiến chỉ đúng bề mặt biết cách chèn mới nhận.
+ */
+export const LIBRARY_DRAG_TYPE = 'application/x-mkddc-library-entry'
+
 export function QuickLibraryPanel({
   library,
   language,
@@ -313,8 +322,23 @@ function BlockCard({
   const rows = Math.max(inputs.length, outputs.length)
 
   return (
-    <li data-testid="quick-library-card" data-entry={entry.entryId}
-        className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]">
+    <li
+      data-testid="quick-library-card"
+      data-entry={entry.entryId}
+      /* `DEV-PROG-016` — kéo-thả vào trình soạn thảo.
+       *
+       * Chỉ mục DÙNG ĐƯỢC mới kéo được: kéo một mục `REVIEW_REQUIRED` rồi thả
+       * xuống và không có gì xảy ra là một cách dạy người dùng rằng kéo-thả
+       * "hên xui". Kiểu dữ liệu riêng (`application/x-mkddc-library-entry`) chứ
+       * không phải `text/plain`: `text/plain` sẽ được TEXTAREA tự chèn nguyên
+       * chuỗi, bỏ qua đường dựng khai báo instance và bỏ qua cả lịch sử Undo. */
+      draggable={insertable}
+      onDragStart={(event) => {
+        if (!insertable) return
+        event.dataTransfer.setData(LIBRARY_DRAG_TYPE, entry.entryId)
+        event.dataTransfer.effectAllowed = 'copy'
+      }}
+      className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]">
       <div className="flex items-center gap-1 border-b border-[var(--c-border)] px-1.5 py-1">
         <span className="mono shrink-0 rounded bg-[var(--c-surface-2)] px-1 text-[10px] text-[var(--c-text-dim)]">
           {entry.scope === 'SYSTEM' ? 'SYS' : 'PRJ'}

@@ -255,3 +255,55 @@ describe('ProgrammingWorkbench — Watch ở LIVE (T59-811)', () => {
     expect(screen.getByRole('link', { name: /Runtime & Bảo trì/ })).toHaveAttribute('href', '/eng/programming/runtime?tab=watch')
   })
 })
+
+/* `DEV-PROG-017` — tìm kiếm bằng biểu thức chính quy và danh sách chỗ dùng. */
+describe('ProgrammingWorkbench — DEV-PROG-017', () => {
+  it('bật biểu thức chính quy thì mẫu được hiểu là REGEX, không phải chữ thường', () => {
+    renderWorkbench()
+    fireEvent.click(screen.getByRole('tab', { name: /Tìm kiếm/ }))
+    fireEvent.change(screen.getByLabelText(/Tìm trong POU đang mở/), { target: { value: 'Fan.*TRUE' } })
+    // Tắt regex: `Fan.*TRUE` không phải một chuỗi có thật trong nguồn.
+    expect(screen.getByText('Không có kết quả.')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Biểu thức chính quy'))
+    expect(screen.queryByText('Không có kết quả.')).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Tìm kiếm (1)' })).toBeInTheDocument()
+  })
+
+  it('biểu thức hỏng NÓI RA lỗi, không âm thầm rơi về tìm chữ thường', () => {
+    // Người dùng gõ dở `IF (`: "0 kết quả" là câu trả lời đúng cho một mẫu chưa
+    // hoàn chỉnh; lặng lẽ đi tìm chuỗi `IF (` là trả lời một câu hỏi khác.
+    renderWorkbench()
+    fireEvent.click(screen.getByRole('tab', { name: /Tìm kiếm/ }))
+    fireEvent.click(screen.getByLabelText('Biểu thức chính quy'))
+    fireEvent.change(screen.getByLabelText(/Tìm trong POU đang mở/), { target: { value: 'FanCmd(' } })
+    expect(screen.getByRole('alert')).toHaveTextContent(/Biểu thức không hợp lệ/)
+  })
+
+  it('mẫu khớp chuỗi rỗng KHÔNG treo vòng lặp', () => {
+    // `a*` khớp chuỗi rỗng ở mọi vị trí; không đẩy `lastIndex` thì `exec` đứng
+    // yên mãi mãi và cả tab trắng màn hình.
+    renderWorkbench()
+    fireEvent.click(screen.getByRole('tab', { name: /Tìm kiếm/ }))
+    fireEvent.click(screen.getByLabelText('Biểu thức chính quy'))
+    fireEvent.change(screen.getByLabelText(/Tìm trong POU đang mở/), { target: { value: 'x*' } })
+    expect(screen.getByRole('tab', { name: /Tìm kiếm \(\d+\)/ })).toBeInTheDocument()
+  })
+
+  it('khay Tham chiếu liệt kê TỪNG chỗ dùng, không chỉ con số đếm', () => {
+    const onJump = vi.fn()
+    renderWorkbench({
+      symbols: [{
+        name: 'FanCmd', typeName: 'BOOL', kindLabel: 'biến', reads: 1, writes: 2,
+        onJump: vi.fn(),
+        occurrences: [
+          { line: 5, role: 'WRITE', preview: 'FanCmd := TRUE;', onJump },
+          { line: 6, role: 'WRITE', preview: 'FanCmd := FALSE;', onJump: vi.fn() },
+        ],
+      }],
+    })
+    fireEvent.click(screen.getByRole('tab', { name: /Tham chiếu/ }))
+    fireEvent.click(screen.getByText('Xem 2 chỗ dùng'))
+    fireEvent.click(screen.getByText('FanCmd := TRUE;'))
+    expect(onJump).toHaveBeenCalledTimes(1)
+  })
+})

@@ -102,6 +102,35 @@ function characterIndexAtVisualColumn(line: string, visualColumn: number, tabSiz
 }
 
 /**
+ * `DEV-PROG-016` — offset cho thao tác THẢ, có KẸP về ký tự gần nhất.
+ *
+ * Khác `stOffsetAtPoint` đúng ở luật biên, và khác một cách có chủ ý. Rê chuột
+ * qua khoảng trắng cuối dòng KHÔNG được bật tooltip của định danh cuối cùng —
+ * nên hover trả `null`. Nhưng thả một khối vào khoảng trắng cuối dòng là một
+ * thao tác rõ nghĩa ("chèn ở cuối dòng này"), và trả `null` ở đó biến một cú
+ * thả hợp lệ thành một cú thả im lặng không có gì xảy ra.
+ */
+export function stDropOffsetAtPoint(
+  source: string,
+  point: StHoverPoint,
+  metrics: StEditorTextMetrics,
+): number {
+  const exact = stOffsetAtPoint(source, point, metrics)
+  if (exact !== null) return exact
+  if (!(metrics.rowHeightPx > 0)) return source.length
+
+  const lines = source.split('\n')
+  const textY = point.y + point.scrollTop - metrics.padTopPx
+  const row = Math.min(lines.length - 1, Math.max(0, Math.floor(textY / metrics.rowHeightPx)))
+  let offset = 0
+  for (let index = 0; index < row; index += 1) offset += lines[index].length + 1
+  /* Thả bên trái lề ⇒ đầu dòng; thả sau ký tự cuối ⇒ cuối dòng. Hai đầu của
+   * cùng một dòng, không phải một giá trị mặc định chung. */
+  const textX = point.x + point.scrollLeft - metrics.padLeftPx
+  return textX < 0 ? offset : offset + lines[row].length
+}
+
+/**
  * Vị trí (dòng, cột hiển thị) của một offset — phép nghịch của `stOffsetAtPoint`.
  *
  * Tooltip neo vào chính KÝ HIỆU chứ không vào con chuột: neo vào chuột làm hộp
