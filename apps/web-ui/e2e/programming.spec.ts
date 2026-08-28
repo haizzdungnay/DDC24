@@ -665,7 +665,10 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
 
     // UJ-PROG-03 — Điểm & Ánh xạ
     await page.getByRole('tab', { name: /Điểm & Ánh xạ/ }).click()
-    await expect(page.getByText('Chưa có ánh xạ nào.')).toBeVisible()
+    /* `PR #311` dựng lại tab Điểm & Ánh xạ (`MappingWorkbench`); câu trạng thái
+       rỗng nay nói rõ nó nói về DRAFT, không phải về thiết bị — "Chưa có ánh xạ
+       nào" một mình có thể bị đọc thành "thiết bị không có điểm nào". */
+    await expect(page.getByText('Chưa có ánh xạ nào trong Draft.')).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('04-design-mapping.png'), fullPage: true })
 
     // UJ-PROG-04 — Thực thi

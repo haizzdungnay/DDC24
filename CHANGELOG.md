@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### Programming — hợp nhất PR #311 vào main, sửa 4 lỗi lộ ra khi hợp nhất (2026-08-28)
+
+- **Fixed — `task.state` của read-back nói dối khi Program dừng hoặc lỗi.**
+  Hai ca `StIntegration` do PR #311 thêm vào đỏ ngay: operator `stop` một Program
+  hoặc một instance rơi `FAULTED`, mà `point_snapshot` vẫn công bố `RUNNING`.
+  Người vận hành đọc một dòng nói mọi thứ đang chạy trong khi output đã bị rút
+  về mức mặc định.
+
+  Nguyên nhân gốc: trạng thái được suy từ HAI dữ kiện ở mức TASK
+  (`should_force_safe()` và `enabled()`) và bỏ qua hoàn toàn trạng thái từng
+  Program. `enabled()` chỉ nói "task còn được lập lịch", không nói "có gì đang
+  chạy". Nay có luật nặng-nhất-thắng: overrun ⇒ FAULT · bất kỳ Program FAULTED ⇒
+  FAULT · không sở hữu output hoặc task tắt ⇒ STOPPED · có Program nhưng không
+  Program nào chạy ⇒ STOPPED · còn lại ⇒ RUNNING. Task rỗng giữ nguyên hành vi
+  cũ: "chưa nạp Program nào" là câu khác hẳn "đã nạp rồi và tất cả đã dừng".
+
+- **Fixed — vùng chạm của cây POU dưới ngưỡng WCAG 2.2.** PR #311 chuyển reset
+  form của `styles.css` vào `@layer base` (sửa đúng một lỗi tương phản thật:
+  nút primary từng kế thừa chữ tối trên nền accent, chỉ 2,03:1). Hệ quả phụ:
+  `text-xs`/`text-sm` của Tailwind mới thật sự áp lên nút, và các nút trong cây
+  POU tụt xuống dưới 24 px — axe bắt `target-size` + `target-offset`. Nay mọi nút
+  trong cây có `min-h-7` (28 px).
+
+- **Fixed — xung đột `ProgrammingHeader.tsx`** giải bằng ROUTE: chỉ **Tổng quan**
+  mang eyebrow + tiêu đề lớn + phụ đề (nó không có trình soạn thảo tranh chỗ);
+  năm workspace còn lại giữ tiêu đề một dòng của `DEV-PROG-013/014`. Ràng buộc
+  chiều cao chỉ tồn tại ở nơi có editor.
+
+- **Changed — bốn phép chọn trong test bám vào tên POU** nay soi đúng CÂY POU.
+  Từ PR #311, tab Điểm & Ánh xạ (luôn mounted, chỉ ẩn bằng CSS) có `<select>`
+  liệt kê Program, nên mỗi tên POU xuất hiện hai lần trong DOM và `getByText`
+  ném "found multiple elements" cho một trang hoàn toàn đúng.
+
+- **Verification** (2026-08-28, sau hợp nhất): `ctest --test-dir build/fw`
+  **1336/1336 PASS**; `npx vitest --run --environment jsdom src` **182 file /
+  2035 test PASS**; `npx playwright test e2e/programming.spec.ts` **55 PASS /
+  13 skipped / 0 fail**; `go vet` + `go test ./... -count=1` PASS;
+  `npm run lint`, `npx tsc --noEmit`, `npm run build` PASS (chunk `programming`
+  **153,36 KiB** gzip / ngân sách R3 165 KiB); hai verifier hợp đồng PASS.
+
 ### Programming PGM-02 — 18 mục `DEV-PROG-001..018` từ review giao diện (2026-08-28)
 
 - **Fixed — `DEV-PROG-001`: dải tab workbench không còn bị đẩy ra khỏi màn hình.**
