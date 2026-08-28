@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState } from 'react'
-import { Outlet, useLocation, useParams } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useProgrammingCapabilities, useProgrammingProgramIntents, useProgrammingProjects, useProgrammingRuntime } from '../api/queries'
 import type { ProgrammingCapabilities, ProgrammingProgramsPage, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
 import { roleAtLeast, useAuth } from '../../auth'
@@ -7,6 +7,7 @@ import { ProgrammingHeader } from './ProgrammingHeader'
 import { ProgrammingContextStrip } from './ProgrammingContextStrip'
 import { ProgrammingFeatureRail } from './ProgrammingFeatureRail'
 import { ProgrammingMobileNav } from './ProgrammingMobileNav'
+import { programsWorkspacePath } from '../shared/programsRoute'
 
 interface ProgrammingRuntimeContextValue {
   capabilities: RemoteState<ProgrammingCapabilities>
@@ -22,6 +23,27 @@ export interface ProgrammingEditingContext {
   draftRevisionId: string
   dirty: boolean
   checkState: 'idle' | 'checking' | 'passed' | 'failed' | 'unknown'
+  /**
+   * `DEV-PROG-009` — hai hành động chính của workspace đang mở, để header ở
+   * trên cùng gọi được chúng.
+   *
+   * Header KHÔNG tự dựng lệnh Lưu/Kiểm tra: batch operation, luật dirty và
+   * đường điều hướng sang PGM-03 đều thuộc workspace. Hai nơi cùng dựng một
+   * lệnh là hai nơi để luật khoá lệch nhau — nên workspace ĐĂNG KÝ hành động
+   * của nó, còn header chỉ là một chỗ bấm thứ hai cho cùng một hành động.
+   *
+   * `undefined` = workspace hiện tại không có hành động nào (Tổng quan,
+   * Runtime…), và khi đó header không hiện nút chết.
+   */
+  actions?: {
+    onSave: () => void
+    saving: boolean
+    /** Lý do đọc được khi không lưu được; `null` = lưu được. */
+    saveDisabledReason: string | null
+    onCheck: () => void
+    /** Lý do đọc được khi chưa Kiểm tra được; `null` = kiểm tra được. */
+    checkDisabledReason: string | null
+  }
 }
 
 const ProgrammingRuntimeContext = createContext<ProgrammingRuntimeContextValue | null>(null)
@@ -63,6 +85,7 @@ export function ProgrammingLayout() {
   const [editingContext, setEditingContext] = useState<ProgrammingEditingContext | null>(null)
   const { projectId: pathProjectId } = useParams<{ projectId?: string }>()
   const location = useLocation()
+  const navigate = useNavigate()
   const canonicalProgramsRoute = location.pathname === '/eng/programming/programs'
   const queryProjectId = canonicalProgramsRoute ? new URLSearchParams(location.search).get('project') ?? undefined : undefined
   const projectId = pathProjectId ?? queryProjectId
@@ -82,7 +105,12 @@ export function ProgrammingLayout() {
         projectName: routeEditingContext?.projectName || listedProject.name,
         draftRevisionId: routeEditingContext?.draftRevisionId || listedProject.draftRevisionId,
         dirty: routeEditingContext?.dirty ?? false,
-        checkState: routeEditingContext?.checkState ?? ('idle' as const)
+        checkState: routeEditingContext?.checkState ?? ('idle' as const),
+        /* `DEV-PROG-009` — hành động chỉ đi qua khi CHÍNH Project đang mở đăng
+           ký chúng. `listedProject` có thể là một Project khác (id trong URL
+           chưa khớp), và mang theo nút Lưu của workspace cũ sẽ ghi vào nhầm
+           Draft. */
+        ...(routeEditingContext?.actions ? { actions: routeEditingContext.actions } : {})
       }
     : routeEditingContext
   // Khi API Project tạm lỗi, vẫn giữ nguyên định danh từ URL để điều hướng giữa
@@ -128,6 +156,17 @@ export function ProgrammingLayout() {
             intentError={programIntents.error}
             editing={visibleEditingContext}
             canMutate={roleAtLeast(session?.role, 'admin')}
+            /* `DEV-PROG-007` — bộ chọn Project. Danh sách và Project đang mở
+               đều lấy từ CÙNG read-model mà shell đã tải; strip không tự gọi
+               HTTP (README §5.1/§5.2). */
+            projectOptions={projects.data?.items.map((item) => ({ projectId: item.projectId, name: item.name })) ?? []}
+            selectedProjectId={scopedProjectId ?? null}
+            onSelectProject={(nextProjectId) => navigate(programsWorkspacePath(nextProjectId))}
+            /* `DEV-PROG-008` — số thứ tự Revision (`T60-015`). `null` là "đã
+               xét và chưa biết", không phải 0; nhãn sẽ bỏ phần `r{N}` chứ
+               không in `r0`. */
+            draftSequence={listedProject?.draftSequence ?? null}
+            activeSequence={listedProject?.activeSequence ?? null}
             details={{
               draftRevisionId: visibleEditingContext?.draftRevisionId ?? null,
               activeRevisionId: runtime.data?.activeRevisionId ?? null,
@@ -158,6 +197,7 @@ export function ProgrammingLayout() {
             }}
           />
           <ProgrammingHeader
+            actions={visibleEditingContext?.actions}
             refreshing={refreshing}
             onRefresh={() => {
               capabilities.refresh()

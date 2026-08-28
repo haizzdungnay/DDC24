@@ -319,10 +319,30 @@ export function DesignWorkspacePage({
       projectName: workspace.project.name,
       draftRevisionId: workspace.project.draftRevisionId,
       dirty: draftDirty,
-      checkState: 'idle'
+      checkState: 'idle',
+      /* `DEV-PROG-009` — workspace ĐĂNG KÝ hai hành động của nó để header ở
+         trên cùng gọi lại. Header không tự dựng batch operation: luật dirty,
+         danh sách operation và đường sang PGM-03 đều thuộc về đây, và hai nơi
+         cùng dựng một lệnh là hai nơi để luật khoá lệch nhau. */
+      actions: {
+        onSave: () => { void workspace.save(pendingOperations) },
+        saving: workspace.saving,
+        saveDisabledReason: !canEdit
+          ? pick('Chế độ hiện tại không cho sửa Draft.', 'The current mode does not allow editing the draft.')
+          : !draftDirty
+            ? pick('Không có thay đổi nào để lưu.', 'There is nothing to save.')
+            : null,
+        onCheck: goToCommission,
+        checkDisabledReason: !canEdit
+          ? pick('Chế độ hiện tại không cho Kiểm tra.', 'The current mode does not allow running Check.')
+          : draftDirty
+            ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
+                   'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
+            : null
+      }
     })
     return () => setEditingContext(null)
-  }, [draftDirty, setEditingContext, workspace.project, workspace.status])
+  }, [canEdit, draftDirty, goToCommission, pendingOperations, pick, setEditingContext, workspace.project, workspace.save, workspace.saving, workspace.status])
 
   useEffect(() => {
     if (!draftDirty) return undefined
@@ -621,11 +641,14 @@ export function DesignWorkspacePage({
             dòng) tài liệu cao 2861 px và dải tab workbench ở `y=2675` — người
             dùng phải cuộn gần 1900 px mới tới được Vấn đề/Tìm kiếm/Watch.
 
-            `20rem` là chrome phía trên đo được (thanh hệ thống 64 + dải ngữ
-            cảnh + tiêu đề + thanh tab ≈ 270 px) cộng lề đáy. Sàn `34rem` giữ cho
-            màn thấp vẫn còn chỗ gõ; dưới `lg` KHÔNG chốt chiều cao vì màn hẹp
-            không có ngân sách để chia và workspace ở đó là chỉ-đọc. */}
-        <div className="flex flex-col lg:h-[calc(100vh-20rem)] lg:min-h-[34rem]">
+            `18rem` là chrome phía trên ĐO ĐƯỢC trên Chrome thật, không phải
+            một con số đoán: sau khi `DEV-PROG-009/013/014` rút gọn tiêu đề, mép
+            trên của vùng này nằm ở `y=252` trên viewport 900, và trừ thêm lề đáy của
+            trang ra 18rem (17rem đo lại cho tài liệu cao 912 px — tràn 12 px). Con số cũ (20rem) để thừa 68 px trống dưới đáy
+            trang — 68 px đó thuộc về chỗ người ta gõ. Sàn `34rem` giữ cho màn
+            thấp vẫn còn chỗ gõ; dưới `lg` KHÔNG chốt chiều cao vì màn hẹp không
+            có ngân sách để chia và workspace ở đó là chỉ-đọc. */}
+        <div className="flex flex-col lg:h-[calc(100vh-18rem)] lg:min-h-[34rem]">
         <div className="min-h-0 lg:flex-1 lg:overflow-hidden">
         {workspaceMode === 'SIMULATE' ? (
           /* `T59-815` — SIMULATE cũng KHÔNG phải editor bị khoá: nó là bản đã
