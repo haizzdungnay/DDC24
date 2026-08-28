@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ClipboardCheck } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
@@ -12,6 +12,7 @@ import { ExecutionTab } from './task/ExecutionTab'
 import { Modal } from '../../../shared/components/Modal'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/types'
+import { ProblemsDrawer } from '../shared/ProblemsDrawer'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
@@ -37,7 +38,7 @@ export function DesignWorkspacePage() {
   const { pick } = useI18n()
   const { session } = useAuth()
   const navigate = useNavigate()
-  const { setEditingContext } = useProgrammingRuntimeContext()
+  const { capabilities, runtime, activeRevision, setEditingContext } = useProgrammingRuntimeContext()
   const canEdit = roleAtLeast(session?.role, 'admin')
   const { projectId } = useParams<{ projectId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -67,6 +68,31 @@ export function DesignWorkspacePage() {
   const [discardVersion, setDiscardVersion] = useState(0)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [savingBeforeNavigation, setSavingBeforeNavigation] = useState(false)
+  const tabRefs = useRef<Partial<Record<DesignTab, HTMLButtonElement | null>>>({})
+
+  const selectTab = useCallback((nextTab: DesignTab, focus = false) => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        next.set('tab', nextTab)
+        return next
+      },
+      { replace: true }
+    )
+    if (focus) globalThis.requestAnimationFrame(() => tabRefs.current[nextTab]?.focus())
+  }, [setSearchParams])
+
+  function handleTabKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, currentTab: DesignTab) {
+    const currentIndex = VALID_TABS.indexOf(currentTab)
+    let nextIndex: number | undefined
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % VALID_TABS.length
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + VALID_TABS.length) % VALID_TABS.length
+    else if (event.key === 'Home') nextIndex = 0
+    else if (event.key === 'End') nextIndex = VALID_TABS.length - 1
+    if (nextIndex === undefined) return
+    event.preventDefault()
+    selectTab(VALID_TABS[nextIndex], true)
+  }
 
   useEffect(() => {
     if (requested === tab) return
@@ -81,11 +107,35 @@ export function DesignWorkspacePage() {
   }, [requested, tab, setSearchParams])
 
   const workspace = useDraftWorkspace(projectId)
+  /* A real project should open on its first program, not on a blank editor.
+   * Keep an explicit/deep-linked selection when it still exists; if a draft
+   * removed that program, fail soft to the first remaining item. */
+  useEffect(() => {
+    const programs = workspace.project?.draft?.programs ?? []
+    if (workspace.status !== 'ready' || programs.length === 0) {
+      if (programs.length === 0 && selectedProgramId) setSelectedProgramId(undefined)
+      return
+    }
+    if (!selectedProgramId || !programs.some((program) => program.programId === selectedProgramId)) {
+      setSelectedProgramId(programs[0].programId)
+    }
+  }, [selectedProgramId, workspace.project?.draft?.programs, workspace.status])
   const pendingOperations = useMemo(() => [...programOperations, ...executionOperations], [executionOperations, programOperations])
   const draftDirty = pendingOperations.length > 0
 
   const updateProgramOperations = useCallback((operations: ProgrammingDraftOperation[]) => setProgramOperations(operations), [])
   const updateExecutionOperations = useCallback((operations: ProgrammingDraftOperation[]) => setExecutionOperations(operations), [])
+
+  const openProgramFromMapping = useCallback((programId: string) => {
+    setSelectedProgramId(programId)
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.set('tab', 'programs')
+      next.set('program', programId)
+      return next
+    }, { replace: true })
+    globalThis.requestAnimationFrame(() => tabRefs.current.programs?.focus())
+  }, [setSearchParams])
 
   /* Dùng chung cho nút "Kiểm tra" ở đây VÀ mục lệnh "Kiểm tra" của Bảng lệnh
    * nhanh (ST Editor Quick Control #2, đã duyệt) — cùng một "dirty guard"
@@ -95,9 +145,8 @@ export function DesignWorkspacePage() {
     navigate(`/eng/programming/projects/${projectId}/commission`)
   }, [draftDirty, navigate, projectId])
 
-  /* D-01: PGM-02 không còn tự chạy Check nên không có `checkState` thật để
-   * báo — Check/Commission (PGM-03) là nơi duy nhất cập nhật giá trị này giờ
-   * (`CheckCommissionPage`). Giữ nguyên `idle` ở đây thay vì suy đoán. */
+  /* Project detail có latestCheck canonical. Chỉ dùng khi Check thuộc đúng
+   * baseRevision hiện hành; kết quả của revision cũ không được gắn sang Draft. */
   useEffect(() => {
     if (workspace.status !== 'ready' || !workspace.project) return
     setEditingContext({
@@ -105,7 +154,7 @@ export function DesignWorkspacePage() {
       projectName: workspace.project.name,
       draftRevisionId: workspace.project.draftRevisionId,
       dirty: draftDirty,
-      checkState: 'idle'
+      checkState: projectCheckState(workspace.project)
     })
     return () => setEditingContext(null)
   }, [draftDirty, setEditingContext, workspace.project, workspace.status])
@@ -139,6 +188,8 @@ export function DesignWorkspacePage() {
     return <StateBlock state="error" title={pick('Không tải được Project.', 'Could not load the project.')} detail={workspace.error ?? undefined} onRetry={workspace.reload} />
   }
   const document = workspace.project.draft
+  const checkState = projectCheckState(workspace.project)
+  const compactCheck = compactCheckStatus(pick, checkState)
 
   return (
     <div className="space-y-3">
@@ -147,22 +198,18 @@ export function DesignWorkspacePage() {
           {VALID_TABS.map((candidate) => (
             <button
               key={candidate}
+              id={`programming-design-tab-${candidate}`}
+              ref={(element) => { tabRefs.current[candidate] = element }}
               type="button"
               role="tab"
               aria-selected={candidate === tab}
+              aria-controls={`programming-design-panel-${candidate}`}
+              tabIndex={candidate === tab ? 0 : -1}
               className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1.5 text-sm font-medium ${
                 candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
               }`}
-              onClick={() =>
-                setSearchParams(
-                  (current) => {
-                    const next = new URLSearchParams(current)
-                    next.set('tab', candidate)
-                    return next
-                  },
-                  { replace: true }
-                )
-              }
+              onClick={() => selectTab(candidate)}
+              onKeyDown={(event) => handleTabKeyDown(event, candidate)}
             >
               {pick(...TAB_LABEL[candidate])}
             </button>
@@ -170,6 +217,12 @@ export function DesignWorkspacePage() {
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
+            <span
+              className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase min-[1024px]:hidden ${compactCheck.className}`}
+              aria-label={pick(`Trạng thái Check: ${compactCheck.label}`, `Check status: ${compactCheck.label}`)}
+            >
+              {pick('Check', 'Check')} · {compactCheck.label}
+            </span>
             {/* D-01: PGM-02 không tự seal/run Check nữa — chỉ điều hướng sang
              * PGM-03 (Check & Commission), nơi giờ sở hữu toàn bộ vòng
              * seal/run/poll/result. Nút vẫn khoá khi Draft chưa lưu, đúng
@@ -212,7 +265,7 @@ export function DesignWorkspacePage() {
           sẽ "mất nội dung đang gõ" — đúng hành vi bị cấm ở
           DDD-FE-PROG-001 §0.1 ràng buộc 1. Phát hiện qua Playwright E2E
           (TASK-PROG-506), sửa ngay trong cùng phiên. */}
-      <div hidden={tab !== 'programs'}>
+      <div id="programming-design-panel-programs" role="tabpanel" aria-labelledby="programming-design-tab-programs" hidden={tab !== 'programs'}>
         <ProgramsTab
           document={document}
           saving={workspace.saving}
@@ -220,18 +273,40 @@ export function DesignWorkspacePage() {
           onSelectProgram={setSelectedProgramId}
           onSave={workspace.save}
           diagnostics={EMPTY_DIAGNOSTICS}
+          runtime={runtime}
+          activeRevision={activeRevision}
           focusDiagnostic={focusDiagnostic}
           onPendingOperationsChange={updateProgramOperations}
           discardVersion={discardVersion}
           onRunCheck={goToCommission}
         />
       </div>
-      <div hidden={tab !== 'mapping'}>
-        <MappingTab document={document} saving={workspace.saving} onSave={workspace.save} />
+      <div id="programming-design-panel-mapping" role="tabpanel" aria-labelledby="programming-design-tab-mapping" hidden={tab !== 'mapping'}>
+        <MappingTab
+          document={document}
+          saving={workspace.saving}
+          onSave={workspace.save}
+          projectId={projectId}
+          saveError={workspace.error}
+          active={tab === 'mapping'}
+          onOpenSource={openProgramFromMapping}
+        />
       </div>
-      <div hidden={tab !== 'execution'}>
-        <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} onPendingOperationsChange={updateExecutionOperations} discardVersion={discardVersion} />
+      <div id="programming-design-panel-execution" role="tabpanel" aria-labelledby="programming-design-tab-execution" hidden={tab !== 'execution'}>
+        <ExecutionTab document={document} saving={workspace.saving} onSave={workspace.save} onPendingOperationsChange={updateExecutionOperations} discardVersion={discardVersion} capabilities={capabilities} />
       </div>
+
+      <ProblemsDrawer
+        diagnostics={EMPTY_DIAGNOSTICS}
+        emptyState={
+          checkState === 'passed' ? 'no-problems'
+          : checkState === 'failed' ? 'check-failed'
+          : checkState === 'checking' ? 'checking'
+          : checkState === 'unknown' ? 'unknown'
+          : 'not-checked'
+        }
+        onEmptyAction={draftDirty ? undefined : goToCommission}
+      />
 
       <Modal
         open={pendingNavigation !== null}
@@ -272,4 +347,24 @@ export function DesignWorkspacePage() {
       </Modal>
     </div>
   )
+}
+
+function projectCheckState(project: { baseRevisionId: string; latestCheck?: { revisionId: string; state: string } | null }): 'idle' | 'checking' | 'passed' | 'failed' | 'unknown' {
+  const check = project.latestCheck
+  if (!check || check.revisionId !== project.baseRevisionId) return 'idle'
+  if (check.state === 'QUEUED' || check.state === 'RUNNING') return 'checking'
+  if (check.state === 'PASSED') return 'passed'
+  if (check.state === 'FAILED' || check.state === 'TIMED_OUT') return 'failed'
+  return 'unknown'
+}
+
+function compactCheckStatus(
+  pick: (vi: string, en: string) => string,
+  state: ReturnType<typeof projectCheckState>,
+): { label: string; className: string } {
+  if (state === 'passed') return { label: pick('Đạt', 'Passed'), className: 'border-[var(--c-good)] bg-[var(--c-good-bg)] text-[var(--c-good-fg)]' }
+  if (state === 'failed') return { label: pick('Không đạt', 'Failed'), className: 'border-[var(--c-fault)] bg-[var(--c-fault-bg)] text-[var(--c-fault-fg)]' }
+  if (state === 'checking') return { label: pick('Đang kiểm tra', 'Checking'), className: 'border-[var(--c-info)] bg-[var(--c-accent-bg)] text-[var(--c-info)]' }
+  if (state === 'unknown') return { label: 'UNKNOWN', className: 'border-[var(--c-warn)] bg-[var(--c-warn-bg)] text-[var(--c-warn-fg)]' }
+  return { label: pick('Chưa kiểm tra', 'Not checked'), className: 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]' }
 }

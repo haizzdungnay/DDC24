@@ -1,197 +1,87 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { UserRole } from '../../../../shared/types'
-import { MappingTab } from './MappingTab'
 import type { ProgrammingDraftDocument, ProgrammingPointCatalogEntry } from '../../model/types'
+import { MappingTab } from './MappingTab'
 
 const auth = vi.hoisted(() => ({ role: 'admin' as UserRole }))
+const catalog = vi.hoisted(() => ({
+  status: 'ready' as 'loading' | 'ready' | 'error',
+  items: [] as ProgrammingPointCatalogEntry[],
+  error: null as string | null,
+  lastSuccessAt: null as number | null,
+}))
+
 vi.mock('../../../auth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../auth')>()
-  return {
-    ...actual,
-    useAuth: () => ({
-      session: { username: 'u', role: auth.role, loginAt: '2026-08-13T00:00:00Z' },
-      login: vi.fn(),
-      logout: vi.fn(),
-      isAuthenticated: true,
-      getAuthHeader: () => ({})
-    })
-  }
+  return { ...actual, useAuth: () => ({ session: { username: 'u', role: auth.role }, getAuthHeader: () => ({}) }) }
 })
 
-const catalogItems = vi.hoisted(() => [] as ProgrammingPointCatalogEntry[])
 vi.mock('../../api/queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/queries')>()
   return {
     ...actual,
-    useProgrammingPointCatalog: () => ({ status: 'ready', data: { items: catalogItems }, error: null, refresh: vi.fn() })
+    useProgrammingPointCatalog: () => ({ status: catalog.status, data: { items: catalog.items }, error: catalog.error, lastSuccessAt: catalog.lastSuccessAt, refresh: vi.fn() }),
   }
 })
 
-function baseDocument(): ProgrammingDraftDocument {
+function documentFixture(): ProgrammingDraftDocument {
   return {
     schemaVersion: 1,
-    project: { projectId: 'project-1', name: 'AHU-01', functionalTags: [] },
-    programs: [],
-    variables: [],
-    bindings: [],
-    task: { taskId: 'task-1', periodMs: 1000, programOrder: [] },
-    library: { profile: 'CORE_REVA', version: '1' }
+    project: { projectId: 'project-1', name: 'AHU', functionalTags: [] },
+    programs: [{ programId: 'program-1', name: 'AHU_Main', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM AHU_Main\nVAR_INPUT\n SupplyTemp : REAL;\nEND_VAR\nVAR_OUTPUT\n FanCmd : BOOL;\nEND_VAR\nEND_PROGRAM' }],
+    variables: [{ variableId: 'var-supply', programId: 'program-1', name: 'SupplyTemp', type: 'REAL', class: 'INPUT', initialValue: null, retain: false }],
+    bindings: [{ bindingId: 'binding-supply', variableId: 'var-supply', point: { category: 'LOCAL', pointId: 'UI-01' }, direction: 'READ', dataType: 'REAL', unit: 'degC', writable: false, qualityPolicy: 'REQUIRE_GOOD' }],
+    task: { taskId: 'task-1', periodMs: 1000, programOrder: ['program-1'] },
+    library: { profile: 'CORE_REVA', version: '1' },
   }
-}
-
-const point: ProgrammingPointCatalogEntry = {
-  category: 'VP', pointId: 'p1', deviceId: undefined, name: 'VP p1', dataType: 'REAL', direction: 'READ', writable: false, quality: 'GOOD', value: 0
 }
 
 beforeEach(() => {
   auth.role = 'admin'
-  catalogItems.length = 0
-  catalogItems.push(point)
+  catalog.status = 'ready'
+  catalog.error = null
+  catalog.lastSuccessAt = 100
+  catalog.items = [
+    { category: 'LOCAL', pointId: 'UI-01', name: 'Supply Temp', dataType: 'REAL', unit: 'degC', direction: 'READ', writable: false, quality: 'GOOD', value: 21.4 },
+    { category: 'LOCAL', pointId: 'DO-01', name: 'Supply Fan', dataType: 'BOOL', direction: 'WRITE', writable: true, quality: 'BAD', value: null },
+    { category: 'MB_RTU', deviceId: 'vfd-1', pointId: 'coil-1', name: 'VFD Enable', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: true },
+  ]
   localStorage.setItem('mkddc-lang', 'vi')
 })
 afterEach(cleanup)
 
-describe('MappingTab — chọn biến từ VAR_INPUT/VAR_OUTPUT, không gõ tay (user report 2026-08-14)', () => {
-  it('mời chọn đúng các biến khai báo trong ST, không phải ô nhập tự do', async () => {
-    const document = baseDocument()
-    document.programs.push({
-      programId: 'program-1', name: 'AHU_FanControl', kind: 'PROGRAM', language: 'ST',
-      document: 'PROGRAM AHU_FanControl\nVAR_INPUT\n  SupplyTemp : REAL;\nEND_VAR\nVAR_OUTPUT\n  FanEnable : BOOL;\nEND_VAR\nEND_PROGRAM'
-    })
+describe('MappingTab Phase 1A — regression boundaries', () => {
+  it('không gọi onSave và khóa toàn bộ Map/Remove với admin', () => {
     const onSave = vi.fn().mockResolvedValue(true)
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={onSave} /></I18nProvider>)
 
-    render(<I18nProvider><MappingTab document={document} saving={false} onSave={onSave} /></I18nProvider>)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
-    const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
-
-    expect(within(dialog).queryByRole('textbox', { name: /Tên biến/ })).not.toBeInTheDocument()
-    const variableSelect = within(dialog).getByRole('combobox', { name: 'Biến' })
-    const options = within(variableSelect).getAllByRole('option').map((option) => option.textContent)
-    expect(options).toEqual(['SupplyTemp (vào · REAL)', 'FanEnable (ra · BOOL)'])
-
-    fireEvent.click(within(dialog).getByText(/VP:p1/))
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Ánh xạ' }))
-
-    await waitFor(() => expect(onSave).toHaveBeenCalled())
-    const operations = onSave.mock.calls[0][0]
-    expect(operations[0]).toMatchObject({ op: 'upsertVariable', variable: { programId: 'program-1', name: 'SupplyTemp', type: 'REAL', class: 'INPUT' } })
-    expect(operations[1]).toMatchObject({ op: 'upsertBinding', binding: { point: { category: 'VP', pointId: 'p1' } } })
+    const mutationButtons = screen.getAllByRole('button', { name: /^Ánh xạ / })
+    expect(mutationButtons.length).toBeGreaterThan(0)
+    expect(mutationButtons.every((button) => button.hasAttribute('disabled'))).toBe(true)
+    expect(screen.queryByRole('button', { name: /Gỡ ánh xạ/ })).not.toBeInTheDocument()
+    expect(onSave).not.toHaveBeenCalled()
   })
 
-  it('lọc bỏ Point không tương thích hướng/kiểu — tái hiện đúng lỗi thật AlarmHigh (BOOL, OUTPUT) bị chọn nhầm UI-09 (REAL, READ)', async () => {
-    catalogItems.length = 0
-    catalogItems.push(
-      { category: 'LOCAL', pointId: 'UI-09', deviceId: undefined, name: 'UI-09', dataType: 'REAL', direction: 'READ', writable: false, quality: 'BAD', value: 0 },
-      { category: 'VP', pointId: 'vp-alarm', deviceId: undefined, name: 'vp-alarm', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: false }
-    )
-    const document = baseDocument()
-    document.programs.push({
-      programId: 'program-1', name: 'AHU_FanControl', kind: 'PROGRAM', language: 'ST',
-      document: 'PROGRAM AHU_FanControl\nVAR_OUTPUT\n  AlarmHigh : BOOL;\nEND_VAR\nEND_PROGRAM'
-    })
-    const onSave = vi.fn().mockResolvedValue(true)
-
-    render(<I18nProvider><MappingTab document={document} saving={false} onSave={onSave} /></I18nProvider>)
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
-    const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
-
-    // UI-09 (REAL, READ) không được hiện — không thể ghi BOOL output vào đó.
-    expect(within(dialog).queryByText(/UI-09/)).not.toBeInTheDocument()
-    expect(within(dialog).getByText(/vp-alarm/)).toBeInTheDocument()
-
-    fireEvent.click(within(dialog).getByText(/vp-alarm/))
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Ánh xạ' }))
-
-    await waitFor(() => expect(onSave).toHaveBeenCalled())
-    const operations = onSave.mock.calls[0][0]
-    expect(operations[1]).toMatchObject({ op: 'upsertBinding', binding: { point: { category: 'VP', pointId: 'vp-alarm' } } })
+  it('giữ value zero/null và đủ quality thay vì bịa healthy zero', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    expect(screen.getAllByText('BAD').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('21.4').length).toBeGreaterThan(0)
   })
 
-  it('hết Point tương thích thì báo rõ lý do (kiểu/hướng), không chỉ "không khớp bộ lọc"', async () => {
-    catalogItems.length = 0
-    catalogItems.push({ category: 'LOCAL', pointId: 'UI-09', deviceId: undefined, name: 'UI-09', dataType: 'REAL', direction: 'READ', writable: false, quality: 'BAD', value: 0 })
-    const document = baseDocument()
-    document.programs.push({
-      programId: 'program-1', name: 'AHU_FanControl', kind: 'PROGRAM', language: 'ST',
-      document: 'PROGRAM AHU_FanControl\nVAR_OUTPUT\n  AlarmHigh : BOOL;\nEND_VAR\nEND_PROGRAM'
-    })
-
-    render(<I18nProvider><MappingTab document={document} saving={false} onSave={vi.fn()} /></I18nProvider>)
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
-    const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
-
-    expect(within(dialog).getByText(/Không có Point kiểu BOOL, hướng ghi được/)).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: 'Ánh xạ' })).toBeDisabled()
+  it('hiện MB_RTU read-only là Core chưa hỗ trợ', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'AHU_Main · FanCmd · Chưa map' }))
+    expect(screen.getByText('Core chưa hỗ trợ')).toBeVisible()
   })
 
-  it('WP-08: đọc đúng biến INPUT/OUTPUT từ Program FBD tạo qua palette (WP-05/06), qua đúng JSON.stringify round-trip thật', async () => {
-    // Tài liệu này KHÔNG viết tay tự do — có cùng shape hệt như
-    // buildInterfaceNode() trong StructuredFbdEditor.tsx sinh ra khi user bấm
-    // "Input"/"Output" ở palette (kind INPUT có port OUTPUT tên "OUT", kind
-    // OUTPUT có port INPUT tên "IN", variable ở parameters.variable) — xác
-    // nhận integration point collectFbdInterfaceVariables() vẫn đọc đúng dữ
-    // liệu do palette mới sinh ra, không chỉ đúng với golden JSON cũ.
-    const fbdDocument = {
-      $schema: '../../fbd_v1.schema.json', schemaVersion: 1, profileId: 'revA-1t-1-5-30',
-      graphId: '30000000-0000-4000-8000-000000000001', name: 'AHU_FAN_ENABLE_WP08',
-      networks: [{
-        id: '30000000-0000-4000-8000-000000000002', name: 'NETWORK_1', order: 0,
-        nodes: [
-          {
-            id: '30000000-0000-4000-8000-000000000003', kind: 'INPUT', typeRef: 'REAL', executionOrder: 0,
-            parameters: { variable: 'SETPOINT' },
-            ports: [{ id: '30000000-0000-4000-8000-000000000004', name: 'OUT', direction: 'OUTPUT', dataType: 'REAL', unit: 'degC', order: 0 }],
-          },
-          {
-            id: '30000000-0000-4000-8000-000000000005', kind: 'OUTPUT', typeRef: 'BOOL', executionOrder: 1,
-            parameters: { variable: 'FAN_CMD' },
-            ports: [{ id: '30000000-0000-4000-8000-000000000006', name: 'IN', direction: 'INPUT', dataType: 'BOOL', unit: null, order: 0 }],
-          },
-        ],
-        wires: [],
-      }],
-    }
-    catalogItems.length = 0
-    catalogItems.push({ category: 'VP', pointId: 'setpoint-src', deviceId: undefined, name: 'setpoint-src', dataType: 'REAL', direction: 'READ', writable: false, quality: 'GOOD', value: 21 })
-    const document = baseDocument()
-    document.programs.push({ programId: 'program-fbd-1', name: 'AHU_FBD', kind: 'PROGRAM', language: 'FBD', document: JSON.stringify(fbdDocument) })
-    const onSave = vi.fn().mockResolvedValue(true)
-
-    render(<I18nProvider><MappingTab document={document} saving={false} onSave={onSave} /></I18nProvider>)
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
-    const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
-
-    const variableSelect = within(dialog).getByRole('combobox', { name: 'Biến' })
-    const options = within(variableSelect).getAllByRole('option').map((option) => option.textContent)
-    expect(options).toEqual(['SETPOINT (vào · REAL)', 'FAN_CMD (ra · BOOL)'])
-
-    fireEvent.click(within(dialog).getByText(/VP:setpoint-src/))
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Ánh xạ' }))
-
-    await waitFor(() => expect(onSave).toHaveBeenCalled())
-    const operations = onSave.mock.calls[0][0]
-    expect(operations[0]).toMatchObject({ op: 'upsertVariable', variable: { programId: 'program-fbd-1', name: 'SETPOINT', type: 'REAL', class: 'INPUT' } })
-    expect(operations[1]).toMatchObject({ op: 'upsertBinding', binding: { point: { category: 'VP', pointId: 'setpoint-src' } } })
-  })
-
-  it('ẩn biến đã ánh xạ rồi, hiện thông báo khi hết biến khả dụng', async () => {
-    const document = baseDocument()
-    document.programs.push({
-      programId: 'program-1', name: 'P1', kind: 'PROGRAM', language: 'ST',
-      document: 'PROGRAM P1\nVAR_OUTPUT\n  FanEnable : BOOL;\nEND_VAR\nEND_PROGRAM'
-    })
-    document.variables.push({ variableId: 'v1', programId: 'program-1', name: 'FanEnable', type: 'BOOL', class: 'OUTPUT', initialValue: null, retain: false })
-
-    render(<I18nProvider><MappingTab document={document} saving={false} onSave={vi.fn()} /></I18nProvider>)
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm ánh xạ' }))
-    const dialog = screen.getByRole('dialog', { name: 'Thêm ánh xạ Biến ↔ Điểm' })
-
-    expect(within(dialog).getByRole('combobox', { name: 'Biến' })).toBeDisabled()
-    expect(within(dialog).getByText(/chưa được ánh xạ/)).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: 'Ánh xạ' })).toBeDisabled()
+  it('viewer chỉ inspect và không có control Map', () => {
+    auth.role = 'viewer'
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    expect(screen.getByText('Viewer · read-only')).toBeVisible()
+    expect(screen.getAllByRole('button', { name: /^Ánh xạ / }).every((button) => button.hasAttribute('disabled'))).toBe(true)
   })
 })

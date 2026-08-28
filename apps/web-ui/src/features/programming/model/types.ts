@@ -191,6 +191,32 @@ export interface ProgrammingDraftDocument {
   library: { profile: string; version: string }
 }
 
+/** Snapshot của revision là `ProgrammingResource` mở trong OpenAPI. Các field
+ * dưới đây phản ánh payload mà Web API hiện phát và chỉ dùng để quan sát bản
+ * immutable/active; FE không dùng chúng làm authority thay cho `/runtime`. */
+export interface ProgrammingRevisionSnapshotObject {
+  kind: string
+  objectId: string
+  sha256?: string
+  payload?: unknown
+}
+
+export interface ProgrammingRevision {
+  revisionId: string
+  projectId: string
+  state: 'DRAFT' | 'IMMUTABLE' | 'ACTIVE' | 'LKG' | 'SUPERSEDED'
+  contentHash: string
+  createdAt: string
+  snapshot?: {
+    manifest?: {
+      label?: string
+      comment?: string
+      objects?: Array<{ kind: string; objectId: string; sha256?: string }>
+    }
+    objects?: ProgrammingRevisionSnapshotObject[]
+  }
+}
+
 export type ProgrammingCheckState = 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'TIMED_OUT'
 
 /** WP-01 (Overview state model, D-01, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15`
@@ -280,14 +306,14 @@ export interface ProgrammingRevisionChanges {
 
 /** `GET /operations/{operationId}` — DM-PROG-001 §3.9 state machine. */
 export type ProgrammingOperationState =
-  | 'REQUESTED'
+  | 'QUEUED'
   | 'PREFLIGHT'
-  | 'STAGED'
+  | 'STAGING'
   | 'APPLYING'
   | 'VERIFYING'
   | 'SUCCEEDED'
-  | 'REJECTED'
   | 'FAILED'
+  | 'ROLLED_BACK'
   | 'UNKNOWN_RECONCILING'
 
 export interface ProgrammingOperationView {
@@ -401,4 +427,8 @@ export interface RemoteState<T> {
   data: T | null
   error: string | null
   refresh: () => void
+  /** Unix milliseconds của lần đọc thành công gần nhất, nếu có.
+   * Giữ riêng với `data` để UI phân biệt snapshot đang giữ lại với dữ liệu
+   * vừa đọc; không phải authority runtime mới. */
+  lastSuccessAt?: number | null
 }

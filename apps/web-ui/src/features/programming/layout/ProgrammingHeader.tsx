@@ -1,6 +1,7 @@
 import { RefreshCw } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { Button } from '../../../shared/components/Button'
+import { useLocation } from 'react-router-dom'
 
 /**
  * `ProgrammingHeader` — UX §16.1.4/§22/§23. Rev A chỉ có `projectsPerController
@@ -11,16 +12,21 @@ import { Button } from '../../../shared/components/Button'
  */
 export function ProgrammingHeader({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
   const { pick } = useI18n()
+  const location = useLocation()
+  const overview = location.pathname === '/eng/programming' || location.pathname === '/eng/programming/'
   return (
-    <header className="flex flex-wrap items-start justify-between gap-3">
+    <header className={`flex flex-wrap justify-between gap-3 ${overview ? 'items-start py-1' : 'items-center'}`}>
       <div>
-        <h1 className="text-2xl font-bold text-[var(--c-text)]">{pick('Lập trình điều khiển', 'Control programming')}</h1>
-        <p className="mt-1 text-sm text-[var(--c-text-dim)]">
-          {pick(
-            'Theo dõi ứng dụng đang chạy, tiếp tục bản nháp và xử lý các vấn đề cần chú ý.',
-            'Monitor the running application, continue draft work, and resolve items requiring attention.'
-          )}
-        </p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--c-accent)]">Programming workstation</p>
+        <h1 className={`${overview ? 'text-2xl' : 'text-lg'} font-bold text-[var(--c-text)]`}>{pick('Lập trình điều khiển', 'Control programming')}</h1>
+        {overview && (
+          <p className="mt-1 text-sm text-[var(--c-text-dim)]">
+            {pick(
+              'Theo dõi ứng dụng đang chạy, tiếp tục bản nháp và xử lý các vấn đề cần chú ý.',
+              'Monitor the running application, continue draft work, and resolve items requiring attention.'
+            )}
+          </p>
+        )}
       </div>
       <Button variant="secondary" size="sm" icon={<RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />} onClick={onRefresh} disabled={refreshing}>
         {pick('Làm mới', 'Refresh')}

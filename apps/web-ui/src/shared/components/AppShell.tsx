@@ -23,6 +23,7 @@ export function AppShell() {
   const [navOpen, setNavOpen] = useState(false)
   const alarmCount = alarms.data?.filter((alarm) => (alarm.active ?? (alarm.status === 'active' || alarm.status === 'acked')) || alarm.status === 'unack').length ?? 0
   const currentUser = me.data ?? session
+  const programmingWorkspace = location.pathname.startsWith('/eng/programming')
 
   useEffect(() => {
     const refresh = () => { void alarms.refetch() }
@@ -49,14 +50,14 @@ export function AppShell() {
         <div className="min-w-0 flex-1">
           <TopBar connectionState={connectionState} alarmCount={alarmCount} currentUser={currentUser} onOpenNav={() => setNavOpen(true)} />
           {connectionState !== 'connected' && (
-            <div className="sticky top-16 z-30 border-b border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-5 py-2 text-sm text-[var(--c-warn-fg)]">
+            <div data-app-reconnect-banner className="sticky top-16 z-30 border-b border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-5 py-2 text-sm text-[var(--c-warn-fg)]">
               {t('reconnecting')}
             </div>
           )}
-          <main id="main-content" className="p-5">
+          <main id="main-content" className={programmingWorkspace ? 'p-2 sm:p-3' : 'p-5'}>
             {/* PA3-204: breadcrumb chỉ hiện với trang có chiều sâu, và command
                 palette (Ctrl/⌘+K) sống ở cấp shell để mở được từ mọi trang. */}
-            <Breadcrumb />
+            {!programmingWorkspace && <Breadcrumb />}
             {/* Một trang lỗi không được làm trắng cả ứng dụng. `resetKey` là
                 đường dẫn hiện tại, nên chuyển sang trang khác sẽ tự thử render
                 lại thay vì kẹt ở màn hình lỗi. */}

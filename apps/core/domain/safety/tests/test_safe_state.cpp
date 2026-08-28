@@ -173,6 +173,54 @@ TEST(SafeState, T6GraphInputBadForcesSafe)
     EXPECT_FALSE(s.active()) << "BAD trên kênh graph không dùng → kệ";
 }
 
+TEST(SafeState, ProgramOwnerIgnoresInactiveGraphInputPolicy)
+{
+    PointTable t;
+    PointQuality q;
+    GraphRuntime g;
+    ASSERT_TRUE(g.load_string(kGraphAi0));
+    PriorityResolver r;
+    SafeState s(q, &g, &r);
+
+    IoSnapshot io = normal_io(100);
+    io.ui_quality[0] = KX_Q_BAD;
+    t.update_inputs(io);
+    q.evaluate(t, io);
+    ASSERT_TRUE(r.set_do(PRIO_LOCAL_MANUAL, 0, true));
+    OutputCmd out = r.resolve();
+
+    s.apply(io, t, &out, false);
+
+    EXPECT_FALSE(s.active());
+    EXPECT_FALSE(s.triggers().graph_input_bad)
+        << "graph giữ để rollback không còn là safety authority trong PROGRAM_ONLY";
+    EXPECT_FALSE(s.triggers().no_controller) << "manual vẫn là nguồn điều khiển hợp lệ";
+    EXPECT_EQ(out.dout[0], 1);
+}
+
+TEST(SafeState, ProgramOwnerDetectsNoControllerEvenWhenRollbackGraphIsLoaded)
+{
+    PointTable t;
+    PointQuality q;
+    GraphRuntime g;
+    ASSERT_TRUE(g.load_string(kGraphAi0));
+    PriorityResolver r;
+    SafeState s(q, &g, &r);
+
+    IoSnapshot io = normal_io(100);
+    io.ui_quality[0] = KX_Q_GOOD;
+    t.update_inputs(io);
+    q.evaluate(t, io);
+    OutputCmd out = active_out();
+
+    s.apply(io, t, &out, false);
+
+    EXPECT_TRUE(s.active());
+    EXPECT_TRUE(s.triggers().no_controller)
+        << "graph inactive không được che việc Program chưa publish output";
+    EXPECT_FALSE(s.triggers().graph_input_bad);
+}
+
 TEST(SafeState, T7NoGraphNoManualForcesSafe)
 {
     PointTable t;

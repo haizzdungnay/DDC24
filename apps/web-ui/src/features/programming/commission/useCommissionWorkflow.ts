@@ -7,6 +7,7 @@ import { useI18n } from '../../../shared/i18n'
 import { useAuth } from '../../auth'
 import { createUuid } from '../../../shared/crypto'
 import type { ProgrammingOperationView } from '../model/types'
+import { operationPollBudget, useOperationPolling } from '../shared/useOperationPolling'
 
 export type CommissionWorkflowState =
   | { phase: 'idle' }
@@ -30,12 +31,16 @@ interface SubmitArgs {
  * revisionId) theo DDD-FE-PROG-001 §13 — timeout không bao giờ tạo key mới
  * hay POST lại; chỉ `GET /operations/{id}` được gọi lại.
  */
-export function useCommissionWorkflow() {
+export function useCommissionWorkflow(taskPeriodsMs?: readonly number[]) {
   const client = useProgrammingApiClient()
   const { pick } = useI18n()
   const { session, login } = useAuth()
   const [state, setState] = useState<CommissionWorkflowState>({ phase: 'idle' })
-  const pollTimer = useRef<number | undefined>(undefined)
+  const submitInFlight = useRef(false)
+  const polling = useOperationPolling({
+    recoveryKey: 'programming.commission.operationId',
+    budgetMs: operationPollBudget(taskPeriodsMs)
+  })
 
   const idempotencyKeyFor = useCallback((revisionId: string): string => {
     const storageKey = `programming.commission.idempotency.${revisionId}`
@@ -46,32 +51,14 @@ export function useCommissionWorkflow() {
     return created
   }, [])
 
-  const pollOperation = useCallback(
-    (operationId: string) => {
-      const poll = () => {
-        client.request<ProgrammingOperationView>('getProgrammingOperation', { path: { operationId } }).then(
-          (operation) => {
-            if (operation.state === 'SUCCEEDED' || operation.state === 'REJECTED' || operation.state === 'FAILED') {
-              setState({ phase: 'terminal', operation })
-              return
-            }
-            if (operation.state === 'UNKNOWN_RECONCILING') {
-              setState({ phase: 'unknown', operationId })
-              return
-            }
-            pollTimer.current = window.setTimeout(poll, 1500)
-          },
-          () => setState({ phase: 'unknown', operationId })
-        )
-      }
-      poll()
-    },
-    [client]
-  )
+  // Giữ API state cũ cho caller, còn timer/recovery thuộc helper dùng chung.
+  const operationState = polling.state
 
   const submit = useCallback(
     async (args: SubmitArgs, reAuthPassword: string) => {
-      window.clearTimeout(pollTimer.current)
+      if (submitInFlight.current || operationState.phase === 'polling' || operationState.phase === 'unknown') return
+      submitInFlight.current = true
+      polling.invalidate()
       setState({ phase: 'submitting' })
       try {
         // Re-auth bắt buộc trước mọi mutation mạnh (DDD-SEC-PROG-001 §4) —
@@ -100,25 +87,25 @@ export function useCommissionWorkflow() {
             correlationId: createUuid()
           }
         )
-        setState({ phase: 'polling', operationId: accepted.operationId })
-        pollOperation(accepted.operationId)
+        setState({ phase: 'idle' })
+        polling.start(accepted.operationId)
       } catch (reason) {
         setState({
           phase: 'error',
           message: reason instanceof ProgrammingApiError ? programmingErrorCopy(pick, reason.envelope.error.code) : pick('Không gửi được lệnh Đưa vào vận hành.', 'Could not submit the commission command.')
         })
-      }
+      } finally { submitInFlight.current = false }
     },
-    [client, idempotencyKeyFor, pollOperation, pick]
+    [client, idempotencyKeyFor, operationState.phase, pick, polling]
   )
 
   const recheckStatus = useCallback(
     (operationId: string) => {
-      setState({ phase: 'polling', operationId })
-      pollOperation(operationId)
+      polling.start(operationId)
     },
-    [pollOperation]
+    [polling]
   )
 
-  return { state, submit, recheckStatus, reset: () => setState({ phase: 'idle' }) }
+  const exposedState = state.phase === 'submitting' || state.phase === 'error' ? state : operationState
+  return { state: exposedState, submit, recheckStatus, reset: () => { polling.reset(); setState({ phase: 'idle' }) } }
 }

@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1180" viewBox="0 0 1440 1180" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
+  <title>OPS-01 Khối "Ai đang giữ quyền điều khiển" trên Landing — desktop 1440, ba trạng thái</title>
+  <desc>Ba artboard đặc tả OverrideOwnershipPanel: có lệnh ép tay, không có lệnh nào, và không đọc được nguồn dữ liệu. Màu lấy từ token LIGHT trong apps/web-ui/src/shared/theme/tokens.ts. Dữ liệu trong hình là MINH HOẠ, không phải dữ liệu runtime.</desc>
+
+  <rect width="1440" height="1180" fill="#C8CCD0"/>
+
+  <!-- ================= ARTBOARD 1 — CÓ LỆNH ÉP TAY ================= -->
+  <text x="24" y="22" font-size="12" font-weight="700" fill="#4A4F55">Artboard 1 — có lệnh ép tay đang giữ (trạng thái chính)</text>
+
+  <g transform="translate(24,36)">
+    <rect x="0" y="0" width="1392" height="560" rx="8" fill="#D8DBDE" stroke="#636970"/>
+
+    <!-- Tiêu đề Panel -->
+    <text x="20" y="30" font-size="13" font-weight="700" fill="#26527C" letter-spacing="0.6">AI ĐANG GIỮ QUYỀN ĐIỀU KHIỂN</text>
+    <text x="20" y="50" font-size="11" fill="#4A4F55">Mọi điểm đang bị ép tay, ai ra lệnh, và còn hiệu lực bao lâu. Nguồn: /points + /activity — không tính TTL ở trình duyệt.</text>
+    <rect x="1160" y="16" width="212" height="30" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="1180" y="36" font-size="12" font-weight="700" fill="#26527C">Mở nhật ký hoạt động →</text>
+    <line x1="20" y1="64" x2="1372" y2="64" stroke="#636970"/>
+
+    <!-- Dải tóm tắt -->
+    <rect x="20" y="78" width="1352" height="42" rx="6" fill="#E9E3F1" stroke="#693797" stroke-width="2"/>
+    <path d="M40 92 h12 v-5 a6 6 0 0 1 12 0 v5 h12 v16 h-36 z" fill="none" stroke="#693797" stroke-width="2"/>
+    <text x="92" y="104" font-size="13" font-weight="700" fill="#693797">3 điểm đang bị ép tay</text>
+    <text x="250" y="104" font-size="12" fill="#4A4F55">· 1 điểm sắp hết hạn trong 5 phút · 1 điểm không có thời hạn tự nhả</text>
+
+    <!-- Header bảng -->
+    <g font-size="10" fill="#4A4F55" letter-spacing="0.4">
+      <text x="32" y="146">ĐIỂM</text>
+      <text x="180" y="146">TÊN ĐIỂM</text>
+      <text x="470" y="146">GIÁ TRỊ ĐANG ÉP</text>
+      <text x="640" y="146">NGƯỜI RA LỆNH</text>
+      <text x="820" y="146">LÚC</text>
+      <text x="985" y="146">CÒN LẠI</text>
+      <text x="1150" y="146">NGUỒN GIỮ</text>
+    </g>
+    <line x1="20" y1="156" x2="1372" y2="156" stroke="#636970"/>
+
+    <!-- Hàng 1 — bình thường -->
+    <g>
+      <text x="32" y="184" font-size="12" font-weight="700" fill="#1C1F23" font-family="monospace">DO-02</text>
+      <text x="180" y="184" font-size="12" font-weight="700" fill="#1C1F23">Quạt cấp AHU-1</text>
+      <text x="470" y="184" font-size="12" fill="#1C1F23" font-family="monospace">ON</text>
+      <text x="640" y="184" font-size="12" fill="#1C1F23">chuong · operator</text>
+      <text x="820" y="184" font-size="12" fill="#4A4F55" font-family="monospace">14:02:11</text>
+      <text x="985" y="184" font-size="13" font-weight="700" fill="#1C1F23" font-family="monospace">18:24</text>
+      <rect x="1150" y="170" width="126" height="20" rx="4" fill="#E9E3F1" stroke="#693797"/>
+      <text x="1158" y="184" font-size="10" font-weight="700" fill="#693797">LOCAL MANUAL</text>
+      <line x1="20" y1="200" x2="1372" y2="200" stroke="#636970" stroke-opacity="0.5"/>
+    </g>
+
+    <!-- Hàng 2 — sắp hết hạn: dấu hiệu PHI-MÀU (icon + chữ), không chỉ đổi màu -->
+    <g>
+      <rect x="20" y="200" width="1352" height="44" fill="#EEE9DB"/>
+      <text x="32" y="228" font-size="12" font-weight="700" fill="#1C1F23" font-family="monospace">AO-01</text>
+      <text x="180" y="228" font-size="12" font-weight="700" fill="#1C1F23">Van nước lạnh AHU-1</text>
+      <text x="470" y="228" font-size="12" fill="#1C1F23" font-family="monospace">62.0 %</text>
+      <text x="640" y="228" font-size="12" fill="#1C1F23">chuong · operator</text>
+      <text x="820" y="228" font-size="12" fill="#4A4F55" font-family="monospace">14:16:40</text>
+      <!-- icon tam giác cảnh báo + nhãn chữ: không truyền trạng thái bằng màu đơn thuần -->
+      <path d="M985 232 l9 -15 l9 15 z" fill="none" stroke="#634D00" stroke-width="2"/>
+      <text x="994" y="230" font-size="9" font-weight="700" fill="#634D00" text-anchor="middle">!</text>
+      <text x="1012" y="226" font-size="13" font-weight="700" fill="#634D00" font-family="monospace">04:11</text>
+      <text x="1012" y="238" font-size="9" font-weight="700" fill="#634D00">SẮP HẾT HẠN</text>
+      <rect x="1150" y="214" width="126" height="20" rx="4" fill="#E9E3F1" stroke="#693797"/>
+      <text x="1158" y="228" font-size="10" font-weight="700" fill="#693797">LOCAL MANUAL</text>
+      <line x1="20" y1="244" x2="1372" y2="244" stroke="#636970" stroke-opacity="0.5"/>
+    </g>
+
+    <!-- Hàng 3 — điểm ảo, KHÔNG có TTL: hiện — kèm lý do, không hiện 00:00 -->
+    <g>
+      <text x="32" y="272" font-size="12" font-weight="700" fill="#1C1F23" font-family="monospace">VP-SETP-01</text>
+      <text x="180" y="272" font-size="12" font-weight="700" fill="#1C1F23">Setpoint nhiệt độ khu A</text>
+      <text x="470" y="272" font-size="12" fill="#1C1F23" font-family="monospace">24.0 °C</text>
+      <text x="640" y="272" font-size="12" fill="#1C1F23">— <tspan font-size="10" fill="#4A4F55">(không có vết trong Activity)</tspan></text>
+      <text x="820" y="272" font-size="12" fill="#4A4F55" font-family="monospace">—</text>
+      <text x="985" y="268" font-size="13" font-weight="700" fill="#4A4F55" font-family="monospace">—</text>
+      <text x="985" y="280" font-size="9" fill="#4A4F55">KHÔNG CÓ THỜI HẠN</text>
+      <rect x="1150" y="258" width="126" height="20" rx="4" fill="#E5E6E8" stroke="#636970"/>
+      <text x="1158" y="272" font-size="10" font-weight="700" fill="#4A4F55">GHI TRỰC TIẾP</text>
+      <line x1="20" y1="288" x2="1372" y2="288" stroke="#636970" stroke-opacity="0.5"/>
+    </g>
+
+    <!-- Chú giải trung thực -->
+    <rect x="20" y="304" width="1352" height="62" rx="6" fill="#E0E6EC" stroke="#26527C"/>
+    <text x="36" y="324" font-size="11" font-weight="700" fill="#26527C">Ba ô có thể hiện “—”, và mỗi ô có nghĩa khác nhau:</text>
+    <text x="36" y="342" font-size="11" fill="#4A4F55">· NGƯỜI RA LỆNH “—” = không tìm thấy vết `point_force`/`point_override` trong Activity cho điểm này, KHÔNG phải “hệ thống tự ép”.</text>
+    <text x="36" y="358" font-size="11" fill="#4A4F55">· CÒN LẠI “—” = `overrideExpiresInS` không có giá trị ⇒ lệnh không có thời hạn tự nhả. Tuyệt đối không vẽ 00:00, vì 00:00 nghĩa là “vừa hết hạn”.</text>
+
+    <!-- Hàng thao tác cho mỗi dòng -->
+    <text x="20" y="392" font-size="11" font-weight="700" fill="#4A4F55">Mỗi hàng có hai đường đi, cả hai đều tới được bằng bàn phím (Tab → Enter):</text>
+    <rect x="20" y="404" width="180" height="32" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="36" y="425" font-size="12" fill="#26527C">Xem điểm ở Monitor</text>
+    <rect x="212" y="404" width="228" height="32" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="228" y="425" font-size="12" fill="#26527C">Xem vết lệnh ở Nhật ký</text>
+    <text x="456" y="425" font-size="11" fill="#4A4F55">→ /monitor?point=&lt;id&gt; và /activity?objectId=&lt;id&gt; — hai tham số mà trang đích THẬT SỰ đọc.</text>
+
+    <!-- RBAC -->
+    <rect x="20" y="452" width="1352" height="88" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="36" y="474" font-size="11" font-weight="700" fill="#1C1F23">Quyền: khối này là ĐỌC, hiển thị cho `viewer` trở lên.</text>
+    <text x="36" y="492" font-size="11" fill="#4A4F55">Suy từ endpoint thật: `GET /api/v1/points` và `GET /api/v1/activity` đều là RoleViewer. Khối không có nút ghi nào,</text>
+    <text x="36" y="508" font-size="11" fill="#4A4F55">nên không cần và KHÔNG ĐƯỢC nâng `ROUTE_MIN_ROLE` của Landing. Việc nhả lệnh ép vẫn nằm ở Monitor, nơi đã khoá `operator`.</text>
+    <text x="36" y="528" font-size="11" fill="#4A4F55">Ca trực chỉ-đọc phải nhìn thấy ai đang giữ quyền — đó chính là câu hỏi bàn giao ca, và giấu nó đi không làm hệ thống an toàn hơn.</text>
+  </g>
+
+  <!-- ================= ARTBOARD 2 — RỖNG ================= -->
+  <text x="24" y="626" font-size="12" font-weight="700" fill="#4A4F55">Artboard 2 — không có lệnh ép tay nào (trạng thái rỗng phải NÓI RA vì sao rỗng)</text>
+  <g transform="translate(24,640)">
+    <rect x="0" y="0" width="684" height="230" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="20" y="30" font-size="13" font-weight="700" fill="#26527C" letter-spacing="0.6">AI ĐANG GIỮ QUYỀN ĐIỀU KHIỂN</text>
+    <line x1="20" y1="46" x2="664" y2="46" stroke="#636970"/>
+    <rect x="20" y="62" width="644" height="146" rx="6" fill="#E0ECE5" stroke="#227742"/>
+    <circle cx="52" cy="98" r="12" fill="none" stroke="#165B2E" stroke-width="2"/>
+    <path d="M46 98 l4 5 l9 -11" fill="none" stroke="#165B2E" stroke-width="2"/>
+    <text x="76" y="94" font-size="13" font-weight="700" fill="#165B2E">Không có lệnh tay nào đang giữ quyền</text>
+    <text x="76" y="114" font-size="11" fill="#4A4F55">Mọi đầu ra đang do logic điều khiển và lịch vận hành quyết định.</text>
+    <text x="36" y="146" font-size="11" fill="#4A4F55">Đã đọc được 29/29 điểm lúc 14:31:02 — đây là kết luận từ dữ liệu đủ,</text>
+    <text x="36" y="162" font-size="11" fill="#4A4F55">không phải màn hình trống vì không đọc được gì.</text>
+    <text x="36" y="188" font-size="10" font-style="italic" fill="#4A4F55">So sánh với Artboard 3: hai tình huống này TRÔNG PHẢI KHÁC NHAU.</text>
+  </g>
+
+  <!-- ================= ARTBOARD 3 — KHÔNG ĐỌC ĐƯỢC ================= -->
+  <g transform="translate(732,640)">
+    <rect x="0" y="0" width="684" height="230" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="20" y="30" font-size="13" font-weight="700" fill="#26527C" letter-spacing="0.6">AI ĐANG GIỮ QUYỀN ĐIỀU KHIỂN</text>
+    <line x1="20" y1="46" x2="664" y2="46" stroke="#636970"/>
+    <rect x="20" y="62" width="644" height="146" rx="6" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+    <path d="M40 106 l14 -24 l14 24 z" fill="none" stroke="#A01017" stroke-width="2"/>
+    <text x="54" y="103" font-size="11" font-weight="700" fill="#A01017" text-anchor="middle">!</text>
+    <text x="82" y="94" font-size="13" font-weight="700" fill="#A01017">Không đọc được bảng điểm</text>
+    <text x="82" y="114" font-size="11" fill="#4A4F55">Không kết luận được là có hay không có lệnh ép tay.</text>
+    <text x="36" y="146" font-size="11" fill="#4A4F55">Đây KHÔNG phải “không có lệnh nào”. Trên một màn hình bàn giao ca,</text>
+    <text x="36" y="162" font-size="11" fill="#4A4F55">trình bày “không đọc được” thành “mọi thứ bình thường” là lỗi an toàn.</text>
+    <rect x="36" y="174" width="120" height="28" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="52" y="192" font-size="12" fill="#26527C">Thử lại</text>
+  </g>
+
+  <!-- ================= Bảng ánh xạ vùng ================= -->
+  <text x="24" y="906" font-size="12" font-weight="700" fill="#4A4F55">Ánh xạ vùng → field → API → state → action → RBAC (DOC_GOVERNANCE §2.2)</text>
+  <g transform="translate(24,918)">
+    <rect x="0" y="0" width="1392" height="236" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <g font-size="10" fill="#4A4F55" letter-spacing="0.4">
+      <text x="16" y="24">VÙNG</text><text x="176" y="24">FIELD</text><text x="392" y="24">API</text>
+      <text x="608" y="24">STATE KHI THIẾU</text><text x="820" y="24">ACTION</text><text x="1064" y="24">RBAC</text><text x="1180" y="24">TEST KHOÁ</text>
+    </g>
+    <line x1="16" y1="32" x2="1376" y2="32" stroke="#636970"/>
+    <g font-size="10.5" fill="#1C1F23">
+      <text x="16" y="54">Dải tóm tắt</text><text x="176" y="54">points[].forced</text><text x="392" y="54">GET /points</text><text x="608" y="54">khối lỗi, không hiện 0</text><text x="820" y="54">—</text><text x="1064" y="54">viewer</text><text x="1180" y="54">summary rỗng ≠ lỗi</text>
+      <text x="16" y="78">Cột ĐIỂM</text><text x="176" y="78">point.id / tag</text><text x="392" y="78">GET /points</text><text x="608" y="78">không render hàng</text><text x="820" y="78">→ /monitor?point=</text><text x="1064" y="78">viewer</text><text x="1180" y="78">link đúng tham số</text>
+      <text x="16" y="102">GIÁ TRỊ ĐANG ÉP</text><text x="176" y="102">point.value + unit</text><text x="392" y="102">GET /points</text><text x="608" y="102">“—”</text><text x="820" y="102">—</text><text x="1064" y="102">viewer</text><text x="1180" y="102">undefined ⇒ “—”</text>
+      <text x="16" y="126">NGƯỜI RA LỆNH</text><text x="176" y="126">activity.actor+role</text><text x="392" y="126">GET /activity?kind=user</text><text x="608" y="126">“—” + lý do</text><text x="820" y="126">→ /activity?objectId=</text><text x="1064" y="126">viewer</text><text x="1180" y="126">không có vết ⇒ “—”</text>
+      <text x="16" y="150">LÚC</text><text x="176" y="150">activity.time</text><text x="392" y="150">GET /activity</text><text x="608" y="150">“—”</text><text x="820" y="150">—</text><text x="1064" y="150">viewer</text><text x="1180" y="150">không đóng dấu giờ máy trạm</text>
+      <text x="16" y="174">CÒN LẠI</text><text x="176" y="174">overrideExpiresInS</text><text x="392" y="174">GET /points (Core cấp)</text><text x="608" y="174">“—” + KHÔNG CÓ THỜI HẠN</text><text x="820" y="174">—</text><text x="1064" y="174">viewer</text><text x="1180" y="174">undefined ⇒ không ra 00:00</text>
+      <text x="16" y="198">NGUỒN GIỮ</text><text x="176" y="198">point.priority</text><text x="392" y="198">GET /points</text><text x="608" y="198">“—”</text><text x="820" y="198">—</text><text x="1064" y="198">viewer</text><text x="1180" y="198">nhãn + icon, không chỉ màu</text>
+    </g>
+    <text x="16" y="224" font-size="10" font-style="italic" fill="#4A4F55">TTL do Core cấp và Core cưỡng chế (PA3-107). Frontend chỉ đếm ngược con số đã nhận; không được tự trừ dần rồi coi kết quả là sự thật.</text>
+  </g>
+</svg>

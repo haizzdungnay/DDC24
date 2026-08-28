@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, ClipboardCheck, FolderPlus, Loader2, PlayCircle, XCircle } from 'lucide-react'
+import { Activity, AlertTriangle, CheckCircle2, ClipboardCheck, FolderPlus, Loader2, PlayCircle, RefreshCw, XCircle } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
 import { Panel } from '../../../shared/components/Panel'
@@ -11,6 +11,7 @@ import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import { useProgrammingProjects, useProgrammingRecentAudit } from '../api/queries'
 import { useCreateProgrammingProject } from '../api/mutations'
 import type { ProgrammingProject, ProgrammingRuntime } from '../model/types'
+import { programmingCoreTruth } from '../shared/runtimeTruth'
 
 /**
  * `OverviewPage` (PGM-01) — `UJ-PROG-01`. Trong `≤5 giây` phải thấy: Core,
@@ -23,87 +24,100 @@ export function OverviewPage() {
   const audit = useProgrammingRecentAudit(5)
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <RunningApplicationPanel runtime={runtime.data} status={runtime.status} />
-      <CoreSafeStatePanel runtime={runtime.data} status={runtime.status} />
-      <DraftAttentionPanel projects={projects} />
-      <div className="lg:col-span-2">
-        <ProgrammingAttentionList runtime={runtime.data} />
+    <div className="space-y-3">
+      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.85fr)]">
+        <RuntimeAuthorityPanel runtime={runtime.data} status={runtime.status} onRetry={runtime.refresh} />
+        <DraftAttentionPanel projects={projects} />
       </div>
-      <RecentEngineeringTimeline audit={audit} />
+      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.85fr)]">
+        <ProgrammingAttentionList runtime={runtime.data} status={runtime.status} />
+        <RecentEngineeringTimeline audit={audit} />
+      </div>
     </div>
   )
 }
 
-function RunningApplicationPanel({ runtime, status }: { runtime: ProgrammingRuntime | null; status: 'loading' | 'ready' | 'error' }) {
-  const { pick } = useI18n()
-  const navigate = useNavigate()
-  if (status === 'loading') return <Panel title={pick('Ứng dụng đang vận hành', 'Running application')}><StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} /></Panel>
-  if (status === 'error' || !runtime) {
-    return (
-      <Panel title={pick('Ứng dụng đang vận hành', 'Running application')}>
-        <StateBlock state="offline" title={pick('Không kết nối được Core', 'Core unreachable')} />
-      </Panel>
-    )
-  }
-  if (!runtime.activeRevisionId) {
-    return (
-      <Panel title={pick('Ứng dụng đang vận hành', 'Running application')}>
-        <p className="text-sm text-[var(--c-text-dim)]">
-          {pick('Chưa có ứng dụng điều khiển nào được đưa vào vận hành.', 'No control application has been commissioned.')}
-        </p>
-      </Panel>
-    )
-  }
-  return (
-    <Panel title={pick('Ứng dụng đang vận hành', 'Running application')}>
-      <div className="space-y-2 text-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">{pick('Đang vận hành', 'Active revision')}</span>
-          <span className="font-mono text-[var(--c-text)]">{runtime.activeRevisionId}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">{pick('Tác vụ', 'Task')}</span>
-          <StatusBadge state={runtime.taskState === 'RUNNING' ? 'online' : runtime.taskState === 'FAULT' ? 'fault' : 'unknown'} label={runtime.taskState} />
-        </div>
-        <Button size="sm" variant="secondary" icon={<PlayCircle className="h-4 w-4" aria-hidden="true" />} onClick={() => navigate('/eng/programming/runtime')}>
-          {pick('Mở runtime', 'Open runtime')}
-        </Button>
-      </div>
-    </Panel>
-  )
+function shortRevision(value: string | null | undefined): string {
+  return value ? value.slice(0, 8) : '—'
 }
 
-function CoreSafeStatePanel({ runtime, status }: { runtime: ProgrammingRuntime | null; status: 'loading' | 'ready' | 'error' }) {
+function RuntimeAuthorityPanel({ runtime, status, onRetry }: { runtime: ProgrammingRuntime | null; status: 'loading' | 'ready' | 'error'; onRetry: () => void }) {
   const { pick } = useI18n()
-  if (status === 'loading') return <Panel title={pick('Core & trạng thái an toàn', 'Core & safe state')}><StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} /></Panel>
-  const coreState = status === 'error' || !runtime || runtime.producerState === 'UNAVAILABLE'
-    ? 'disconnected'
-    : runtime.producerState === 'DEGRADED'
-      ? 'degraded'
-      : 'connected'
-  const coreLabel = status === 'error' || !runtime || runtime.producerState === 'UNAVAILABLE'
-    ? pick('Không kết nối được Core', 'Core unreachable')
-    : runtime.producerState === 'DEGRADED'
+  const navigate = useNavigate()
+  const truth = programmingCoreTruth({ status, data: runtime })
+  const coreState = truth === 'ready' ? 'connected' : truth === 'degraded' ? 'degraded' : truth === 'unavailable' ? 'disconnected' : truth === 'stale' ? 'stale' : 'unknown'
+  const coreLabel = truth === 'ready'
+    ? pick('Core sẵn sàng', 'Core ready')
+    : truth === 'degraded'
       ? pick('Core suy giảm', 'Core degraded')
-      : pick('Core đang chạy', 'Core running')
+      : truth === 'unavailable'
+        ? pick('Không kết nối được Core', 'Core unreachable')
+        : truth === 'stale'
+          ? pick('Snapshot Core cũ', 'Stale Core snapshot')
+          : pick('Trạng thái Core chưa xác định', 'Core state unknown')
+  const activeTitle = truth !== 'ready'
+    ? pick('Chưa xác nhận được bản đang vận hành', 'Running revision is not confirmed')
+    : runtime?.activeRevisionId
+      ? `Revision ${shortRevision(runtime.activeRevisionId)}`
+      : pick('Chưa có bản Active', 'No active revision')
+  const taskState = truth === 'ready' && runtime?.taskState === 'RUNNING'
+    ? 'online'
+    : truth === 'ready' && runtime?.taskState === 'FAULT'
+      ? 'fault'
+      : truth === 'unavailable'
+        ? 'disconnected'
+        : truth === 'stale'
+          ? 'stale'
+          : truth === 'degraded'
+            ? 'degraded'
+            : 'unknown'
+
   return (
-    <Panel title={pick('Core & trạng thái an toàn', 'Core & safe state')}>
-      <div className="space-y-2 text-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">Core</span>
-          <StatusBadge state={coreState} label={coreLabel} />
+    <section aria-labelledby="programming-runtime-authority" className="min-w-0 overflow-hidden rounded-[var(--radius)] border border-[var(--c-line-strong)] bg-[var(--c-surface)] shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--c-border)] px-4 py-4 sm:px-5">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--c-text-dim)]"><Activity className="h-3.5 w-3.5" aria-hidden="true" />{pick('Bản Active & Runtime', 'Active revision & runtime')}</p>
+          <h2 id="programming-runtime-authority" className="mt-1 text-xl font-bold tracking-tight text-[var(--c-text)] sm:text-2xl">{status === 'loading' ? pick('Đang đọc trạng thái…', 'Reading state…') : activeTitle}</h2>
+          <p className="mt-1 break-all font-mono text-xs text-[var(--c-text-dim)]">{pick('Active revision', 'Active revision')}: {truth === 'ready' ? (runtime?.activeRevisionId ?? '—') : pick('chưa xác nhận', 'not confirmed')}</p>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">{pick('Trạng thái an toàn', 'Safe state')}</span>
-          <span className="text-[var(--c-text)]">{runtime && status === 'ready' ? (runtime.safeState ? pick('Có', 'Yes') : pick('Không', 'No')) : '—'}</span>
+        <StatusBadge
+          state={taskState}
+          label={status === 'loading' ? pick('ĐANG ĐỌC', 'LOADING') : truth === 'ready' ? (runtime?.taskState ?? 'UNKNOWN') : coreLabel}
+        />
+      </div>
+
+      <dl className="grid divide-y divide-[var(--c-border)] border-b border-[var(--c-border)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div className="min-w-0 px-4 py-3 sm:px-5">
+          <dt className="text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">Core</dt>
+          <dd className="mt-1"><StatusBadge state={coreState} label={coreLabel} /></dd>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-[var(--c-text-dim)]">{pick('Cập nhật lúc', 'Observed at')}</span>
-          <span className="text-[var(--c-text-dim)]">{runtime ? new Date(runtime.observedAt).toLocaleTimeString() : '—'}</span>
+        <div className="min-w-0 px-4 py-3 sm:px-5">
+          <dt className="text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">{pick('Trạng thái an toàn', 'Safe state')}</dt>
+          <dd className={`mt-1 text-sm font-semibold ${truth === 'ready' && runtime?.safeState ? 'text-[var(--c-warn-fg)]' : 'text-[var(--c-text)]'}`}>
+            {truth === 'ready' && runtime ? (runtime.safeState ? pick('ĐANG TÁC ĐỘNG', 'ACTIVE') : 'NORMAL') : '—'}
+          </dd>
+        </div>
+        <div className="min-w-0 px-4 py-3 sm:px-5">
+          <dt className="text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">{pick('Chu kỳ tác vụ', 'Task period')}</dt>
+          <dd className="mt-1 text-sm font-semibold text-[var(--c-text)]">{truth === 'ready' && runtime?.task ? `${runtime.task.periodMs} ms` : '—'}</dd>
+          <dd className="mt-0.5 text-xs text-[var(--c-text-dim)]">{runtime?.observedAt ? `${pick('Đọc lúc', 'Observed')} ${new Date(runtime.observedAt).toLocaleTimeString()}` : pick('Chưa có mốc đọc', 'No observation yet')}</dd>
+        </div>
+      </dl>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
+        <p className="max-w-xl text-xs text-[var(--c-text-dim)]">
+          {truth === 'ready'
+            ? pick('Trạng thái runtime được đọc trực tiếp từ producer đang sẵn sàng.', 'Runtime state comes directly from the ready producer.')
+            : pick('Không dùng snapshot/unknown để suy ra hệ thống đang chạy. Các thao tác runtime tiếp tục fail-closed.', 'Snapshot/unknown data is not treated as running. Runtime actions remain fail-closed.')}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {truth !== 'ready' && <Button size="sm" variant="secondary" icon={<RefreshCw className="h-4 w-4" aria-hidden="true" />} onClick={onRetry}>{pick('Đọc lại', 'Retry read')}</Button>}
+          <Button size="sm" variant="secondary" icon={<PlayCircle className="h-4 w-4" aria-hidden="true" />} onClick={() => navigate('/eng/programming/runtime')}>
+            {pick('Mở Runtime', 'Open runtime')}
+          </Button>
         </div>
       </div>
-    </Panel>
+    </section>
   )
 }
 
@@ -268,14 +282,16 @@ function DraftPrimaryAction({ project, navigate }: { project: ProgrammingProject
   return <Button size="sm" onClick={() => navigate(designPath)}>{pick('Tiếp tục chỉnh sửa', 'Continue editing')}</Button>
 }
 
-function ProgrammingAttentionList({ runtime }: { runtime: ProgrammingRuntime | null }) {
+function ProgrammingAttentionList({ runtime, status }: { runtime: ProgrammingRuntime | null; status: 'loading' | 'ready' | 'error' }) {
   const { pick } = useI18n()
   const navigate = useNavigate()
   const items: Array<{ code: string; severity: 'error' | 'warning'; text: string; scope: string; action: string }> = []
-  if (runtime?.producerState === 'UNAVAILABLE') items.push({ code: 'PRG-CORE-UNAVAILABLE', severity: 'error', text: pick('Không kết nối được Core.', 'Core is unreachable.'), scope: 'Core', action: pick('Kiểm tra service/Core và kết nối IPC.', 'Check the service/Core and IPC connection.') })
-  else if (runtime?.producerState === 'DEGRADED') items.push({ code: 'PRG-CORE-DEGRADED', severity: 'warning', text: pick('Core đang suy giảm; dữ liệu có thể cũ.', 'Core is degraded; data may be stale.'), scope: 'Core', action: pick('Chỉ chẩn đoán; mọi mutation runtime đang bị khóa.', 'Diagnose only; runtime mutations are locked.') })
-  if (runtime?.taskState === 'FAULT') items.push({ code: 'PRG-TASK-FAULT', severity: 'error', text: pick('Tác vụ điều khiển đang lỗi (FAULT).', 'The control task is faulted.'), scope: runtime.task?.taskId ?? 'Control_Main', action: pick('Mở Runtime để xem số lần quá giờ và trạng thái tác vụ.', 'Open Runtime to inspect overruns and task state.') })
-  if (runtime?.safeState) items.push(
+  const truth = programmingCoreTruth({ status, data: runtime })
+  if (truth === 'unavailable') items.push({ code: 'PRG-CORE-UNAVAILABLE', severity: 'error', text: pick('Không kết nối được Core.', 'Core is unreachable.'), scope: 'Core', action: pick('Kiểm tra service/Core và kết nối IPC.', 'Check the service/Core and IPC connection.') })
+  else if (truth === 'degraded') items.push({ code: 'PRG-CORE-DEGRADED', severity: 'warning', text: pick('Core đang suy giảm; dữ liệu có thể cũ.', 'Core is degraded; data may be stale.'), scope: 'Core', action: pick('Chỉ chẩn đoán; mọi mutation runtime đang bị khóa.', 'Diagnose only; runtime mutations are locked.') })
+  else if (truth === 'stale' || truth === 'unknown') items.push({ code: 'PRG-CORE-UNKNOWN', severity: 'warning', text: pick('Trạng thái Core hiện chưa xác định; snapshot cũ không được xem là live.', 'The current Core state is unknown; the last-known snapshot is not live.'), scope: 'Core', action: pick('Chỉ chẩn đoán và thử đọc lại; mọi mutation runtime đang bị khóa.', 'Diagnose and retry the read only; runtime mutations are locked.') })
+  if (truth === 'ready' && runtime?.taskState === 'FAULT') items.push({ code: 'PRG-TASK-FAULT', severity: 'error', text: pick('Tác vụ điều khiển đang lỗi (FAULT).', 'The control task is faulted.'), scope: runtime.task?.taskId ?? 'Control_Main', action: pick('Mở Runtime để xem số lần quá giờ và trạng thái tác vụ.', 'Open Runtime to inspect overruns and task state.') })
+  if (truth === 'ready' && runtime?.safeState) items.push(
     runtime.safeStateNoControllerOnly
       ? {
           code: 'PRG-SAFE-ACTIVE',

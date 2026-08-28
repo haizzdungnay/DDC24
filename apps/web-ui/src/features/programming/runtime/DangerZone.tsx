@@ -11,7 +11,6 @@ import { ProgrammingApiError } from '../api/generated/client'
 import { programmingErrorCopy } from '../api/errorCopy'
 import { useProgrammingRevisionChanges } from '../api/queries'
 import { useRestoreWorkflow } from './useRestoreWorkflow'
-import { useRetainResetWorkflow } from './useRetainResetWorkflow'
 import type { ProgrammingRuntime } from '../model/types'
 
 /**
@@ -19,7 +18,7 @@ import type { ProgrammingRuntime } from '../model/types'
  * viền cảnh báo, chỉ `admin` thấy nút thật; viewer thấy ở chế độ đọc kèm lý
  * do, KHÔNG thấy một dãy nút bị vô hiệu hóa (UX §16.4).
  */
-export function DangerZone({ runtime, runtimeStatus }: { runtime: ProgrammingRuntime | null; runtimeStatus: 'loading' | 'ready' | 'error' }) {
+export function DangerZone({ runtime, runtimeStatus, taskPeriodsMs }: { runtime: ProgrammingRuntime | null; runtimeStatus: 'loading' | 'ready' | 'error'; taskPeriodsMs?: readonly number[] }) {
   const { pick } = useI18n()
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin')
@@ -38,21 +37,21 @@ export function DangerZone({ runtime, runtimeStatus }: { runtime: ProgrammingRun
   return (
     <Panel title={pick('Vùng thao tác nguy hiểm', 'Danger zone')} className="border-[var(--c-warn)]">
       <div className="space-y-4">
-        <RestoreSection runtime={runtime} coreMutationReady={coreMutationReady} />
+        <RestoreSection runtime={runtime} coreMutationReady={coreMutationReady} taskPeriodsMs={taskPeriodsMs} />
         <div className="h-px bg-[var(--c-border)]" />
         <BundleExportSection revisionId={runtime?.activeRevisionId ?? null} />
         <div className="h-px bg-[var(--c-border)]" />
         <BundleImportSection />
         <div className="h-px bg-[var(--c-border)]" />
-        <RetainResetSection runtime={runtime} coreMutationReady={coreMutationReady} />
+        <RetainResetSection runtime={runtime} />
       </div>
     </Panel>
   )
 }
 
-function RestoreSection({ runtime, coreMutationReady }: { runtime: ProgrammingRuntime | null; coreMutationReady: boolean }) {
+function RestoreSection({ runtime, coreMutationReady, taskPeriodsMs }: { runtime: ProgrammingRuntime | null; coreMutationReady: boolean; taskPeriodsMs?: readonly number[] }) {
   const { pick } = useI18n()
-  const restore = useRestoreWorkflow()
+  const restore = useRestoreWorkflow(taskPeriodsMs)
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [password, setPassword] = useState('')
@@ -83,7 +82,9 @@ function RestoreSection({ runtime, coreMutationReady }: { runtime: ProgrammingRu
         <p className={`mt-2 text-sm ${restore.state.operation.state === 'SUCCEEDED' ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-fault-fg)]'}`}>
           {restore.state.operation.state === 'SUCCEEDED'
             ? pick(`Khôi phục thành công. Bản đang chạy: ${restore.state.operation.actualActiveRevisionId ?? '—'}.`, `Restore succeeded. Running version: ${restore.state.operation.actualActiveRevisionId ?? '—'}.`)
-            : pick('Khôi phục thất bại.', 'Restore failed.')}
+            : restore.state.operation.state === 'ROLLED_BACK'
+              ? pick(`Khôi phục đã được Core quay lui. Bản đang chạy sau read-back: ${restore.state.operation.actualActiveRevisionId ?? 'chưa xác định'}.`, `Restore was rolled back by Core. Running revision after read-back: ${restore.state.operation.actualActiveRevisionId ?? 'unknown'}.`)
+              : pick('Khôi phục thất bại.', 'Restore failed.')}
         </p>
       )}
       {restore.state.phase === 'error' && <p className="mt-2 text-sm text-[var(--c-fault-fg)]">{restore.state.message}</p>}
@@ -238,151 +239,55 @@ function BundleImportSection() {
   )
 }
 
-/**
- * WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001). Trước đây là stub khoá
- * cứng vì backend chỉ ở mức contract-only (503) và chưa có danh sách biến
- * RETAIN bị ảnh hưởng — cả hai điều kiện đó nay đã có: `POST /retain/reset`
- * đã nối Core thật, và danh sách biến dùng lại đúng
- * `GET /revisions/none/changes/{activeRevisionId}` (impact nhóm `retain`)
- * — cùng cơ chế Commission đã dùng, không phải một nguồn dữ liệu mới.
- */
-function RetainResetSection({ runtime, coreMutationReady }: { runtime: ProgrammingRuntime | null; coreMutationReady: boolean }) {
+/** RETAIN chỉ được đọc impact cho tới khi security authority cấp token một-lần. */
+function RetainResetSection({ runtime }: { runtime: ProgrammingRuntime | null }) {
   const { pick } = useI18n()
   const activeRevisionId = runtime?.activeRevisionId ?? null
   const changes = useProgrammingRevisionChanges('none', activeRevisionId ?? undefined)
-  const retainReset = useRetainResetWorkflow()
-  const [open, setOpen] = useState(false)
-  const [reason, setReason] = useState('')
-  const [password, setPassword] = useState('')
-  const [acknowledged, setAcknowledged] = useState(false)
-  const submitting = retainReset.state.phase === 'submitting' || retainReset.state.phase === 'polling'
-  const canReset = coreMutationReady && !!activeRevisionId
-
   const impact = changes.data?.impact.retain ?? null
-  // UNAVAILABLE (hoặc lỗi đọc) fail-closed — không cho xác nhận khi không
-  // biết chắc phạm vi ảnh hưởng (đúng nguyên tắc Commission dùng cho `hasUnavailable`).
   const impactUnavailable = changes.status === 'error' || impact?.status === 'UNAVAILABLE'
-  const impactPresent = impact?.status === 'PRESENT'
-  const confirmDisabled =
-    submitting ||
-    changes.status === 'loading' ||
-    reason.trim().length === 0 ||
-    password.length === 0 ||
-    impactUnavailable ||
-    (impactPresent && !acknowledged)
-
-  function openDialog() {
-    setReason('')
-    setPassword('')
-    setAcknowledged(false)
-    changes.refresh()
-    setOpen(true)
-  }
 
   return (
-    <div>
-      <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Đặt lại trạng thái lưu (RETAIN)', 'Reset RETAIN state')}</h3>
-      <p className="mt-1 text-sm text-[var(--c-text-dim)]">
-        {canReset
-          ? pick(
-              `Đặt lại toàn bộ biến RETAIN của bản đang chạy (${activeRevisionId!.slice(0, 8)}) về giá trị khởi tạo.`,
-              `Reset all RETAIN variables of the running version (${activeRevisionId!.slice(0, 8)}) to their initial value.`
-            )
-          : pick('Chỉ cho phép khi có Active Revision, Core ở READY và safe-state không tác động.', 'Allowed only when an Active Revision exists, Core is READY, and safe-state is inactive.')}
+    <section aria-labelledby="programming-retain-title" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 id="programming-retain-title" className="text-sm font-semibold text-[var(--c-text)]">{pick('Đặt lại trạng thái lưu (RETAIN)', 'Reset RETAIN state')}</h3>
+          <p className="mt-1 text-xs font-semibold text-[var(--c-warn-fg)]">CONTRACT_UNAVAILABLE</p>
+        </div>
+        <Button size="sm" variant="danger" icon={<AlertTriangle className="h-4 w-4" aria-hidden="true" />} disabled aria-describedby="programming-retain-contract-note">
+          {pick('Đặt lại RETAIN', 'Reset RETAIN')}
+        </Button>
+      </div>
+      <p id="programming-retain-contract-note" className="mt-2 text-sm text-[var(--c-text-dim)]">
+        {pick(
+          'Chưa có cơ chế cấp confirmationToken một-lần theo contract. FE chỉ hiển thị phạm vi ảnh hưởng và sẽ không gửi lệnh đặt lại.',
+          'The contract-required one-time confirmationToken is not available. The UI only shows impact and will not submit a reset command.'
+        )}
       </p>
-      <Button size="sm" variant="danger" className="mt-2" icon={<AlertTriangle className="h-4 w-4" aria-hidden="true" />} disabled={!canReset} onClick={openDialog}>
-        {pick('Đặt lại RETAIN…', 'Reset RETAIN…')}
-      </Button>
+      <p className="mt-2 text-xs text-[var(--c-text-dim)]">
+        {pick(`Active Revision: ${activeRevisionId?.slice(0, 8) ?? '—'}`, `Active Revision: ${activeRevisionId?.slice(0, 8) ?? '—'}`)}
+      </p>
 
-      {retainReset.state.phase === 'unknown' && (
-        <div role="alert" className="mt-2 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-2 text-sm">
-          <p className="text-[var(--c-warn-fg)]">{pick('Chưa xác định kết quả Đặt lại RETAIN. Đang chờ đọc ngược…', 'RETAIN reset result unknown. Waiting for read-back…')}</p>
-          <Button size="sm" className="mt-1" onClick={() => retainReset.recheckStatus(retainReset.state.phase === 'unknown' ? retainReset.state.operationId : '')}>
-            {pick('Kiểm tra lại trạng thái', 'Re-check status')}
-          </Button>
+      {activeRevisionId && changes.status === 'loading' && (
+        <p className="mt-2 text-sm text-[var(--c-text-dim)]">{pick('Đang đọc phạm vi ảnh hưởng RETAIN…', 'Loading RETAIN impact…')}</p>
+      )}
+      {activeRevisionId && impactUnavailable && (
+        <div role="alert" className="mt-2 text-sm text-[var(--c-fault-fg)]">
+          <p>{pick('Không đọc được phạm vi ảnh hưởng RETAIN.', 'Could not read RETAIN impact.')}</p>
+          <Button size="sm" variant="secondary" className="mt-2" onClick={changes.refresh}>{pick('Thử đọc lại', 'Retry read-back')}</Button>
         </div>
       )}
-      {retainReset.state.phase === 'terminal' && (
-        <p className={`mt-2 text-sm ${retainReset.state.operation.state === 'SUCCEEDED' ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-fault-fg)]'}`}>
-          {retainReset.state.operation.state === 'SUCCEEDED'
-            ? pick('Đặt lại RETAIN thành công.', 'RETAIN reset succeeded.')
-            : pick('Đặt lại RETAIN thất bại.', 'RETAIN reset failed.')}
-        </p>
-      )}
-      {retainReset.state.phase === 'error' && <p className="mt-2 text-sm text-[var(--c-fault-fg)]">{retainReset.state.message}</p>}
-
-      <Modal
-        open={open}
-        title={pick('Xác nhận Đặt lại RETAIN', 'Confirm RETAIN reset')}
-        confirmLabel={pick('Đặt lại RETAIN', 'Reset RETAIN')}
-        danger
-        confirmLoading={submitting}
-        confirmDisabled={confirmDisabled}
-        onConfirm={() => {
-          if (!activeRevisionId) return
-          void retainReset.submit(activeRevisionId, reason, password)
-        }}
-        onClose={() => {
-          if (submitting) return
-          setOpen(false)
-        }}
-      >
-        <div className="space-y-3">
-          <p>{pick('Hành động này xoá ngay giá trị RETAIN đang lưu của bản đang chạy và không thể hoàn tác bằng nút Hủy.', 'This action immediately clears the RETAIN values of the running version and cannot be undone with Cancel.')}</p>
-          <p className="text-xs text-[var(--c-text-dim)]">
-            {pick(`Áp dụng cho Active Revision: ${activeRevisionId?.slice(0, 8) ?? '—'}`, `Applies to Active Revision: ${activeRevisionId?.slice(0, 8) ?? '—'}`)}
+      {impact?.status === 'PRESENT' && (
+        <div className="mt-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2">
+          <p className="text-sm font-medium text-[var(--c-text)]">
+            {pick(`${impact.items.length} biến RETAIN sẽ bị ảnh hưởng sau khi security gate được mở.`, `${impact.items.length} RETAIN variables would be affected after the security gate is opened.`)}
           </p>
-
-          {changes.status === 'loading' && (
-            <p className="text-sm text-[var(--c-text-dim)]">{pick('Đang tải danh sách biến RETAIN…', 'Loading the RETAIN variable list…')}</p>
-          )}
-          {impactUnavailable && (
-            <p role="alert" className="text-sm text-[var(--c-fault-fg)]">
-              {pick('Không đọc được danh sách biến RETAIN bị ảnh hưởng — không thể xác nhận an toàn.', 'Could not read the affected RETAIN variable list — cannot confirm safely.')}
-            </p>
-          )}
-          {impactPresent && impact && (
-            <fieldset className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" className="mt-0.5" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
-                <span>
-                  {pick(
-                    `Tôi xác nhận đã xem ${impact.items.length} biến RETAIN sẽ bị đặt về giá trị khởi tạo.`,
-                    `I confirm I have reviewed the ${impact.items.length} RETAIN variables that will be reset to their initial value.`
-                  )}
-                </span>
-              </label>
-              <ul className="mt-2 max-h-32 list-disc space-y-0.5 overflow-y-auto pl-6 text-xs text-[var(--c-text-dim)]">
-                {impact.items.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </fieldset>
-          )}
-          {impact?.status === 'NONE' && <p className="text-sm text-[var(--c-text-dim)]">{pick('Bản đang chạy không có biến RETAIN nào.', 'The running version has no RETAIN variables.')}</p>}
-
-          <label className="block text-xs font-medium text-[var(--c-text-dim)]" htmlFor="programming-retain-reset-reason">
-            {pick('Lý do đặt lại RETAIN', 'RETAIN reset reason')}
-          </label>
-          <input
-            id="programming-retain-reset-reason"
-            className="w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-sm text-[var(--c-text)]"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-          />
-          <label className="block text-xs font-medium text-[var(--c-text-dim)]" htmlFor="programming-retain-reset-reauth">
-            {pick('Xác thực lại — nhập mật khẩu', 'Re-authenticate — enter password')}
-          </label>
-          <input
-            id="programming-retain-reset-reauth"
-            type="password"
-            autoComplete="current-password"
-            className="w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-sm text-[var(--c-text)]"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
+          <ul className="mt-2 max-h-32 list-disc space-y-0.5 overflow-y-auto pl-6 text-xs text-[var(--c-text-dim)]">
+            {impact.items.map((item) => <li key={item}>{item}</li>)}
+          </ul>
         </div>
-      </Modal>
-    </div>
+      )}
+      {impact?.status === 'NONE' && <p className="mt-2 text-sm text-[var(--c-text-dim)]">{pick('Bản đang Active không có biến RETAIN nào.', 'The active revision has no RETAIN variables.')}</p>}
+    </section>
   )
 }

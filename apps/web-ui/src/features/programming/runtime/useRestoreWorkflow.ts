@@ -6,6 +6,7 @@ import { useI18n } from '../../../shared/i18n'
 import { useAuth } from '../../auth'
 import { createUuid } from '../../../shared/crypto'
 import type { ProgrammingOperationView } from '../model/types'
+import { operationPollBudget, useOperationPolling } from '../shared/useOperationPolling'
 
 export type RestoreWorkflowState =
   | { phase: 'idle' }
@@ -21,39 +22,24 @@ export type RestoreWorkflowState =
  * cùng re-auth và cùng nguyên tắc "không tự POST lại khi timeout"
  * (UX-WEB-PROG-001 §17 hàng "Restore").
  */
-export function useRestoreWorkflow() {
+export function useRestoreWorkflow(taskPeriodsMs?: readonly number[]) {
   const client = useProgrammingApiClient()
   const { pick } = useI18n()
   const { session, login } = useAuth()
   const [state, setState] = useState<RestoreWorkflowState>({ phase: 'idle' })
-  const pollTimer = useRef<number | undefined>(undefined)
+  const submitInFlight = useRef(false)
+  const polling = useOperationPolling({
+    recoveryKey: 'programming.restore.operationId',
+    budgetMs: operationPollBudget(taskPeriodsMs)
+  })
 
-  const pollOperation = useCallback(
-    (operationId: string) => {
-      const poll = () => {
-        client.request<ProgrammingOperationView>('getProgrammingOperation', { path: { operationId } }).then(
-          (operation) => {
-            if (operation.state === 'SUCCEEDED' || operation.state === 'REJECTED' || operation.state === 'FAILED') {
-              setState({ phase: 'terminal', operation })
-              return
-            }
-            if (operation.state === 'UNKNOWN_RECONCILING') {
-              setState({ phase: 'unknown', operationId })
-              return
-            }
-            pollTimer.current = window.setTimeout(poll, 1500)
-          },
-          () => setState({ phase: 'unknown', operationId })
-        )
-      }
-      poll()
-    },
-    [client]
-  )
+  const operationState = polling.state
 
   const submit = useCallback(
     async (targetRevisionId: string, expectedActiveRevisionId: string | null, reason: string, reAuthPassword: string) => {
-      window.clearTimeout(pollTimer.current)
+      if (submitInFlight.current || operationState.phase === 'polling' || operationState.phase === 'unknown') return
+      submitInFlight.current = true
+      polling.invalidate()
       setState({ phase: 'submitting' })
       try {
         try {
@@ -73,25 +59,25 @@ export function useRestoreWorkflow() {
           idempotencyKey,
           correlationId: createUuid()
         })
-        setState({ phase: 'polling', operationId: accepted.operationId })
-        pollOperation(accepted.operationId)
+        setState({ phase: 'idle' })
+        polling.start(accepted.operationId)
       } catch (reason_) {
         setState({
           phase: 'error',
           message: reason_ instanceof ProgrammingApiError ? programmingErrorCopy(pick, reason_.envelope.error.code) : pick('Không gửi được lệnh Khôi phục.', 'Could not submit the restore command.')
         })
-      }
+      } finally { submitInFlight.current = false }
     },
-    [client, login, session?.username, pollOperation, pick]
+    [client, login, operationState.phase, pick, polling, session?.username]
   )
 
   const recheckStatus = useCallback(
     (operationId: string) => {
-      setState({ phase: 'polling', operationId })
-      pollOperation(operationId)
+      polling.start(operationId)
     },
-    [pollOperation]
+    [polling]
   )
 
-  return { state, submit, recheckStatus, reset: () => setState({ phase: 'idle' }) }
+  const exposedState = state.phase === 'submitting' || state.phase === 'error' ? state : operationState
+  return { state: exposedState, submit, recheckStatus, reset: () => { polling.reset(); setState({ phase: 'idle' }) } }
 }

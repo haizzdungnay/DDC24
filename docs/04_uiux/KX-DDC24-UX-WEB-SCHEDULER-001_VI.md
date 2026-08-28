@@ -1,7 +1,7 @@
 # UI/UX Spec — Web · Lịch vận hành (`/eng/scheduler/*`)
 
 > **Document ID:** KX-DDC24-UX-WEB-SCHEDULER-001-VI
-> **Trạng thái:** Active | **Phiên bản:** 1.0 | **Ngày lập:** 2026-08-07
+> **Trạng thái:** Active | **Phiên bản:** 1.1 | **Ngày lập:** 2026-08-07 | **Sửa gần nhất:** 2026-08-19
 > **Chủ quản:** Product Owner + SW Lead
 > **Phạm vi:** Đặc tả trình bày và tương tác cho họ trang `/eng/scheduler/*`.
 > **Không bao gồm:** hợp đồng dữ liệu (thuộc [`schedule_v3_1.schema.json`](../../contracts/config/schedule_v3_1.schema.json)),
@@ -9,7 +9,7 @@
 > **Tài liệu liên quan:** [ADR-023](../adr/ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md) ·
 > [UC-WEB-SCHEDULER-001](KX-DDC24-UC-WEB-SCHEDULER-001_VI.md) ·
 > [UX-SYSTEM-001](KX-DDC24-UX-SYSTEM-001_VI.md) (token & component) ·
-> [Plan 50](../03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md)
+> [Plan 50](../03_implementation/archive/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md)
 
 ---
 
@@ -238,6 +238,75 @@ báo `SCH-TARGET-002`/`003` sau — chặn sớm tại chỗ nhập.
 Mô phỏng **chạy ở backend bằng đúng mã đánh giá của controller**. Cài lại thuật toán trong
 JavaScript hay Go là tự nói dối: nó đúng cho tới ngày hai bản lệch nhau, và ngày đó không ai biết.
 
+## 8b. Tab **Hiệu lực thực tế** — Effective Preview (`SCH-EFF-01`)
+
+Nguồn: [`ADR-045`](../00_governance/DECISIONS.md) · phục vụ `T57-3.5` (điểm này
+thực tế nghe lịch nào), `T57-3.6` (lịch đang soạn có đè lịch khác không) và
+`T57-3.7` (lịch này đã tác động những gì trong 7 ngày).
+
+### 8b.1 Vì sao tab này tồn tại — và vì sao chỉ MỘT endpoint
+
+Tab **Mô phỏng** (§8) trả lời "lịch NÀY sẽ làm gì". Nó không trả lời câu hỏi mà
+người vận hành thật sự hỏi khi có nhiều lịch: *"cái điểm này rốt cuộc nghe ai?"*
+
+Phân xử ưu tiên xảy ra **ở điểm**, không ở lịch. Vì vậy tab này chọn **điểm**
+trước, rồi mới dựng dải hiệu lực. Lịch chưa gán điểm điều khiển nào thì tab hiện
+trạng thái rỗng có giải thích, chứ không hiện một bảng trống.
+
+Ba câu hỏi trên dùng **chung** `GET /api/v1/schedules/effective`, chỉ khác khoảng
+thời gian và cách trình bày (`ADR-045` điều 2). Mở endpoint thứ hai cho cùng một
+câu hỏi là tự tạo hai đường sẽ trôi khỏi nhau.
+
+### 8b.2 Đặc tả trực quan
+
+**Desktop 1440 — ba trạng thái (có xung đột, không lịch nào ghi, thiếu engine):**
+
+![SCH-EFF-01 desktop](assets/scheduler/SCH-EFF-01_EFFECTIVE_PREVIEW_DESKTOP.svg)
+
+**Mobile 390 × 844 — khối xung đột luôn nằm TRÊN bảng:**
+
+![SCH-EFF-01 mobile](assets/scheduler/SCH-EFF-01_EFFECTIVE_PREVIEW_MOBILE.svg)
+
+### 8b.3 Cây component
+
+```text
+ScheduleEditorPage
+└── EffectiveTab                      (mới — tab thứ tư, sau Mô phỏng)
+    ├── PointSelect                   (mới — chỉ liệt kê target có point_id)
+    ├── Button ×2                     (24 giờ tới · 7 ngày qua)
+    ├── StateBlock state="loading"    (dùng lại — "Đang hỏi engine của bộ điều khiển")
+    ├── StateBlock state="error"      (dùng lại — thiếu engine ⇒ nguyên văn 503)
+    ├── ConflictBlock                 (mới — đặt TRÊN bảng, tông `--c-warn`)
+    ├── StateBlock state="empty"      (dùng lại — không lịch nào ghi trong khoảng)
+    └── SegmentTable                  (mới — overflow-x-auto, min-width 640)
+```
+
+### 8b.4 Bảng ánh xạ vùng → field → API → state → action → RBAC → copy → error → test
+
+| Vùng | Field | API (thật) | State khi thiếu | Action | RBAC | Copy khi rỗng | Test khoá |
+|---|---|---|---|---|---|---|---|
+| Bộ chọn điểm | `schedule.target_objects[].point_id` | cấu hình lịch đang mở | tab hiện khối rỗng có giải thích | đổi điểm ⇒ gọi lại | viewer | "Lịch này chưa có điểm điều khiển nào" | target không có `point_id` bị loại khỏi danh sách |
+| Khối xung đột | `conflicts[]` | `GET /api/v1/schedules/effective` | không render | — | viewer | — | có xung đột ⇒ khối nằm **trên** bảng |
+| Cột TỪ · ĐẾN | `segments[].from/.to` | như trên | hàng không render | — | viewer | — | mốc thời gian từ engine, không dựng ở trình duyệt |
+| Cột GIÁ TRỊ | `segments[].value` | như trên | `—` | — | viewer | — | `null`/`undefined` ⇒ `—`, **tuyệt đối không** ra `0` |
+| Cột LỊCH THẮNG | `scheduleId`, `scheduleName`, `priority` | như trên | "Không lịch nào" | — | viewer | — | hiện tên lịch + `P<priority>` |
+| Cột VÌ SAO | `segments[].reason` | như trên | ô trống | — | viewer | — | lý do đến từ engine, FE không tự sinh |
+| Dòng engine | `engine` | như trên | không render | — | viewer | — | nói rõ đang tính bằng binary nào |
+
+### 8b.5 Ba luật của tab
+
+| Luật | Vì sao |
+|---|---|
+| **Thiếu engine ⇒ nói ra, KHÔNG tự phân xử.** `mkddc-schedule-sim` vắng mặt ⇒ backend `503`, tab hiện nguyên văn lý do và không vẽ bảng | Một bản phân xử thứ hai viết trong giao diện sẽ đúng cho tới ngày nó lệch khỏi bộ điều khiển — và ngày đó rơi đúng vào ca trực mà các lịch chồng nhau |
+| **Ô giá trị của đoạn không lịch nào ghi là `—`, không phải `0`** | `0` là một **lệnh** (tắt/đóng); `—` nghĩa là không lịch nào ghi và điểm giữ nguyên giá trị đang có. Nhầm hai thứ này là ra lệnh tắt một thiết bị mà không ai yêu cầu |
+| **Xung đột không phải lỗi cấu hình.** Khối xung đột dùng tông `--c-warn`, không dùng `--c-fault` | Nhiều lịch chạm một điểm là chuyện bình thường và hợp lệ; thứ nguy hiểm là **không biết lịch nào thắng**. Tô đỏ sẽ khiến người dùng đi "sửa" một cấu hình đúng |
+
+### 8b.6 Quyền
+
+Đọc thuần, `RoleViewer` — `GET /api/v1/schedules/effective` đăng ký ở mức đó
+trong `apps/web-api/internal/app/http.go`. Tab **không** có hành động ghi nào;
+sửa lịch vẫn nằm ở các tab Tuần/Ngoại lệ/Target với quyền hiện hành.
+
 ---
 
 ## 9. Publish Review — modal diff
@@ -340,3 +409,4 @@ Màu khối trên lịch tuần:
 | Phiên bản | Ngày | Người | Nội dung |
 |---|---|---|---|
 | 1.0 | 2026-08-07 | SW Lead | Bản đầu, tách từ proposal sau khi PM/CTO duyệt ADR-023. 8 nguyên tắc, kiến trúc thông tin 4 route + 6 tab, wireframe 7 màn hình |
+| 1.1 | 2026-08-19 | Agent kỹ thuật | Thêm §8b `SCH-EFF-01` — tab **Hiệu lực thực tế** (`T57-3.5`/`T57-3.6`/`T57-3.7`, `ADR-045`) kèm **2 asset SVG** desktop + mobile, mở cổng Detailed Design theo `DOC_GOVERNANCE` §2.2. Ba luật của tab, trong đó hai luật đắt nhất: thiếu engine thì **nói ra chứ không tự phân xử**, và ô giá trị của đoạn không lịch nào ghi là `—` **chứ không phải `0`** (0 là một lệnh tắt) |

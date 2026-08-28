@@ -47,6 +47,9 @@ interface MockState {
   retainResetCount: number
   traceCount: number
   traceRunning: boolean
+  runtimeProducerState?: string
+  runtimeRequestFails?: boolean
+  monitorOffline?: boolean
 }
 
 function draftETag(state: MockState): string {
@@ -65,8 +68,11 @@ async function installProgrammingMocks(page: Page, state: MockState) {
   // P5. Mock route WS này thay vì lọc lỗi console — closer với hành vi thật
   // (kết nối "mở" được) và giữ assertion không-có-console-error-lạ có ý
   // nghĩa cho các lỗi P5 thật.
+  let closeMonitorSocket: (() => Promise<void>) | undefined
   await page.routeWebSocket('**/api/v1/ws/monitor', (ws) => {
     ws.onMessage(() => undefined)
+    closeMonitorSocket = () => ws.close({ code: 1001, reason: 'viewport reconnect test' })
+    if (state.monitorOffline) void ws.close({ code: 1012, reason: 'simulated reconnect' })
   })
   await page.route('**/api/v1/programming/**', async (route) => {
     const request = route.request()
@@ -83,17 +89,26 @@ async function installProgrammingMocks(page: Page, state: MockState) {
       })
     }
     if (method === 'GET' && path === '/runtime') {
+      if (state.runtimeRequestFails) {
+        return json(route, { error: { code: 'PRG-ERR-UNAVAILABLE-001', messageKey: 'programming.error.unavailable', retryable: true } }, 503)
+      }
       return json(route, {
-        schemaVersion: '1.0', controllerId: 'foxlinx-lab', producerState: 'READY', activeRevisionId: ACTIVE_REVISION_ID, lkgRevisionId: ACTIVE_REVISION_ID,
-        taskState: 'RUNNING', safeState: false, observedAt: new Date().toISOString(),
+        schemaVersion: '1.0', controllerId: 'foxlinx-lab', producerState: state.runtimeProducerState ?? 'READY', activeRevisionId: ACTIVE_REVISION_ID, lkgRevisionId: ACTIVE_REVISION_ID,
+        taskState: 'RUNNING', safeState: false, safeStateNoControllerOnly: false, observedAt: new Date().toISOString(),
         task: { taskId: 'Control_Main', periodMs: 1000, budgetMs: 200, state: 'RUNNING', runCount: 120, missedReleaseCount: 0, lastExecNs: 120000, maxExecNs: 310000, overrunCount: 1, consecutiveOverruns: 0 }
       })
     }
     if (method === 'GET' && path === '/projects') {
-      return json(route, { items: [{ projectId: PROJECT_ID, name: 'AHU-01', etag: draftETag(state), activeRevisionId: ACTIVE_REVISION_ID, draftRevisionId: state.draft.project.projectId, updatedAt: new Date().toISOString() }] })
+      return json(route, { items: [{ projectId: PROJECT_ID, name: 'AHU-01', etag: draftETag(state), activeRevisionId: ACTIVE_REVISION_ID, draftRevisionId: state.draft.project.projectId, updatedAt: new Date().toISOString(), latestCheck: { checkId: 'check-latest', revisionId: ACTIVE_REVISION_ID, state: state.checkState, createdAt: new Date().toISOString(), completedAt: new Date().toISOString() } }] })
     }
     if (method === 'GET' && path === `/projects/${PROJECT_ID}`) {
       return json(route, { projectId: PROJECT_ID, name: 'AHU-01', etag: draftETag(state), activeRevisionId: ACTIVE_REVISION_ID, draftRevisionId: state.draft.project.projectId, updatedAt: new Date().toISOString(), draft: state.draft })
+    }
+    if (method === 'GET' && path === `/revisions/${ACTIVE_REVISION_ID}`) {
+      return json(route, {
+        revisionId: ACTIVE_REVISION_ID, projectId: PROJECT_ID, state: 'ACTIVE', contentHash: 'sha256:active-e2e', createdAt: new Date().toISOString(),
+        snapshot: { objects: [{ kind: 'PROGRAM', objectId: 'program-e2e-0001', sha256: 'sha256:program-e2e-0001', payload: { name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST' } }] }
+      })
     }
     if (method === 'PATCH' && path === `/projects/${PROJECT_ID}/draft`) {
       const body = request.postDataJSON() as { operations: Array<{ op: string; [key: string]: unknown }> }
@@ -212,21 +227,21 @@ async function installProgrammingMocks(page: Page, state: MockState) {
     }
     if (method === 'POST' && path === '/operations/commission') {
       state.commissionCount += 1
-      return json(route, { operationId: 'operation-commission-e2e', statusUrl: '', state: 'REQUESTED', requestHash: 'hash', acceptedAt: new Date().toISOString(), correlationId }, 202)
+      return json(route, { operationId: 'operation-commission-e2e', statusUrl: '', state: 'QUEUED', requestHash: 'hash', acceptedAt: new Date().toISOString(), correlationId }, 202)
     }
     if (method === 'GET' && path === '/operations/operation-commission-e2e') {
       return json(route, { operationId: 'operation-commission-e2e', state: 'SUCCEEDED', step: 'done', requestedRevisionId: 'revision-mock-0001', previousActiveRevisionId: ACTIVE_REVISION_ID, actualActiveRevisionId: 'revision-mock-0001', keepsRunningRevision: false, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
     }
     if (method === 'POST' && path === '/operations/restore') {
       state.restoreCount += 1
-      return json(route, { operationId: 'operation-restore-e2e', statusUrl: '', state: 'REQUESTED', requestHash: 'hash', acceptedAt: new Date().toISOString(), correlationId }, 202)
+      return json(route, { operationId: 'operation-restore-e2e', statusUrl: '', state: 'QUEUED', requestHash: 'hash', acceptedAt: new Date().toISOString(), correlationId }, 202)
     }
     if (method === 'GET' && path === '/operations/operation-restore-e2e') {
       return json(route, { operationId: 'operation-restore-e2e', state: 'SUCCEEDED', step: 'done', requestedRevisionId: ACTIVE_REVISION_ID, previousActiveRevisionId: ACTIVE_REVISION_ID, actualActiveRevisionId: ACTIVE_REVISION_ID, keepsRunningRevision: false, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
     }
     if (method === 'POST' && path === '/retain/reset') {
       state.retainResetCount += 1
-      return json(route, { operationId: 'operation-retain-reset-e2e', statusUrl: '', state: 'REQUESTED', requestHash: 'hash', acceptedAt: new Date().toISOString(), correlationId }, 202)
+      return json(route, { operationId: 'operation-retain-reset-e2e', statusUrl: '', state: 'QUEUED', requestHash: 'hash', acceptedAt: new Date().toISOString(), correlationId }, 202)
     }
     if (method === 'GET' && path === '/operations/operation-retain-reset-e2e') {
       return json(route, { operationId: 'operation-retain-reset-e2e', kind: 'RESET_RETAIN', state: 'SUCCEEDED', step: 'done', requestedRevisionId: ACTIVE_REVISION_ID, previousActiveRevisionId: ACTIVE_REVISION_ID, actualActiveRevisionId: null, keepsRunningRevision: true, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
@@ -248,6 +263,9 @@ async function installProgrammingMocks(page: Page, state: MockState) {
     // request thất bại ngoài dự kiến (spec dưới lọc rõ các path này).
     await json(route, { error: { code: 'PRG-ERR-UNAVAILABLE-001', messageKey: 'programming.error.unavailable', retryable: true, keepsRunningRevision: true, correlationId } }, 503)
   })
+  return async () => {
+    await closeMonitorSocket?.()
+  }
 }
 
 async function login(page: Page) {
@@ -312,6 +330,181 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     }
   })
 
+  test('FE-PROG-01: context responsive giữ truth và route Project lạ fail-closed', async ({ page }, testInfo) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    state.draft.programs.push({ programId: 'program-e2e-0001', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'X := 1;', executionOrder: 0, functionalTags: [] })
+    state.draft.task.programOrder = ['program-e2e-0001']
+    await installProgrammingMocks(page, state)
+    const writes: string[] = []
+    page.on('request', (request) => {
+      if (request.url().includes('/api/v1/programming/') && request.method() !== 'GET') writes.push(`${request.method()} ${request.url()}`)
+    })
+
+    await login(page)
+    await navigate(page, '/eng/programming')
+    const context = page.getByRole('region', { name: 'Ngữ cảnh Lập trình' })
+    await expect(context).toBeVisible()
+
+    const viewport = page.viewportSize()
+    if ((viewport?.width ?? 1280) < 1024) {
+      await expect(context.getByText(new RegExp(`Sửa .* Active ${ACTIVE_REVISION_ID.slice(0, 8)}`))).toBeVisible()
+      await expect(context.getByText('Sẵn sàng', { exact: true })).toBeVisible()
+      const trigger = page.getByRole('button', { name: 'Mở chi tiết ngữ cảnh Lập trình' })
+      await trigger.click()
+      const drawer = page.getByRole('dialog', { name: 'Ngữ cảnh Lập trình' })
+      await expect(drawer).toBeVisible()
+      await expect(drawer.getByText('foxlinx-lab')).toBeVisible()
+      await expect(drawer.getByText('BẢN ĐANG ACTIVE')).toBeVisible()
+      await page.screenshot({ path: testInfo.outputPath('context-mobile-drawer.png'), fullPage: true })
+      await page.keyboard.press('Escape')
+      await expect(drawer).toBeHidden()
+      await expect(trigger).toBeFocused()
+    } else {
+      await expect(context.getByText('foxlinx-lab')).toBeVisible()
+      await expect(context.getByText(ACTIVE_REVISION_ID)).toBeVisible()
+      await expect(context.getByText('Core sẵn sàng')).toBeVisible()
+      await expect(context.getByText('BẢN ĐANG ACTIVE')).toBeVisible()
+      await page.screenshot({ path: testInfo.outputPath('context-desktop.png'), fullPage: true })
+    }
+
+    await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
+    const designLive = (viewport?.width ?? 1280) < 1024
+      ? page.getByRole('dialog', { name: /Thuộc tính|Inspector/ })
+      : page.getByRole('complementary', { name: /Thuộc tính|Inspector/ })
+    if ((viewport?.width ?? 1280) < 1024) await page.getByRole('button', { name: /Thuộc tính|Inspector/ }).click()
+    await expect(designLive.getByText('LIVE', { exact: true })).toBeVisible()
+    await expect(page.getByText('ĐANG CHẠY', { exact: false })).toBeVisible()
+    await expect(page.getByText('BẢN NHÁP KHÔNG PHẢI BẢN ĐANG CHẠY.')).toHaveCount(0)
+
+    const unknownProjectId = 'project-khong-ton-tai'
+    await navigate(page, `/eng/programming/projects/${unknownProjectId}/design`)
+    await expect(page.getByText('Project không tồn tại.')).toBeVisible()
+    await expect(page.getByText(new RegExp(unknownProjectId)).filter({ visible: true }).first()).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${unknownProjectId}/design$`))
+    await expect(page.getByRole('button', { name: 'Lưu', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Kiểm tra', exact: true })).toHaveCount(0)
+    expect(writes, 'Route Project lạ không được tạo mutation request').toEqual([])
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await page.screenshot({ path: testInfo.outputPath('invalid-project-fail-closed.png'), fullPage: true })
+  })
+
+  test('FE-PROG-01: state lạ và snapshot lỗi không được hiển thị như runtime live', async ({ page }) => {
+    const state: MockState = {
+      etagGeneration: 1,
+      draft: initialDraft(),
+      checkState: 'PASSED',
+      commissionCount: 0,
+      restoreCount: 0,
+      retainResetCount: 0,
+      traceCount: 0,
+      traceRunning: false,
+      runtimeProducerState: 'FUTURE_STATE'
+    }
+    await installProgrammingMocks(page, state)
+    await login(page)
+    await navigate(page, '/eng/programming/runtime')
+
+    const context = page.getByRole('region', { name: 'Ngữ cảnh Lập trình' })
+    const viewport = page.viewportSize()
+    if ((viewport?.width ?? 1280) < 1024) {
+      await expect(context.getByText('UNKNOWN', { exact: true })).toBeVisible()
+      await page.getByRole('button', { name: 'Mở chi tiết ngữ cảnh Lập trình' }).click()
+      await expect(page.getByRole('dialog', { name: 'Ngữ cảnh Lập trình' }).getByText(/Core trả trạng thái thiếu hoặc không được hỗ trợ/)).toBeVisible()
+      await page.keyboard.press('Escape')
+    } else {
+      await expect(context.getByText(/Core trả trạng thái thiếu hoặc không được hỗ trợ/)).toBeVisible()
+    }
+    await expect(page.getByText('Core sẵn sàng')).toHaveCount(0)
+    await expect(page.getByText('RUNNING', { exact: true })).toHaveCount(0)
+
+    state.runtimeProducerState = 'READY'
+    state.runtimeRequestFails = true
+    await page.getByRole('button', { name: 'Làm mới' }).click()
+    await expect(context.getByText('STALE', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 })
+    if ((viewport?.width ?? 1280) < 1024) {
+      await page.getByRole('button', { name: 'Mở chi tiết ngữ cảnh Lập trình' }).click()
+      const drawer = page.getByRole('dialog', { name: 'Ngữ cảnh Lập trình' })
+      await expect(drawer.getByText(/snapshot cuối, không phải dữ liệu live/i)).toBeVisible()
+      await expect(drawer.getByText(/Tuổi snapshot/)).toBeVisible()
+      await page.keyboard.press('Escape')
+    } else {
+      await expect(context.getByText(/snapshot cuối, không phải dữ liệu live/i)).toBeVisible()
+      await expect(context.getByText(/Tuổi snapshot/)).toBeVisible()
+    }
+    await expect(page.getByText('Core sẵn sàng')).toHaveCount(0)
+  })
+
+  test('FE-PROG-01: context không che reconnect banner tại năm viewport', async ({ page }, testInfo) => {
+    const state: MockState = {
+      etagGeneration: 1,
+      draft: initialDraft(),
+      checkState: 'PASSED',
+      commissionCount: 0,
+      restoreCount: 0,
+      retainResetCount: 0,
+      traceCount: 0,
+      traceRunning: false,
+      monitorOffline: true
+    }
+    await installProgrammingMocks(page, state)
+    const consoleErrors: string[] = []
+    const failedRequests: string[] = []
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text())
+    })
+    page.on('requestfailed', (request) => failedRequests.push(request.url()))
+    await login(page)
+    await navigate(page, '/eng/programming')
+
+    for (const viewport of [
+      { width: 1536, height: 1024 },
+      { width: 1280, height: 800 },
+      { width: 1024, height: 768 },
+      { width: 768, height: 1024 },
+      { width: 390, height: 844 }
+    ]) {
+      await page.setViewportSize(viewport)
+      const banner = page.locator('[data-app-reconnect-banner]')
+      const context = page.getByRole('region', { name: 'Ngữ cảnh Lập trình' })
+      await expect(page.getByRole('heading', { name: 'Lập trình điều khiển' })).toBeVisible()
+      await expect(banner).toBeVisible()
+      await expect(context).toBeVisible()
+      const geometry = await page.evaluate(() => {
+        const bannerElement = document.querySelector<HTMLElement>('[data-app-reconnect-banner]')!
+        const contextElement = document.querySelector<HTMLElement>('[aria-label="Ngữ cảnh Lập trình"]')!
+        const bannerBox = bannerElement.getBoundingClientRect()
+        const contextBox = contextElement.getBoundingClientRect()
+        return {
+          bannerBottom: bannerBox.bottom,
+          contextTop: contextBox.top,
+          overflow: document.documentElement.scrollWidth > window.innerWidth
+        }
+      })
+      expect(geometry.contextTop, `${viewport.width}px: context phải nằm dưới reconnect banner`).toBeGreaterThanOrEqual(geometry.bannerBottom - 1)
+      expect(geometry.overflow, `${viewport.width}px: không được tràn ngang cấp trang`).toBe(false)
+
+      if ([1536, 1024, 390].includes(viewport.width)) {
+        await page.screenshot({ path: testInfo.outputPath(`overview-${viewport.width}x${viewport.height}.png`), fullPage: true })
+      }
+      if (viewport.width === 390) {
+        const trigger = page.getByRole('button', { name: 'Mở chi tiết ngữ cảnh Lập trình' })
+        await trigger.click()
+        const drawer = page.getByRole('dialog', { name: 'Ngữ cảnh Lập trình' })
+        await expect(drawer).toBeVisible()
+        await expect(drawer.getByRole('button', { name: 'Đóng ngữ cảnh Lập trình' })).toBeFocused()
+        await page.screenshot({ path: testInfo.outputPath('overview-390x844-context-drawer.png'), fullPage: true })
+        await page.keyboard.press('Escape')
+        await expect(drawer).toBeHidden()
+        await expect(trigger).toBeFocused()
+      }
+    }
+
+    const unexpectedConsoleErrors = consoleErrors.filter((text) => !text.includes('503') && !text.includes('Failed to load resource'))
+    expect(unexpectedConsoleErrors, `Console error ngoài proxy shell đã biết: ${unexpectedConsoleErrors.join(' | ')}`).toEqual([])
+    const unexpectedProgrammingFailures = failedRequests.filter((url) => url.includes('/api/v1/programming/'))
+    expect(unexpectedProgrammingFailures, `Programming request thất bại: ${unexpectedProgrammingFailures.join(' | ')}`).toEqual([])
+  })
+
   test('UJ-PROG-01..08: Tổng quan → Thiết kế (ST+FBD+ánh xạ+thực thi) → Kiểm tra → Đưa vào vận hành → Runtime → Khôi phục', async ({ page }, testInfo) => {
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
@@ -330,23 +523,60 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await expect(page.getByRole('heading', { name: 'Lập trình điều khiển' })).toBeVisible()
     expect(await page.evaluate(() => typeof crypto.randomUUID)).toBe('undefined')
     expect(await page.evaluate(() => typeof crypto.subtle)).toBe('undefined')
-    await expect(page.getByText(ACTIVE_REVISION_ID).first()).toBeVisible()
+    await expect(page.getByText(ACTIVE_REVISION_ID).filter({ visible: true }).first()).toBeVisible()
+    await expect(page.getByText('Kiểm tra gần nhất đạt — sẵn sàng Đưa vào vận hành.')).toBeVisible()
+    await expect(page.getByText('Đang chỉnh sửa — chưa Kiểm tra lần nào cho bản này.')).toHaveCount(0)
     await page.screenshot({ path: testInfo.outputPath('01-overview.png'), fullPage: true })
 
     // UJ-PROG-02 — mở workspace Thiết kế qua Project trong Draft panel
     await page.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }).click()
     await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/design`)
-    await expect(page.getByText('Chưa có chương trình. Bấm + để tạo.')).toBeVisible()
+    const designWidth = page.viewportSize()?.width ?? 1280
+    // Theo plan: Explorer thành cột từ 1024 px, Inspector thành cột từ 1280 px.
+    const explorerDrawer = designWidth < 1024
+    const inspectorDrawer = designWidth < 1280
+    // 1024/768 dùng Problems sheet như asset responsive; chỉ workstation
+    // desktop >=1280 mới giữ khay resize cố định dưới editor.
+    const mobileProblems = designWidth < 1280
+    const explorerTrigger = page.getByRole('button', { name: /^(Cây|Explorer)$/ })
+    if (explorerDrawer) {
+      await explorerTrigger.click()
+      const explorer = page.getByRole('dialog', { name: 'Cây ứng dụng' })
+      await expect(explorer.getByText('Chưa có chương trình. Bấm + để tạo.')).toBeVisible()
+      await explorer.getByTitle('Thêm chương trình ST').focus()
+    } else {
+      await expect(page.getByText('Chưa có chương trình. Bấm + để tạo.')).toBeVisible()
+      await page.getByTitle('Thêm chương trình ST').focus()
+    }
 
-    // Thêm chương trình ST bằng bàn phím hoàn toàn (Tab tới nút, Enter kích hoạt)
-    await page.getByTitle('Thêm chương trình ST').focus()
+    // Thêm chương trình ST bằng bàn phím hoàn toàn (Tab tới nút, Enter kích hoạt).
     await page.keyboard.press('Enter')
-    await expect(page.getByRole('heading', { name: 'Chương trình mới' })).toBeVisible()
+    if (explorerDrawer) {
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('dialog', { name: 'Cây ứng dụng' })).toBeHidden()
+      await expect(explorerTrigger).toBeFocused()
+    }
+    await expect(page.getByRole('heading', { name: 'Chương trình mới' }).first()).toBeVisible()
     const sourceBox = page.getByLabel(/Mã nguồn ST/)
     await sourceBox.fill('AO1 := UI1 * 2.0;')
     await page.getByRole('button', { name: 'Lưu', exact: true }).click()
     await expect(page.getByText('Chưa lưu.')).toHaveCount(0)
     await page.screenshot({ path: testInfo.outputPath('02-design-st.png'), fullPage: true })
+    if (inspectorDrawer) {
+      const inspectorTrigger = page.getByRole('button', { name: /^(Thuộc tính|Inspector)$/ })
+      await inspectorTrigger.click()
+      await expect(page.getByRole('dialog', { name: 'Thuộc tính' })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(inspectorTrigger).toBeFocused()
+
+      if (mobileProblems) {
+        const problemsTrigger = page.getByRole('button', { name: /^(Mở khay|Open tray)$/ })
+        await problemsTrigger.click()
+        await expect(page.getByRole('dialog', { name: 'Danh sách lỗi' })).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(problemsTrigger).toBeFocused()
+      }
+    }
 
     // Đổi tab không mất nội dung đang gõ: gõ dở rồi chuyển tab và quay lại
     await sourceBox.fill('AO1 := UI1 * 2.0; (* dở dang *)')
@@ -355,12 +585,19 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await page.getByRole('tab', { name: 'Chương trình', exact: true }).click()
     await expect(sourceBox).toHaveValue('AO1 := UI1 * 2.0; (* dở dang *)')
     await expect(page.getByText(/Draft có thay đổi chưa lưu/)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Kiểm tra' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Kiểm tra', exact: true })).toBeDisabled()
     await sourceBox.press('Control+s')
     await expect(page.getByText('Chưa lưu.')).toHaveCount(0)
 
     // UJ-PROG-02 (FBD) — thêm chương trình FBD, mount StructuredFbdEditor thật
-    await page.getByTitle('Thêm chương trình FBD').click()
+    if (explorerDrawer) {
+      await explorerTrigger.click()
+      await page.getByRole('dialog', { name: 'Cây ứng dụng' }).getByTitle('Thêm chương trình FBD').click()
+      await page.keyboard.press('Escape')
+      await expect(explorerTrigger).toBeFocused()
+    } else {
+      await page.getByTitle('Thêm chương trình FBD').click()
+    }
     const fbdToolbar = page.getByRole('toolbar', { name: 'Lệnh FBD' })
     await expect(fbdToolbar).toBeVisible()
 
@@ -390,7 +627,11 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
 
     // UJ-PROG-03 — Điểm & Ánh xạ
     await page.getByRole('tab', { name: /Điểm & Ánh xạ/ }).click()
-    await expect(page.getByText('Chưa có ánh xạ nào.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Biến chương trình' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Điểm khả dụng' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ánh xạ đã gán' })).toBeVisible()
+    await expect(page.getByText(/Phase 1A chỉ đọc/)).toBeVisible()
+    await expect(page.getByRole('button', { name: /Gợi ý \(Phase 1A\)/ })).toBeDisabled()
     await page.screenshot({ path: testInfo.outputPath('04-design-mapping.png'), fullPage: true })
 
     // UJ-PROG-04 — Thực thi
@@ -401,12 +642,14 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     // UJ-PROG-05 — Kiểm tra (D-01: PGM-02 chỉ lưu rồi điều hướng, PGM-03 sở
     // hữu toàn bộ seal/run/poll/result — không còn seal/Check inline ở đây).
     await page.getByRole('tab', { name: 'Chương trình', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Kiểm tra' })).toBeEnabled()
-    await page.getByRole('button', { name: 'Kiểm tra' }).click()
+    await expect(page.getByRole('button', { name: 'Kiểm tra', exact: true })).toBeEnabled()
+    await page.getByRole('button', { name: 'Kiểm tra', exact: true }).click()
     await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/commission`)
     await expect(page.getByText('Chưa có Kiểm tra nào.')).toBeVisible()
-    await page.getByRole('button', { name: 'Kiểm tra' }).click()
-    await expect(page.getByText('PASSED')).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Kiểm tra', exact: true }).click()
+    await expect(page.getByText('PASSED', { exact: true })).toBeVisible({ timeout: 10_000 })
+    const candidateRevisionId = new URL(page.url()).searchParams.get('revisionId')
+    if (!candidateRevisionId) throw new Error('Thiếu revisionId trong URL Commission sau khi Check PASS')
     await page.screenshot({ path: testInfo.outputPath('06-commission.png'), fullPage: true })
 
     // UJ-PROG-06 — Đưa vào vận hành
@@ -417,19 +660,19 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     const checkboxes = dialog.getByRole('checkbox')
     for (const checkbox of await checkboxes.all()) await checkbox.check()
     await dialog.getByLabel(/Xác thực lại/).fill('admin')
-    await dialog.getByRole('button', { name: 'Gửi lệnh' }).click()
+    await dialog.getByRole('button', { name: new RegExp(`^Xác nhận ${candidateRevisionId.slice(0, 8)}$`) }).click()
     await expect(page.getByText(/Đưa vào vận hành thành công/)).toBeVisible({ timeout: 10_000 })
     expect(state.commissionCount).toBe(1)
     await page.screenshot({ path: testInfo.outputPath('07-commission-succeeded.png'), fullPage: true })
 
     // UJ-PROG-07 — Runtime & Theo dõi
     await navigate(page, '/eng/programming/runtime')
-    await expect(page.getByText('Đang vận hành / LKG')).toBeVisible()
+    await expect(page.getByText('Runtime hiện tại')).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('08-runtime.png'), fullPage: true })
     await page.getByRole('tab', { name: 'Theo dõi' }).click()
-    await expect(page.getByText('4.1 V')).toBeVisible()
-    await expect(page.getByText('6.2 V')).toBeVisible()
-    await expect(page.getByText('manual · operator-e2e')).toBeVisible()
+    await expect(page.locator('td:visible, dd:visible').filter({ hasText: /^4,1 V$/ })).toBeVisible()
+    await expect(page.locator('td:visible, dd:visible').filter({ hasText: /^6,2 V$/ })).toBeVisible()
+    await expect(page.locator('td:visible, dd:visible').filter({ hasText: /^manual · operator-e2e$/ })).toBeVisible()
     await page.getByRole('checkbox', { name: 'Trace SupplySetpoint' }).check()
     await page.getByRole('button', { name: 'Bắt đầu trace' }).click()
     await expect(page.getByRole('button', { name: 'Dừng trace' })).toBeVisible()
@@ -443,7 +686,10 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await expect(page.getByText('Vùng thao tác nguy hiểm')).toBeVisible()
     await page.getByRole('button', { name: 'Xuất gói .zip' }).click()
     await expect(page.getByText(/Đã xuất 4 byte/)).toBeVisible()
-    await expect(page.getByRole('button', { name: /Đặt lại RETAIN…/ })).toBeEnabled()
+    await expect(page.getByText('CONTRACT_UNAVAILABLE')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Đặt lại RETAIN' })).toBeDisabled()
+    await expect(page.getByText('SupplySetpoint')).toBeVisible()
+    expect(state.retainResetCount).toBe(0)
     await page.locator('#programming-bundle-import-input').setInputFiles({ name: 'replacement.zip', mimeType: 'application/zip', buffer: Buffer.from('PK\x03\x04') })
     await expect(page.getByText(/Nhập gói thành công/)).toBeVisible()
     await page.getByRole('button', { name: /Khôi phục bản trước…/ }).click()
@@ -454,29 +700,21 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await expect(page.getByText(/Khôi phục thành công/)).toBeVisible({ timeout: 10_000 })
     expect(state.restoreCount).toBe(1)
     await page.screenshot({ path: testInfo.outputPath('10-restore-succeeded.png'), fullPage: true })
-    // Modal Khôi phục KHÔNG tự đóng sau khi thành công (giữ nguyên kết quả cho
-    // người dùng đọc) — đóng thủ công trước khi mở dialog RETAIN reset kế tiếp.
+    // Modal Khôi phục KHÔNG tự đóng sau khi thành công; đóng thủ công để tiếp
+    // tục kiểm tra trạng thái chỉ đọc của Service.
     await restoreDialog.getByRole('button', { name: 'Hủy' }).click()
     await expect(page.getByRole('dialog')).not.toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('11-retain-contract-unavailable.png'), fullPage: true })
 
-    // WP-12 (RETAIN Reset) — danh sách biến RETAIN thật (dùng lại GET
-    // /revisions/none/changes/{active}), tick xác nhận, re-auth, đọc ngược SUCCEEDED.
-    await page.getByRole('button', { name: /Đặt lại RETAIN…/ }).click()
-    const retainDialog = page.getByRole('dialog')
-    await expect(retainDialog.getByText('SupplySetpoint')).toBeVisible()
-    await expect(retainDialog.getByText('FanRuntimeHours')).toBeVisible()
-    await retainDialog.getByRole('checkbox').check()
-    await retainDialog.getByLabel('Lý do đặt lại RETAIN').fill('Kiểm chứng E2E TASK-PROG-506')
-    await retainDialog.getByLabel(/Xác thực lại/).fill('admin')
-    await retainDialog.getByRole('button', { name: 'Đặt lại RETAIN' }).click()
-    await expect(page.getByText(/Đặt lại RETAIN thành công/)).toBeVisible({ timeout: 10_000 })
-    expect(state.retainResetCount).toBe(1)
-    await page.screenshot({ path: testInfo.outputPath('11-retain-reset-succeeded.png'), fullPage: true })
-
-    // Console/Network — không có lỗi ngoài các 503 chủ động (runtime/monitor
-    // GET, runtime/traces theo id lạ...) đã được UI xử lý như trạng thái hợp lệ.
+    // Console/Network — không có lỗi ngoài các 503 chủ động đã được UI xử lý
+    // và một GET trace đang poll bị hủy đúng lúc DELETE dừng trace hoàn tất.
     const unexpectedConsoleErrors = consoleErrors.filter((text) => !text.includes('503') && !text.includes('Failed to load resource'))
     expect(unexpectedConsoleErrors, `Console error ngoài dự kiến: ${unexpectedConsoleErrors.join(' | ')}`).toEqual([])
+    const unexpectedProgrammingFailures = failedRequests.filter((url) =>
+      url.includes('/api/v1/programming/') &&
+      !url.endsWith('/runtime/traces/99999999-9999-4999-8999-999999999999')
+    )
+    expect(unexpectedProgrammingFailures, `Programming request thất bại ngoài poll trace bị hủy khi dừng: ${unexpectedProgrammingFailures.join(' | ')}`).toEqual([])
   })
 
   test('VS-PROG-028: bốn workspace không có vi phạm WCAG A/AA tự động phát hiện được', async ({ page }) => {
@@ -495,18 +733,55 @@ test.describe('Programming P5 — bốn workspace, tám journey (TASK-PROG-506)'
     await login(page)
 
     const screens = [
-      { path: '/eng/programming', ready: page.getByRole('heading', { name: 'Lập trình điều khiển' }) },
-      { path: `/eng/programming/projects/${PROJECT_ID}/design`, ready: page.getByRole('button', { name: /Điều khiển AHU/ }) },
+      {
+        path: '/eng/programming',
+        shell: page.getByRole('heading', { name: 'Lập trình điều khiển' }),
+        ready: page.getByRole('heading', { name: 'Lập trình điều khiển' })
+      },
+      {
+        path: `/eng/programming/projects/${PROJECT_ID}/design`,
+        shell: page.getByRole('tab', { name: 'Chương trình' }),
+        ready: page.getByLabel(/Mã nguồn ST/)
+      },
+      {
+        path: `/eng/programming/projects/${PROJECT_ID}/design?tab=mapping`,
+        shell: page.getByRole('tab', { name: /Điểm & Ánh xạ/ }),
+        ready: page.getByRole('heading', { name: 'Biến chương trình' })
+      },
       {
         path: `/eng/programming/projects/${PROJECT_ID}/commission?revisionId=revision-mock-0001&checkId=check-mock-0001`,
+        shell: page.getByRole('heading', { name: 'Kiểm tra & Đưa vào vận hành' }),
         ready: page.getByText('PASSED')
       },
-      { path: '/eng/programming/runtime?tab=watch', ready: page.getByText('SupplySetpoint') }
+      {
+        path: '/eng/programming/runtime?tab=watch',
+        shell: page.getByRole('heading', { name: 'Runtime & Bảo trì' }),
+        ready: page.locator('strong:visible').filter({ hasText: /^SupplySetpoint$/ })
+      }
     ]
 
     for (const screen of screens) {
       await navigate(page, screen.path)
-      await expect(screen.ready.first()).toBeVisible()
+      await expect(screen.shell.first()).toBeVisible({ timeout: 15_000 })
+      if (screen.path.endsWith('/design')) {
+        // Chờ draft/editor sẵn sàng trước khi mở drawer; tránh race giữa route
+        // guard và nút Explorer ở viewport compact.
+        await expect(screen.ready.first()).toBeVisible()
+        const explorerDrawer = (page.viewportSize()?.width ?? 1280) < 1024
+        if (explorerDrawer) {
+          const explorerTrigger = page.getByRole('button', { name: /^(Cây|Explorer)$/ })
+          await explorerTrigger.click()
+          await page.getByRole('dialog', { name: 'Cây ứng dụng' }).getByRole('treeitem', { name: 'Điều khiển AHU PROGRAM · ST' }).click()
+          await expect(page.getByRole('dialog', { name: 'Cây ứng dụng' })).toBeHidden()
+          await expect(screen.ready.first()).toBeFocused()
+        } else {
+          await page.getByRole('treeitem', { name: 'Điều khiển AHU PROGRAM · ST' }).click()
+        }
+      }
+      // Route Programming tải query bất đồng bộ và hai project Chrome chạy
+      // song song; chờ đúng readiness của từng màn thay vì phụ thuộc budget
+      // assertion mặc định 5 giây (dễ timeout giả khi máy đang build/test).
+      await expect(screen.ready.first()).toBeVisible({ timeout: 15_000 })
       const result = await new AxeBuilder({ page })
         .include('main')
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])

@@ -13,6 +13,11 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "contracts/programming"

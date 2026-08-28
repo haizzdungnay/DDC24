@@ -38,10 +38,20 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
 
     def test_current_catalog_is_complete(self):
         catalog, raw, schema_raw = GENERATOR.load_and_validate()
-        self.assertEqual(len(catalog["publicErrors"]), 19)
-        self.assertEqual(len(catalog["componentDetails"]), 77)
+        self.assertEqual(len(catalog["publicErrors"]), 20)
+        self.assertEqual(len(catalog["componentDetails"]), 104)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
+
+    def test_manifest_consumer_paths_are_platform_neutral(self):
+        manifest = json.loads(GENERATOR.render_manifest(self.catalog, "catalog", "schema"))
+        consumers = manifest["generatedConsumers"]
+        self.assertEqual(consumers, [
+            "apps/web-api/internal/programming/domain/errors_generated.go",
+            "apps/core/application/programming/program_error_generated.hpp",
+            "apps/web-ui/src/features/programming/api/generated/errors.ts",
+        ])
+        self.assertTrue(all("\\" not in path for path in consumers))
 
     def test_rejects_unknown_major(self):
         self.assert_rejected(lambda catalog: catalog.__setitem__("catalogVersion", "2.0.0"))

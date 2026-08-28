@@ -86,7 +86,7 @@ describe('OverviewPage — Việc cần chú ý (TR-MKDDC24-P2-20260814-02)', ()
     renderOverview('vi')
     const item = await screen.findByRole('button', { name: /PRG-SAFE-ACTIVE/ })
     fireEvent.click(item)
-    await screen.findByText('Đang vận hành / LKG')
+    await screen.findByText('Runtime hiện tại')
     expect(screen.getAllByText(ACTIVE_ID).length).toBeGreaterThan(0)
   })
 

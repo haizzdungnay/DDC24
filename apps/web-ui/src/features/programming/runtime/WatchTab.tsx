@@ -9,7 +9,7 @@ import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { useAuth, roleAtLeast } from '../../auth'
 import { useProgrammingApiClient } from '../api/authClient'
 import { useProgrammingRuntimeMonitor } from '../api/queries'
-import type { ProgrammingMonitorSample, ProgrammingTrace, ProgrammingTraceAccepted, ProgrammingTraceRequest } from '../model/types'
+import type { ProgrammingMonitorPage, ProgrammingMonitorSample, ProgrammingTrace, ProgrammingTraceAccepted, ProgrammingTraceRequest } from '../model/types'
 
 /** PGM-04/UJ-PROG-07 — monitor 1 Hz chỉ đọc và trace bounded. Mọi giá trị,
  * quality, freshness, priority và TTL đều đến từ snapshot Core/BE; `null`
@@ -90,28 +90,41 @@ export function WatchTab() {
         ) : monitor.data.items.length === 0 ? (
           <StateBlock state="empty" title={pick('Revision đang chạy chưa có biến ánh xạ.', 'The running revision has no mapped variables.')} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead><tr className="border-b border-[var(--c-border)] text-xs uppercase text-[var(--c-text-dim)]">
-                <th className="py-1 pr-2"><span className="sr-only">{pick('Chọn trace', 'Select for trace')}</span></th>
-                <th className="py-1 pr-3">{pick('Biến / Point', 'Variable / Point')}</th>
-                <th className="py-1 pr-3">{pick('Giá trị Program', 'Program value')}</th>
-                <th className="py-1 pr-3">{pick('Giá trị thực tế', 'Actual value')}</th>
-                <th className="py-1 pr-3">{pick('Nguồn đang giữ', 'Effective owner')}</th>
-                <th className="py-1 pr-3">{pick('Ưu tiên', 'Priority')}</th>
-                <th className="py-1 pr-3">TTL</th>
-                <th className="py-1">{pick('Chất lượng / độ tươi', 'Quality / freshness')}</th>
-              </tr></thead>
-              <tbody>{monitor.data.items.map((item) => (
-                <MonitorRow key={item.variableId} item={item} selected={selected.has(item.variableId)} onSelect={(checked) => setSelected((current) => {
+          <>
+            <MonitorEvidence monitor={monitor.data} />
+            <div className="mt-4 hidden overflow-x-auto md:block">
+              <table className="w-full text-left text-sm">
+                <thead><tr className="border-b border-[var(--c-border)] text-xs uppercase text-[var(--c-text-dim)]">
+                  <th className="py-1 pr-2"><span className="sr-only">{pick('Chọn trace', 'Select for trace')}</span></th>
+                  <th className="py-1 pr-3">{pick('Biến / Point', 'Variable / Point')}</th>
+                  <th className="py-1 pr-3">{pick('Giá trị Program', 'Program value')}</th>
+                  <th className="py-1 pr-3">{pick('Giá trị thực tế', 'Actual value')}</th>
+                  <th className="py-1 pr-3">{pick('Nguồn đang giữ', 'Effective owner')}</th>
+                  <th className="py-1 pr-3">{pick('Ưu tiên', 'Priority')}</th>
+                  <th className="py-1 pr-3">TTL</th>
+                  <th className="py-1">{pick('Chất lượng / độ tươi', 'Quality / freshness')}</th>
+                </tr></thead>
+                <tbody>{monitor.data.items.map((item) => (
+                  <MonitorRow key={item.variableId} item={item} selected={selected.has(item.variableId)} onSelect={(checked) => setSelected((current) => {
+                    const next = new Set(current)
+                    if (checked && next.size < 32) next.add(item.variableId)
+                    else if (!checked) next.delete(item.variableId)
+                    return next
+                  })} />
+                ))}</tbody>
+              </table>
+            </div>
+            <div className="mt-4 space-y-2 md:hidden">
+              {monitor.data.items.map((item) => (
+                <MonitorCard key={item.variableId} item={item} selected={selected.has(item.variableId)} onSelect={(checked) => setSelected((current) => {
                   const next = new Set(current)
                   if (checked && next.size < 32) next.add(item.variableId)
                   else if (!checked) next.delete(item.variableId)
                   return next
                 })} />
-              ))}</tbody>
-            </table>
-          </div>
+              ))}
+            </div>
+          </>
         )}
       </Panel>
 
@@ -149,11 +162,34 @@ export function WatchTab() {
   )
 }
 
+function MonitorEvidence({ monitor }: { monitor: ProgrammingMonitorPage }) {
+  const { pick } = useI18n()
+  const sampleTimes = monitor.items.map((item) => Date.parse(item.observedAt)).filter(Number.isFinite)
+  const newestObservedAt = sampleTimes.length > 0 ? new Date(Math.max(...sampleTimes)).toLocaleString() : '—'
+  return (
+    <div className="grid gap-px overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-border)] sm:grid-cols-2 lg:grid-cols-4" aria-label={pick('Bằng chứng monitor', 'Monitor evidence')}>
+      <EvidenceCell label={pick('Bản đang Active', 'Active revision')} value={monitor.activeRevisionId ?? '—'} mono />
+      <EvidenceCell label={pick('Tác vụ / chu kỳ', 'Task / period')} value={monitor.task ? `${monitor.task.taskId} · ${monitor.task.periodMs} ms` : '—'} />
+      <EvidenceCell label={pick('Trạng thái an toàn', 'Safe state')} value={monitor.safeState ? pick('ĐANG TÁC ĐỘNG', 'ACTIVE') : pick('Bình thường', 'Normal')} tone={monitor.safeState ? 'warn' : 'good'} />
+      <EvidenceCell label={pick('Snapshot mới nhất', 'Newest snapshot')} value={newestObservedAt} />
+    </div>
+  )
+}
+
+function EvidenceCell({ label, value, mono = false, tone }: { label: string; value: string; mono?: boolean; tone?: 'good' | 'warn' }) {
+  return (
+    <div className="min-w-0 bg-[var(--c-surface-2)] px-3 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--c-text-dim)]">{label}</p>
+      <p className={`mt-1 break-all text-sm font-semibold ${mono ? 'font-mono text-xs' : ''} ${tone === 'good' ? 'text-[var(--c-good-fg)]' : tone === 'warn' ? 'text-[var(--c-warn-fg)]' : 'text-[var(--c-text)]'}`}>{value}</p>
+    </div>
+  )
+}
+
 function MonitorRow({ item, selected, onSelect }: { item: ProgrammingMonitorSample; selected: boolean; onSelect: (checked: boolean) => void }) {
   return (
     <tr className="border-b border-[var(--c-border)]">
       <td className="py-1.5 pr-2"><input type="checkbox" aria-label={`Trace ${item.variableName}`} checked={selected} onChange={(event) => onSelect(event.target.checked)} /></td>
-      <td className="py-1.5 pr-3"><strong className="text-[var(--c-text)]">{item.variableName}</strong><br/><span className="font-mono text-xs text-[var(--c-text-dim)]">{item.point.category}:{item.point.deviceId ? `${item.point.deviceId}:` : ''}{item.point.pointId}</span></td>
+      <td className="py-1.5 pr-3"><strong className="text-[var(--c-text)]">{item.variableName}</strong><br/><span className="font-mono text-xs text-[var(--c-text-dim)]">{item.point.category}:{item.point.deviceId ? `${item.point.deviceId}:` : ''}{item.point.pointId}</span><br/><span className="text-[10px] text-[var(--c-text-dim)]">{item.programId.slice(0, 8)} · {item.direction} · {item.dataType}</span><br/><span className="text-[10px] text-[var(--c-text-dim)]">{new Date(item.observedAt).toLocaleString()}</span></td>
       <td className="py-1.5 pr-3 font-mono">{displayValue(item.programValue, item.unit)}</td>
       <td className="py-1.5 pr-3 font-mono">{displayValue(item.actualValue, item.unit)}</td>
       <td className="py-1.5 pr-3">{item.overriddenBy ?? 'PROGRAM'}{item.overrideActor ? ` · ${item.overrideActor}` : ''}</td>
@@ -161,6 +197,25 @@ function MonitorRow({ item, selected, onSelect }: { item: ProgrammingMonitorSamp
       <td className="py-1.5 pr-3">{item.overrideRemainingS === null ? '—' : `${item.overrideRemainingS}s`}</td>
       <td className="py-1.5"><span className={item.freshness === 'LIVE' && item.quality === 'GOOD' ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-warn-fg)]'}>{item.quality} · {item.freshness}</span></td>
     </tr>
+  )
+}
+
+function MonitorCard({ item, selected, onSelect }: { item: ProgrammingMonitorSample; selected: boolean; onSelect: (checked: boolean) => void }) {
+  const point = `${item.point.category}:${item.point.deviceId ? `${item.point.deviceId}:` : ''}${item.point.pointId}`
+  return (
+    <article className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0"><strong className="block break-words">{item.variableName}</strong><span className="font-mono text-xs text-[var(--c-text-dim)]">{point}</span><span className="mt-1 block text-xs text-[var(--c-text-dim)]">{item.programId.slice(0, 8)} · {item.direction} · {item.dataType}</span></div>
+        <label className="flex shrink-0 items-center gap-1 text-xs"><input type="checkbox" aria-label={`Trace ${item.variableName}`} checked={selected} onChange={(event) => onSelect(event.target.checked)} /> Trace</label>
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div><dt className="text-[var(--c-text-dim)]">Giá trị Program</dt><dd className="font-mono">{displayValue(item.programValue, item.unit)}</dd></div>
+        <div><dt className="text-[var(--c-text-dim)]">Giá trị thực tế</dt><dd className="font-mono">{displayValue(item.actualValue, item.unit)}</dd></div>
+        <div><dt className="text-[var(--c-text-dim)]">Nguồn đang giữ</dt><dd>{item.overriddenBy ?? 'PROGRAM'}{item.overrideActor ? ` · ${item.overrideActor}` : ''}</dd></div>
+        <div><dt className="text-[var(--c-text-dim)]">Ưu tiên / TTL</dt><dd>{item.effectivePriority ?? '—'} / {item.overrideRemainingS === null ? '—' : `${item.overrideRemainingS}s`}</dd></div>
+        <div className="col-span-2"><dt className="text-[var(--c-text-dim)]">Chất lượng / độ tươi</dt><dd className={item.freshness === 'LIVE' && item.quality === 'GOOD' ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-warn-fg)]'}>{item.quality} · {item.freshness}</dd><dd className="mt-1 text-[10px] text-[var(--c-text-dim)]">{new Date(item.observedAt).toLocaleString()}</dd></div>
+      </dl>
+    </article>
   )
 }
 
@@ -173,5 +228,6 @@ function TraceTable({ trace }: { trace: ProgrammingTrace }) {
 function displayValue(value: unknown, unit?: string): string {
   if (value === null || value === undefined) return '—'
   if (typeof value === 'number' && !Number.isFinite(value)) return '—'
-  return `${String(value)}${unit ? ` ${unit}` : ''}`
+  const displayed = typeof value === 'number' ? new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(value) : String(value)
+  return `${displayed}${unit ? ` ${unit}` : ''}`
 }

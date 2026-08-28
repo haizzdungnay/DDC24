@@ -80,22 +80,36 @@ sudo apt install golang-go nodejs npm                      # mkddc-web (Go) + ui
 git clone https://github.com/bacnet-stack/bacnet-stack
 ```
 
-### 2.2 Kết nối vào thiết bị
+### 2.2 Chạy thử — local trước, board sau
+
+**Cách nhanh nhất để có stack chạy được là chạy local, không cần board.** Repo đã có
+chuỗi mô phỏng `tools/run_noboard_demo.sh` (socat PTY + `fake_mcu` + `mkddc-iobus` +
+`mkddc-core`) sinh dữ liệu I/O thật, không phải mock. Trình tự đầy đủ, các bẫy đã
+cắn và trạng thái đúng khi chạy được:
+→ [DEVELOPMENT_AND_OPERATIONS § Chạy local full-stack no-board](../06_operations/DEVELOPMENT_AND_OPERATIONS.md#chạy-local-full-stack-no-board-không-ssh-board).
+
+Tóm tắt: build C++ vào `build/release/cpp` → `./tools/run_noboard_demo.sh` →
+`./run-local.sh` (Web API `:8081`) → `npm run dev` trong `apps/web-ui` →
+`http://127.0.0.1:5173`, đăng nhập `admin` / `admin123`. Trên Windows phải chạy
+trong WSL vì backend Go là Linux-only.
+
+Khi cần board thật:
 ```bash
-# SSH vào SOM (port 2222, key-only — KHÔNG phải 22)
-ssh -p 2222 kinexus@<ip-thiet-bi>
-# Web config UI / commissioning (mkddc-web, trong LAN)
-http://<ip-thiet-bi>:8080      # production sẽ redirect sang https://<ip>:8443
+ssh SOM-DDC-24-foxlinx        # Foxlinx production, mekong-fac.ddns.net:2223
 ```
+> ⛔ `ssh -p 2222 kinexus@<ip>` và `http://<ip>:8080` trong tài liệu cũ là di sản
+> board Orange Pi 5B đã ngưng dùng từ 2026-08-05.
 
 ### 2.3 Các service (Rev A — chỉ 3 process)
 > Nguồn-chuẩn: [Decision Log](../00_governance/DECISIONS.md), [ADR-005](../adr/ADR-005-three-process-architecture.md).
 
 | Service | Code dir | Vai trò |
 |---------|----------|---------|
-| `mkddc-core` | `services/core/` | graph engine + IO image + priority/safe-state + BACnet object table (C++17) |
-| `mkddc-iobus` | `services/iobus/` | IOP/MCU scan + Modbus RTU master + BACnet/IP datalink (C/C++17) |
-| `mkddc-web` | `web/` | REST + config form/JSON + import/export `graph.json` + validator (Go) |
+| `mkddc-core` | `apps/core/` | graph engine + IO image + priority/safe-state + BACnet object table (C++17) |
+| `mkddc-iobus` | `apps/iobus/` | IOP/MCU scan + Modbus RTU master + BACnet/IP datalink (C/C++17) |
+| `mkddc-web` | `apps/web-api/` | REST + config form/JSON + import/export `graph.json` + validator (Go) |
+
+> Path `services/` và `web/` đã bị xoá theo `PLAN-ARCH-RESTRUCT-002`; root CMake là authority.
 
 ```bash
 systemctl status mkddc-core           # xem service lõi

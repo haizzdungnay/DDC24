@@ -26,7 +26,22 @@ vi.mock('../../auth', async (importOriginal) => {
 const client = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => client }))
 vi.mock('../layout/ProgrammingLayout', () => ({
-  useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn() })
+  useProgrammingRuntimeContext: () => ({
+    setEditingContext: vi.fn(),
+    capabilities: {
+      status: 'ready',
+      data: { schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: ['ST', 'FBD'], types: ['BOOL', 'REAL'], taskPeriodsMs: [1000, 5000, 30000], limits: {} },
+      error: null,
+      refresh: vi.fn()
+    },
+    runtime: {
+      status: 'ready',
+      data: { producerState: 'READY', taskState: 'RUNNING', activeRevisionId: null, task: { taskId: 'task-1', periodMs: 1000, runCount: 0 } },
+      error: null,
+      refresh: vi.fn()
+    },
+    activeRevision: { status: 'ready', data: null, error: null, refresh: vi.fn() }
+  })
 }))
 
 function baseDocument(): ProgrammingDraftDocument {
@@ -73,6 +88,227 @@ afterEach(() => {
 })
 
 describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
+  it('mobile Explorer drawer traps focus, locks scroll, closes with Escape, and restores trigger focus', async () => {
+    vi.stubGlobal('innerWidth', 390)
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+    renderWorkspace()
+    const trigger = await screen.findByRole('button', { name: /Cây|Explorer/ })
+    fireEvent.click(trigger)
+    const drawer = screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ })
+    const close = within(drawer).getByRole('button', { name: /Đóng cây ứng dụng|Close explorer/ })
+    expect(screen.getByRole('button', { name: /Đóng ngăn kéo|Close drawer/ })).toHaveClass('min-[1280px]:hidden')
+    expect(close).toHaveClass('min-[1024px]:hidden')
+    expect(document.body.style.overflow).toBe('hidden')
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(drawer, { key: 'Tab', shiftKey: true })
+    expect(within(drawer).getByRole('button', { name: /Application.*AHU-01/ })).toHaveFocus()
+    fireEvent.keyDown(drawer, { key: 'Tab' })
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).not.toBeInTheDocument()
+    expect(document.body.style.overflow).toBe('')
+    expect(trigger).toHaveFocus()
+  })
+
+  it('click backdrop của Inspector trả focus về trigger', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+    renderWorkspace()
+    const trigger = await screen.findByRole('button', { name: /Thuộc tính|Inspector/ })
+    fireEvent.click(trigger)
+    const backdrop = screen.getByRole('button', { name: /Đóng ngăn kéo|Close drawer/ })
+    fireEvent.click(backdrop)
+    expect(screen.queryByRole('dialog', { name: /Thuộc tính|Inspector/ })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('mobile Inspector drawer traps focus, locks scroll, closes with Escape, and restores trigger focus', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+    renderWorkspace()
+    const trigger = await screen.findByRole('button', { name: /Thuộc tính|Inspector/ })
+    fireEvent.click(trigger)
+    const drawer = screen.getByRole('dialog', { name: /Thuộc tính|Inspector/ })
+    const close = within(drawer).getByRole('button', { name: /Đóng thuộc tính|Close inspector/ })
+    expect(screen.getByRole('button', { name: /Đóng ngăn kéo|Close drawer/ })).toHaveClass('min-[1280px]:hidden')
+    expect(close).toHaveClass('min-[1280px]:hidden')
+    expect(document.body.style.overflow).toBe('hidden')
+    expect(close).toHaveFocus()
+    // Empty Inspector only has the close control, so both directions must remain trapped there.
+    fireEvent.keyDown(drawer, { key: 'Tab' })
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(drawer, { key: 'Tab', shiftKey: true })
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: /Thuộc tính|Inspector/ })).not.toBeInTheDocument()
+    expect(document.body.style.overflow).toBe('')
+    expect(trigger).toHaveFocus()
+  })
+
+  it('Explorer/Inspector triggers expose matching ARIA controls and selecting a mobile ST program closes Explorer and focuses the editor', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+    renderWorkspace()
+    const explorerTrigger = await screen.findByRole('button', { name: /Cây|Explorer/ })
+    const inspectorTrigger = screen.getByRole('button', { name: /Thuộc tính|Inspector/ })
+    expect(explorerTrigger).toHaveAttribute('aria-controls', 'programming-explorer-pane')
+    expect(inspectorTrigger).toHaveAttribute('aria-controls', 'programming-inspector-pane')
+    fireEvent.click(explorerTrigger)
+    expect(explorerTrigger).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(within(screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).getByRole('treeitem', { name: /^Chương trình A/ }))
+    await waitFor(() => expect(explorerTrigger).toHaveAttribute('aria-expanded', 'false'))
+    await waitFor(() => expect(screen.getByLabelText(/Mã nguồn ST/)).toHaveFocus())
+  })
+
+  it('Giai đoạn 1: Explorer nhóm Program theo functional tag thật, có collapse và breadcrumb khớp Program được chọn', async () => {
+    const project = baseProject()
+    project.draft!.project.functionalTags = ['AHU', 'Bơm', 'Chiller']
+    project.draft!.programs.push(
+      { programId: 'fan', name: 'Quạt cấp', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM Fan\nEND_PROGRAM\n', functionalTags: ['AHU', 'sample', 'local-io'] },
+      { programId: 'pump', name: 'Bơm tuần hoàn', kind: 'PROGRAM', language: 'FBD', document: '{}', functionalTags: ['Bơm'] },
+      { programId: 'other', name: 'Chưa gắn nhóm', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM Other\nEND_PROGRAM\n', functionalTags: [] },
+    )
+    project.draft!.task.programOrder = ['fan', 'pump', 'other']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    const tree = await screen.findByRole('tree', { name: 'Cây chương trình theo nhóm chức năng' })
+    const ahu = within(tree).getByRole('treeitem', { name: 'AHU, 1 chương trình' })
+    const pump = within(tree).getByRole('treeitem', { name: 'Bơm, 1 chương trình' })
+    const unassigned = within(tree).getByRole('treeitem', { name: 'Chưa phân nhóm, 1 chương trình' })
+    expect(ahu).toHaveAttribute('aria-level', '2')
+    expect(pump).toHaveAttribute('aria-expanded', 'true')
+    expect(unassigned).toHaveAttribute('aria-expanded', 'true')
+    expect(within(tree).getByRole('treeitem', { name: /Quạt cấp/ })).toHaveAttribute('aria-current', 'true')
+    expect(within(tree).getAllByRole('treeitem').filter((item) => item.getAttribute('aria-level') === '3')).toHaveLength(project.draft!.programs.length)
+    expect(within(tree).queryByRole('treeitem', { name: /sample|local-io/i })).not.toBeInTheDocument()
+    expect(within(tree).queryByRole('treeitem', { name: /Chiller/ })).not.toBeInTheDocument()
+    expect(within(tree).getByTitle('Tag phụ: sample, local-io')).toHaveTextContent('+2 tag')
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Đường dẫn chương trình' })
+    expect(breadcrumb).toHaveTextContent(/AHU-01\s*\/\s*AHU\s*\/\s*Quạt cấp/)
+    expect(breadcrumb.parentElement).toHaveTextContent('PROGRAM · ST')
+    expect(breadcrumb.parentElement).not.toHaveTextContent('LIVE')
+
+    fireEvent.click(ahu)
+    expect(ahu).toHaveAttribute('aria-expanded', 'false')
+    expect(within(tree).queryByRole('treeitem', { name: /Quạt cấp/ })).not.toBeInTheDocument()
+  })
+
+  it('tri-pane dùng từ 1280px; Explorer vẫn là cột ở tablet ngang 1024px', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+    renderWorkspace()
+    await screen.findByRole('button', { name: /Cây|Explorer/ })
+    const grid = screen.getByText('Chưa có chương trình. Bấm + để tạo.').closest('div.grid')
+    expect(grid?.className).toContain('min-[1280px]:grid-cols-[260px_1fr_300px]')
+    expect(grid?.className).toContain('min-[1024px]:grid-cols-[260px_1fr]')
+    expect(grid?.className).not.toContain('xl:grid-cols')
+  })
+
+  it('mobile hiển thị trạng thái Check cạnh hành động chính mà không cần cuộn tới Problems', async () => {
+    const project = baseProject()
+    project.latestCheck = {
+      checkId: 'check-1', revisionId: 'draft-1', state: 'PASSED',
+      createdAt: '2026-08-20T00:00:00Z', completedAt: '2026-08-20T00:00:01Z'
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    const status = await screen.findByLabelText('Trạng thái Check: Đạt')
+    expect(status).toHaveTextContent('Check · Đạt')
+    expect(status).toHaveClass('min-[1024px]:hidden')
+  })
+
+  it('đóng pane khi resize lên desktop và Ctrl+P trả focus trước khi mở palette', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
+    renderWorkspace()
+    const trigger = await screen.findByRole('button', { name: /Cây|Explorer/ })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ }), { key: 'p', ctrlKey: true })
+    await waitFor(() => expect(trigger).toHaveFocus())
+    await waitFor(() => expect(screen.getByRole('dialog', { name: /Bảng lệnh nhanh|Command palette/ })).toBeInTheDocument())
+    expect(screen.queryByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).not.toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(trigger)
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 })
+    fireEvent(window, new Event('resize'))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).not.toBeInTheDocument())
+    expect(document.body.style.overflow).toBe('')
+  })
+
+  it('đóng drawer khi chuyển sang desktop để trả lại ARIA và body scroll', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+    vi.stubGlobal('innerWidth', 1024)
+    renderWorkspace()
+    const trigger = await screen.findByRole('button', { name: /Cây|Explorer/ })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).toBeInTheDocument()
+    vi.stubGlobal('innerWidth', 1280)
+    fireEvent(window, new Event('resize'))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).not.toBeInTheDocument())
+    expect(document.body.style.overflow).toBe('')
+  })
+
+  it('mở Command Palette sẽ đóng drawer đang mở', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+    renderWorkspace()
+    const explorerTrigger = await screen.findByRole('button', { name: /Cây|Explorer/ })
+    fireEvent.click(explorerTrigger)
+    const drawer = screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ })
+    fireEvent.click(within(drawer).getByTitle(/Bảng lệnh nhanh|Command palette/))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).not.toBeInTheDocument())
+    await screen.findByRole('dialog', { name: /Bảng lệnh nhanh|Command palette/ })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Bảng lệnh nhanh|Command palette/ })).not.toBeInTheDocument())
+    expect(document.body.style.overflow).toBe('')
+  })
+
   it('nạp Draft thật và cho phép thêm chương trình ST qua PATCH batch upsertProgram+setTask', async () => {
     let counter = 0
     vi.stubGlobal('crypto', {
@@ -110,7 +346,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(setTaskOp.op).toBe('setTask')
     expect(setTaskOp.task.programOrder).toEqual([upsertOp.program.programId])
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /New program/ })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('treeitem', { name: /^New program/ })).toBeInTheDocument())
   })
 
   it('WP-11: bố cục 3 cột (Cây/Editor/Inspector) theo UX §16.2 — Inspector là cột riêng, không nằm dưới editor', async () => {
@@ -126,12 +362,9 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
 
-    // Chưa chọn chương trình nào: cột Inspector vẫn tồn tại, hiện trạng thái trống.
+    // Draft có chương trình sẽ tự mở chương trình đầu tiên để người vận hành
+    // không rơi vào màn hình trống; Inspector vì vậy hiển thị metadata ngay.
     const tree = screen.getByRole('navigation', { name: 'Cây ứng dụng' })
-    const inspectorEmpty = screen.getByRole('complementary', { name: 'Thuộc tính' })
-    expect(within(inspectorEmpty).getByText('Chọn một chương trình để xem thuộc tính.')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByText('Chương trình A'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     // Sau khi chọn: cây, editor và Inspector cùng có mặt đồng thời (3 cột),
@@ -139,6 +372,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(tree).toBeInTheDocument()
     expect(screen.getByLabelText(/Mã nguồn ST/)).toBeInTheDocument()
     const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    fireEvent.click(within(inspector).getByRole('tab', { name: 'Thuộc tính' }))
     expect(within(inspector).getByLabelText('Tên')).toHaveValue('Chương trình A')
     expect(within(inspector).getByLabelText('Loại')).toHaveValue('PROGRAM')
   })
@@ -155,10 +389,11 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Chương trình A'))
+    fireEvent.click(screen.getByRole('treeitem', { name: /^Chương trình A/ }))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    fireEvent.click(within(inspector).getByRole('tab', { name: 'Thuộc tính' }))
     const kindSelect = within(inspector).getByLabelText('Loại') as HTMLSelectElement
     const options = within(kindSelect).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)
     expect(options).toEqual(['PROGRAM'])
@@ -180,10 +415,11 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('FB cũ từ bundle')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('FB cũ từ bundle'))
+    fireEvent.click(screen.getByRole('treeitem', { name: /^FB cũ từ bundle/ }))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    fireEvent.click(within(inspector).getByRole('tab', { name: 'Thuộc tính' }))
     // Accessible name của <select> nuốt luôn text cảnh báo trong cùng <label>
     // khi kind khác PROGRAM (span warning render bên trong label bao ngoài) —
     // dùng regex bắt đầu bằng "Loại" thay vì so khớp tuyệt đối.
@@ -194,7 +430,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     // được backend hỗ trợ.
     expect(options.sort()).toEqual(['FUNCTION_BLOCK', 'PROGRAM'].sort())
     expect(kindSelect).toHaveValue('FUNCTION_BLOCK')
-    expect(within(inspector).getByText(/chưa được Kiểm tra hỗ trợ biên dịch/)).toBeInTheDocument()
+    expect(within(inspector).getByText(/Loại này chưa được Check hỗ trợ biên dịch/)).toBeInTheDocument()
   })
 
   it('409 giữ nguyên buffer đang gõ và hiện banner reload/merge (UX §9)', async () => {
@@ -217,7 +453,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Chương trình A'))
+    fireEvent.click(screen.getByRole('treeitem', { name: /^Chương trình A/ }))
 
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
     fireEvent.change(textarea, { target: { value: 'X := 2; (* chưa lưu *)' } })
@@ -347,7 +583,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
     expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByTitle('Xóa chương trình'))
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Cây ứng dụng' })).getByTitle(/^Xóa chương trình/))
     const dialog = screen.getByRole('dialog', { name: 'Xóa chương trình?' })
     expect(within(dialog).getByText(/Điều khiển AHU/)).toHaveTextContent('Không thể hoàn tác sau khi lưu.')
 
@@ -381,7 +617,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    fireEvent.click(screen.getByRole('treeitem', { name: /^Điều khiển AHU/ }))
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
 
     fireEvent.keyDown(textarea, { key: 'p', ctrlKey: true })
@@ -410,7 +646,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Program A')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Program A'))
+    fireEvent.click(screen.getByRole('treeitem', { name: /^Program A/ }))
     const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
     expect(textarea).toHaveValue(sourceA)
 
@@ -439,7 +675,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    fireEvent.click(screen.getByRole('treeitem', { name: /^Điều khiển AHU/ }))
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
 
     fireEvent.keyDown(textarea, { key: 'p', ctrlKey: true })
@@ -464,7 +700,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    fireEvent.click(screen.getByRole('treeitem', { name: /^Điều khiển AHU/ }))
     const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
 
     const start = source.indexOf('X := 1;')
@@ -490,7 +726,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    fireEvent.click(screen.getByRole('treeitem', { name: /^Điều khiển AHU/ }))
     const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
 
     const start = source.indexOf('X := 1;')
@@ -525,7 +761,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    fireEvent.click(screen.getByRole('treeitem', { name: /^Điều khiển AHU/ }))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const countCatalogCalls = () => client.request.mock.calls.filter(([operationId]) => operationId === 'getProgrammingPointCatalog').length

@@ -31,6 +31,20 @@ static const char* point_source_name(PointSource source)
     return "unknown";
 }
 
+static const char* runtime_task_state(const StTask& task, bool program_owner)
+{
+    if (!program_owner || !task.enabled()) return "STOPPED";
+    if (task.monitor().should_force_safe()) return "FAULT";
+
+    bool any_running = false;
+    for (const auto& program : task.programs()) {
+        if (!program->enabled) continue;
+        if (program->state == StProgramState::FAULTED) return "FAULT";
+        if (program->state == StProgramState::RUNNING) any_running = true;
+    }
+    return any_running ? "RUNNING" : "STOPPED";
+}
+
 void ScanLoop::step()
 {
     const uint64_t t0 = now_ns();
@@ -218,7 +232,8 @@ void ScanLoop::step()
     OutputCmd out = d_.resolver->resolve();
 
     /* 7. Safe-state có thể ghi đè */
-    d_.safe->apply(last_io_, *d_.table, &out);
+    d_.safe->apply(last_io_, *d_.table, &out,
+                   active_mode != CutoverMode::PROGRAM_ONLY);
 
     /* Physical output is realtime-critical. Publish/serialization is nonessential. */
     d_.writer->write(out);
@@ -243,8 +258,7 @@ void ScanLoop::step()
                     std::min(task_id.size(), target.id.size() - 1));
         target.period_ms = task.config().period_ms;
         target.budget_ms = task.config().budget_ms;
-        const char* state = task.monitor().should_force_safe() ? "FAULT" :
-            (program_owner && task.enabled() ? "RUNNING" : "STOPPED");
+        const char* state = runtime_task_state(task, program_owner);
         std::memcpy(target.state.data(), state,
                     std::min(std::strlen(state), target.state.size() - 1));
         target.run_count = task.stats().run_count;

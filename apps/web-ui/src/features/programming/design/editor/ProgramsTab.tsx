@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AlignLeft, Command, FilePlus, PlusSquare, Save, Search, Trash2, X } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { AlignLeft, PanelLeft, PanelRight, PlusSquare, Save, Search, Tag, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { createUuid } from '../../../../shared/crypto'
 import { useAuth, roleAtLeast } from '../../../auth'
@@ -8,7 +8,7 @@ import { Modal } from '../../../../shared/components/Modal'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import { canonicalFbdJson, FBD_PROFILE_ID, FBD_SCHEMA_VERSION, type FbdDocument } from '../../fbd/model'
 import { useLazyProgrammingPointCatalog } from '../../api/queries'
-import type { ProgrammingDiagnostic, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
+import type { ProgrammingDiagnostic, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram, ProgrammingRevision, ProgrammingRuntime, RemoteState } from '../../model/types'
 import {
   buildStCompletions,
   computeAutoIndent,
@@ -20,6 +20,8 @@ import {
   type StDiagnosticRange,
 } from './stEditorSupport'
 import { CommandPalette } from './CommandPalette'
+import { ProgramExplorer, primaryFunctionalTag } from './ProgramExplorer'
+import { ProgramInspector, type ProgramMetadataDraft } from './ProgramInspector'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { SelectionQuickActions } from './SelectionQuickActions'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
@@ -33,31 +35,10 @@ function stProgramTemplate(): string {
   return 'PROGRAM NewProgram\nEND_PROGRAM\n'
 }
 
-/** Nguồn chân lý DUY NHẤT cho số đo ST editor — gutter số dòng, overlay tô
- *  cú pháp, textarea, dải highlight active-line và điểm neo dropdown gợi ý
- *  ĐỀU phải dùng đúng các hằng số này, áp bằng INLINE STYLE (không qua class
- *  Tailwind `text-sm`/`leading-5`/`p-3`).
- *
- *  Lý do bắt buộc inline style — đây là nguyên nhân gốc thật của lỗi lệch
- *  dòng/nhoè chữ báo qua ảnh chụp 2026-08-17 (FE-ST-001..006), KHÔNG phải
- *  do tính sai `background-position` như bản vá trước đó tưởng: `styles.css`
- *  có rule `button, input, select, textarea { font: inherit }` nằm NGOÀI mọi
- *  `@layer` (chỉ có `@import "tailwindcss"` ở đầu file, còn lại là CSS trần).
- *  Theo CSS Cascade Layers, rule không-layer LUÔN thắng rule có layer bất kể
- *  độ đặc hiệu — nên nó âm thầm đè `text-sm`/`leading-5` của Tailwind CHỈ
- *  trên `<textarea>` (không đè `<pre>` gutter/overlay vì chúng không khớp
- *  selector đó), khiến textarea render chữ theo font-size/line-height KẾ
- *  THỪA từ phần tử cha — không phải 14px/20px như gutter/overlay giả định.
- *  Caret và vùng chọn thật của trình duyệt (do chính textarea vẽ) vì vậy
- *  lệch khỏi lưới 20px, và độ lệch CỘNG DỒN theo từng dòng — khớp chính xác
- *  hiện tượng "dòng đầu gần đúng, dòng 9-10 lệch hẳn" trong ảnh chụp. Textarea
- *  đã phải dùng inline style cho `color`/`caretColor` vì đúng lý do này (xem
- *  comment tại chỗ khai báo `style` của textarea) — nay áp dụng nhất quán
- *  cho CẢ BA lớp thay vì chỉ hai thuộc tính màu.
- *
- *  Theo khuyến nghị người dùng: KHÔNG kẻ lưới từng dòng nữa (mọi code editor
- *  chuẩn — VS Code, Sublime — chỉ highlight active-line, không kẻ toàn bộ
- *  hàng). Lưới cũ (`EDITOR_ROW_GRID`) đã bỏ hẳn. */
+/** Nguồn chân lý duy nhất cho số đo ST editor. Gutter, overlay và textarea
+ * dùng cùng inline metrics để caret, selection, highlight và gợi ý không lệch
+ * dòng dù theme hoặc base form style thay đổi. Editor chỉ tô active-line,
+ * không kẻ lưới từng dòng. */
 const EDITOR_FONT_SIZE_PX = 14
 const EDITOR_ROW_HEIGHT_PX = 20
 const EDITOR_PAD_TOP_PX = 12
@@ -104,6 +85,8 @@ export function ProgramsTab({
   onSelectProgram,
   onSave,
   diagnostics,
+  runtime,
+  activeRevision,
   focusDiagnostic,
   onPendingOperationsChange,
   discardVersion,
@@ -115,6 +98,8 @@ export function ProgramsTab({
   onSelectProgram: (programId: string | undefined) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   diagnostics: ProgrammingDiagnostic[]
+  runtime: RemoteState<ProgrammingRuntime>
+  activeRevision: RemoteState<ProgrammingRevision | null>
   focusDiagnostic: ProgrammingDiagnostic | null
   onPendingOperationsChange: (operations: ProgrammingDraftOperation[]) => void
   discardVersion: number
@@ -128,6 +113,11 @@ export function ProgramsTab({
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin')
   const selected = document.programs.find((program) => program.programId === selectedProgramId)
+  const activeProgramIds = useMemo(
+    () => new Set((activeRevision.data?.snapshot?.objects ?? []).filter((item) => item.kind === 'PROGRAM').map((item) => item.objectId)),
+    [activeRevision.data]
+  )
+  const runtimeConfirmed = runtime.status === 'ready' && runtime.data?.producerState === 'READY' && runtime.data.taskState === 'RUNNING' && activeRevision.status === 'ready' && activeRevision.data?.revisionId === runtime.data.activeRevisionId
   const [buffers, setBuffers] = useState<Record<string, string>>({})
   const [projectTagsDraft, setProjectTagsDraft] = useState(() => document.project.functionalTags.join(', '))
   const [metadataDrafts, setMetadataDrafts] = useState<Record<string, ProgramMetadataDraft>>({})
@@ -139,6 +129,14 @@ export function ProgramsTab({
    * `SourceEditor`) để cache còn nguyên khi đổi Program đang chọn. */
   const pointCatalog = useLazyProgrammingPointCatalog()
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [mobileExplorerOpen, setMobileExplorerOpen] = useState(false)
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false)
+  const explorerTriggerRef = useRef<HTMLButtonElement>(null)
+  const inspectorTriggerRef = useRef<HTMLButtonElement>(null)
+  const explorerPaneRef = useRef<HTMLElement>(null)
+  const inspectorPaneRef = useRef<HTMLElement>(null)
+  const editorSurfaceRef = useRef<HTMLDivElement>(null)
+  const editorFocusPendingRef = useRef(false)
   /* Điều hướng chéo Program khi chọn một biến ở Bảng lệnh nhanh: đổi
    * `selectedProgramId` rồi TÁI DÙNG đúng cơ chế `focusDiagnostic` đã có
    * (D-01) — không viết thêm một prop/hiệu ứng thứ hai cho cùng việc "chọn
@@ -283,94 +281,141 @@ export function ProgramsTab({
     onRunCheck()
   }
 
+  useEffect(() => {
+    if (!mobileExplorerOpen && !mobileInspectorOpen) return
+    const previousOverflow = globalThis.document.body.style.overflow
+    globalThis.document.body.style.overflow = 'hidden'
+    const closeMobilePanes = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      if (mobileExplorerOpen) {
+        setMobileExplorerOpen(false)
+        explorerTriggerRef.current?.focus()
+      }
+      if (mobileInspectorOpen) {
+        setMobileInspectorOpen(false)
+        inspectorTriggerRef.current?.focus()
+      }
+    }
+    globalThis.document.addEventListener('keydown', closeMobilePanes)
+    const closeAtDesktopBreakpoint = () => {
+      if (globalThis.innerWidth >= 1024) setMobileExplorerOpen(false)
+      if (globalThis.innerWidth >= 1280) setMobileInspectorOpen(false)
+    }
+    globalThis.addEventListener('resize', closeAtDesktopBreakpoint)
+    const pane = mobileExplorerOpen ? explorerPaneRef.current : inspectorPaneRef.current
+    pane?.querySelector<HTMLElement>('button')?.focus()
+    return () => {
+      globalThis.document.removeEventListener('keydown', closeMobilePanes)
+      globalThis.removeEventListener('resize', closeAtDesktopBreakpoint)
+      globalThis.document.body.style.overflow = previousOverflow
+    }
+  }, [mobileExplorerOpen, mobileInspectorOpen])
+
+  useEffect(() => {
+    const closeAtDesktop = () => {
+      if (globalThis.innerWidth >= 1024) setMobileExplorerOpen(false)
+      if (globalThis.innerWidth >= 1280) setMobileInspectorOpen(false)
+    }
+    globalThis.addEventListener('resize', closeAtDesktop)
+    closeAtDesktop()
+    return () => globalThis.removeEventListener('resize', closeAtDesktop)
+  }, [])
+
+  useEffect(() => {
+    if (!editorFocusPendingRef.current || !selected) return
+    editorFocusPendingRef.current = false
+    const frame = globalThis.requestAnimationFrame(() => {
+      const target = editorSurfaceRef.current?.querySelector<HTMLElement>('textarea, [role="toolbar"] button')
+      target?.focus()
+    })
+    return () => globalThis.cancelAnimationFrame(frame)
+  }, [selected, selected?.language])
+
+  function selectProgramFromExplorer(programId: string) {
+    onSelectProgram(programId)
+    if (mobileExplorerOpen) {
+      editorFocusPendingRef.current = true
+      setMobileExplorerOpen(false)
+      // The selected program may already be active (for example after the
+      // automatic first-program selection), so the selection effect alone
+      // cannot reliably move focus into the editor.
+      globalThis.setTimeout(() => {
+        editorSurfaceRef.current?.querySelector<HTMLElement>('textarea, [role="toolbar"] button')?.focus()
+      }, 0)
+    }
+  }
+
+  function openPaletteFromShortcut() {
+    if (!mobileExplorerOpen && !mobileInspectorOpen) {
+      setPaletteOpen(true)
+      return
+    }
+    const returnFocusRef = mobileExplorerOpen ? explorerTriggerRef : inspectorTriggerRef
+    setMobileExplorerOpen(false)
+    setMobileInspectorOpen(false)
+    returnFocusRef.current?.focus()
+    globalThis.requestAnimationFrame(() => setPaletteOpen(true))
+  }
+
+  function openPalette() {
+    setMobileExplorerOpen(false)
+    setMobileInspectorOpen(false)
+    const returnFocusRef = mobileExplorerOpen ? explorerTriggerRef : inspectorTriggerRef
+    returnFocusRef.current?.focus()
+    setPaletteOpen(true)
+  }
+
+  function trapMobilePaneFocus(event: ReactKeyboardEvent<HTMLElement>, pane: HTMLElement | null) {
+    if (event.key !== 'Tab' || !pane) return
+    const focusable = [...pane.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href]')]
+    if (focusable.length === 0) { event.preventDefault(); pane.focus(); return }
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && globalThis.document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && globalThis.document.activeElement === last) { event.preventDefault(); first.focus() }
+  }
+
   return (
     <div
-      className="grid gap-4 md:grid-cols-[280px_1fr] lg:grid-cols-[280px_1fr_308px]"
+      className="grid gap-2 min-[1024px]:grid-cols-[260px_1fr] min-[1280px]:grid-cols-[260px_1fr_300px]"
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
           event.preventDefault()
-          setPaletteOpen(true)
+          openPaletteFromShortcut()
         }
       }}
     >
       <CommandPalette open={paletteOpen} entries={paletteEntries} onClose={() => setPaletteOpen(false)} onSelect={handlePaletteSelect} />
-      <nav aria-label={pick('Cây ứng dụng', 'Application tree')} className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
-        <ProjectTagsEditor
+      <div className="col-span-full flex gap-2 min-[1280px]:hidden">
+        <button ref={explorerTriggerRef} type="button" className="flex min-h-10 items-center gap-1 rounded border border-[var(--c-border)] px-3 py-2 text-sm min-[1024px]:hidden" aria-controls="programming-explorer-pane" aria-expanded={mobileExplorerOpen} onClick={() => setMobileExplorerOpen(true)}><PanelLeft className="h-4 w-4" aria-hidden="true" />{pick('Cây', 'Explorer')}</button>
+        <button ref={inspectorTriggerRef} type="button" className="flex min-h-10 items-center gap-1 rounded border border-[var(--c-border)] px-3 py-2 text-sm min-[1280px]:hidden" aria-controls="programming-inspector-pane" aria-expanded={mobileInspectorOpen} onClick={() => setMobileInspectorOpen(true)}><PanelRight className="h-4 w-4" aria-hidden="true" />{pick('Thuộc tính', 'Inspector')}</button>
+      </div>
+      {(mobileExplorerOpen || mobileInspectorOpen) && <button type="button" className="fixed inset-0 z-40 bg-black/40 min-[1280px]:hidden" aria-label={pick('Đóng ngăn kéo', 'Close drawer')} onClick={() => {
+        if (mobileExplorerOpen) explorerTriggerRef.current?.focus()
+        if (mobileInspectorOpen) inspectorTriggerRef.current?.focus()
+        setMobileExplorerOpen(false)
+        setMobileInspectorOpen(false)
+      }} />}
+      <nav id="programming-explorer-pane" ref={explorerPaneRef} role={mobileExplorerOpen ? 'dialog' : undefined} aria-modal={mobileExplorerOpen || undefined} aria-label={pick('Cây ứng dụng', 'Application tree')} tabIndex={mobileExplorerOpen ? -1 : undefined} onKeyDown={(event) => trapMobilePaneFocus(event, explorerPaneRef.current)} className={`rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2 ${mobileExplorerOpen ? 'fixed inset-y-0 left-0 z-50 w-[min(20rem,86vw)] overflow-y-auto shadow-xl' : 'hidden'} min-[1024px]:static min-[1024px]:block min-[1024px]:w-auto min-[1024px]:shadow-none`}>
+        {mobileExplorerOpen && <button type="button" className="mb-2 min-h-10 min-w-10 rounded border border-[var(--c-border)] p-2 text-sm min-[1024px]:hidden" aria-label={pick('Đóng cây ứng dụng', 'Close explorer')} onClick={() => { setMobileExplorerOpen(false); explorerTriggerRef.current?.focus() }}><X className="h-4 w-4" aria-hidden="true" /></button>}
+        <ProgramExplorer
           canEdit={canEdit}
-          value={projectTagsDraft}
           saving={saving}
-          onChange={setProjectTagsDraft}
-          onSave={() => onSave([{ op: 'setFunctionalTags', tags: parseTags(projectTagsDraft) }])}
+          functionalTags={projectTagsDraft}
+          projectFunctionalTags={parseTags(projectTagsDraft)}
+          programs={document.programs}
+          projectName={document.project.name}
+          activeProgramIds={activeProgramIds}
+          runtimeConfirmed={runtimeConfirmed}
+          selectedProgramId={selectedProgramId}
+          onFunctionalTagsChange={setProjectTagsDraft}
+          onSaveFunctionalTags={() => onSave([{ op: 'setFunctionalTags', tags: parseTags(projectTagsDraft) }])}
+          onOpenCommandPalette={openPalette}
+          onAddProgram={addProgram}
+          onSelectProgram={selectProgramFromExplorer}
+          onRequestDelete={setPendingDeleteId}
         />
-        <div className="mb-2 flex items-center justify-between px-1">
-          <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Chương trình', 'Programs')}</h3>
-          <span className="flex gap-1">
-            <button
-              type="button"
-              className="rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-              title={pick('Bảng lệnh nhanh (Ctrl+P)', 'Command palette (Ctrl+P)')}
-              onClick={() => setPaletteOpen(true)}
-            >
-              <Command className="h-4 w-4" aria-hidden="true" />
-              <span className="sr-only">{pick('Bảng lệnh nhanh', 'Command palette')}</span>
-            </button>
-            {canEdit && (
-              <>
-                <button
-                  type="button"
-                  className="rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-                  title={pick('Thêm chương trình FBD', 'Add FBD program')}
-                  onClick={() => addProgram('FBD')}
-                >
-                  <FilePlus className="h-4 w-4" aria-hidden="true" />
-                  <span className="sr-only">{pick('FBD', 'FBD')}</span>
-                </button>
-                <button
-                  type="button"
-                  className="rounded p-1 text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-                  title={pick('Thêm chương trình ST', 'Add ST program')}
-                  onClick={() => addProgram('ST')}
-                >
-                  ST+
-                </button>
-              </>
-            )}
-          </span>
-        </div>
-        {document.programs.length === 0 ? (
-          <p className="px-1 text-sm text-[var(--c-text-dim)]">
-            {canEdit
-              ? pick('Chưa có chương trình. Bấm + để tạo.', 'No programs yet. Click + to create one.')
-              : pick('Chưa có chương trình.', 'No programs yet.')}
-          </p>
-        ) : (
-          <ul className="space-y-0.5">
-            {document.programs.map((program) => (
-              <li key={program.programId} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-current={program.programId === selectedProgramId ? 'true' : undefined}
-                  className={`w-full rounded px-2 py-1.5 text-left text-sm ${
-                    program.programId === selectedProgramId ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent)]' : 'text-[var(--c-text)] hover:bg-[var(--c-surface-2)]'
-                  }`}
-                  onClick={() => onSelectProgram(program.programId)}
-                >
-                  {program.name} <span className="text-[var(--c-text-dim)]">· {program.language}</span>
-                </button>
-                {canEdit && (
-                  <button
-                    type="button"
-                    className="shrink-0 rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-fault-fg)]"
-                    title={pick('Xóa chương trình', 'Delete program')}
-                    onClick={() => setPendingDeleteId(program.programId)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
       </nav>
       <Modal
         open={pendingDeleteId !== null}
@@ -390,7 +435,23 @@ export function ProgramsTab({
           )}
         </p>
       </Modal>
-      <div>
+      <div ref={editorSurfaceRef} className="min-w-0">
+        {selected && (
+          <ProgramOrientationStrip
+            program={selected}
+            projectName={document.project.name}
+            projectFunctionalTags={parseTags(projectTagsDraft)}
+            live={runtimeConfirmed && activeProgramIds.has(selected.programId)}
+          />
+        )}
+        {selected && (
+          <ProgramRuntimeStrip
+            program={selected}
+            runtime={runtime}
+            activeRevision={activeRevision}
+            active={runtimeConfirmed && activeProgramIds.has(selected.programId)}
+          />
+        )}
         {!selected ? (
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Chọn một chương trình ở cây bên trái.', 'Select a program from the tree on the left.')}</p>
         ) : selected.language === 'ST' ? (
@@ -423,16 +484,26 @@ export function ProgramsTab({
           />
         )}
       </div>
-      <aside aria-label={pick('Thuộc tính', 'Inspector')}>
+      <aside id="programming-inspector-pane" ref={inspectorPaneRef} role={mobileInspectorOpen ? 'dialog' : undefined} aria-modal={mobileInspectorOpen || undefined} aria-label={pick('Thuộc tính', 'Inspector')} tabIndex={mobileInspectorOpen ? -1 : undefined} onKeyDown={(event) => trapMobilePaneFocus(event, inspectorPaneRef.current)} className={`${mobileInspectorOpen ? 'fixed inset-y-0 right-0 z-50 w-[min(20rem,86vw)] overflow-y-auto bg-[var(--c-bg)] p-3 shadow-xl' : 'hidden'} min-[1280px]:static min-[1280px]:block min-[1280px]:w-auto min-[1280px]:overflow-visible min-[1280px]:bg-transparent min-[1280px]:p-0 min-[1280px]:shadow-none`}>
+        {mobileInspectorOpen && <button type="button" className="mb-2 min-h-10 min-w-10 rounded border border-[var(--c-border)] p-2 text-sm min-[1280px]:hidden" aria-label={pick('Đóng thuộc tính', 'Close inspector')} onClick={() => { setMobileInspectorOpen(false); inspectorTriggerRef.current?.focus() }}><X className="h-4 w-4" aria-hidden="true" /></button>}
         {selected ? (
           <ProgramInspector
-            program={selected}
-            programs={document.programs}
             draft={metadataDrafts[selected.programId] ?? metadataOf(selected)}
+            program={selected}
+            variables={document.variables.filter((variable) => variable.programId === selected.programId)}
+            bindings={document.bindings}
+            source={buffers[selected.programId] ?? programSource(selected)}
+            active={runtimeConfirmed && activeProgramIds.has(selected.programId)}
+            activeRevisionId={runtime.data?.activeRevisionId ?? null}
             canEdit={canEdit}
             saving={saving}
+            dirty={!sameMetadata(metadataDrafts[selected.programId] ?? metadataOf(selected), metadataOf(selected))}
+            duplicateName={isDuplicateProgramName(document.programs, (metadataDrafts[selected.programId] ?? metadataOf(selected)).name, selected.programId)}
             onChange={(draft) => setMetadataDrafts((current) => ({ ...current, [selected.programId]: draft }))}
-            onSave={onSave}
+            onSave={() => {
+              const draft = metadataDrafts[selected.programId] ?? metadataOf(selected)
+              void onSave([{ op: 'upsertProgram', program: { ...selected, name: draft.name.trim(), kind: draft.kind, functionalTags: parseTags(draft.functionalTags) } }])
+            }}
           />
         ) : (
           <section className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
@@ -443,6 +514,73 @@ export function ProgramsTab({
           </section>
         )}
       </aside>
+    </div>
+  )
+}
+
+function ProgramRuntimeStrip({
+  program,
+  runtime,
+  activeRevision,
+  active
+}: {
+  program: ProgrammingProgram
+  runtime: RemoteState<ProgrammingRuntime>
+  activeRevision: RemoteState<ProgrammingRevision | null>
+  active: boolean
+}) {
+  const { pick } = useI18n()
+  if (runtime.status === 'loading' || activeRevision.status === 'loading') {
+    return <div role="status" className="mb-2 border-l-4 border-slate-400 bg-[var(--c-surface-2)] px-3 py-2 text-xs text-[var(--c-text-dim)]">{pick('Đang đối chiếu Program với bản Active…', 'Checking the program against the active revision…')}</div>
+  }
+  if (active) {
+    return (
+      <div role="status" className="mb-2 flex flex-wrap items-center justify-between gap-2 border-l-4 border-[var(--c-good)] bg-[var(--c-good-bg)] px-3 py-2 text-xs text-[var(--c-good-fg)]">
+        <span><strong>● {pick('ĐANG CHẠY', 'RUNNING')}</strong> · {program.name} {pick('có trong bản Active', 'is present in active revision')} <span className="font-mono">{runtime.data?.activeRevisionId?.slice(0, 8)}</span></span>
+        <span className="font-mono">{runtime.data?.task?.taskId ?? 'Task'} · {runtime.data?.task?.periodMs ?? '—'} ms · scan #{runtime.data?.task?.runCount ?? '—'}</span>
+      </div>
+    )
+  }
+  if (runtime.status === 'ready' && runtime.data?.activeRevisionId) {
+    return (
+      <div role="status" className="mb-2 border-l-4 border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
+        <strong>{pick('BẢN NHÁP KHÔNG PHẢI BẢN ĐANG CHẠY.', 'THE DRAFT IS NOT THE RUNNING REVISION.')}</strong>{' '}
+        {pick('Runtime đang dùng bản Active', 'Runtime is using active revision')} <span className="font-mono">{runtime.data.activeRevisionId.slice(0, 8)}</span>.
+      </div>
+    )
+  }
+  return <div role="status" className="mb-2 border-l-4 border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Chưa xác minh được Program đang chạy từ runtime authority.', 'The running program could not be verified from runtime authority.')}</div>
+}
+
+function ProgramOrientationStrip({
+  program,
+  projectName,
+  projectFunctionalTags,
+  live
+}: {
+  program: ProgrammingProgram
+  projectName: string
+  projectFunctionalTags: string[]
+  live: boolean
+}) {
+  const { pick } = useI18n()
+  const group = primaryFunctionalTag(program.functionalTags, projectFunctionalTags) ?? pick('Chưa phân nhóm', 'Unassigned')
+  return (
+    <div
+      className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2"
+      aria-label={pick('Định hướng lựa chọn chương trình', 'Program selection orientation')}
+    >
+      <nav aria-label={pick('Đường dẫn chương trình', 'Program breadcrumb')} className="flex min-w-0 flex-wrap items-center gap-1 text-xs">
+        <span className="font-semibold text-[var(--c-text-dim)]">{projectName}</span>
+        <span aria-hidden="true" className="text-[var(--c-text-dim)]">/</span>
+        <span className="inline-flex items-center gap-1 text-[var(--c-text-dim)]"><Tag className="h-3.5 w-3.5" aria-hidden="true" />{group}</span>
+        <span aria-hidden="true" className="text-[var(--c-text-dim)]">/</span>
+        <strong className="truncate text-[var(--c-text)]">{program.name}</strong>
+      </nav>
+      <div className="flex shrink-0 items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">
+        <span>{program.kind} · {program.language}</span>
+        {live && <span className="rounded-full bg-[var(--c-good-bg)] px-2 py-0.5 text-[var(--c-good-fg)]">LIVE</span>}
+      </div>
     </div>
   )
 }
@@ -843,7 +981,7 @@ export function SourceEditor({
       <label className="sr-only" htmlFor={`programming-st-source-${program.programId}`}>
         {pick(`Mã nguồn ST của ${program.name}`, `ST source for ${program.name}`)}
       </label>
-      <div className="relative grid h-96 grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]">
+      <div className="relative grid h-[clamp(22rem,36vh,30rem)] grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)] min-[1280px]:h-[clamp(17rem,28vh,22rem)]">
         {/* Con trỏ lệch dòng (báo trực tiếp trên board, 2026-08-15 và
          * 2026-08-17 — ảnh chụp cho thấy lưới kẻ cắt xuyên chữ, không phải
          * chỉ lệch nhẹ): tắt word-wrap (`whitespace-pre` + `wrap="off"`) đã
@@ -875,7 +1013,7 @@ export function SourceEditor({
             </div>
           ))}
         </div>
-        <div className="relative h-96 overflow-hidden">
+        <div className="relative h-full overflow-hidden">
           {/* WP-10 P0: overlay tô cú pháp + gạch chân diagnostic, nằm DƯỚI
            * textarea (chữ trong suốt, chỉ hiện con trỏ) — `EDITOR_TEXT_METRICS`
            * (inline) khớp pixel-cho-pixel với textarea phía trên, xem lý do ở
@@ -926,7 +1064,7 @@ export function SourceEditor({
             id={`programming-st-source-${program.programId}`}
             aria-describedby={diagnostics.length > 0 ? `programming-st-diagnostics-${program.programId}` : undefined}
             wrap="off"
-            className="absolute inset-0 h-96 w-full resize-none whitespace-pre border-0 bg-transparent outline-none"
+            className="absolute inset-0 h-full w-full resize-none whitespace-pre border-0 bg-transparent outline-none"
             /* `color`/`caretColor` VÀ toàn bộ `EDITOR_TEXT_METRICS` (font-size/
              * line-height/padding/tab-size) đều phải là inline style — lý do
              * đầy đủ ở comment tại chỗ khai báo `EDITOR_TEXT_METRICS` phía
@@ -1059,7 +1197,7 @@ export function SourceEditor({
         <span>{pick('Dòng', 'Line')} {cursor.line}, {pick('cột', 'column')} {cursor.column}</span>
         <span>{source.length} {pick('ký tự', 'characters')}</span>
       </div>
-      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
+      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 min-[1280px]:hidden">
         <h4 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Ký hiệu & kiểu', 'Symbols & types')}</h4>
         {symbols.length === 0 ? (
           <p className="mt-1 text-xs text-[var(--c-text-dim)]">{pick('Chưa nhận diện khai báo VAR.', 'No VAR declarations detected.')}</p>
@@ -1158,12 +1296,6 @@ function FbdEditorPane({
   )
 }
 
-interface ProgramMetadataDraft {
-  name: string
-  kind: ProgrammingProgram['kind']
-  functionalTags: string
-}
-
 function metadataOf(program: ProgrammingProgram): ProgramMetadataDraft {
   return { name: program.name, kind: program.kind, functionalTags: (program.functionalTags ?? []).join(', ') }
 }
@@ -1200,58 +1332,6 @@ export function uniqueProgramName(programs: ProgrammingProgram[], baseName: stri
 function programSource(program: ProgrammingProgram): string {
   if (typeof program.document === 'string') return program.document
   return JSON.stringify(program.document)
-}
-
-function ProjectTagsEditor({ canEdit, value, saving, onChange, onSave }: { canEdit: boolean; value: string; saving: boolean; onChange: (value: string) => void; onSave: () => Promise<boolean> }) {
-  const { pick } = useI18n()
-  return (
-    <div className="mb-3 border-b border-[var(--c-border)] pb-3">
-      <label className="text-xs font-semibold uppercase text-[var(--c-text-dim)]" htmlFor="programming-project-functional-tags">{pick('Nhóm chức năng', 'Functional tags')}</label>
-      <input id="programming-project-functional-tags" value={value} readOnly={!canEdit} onChange={(event) => onChange(event.target.value)} placeholder={pick('AHU, Nhiệt độ gió cấp', 'AHU, Supply air temperature')} className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-xs text-[var(--c-text)]" />
-      {canEdit && <Button className="mt-1" size="sm" variant="ghost" loading={saving} onClick={() => void onSave()}>{pick('Lưu nhóm', 'Save tags')}</Button>}
-    </div>
-  )
-}
-
-function ProgramInspector({ program, programs, draft, canEdit, saving, onChange, onSave }: { program: ProgrammingProgram; programs: ProgrammingProgram[]; draft: ProgramMetadataDraft; canEdit: boolean; saving: boolean; onChange: (draft: ProgramMetadataDraft) => void; onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean> }) {
-  const { pick } = useI18n()
-  const dirty = !sameMetadata(draft, metadataOf(program))
-  const duplicateName = isDuplicateProgramName(programs, draft.name, program.programId)
-  return (
-    <section className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
-      <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Thuộc tính', 'Inspector')}</h3>
-      <div className="mt-2 grid gap-2 sm:grid-cols-3">
-        <label className="text-xs text-[var(--c-text-dim)]">
-          {pick('Tên', 'Name')}
-          <input className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.name} readOnly={!canEdit} onChange={(event) => onChange({ ...draft, name: event.target.value })} />
-          {duplicateName && <span className="mt-1 block text-xs font-normal normal-case text-[var(--c-fault-fg)]">{pick('Tên đã được dùng bởi chương trình khác.', 'This name is already used by another program.')}</span>}
-        </label>
-        <label className="text-xs text-[var(--c-text-dim)]">
-          {pick('Loại', 'Kind')}
-          {/* WP-02 (D-03, REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15 §7.4): Check
-           * (`compilerInput()`, BE) chỉ biên dịch đúng 1 object PROGRAM/Revision
-           * — bất kỳ object FUNCTION/FUNCTION_BLOCK nào cũng làm Check fail cứng
-           * `ST-CLI-LIMIT` không giải thích lý do. Trước đây dropdown này cho
-           * chọn cả ba loại dù backend chỉ làm được PROGRAM — ẩn hai lựa chọn
-           * chưa hỗ trợ khỏi UI thay vì để người dùng tự khám phá sau một vòng
-           * Check thất bại khó hiểu. Program hiện có (nếu có, từ import bundle)
-           * mang sẵn kind khác PROGRAM vẫn hiển thị đúng giá trị thật kèm cảnh
-           * báo, không bị ẩn/mất dữ liệu. */}
-          <select className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.kind} disabled={!canEdit} onChange={(event) => onChange({ ...draft, kind: event.target.value as ProgrammingProgram['kind'] })}>
-            <option value="PROGRAM">PROGRAM</option>
-            {draft.kind !== 'PROGRAM' && <option value={draft.kind}>{draft.kind}</option>}
-          </select>
-          {draft.kind !== 'PROGRAM' && (
-            <span className="mt-1 block text-xs font-normal normal-case text-[var(--c-warn-fg)]">
-              {pick('Loại này chưa được Kiểm tra hỗ trợ biên dịch — đổi về PROGRAM trước khi Kiểm tra.', 'This kind is not supported by Check yet — switch to PROGRAM before running Check.')}
-            </span>
-          )}
-        </label>
-        <label className="text-xs text-[var(--c-text-dim)]">{pick('Tag chức năng', 'Functional tags')}<input className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]" value={draft.functionalTags} readOnly={!canEdit} onChange={(event) => onChange({ ...draft, functionalTags: event.target.value })} /></label>
-      </div>
-      {canEdit && <Button className="mt-2" size="sm" loading={saving} disabled={!dirty || draft.name.trim().length === 0 || duplicateName} onClick={() => void onSave([{ op: 'upsertProgram', program: { ...program, name: draft.name.trim(), kind: draft.kind, functionalTags: parseTags(draft.functionalTags) } }])}>{pick('Lưu thuộc tính', 'Save properties')}</Button>}
-    </section>
-  )
 }
 
 interface StSymbol { name: string; type: string; offset: number; references: number }

@@ -101,7 +101,7 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
         detail_keys.add(key)
 
     # §9 là authority con người đọc; catalog không được âm thầm bỏ/thêm mã.
-    spec = INTERFACE_SPEC.read_text()
+    spec = INTERFACE_SPEC.read_text(encoding="utf-8")
     section9 = spec.split("## 9.", 1)[1].split("## 10.", 1)[0]
     spec_codes = set(re.findall(r"PRG-ERR-[A-Z0-9-]+", section9))
     if codes != spec_codes:
@@ -111,19 +111,19 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
         )
 
     expected_details: dict[str, set[str]] = {
-        "st-control-api": set(re.findall(r"API-E-[0-9]{3}", (ROOT / "apps/core/application/st/st_control_api.hpp").read_text())),
-        "artifact-loader": set(re.findall(r"IR-E-[0-9]{3}", (ROOT / "apps/core/application/st/st_loader.hpp").read_text())),
-        "retain": set(re.findall(r"RT-RETAIN-[0-9]{3}", (ROOT / "apps/core/application/st/st_retain.hpp").read_text())),
+        "st-control-api": set(re.findall(r"API-E-[0-9]{3}", (ROOT / "apps/core/application/st/st_control_api.hpp").read_text(encoding="utf-8"))),
+        "artifact-loader": set(re.findall(r"IR-E-[0-9]{3}", (ROOT / "apps/core/application/st/st_loader.hpp").read_text(encoding="utf-8"))),
+        "retain": set(re.findall(r"RT-RETAIN-[0-9]{3}", (ROOT / "apps/core/application/st/st_retain.hpp").read_text(encoding="utf-8"))),
         "core-ipc": set(re.findall(
             r"IPC-[A-Z0-9-]+",
-            (ROOT / "apps/core/application/programming/program_ipc_server.cpp").read_text()
-            + (ROOT / "apps/core/application/programming/programming_runtime_coordinator.cpp").read_text(),
+            (ROOT / "apps/core/application/programming/program_ipc_server.cpp").read_text(encoding="utf-8")
+            + (ROOT / "apps/core/application/programming/programming_runtime_coordinator.cpp").read_text(encoding="utf-8"),
         )),
     }
-    diagnostic_source = (ROOT / "apps/core/application/st/st_diagnostic.hpp").read_text()
+    diagnostic_source = (ROOT / "apps/core/application/st/st_diagnostic.hpp").read_text(encoding="utf-8")
     expected_details["compiler"] = set(re.findall(r"ST-(?:LEX|SYN|SEM|LIM|IOMAP)-[0-9]{3}", diagnostic_source))
     for source in ("st_compile_main.cpp", "st_validate_main.cpp"):
-        expected_details["compiler"].update(re.findall(r"ST-CLI-[A-Z0-9-]+", (ROOT / "apps/core/application/st" / source).read_text()))
+        expected_details["compiler"].update(re.findall(r"ST-CLI-[A-Z0-9-]+", (ROOT / "apps/core/application/st" / source).read_text(encoding="utf-8")))
     expected_details["runtime"] = set(re.findall(r"ST-RT-[0-9]{3}", diagnostic_source))
     for component, expected in expected_details.items():
         mapped = {detail for mapped_component, detail in detail_keys if mapped_component == component}
@@ -449,9 +449,9 @@ def render_manifest(catalog: dict[str, Any], catalog_hash: str, schema_hash: str
         "publicErrorCount": len(catalog["publicErrors"]),
         "componentDetailCount": len(catalog["componentDetails"]),
         "generatedConsumers": [
-            str(GO_OUTPUT.relative_to(ROOT)),
-            str(CPP_OUTPUT.relative_to(ROOT)),
-            str(TS_OUTPUT.relative_to(ROOT)),
+            GO_OUTPUT.relative_to(ROOT).as_posix(),
+            CPP_OUTPUT.relative_to(ROOT).as_posix(),
+            TS_OUTPUT.relative_to(ROOT).as_posix(),
         ],
     }
     return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
@@ -475,7 +475,7 @@ def main() -> int:
         return 1
 
     if args.check:
-        drift = [path for path, content in outputs.items() if not path.exists() or path.read_text() != content]
+        drift = [path for path, content in outputs.items() if not path.exists() or path.read_text(encoding="utf-8") != content]
         if drift:
             for path in drift:
                 print(f"DRIFT: {path.relative_to(ROOT)}", file=sys.stderr)
@@ -488,7 +488,7 @@ def main() -> int:
 
     for path, content in outputs.items():
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
+        path.write_text(content, encoding="utf-8")
         print(path.relative_to(ROOT))
     return 0
 

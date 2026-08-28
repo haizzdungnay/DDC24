@@ -23,7 +23,12 @@ body {
   color: var(--c-text);
 }
 
-button, input, select, textarea { font: inherit; color: inherit; }
+/* Đặt reset form trong base layer để utility màu/chữ của component vẫn có
+ * quyền ưu tiên. Rule không-layer trước đây làm nút primary kế thừa chữ tối
+ * trên nền accent, khiến tương phản thực tế chỉ còn 2.03:1. */
+@layer base {
+  button, input, select, textarea { font: inherit; color: inherit; }
+}
 
 button:focus-visible,
 a:focus-visible,

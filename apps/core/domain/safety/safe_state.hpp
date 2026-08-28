@@ -45,8 +45,11 @@ public:
     };
     const Triggers& triggers() const { return triggers_; }
 
-    /* Có thể ghi đè *inout — gọi SAU priority_resolver.resolve() (scan step 7). */
-    void apply(const IoSnapshot& io, const PointTable& table, OutputCmd* inout);
+    /* Có thể ghi đè *inout — gọi SAU priority_resolver.resolve() (scan step 7).
+     * `graph_is_active_producer=false` khi Program đã sở hữu Local logic: graph
+     * cũ vẫn được giữ để rollback nhưng không còn là authority cho T6/T7. */
+    void apply(const IoSnapshot& io, const PointTable& table, OutputCmd* inout,
+               bool graph_is_active_producer = true);
 
     bool active() const { return active_; }
 

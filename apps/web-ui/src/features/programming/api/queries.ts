@@ -11,6 +11,7 @@ import type {
   ProgrammingOverridePage,
   ProgrammingPointCatalogPage,
   ProgrammingProjectPage,
+  ProgrammingRevision,
   ProgrammingRevisionChanges,
   ProgrammingRuntime,
   ProgrammingMonitorPage,
@@ -28,17 +29,19 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
   const [status, setStatus] = useState<RemoteState<T>['status']>('loading')
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null)
   const loadRef = useRef(load)
   loadRef.current = load
   const generation = useRef(0)
 
   const run = useCallback(() => {
     const myGeneration = ++generation.current
-    loadRef.current().then(
+    return loadRef.current().then(
       (value) => {
         if (myGeneration !== generation.current) return
         setData(value)
         setError(null)
+        setLastSuccessAt(Date.now())
         setStatus('ready')
       },
       (reason: unknown) => {
@@ -56,10 +59,24 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
   }, [pick])
 
   useEffect(() => {
-    run()
-    if (intervalMs <= 0) return undefined
-    const timer = window.setInterval(run, intervalMs)
-    return () => window.clearInterval(timer)
+    let disposed = false
+    let timer: number | undefined
+    const poll = () => {
+      const pending = run()
+      if (intervalMs <= 0) return
+      void pending.then(() => {
+        if (!disposed) timer = window.setTimeout(poll, intervalMs)
+      }, () => {
+        if (!disposed) timer = window.setTimeout(poll, intervalMs)
+      })
+    }
+    poll()
+    return () => {
+      disposed = true
+      if (timer !== undefined) window.clearTimeout(timer)
+      // Bỏ response của tài nguyên cũ sau unmount hoặc khi dependency đổi.
+      generation.current += 1
+    }
     // `load` cố ý nằm trong deps dù `run()` luôn đọc qua `loadRef` (giá trị
     // mới nhất) — thiếu nó, đổi định danh tài nguyên (vd `checkId` từ
     // `undefined` sang giá trị thật sau một `navigate` cùng trang, xem D-01/
@@ -67,7 +84,7 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
     // của lần mount đầu tới khi ai đó gọi `refresh()` thủ công.
   }, [run, load, intervalMs])
 
-  return { status, data, error, refresh: run }
+  return { status, data, error, refresh: run, lastSuccessAt }
 }
 
 /** `GET /capabilities` — cache 5 s theo IFSPEC-PROG-001 §11.1; đủ để refresh mỗi 5 s. */
@@ -97,12 +114,25 @@ export function useProgrammingProjects(): RemoteState<ProgrammingProjectPage> {
   return useProgrammingResource(load, 0)
 }
 
+/** Đọc snapshot immutable của bản đang Active để UI có thể chỉ rõ Program nào
+ * thuộc bản đang chạy. `/runtime` vẫn là authority cho Active ID và task state. */
+export function useProgrammingRevision(revisionId: string | null | undefined): RemoteState<ProgrammingRevision | null> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => {
+    if (!revisionId) return Promise.resolve(null)
+    return client.request<ProgrammingRevision>('getProgrammingRevision', { path: { revisionId } })
+  }, [client, revisionId])
+  return useProgrammingResource(load, 0)
+}
+
 /** `GET /point-catalog` — tab Điểm & Ánh xạ có nhịp làm mới riêng (UX §0.1
  * ràng buộc 3: `usePointCatalogQuery` tách khỏi `useDraftQuery`). */
-export function useProgrammingPointCatalog(): RemoteState<ProgrammingPointCatalogPage> {
+export function useProgrammingPointCatalog(enabled = true): RemoteState<ProgrammingPointCatalogPage> {
   const client = useProgrammingApiClient()
-  const load = useCallback(() => client.request<ProgrammingPointCatalogPage>('getProgrammingPointCatalog'), [client])
-  return useProgrammingResource(load, 10000)
+  const load = useCallback(() => enabled
+    ? client.request<ProgrammingPointCatalogPage>('getProgrammingPointCatalog')
+    : Promise.resolve<ProgrammingPointCatalogPage>({ items: [] }), [client, enabled])
+  return useProgrammingResource(load, enabled ? 10000 : 0)
 }
 
 export interface LazyPointCatalogState {
@@ -219,7 +249,8 @@ export function useProgrammingOperations(limit = 20): RemoteState<ProgrammingOpe
   return useProgrammingResource(load, 0)
 }
 
-/** `GET /runtime/monitor` — snapshot cuối-scan authoritative, poll 1 Hz. Lỗi
+/** `GET /runtime/monitor` — snapshot cuối-scan authoritative, nghỉ 1 giây giữa
+ * hai lần đọc để request chậm không chồng lấn và làm UI mắc kẹt ở loading. Lỗi
  * nguồn giữ nguyên trạng thái error/offline; hook không tái sử dụng sample cũ
  * như dữ liệu LIVE. */
 export function useProgrammingRuntimeMonitor(): RemoteState<ProgrammingMonitorPage> {

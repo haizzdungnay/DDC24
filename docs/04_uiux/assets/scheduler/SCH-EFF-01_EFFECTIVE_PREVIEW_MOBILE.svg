@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
+  <title>SCH-EFF-01 Tab "Hiệu lực thực tế" — mobile 390, hai trạng thái</title>
+  <desc>Hai artboard mobile của EffectiveTab: có xung đột (khối cảnh báo đặt trên bảng cuộn ngang) và thiếu engine. Màu lấy từ token LIGHT trong apps/web-ui/src/shared/theme/tokens.ts. Dữ liệu trong hình là MINH HOẠ, không phải dữ liệu runtime.</desc>
+
+  <rect width="800" height="800" fill="#C8CCD0"/>
+
+  <text x="24" y="22" font-size="12" font-weight="700" fill="#4A4F55">Artboard 1 — mobile 390 · có xung đột</text>
+  <text x="424" y="22" font-size="12" font-weight="700" fill="#4A4F55">Artboard 2 — mobile 390 · thiếu engine (503)</text>
+
+  <!-- ============ MOBILE 1 ============ -->
+  <g transform="translate(24,36)">
+    <rect x="0" y="0" width="390" height="724" rx="8" fill="#D8DBDE" stroke="#636970"/>
+
+    <!-- Tab cuộn ngang ở mobile -->
+    <g font-size="11">
+      <rect x="16" y="14" width="86" height="34" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="42" y="36" fill="#1C1F23">Tuần</text>
+      <rect x="110" y="14" width="96" height="34" rx="6" fill="#C2C6CA" stroke="#636970"/>
+      <text x="126" y="36" fill="#1C1F23">Ngoại lệ</text>
+      <rect x="214" y="14" width="140" height="34" rx="6" fill="#26527C" stroke="#26527C"/>
+      <text x="226" y="36" font-weight="700" fill="#FFFFFF">Hiệu lực thực tế</text>
+    </g>
+    <line x1="16" y1="60" x2="374" y2="60" stroke="#636970"/>
+
+    <text x="16" y="88" font-size="10" fill="#4A4F55">Điểm</text>
+    <rect x="16" y="96" width="358" height="40" rx="6" fill="#C8CCD0" stroke="#636970"/>
+    <text x="30" y="121" font-size="12" font-family="monospace" fill="#1C1F23">AO-01</text>
+    <path d="M348 112 l6 7 l6 -7" fill="none" stroke="#4A4F55" stroke-width="2"/>
+    <rect x="16" y="146" width="174" height="40" rx="6" fill="#26527C" stroke="#26527C"/>
+    <text x="56" y="171" font-size="12" font-weight="700" fill="#FFFFFF">24 giờ tới</text>
+    <rect x="200" y="146" width="174" height="40" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="238" y="171" font-size="12" fill="#1C1F23">7 ngày qua</text>
+
+    <!-- Khối xung đột LUÔN nằm trên bảng, kể cả ở mobile -->
+    <rect x="16" y="200" width="358" height="128" rx="6" fill="#EEE9DB" stroke="#826500" stroke-width="2"/>
+    <text x="28" y="222" font-size="11" font-weight="700" fill="#634D00">2 THỜI ĐIỂM CÓ NHIỀU LỊCH</text>
+    <text x="28" y="238" font-size="11" font-weight="700" fill="#634D00">CÙNG GHI</text>
+    <g font-size="9">
+      <text x="28" y="262" font-family="monospace" fill="#1C1F23">20/08 06:00</text>
+      <text x="118" y="262" fill="#4A4F55">SCH-001 · SCH-004</text>
+      <text x="28" y="276" fill="#4A4F55">→ thắng: </text>
+      <text x="78" y="276" font-weight="700" fill="#1C1F23">SCH-004</text>
+      <text x="136" y="276" fill="#4A4F55">(P8 &gt; P12)</text>
+
+      <text x="28" y="300" font-family="monospace" fill="#1C1F23">20/08 18:00</text>
+      <text x="118" y="300" fill="#4A4F55">SCH-001 · 004 · 009</text>
+      <text x="28" y="314" fill="#4A4F55">→ thắng: </text>
+      <text x="78" y="314" font-weight="700" fill="#1C1F23">SCH-009</text>
+      <text x="136" y="314" fill="#4A4F55">(ngoại lệ đè tuần)</text>
+    </g>
+
+    <!-- Bảng cuộn ngang -->
+    <rect x="16" y="342" width="358" height="240" rx="6" fill="#D8DBDE" stroke="#636970"/>
+    <rect x="16" y="342" width="358" height="28" rx="6" fill="#C2C6CA"/>
+    <g font-size="9" fill="#4A4F55" letter-spacing="0.3">
+      <text x="26" y="360">TỪ</text>
+      <text x="140" y="360">ĐẾN</text>
+      <text x="260" y="360">GIÁ TRỊ</text>
+      <text x="320" y="360">LỊCH…</text>
+    </g>
+    <line x1="16" y1="370" x2="374" y2="370" stroke="#636970"/>
+    <g font-size="9" font-family="monospace" fill="#1C1F23">
+      <text x="26" y="390">20/08 00:00</text><text x="140" y="390">20/08 06:00</text><text x="266" y="390">18.0</text>
+      <line x1="16" y1="400" x2="374" y2="400" stroke="#636970"/>
+      <text x="26" y="420">20/08 06:00</text><text x="140" y="420">20/08 18:00</text><text x="266" y="420">23.0</text>
+      <line x1="16" y1="430" x2="374" y2="430" stroke="#636970"/>
+      <text x="26" y="450">20/08 18:00</text><text x="140" y="450">20/08 22:00</text><text x="272" y="450">—</text>
+      <line x1="16" y1="460" x2="374" y2="460" stroke="#636970"/>
+      <text x="26" y="480">20/08 22:00</text><text x="140" y="480">21/08 00:00</text><text x="266" y="480">18.0</text>
+    </g>
+    <rect x="16" y="554" width="358" height="28" rx="6" fill="#C2C6CA"/>
+    <rect x="24" y="564" width="140" height="8" rx="4" fill="#636970"/>
+    <text x="180" y="572" font-size="9" fill="#4A4F55">← cuộn để xem LỊCH THẮNG · VÌ SAO</text>
+
+    <text x="16" y="608" font-size="9" fill="#4A4F55">Ô giá trị của đoạn không lịch nào ghi là "—",</text>
+    <text x="16" y="622" font-size="9" fill="#4A4F55">tuyệt đối không phải 0: 0 là một lệnh, còn "—"</text>
+    <text x="16" y="636" font-size="9" fill="#4A4F55">nghĩa là điểm giữ nguyên giá trị đang có.</text>
+  </g>
+
+  <!-- ============ MOBILE 2 — 503 ============ -->
+  <g transform="translate(424,36)">
+    <rect x="0" y="0" width="390" height="724" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <g font-size="11">
+      <rect x="214" y="14" width="140" height="34" rx="6" fill="#26527C" stroke="#26527C"/>
+      <text x="226" y="36" font-weight="700" fill="#FFFFFF">Hiệu lực thực tế</text>
+    </g>
+    <line x1="16" y1="60" x2="374" y2="60" stroke="#636970"/>
+
+    <text x="16" y="88" font-size="10" fill="#4A4F55">Điểm</text>
+    <rect x="16" y="96" width="358" height="40" rx="6" fill="#C8CCD0" stroke="#636970"/>
+    <text x="30" y="121" font-size="12" font-family="monospace" fill="#1C1F23">AO-01</text>
+
+    <rect x="16" y="152" width="358" height="128" rx="6" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+    <circle cx="44" cy="180" r="11" fill="none" stroke="#A01017" stroke-width="2"/>
+    <text x="40" y="185" font-size="13" font-weight="700" fill="#A01017">!</text>
+    <text x="66" y="178" font-size="12" font-weight="700" fill="#A01017">Không tính được hiệu</text>
+    <text x="66" y="194" font-size="12" font-weight="700" fill="#A01017">lực thực tế</text>
+    <text x="28" y="222" font-size="9" fill="#4A4F55">503 không tìm thấy mkddc-schedule-sim —</text>
+    <text x="28" y="236" font-size="9" fill="#4A4F55">phân xử ưu tiên thuộc bộ điều khiển, giao</text>
+    <text x="28" y="250" font-size="9" fill="#4A4F55">diện không tự tính thay.</text>
+
+    <text x="16" y="310" font-size="9" fill="#4A4F55">Không có bảng "gần đúng", không có ô trống,</text>
+    <text x="16" y="324" font-size="9" fill="#4A4F55">không có spinner treo vĩnh viễn. Trạng thái</text>
+    <text x="16" y="338" font-size="9" fill="#4A4F55">đúng là nói ra thiếu gì, để người kỹ thuật biết</text>
+    <text x="16" y="352" font-size="9" fill="#4A4F55">phải cài gói nào lên thiết bị.</text>
+  </g>
+</svg>

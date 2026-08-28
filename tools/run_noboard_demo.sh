@@ -12,9 +12,13 @@ set -u
 cd "$(dirname "$0")/.."
 
 BUILD="${MKDDC_CPP_BUILD_ROOT:-build/release/cpp}"
-SOCK=/tmp/mkddc-core.sock
-PTY_A=/tmp/mkddc-iop-a
-PTY_B=/tmp/mkddc-iop-b
+# Ba path này là singleton dùng chung toàn máy. Hai checkout cùng chạy demo sẽ
+# giành nhau: checkout sau ghi đè socket, core của checkout trước thành zombie và
+# Web API trước đó báo "core unavailable" — trông như code hỏng. Đặt
+# MKDDC_DEMO_SUFFIX khác nhau cho mỗi checkout khi cần chạy song song.
+SOCK="/tmp/mkddc-core${MKDDC_DEMO_SUFFIX:-}.sock"
+PTY_A="/tmp/mkddc-iop-a${MKDDC_DEMO_SUFFIX:-}"
+PTY_B="/tmp/mkddc-iop-b${MKDDC_DEMO_SUFFIX:-}"
 LOGDIR="$(pwd)/logs/demo"   # log trong codebase (logs/ gitignored) cho dễ đọc
 IOBUS=$BUILD/iobus/mkddc-iobus
 CORE=$BUILD/core/mkddc-core
@@ -24,21 +28,28 @@ DUMP=$BUILD/iobus/shm_dump_io
 die() { echo "LỖI: $*" >&2; exit 1; }
 
 cmd_stop() {
-    pkill -x mkddc-core 2>/dev/null
-    pkill -x mkddc-iobus 2>/dev/null
-    pkill -x fake_mcu 2>/dev/null
-    pkill -f "PTY.*mkddc-iop" 2>/dev/null
+    # Chỉ giết tiến trình của chính checkout này. `pkill -x mkddc-core` giết cả
+    # core của checkout khác đang chạy song song — checkout kia mất core giữa
+    # chừng và Web API của nó báo "core unavailable" không rõ lý do.
+    pkill -f "$CORE --sock $SOCK" 2>/dev/null
+    pkill -f "$IOBUS --uart $PTY_A" 2>/dev/null
+    pkill -f "$FAKE --uart $PTY_B" 2>/dev/null
+    pkill -f "PTY.*link=$PTY_A" 2>/dev/null
     rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm "$SOCK"
     echo "đã dừng + dọn sạch"
 }
 
 cmd_do() {  # $1 = kênh (1-4), $2 = 0/1
-    python3 - "$1" "$2" <<'EOF'
-import socket, sys
-ch, val = sys.argv[1], sys.argv[2]
+    python3 - "$1" "$2" "$SOCK" <<'EOF'
+import socket, sys, time
+ch, val, sock_path = sys.argv[1], sys.argv[2], sys.argv[3]
+# Core cache response theo `id` để idempotent. Hardcode id=1 thì lần gọi thứ hai
+# với giá trị khác sẽ bị `id_conflict` — demo trông như core từ chối ghi trong
+# khi thực ra script gửi trùng id. Lấy id theo đồng hồ ns cho mỗi lệnh.
+req_id = time.time_ns()
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-s.connect("/tmp/mkddc-core.sock")
-s.sendall(f'{{"id":1,"op":"write","point":"DO{ch}","value":{val},"source":"manual","user":"demo"}}\n'.encode())
+s.connect(sock_path)
+s.sendall(f'{{"id":{req_id},"op":"write","point":"DO{ch}","value":{val},"source":"manual","user":"demo"}}\n'.encode())
 s.settimeout(5)
 print("core trả lời:", s.recv(256).decode().strip())
 EOF
@@ -49,7 +60,7 @@ stop)     cmd_stop; exit 0 ;;
 do1|do2|do3|do4)
     cmd_do "${1#do}" "${2:?cần 0 hoặc 1}"; exit 0 ;;
 kill-mcu)
-    pkill -x fake_mcu && echo "fake MCU đã chết -> nhìn dashboard: iop_status chuyển FAULT->SAFE, DO về 0"
+    pkill -f "$FAKE --uart $PTY_B" && echo "fake MCU đã chết -> nhìn dashboard: iop_status chuyển FAULT->SAFE, DO về 0"
     exit 0 ;;
 revive)
     nohup "$FAKE" --uart "$PTY_B" > "$LOGDIR/fake_mcu.log" 2>&1 &
