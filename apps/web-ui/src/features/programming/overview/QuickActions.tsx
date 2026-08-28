@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { ComponentType, SVGProps } from 'react'
 import { useI18n } from '../../../shared/i18n'
 import { Panel } from '../../../shared/components/Panel'
-import { roleAtLeast } from '../../auth'
+import { roleCan } from '../../../shared/auth/capabilities'
 import type { UserRole } from '../../../shared/types'
 import type { ProgrammingTargetState } from '../model/types'
 import type { PrimaryCtaKind } from './resolvePrimaryCta'
@@ -59,7 +59,7 @@ export type QuickActionBlockReason =
   /** Controller chưa có Project nào ⇒ không tồn tại đích để đi tới. */
   | 'NO_PROJECT'
   /** Vai hiện tại dưới `admin` (README §4: Edit/Check/Commission đều là admin). */
-  | 'NEEDS_ADMIN'
+  | 'NEEDS_PERMISSION'
   /** `producerState = UNAVAILABLE`. */
   | 'CORE_UNAVAILABLE'
   /** `producerState = DEGRADED` — mọi thay đổi runtime bị khoá. */
@@ -118,7 +118,7 @@ export function quickActionForPrimaryCta(kind: PrimaryCtaKind | null): QuickActi
  * Bảng chặn — hàm thuần, có test riêng.
  *
  * THỨ TỰ XÉT LÝ DO đi từ bền vững nhất tới tạm thời nhất: `NO_PROJECT` (chưa có
- * gì để mở) → `NEEDS_ADMIN` (vai này sẽ không bao giờ làm được) → tình trạng
+ * gì để mở) → `NEEDS_PERMISSION` (vai này sẽ không bao giờ làm được) → tình trạng
  * Core (sẽ hết khi Core trở lại). Nói lý do tạm thời trước lý do vĩnh viễn sẽ
  * làm người dùng chờ một thứ không bao giờ đổi.
  *
@@ -136,19 +136,27 @@ export function quickActionForPrimaryCta(kind: PrimaryCtaKind | null): QuickActi
  *    người dùng trong một vòng lặp không lối ra trên mọi controller mới lắp.
  */
 export function quickActionItems(input: QuickActionsInput): QuickActionItem[] {
-  const canAdmin = roleAtLeast(input.role, 'admin')
+  /* `WEB-RBAC-001` — hỏi NĂNG LỰC, không so vai.
+   *
+   * Ba lối tắt này ánh xạ thẳng vào ba quyền của server: mở workspace và
+   * Kiểm tra là `program.edit`, Đưa vào vận hành là `program.activate`. So
+   * `role >= admin` chặn luôn `engineer` — vai tồn tại đúng để làm việc
+   * Programming — trên những thao tác máy chủ sẵn sàng chấp nhận. */
+  const canEdit = roleCan(input.role, 'program.edit')
+  const canActivate = roleCan(input.role, 'program.activate')
   const projectPath = (suffix: string) =>
     input.projectId ? `/eng/programming/projects/${input.projectId}/${suffix}` : null
 
   const projectScopedBlock = (): QuickActionBlockReason | null => {
     if (!input.projectId) return 'NO_PROJECT'
-    if (!canAdmin) return 'NEEDS_ADMIN'
+    if (!canEdit) return 'NEEDS_PERMISSION'
     return null
   }
 
   const commissionBlock = (): QuickActionBlockReason | null => {
     const base = projectScopedBlock()
     if (base) return base
+    if (!canActivate) return 'NEEDS_PERMISSION'
     if (input.producerState === null) return 'CORE_UNREAD'
     if (input.producerState === 'UNAVAILABLE') return 'CORE_UNAVAILABLE'
     if (input.producerState === 'DEGRADED') return 'CORE_DEGRADED'
@@ -214,8 +222,8 @@ export function quickActionBlockedLabel(pick: PickFn, reason: QuickActionBlockRe
   switch (reason) {
     case 'NO_PROJECT':
       return pick('Controller này chưa có Project nào.', 'This controller has no project yet.')
-    case 'NEEDS_ADMIN':
-      return pick('Cần quyền admin; vai hiện tại chỉ được xem.', 'Requires the admin role; the current role is read-only.')
+    case 'NEEDS_PERMISSION':
+      return pick('Vai hiện tại không có quyền cho thao tác này.', 'The current role does not have permission for this action.')
     case 'CORE_UNAVAILABLE':
       return pick('Không kết nối được Core — Đưa vào vận hành bị khoá.', 'Core is unreachable — Commission is locked.')
     case 'CORE_DEGRADED':

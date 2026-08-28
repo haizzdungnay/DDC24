@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, FolderPlus, PencilRuler, WifiOff } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
-import { useAuth, roleAtLeast } from '../../auth'
+import { useAuth } from '../../auth'
+import { roleCan } from '../../../shared/auth/capabilities'
 import { Panel } from '../../../shared/components/Panel'
 import { Button } from '../../../shared/components/Button'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
@@ -79,7 +80,9 @@ export function OverviewPage() {
   const { pick } = useI18n()
   const { session } = useAuth()
   const { runtime, projects, programIntents } = useProgrammingRuntimeContext()
-  const canAdmin = roleAtLeast(session?.role, 'admin')
+  /* `WEB-RBAC-001` — lối tắt và thẻ "chưa có Project" nói về việc SỬA chương
+     trình, tức `program.edit`, chứ không về vai `admin`. */
+  const canEdit = roleCan(session?.role, 'program.edit')
 
   // Cùng luật chọn Project với `ProgrammingLayout` (route Tổng quan không mang
   // `projectId`): Project đầu tiên của trang đầu. Rev A khoá một Project trên
@@ -179,7 +182,7 @@ export function OverviewPage() {
         {firstRead ? (
           <CardSkeleton title={pick('Bản nháp ↔ Bản đang vận hành', 'Draft ↔ Active')} rows={4} columns={2} />
         ) : noProject ? (
-          <NoProjectCard canAdmin={canAdmin} />
+          <NoProjectCard canEdit={canEdit} />
         ) : (
           <DraftActiveCompareCard
             draft={vm.draft}
@@ -202,7 +205,7 @@ export function OverviewPage() {
       <ProgramsSection
         model={vm.programs}
         projectId={vm.projectId}
-        canAdmin={canAdmin}
+        canEdit={canEdit}
         loading={firstRead || vm.programs.emptyReason === 'LOADING'}
       />
 
@@ -354,7 +357,7 @@ function PrimaryCtaBar({
  * họ chỉ thấy một trang trống và không biết mình đang thiếu quyền hay thiết bị
  * thật sự chưa có gì.
  */
-function NoProjectCard({ canAdmin }: { canAdmin: boolean }) {
+function NoProjectCard({ canEdit }: { canEdit: boolean }) {
   const { pick } = useI18n()
   const navigate = useNavigate()
   const { createProject, creating, error } = useCreateProgrammingProject()
@@ -368,7 +371,7 @@ function NoProjectCard({ canAdmin }: { canAdmin: boolean }) {
           'This controller has no project yet — there is no draft to edit and no package to commission.'
         )}
       </p>
-      {canAdmin ? (
+      {canEdit ? (
         <form
           className="mt-3 space-y-2"
           onSubmit={(event) => {
@@ -396,8 +399,8 @@ function NoProjectCard({ canAdmin }: { canAdmin: boolean }) {
       ) : (
         <p className="mt-2 text-xs text-[var(--c-text-dim)]">
           {pick(
-            'Cần quyền admin để tạo Project; vai hiện tại chỉ được xem.',
-            'Creating a project requires the admin role; the current role is read-only.'
+            'Vai hiện tại không có quyền tạo Project.',
+            'The current role does not have permission to create a project.'
           )}
         </p>
       )}
@@ -412,12 +415,12 @@ function NoProjectCard({ canAdmin }: { canAdmin: boolean }) {
 function ProgramsSection({
   model,
   projectId,
-  canAdmin,
+  canEdit,
   loading
 }: {
   model: ProgramsSummaryModel
   projectId: string | null
-  canAdmin: boolean
+  canEdit: boolean
   loading: boolean
 }) {
   const { pick } = useI18n()
@@ -434,7 +437,7 @@ function ProgramsSection({
   // Rỗng thì bảng và thẻ gọn nói y hệt nhau, nên chỉ vẽ MỘT lần — nhân đôi một
   // khối trạng thái rỗng chỉ tạo thêm một tiêu đề trùng cho trình đọc màn hình.
   if (model.rows.length === 0) {
-    const canCreate = canAdmin && projectId !== null && model.emptyReason === 'NO_PROGRAM'
+    const canCreate = canEdit && projectId !== null && model.emptyReason === 'NO_PROGRAM'
     return (
       <div className="min-w-0 space-y-2 lg:col-span-3">
         <ProgramsSummaryTable model={model} projectId={projectId} />

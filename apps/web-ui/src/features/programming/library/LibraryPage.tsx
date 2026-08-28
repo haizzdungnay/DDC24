@@ -6,7 +6,8 @@ import { StateBlock } from '../../../shared/components/StateBlock'
 import { Button } from '../../../shared/components/Button'
 import { Modal } from '../../../shared/components/Modal'
 import { useI18n } from '../../../shared/i18n'
-import { useAuth, roleAtLeast } from '../../auth'
+import { useAuth } from '../../auth'
+import { roleCan } from '../../../shared/auth/capabilities'
 import { createUuid } from '../../../shared/crypto'
 import { useProgrammingLibrary, useProgrammingProjects, type LibrarySearchFilters } from '../api/queries'
 import { useProgrammingLibraryEntryMutations, type LibraryEntryDraft } from '../api/mutations'
@@ -74,7 +75,10 @@ interface ReadBack {
 export function LibraryPage() {
   const { pick } = useI18n()
   const { session } = useAuth()
-  const canAdmin = roleAtLeast(session?.role, 'admin')
+  /* `WEB-RBAC-001` — ghi PROJECT Library đòi `program.edit`, không đòi vai
+     `admin`. Trước lát này `engineer` bị giao diện chặn trên một thao tác mà
+     máy chủ chấp nhận. */
+  const canEdit = roleCan(session?.role, 'program.edit')
   const routeParams = useParams<{ projectId: string }>()
   const projects = useProgrammingProjects()
   // Route là nguồn sự thật; danh sách chỉ là đường lùi cho lối vào cũ không
@@ -113,7 +117,7 @@ export function LibraryPage() {
   const usages = useMemo(() => libraryUsagesByEntryId(workspace.project?.draft), [workspace.project?.draft])
   const dependents = useMemo(() => (selected ? libraryDependents(selected, entries) : []), [selected, entries])
   const permissions = selected
-    ? libraryEntryPermissions(selected, { canAdmin, hasProject: Boolean(projectId), dependents })
+    ? libraryEntryPermissions(selected, { canEdit, hasProject: Boolean(projectId), dependents })
     : null
   const lock = workspace.project?.draft ? draftLibraryLock(workspace.project.draft) : null
 
@@ -151,8 +155,8 @@ export function LibraryPage() {
   async function handleSave(draft: LibraryEntryDraft) {
     // Hàng rào thật, không phải mẹo ẩn nút: kể cả khi một nút bị bỏ sót
     // `disabled`, đường ghi vẫn dừng ở đây và nói rõ lý do.
-    if (!canAdmin) {
-      setBlocked('NEEDS_ADMIN')
+    if (!canEdit) {
+      setBlocked('NEEDS_PERMISSION')
       return
     }
     if (!projectId) {
@@ -173,7 +177,7 @@ export function LibraryPage() {
 
   async function handleDelete(group: LibraryEntryGroup) {
     const permission = libraryEntryPermissions(group, {
-      canAdmin,
+      canEdit,
       hasProject: Boolean(projectId),
       dependents: libraryDependents(group, entries)
     })
@@ -191,7 +195,7 @@ export function LibraryPage() {
 
   async function handleDeprecate(revision: ProgrammingLibraryEntry) {
     const block = libraryRevisionDeprecationBlock(revision, {
-      canAdmin,
+      canEdit,
       hasProject: Boolean(projectId)
     })
     if (block) {
@@ -263,7 +267,7 @@ export function LibraryPage() {
           className="min-w-0"
           title={pick('Danh sách khối', 'Blocks')}
           action={
-            canAdmin ? (
+            canEdit ? (
               <Button
                 size="sm"
                 icon={<Plus className="h-4 w-4" aria-hidden="true" />}
@@ -299,10 +303,10 @@ export function LibraryPage() {
               dependents={dependents}
               permissions={permissions}
               pending={pending}
-              canDeprecate={canAdmin && Boolean(projectId)}
+              canDeprecate={canEdit && Boolean(projectId)}
               onEdit={(group) => {
                 const permission = libraryEntryPermissions(group, {
-                  canAdmin,
+                  canEdit,
                   hasProject: Boolean(projectId),
                   dependents: libraryDependents(group, entries)
                 })
@@ -327,7 +331,7 @@ export function LibraryPage() {
                 : pick('Tạo khối PROJECT', 'New PROJECT block')
             }
           >
-            {canAdmin ? (
+            {canEdit ? (
               editor ? (
                 <LibraryEntryForm
                   key={editor.kind === 'edit' ? editor.entry.entryId : 'create'}
@@ -447,7 +451,7 @@ function MutationBlockNotice({ block }: { block: LibraryMutationBlock }) {
       'Khối SYSTEM thuộc registry chỉ đọc — máy chủ từ chối mọi thao tác sửa hoặc xoá lên nó.',
       'SYSTEM blocks belong to the read-only registry — the server rejects every edit or delete on them.'
     ),
-    NEEDS_ADMIN: pick(
+    NEEDS_PERMISSION: pick(
       'Thao tác này cần quyền quản trị.',
       'This action requires an administrator role.'
     ),

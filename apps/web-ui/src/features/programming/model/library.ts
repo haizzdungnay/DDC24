@@ -94,7 +94,7 @@ export function groupLibraryEntries(items: ProgrammingLibraryEntry[]): LibraryEn
 
 export type LibraryMutationBlock =
   | 'SYSTEM_IMMUTABLE'
-  | 'NEEDS_ADMIN'
+  | 'NEEDS_PERMISSION'
   | 'NO_PROJECT'
   | 'PUBLISHED_IMMUTABLE'
   | 'DEPRECATE_REQUIRES_PUBLISHED'
@@ -119,13 +119,18 @@ export interface LibraryEntryPermissions {
  */
 export function libraryEntryPermissions(
   group: LibraryEntryGroup,
-  options: { canAdmin: boolean; hasProject: boolean; dependents: string[] }
+  options: { canEdit: boolean; hasProject: boolean; dependents: string[] }
 ): LibraryEntryPermissions {
   if (group.scope === 'SYSTEM') {
     return { canSave: false, savesNewVersion: false, canDelete: false, saveBlock: 'SYSTEM_IMMUTABLE', deleteBlock: 'SYSTEM_IMMUTABLE' }
   }
-  if (!options.canAdmin) {
-    return { canSave: false, savesNewVersion: false, canDelete: false, saveBlock: 'NEEDS_ADMIN', deleteBlock: 'NEEDS_ADMIN' }
+  /* `WEB-RBAC-001` — ghi PROJECT Library đòi `program.edit` ở server
+     (`x-rbac: [engineer, admin]`), không đòi vai `admin`. Điều kiện cũ
+     (`canAdmin`) chặn `engineer` ngay tại giao diện trên một thao tác máy chủ
+     sẵn sàng chấp nhận — và người bị chặn không có cách nào biết đó là lỗi
+     giao diện chứ không phải chính sách. */
+  if (!options.canEdit) {
+    return { canSave: false, savesNewVersion: false, canDelete: false, saveBlock: 'NEEDS_PERMISSION', deleteBlock: 'NEEDS_PERMISSION' }
   }
   if (!options.hasProject) {
     return { canSave: false, savesNewVersion: false, canDelete: false, saveBlock: 'NO_PROJECT', deleteBlock: 'NO_PROJECT' }
@@ -150,10 +155,10 @@ export function libraryEntryPermissions(
  * route server chỉ chấp nhận đúng chuyển tiếp PUBLISHED -> DEPRECATED. */
 export function libraryRevisionDeprecationBlock(
   revision: ProgrammingLibraryEntry,
-  options: { canAdmin: boolean; hasProject: boolean }
+  options: { canEdit: boolean; hasProject: boolean }
 ): LibraryMutationBlock | null {
   if (revision.scope === 'SYSTEM') return 'SYSTEM_IMMUTABLE'
-  if (!options.canAdmin) return 'NEEDS_ADMIN'
+  if (!options.canEdit) return 'NEEDS_PERMISSION'
   if (!options.hasProject) return 'NO_PROJECT'
   if (revision.libraryState !== 'PUBLISHED') return 'DEPRECATE_REQUIRES_PUBLISHED'
   return null

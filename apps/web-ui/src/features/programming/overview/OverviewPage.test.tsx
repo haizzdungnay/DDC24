@@ -447,7 +447,7 @@ describe('OverviewPage — ma trận sáu trạng thái (handoff §6, T60-207)',
     renderOverview('vi')
     expect(await screen.findByTestId('no-project')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Tạo bản nháp/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/Cần quyền admin để tạo Project/)).toBeInTheDocument()
+    expect(screen.getByText(/không có quyền tạo Project/)).toBeInTheDocument()
   })
 
   it('§6-3 Core offline: banner DÍNH, vẫn cho sửa, KHOÁ Đưa vào vận hành', async () => {
@@ -538,14 +538,14 @@ describe('OverviewPage — ma trận sáu trạng thái (handoff §6, T60-207)',
 
     // Hành động bị vô hiệu hoá và PHẢI nói lý do.
     const cta = screen.getByTestId('primary-cta')
-    expect(cta).toHaveAttribute('data-blocked-by', 'NEEDS_ADMIN')
+    expect(cta).toHaveAttribute('data-blocked-by', 'NEEDS_PERMISSION')
     expect(cta).toHaveAttribute('aria-disabled', 'true')
     // Lý do hiện ở CẢ CTA chính lẫn các lối tắt — không chỗ nào xám đi mà im lặng.
-    expect(screen.getAllByText('Cần quyền admin; vai hiện tại chỉ được xem.').length).toBeGreaterThan(1)
+    expect(screen.getAllByText('Vai hiện tại không có quyền cho thao tác này.').length).toBeGreaterThan(1)
 
     const quick = within(screen.getByTestId('quick-actions'))
     for (const name of [/Tiếp tục chỉnh sửa/, /Kiểm tra thay đổi/, /Đưa vào vận hành/]) {
-      expect(quick.getByRole('button', { name })).toHaveAttribute('data-blocked-by', 'NEEDS_ADMIN')
+      expect(quick.getByRole('button', { name })).toHaveAttribute('data-blocked-by', 'NEEDS_PERMISSION')
     }
     // Xem Runtime là quyền của cả ba vai.
     expect(quick.getByRole('button', { name: /Mở Runtime/ })).not.toHaveAttribute('data-blocked-by')

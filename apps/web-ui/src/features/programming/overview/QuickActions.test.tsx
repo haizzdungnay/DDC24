@@ -92,7 +92,7 @@ describe('quickActionItems — bảng chặn', () => {
   it('viewer và operator: chặn vì thiếu quyền, Runtime vẫn mở (README §4)', () => {
     for (const role of ['viewer', 'operator'] as const) {
       expect(keys({ role })).toEqual({
-        edit: 'NEEDS_ADMIN', check: 'NEEDS_ADMIN', commission: 'NEEDS_ADMIN', runtime: null
+        edit: 'NEEDS_PERMISSION', check: 'NEEDS_PERMISSION', commission: 'NEEDS_PERMISSION', runtime: null
       })
     }
   })
@@ -180,7 +180,7 @@ describe('QuickActions — vô hiệu hoá KÈM GIẢI THÍCH', () => {
     expect(screen.getAllByRole('button')).toHaveLength(4)
     for (const key of ['edit', 'check', 'commission'] as const) {
       expect(action(key)).toHaveAttribute('aria-disabled', 'true')
-      expect(action(key).textContent).toContain('Cần quyền admin; vai hiện tại chỉ được xem.')
+      expect(action(key).textContent).toContain('Vai hiện tại không có quyền cho thao tác này.')
     }
     expect(action('runtime')).not.toHaveAttribute('aria-disabled')
   })
@@ -206,7 +206,7 @@ describe('QuickActions — vô hiệu hoá KÈM GIẢI THÍCH', () => {
     expect(document.activeElement).toBe(button)
     const describedBy = button.getAttribute('aria-describedby')
     expect(describedBy).not.toBeNull()
-    expect(document.getElementById(describedBy as string)?.textContent).toContain('Cần quyền admin')
+    expect(document.getElementById(describedBy as string)?.textContent).toContain('không có quyền')
   })
 })
 
@@ -279,7 +279,33 @@ describe('QuickActions — luật chung', () => {
     renderActions({ role: 'viewer' }, 'en')
     const list = screen.getByTestId('quick-actions')
     expect(list.textContent).toContain('Continue Editing')
-    expect(list.textContent).toContain('Requires the admin role')
+    expect(list.textContent).toContain('does not have permission')
     expect(list.textContent ?? '').not.toMatch(/[àáảãạăâđêôơư]/i)
+  })
+})
+
+/*
+`WEB-RBAC-001` — vai `engineer` PHẢI dùng được lối tắt Programming.
+
+Bộ cũ chỉ kiểm chiều "viewer/operator bị chặn". Chiều đó một mình vẫn xanh khi
+điều kiện là `role >= admin` — tức đúng lúc `engineer` bị chặn nhầm. Hai chiều
+phải cùng đúng thì phép đo mới nói được điều gì.
+*/
+describe('quickActionItems — vai engineer', () => {
+  it('engineer mở được cả bốn lối tắt; operator/viewer vẫn bị chặn', () => {
+    const forRole = (role: 'viewer' | 'operator' | 'engineer' | 'admin') =>
+      Object.fromEntries(quickActionItems(props({ role })).map((item) => [item.key, item.blockedBy]))
+
+    expect(forRole('engineer')).toEqual({ edit: null, check: null, commission: null, runtime: null })
+    expect(forRole('admin')).toEqual({ edit: null, check: null, commission: null, runtime: null })
+    for (const role of ['viewer', 'operator'] as const) {
+      const blocks = forRole(role)
+      expect(blocks.edit, `${role} phải bị chặn ở edit`).toBe('NEEDS_PERMISSION')
+      expect(blocks.check, `${role} phải bị chặn ở check`).toBe('NEEDS_PERMISSION')
+      expect(blocks.commission, `${role} phải bị chặn ở commission`).toBe('NEEDS_PERMISSION')
+      // Runtime là đường ĐỌC: chặn nó lại làm người trực ca mù trước thiết bị
+      // họ đang đứng cạnh.
+      expect(blocks.runtime, `${role} vẫn phải xem được Runtime`).toBeNull()
+    }
   })
 })
