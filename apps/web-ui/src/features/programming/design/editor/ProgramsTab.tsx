@@ -354,12 +354,34 @@ export function ProgramsTab({
    * Chèn đi bằng YÊU CẦU có `nonce` (cùng khuôn `formatRequest`): panel không
    * biết cách chèn, và sửa buffer từ ngoài sẽ làm mất lịch sử Undo. */
   const [libraryDockOpen, setLibraryDockOpen] = useState(false)
+  /* Bản đồ mã là ĐIỀU HƯỚNG trong POU đang mở, nên nó thuộc cột trái cùng cây
+   * POU — không phải một khay nữa chồng dưới chỗ gõ. Mặc định mở: nó là cách
+   * nhanh nhất để đi trong một POU 400 dòng. */
+  const [codeMapOpen, setCodeMapOpen] = useState(true)
   const [libraryInsertRequest, setLibraryInsertRequest] = useState<{ entry: CatalogEntry; nonce: number } | null>(null)
   /* Điều hướng chéo Program khi chọn một biến ở Bảng lệnh nhanh: đổi
    * `selectedProgramId` rồi TÁI DÙNG đúng cơ chế `focusDiagnostic` đã có
    * (D-01) — không viết thêm một prop/hiệu ứng thứ hai cho cùng việc "chọn
    * vùng theo line/column sau khi Program mới mount". */
   const [paletteJumpTarget, setPaletteJumpTarget] = useState<ProgrammingDiagnostic | null>(null)
+
+  /**
+   * Đưa con trỏ tới một offset trong POU ĐANG MỞ, từ một khay nằm ngoài trình
+   * soạn thảo (Bản đồ mã ở cột trái, Tham chiếu ở cột phải).
+   *
+   * Tái dùng đúng cơ chế `focusDiagnostic` đã có thay vì mở một đường thứ hai
+   * chọc vào `textarea`: chỉ một nơi biết cách đặt con trỏ thì chỉ có một hành
+   * vi cuộn/tiêu điểm, và nó đã được kiểm bằng chính bộ test của editor.
+   */
+  function jumpInSelectedPou(offset: number, length: number) {
+    if (!selectedProgramId) return
+    const source = buffers[selectedProgramId] ?? ''
+    const { line, column } = offsetToLineColumn(source, offset)
+    setPaletteJumpTarget({
+      code: '', severity: 'ERROR', messageKey: '',
+      location: { programId: selectedProgramId, line, column, length: Math.max(1, length) },
+    })
+  }
 
   /* Quyết định #04: chỉ mục Bảng lệnh nhanh tính lại theo `buffers`/
    * `document.programs` — KHÔNG theo chuỗi tìm kiếm (đó là việc lọc rẻ ở
@@ -515,6 +537,18 @@ export function ProgramsTab({
         </div>
         <div id="programs-slot-left">
         {explorerSlot}
+        {/* Bản đồ mã: ĐIỀU HƯỚNG trong POU đang mở, nên nó đứng cùng cột với
+            cây POU — điều hướng giữa các POU và điều hướng trong một POU là
+            cùng một loại việc. Trước lát này nó nằm DƯỚI chỗ gõ, tức người dùng
+            phải cuộn qua chính chỗ mình đang làm để tới thứ dùng để đi. */}
+        {selected && selected.language === 'ST' && codeMapOpen && (
+          <div className="mt-2">
+            <StCodeMap
+              source={buffers[selected.programId] ?? programSource(selected)}
+              onNavigate={(offset) => jumpInSelectedPou(offset, 1)}
+            />
+          </div>
+        )}
         {/* `DEV-PROG-011` — `ProjectTagsEditor` đã rời khỏi đây. Nhãn chức năng
             thuộc về PROJECT chứ không thuộc về cây POU, và để nó dưới cây làm
             người đọc tưởng nó là nhãn của POU đang chọn. Nó nay ở cột phải,
@@ -658,6 +692,8 @@ export function ProgramsTab({
             onWatchVariable={onWatchVariable}
             libraryOpen={libraryDockOpen}
             onToggleLibrary={() => setLibraryDockOpen((open) => !open)}
+            codeMapOpen={codeMapOpen}
+            onToggleCodeMap={() => setCodeMapOpen((open) => !open)}
             libraryInsertRequest={libraryInsertRequest}
             libraryEntries={libraryEntries}
             onEnsureLibraryLoaded={libraryCatalog.ensureLoaded}
@@ -799,6 +835,18 @@ export function ProgramsTab({
             </p>
           </section>
         )}
+        {/* Tham chiếu tại con trỏ: nó mô tả KÝ HIỆU ĐANG CHỌN, đúng loại thông
+            tin mà cột Thuộc tính đã sở hữu. Để nó dưới chỗ gõ như trước làm cột
+            giữa dài ra và tách nó khỏi phần Inspector nói về chính ký hiệu đó. */}
+        {selected && selected.language === 'ST' && (
+          <div className="mt-2">
+            <StCrossReferencePanel
+              cursorSymbol={cursorSymbol}
+              note={null}
+              onJump={(offset, length) => jumpInSelectedPou(offset, length)}
+            />
+          </div>
+        )}
         {/* `DEV-PROG-011` — nhãn chức năng của PROJECT. Gập lại theo mặc định:
             nó là cấu hình đặt một lần, không phải thứ đọc trong lúc soạn. */}
         <details className="mt-2 rounded-[var(--radius)] border border-[var(--c-border)] p-2">
@@ -913,6 +961,8 @@ export function SourceEditor({
   onWatchVariable,
   libraryOpen = false,
   onToggleLibrary,
+  codeMapOpen = false,
+  onToggleCodeMap,
   libraryInsertRequest,
   libraryEntries,
   onEnsureLibraryLoaded,
@@ -952,6 +1002,10 @@ export function SourceEditor({
   /** `DEV-PROG-002` — Thư viện nhanh (cột phải) đang mở hay không. */
   libraryOpen?: boolean
   onToggleLibrary?: () => void
+  /** `DEV-PROG-001` (sửa vị trí) — Bản đồ mã nay sống ở CỘT TRÁI cùng cây POU;
+   *  nút bật/tắt vẫn ở thanh công cụ nên trạng thái do cha giữ. */
+  codeMapOpen?: boolean
+  onToggleCodeMap?: () => void
   /**
    * `DEV-PROG-002` — yêu cầu chèn một mục thư viện, phát từ panel ở cột phải.
    * Cùng khuôn với `formatRequest`: panel KHÔNG biết cách chèn (ST dựng đoạn mã
@@ -1036,7 +1090,7 @@ export function SourceEditor({
   /* `T59-821` — Code Map bật/tắt được. Nó CHỈ hiện khi tài liệu vượt ngưỡng
    * (`CODE_MAP_MIN_LINES`); dưới ngưỡng cả tài liệu đã nằm trong một màn hình
    * và một bản đồ của thứ đang thấy hết là chiếm chỗ vô ích. */
-  const [codeMapOpen, setCodeMapOpen] = useState(true)
+
   /* Phát ra ngoài khi ký hiệu đổi. `useEffect` chứ không gọi trong render: gọi
    * trong render sẽ set state của cha giữa lúc con đang render. */
   useEffect(() => {
@@ -1607,7 +1661,7 @@ export function SourceEditor({
                   <button
                     type="button"
                     className="w-full rounded px-2 py-1 text-left text-sm hover:bg-[var(--c-surface-2)]"
-                    onClick={() => setCodeMapOpen((open) => !open)}
+                    onClick={onToggleCodeMap}
                   >
                     {codeMapOpen ? pick('Ẩn bản đồ mã', 'Hide code map') : pick('Hiện bản đồ mã', 'Show code map')}
                   </button>
@@ -2016,41 +2070,12 @@ export function SourceEditor({
       {libraryInsertionNote && (
         <p role="status" className="text-xs text-[var(--c-text-dim)]">{libraryInsertionNote}</p>
       )}
-      {runtimeOverlay && <StRuntimeValueOverlay state={runtimeOverlay} />}
-      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
-        <h4 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Ký hiệu & kiểu', 'Symbols & types')}</h4>
-        {symbols.length === 0 ? (
-          <p className="mt-1 text-xs text-[var(--c-text-dim)]">{pick('Chưa nhận diện khai báo VAR.', 'No VAR declarations detected.')}</p>
-        ) : (
-          /* Trần 8rem: POU thật có 36 ký hiệu, và danh sách không chặn cao
-             ~900 px chính là thứ đẩy workbench xuống `y=2675` (DEV-PROG-001). */
-          <ul className="mt-1 flex max-h-32 flex-wrap gap-1 overflow-y-auto">
-            {symbols.map((symbol) => (
-              <li key={`${symbol.name}-${symbol.offset}`}>
-                <button type="button" className="rounded bg-[var(--c-surface-2)] px-2 py-1 font-mono text-xs text-[var(--c-text)] hover:text-[var(--c-accent)]" onClick={() => selectRange(symbol.offset, symbol.name.length)}>
-                  {symbol.name}: {symbol.type} · {symbol.references} {pick('tham chiếu', 'refs')}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      {codeMapOpen && (
-        /* Đặt DƯỚI khung soạn thảo, không bọc khung đó trong một lớp lưới mới:
-           textarea là `absolute inset-0` của khung, nên thêm một tầng flex bao
-           quanh làm hộp của nó lệch và mọi cú bấm rơi vào lớp bao — đúng lỗi
-           `intercepts pointer events` mà e2e bắt được.
-
-           Điều hướng KHÔNG được đổi một byte tài liệu: Code Map chỉ phát ra
-           offset, và `selectRange` là chính đường chọn vùng đã có. */
-        <StCodeMap source={source} onNavigate={(offset) => selectRange(offset, 0)} />
+      {/* Ghi chú của "Tới khai báo (F12)" ở LẠI cạnh trình soạn thảo: nó nói về
+          cú bấm vừa xảy ra trong editor, không phải về ký hiệu dưới con trỏ. */}
+      {referenceNote && (
+        <p role="status" className="text-xs text-[var(--c-warn-fg)]">{referenceNote}</p>
       )}
-
-      <StCrossReferencePanel
-        cursorSymbol={cursorSymbol}
-        note={referenceNote}
-        onJump={(offset, length) => { setReferenceNote(null); selectRange(offset, length) }}
-      />
+      {runtimeOverlay && <StRuntimeValueOverlay state={runtimeOverlay} />}
       </div>
       {/* Thanh trạng thái GHIM ở đáy cột, ngoài vùng cuộn: nó phải đọc được mà
           không phải cuộn đi tìm — đúng vai trò của một status bar. */}

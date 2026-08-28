@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
 import { SourceEditor } from './ProgramsTab'
+import { StCrossReferencePanel } from './StCrossReferencePanel'
+import type { StCursorSymbol } from './stReferenceIndex'
 import type { ProgrammingDiagnostic, ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
 
 function program(document: string): ProgrammingProgram {
@@ -23,24 +25,42 @@ function renderEditor(source: string, options?: {
   const onChange = options?.onChange ?? vi.fn()
   const onSave = options?.onSave ?? vi.fn().mockResolvedValue(true)
   const onEnsurePointCatalogLoaded = options?.onEnsurePointCatalogLoaded ?? vi.fn()
-  const utils = render(
-    <I18nProvider>
-      <SourceEditor
-        program={program(source)}
-        source={source}
-        canEdit={options?.canEdit ?? true}
-        saving={false}
-        diagnostics={options?.diagnostics ?? []}
-        focusDiagnostic={null}
-        onChange={onChange}
-        onSave={onSave}
-        pointCatalogStatus={options?.pointCatalogStatus ?? 'idle'}
-        pointCatalogItems={options?.pointCatalogItems ?? []}
-        pointCatalogError={null}
-        onEnsurePointCatalogLoaded={onEnsurePointCatalogLoaded}
-      />
-    </I18nProvider>,
-  )
+  /* Khay "Tham chiếu tại con trỏ" nay sống ở CỘT PHẢI (`ProgramsTab`), cạnh
+   * Inspector nói về cùng ký hiệu đó — trước nó nằm dưới chỗ gõ và kéo dài cột
+   * giữa. Harness dựng lại ĐÚNG cách nối của production (`onCursorSymbolChange`
+   * → panel) thay vì soi vào trong editor: bộ test này khoá hành vi "con trỏ
+   * đổi thì khay nói đúng ký hiệu", và hành vi đó đi qua chính seam này. */
+  function Harness() {
+    const [cursorSymbol, setCursorSymbol] = useState<StCursorSymbol | null>(null)
+    /* Buffer phải là STATE, không phải hằng số đóng gói.
+     *
+     * Khay tham chiếu render lại theo con trỏ, và một `source` cố định sẽ dội
+     * giá trị CŨ ngược vào `<textarea>` ở đúng lần render đó — buffer người dùng
+     * vừa gõ biến mất. Ở production `ProgramsTab` giữ `buffers`, nên harness
+     * phải giữ đúng vai trò ấy thay vì dựng một mô hình dữ liệu khác. */
+    const [value, setValue] = useState(source)
+    return (
+      <>
+        <SourceEditor
+          program={program(source)}
+          source={value}
+          canEdit={options?.canEdit ?? true}
+          saving={false}
+          diagnostics={options?.diagnostics ?? []}
+          focusDiagnostic={null}
+          onChange={(next) => { setValue(next); onChange(next) }}
+          onSave={onSave}
+          onCursorSymbolChange={setCursorSymbol}
+          pointCatalogStatus={options?.pointCatalogStatus ?? 'idle'}
+          pointCatalogItems={options?.pointCatalogItems ?? []}
+          pointCatalogError={null}
+          onEnsurePointCatalogLoaded={onEnsurePointCatalogLoaded}
+        />
+        <StCrossReferencePanel cursorSymbol={cursorSymbol} note={null} onJump={vi.fn()} />
+      </>
+    )
+  }
+  const utils = render(<I18nProvider><Harness /></I18nProvider>)
   return { ...utils, onChange, onSave, onEnsurePointCatalogLoaded, textarea: screen.getByLabelText(/Mã nguồn ST/) as HTMLTextAreaElement }
 }
 

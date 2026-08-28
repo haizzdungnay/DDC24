@@ -161,10 +161,13 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     const handle = screen.getByRole('separator')
     expect(handle).toHaveAttribute('aria-valuemin', '120')
     expect(handle).toHaveAttribute('aria-valuemax', '520')
-    expect(handle).toHaveAttribute('aria-valuenow', '200')
+    // `DEV-PROG-001` hạ mặc định 200 → 150: workbench và trình soạn thảo chia
+    // cùng một ngân sách chiều cao, nên mỗi pixel mặc định ở đây là một pixel
+    // lấy khỏi chỗ người ta gõ.
+    expect(handle).toHaveAttribute('aria-valuenow', '150')
 
     fireEvent.keyDown(handle, { key: 'ArrowUp' })
-    expect(handle).toHaveAttribute('aria-valuenow', '224')
+    expect(handle).toHaveAttribute('aria-valuenow', '174')
   })
 
   it('đổi chiều cao được bằng BÀN PHÍM, không chỉ bằng chuột', () => {

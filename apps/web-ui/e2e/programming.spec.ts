@@ -616,7 +616,12 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await page.getByRole('tab', { name: 'Chương trình', exact: true }).click()
     await expect(sourceBox).toHaveValue('AO1 := UI1 * 2.0; (* dở dang *)')
     await expect(page.getByText(/Draft có thay đổi chưa lưu/)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Kiểm tra' })).toBeDisabled()
+    /* `DEV-PROG-009` đưa `Kiểm tra` lên header nữa, nên có HAI nút cho cùng
+       hành động — đúng ý đồ ("giữ ở toolbar, nơi chính là header"). Tên truy
+       cập khác nhau (`Kiểm tra` vs `Kiểm tra gói`) nên phép chọn phải nói rõ
+       nó nhắm nút nào; cả hai đều phải bị khoá khi Draft còn bẩn. */
+    await expect(page.getByRole('button', { name: 'Kiểm tra', exact: true })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Kiểm tra gói', exact: true })).toBeDisabled()
     await sourceBox.press('Control+s')
     await expect(page.getByText('Chưa lưu.')).toHaveCount(0)
 
@@ -671,8 +676,10 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     // UJ-PROG-05 — Kiểm tra (D-01: PGM-02 chỉ lưu rồi điều hướng, PGM-03 sở
     // hữu toàn bộ seal/run/poll/result — không còn seal/Check inline ở đây).
     await page.getByRole('tab', { name: 'Chương trình', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Kiểm tra' })).toBeEnabled()
-    await page.getByRole('button', { name: 'Kiểm tra' }).click()
+    /* Hai nút cùng hành động (`DEV-PROG-009`), tên truy cập khác nhau. Case này
+       đi bằng nút của thanh công cụ — đúng đường người dùng vừa gõ xong sẽ bấm. */
+    await expect(page.getByRole('button', { name: 'Kiểm tra', exact: true })).toBeEnabled()
+    await page.getByRole('button', { name: 'Kiểm tra', exact: true }).click()
     await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/commission`)
     await expect(page.getByText('Chưa có Kiểm tra nào.')).toBeVisible()
     await page.getByRole('button', { name: 'Kiểm tra' }).click()
@@ -1228,7 +1235,12 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     await page.getByTitle('Thêm FUNCTION_BLOCK').click()
     await expect(page.getByRole('button', { name: 'Mở NewFunctionBlock' })).toBeVisible()
     await page.getByRole('button', { name: 'Mở NewFunction', exact: true }).click()
-    await expect(page.getByText(/chỉ chạy khi được Program gọi/)).toBeVisible()
+    /* `DEV-PROG-011` — câu này TỪNG nằm trong khay "Thuộc tính POU" của thanh
+       bên; nó đã về `ContextInspector` ở cột phải cùng bốn trường còn lại. Giữ
+       hai khay thuộc tính ở hai cột là hai chỗ có thể nói khác nhau về cùng một
+       POU. Khẳng định không đổi: FUNCTION không có lịch chạy và giao diện phải
+       NÓI RA điều đó, không để một ô chu kỳ xám gợi ý rằng bật được ở đâu đó. */
+    await expect(page.getByTestId('context-inspector')).toContainText('Chạy khi được gọi')
 
     // Lọc chỉ đổi thứ được vẽ, không đổi POU đang chọn.
     await page.getByLabel('Tìm POU').fill('NewFunctionBlock')
@@ -1269,8 +1281,12 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     // Mở tab Chương trình KHÔNG được tạo traffic catalog; panel mới là thứ fetch.
     expect(libraryRequests, 'catalog phải LAZY').toEqual([])
 
-    await page.getByRole('button', { name: /Thư viện/ }).click()
-    const panel = page.getByRole('dialog', { name: 'Thư viện nhanh' })
+    /* `DEV-PROG-002` — Thư viện nhanh nay là panel CẮM ở cột phải
+       (`role="region"`), không còn là hộp thoại nổi phủ lên mã nguồn; và nút
+       trên thanh công cụ có tên chính xác là `Thư viện` (nút "Mở Thư viện
+       nhanh" ở cột phải là lối mở thứ hai khi panel đang thu gọn). */
+    await page.getByRole('button', { name: 'Thư viện', exact: true }).click()
+    const panel = page.getByRole('region', { name: 'Thư viện nhanh' })
     await expect(panel).toBeVisible()
     await expect.poll(() => libraryRequests.length).toBeGreaterThan(0)
 

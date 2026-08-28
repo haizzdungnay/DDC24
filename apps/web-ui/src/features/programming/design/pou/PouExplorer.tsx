@@ -246,12 +246,18 @@ export function PouExplorer({
                   {pick(...label)} ({group.length})
                 </button>
               </h3>
+              {/* Thân nhóm LUÔN có mặt trong DOM và luôn mang `id`, kể cả khi
+                  nhóm rỗng: `aria-controls` của nút gập trỏ vào đây, và một
+                  `aria-controls` trỏ tới id không tồn tại là lỗi
+                  `aria-valid-attr-value` mà axe bắt được — nút nói nó điều
+                  khiển một vùng không có thật. */}
+              <div id={groupId}>
               {collapsed ? null : group.length === 0 ? (
                 <p className="px-5 py-1 text-sm text-[var(--c-text-dim)]">
                   {query.trim() === '' ? pick('Chưa có', 'None yet') : pick('Không khớp', 'No match')}
                 </p>
               ) : (
-                <ul id={groupId} aria-label={pick(...label)} className="flex flex-col">
+                <ul aria-label={pick(...label)} className="flex flex-col">
                   {group.map((item) => (
                     <li
                       key={item.objectId}
@@ -348,6 +354,7 @@ export function PouExplorer({
                   ))}
                 </ul>
               )}
+              </div>
             </section>
           )
         })}

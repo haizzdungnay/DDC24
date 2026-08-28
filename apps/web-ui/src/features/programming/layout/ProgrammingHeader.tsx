@@ -37,8 +37,14 @@ export function ProgrammingHeader({
       <div className="flex flex-wrap items-center gap-2">
         {actions && (
           <>
+            {/* Tên truy cập khác nút `Lưu` của thanh công cụ trình soạn thảo,
+                dù nhãn nhìn thấy giống nhau. Hai nút cùng tên trên một màn hình
+                buộc người dùng trình đọc màn hình phải đoán cái nào là cái nào —
+                và nó cũng làm mọi phép chọn theo vai trò trong test thành mơ hồ.
+                Tên đầy đủ CHỨA nhãn nhìn thấy, đúng WCAG 2.5.3. */}
             <Button
               size="sm"
+              aria-label={pick('Lưu bản nháp', 'Save the draft')}
               icon={<Save className="h-4 w-4" aria-hidden="true" />}
               loading={actions.saving}
               disabled={actions.saveDisabledReason !== null}
@@ -52,6 +58,7 @@ export function ProgrammingHeader({
             <Button
               size="sm"
               variant="secondary"
+              aria-label={pick('Kiểm tra gói', 'Check the package')}
               icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
               disabled={actions.checkDisabledReason !== null}
               title={actions.checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-03)', 'Check the package (opens PGM-03)')}

@@ -1,4 +1,4 @@
-import { stSymbolAt, type StCursorSymbol, type StReferenceIndex } from './stReferenceIndex'
+import { ST_NON_SYMBOL_KEYWORDS, stSymbolAt, type StCursorSymbol, type StReferenceIndex } from './stReferenceIndex'
 
 /**
  * `T59-820` / `PGM02-V22-WP-04` (phần còn nợ) — hover ký hiệu cho editor ST.
@@ -180,19 +180,14 @@ export function stHoverSymbolAtPoint(
 /**
  * Từ khoá của subset ST (§10) và hằng dựng sẵn.
  *
- * Danh sách này cố ý TÁCH khỏi danh sách trong `stReferenceIndex`: ở đó nó phục
- * vụ việc loại từ khoá khỏi chỉ mục khai báo; ở đây nó phục vụ việc im lặng khi
- * rê chuột. Hai mục đích khác nhau, và gộp chúng sẽ khiến một lần chỉnh danh
- * sách vì mục đích này lặng lẽ đổi hành vi của mục đích kia.
+ * Danh sách này TỪNG được khai riêng ở đây với lý do "hai mục đích khác nhau"
+ * (loại từ khoá khỏi chỉ mục khai báo vs. im lặng khi rê chuột). `DEV-PROG-004`
+ * bác lý do đó bằng một lỗi thật: hai bản đã lệch, chỉ mục dùng bản HẸP hơn, và
+ * mở một POU kind `FUNCTION` làm Inspector nhảy sang ngữ cảnh "Ký hiệu ST" với
+ * bốn dòng "không xác định được". Cả hai chỗ hỏi CÙNG một câu — *"định danh này
+ * có phải ký hiệu người dùng khai không"* — nên chúng phải đọc cùng một danh
+ * sách. Danh sách sống ở `stReferenceIndex` vì đó là nơi phân giải ký hiệu.
  */
-const HOVER_KEYWORDS = new Set([
-  'PROGRAM', 'END_PROGRAM', 'FUNCTION', 'END_FUNCTION', 'FUNCTION_BLOCK', 'END_FUNCTION_BLOCK',
-  'VAR', 'VAR_INPUT', 'VAR_OUTPUT', 'VAR_IN_OUT', 'VAR_TEMP', 'END_VAR', 'RETAIN',
-  'IF', 'THEN', 'ELSIF', 'ELSE', 'END_IF', 'CASE', 'OF', 'END_CASE',
-  'FOR', 'TO', 'BY', 'DO', 'END_FOR', 'WHILE', 'END_WHILE', 'REPEAT', 'UNTIL', 'END_REPEAT',
-  'AND', 'OR', 'XOR', 'NOT', 'MOD', 'TRUE', 'FALSE', 'RETURN', 'EXIT',
-])
-
 export function isStKeyword(identifier: string): boolean {
-  return HOVER_KEYWORDS.has(identifier.toUpperCase())
+  return ST_NON_SYMBOL_KEYWORDS.has(identifier.toUpperCase())
 }

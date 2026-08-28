@@ -323,23 +323,26 @@ export function DesignWorkspacePage({
       /* `DEV-PROG-009` — workspace ĐĂNG KÝ hai hành động của nó để header ở
          trên cùng gọi lại. Header không tự dựng batch operation: luật dirty,
          danh sách operation và đường sang PGM-03 đều thuộc về đây, và hai nơi
-         cùng dựng một lệnh là hai nơi để luật khoá lệch nhau. */
-      actions: {
-        onSave: () => { void workspace.save(pendingOperations) },
-        saving: workspace.saving,
-        saveDisabledReason: !canEdit
-          ? pick('Chế độ hiện tại không cho sửa Draft.', 'The current mode does not allow editing the draft.')
-          : !draftDirty
-            ? pick('Không có thay đổi nào để lưu.', 'There is nothing to save.')
-            : null,
-        onCheck: goToCommission,
-        checkDisabledReason: !canEdit
-          ? pick('Chế độ hiện tại không cho Kiểm tra.', 'The current mode does not allow running Check.')
-          : draftDirty
+         cùng dựng một lệnh là hai nơi để luật khoá lệch nhau.
+
+         KHÔNG đăng ký gì khi không được sửa (LIVE, SIMULATE, dưới 768 px, vai
+         không đủ quyền). Một nút Lưu bị vô hiệu hoá vẫn là một nút Lưu có mặt
+         trên màn hình — và `AC-PGM02-006`/`T59-812` đòi bề mặt LIVE **không lộ
+         mutation**, tức đếm bằng 0, chứ không phải "có nhưng bấm không được".
+         Vô hiệu hoá là câu trả lời cho "chưa lưu được lúc này"; vắng mặt là câu
+         trả lời cho "chế độ này không sửa". */
+      ...(canEdit ? {
+        actions: {
+          onSave: () => { void workspace.save(pendingOperations) },
+          saving: workspace.saving,
+          saveDisabledReason: draftDirty ? null : pick('Không có thay đổi nào để lưu.', 'There is nothing to save.'),
+          onCheck: goToCommission,
+          checkDisabledReason: draftDirty
             ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
                    'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
             : null
-      }
+        }
+      } : {})
     })
     return () => setEditingContext(null)
   }, [canEdit, draftDirty, goToCommission, pendingOperations, pick, setEditingContext, workspace.project, workspace.save, workspace.saving, workspace.status])

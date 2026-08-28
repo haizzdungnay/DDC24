@@ -70,7 +70,16 @@ export interface WorkbenchSearchHit {
 
 const MIN_HEIGHT = 120
 const MAX_HEIGHT = 520
-const DEFAULT_HEIGHT = 200
+/**
+ * `DEV-PROG-001` — 200 → 150 px.
+ *
+ * Workbench và trình soạn thảo chia CÙNG một ngân sách chiều cao, nên mỗi pixel
+ * mặc định ở đây là một pixel lấy khỏi chỗ người ta gõ. Đo ở 1440×900 sau khi
+ * khay phụ rời khỏi cột giữa: workbench chiếm 260 px và editor chỉ còn ~209 px.
+ * Khay Vấn đề của một Draft sạch chỉ có hai dòng chữ, nên 150 px đã dư — và tay
+ * kéo vẫn còn đó cho lúc danh sách lỗi dài thật.
+ */
+const DEFAULT_HEIGHT = 150
 
 type TabId = 'problems' | 'search' | 'references' | 'watch' | 'trace'
 
