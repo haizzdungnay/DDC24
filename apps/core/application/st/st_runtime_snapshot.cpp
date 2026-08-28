@@ -24,6 +24,50 @@ void copy_bounded(std::array<char, N>* target, const char* value) noexcept
     std::memcpy(target->data(), value, count);
 }
 
+/* Trạng thái task công bố ra `point_snapshot`.
+ *
+ * TRIỆU CHỨNG (`TASK-PROG-401`, hai ca `StIntegration` đỏ): operator dừng một
+ * Program, hoặc một instance rơi vào `FAULTED`, mà read-back vẫn nói `RUNNING`.
+ * Người vận hành nhìn một dòng chữ nói mọi thứ đang chạy trong khi output đã
+ * bị rút về mức mặc định — đúng loại nói dối mà đọc-lại-thật tồn tại để chặn.
+ *
+ * NGUYÊN NHÂN GỐC: trạng thái được suy từ HAI dữ kiện ở mức TASK
+ * (`should_force_safe()` và `enabled()`) và bỏ qua hoàn toàn trạng thái của
+ * từng Program bên trong. `enabled()` chỉ nói "task còn được lập lịch", không
+ * nói "có gì đang chạy".
+ *
+ * LUẬT (nặng nhất thắng, và không bao giờ suy diễn lên phía tốt hơn):
+ *
+ *   1. Overrun buộc về safe          → FAULT
+ *   2. Có BẤT KỲ Program nào FAULTED → FAULT
+ *   3. Không phải chủ sở hữu output, hoặc task bị tắt → STOPPED
+ *   4. Task còn Program nhưng KHÔNG Program nào đang chạy → STOPPED
+ *   5. Còn lại                        → RUNNING
+ *
+ * Luật 4 là chỗ ca thứ hai đỏ: `stop("p")` để `enabled()` của TASK nguyên vẹn
+ * (task vẫn được lập lịch cho các Program khác), nên chỉ nhìn mức task thì
+ * không thể thấy Program duy nhất đã dừng.
+ */
+const char* task_state_name(const StTask& task, bool program_owner) noexcept
+{
+    if (task.monitor().should_force_safe()) return "FAULT";
+
+    bool any_running = false;
+    for (const auto& program : task.programs()) {
+        if (program == nullptr) continue;
+        if (program->state == StProgramState::FAULTED) return "FAULT";
+        if (program->state == StProgramState::RUNNING || program->state == StProgramState::ACTIVE) {
+            any_running = true;
+        }
+    }
+
+    if (!program_owner || !task.enabled()) return "STOPPED";
+    /* Task rỗng giữ nguyên hành vi cũ (`RUNNING`): chưa nạp Program nào là một
+     * câu khác hẳn "đã nạp rồi và tất cả đã dừng". */
+    if (!task.programs().empty() && !any_running) return "STOPPED";
+    return "RUNNING";
+}
+
 } // namespace
 
 void st_populate_runtime_snapshot(const StScheduler* scheduler, bool program_owner,
@@ -43,11 +87,7 @@ void st_populate_runtime_snapshot(const StScheduler* scheduler, bool program_own
     copy_bounded(&task.id, first_task.config().id);
     task.period_ms = first_task.config().period_ms;
     task.budget_ms = first_task.config().budget_ms;
-    const char* task_state = first_task.monitor().should_force_safe()
-                                 ? "FAULT"
-                                 : (program_owner && first_task.enabled() ? "RUNNING"
-                                                                          : "STOPPED");
-    copy_bounded(&task.state, task_state);
+    copy_bounded(&task.state, task_state_name(first_task, program_owner));
     task.run_count = first_task.stats().run_count;
     task.missed_release_count = first_task.stats().missed_release_count;
     task.last_exec_ns = first_task.stats().last_exec_ns;
