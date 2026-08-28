@@ -138,3 +138,38 @@ tới ba thứ dùng để đi và để tra.
 
 Sau khi cột giữa trống ra, chiều cao mặc định workbench hạ 200 → 150 px: hai
 vùng chia cùng một ngân sách, và khay Vấn đề của một Draft sạch chỉ có hai dòng.
+
+## 10. Deploy lên bo Foxlinx và đo lại trên thiết bị thật
+
+| Bước | Kết quả |
+|---|---|
+| Build phát hành | `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:release`. Cờ **được kiểm bằng hash chunk**, không tin lệnh đã gõ: có cờ ⇒ `programming-CC3_YJe_.js`, không cờ ⇒ `programming-CPBNd7gv.js` |
+| Sao lưu | `dist.bak-devprog-20260828T055630Z`, `mkddc-web.bak-devprog-20260828T055630Z` |
+| Đẩy FE | `tar` + `scp` (bo Buildroot **không có `rsync`**), đổi thư mục nguyên tử |
+| Cross-build BE | `CGO_ENABLED=0 GOOS=linux GOARCH=arm64` ⇒ ELF aarch64 **statically linked** (không dính glibc/GLIBCXX của bo) |
+| Đẩy BE + restart | `install -o mkddc -g mkddc -m 0755` + `systemctl restart mkddc-web-pi` ⇒ `active` |
+| Sức khoẻ | `GET /api/v1/health` = `status:ok`; core/io_shm/iobus/mcu_connection/plc_shm/web đều `ok` |
+| Bundle đang phục vụ | `index-D3Fba_4s.js` — khớp bản vừa build |
+
+Đo lại bằng Chrome thật trên bo, ba viewport, POU `AHU_MasterSequence`:
+
+| Viewport | Tài liệu / khung nhìn | Tràn ngang | 5 tab workbench | Bề rộng vùng gõ |
+|---|---|---|---|---|
+| 1280×800 | 828 / 800 px | 0 | `y=596`, hit-test **trúng chính nó** cả 5 | 324 px |
+| 1440×800 | 828 / 800 px | 0 | `y=596`, **ok** cả 5 | 484 px |
+| 1920×800 | 828 / 800 px | 0 | `y=596`, **ok** cả 5 | 964 px |
+
+Không có lỗi runtime nào (`pageerror` rỗng ở cả ba). Card `Ký hiệu & kiểu` đã
+biến mất khỏi cột giữa; `Bản đồ mã` ở `x=266` (cột trái).
+
+Còn 28 px cuộn trang ở viewport cao 800 (lề đáy của trang) — dải tab vẫn nằm
+trọn trong màn hình đầu nên AC đạt; ghi lại để không ai tưởng đó là hồi quy.
+
+### Đường lùi
+
+```sh
+ssh -p 2223 root@mekong-fac.ddns.net
+rm -rf /opt/mkddc-web/dist && mv /opt/mkddc-web/dist.bak-devprog-20260828T055630Z /opt/mkddc-web/dist
+install -o mkddc -g mkddc -m 0755 /opt/mkddc-web/mkddc-web.bak-devprog-20260828T055630Z /opt/mkddc-web/mkddc-web
+systemctl restart mkddc-web-pi
+```
