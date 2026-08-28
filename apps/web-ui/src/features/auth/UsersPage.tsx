@@ -12,6 +12,7 @@ import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { formatDateTime } from '../../shared/utils'
 import type { UserAccessRow, UserAccount, UserRole } from '../../shared/types'
+import { USER_ROLES } from './roles'
 import {
   ENFORCED_MIN_PASSWORD_LENGTH,
   RECOMMENDED_MIN_PASSWORD_LENGTH,
@@ -39,7 +40,10 @@ import {
  * và "Trạng thái online". Thà thiếu cột còn hơn một cột luôn hiển thị sai.
  */
 
-const ROLE_OPTIONS: UserRole[] = ['viewer', 'operator', 'admin']
+/* `WEB-RBAC-001` — danh sách vai lấy từ MỘT nguồn (`USER_ROLES`), không khai
+ * lại ở đây: một bảng chọn thiếu vai nào thì admin không cấp được vai đó, và
+ * lỗi ấy chỉ lộ ra khi có người đi tìm nó. */
+const ROLE_OPTIONS: readonly UserRole[] = USER_ROLES
 /* T57-1.9 / `ADR-037` — con số này phải KHỚP `validNewPassword` trong
    `apps/web-api/internal/auth/service.go`. Siết ở đây mà không siết ở Go làm
    giao diện mô tả sai thiết bị: màn hình bảo "tối thiểu 8" trong khi cùng cái

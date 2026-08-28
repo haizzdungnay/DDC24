@@ -47,6 +47,10 @@ export function UserInfoPage() {
   const initial = username.slice(0, 1).toUpperCase()
   const roleSummary = {
     admin: pick('Toàn quyền: cấu hình, override, acknowledge alarm, deploy demo.', 'Full access: configuration, override, alarm acknowledge, demo deploy.'),
+    engineer: pick(
+      'Kỹ sư: cấu hình thiết bị, sửa và đưa chương trình vào vận hành. KHÔNG quản lý tài khoản.',
+      'Engineer: device configuration, program editing and commissioning. No account management.'
+    ),
     operator: pick('Vận hành: override có kiểm soát và acknowledge alarm.', 'Operator access: controlled override and alarm acknowledge.'),
     viewer: pick('Chỉ xem: theo dõi dashboard, monitoring, alarm và trends.', 'Read-only access: dashboard, monitoring, alarms, and trends.')
   }
