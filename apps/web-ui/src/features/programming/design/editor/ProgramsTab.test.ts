@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import { formatStDocument } from './stFormat'
 import {
-  collectStInterfaceVariables, collectStSymbols, formatStSource, isDuplicateProgramName, isValidPouName,
+  collectStInterfaceVariables, collectStSymbols, isDuplicateProgramName, isValidPouName,
   mapOffsetAcrossReplaceAll, mapOffsetByNonWhitespaceCount, uniqueProgramName
 } from './ProgramsTab'
 import type { ProgrammingProgram } from '../../model/types'
@@ -19,90 +20,33 @@ function program(overrides: Partial<ProgrammingProgram> = {}): ProgrammingProgra
   }
 }
 
-describe('formatStSource (BUG-013)', () => {
-  it('tách code dán một dòng thành nhiều dòng theo từ khoá khối', () => {
-    const oneLine = 'PROGRAM test VAR Counter:INT; END_VAR Counter:=Counter+1; END_PROGRAM'
-    const formatted = formatStSource(oneLine)
-    const lines = formatted.split('\n').filter((line) => line.length > 0).map((line) => line.trim())
-    expect(lines[0]).toBe('PROGRAM test')
-    expect(lines).toContain('VAR')
-    expect(lines.some((line) => line.startsWith('Counter:INT;'))).toBe(true)
-    expect(lines).toContain('END_VAR')
-    expect(lines[lines.length - 1]).toBe('END_PROGRAM')
-  })
+/* `formatStSource` (formatter bằng regex) đã bị gỡ ở `DEV-PROG-019`.
+ *
+ * Bộ test cũ của nó khoá đúng hành vi mà đề bài sản phẩm nay bác bỏ: thụt lề 2
+ * dấu cách, và một cách cài đặt không biết đến chú thích. Bằng chứng nó phá dữ
+ * liệu người dùng, cùng bộ test thay thế đầy đủ, nằm ở
+ * `./stFormat/stFormat.test.ts` — nơi formatter mới được kiểm cả bốn ví dụ của
+ * đề bài lẫn bốn điều "tuyệt đối không được làm".
+ */
 
-  it('không đổi gì với chuỗi rỗng', () => {
-    expect(formatStSource('')).toBe('')
-  })
+/** Bản đã định dạng, dùng chung cho các phép đo bên dưới. Ném khi formatter
+ *  từ chối — một test đo "sau khi Format" mà format không chạy là một test đo
+ *  chính đầu vào của nó. */
+function formatted(source: string): string {
+  const result = formatStDocument(source)
+  if (!result.ok) throw new Error(result.reason)
+  return result.text
+}
 
-  it('vẫn hoạt động với code đã có xuống dòng sẵn', () => {
-    const multiline = 'PROGRAM test\nVAR\nCounter : INT;\nEND_VAR\nEND_PROGRAM'
-    const formatted = formatStSource(multiline)
-    expect(formatted.split('\n').filter(Boolean)).toEqual([
-      'PROGRAM test', '  VAR', '    Counter : INT;', '  END_VAR', 'END_PROGRAM'
-    ])
-  })
-
-  // Báo lỗi trực tiếp kèm ảnh chụp 2026-08-17: bấm "Định dạng" xé `VAR RETAIN`
-  // thành hai dòng "VAR" / "RETAIN" lệch thụt lề (đè EBNF §10 `"VAR" "RETAIN"`
-  // phải chung một dòng) và xé `IF ... THEN` thành "IF" / "<điều kiện> THEN"
-  // cùng độ sâu thụt lề với thân khối — cả hai PHẢI giữ nguyên trên một dòng.
-  it('giữ "VAR RETAIN" trên cùng một dòng, không xé thành "VAR" + "RETAIN"', () => {
-    const source = 'PROGRAM t\nVAR RETAIN\n  StartCount : INT;\nEND_VAR\nEND_PROGRAM'
-    const formatted = formatStSource(source)
-    expect(formatted.split('\n').filter(Boolean)).toEqual([
-      'PROGRAM t', '  VAR RETAIN', '    StartCount : INT;', '  END_VAR', 'END_PROGRAM'
-    ])
-  })
-
-  it('giữ "IF <điều kiện> THEN" trên cùng một dòng, không xé "IF" ra riêng', () => {
-    const source = 'PROGRAM t\nIF HighTrig.Q THEN\n  StartCount := StartCount + 1;\nEND_IF\nEND_PROGRAM'
-    const formatted = formatStSource(source)
-    expect(formatted.split('\n').filter(Boolean)).toEqual([
-      'PROGRAM t', '  IF HighTrig.Q THEN', '    StartCount := StartCount + 1;', '  END_IF', 'END_PROGRAM'
-    ])
-  })
-
-  it('giữ "ELSIF <điều kiện> THEN" trên cùng một dòng', () => {
-    const source = 'PROGRAM t\nIF A THEN\n  B := TRUE;\nELSIF C THEN\n  B := FALSE;\nEND_IF\nEND_PROGRAM'
-    const formatted = formatStSource(source)
-    expect(formatted.split('\n').filter(Boolean)).toEqual([
-      'PROGRAM t', '  IF A THEN', '    B := TRUE;', '  ELSIF C THEN', '    B := FALSE;', '  END_IF', 'END_PROGRAM'
-    ])
-  })
-
-  it('không đổi gì khi VAR không đi kèm RETAIN (đường thường vẫn phải giữ nguyên)', () => {
-    const source = 'PROGRAM t\nVAR\n  Counter : INT;\nEND_VAR\nEND_PROGRAM'
-    const formatted = formatStSource(source)
-    expect(formatted.split('\n').filter(Boolean)).toEqual([
-      'PROGRAM t', '  VAR', '    Counter : INT;', '  END_VAR', 'END_PROGRAM'
-    ])
-  })
-
-  it('idempotent — Format lần hai trên kết quả đã đúng không đổi gì thêm', () => {
-    const source = 'PROGRAM t\nVAR RETAIN\n  StartCount : INT;\nEND_VAR\nIF A THEN\n  B := TRUE;\nEND_IF\nEND_PROGRAM'
-    const once = formatStSource(source)
-    const twice = formatStSource(once)
-    expect(twice).toBe(once)
-  })
-})
-
-// Báo lỗi trực tiếp 2026-08-17: "chọn dòng A thì nó lại hiện dòng B" — bấm
-// "Định dạng"/"Thay tất cả" gọi thẳng `onChange(next)` không qua
-// `applyEditRange`, nên khay Dòng/cột + dải active-line đứng yên ở vị trí CŨ
-// trong khi con trỏ DOM thật của textarea bị đặt lại (thường về offset 0).
-// Hai hàm dưới đây ánh xạ vị trí con trỏ cũ sang bản mới để khay luôn khớp
-// con trỏ thật — test đúng phần lõi thuần logic (không cần dựng textarea thật,
-// bằng chứng hành vi thật đã có ở e2e).
 describe('mapOffsetByNonWhitespaceCount (giữ vị trí con trỏ qua "Định dạng")', () => {
   it('map offset đúng khi Format thêm dòng trống/thụt lề phía trước', () => {
     const before = 'PROGRAM t VAR RETAIN Counter:INT; END_VAR END_PROGRAM'
-    const after = formatStSource(before)
+    const after = formatted(before)
     // Con trỏ đứng ngay sau "END_PROGRAM" ở bản cũ (cuối chuỗi).
     const offset = before.length
     const mapped = mapOffsetByNonWhitespaceCount(before, after, offset)
     expect(after.slice(0, mapped).replace(/\s/g, '').length).toBe(before.replace(/\s/g, '').length)
-    // `formatStSource` luôn thêm `\n` cuối cùng — vị trí đúng ngay SAU ký tự
+    // Formatter luôn kết thúc bằng `\n` — vị trí đúng ngay SAU ký tự — vị trí đúng ngay SAU ký tự
     // không-trắng cuối (END_PROGRAM), TRƯỚC dòng trống thêm vào đó.
     expect(mapped).toBe(after.length - 1)
   })
@@ -113,7 +57,7 @@ describe('mapOffsetByNonWhitespaceCount (giữ vị trí con trỏ qua "Định 
 
   it('map đúng vị trí giữa chuỗi — không lệch dòng khi format chèn xuống dòng phía trước con trỏ', () => {
     const before = 'PROGRAM t VAR RETAIN Counter:INT; END_VAR Counter:=Counter+1; END_PROGRAM'
-    const after = formatStSource(before)
+    const after = formatted(before)
     const offset = before.indexOf('Counter:=Counter+1')
     const mapped = mapOffsetByNonWhitespaceCount(before, after, offset)
     // Vị trí mới phải rơi ngay trước cùng token "Counter:=Counter+1" ở bản đã format.
@@ -158,8 +102,7 @@ describe('collectStSymbols (BUG-013)', () => {
   })
 
   it('nhận diện nhiều khai báo liên tiếp sau khi Format', () => {
-    const formatted = formatStSource('PROGRAM t VAR A:BOOL; B:REAL; END_VAR END_PROGRAM')
-    const symbols = collectStSymbols(formatted)
+    const symbols = collectStSymbols(formatted('PROGRAM t VAR A:BOOL; B:REAL; END_VAR END_PROGRAM'))
     expect(symbols.map((s) => s.name)).toEqual(['A', 'B'])
   })
 
