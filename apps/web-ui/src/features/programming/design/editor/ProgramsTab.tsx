@@ -114,7 +114,7 @@ const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
  * `auto` nên `basis:0` + `min-h` cho ra đúng sàn 18rem — không bao giờ sập
  * thành một khe hai dòng.
  */
-const EDITOR_FRAME_CLASS = 'min-h-[18rem] flex-1 lg:min-h-[10rem]'
+const EDITOR_FRAME_CLASS = 'min-h-[18rem] min-w-0 flex-1 lg:min-h-[10rem]'
 
 const HOVER_SAMPLE = '00000000000000000000'
 const HOVER_METRICS: Omit<StEditorTextMetrics, 'charWidthPx'> = {
@@ -216,6 +216,7 @@ export function ProgramsTab({
   runtimeOverlayByProgramId,
   userPouInterfaces = EMPTY_USER_POU_INTERFACES,
   forceReadOnly = false,
+  onWatchVariable,
 }: {
   document: ProgrammingDraftDocument
   saving: boolean
@@ -256,6 +257,8 @@ export function ProgramsTab({
   userPouInterfaces?: readonly UserPouInterface[]
   /** Policy viewport từ route: dưới 768 px thắng cả quyền admin. */
   forceReadOnly?: boolean
+  /** `DEV-PROG-003` — nháy đúp một ký hiệu trong trình soạn thảo ST để theo dõi. */
+  onWatchVariable?: (name: string) => void
 }) {
   const { pick } = useI18n()
   const { session } = useAuth()
@@ -643,6 +646,7 @@ export function ProgramsTab({
             canEdit={canEdit}
             saving={saving}
             onCursorSymbolChange={setCursorSymbol}
+            onWatchVariable={onWatchVariable}
             libraryEntries={libraryEntries}
             onEnsureLibraryLoaded={libraryCatalog.ensureLoaded}
             onRunCheck={onRunCheck}
@@ -854,6 +858,7 @@ export function SourceEditor({
   formatRequest,
   projectId,
   onCursorSymbolChange,
+  onWatchVariable,
   libraryEntries,
   onEnsureLibraryLoaded,
   onRunCheck,
@@ -890,6 +895,8 @@ export function SourceEditor({
    * chúng sẽ lệch nhau đúng lúc con trỏ nằm ở ranh giới một định danh.
    */
   onCursorSymbolChange?: (symbol: StCursorSymbol | null) => void
+  /** `DEV-PROG-003` — người dùng nháy đúp một ký hiệu và muốn theo dõi nó. */
+  onWatchVariable?: (name: string) => void
   /** `T59-820` — catalog thư viện đã nạp, dùng CHUNG với Inspector. */
   libraryEntries?: readonly CatalogEntry[]
   onEnsureLibraryLoaded?: () => void
@@ -1508,6 +1515,12 @@ export function SourceEditor({
       <label className="sr-only" htmlFor={`programming-st-source-${program.programId}`}>
         {pick(`Mã nguồn ST của ${program.name}`, `ST source for ${program.name}`)}
       </label>
+      {/* `DEV-PROG-002` — hàng ngang: khung soạn thảo + Thư viện nhanh CẮM cố
+          định bên phải. Bản trước là một panel nổi `absolute` phủ lên chính mã
+          nguồn, nên vừa chọn khối vừa nhìn chỗ sắp chèn là không thể. Cắm vào
+          hàng thì panel ĐẨY chỗ thay vì che, và nút `Thư viện` trên thanh công
+          cụ trở thành nút thu gọn/mở của nó. */}
+      <div className="flex min-h-0 flex-1 gap-2">
       <div className={`relative grid ${EDITOR_FRAME_CLASS} grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]`}>
         {/* Con trỏ lệch dòng (báo trực tiếp trên board, 2026-08-15 và
          * 2026-08-17 — ảnh chụp cho thấy lưới kẻ cắt xuyên chữ, không phải
@@ -1643,6 +1656,18 @@ export function SourceEditor({
               closeCompletion()
               /* Ctrl/Cmd+Click = tới khai báo, đường chuột của F12. */
               if (event.ctrlKey || event.metaKey) handleGoToDefinition()
+            }}
+            onDoubleClick={(event) => {
+              /* `DEV-PROG-003` — nháy đúp một ký hiệu = "cho tôi xem giá trị
+                 của biến này". Dùng chính `stSymbolAt` mà Inspector và hover
+                 đang dùng: một bản phân giải thứ hai sẽ nhận diện khác ở đúng
+                 chỗ khó thấy nhất (instance FB, tên trùng một phần).
+
+                 Nháy đúp vào chỗ KHÔNG phải ký hiệu thì không làm gì — không
+                 gửi một cái tên rỗng và cũng không nhảy khay, vì nháy đúp còn
+                 là thao tác chọn từ bình thường của người đang gõ. */
+              const symbol = stSymbolAt(source, event.currentTarget.selectionStart ?? 0, referenceIndex)
+              if (symbol) onWatchVariable?.(symbol.identifier)
             }}
             onKeyUp={updateCursor}
             onSelect={updateCursor}
@@ -1787,25 +1812,6 @@ export function SourceEditor({
             )
           })()}
         </div>
-        {libraryPanelOpen && canEdit && (
-          <QuickLibraryHost
-            projectId={projectId}
-            language="ST"
-            onInsert={(entry) => {
-              /* Đã có instance cùng kiểu thì hỏi: dùng lại hay tạo mới. Tự
-               * dùng lại là sai (hai lời gọi chung một timer là lỗi điều
-               * khiển thật), mà tự tạo mới cũng sai khi người dùng đang muốn
-               * gọi lại đúng instance đó. */
-              if (entry.stateful && collectDeclaredInstances(source, entry.name).length > 0) {
-                setPendingLibraryEntry(entry)
-                return true
-              }
-              applyLibraryInsertion(entry)
-              return true
-            }}
-            onClose={() => setLibraryPanelOpen(false)}
-          />
-        )}
         {pendingLibraryEntry && canEdit && (
           <FbInstancePicker
             entry={pendingLibraryEntry}
@@ -1825,6 +1831,27 @@ export function SourceEditor({
             onEnsureLoaded={onEnsurePointCatalogLoaded}
             onInsert={handleInsertAtCursor}
             onClose={() => setInsertPanelOpen(false)}
+          />
+        )}
+      </div>
+        {libraryPanelOpen && canEdit && (
+          <QuickLibraryHost
+            variant="docked"
+            projectId={projectId}
+            language="ST"
+            onInsert={(entry) => {
+              /* Đã có instance cùng kiểu thì hỏi: dùng lại hay tạo mới. Tự
+               * dùng lại là sai (hai lời gọi chung một timer là lỗi điều
+               * khiển thật), mà tự tạo mới cũng sai khi người dùng đang muốn
+               * gọi lại đúng instance đó. */
+              if (entry.stateful && collectDeclaredInstances(source, entry.name).length > 0) {
+                setPendingLibraryEntry(entry)
+                return true
+              }
+              applyLibraryInsertion(entry)
+              return true
+            }}
+            onClose={() => setLibraryPanelOpen(false)}
           />
         )}
       </div>

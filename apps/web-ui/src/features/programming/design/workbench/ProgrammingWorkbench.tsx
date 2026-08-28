@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../../../shared/i18n'
+import { WorkbenchWatchPanel, type WatchRow } from './WorkbenchWatchPanel'
 
 /**
  * `T59-807` / `PGM02-V22-WP-06-R1` — workbench dưới đáy, dùng CHUNG cho mọi bề
@@ -46,14 +47,11 @@ export interface WorkbenchSymbol {
  * Đã được **trình bày sẵn** (`display`/`state`) chứ không phải giá trị thô:
  * luật "null/BAD/OFFLINE không bao giờ thành 0" sống ở `presentStRuntimeValue`,
  * và diễn giải lại lần thứ hai ở đây là hai chỗ để lệch nhau.
+ *
+ * `DEV-PROG-003` mở rộng thành đúng kiểu của khay Watch (thêm kiểu dữ liệu,
+ * quality thô, mốc đọc và giá trị số để vẽ xu hướng).
  */
-export interface WorkbenchWatchRow {
-  variableId: string
-  name: string
-  display: string
-  state: 'live' | 'uncertain' | 'stale' | 'invalid'
-  unit?: string
-}
+export type WorkbenchWatchRow = WatchRow
 
 export interface WorkbenchSearchHit {
   offset: number
@@ -77,6 +75,7 @@ export function ProgrammingWorkbench({
   checkOwnerHref,
   watch,
   traceOwnerHref,
+  watchAddRequest,
 }: {
   mode: WorkbenchMode
   /** Nguồn dữ liệu đang hiển thị, ví dụ `Draft · AHU_FanControl`. */
@@ -95,6 +94,12 @@ export function ProgrammingWorkbench({
   watch?: readonly WorkbenchWatchRow[] | null
   /** PGM-06 sở hữu phiên Trace; workbench chỉ trỏ tới, không mở phiên thứ hai. */
   traceOwnerHref?: string
+  /**
+   * `DEV-PROG-003` — yêu cầu theo dõi một biến, phát từ nháy đúp trong trình
+   * soạn thảo. `nonce` là bắt buộc: nháy đúp HAI LẦN vào cùng một biến vẫn phải
+   * mở lại khay, mà so sánh theo tên thì lần thứ hai không có gì đổi.
+   */
+  watchAddRequest?: { name: string; nonce: number } | null
 }) {
   const { pick } = useI18n()
   const [open, setOpen] = useState(true)
@@ -127,6 +132,17 @@ export function ProgrammingWorkbench({
    * tại để chặn. */
   useEffect(() => { setQuery('') }, [sourceLabel, mode])
 
+  /* `DEV-PROG-003` — nháy đúp một biến trong trình soạn thảo phải ĐƯA NGƯỜI
+   * DÙNG TỚI khay Watch, không chỉ âm thầm thêm một dòng vào một khay đang
+   * đóng. Chỉ chuyển tab khi khay Watch thật sự có nguồn giá trị; ở chế độ EDIT
+   * nó không có, và nhảy sang một khay chỉ để hiện lời giải thích là cướp tiêu
+   * điểm của người đang gõ. */
+  useEffect(() => {
+    if (!watchAddRequest || watch === null || watch === undefined) return
+    setTab('watch')
+    setOpen(true)
+  }, [watchAddRequest, watch])
+
   const modeBadge = (
     <span className="rounded-full bg-[var(--c-surface-2)] px-2 py-0.5 text-[10px] font-semibold uppercase text-[var(--c-text-dim)]">
       {mode} · {sourceLabel}
@@ -137,7 +153,7 @@ export function ProgrammingWorkbench({
     { id: 'problems', label: pick('Vấn đề', 'Problems'), count: problems.length, available: true },
     { id: 'search', label: pick('Tìm kiếm', 'Search'), count: source ? hits.length : null, available: source !== null },
     { id: 'references', label: pick('Tham chiếu', 'Cross reference'), count: symbols.length, available: symbols.length > 0 || source !== null },
-    { id: 'watch', label: 'Watch', count: watch ? watch.length : null, available: watch !== null && watch !== undefined },
+    { id: 'watch', label: pick('Watch (Trực tiếp)', 'Watch (Live)'), count: watch ? watch.length : null, available: watch !== null && watch !== undefined },
     { id: 'trace', label: 'Trace', count: null, available: false },
   ]
 
@@ -239,7 +255,7 @@ export function ProgrammingWorkbench({
                 'Watch needs a runtime value source. EDIT mode only has the draft, so there is nothing to show — switch to LIVE to see the running package.',
               )} />
             ) : (
-              <WatchPanel rows={watch} pick={pick} />
+              <WorkbenchWatchPanel rows={watch} addRequest={watchAddRequest} />
             )
           )}
           {tab === 'trace' && (
@@ -266,42 +282,6 @@ export function ProgrammingWorkbench({
       )}
     </section>
   )
-}
-
-function WatchPanel({ rows, pick }: { rows: readonly WorkbenchWatchRow[]; pick: (vi: string, en: string) => string }) {
-  if (rows.length === 0) {
-    /* Nguồn CÓ nhưng POU này không có biến nào được ánh xạ — khác hẳn "không có
-     * nguồn giá trị". Hai câu dẫn tới hai việc khác nhau. */
-    return <Unavailable reason={pick('POU đang mở không có biến runtime nào được ánh xạ.', 'The open POU has no mapped runtime variables.')} />
-  }
-  return (
-    <table className="w-full text-xs">
-      <caption className="sr-only">{pick('Giá trị runtime theo biến', 'Runtime values by variable')}</caption>
-      <thead>
-        <tr className="text-left text-[var(--c-text-dim)]">
-          <th scope="col" className="py-1">{pick('Biến', 'Variable')}</th>
-          <th scope="col" className="py-1">{pick('Giá trị', 'Value')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.variableId} className="border-t border-[var(--c-border)]">
-            <td className="py-1 font-mono text-[var(--c-text)]">{row.name}</td>
-            <td className={`py-1 font-mono ${WATCH_STATE_CLASS[row.state]}`}>
-              {row.display}{row.unit && row.state !== 'invalid' ? ` ${row.unit}` : ''}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-const WATCH_STATE_CLASS: Record<WorkbenchWatchRow['state'], string> = {
-  live: 'text-[var(--c-good-fg)]',
-  uncertain: 'text-[var(--c-warn-fg)]',
-  stale: 'text-[var(--c-warn-fg)]',
-  invalid: 'text-[var(--c-text-dim)]',
 }
 
 function Unavailable({ reason }: { reason: string }) {

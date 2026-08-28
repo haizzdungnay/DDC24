@@ -56,7 +56,7 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
 
   it('Watch và Trace ở chế độ EDIT GIẢI THÍCH vì sao trống, không hiện danh sách rỗng', () => {
     renderWorkbench()
-    fireEvent.click(screen.getByRole('tab', { name: 'Watch' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Watch (Trực tiếp)' }))
     expect(screen.getByRole('status')).toHaveTextContent(/cần nguồn giá trị runtime/)
     expect(screen.getByRole('status')).toHaveTextContent(/Chế độ EDIT chỉ có Draft/)
 
@@ -200,8 +200,14 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
  * nhận `display`/`state` đã tính sẵn. */
 describe('ProgrammingWorkbench — Watch ở LIVE (T59-811)', () => {
   const rows = [
-    { variableId: 'v1', name: 'SupplyTemp', display: '21.5', state: 'live' as const, unit: 'degC' },
-    { variableId: 'v2', name: 'Missing', display: '—', state: 'invalid' as const, unit: 'degC' },
+    {
+      variableId: 'v1', name: 'SupplyTemp', display: '21.5', state: 'live' as const, unit: 'degC',
+      quality: 'GOOD' as const, typeName: 'REAL', observedAt: '2026-08-28T07:32:18.123Z', numeric: 21.5,
+    },
+    {
+      variableId: 'v2', name: 'Missing', display: '—', state: 'invalid' as const, unit: 'degC',
+      quality: 'BAD' as const, numeric: null,
+    },
   ]
 
   function renderLiveWatch(watch: typeof rows | [] | null) {
@@ -222,13 +228,16 @@ describe('ProgrammingWorkbench — Watch ở LIVE (T59-811)', () => {
     const panel = screen.getByRole('tabpanel')
     expect(within(panel).getByText('21.5 degC')).toBeInTheDocument()
     // `—` là "không có dữ liệu"; gắn đơn vị vào đó làm nó trông như một số đo.
-    expect(within(panel).getByText('—')).toBeInTheDocument()
+    // `DEV-PROG-003` thêm cột Mốc đọc, cũng hiện `—` khi không có mốc — nên
+    // phải soi ĐÚNG dòng thay vì đếm số lần chuỗi `—` xuất hiện trong khay.
+    const invalidRow = within(panel).getAllByTestId('workbench-watch-row')[1]
+    expect(within(invalidRow).getAllByText('—').length).toBeGreaterThanOrEqual(1)
     expect(within(panel).queryByText('— degC')).toBeNull()
   })
 
   it('tab Watch đếm đúng số biến đang theo dõi', () => {
     renderLiveWatch(rows)
-    expect(screen.getByRole('tab', { name: 'Watch (2)' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Watch (Trực tiếp) (2)' })).toBeInTheDocument()
   })
 
   it('có nguồn nhưng POU không có biến ánh xạ ⇒ nói đúng vế đó', () => {

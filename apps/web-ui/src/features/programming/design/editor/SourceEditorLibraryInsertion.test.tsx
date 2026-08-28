@@ -70,7 +70,11 @@ function renderEditor(initial: string) {
 
 async function openLibrary() {
   fireEvent.click(screen.getByRole('button', { name: /Thư viện/ }))
-  return waitFor(() => screen.getByRole('dialog', { name: 'Thư viện nhanh' }))
+  // `DEV-PROG-002` — Thư viện nhanh trong trình soạn thảo ST nay là panel CẮM
+  // (`role="region"`), không còn là hộp thoại nổi phủ lên mã nguồn. Khai
+  // `dialog` cho một vùng không chặn phần còn lại là nói sai với trình đọc màn
+  // hình, nên vai trò đổi theo bố cục.
+  return waitFor(() => screen.getByRole('region', { name: 'Thư viện nhanh' }))
 }
 
 beforeEach(() => {

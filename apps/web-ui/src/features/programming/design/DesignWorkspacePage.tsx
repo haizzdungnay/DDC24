@@ -184,6 +184,14 @@ export function DesignWorkspacePage({
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [savingBeforeNavigation, setSavingBeforeNavigation] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
+  /* `DEV-PROG-003` — yêu cầu theo dõi một biến, phát từ nháy đúp trong trình
+   * soạn thảo và tiêu thụ ở workbench. `nonce` là bắt buộc: nháy đúp hai lần
+   * vào CÙNG một biến vẫn phải mở lại khay Watch, mà so theo tên thì lần thứ
+   * hai không có gì đổi để `useEffect` bên kia nhận ra. */
+  const [watchAddRequest, setWatchAddRequest] = useState<{ name: string; nonce: number } | null>(null)
+  const watchVariable = useCallback((name: string) => {
+    setWatchAddRequest((current) => ({ name, nonce: (current?.nonce ?? 0) + 1 }))
+  }, [])
   const compareTriggerRef = useRef<HTMLButtonElement>(null)
   const [compareFbdFocus, setCompareFbdFocus] = useState<{ programId: string; selection: FbdSelection } | null>(null)
 
@@ -678,6 +686,7 @@ export function DesignWorkspacePage({
           )}
           userPouInterfaces={userPouInterfaces}
           forceReadOnly={mobileReadOnly}
+          onWatchVariable={watchVariable}
         />
         )}
         {/* `T59-807` / `WP-06-R1` — MỘT workbench dùng chung. Trước đây mỗi
@@ -692,6 +701,7 @@ export function DesignWorkspacePage({
             ? { runtimeOverlay: runtimeOverlays[selectedProgramId] ?? { status: 'unavailable' as const } }
             : {})}
           traceOwnerHref="/eng/programming/runtime?tab=watch"
+          watchAddRequest={watchAddRequest}
           document={document}
           source={workbenchSource}
           sourceLabel={workbenchSourceLabel}

@@ -16,6 +16,21 @@ import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type W
  * previous render" ngay lần đầu Draft tải xong. Một component con render sau
  * mọi guard thì có vòng đời hook của riêng nó.
  */
+/**
+ * `DEV-PROG-003` — mẫu để vẽ xu hướng, hoặc `null` nếu không vẽ được.
+ *
+ * `invalid` KHÔNG bao giờ thành một điểm trên đường: một giá trị không đọc được
+ * mà bị vẽ thành 0 sẽ tạo ra một cú rơi thẳng đứng trông hệt như thiết bị vừa
+ * tắt — đúng kiểu kết luận sai mà luật "null không bao giờ thành 0" tồn tại để
+ * chặn. BOOL quy về 0/1 vì đó là biểu diễn thật của nó ở lớp điều khiển.
+ */
+function trendSample(value: unknown, state: 'live' | 'uncertain' | 'stale' | 'invalid'): number | null {
+  if (state === 'invalid') return null
+  if (typeof value === 'boolean') return value ? 1 : 0
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  return null
+}
+
 export function DesignWorkbench({
   mode,
   document,
@@ -26,6 +41,7 @@ export function DesignWorkbench({
   onJumpToOffset,
   runtimeOverlay,
   traceOwnerHref,
+  watchAddRequest,
 }: {
   mode: WorkbenchMode
   document: ProgrammingDraftDocument
@@ -40,6 +56,8 @@ export function DesignWorkbench({
    */
   runtimeOverlay?: StRuntimeOverlayState
   traceOwnerHref?: string
+  /** `DEV-PROG-003` — chuyển tiếp yêu cầu theo dõi biến tới khay Watch. */
+  watchAddRequest?: { name: string; nonce: number } | null
 }) {
   const { pick } = useI18n()
 
@@ -97,6 +115,16 @@ export function DesignWorkbench({
      * chuyển hướng theo `programId` đã chốt lúc dựng danh sách. */
   }, [document.programs, pick])
 
+  /* Kiểu dữ liệu của biến KHÔNG có trong snapshot runtime — Core trả giá trị,
+   * không trả khai báo. Tra từ chính chỉ mục ký hiệu của POU đang mở là đọc từ
+   * nguồn thật (mã nguồn), không phải suy từ hình dạng giá trị: `0` có thể là
+   * INT, REAL hay một BOOL đã bị ép kiểu, và đoán sai kiểu ở đây sẽ dẫn người
+   * chỉnh định tới một kết luận sai về tràn số. */
+  const typeByName = useMemo(() => {
+    if (source === null) return new Map<string, string>()
+    return new Map(buildStReferenceIndex(source).symbols.map((entry) => [entry.name, entry.typeName]))
+  }, [source])
+
   /* Chiếu overlay thành dòng Watch. `presentStRuntimeValue` là nơi DUY NHẤT
    * biết luật "null/BAD/OFFLINE không bao giờ thành 0"; diễn giải lại ở đây là
    * dựng một bản luật thứ hai có thể lệch. */
@@ -110,7 +138,11 @@ export function DesignWorkbench({
             name: item.variableName,
             display: presented.displayValue,
             state: presented.state,
+            quality: item.quality,
             unit: item.unit,
+            ...(typeByName.get(item.variableName) ? { typeName: typeByName.get(item.variableName) } : {}),
+            ...(item.observedAt ? { observedAt: item.observedAt } : {}),
+            numeric: trendSample(item.value, presented.state),
           }
         })
       : []
@@ -120,6 +152,7 @@ export function DesignWorkbench({
       mode={mode}
       watch={watch}
       traceOwnerHref={traceOwnerHref}
+      watchAddRequest={watchAddRequest}
       sourceLabel={sourceLabel}
       problems={problems}
       symbols={symbols}
