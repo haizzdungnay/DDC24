@@ -607,6 +607,18 @@ export function DesignWorkspacePage({
             tài liệu khác: nguồn của gói ĐANG CHẠY. Dùng lại đúng component
             editor rồi tắt sửa là cách chắc chắn nhất để một hôm nào đó Draft rò
             vào chỗ đáng lẽ phải là Active, mà không có dấu hiệu bên ngoài nào. */}
+        {/* `DEV-PROG-001` — bề mặt soạn thảo và workbench nằm trong MỘT cột cao
+            theo viewport. Trước lát này cả hai chỉ xếp nối nhau trong dòng chảy
+            của trang: đo trên bo Foxlinx (1280×800, POU AHU_MasterSequence 128
+            dòng) tài liệu cao 2861 px và dải tab workbench ở `y=2675` — người
+            dùng phải cuộn gần 1900 px mới tới được Vấn đề/Tìm kiếm/Watch.
+
+            `20rem` là chrome phía trên đo được (thanh hệ thống 64 + dải ngữ
+            cảnh + tiêu đề + thanh tab ≈ 270 px) cộng lề đáy. Sàn `34rem` giữ cho
+            màn thấp vẫn còn chỗ gõ; dưới `lg` KHÔNG chốt chiều cao vì màn hẹp
+            không có ngân sách để chia và workspace ở đó là chỉ-đọc. */}
+        <div className="flex flex-col lg:h-[calc(100vh-20rem)] lg:min-h-[34rem]">
+        <div className="min-h-0 lg:flex-1 lg:overflow-hidden">
         {workspaceMode === 'SIMULATE' ? (
           /* `T59-815` — SIMULATE cũng KHÔNG phải editor bị khoá: nó là bản đã
              lưu và đã Kiểm tra mà phiên đang chạy, pin theo Revision của phiên
@@ -673,6 +685,7 @@ export function DesignWorkspacePage({
             FBD nằm trong editor FBD, tham chiếu ST nằm trong editor ST, tìm
             kiếm nằm trong thanh công cụ ST. Không có chỗ nào để hỏi "Draft này
             đang có vấn đề gì" cho CẢ Project. */}
+        </div>
         <DesignWorkbench
           mode={workspaceMode === 'LIVE' ? 'LIVE' : 'EDIT'}
           {...(workspaceMode === 'LIVE' && selectedProgramId
@@ -686,6 +699,7 @@ export function DesignWorkspacePage({
           onSelectProgram={selectProgram}
           onJumpToOffset={jumpToSourceOffset}
         />
+        </div>
       </div>
       <div hidden={tab !== 'mapping'}>
         <MappingTab

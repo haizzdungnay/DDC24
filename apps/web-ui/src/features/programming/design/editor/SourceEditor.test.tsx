@@ -106,7 +106,10 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     expect(textarea.value).toBe(expected)
     expect(textarea.selectionStart).toBe(expected.length)
     expect(textarea.selectionEnd).toBe(expected.length)
-    expect(screen.getByText(/Dòng 2, cột 5/)).toBeInTheDocument()
+    // `DEV-PROG-001` bỏ hàng "Dòng x, cột y" trùng lặp; vị trí con trỏ nay do
+    // THANH TRẠNG THÁI nói (`Dòng:Cột`). Ý định của test không đổi: DOM phải
+    // phản ánh con trỏ ngay trong cùng lượt xử lý phím.
+    expect(screen.getByTestId('editor-status-position')).toHaveTextContent('2:5')
   })
 
   it('Autocomplete chấp nhận: DOM value/selection cập nhật đồng bộ ngay sau Enter chọn gợi ý', () => {
@@ -118,7 +121,7 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     fireEvent.keyDown(textarea, { key: 'Enter' })
     expect(textarea.value).toBe('X := ABS')
     expect(textarea.selectionStart).toBe('X := ABS'.length)
-    expect(screen.getByText(/Dòng 1, cột 9/)).toBeInTheDocument()
+    expect(screen.getByTestId('editor-status-position')).toHaveTextContent('1:9')
   })
 
   it('Thay chỉ đổi lần khớp kế tiếp: DOM value/selection cập nhật đồng bộ', () => {
